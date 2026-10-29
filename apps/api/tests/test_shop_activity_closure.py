@@ -220,14 +220,16 @@ async def test_close_status_includes_class_collection_and_council_confirmation_t
     response = await authed_client_factory(admin_user).get(endpoint)
     assert response.status_code == 200
     status_item = response.json()["statuses"][str(categories[0].id)]
-    assert status_item["class_collected_at"] == latest_collection.isoformat()
-    assert status_item["council_confirmed_at"] == council_confirmation.isoformat()
+    assert datetime.fromisoformat(status_item["class_collected_at"]) == latest_collection
+    assert datetime.fromisoformat(status_item["council_confirmed_at"]) == council_confirmation
 
     member_status = await authed_client_factory(buyer).get(endpoint)
     assert member_status.status_code == 200
     assert (
-        member_status.json()["statuses"][str(categories[0].id)]["class_collected_at"]
-        == latest_collection.isoformat()
+        datetime.fromisoformat(
+            member_status.json()["statuses"][str(categories[0].id)]["class_collected_at"]
+        )
+        == latest_collection
     )
 
     outsider = await make_user(student_id="310002", email="310002@hchs.hc.edu.tw")

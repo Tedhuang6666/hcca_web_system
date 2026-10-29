@@ -336,8 +336,10 @@ async def close_category_for_class(
     )
     if category is None:
         raise ValueError("找不到此商品分類")
-    if class_id is not None or closes_at is not None:
-        raise ValueError("班級改由班聯統一期限或確認收款鎖單，不提供班級截止設定")
+    if class_id is None and closes_at is not None:
+        raise ValueError("班聯統一截止時間請在活動設定調整")
+    if class_id is not None and await session.get(SchoolClass, class_id) is None:
+        raise ValueError("找不到此班級")
     now = datetime.now(UTC)
     # 確認沒有重複有效結單
     existing_q = select(ShopOrderClose).where(
@@ -350,7 +352,7 @@ async def close_category_for_class(
         scheduled = existing.closes_at
         if scheduled is not None and scheduled.tzinfo is None:
             scheduled = scheduled.replace(tzinfo=UTC)
-        if scheduled is None or scheduled <= now:
+        if class_id is None and (scheduled is None or scheduled <= now):
             raise ValueError("此分類已結單，請先重新開單再結單")
         existing.is_active = False
         existing.reopened_by_id = closed_by_id
@@ -376,8 +378,6 @@ async def reopen_category_for_class(
     class_id: uuid.UUID | None,
     reopened_by_id: uuid.UUID,
 ) -> ShopOrderClose:
-    if class_id is not None:
-        raise ValueError("請由班聯撤銷該班收款確認；仍須遵守統一截止時間")
     existing_q = (
         select(ShopOrderClose)
         .options(selectinload(ShopOrderClose.closed_by))
@@ -395,3 +395,17 @@ async def reopen_category_for_class(
     existing.reopened_at = now_local()
     await session.flush()
     return existing
+
+
+async def get_class_deadline(
+    session: AsyncSession, category_id: uuid.UUID, class_id: uuid.UUID
+) -> ShopOrderClose | None:
+    return await session.scalar(
+        select(ShopOrderClose)
+        .where(
+            ShopOrderClose.category_id == category_id,
+            ShopOrderClose.class_id == class_id,
+            ShopOrderClose.is_active.is_(True),
+        )
+        .options(selectinload(ShopOrderClose.closed_by))
+    )

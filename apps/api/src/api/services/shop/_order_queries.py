@@ -73,6 +73,7 @@ async def _reconcile_unassigned_class_orders(
         .where(
             Order.class_id.is_(None),
             Order.test_product_id.is_(None),
+            Order.supplement_class_id.is_(None),
             Order.status.in_((OrderStatus.PENDING, OrderStatus.CONFIRMED)),
         )
         .order_by(Order.id)

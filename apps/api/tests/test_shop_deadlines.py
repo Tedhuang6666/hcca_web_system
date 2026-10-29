@@ -115,7 +115,9 @@ async def test_unified_deadline_caps_categories_and_product_extensions(
     )
     assert response.status_code == 200
     assert datetime.fromisoformat(response.json()["effective_sale_end"]) == activity.order_closes_at
-    catalog = (await client.get("/shop/catalog")).json()
+    public_catalog = (await client.get("/shop/catalog")).json()
+    assert str(categories[0].id) not in {row["id"] for row in public_catalog}
+    catalog = (await manager.get("/shop/catalog", params={"include_closed": True})).json()
     first = next(row for row in catalog if row["id"] == str(categories[0].id))
     second = next(row for row in catalog if row["id"] == str(categories[1].id))
     assert (

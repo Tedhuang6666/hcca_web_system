@@ -107,20 +107,26 @@ async def status(setup):
     return response.json()["statuses"][str(setup["category"].id)]
 
 
-async def test_cadre_cannot_control_class_cutoff(client, class_deadlines):
+async def test_cadre_can_control_only_own_class_cutoff(client, class_deadlines):
     s = class_deadlines
     body = {"class_id": str(s["class"].id)}
     assert (await client.post(close_path(s), json=body)).status_code == 401
-    for actor in ["cadre", "student", "outsider", "manager"]:
-        assert (await s[actor].post(close_path(s), json=body)).status_code == 422
+    for actor in ["student", "outsider"]:
+        assert (await s[actor].post(close_path(s), json=body)).status_code == 403
         assert (await s[actor].delete(close_path(s), params=body)).status_code == 403
     assert (await s["cadre"].post(close_path(s), json={})).status_code == 403
     body["closes_at"] = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
-    assert (await s["cadre"].post(close_path(s), json=body)).status_code == 422
+    for actor in ["cadre", "manager"]:
+        assert (await s[actor].post(close_path(s), json=body)).status_code == 201
+        assert (
+            await s[actor].delete(close_path(s), params={"class_id": body["class_id"]})
+        ).status_code == 200
 
 
 @pytest.mark.parametrize("scheduled", [False, True])
-async def test_legacy_class_cutoffs_no_longer_lock_orders(db_session, class_deadlines, scheduled):
+async def test_class_cutoffs_lock_self_ordering_but_allow_cadre_assistance(
+    db_session, class_deadlines, scheduled
+):
     s = class_deadlines
     db_session.add(
         ShopOrderClose(
@@ -132,10 +138,10 @@ async def test_legacy_class_cutoffs_no_longer_lock_orders(db_session, class_dead
         )
     )
     await db_session.flush()
-    assert (await status(s))["is_closed"] is False
+    assert (await status(s))["is_closed"] is True
     assert (
         await s["student"].put(registration_path(s), json={"variants": [{"quantity": 1}]})
-    ).status_code == 200
+    ).status_code == 409
     assert (await s["cadre"].post("/shop/orders/class", json=order_payload(s))).status_code == 201
 
 
@@ -191,7 +197,9 @@ async def test_unified_cutoff_locks_student_family_and_assisted_orders(
     assert (await status(s))["is_closed"] is True
 
 
-async def test_council_payment_locks_supplements_and_every_order_entry(db_session, class_deadlines):
+async def test_council_payment_locks_self_ordering_but_allows_separate_cadre_supplements(
+    db_session, class_deadlines
+):
     s = class_deadlines
     created = await s["student"].put(registration_path(s), json={"variants": [{"quantity": 1}]})
     order_id = created.json()["id"]
@@ -210,7 +218,10 @@ async def test_council_payment_locks_supplements_and_every_order_entry(db_sessio
     assert (
         await s["student"].put(registration_path(s), json={"variants": [{"quantity": 3}]})
     ).status_code == 409
-    assert (await s["cadre"].post("/shop/orders/class", json=order_payload(s))).status_code == 422
+    supplement = await s["cadre"].post("/shop/orders/class", json=order_payload(s))
+    assert supplement.status_code == 201
+    assert supplement.json()[0]["class_id"] is None
+    assert supplement.json()[0]["supplement_class_id"] == str(s["class"].id)
     assert (
         await s["cadre"].put(
             f"/shop/orders/class/members/{s['buyer'].id}/products/{s['product'].id}",

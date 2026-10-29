@@ -152,7 +152,7 @@ async def test_admin_assisted_order_rejects_inactive_and_unassigned_students(
     assert (await ac.get(f"/shop/orders/recipients/{uuid.uuid4()}")).status_code == 404
 
 
-@pytest.mark.parametrize("constraint", ["stock", "deadline", "global_close"])
+@pytest.mark.parametrize("constraint", ["stock", "deadline", "global_close", "purchase_limit"])
 async def test_admin_assisted_order_keeps_order_constraints(
     db_session, admin_user, authed_client_factory, constraint
 ):
@@ -166,17 +166,29 @@ async def test_admin_assisted_order_keeps_order_constraints(
     elif constraint == "global_close":
         closed = await ac.post(f"/shop/categories/{product.category_id}/close", json={})
         assert closed.status_code == 201
+    elif constraint == "purchase_limit":
+        product.max_quantity_per_user = 1
+        product.stock_quantity = 10
+        await db_session.flush()
     response = await ac.post(
         "/shop/orders/assisted",
         json={
             "user_id": str(student.id),
             "items": [
-                {"product_id": str(product.id), "quantity": 2 if constraint == "stock" else 1}
+                {
+                    "product_id": str(product.id),
+                    "quantity": 2 if constraint in {"stock", "purchase_limit"} else 1,
+                }
             ],
         },
     )
-    assert response.status_code == 422
-    assert await db_session.scalar(select(func.count()).select_from(Order)) == 0
+    assert response.status_code == (422 if constraint == "stock" else 201)
+    if constraint == "global_close":
+        assert response.json()[0]["class_id"] is None
+        assert response.json()[0]["supplement_class_id"] is not None
+    assert await db_session.scalar(select(func.count()).select_from(Order)) == (
+        0 if constraint == "stock" else 1
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -187,6 +199,191 @@ async def current_shop_student_prefixes(db_session):
         )
     )
     await db_session.flush()
+
+
+@pytest.mark.parametrize("council_closed", [False, True])
+async def test_supplement_collection_rejoins_original_class_and_has_own_receipt(
+    db_session, authed_client_factory, client, council_closed
+):
+    from io import BytesIO
+
+    from pypdf import PdfReader
+
+    sc = await _make_class(db_session)
+    manager = await _bare_user(db_session)
+    await _grant_permission(db_session, manager, "shop:manage_orders")
+    cadre = await _bare_user(db_session, student_id="11501")
+    await class_svc.add_cadre(db_session, sc, user_id=cadre.id)
+    buyer = await _bare_user(db_session, student_id="11520")
+    outsider = await _bare_user(db_session, student_id="11620")
+    product = await _make_active_product(db_session, manager, price=17)
+    mc, cc, bc = [authed_client_factory(user) for user in (manager, cadre, buyer)]
+    original = await bc.put(
+        f"/shop/registrations/current/products/{product.id}", json={"variants": [{"quantity": 1}]}
+    )
+    assert original.status_code == 200
+    original_id = original.json()["id"]
+    paid = await mc.patch(
+        f"/shop/orders/classes/{sc.id}/payment", json={"is_paid": True, "activity_id": None}
+    )
+    assert paid.status_code == 200
+    assert (
+        await bc.put(
+            f"/shop/registrations/current/products/{product.id}",
+            json={"variants": [{"quantity": 2}]},
+        )
+    ).status_code == 409
+    payload = {"user_id": str(buyer.id), "items": [{"product_id": str(product.id), "quantity": 2}]}
+    if council_closed:
+        assert (
+            await mc.post(f"/shop/categories/{product.category_id}/close", json={})
+        ).status_code == 201
+        assert (await cc.post("/shop/orders/class", json=payload)).status_code == 422
+        added = await mc.post("/shop/orders/assisted", json=payload)
+        actor = mc
+    else:
+        added = await cc.post("/shop/orders/class", json=payload)
+        actor = cc
+    assert added.status_code == 201, added.text
+    supplement = added.json()[0]
+    sid = supplement["id"]
+    assert supplement["class_id"] is None
+    assert supplement["supplement_class_id"] == str(sc.id)
+    assert supplement["total_price"] == 34
+    assert not supplement["is_paid"]
+    assert (await client.get("/shop/orders/supplements")).status_code == 401
+    assert (await authed_client_factory(outsider).get("/shop/orders/supplements")).json() == []
+    assert (await actor.get("/shop/orders/supplements")).json()[0]["id"] == sid
+    assert (await actor.get(f"/shop/orders/{sid}/supplement-receipt.pdf")).status_code == 409
+    assert (
+        await authed_client_factory(outsider).get(f"/shop/orders/{sid}/supplement-receipt.pdf")
+    ).status_code == 404
+    # 班級查詢的補歸班不能把待補收訂單提前併回。
+    assert {
+        str(order.id) for order in await shop_svc.list_orders(db_session, class_ids=[sc.id])
+    } == {original_id}
+    assert {
+        str(order.id)
+        for order in await shop_svc.get_class_member_registrations(db_session, buyer.id, [sc.id])
+    } == {original_id}
+    assert all(
+        str(order.id) != sid
+        for order in await shop_svc.get_current_registrations(db_session, buyer.id)
+    )
+    assert (
+        await authed_client_factory(outsider).patch(
+            f"/shop/orders/{sid}/payment", json={"is_paid": True}
+        )
+    ).status_code in {403, 404}
+    confirmed = await mc.patch(f"/shop/orders/{sid}/payment", json={"is_paid": True})
+    assert confirmed.status_code == 200, confirmed.text
+    assert confirmed.json()["class_id"] == str(sc.id)
+    receipt = await actor.get(f"/shop/orders/{sid}/supplement-receipt.pdf")
+    assert receipt.status_code == 200
+    text = "".join(page.extract_text() for page in PdfReader(BytesIO(receipt.content)).pages)
+    assert "補收款" in text and "34" in text
+    assert "51" not in text
+    report = await mc.get("/shop/orders/class-payments")
+    assert report.json()[0]["amount"] == 51
+    original_after = (await bc.get(f"/shop/orders/{original_id}")).json()
+    assert original_after["is_paid"] and original_after["total_price"] == 17
+    receivable = await db_session.scalar(
+        select(Receivable).where(Receivable.source_id == uuid.UUID(sid))
+    )
+    assert receivable.class_id == sc.id and receivable.paid_amount == 34
+    reversed_payment = await mc.patch(f"/shop/orders/{sid}/payment", json={"is_paid": False})
+    assert reversed_payment.json()["class_id"] is None
+    assert (await actor.get(f"/shop/orders/{sid}/supplement-receipt.pdf")).status_code == 409
+
+
+async def test_class_deadline_is_scoped_and_assisted_orders_can_bypass_it(
+    db_session, authed_client_factory
+):
+    sc = await _make_class(db_session)
+    other = await _make_class(db_session, start="11601", end="11640")
+    cadre = await _bare_user(db_session, student_id="11501")
+    await class_svc.add_cadre(db_session, sc, user_id=cadre.id)
+    buyer = await _bare_user(db_session, student_id="11520")
+    product = await _make_active_product(db_session, cadre)
+    cc, bc = authed_client_factory(cadre), authed_client_factory(buyer)
+    path = f"/shop/categories/{product.category_id}/close"
+    expired = {
+        "class_id": str(sc.id),
+        "closes_at": (datetime.now(UTC) - timedelta(minutes=1)).isoformat(),
+    }
+    assert (await bc.post(path, json=expired)).status_code == 403
+    assert (await cc.post(path, json={**expired, "class_id": str(other.id)})).status_code == 403
+    assert (await cc.post(path, json=expired)).status_code == 201
+    assert (
+        await bc.put(
+            f"/shop/registrations/current/products/{product.id}",
+            json={"variants": [{"quantity": 1}]},
+        )
+    ).status_code == 409
+    payload = {"user_id": str(buyer.id), "items": [{"product_id": str(product.id), "quantity": 1}]}
+    assert (await cc.post("/shop/orders/class", json=payload)).status_code == 201
+    future = {**expired, "closes_at": (datetime.now(UTC) + timedelta(days=1)).isoformat()}
+    assert (await cc.post(path, json=future)).status_code == 201
+    loaded = await cc.get(
+        f"/shop/categories/{product.category_id}/class-deadline", params={"class_id": str(sc.id)}
+    )
+    assert loaded.json()["closes_at"] == future["closes_at"].replace("+00:00", "Z")
+    assert (
+        await bc.put(
+            f"/shop/registrations/current/products/{product.id}",
+            json={"variants": [{"quantity": 2}]},
+        )
+    ).status_code == 200
+    assert (await cc.delete(path, params={"class_id": str(sc.id)})).status_code == 200
+    assert (await cc.post(path, json={})).status_code == 403
+
+
+@pytest.mark.parametrize("manager", [False, True])
+async def test_manually_separate_order_checks_class_scope_and_preserves_amounts(
+    db_session, client, authed_client_factory, manager
+):
+    sc = await _make_class(db_session)
+    actor = await _bare_user(db_session, student_id="11501")
+    await class_svc.add_cadre(db_session, sc, user_id=actor.id)
+    if manager:
+        await _grant_permission(db_session, actor, "shop:manage_orders")
+    buyer = await _bare_user(db_session, student_id="11520")
+    outsider = await _bare_user(db_session, student_id="11620")
+    order = await _seed_order(db_session, buyer, class_id=sc.id, total_price=123)
+    path = f"/shop/orders/{order.id}/separate"
+    assert (await client.post(path)).status_code == 401
+    assert (await authed_client_factory(buyer).post(path)).status_code == 403
+    assert (await authed_client_factory(outsider).post(path)).status_code == 403
+    ac = authed_client_factory(actor)
+    response = await ac.post(path)
+    assert response.status_code == 200, response.text
+    assert response.json()["class_id"] is None
+    assert response.json()["supplement_class_id"] == str(sc.id)
+    assert response.json()["total_price"] == 123
+    assert (await ac.post(path)).status_code == 200
+    paid = await _seed_order(db_session, buyer, class_id=sc.id, is_paid=True)
+    assert (await ac.post(f"/shop/orders/{paid.id}/separate")).status_code == 409
+
+
+async def test_receivable_payment_rejoins_supplement_only_after_full_collection(
+    db_session, authed_client_factory
+):
+    from api.services import receivable as receivable_svc
+
+    sc = await _make_class(db_session)
+    actor = await _bare_user(db_session)
+    await _grant_permission(db_session, actor, "shop:manage_orders")
+    buyer = await _bare_user(db_session, student_id="11520")
+    order = await _seed_order(db_session, buyer, class_id=sc.id, total_price=123)
+    assert (
+        await authed_client_factory(actor).post(f"/shop/orders/{order.id}/separate")
+    ).status_code == 200
+    receivable = await db_session.scalar(select(Receivable).where(Receivable.source_id == order.id))
+    await receivable_svc.mark_paid(db_session, receivable, actor_id=actor.id, paid_amount=20)
+    assert order.class_id is None and not order.is_paid
+    await receivable_svc.mark_paid(db_session, receivable, actor_id=actor.id)
+    assert order.class_id == sc.id and order.is_paid
+    assert receivable.class_id == sc.id
 
 
 @pytest.fixture
@@ -2098,7 +2295,9 @@ async def test_class_payment_report_summarizes_confirmed_valid_orders(
     manager = await _bare_user(db_session)
     await _grant_permission(db_session, manager, "shop:manage_orders")
     await _seed_order(db_session, buyer, class_id=school_class.id, total_price=100)
-    cancelled_order = await _seed_order(db_session, buyer, class_id=school_class.id, total_price=200)
+    cancelled_order = await _seed_order(
+        db_session, buyer, class_id=school_class.id, total_price=200
+    )
 
     client = authed_client_factory(manager)
     confirmed = await client.patch(
@@ -2130,7 +2329,9 @@ async def test_class_payment_report_requires_global_shop_read_permission(
     viewer = await _bare_user(db_session)
 
     assert (await client.get("/shop/orders/class-payments")).status_code == 401
-    assert (await authed_client_factory(viewer).get("/shop/orders/class-payments")).status_code == 403
+    assert (
+        await authed_client_factory(viewer).get("/shop/orders/class-payments")
+    ).status_code == 403
 
 
 async def test_council_class_payment_emails_cadres_full_class_orders_once(
@@ -3393,7 +3594,7 @@ async def test_close_category_global_by_manager_then_conflict_on_repeat(
     assert second.status_code == 409
 
 
-async def test_close_category_by_cadre_for_own_class_rejected(
+async def test_close_category_by_cadre_for_own_class_allowed(
     db_session, authed_client_factory
 ) -> None:
     sc = await _make_class(db_session)
@@ -3403,7 +3604,8 @@ async def test_close_category_by_cadre_for_own_class_rejected(
 
     ac = authed_client_factory(cadre)
     resp = await ac.post(f"/shop/categories/{category.id}/close", json={"class_id": str(sc.id)})
-    assert resp.status_code == 422
+    assert resp.status_code == 201
+    assert resp.json()["class_id"] == str(sc.id)
 
 
 async def test_close_category_globally_by_cadre_returns_403(
@@ -3419,7 +3621,7 @@ async def test_close_category_globally_by_cadre_returns_403(
     assert resp.status_code == 403
 
 
-async def test_close_category_by_cadre_for_other_class_returns_422(
+async def test_close_category_by_cadre_for_other_class_returns_403(
     db_session, authed_client_factory
 ) -> None:
     sc = await _make_class(db_session, start="11501", end="11540")
@@ -3432,7 +3634,7 @@ async def test_close_category_by_cadre_for_other_class_returns_422(
     resp = await ac.post(
         f"/shop/categories/{category.id}/close", json={"class_id": str(other_sc.id)}
     )
-    assert resp.status_code == 422
+    assert resp.status_code == 403
 
 
 async def test_reopen_category_when_not_closed_returns_409(

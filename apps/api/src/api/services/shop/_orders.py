@@ -485,6 +485,8 @@ async def _create_order_from_items(
     coupon_code: str | None = None,
     payment_method: str = "cash_on_pickup",
     replace_order: Order | None = None,
+    council_override: bool = False,
+    supplement_class_id: uuid.UUID | None = None,
 ) -> Order:
     if replace_order is not None and replace_order.test_product_id is not None:
         raise ValueError("測試訂購請至商品頁調整")
@@ -503,20 +505,16 @@ async def _create_order_from_items(
     if len(scopes) != 1 or next(iter(scopes))[0] != activity_id:
         raise ValueError("同一筆訂單只能包含同一活動的商品")
     order_scope = next(iter(scopes))
-    if assisted_by_id is not None and replace_order is None:
+    if assisted_by_id is not None and class_id is None and supplement_class_id is None:
         paid_orders = await get_current_registrations(session, user_id)
-        paid_product_ids = {
-            item.product_id
-            for order in paid_orders
-            if (order.is_paid or order.is_class_collected)
-            and _order_activity_id(order) == activity_id
-            for item in order.items
-        }
-        requested_product_ids = {item.product_id for item in cart_items}
-        if paid_product_ids and not requested_product_ids.issubset(paid_product_ids):
-            raise ValueError("班級幹部已登記收款，商品登記已鎖定")
+        if any(
+            (existing.is_paid or existing.is_class_collected)
+            and _order_activity_id(existing) == activity_id
+            for existing in paid_orders
+        ):
+            raise ValueError("已收款登記已鎖定，請先確認補收款原班級")
     order = replace_order
-    if order is None:
+    if order is None and supplement_class_id is None:
         order = await get_current_registration(
             session,
             user_id,
@@ -566,7 +564,7 @@ async def _create_order_from_items(
         )
     for product_id, quantity in requested_quantities.items():
         product = await get_product(session, product_id)
-        if product is not None:
+        if product is not None and not council_override:
             await _assert_purchase_limit(
                 session,
                 product,
@@ -585,13 +583,15 @@ async def _create_order_from_items(
         sale_end = product.effective_sale_end
         if sale_end is not None and sale_end.tzinfo is None:
             sale_end = sale_end.replace(tzinfo=UTC)
-        if sale_end is not None and datetime.now(UTC) >= sale_end:
+        if not council_override and sale_end is not None and datetime.now(UTC) >= sale_end:
             raise ValueError(f"商品「{product.name}」已截止販售")
-        await _assert_product_registration_open(
-            session,
-            product,
-            class_id=class_id,
-        )
+        if council_override:
+            if product.status != ProductStatus.ACTIVE:
+                raise ValueError(f"商品「{product.name}」目前無法登記")
+        else:
+            await _assert_product_registration_open(
+                session, product, class_id=class_id, allow_class_deadline=assisted_by_id is not None
+            )
 
         option_ids = [uuid.UUID(str(o["option_id"])) for o in (cart_item.selected_options or [])]
         selected = _resolve_selected_options(product, option_ids)
@@ -624,6 +624,7 @@ async def _create_order_from_items(
             category_id=order_scope[1],
             assistance_scope=assistance_scope,
             assisted_by_id=assisted_by_id,
+            supplement_class_id=supplement_class_id,
             status=OrderStatus.PENDING,
             subtotal_price=0,
             discount_amount=0,
@@ -706,21 +707,59 @@ async def create_direct_order(
     data: ClassOrderUpsert,
     assistance_scope: str = "class_assisted",
     assisted_by_id: uuid.UUID | None = None,
+    payment_method: str = "cash_on_pickup",
 ) -> list[Order]:
+    await _lock_class_orders(session, class_id)
+    council_override = assistance_scope in {"council_assisted", "council_separate"}
     cart_items = await _order_items_to_cart_items(session, data.items)
     orders: list[Order] = []
     for (activity_id, _category_id), activity_items in (
         await _group_cart_items_by_activity(session, cart_items)
     ).items():
+        supplement = assistance_scope == "council_separate"
+        if council_override:
+            categories = {
+                product.category or (product.series.category if product.series else None)
+                for item in activity_items
+                if (product := await get_product(session, item.product_id)) is not None
+            }
+            closed = await get_close_status(
+                session, [category.id for category in categories if category is not None], None
+            )
+            supplement = supplement or any(closed.values())
+        if assisted_by_id is not None and class_id is not None:
+            class_paid = await session.scalar(
+                select(ShopClassPayment.id).where(
+                    ShopClassPayment.class_id == class_id,
+                    ShopClassPayment.activity_id == activity_id,
+                    ShopClassPayment.is_paid.is_(True),
+                )
+            )
+            collected = await session.scalar(
+                select(Order.id)
+                .where(
+                    Order.user_id == user_id,
+                    Order.class_id == class_id,
+                    Order.activity_id == activity_id,
+                    Order.test_product_id.is_(None),
+                    Order.status.in_((OrderStatus.PENDING, OrderStatus.CONFIRMED)),
+                    or_(Order.is_paid.is_(True), Order.is_class_collected.is_(True)),
+                )
+                .limit(1)
+            )
+            supplement = supplement or class_paid is not None or collected is not None
         order = await _create_order_from_items(
             session,
             user_id=user_id,
-            class_id=class_id,
+            class_id=None if supplement else class_id,
             activity_id=activity_id,
             cart_items=activity_items,
             notes=data.notes,
-            assistance_scope=assistance_scope,
+            assistance_scope="supplement" if supplement else assistance_scope,
             assisted_by_id=assisted_by_id,
+            payment_method=payment_method,
+            council_override=council_override,
+            supplement_class_id=class_id if supplement else None,
         )
         await receivable_svc.sync_shop_order(session, order)
         orders.append(order)
@@ -890,6 +929,7 @@ async def get_current_registration(
         Order.user_id == user_id,
         Order.status.in_(statuses),
         Order.test_product_id == test_product_id,
+        Order.supplement_class_id.is_(None),
     )
     if editable_only:
         query = query.where(Order.is_paid.is_(False), Order.is_class_collected.is_(False))
@@ -923,6 +963,7 @@ async def get_current_registrations(
         .where(
             Order.user_id == user_id,
             Order.status.in_((OrderStatus.PENDING, OrderStatus.CONFIRMED)),
+            Order.supplement_class_id.is_(None),
             True if include_testing else Order.test_product_id.is_(None),
         )
         .order_by(Order.created_at.desc(), Order.updated_at.desc())
@@ -947,6 +988,7 @@ async def _get_class_member_orders(
         .where(
             Order.user_id == user_id,
             Order.test_product_id.is_(None),
+            or_(Order.supplement_class_id.is_(None), Order.class_id.is_not(None)),
             Order.status.in_((OrderStatus.PENDING, OrderStatus.CONFIRMED)),
             or_(Order.class_id.in_(class_ids), Order.class_id.is_(None)),
         )
@@ -1015,6 +1057,7 @@ async def _assert_product_registration_open(
     class_id: uuid.UUID | None,
     allow_sold_out: bool = False,
     allow_testing: bool = False,
+    allow_class_deadline: bool = False,
 ) -> None:
     if allow_testing and product.status == ProductStatus.TESTING:
         await _assert_activity_order_unlocked(session, _product_activity_id(product))
@@ -1045,7 +1088,8 @@ async def _assert_product_registration_open(
         if closes.get(category_id) is not None:
             if closes[category_id].is_global:
                 raise ValueError("班聯會已全域停止此分類訂購，班代亦無法代訂")
-            raise ValueError("班聯已確認本班收款，商品登記已鎖定")
+            if not allow_class_deadline:
+                raise ValueError("本班已截止，請聯繫班代協助加購")
 
 
 async def get_order(session: AsyncSession, order_id: uuid.UUID) -> Order | None:
@@ -1304,6 +1348,12 @@ async def replace_order_items(
 async def set_order_paid(
     session: AsyncSession, order: Order, *, is_paid: bool, actor_id: uuid.UUID
 ) -> Order:
+    if order.supplement_class_id is not None:
+        await _lock_class_orders(session, order.supplement_class_id)
+        order.class_id = order.supplement_class_id if is_paid else None
+        order.school_class = (
+            await session.get(SchoolClass, order.supplement_class_id) if is_paid else None
+        )
     order.is_paid = is_paid
     if is_paid:
         order.paid_at = datetime.now(UTC)
@@ -1352,7 +1402,7 @@ async def get_close_status(
     category_ids: list[uuid.UUID],
     class_id: uuid.UUID | None,
 ) -> dict[uuid.UUID, CloseStatusItem | None]:
-    """統一期限、班聯收款或全域停止；舊班代截止紀錄不再生效。"""
+    """班聯結單優先；班級期限及繳款狀態限制學生自行訂購。"""
     if not category_ids:
         return {}
     categories = list(
@@ -1381,7 +1431,7 @@ async def get_close_status(
         .where(
             ShopOrderClose.is_active.is_(True),
             ShopOrderClose.category_id.in_(category_ids),
-            ShopOrderClose.class_id.is_(None),
+            or_(ShopOrderClose.class_id.is_(None), ShopOrderClose.class_id == class_id),
         )
     )
     q = q.where(
@@ -1407,10 +1457,13 @@ async def get_close_status(
                 closed_at=payment.confirmed_at,
             )
     for row in rows:
+        if row.class_id is not None and result[row.category_id] is not None:
+            continue
         result[row.category_id] = CloseStatusItem(
             is_closed=True,
-            is_global=True,
+            is_global=row.class_id is None,
             closed_at=row.created_at,
+            closes_at=row.closes_at,
             closed_by_name=row.closed_by.display_name if row.closed_by else None,
         )
     return result

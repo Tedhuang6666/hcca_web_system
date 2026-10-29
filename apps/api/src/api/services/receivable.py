@@ -249,6 +249,9 @@ async def _sync_source_payment(db: AsyncSession, item: Receivable, *, is_paid: b
     if item.source_type == ReceivableSource.SHOP_ORDER.value:
         order = await db.get(Order, item.source_id)
         if order:
+            if order.supplement_class_id is not None:
+                order.class_id = order.supplement_class_id if is_paid else None
+                item.class_id = order.class_id
             order.is_paid = is_paid
             order.paid_at = item.paid_at if is_paid else None
             order.paid_by_id = item.collected_by_id if is_paid else None

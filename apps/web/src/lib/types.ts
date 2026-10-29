@@ -115,6 +115,7 @@ export type {
   ClassMembershipCreate,
   ClassMembershipOut,
   ClassOrderCreate,
+  AdminAssistedOrderCreate,
   ClassOrderUpsert,
   ClassPaymentOut,
   ClassPaymentReportItemOut,

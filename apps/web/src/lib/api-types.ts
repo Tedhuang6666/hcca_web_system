@@ -10346,6 +10346,23 @@ export interface paths {
         patch: operations["update_category_shop_categories__category_id__patch"];
         trace?: never;
     };
+    "/shop/categories/{category_id}/class-deadline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Class Deadline */
+        get: operations["read_class_deadline_shop_categories__category_id__class_deadline_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shop/categories/{category_id}/close": {
         parameters: {
             query?: never;
@@ -10830,6 +10847,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop/orders/supplements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 補收款清單 */
+        get: operations["list_supplement_orders_shop_orders_supplements_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shop/orders/{order_id}": {
         parameters: {
             query?: never;
@@ -10914,6 +10948,40 @@ export interface paths {
         head?: never;
         /** 管理員標示單筆訂單是否已繳費 */
         patch: operations["update_order_payment_shop_orders__order_id__payment_patch"];
+        trace?: never;
+    };
+    "/shop/orders/{order_id}/separate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 將個別訂單獨立收款 */
+        post: operations["separate_order_collection_shop_orders__order_id__separate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shop/orders/{order_id}/supplement-receipt.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 下載單筆補收款收據 */
+        get: operations["download_supplement_receipt_shop_orders__order_id__supplement_receipt_pdf_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/shop/products": {
@@ -12747,6 +12815,29 @@ export interface components {
             order_id: string;
             /** Seat Ids */
             seat_ids: string[];
+        };
+        /** AdminAssistedOrderCreate */
+        AdminAssistedOrderCreate: {
+            /**
+             * Collection Mode
+             * @default class
+             * @enum {string}
+             */
+            collection_mode: "class" | "separate";
+            /** Items */
+            items: components["schemas"]["OrderItemCreate"][];
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Payment Method
+             * @default cash_on_pickup
+             * @enum {string}
+             */
+            payment_method: "cash_on_pickup" | "bank_transfer";
+            /** Roster Entry Id */
+            roster_entry_id?: string | null;
+            /** User Id */
+            user_id?: string | null;
         };
         /** AdminDashboardStats */
         AdminDashboardStats: {
@@ -21921,6 +22012,8 @@ export interface components {
              * @default 0
              */
             subtotal_price: number;
+            /** Supplement Class Id */
+            supplement_class_id?: string | null;
             /** Test Product Id */
             test_product_id?: string | null;
             /** Total Price */
@@ -22009,6 +22102,8 @@ export interface components {
              * @default 0
              */
             subtotal_price: number;
+            /** Supplement Class Id */
+            supplement_class_id?: string | null;
             /** Test Product Id */
             test_product_id?: string | null;
             /** Total Price */
@@ -29540,9 +29635,9 @@ export interface components {
         /** ShopOrderCloseCreate */
         ShopOrderCloseCreate: {
             /** Class Id */
-            class_id?: null;
+            class_id?: string | null;
             /** Closes At */
-            closes_at?: null;
+            closes_at?: string | null;
             /** Notes */
             notes?: string | null;
         };
@@ -55208,6 +55303,39 @@ export interface operations {
             };
         };
     };
+    read_class_deadline_shop_categories__category_id__class_deadline_get: {
+        parameters: {
+            query: {
+                class_id: string;
+            };
+            header?: never;
+            path: {
+                category_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopOrderCloseOut"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     close_category_shop_categories__category_id__close_post: {
         parameters: {
             query?: never;
@@ -55844,7 +55972,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ClassOrderCreate"];
+                "application/json": components["schemas"]["AdminAssistedOrderCreate"];
             };
         };
         responses: {
@@ -56322,6 +56450,38 @@ export interface operations {
             };
         };
     };
+    list_supplement_orders_shop_orders_supplements_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderListItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_order_shop_orders__order_id__get: {
         parameters: {
             query?: never;
@@ -56516,6 +56676,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrderOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    separate_order_collection_shop_orders__order_id__separate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_supplement_receipt_shop_orders__order_id__supplement_receipt_pdf_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

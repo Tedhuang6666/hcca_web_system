@@ -5,6 +5,7 @@ import CouncilOrdersPage from "@/app/(protected)/shop/council-orders/page";
 const api = vi.hoisted(() => ({
   catalog: vi.fn(), listActivities: vi.fn(), recipientOptions: vi.fn(), orderSummary: vi.fn(), orderQuantities: vi.fn(),
   classPaymentReport: vi.fn(),
+  listSupplementOrders: vi.fn(),
   listOrders: vi.fn(), getCloseStatus: vi.fn(), closeCategory: vi.fn(), reopenCategory: vi.fn(), setClassPaid: vi.fn(),
   cancelOrder: vi.fn(), downloadClassReceipt: vi.fn(), downloadClassReceipts: vi.fn(),
 }));
@@ -33,6 +34,7 @@ beforeEach(() => {
   api.recipientOptions.mockResolvedValue([]);
   api.orderSummary.mockResolvedValue(summary());
   api.classPaymentReport.mockResolvedValue([]);
+  api.listSupplementOrders.mockResolvedValue([]);
   api.orderQuantities.mockResolvedValue([]);
   api.listOrders.mockResolvedValue([]);
   api.getCloseStatus.mockResolvedValue({ statuses: { shirts: { is_closed: false }, bags: { is_closed: false }, cards: { is_closed: false } } });
@@ -111,8 +113,8 @@ describe("全校收款與訂單", () => {
     await openPage();
 
     expect(screen.queryByRole("button", { name: "確認一年一班的校慶收款" })).not.toBeInTheDocument();
-    expect(await screen.findByText("已確認收款")).toBeVisible();
-    expect(screen.getByRole("button", { name: "確認一年一班的冬季活動收款" })).toBeVisible();
+    await waitFor(() => expect(screen.getByText("已確認收款")).toBeVisible());
+    await waitFor(() => expect(screen.getByRole("button", { name: "確認一年一班的冬季活動收款" })).toBeVisible());
   });
 
   it("全校唯讀者可查看收款統計但不能確認收款", async () => {
@@ -137,7 +139,7 @@ describe("全校收款與訂單", () => {
   it("沒有另外建立活動也能在頁面上方全域鎖單商品批次", async () => {
     api.listActivities.mockResolvedValue([]);
     render(<CouncilOrdersPage />);
-    const closure = await screen.findByRole("region", { name: "活動結單與公開入口" });
+    const closure = await screen.findByRole("region", { name: "班聯結單與公開入口" });
     expect(closure).toBeVisible();
     expect(closure.closest("details")).toBeNull();
     expect(closure.compareDocumentPosition(screen.getByRole("navigation", { name: "班聯統籌工作" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

@@ -1,4 +1,5 @@
 import type {
+  AdminAssistedOrderCreate,
   ClassMemberOut,
   ShopSalesAnalyticsOut,
   ShopSalesReportCreate,
@@ -155,7 +156,14 @@ export const shopApi = {
   clearAllOrders: () => del<ShopOrdersClearOut>("/shop/orders"),
   createClassOrder: (body: ClassOrderCreate) => post<OrderOut[]>("/shop/orders/class", body),
   listOrderRecipients: (classId: string) => get<ClassMemberOut[]>(`/shop/orders/recipients/${classId}`),
-  createAdminAssistedOrder: (body: ClassOrderCreate) => post<OrderOut[]>("/shop/orders/assisted", body),
+  createAdminAssistedOrder: (body: AdminAssistedOrderCreate) => post<OrderOut[]>("/shop/orders/assisted", body),
+  listSupplementOrders: (offset = 0) => get<OrderListItem[]>(`/shop/orders/supplements?limit=500&offset=${offset}`),
+  separateOrder: (id: string) => post<OrderOut>(`/shop/orders/${id}/separate`),
+  downloadSupplementReceipt: async (id: string) => {
+    const response = await authFetch(`${BASE}/shop/orders/${id}/supplement-receipt.pdf`, { credentials: "include" });
+    if (!response.ok) throw new ApiError(response.status, await errorMessageFromResponse(response));
+    return response;
+  },
   updateOrder: (id: string, body: {
     user_id: string;
     items: { product_id: string; quantity: number; option_ids: string[] }[];
@@ -245,10 +253,11 @@ export const shopApi = {
   deleteVariantOption: (optionId: string) => del<void>(`/shop/variant-options/${optionId}`),
 
   // 結單管理
-  closeCategory: (categoryId: string, body: { notes?: string }) =>
+  getClassDeadline: (categoryId: string, classId: string) => get<ShopOrderCloseOut | null>(`/shop/categories/${categoryId}/class-deadline?class_id=${classId}`),
+  closeCategory: (categoryId: string, body: { notes?: string; class_id?: string; closes_at?: string | null }) =>
     post<ShopOrderCloseOut>(`/shop/categories/${categoryId}/close`, body),
-  reopenCategory: (categoryId: string) =>
-    del<ShopOrderCloseOut>(`/shop/categories/${categoryId}/close`),
+  reopenCategory: (categoryId: string, classId?: string) =>
+    del<ShopOrderCloseOut>(`/shop/categories/${categoryId}/close${classId ? `?class_id=${classId}` : ""}`),
   getCloseStatus: (categoryIds: string[], classId?: string) => {
     const p = new URLSearchParams();
     categoryIds.forEach((id) => p.append("category_ids", id));
