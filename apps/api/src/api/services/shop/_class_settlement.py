@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from api.core.clock import now_local
 from api.models.school_class import SchoolClass
@@ -377,10 +378,14 @@ async def reopen_category_for_class(
 ) -> ShopOrderClose:
     if class_id is not None:
         raise ValueError("請由班聯撤銷該班收款確認；仍須遵守統一截止時間")
-    existing_q = select(ShopOrderClose).where(
-        ShopOrderClose.category_id == category_id,
-        ShopOrderClose.is_active.is_(True),
-        ShopOrderClose.class_id == class_id if class_id else ShopOrderClose.class_id.is_(None),
+    existing_q = (
+        select(ShopOrderClose)
+        .options(selectinload(ShopOrderClose.closed_by))
+        .where(
+            ShopOrderClose.category_id == category_id,
+            ShopOrderClose.is_active.is_(True),
+            ShopOrderClose.class_id == class_id if class_id else ShopOrderClose.class_id.is_(None),
+        )
     )
     existing = (await session.execute(existing_q)).scalar_one_or_none()
     if not existing:
