@@ -10643,6 +10643,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop/orders/class-payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 班聯目前確認收款的班級明細 */
+        get: operations["class_payment_report_shop_orders_class_payments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shop/orders/class/members/{member_user_id}/products/{product_id}": {
         parameters: {
             query?: never;
@@ -14956,6 +14973,31 @@ export interface components {
             is_paid: boolean;
             /** Updated Orders */
             updated_orders: number;
+        };
+        /** ClassPaymentReportItemOut */
+        ClassPaymentReportItemOut: {
+            /** Activity Id */
+            activity_id?: string | null;
+            /** Activity Label */
+            activity_label: string;
+            /** Amount */
+            amount: number;
+            /**
+             * Class Id
+             * Format: uuid
+             */
+            class_id: string;
+            /** Class Label */
+            class_label: string;
+            /**
+             * Confirmed At
+             * Format: date-time
+             */
+            confirmed_at: string;
+            /** Grade */
+            grade: number;
+            /** Order Count */
+            order_count: number;
         };
         /** ClassPaymentUpdate */
         ClassPaymentUpdate: {
@@ -55901,6 +55943,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    class_payment_report_shop_orders_class_payments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClassPaymentReportItemOut"][];
                 };
             };
         };

@@ -1541,6 +1541,9 @@ from api.services.shop._order_queries import (  # noqa: E402
     class_order_summary as class_order_summary,
 )
 from api.services.shop._order_queries import (  # noqa: E402
+    class_payment_report as class_payment_report,
+)
+from api.services.shop._order_queries import (  # noqa: E402
     order_quantities as order_quantities,
 )
 from api.services.shop._order_queries import (  # noqa: E402

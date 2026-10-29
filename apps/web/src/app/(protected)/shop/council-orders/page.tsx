@@ -17,6 +17,7 @@ import Modal from "@/components/ui/Modal";
 import type {
   ActivityOut,
   CatalogCategoryOut,
+  ClassPaymentReportItemOut,
   CloseStatusItem,
   OrderListItem,
   OrderQuantityRow,
@@ -29,6 +30,25 @@ type Tab = "summary" | "quantities" | "orders" | "analytics";
 
 function money(v: number) {
   return `NT$${v.toLocaleString("zh-TW")}`;
+}
+
+function taipeiDate(value: Date) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(value);
+  const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+function taipeiDateTime(value: string) {
+  return new Intl.DateTimeFormat("zh-TW", {
+    timeZone: "Asia/Taipei",
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(value));
 }
 
 // ── 結單狀態徽章 ─────────────────────────────────────────────────────────────
@@ -60,6 +80,9 @@ export default function CouncilOrdersPage() {
   const canConfirmClassPayment = hasAdminPermission
     || permissions.has("shop:manage")
     || permissions.has("shop:manage_orders");
+  const canViewClassPaymentReport = canConfirmClassPayment
+    || permissions.has("shop:view_all")
+    || permissions.has("finance:view");
   const canViewAdvancedStats = hasAdminPermission || permissions.has("shop:manage");
   const [tab, setTab] = useState<Tab>("summary");
   const [analyticsRefresh, setAnalyticsRefresh] = useState(0);
@@ -76,12 +99,20 @@ export default function CouncilOrdersPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [search, setSearch] = useState("");
+  const [collectionDateFrom, setCollectionDateFrom] = useState(() => taipeiDate(new Date()));
+  const [collectionDateTo, setCollectionDateTo] = useState(() => taipeiDate(new Date()));
+  const [collectionActivityId, setCollectionActivityId] = useState("");
+  const [collectionGrade, setCollectionGrade] = useState("");
+  const [collectionClassSearch, setCollectionClassSearch] = useState("");
 
   // 資料
   const [catalog, setCatalog] = useState<CatalogCategoryOut[]>([]);
   const [activities, setActivities] = useState<ActivityOut[]>([]);
   const [classes, setClasses] = useState<SchoolClassListItem[]>([]);
   const [summary, setSummary] = useState<OrderSummaryOut | null>(null);
+  const [classPayments, setClassPayments] = useState<ClassPaymentReportItemOut[]>([]);
+  const [classPaymentsLoading, setClassPaymentsLoading] = useState(true);
+  const [classPaymentsError, setClassPaymentsError] = useState("");
   const [quantities, setQuantities] = useState<OrderQuantityRow[]>([]);
   const [orders, setOrders] = useState<OrderListItem[]>([]);
   const [closeStatus, setCloseStatus] = useState<Record<string, Record<string, CloseStatusItem>>>({});
@@ -91,6 +122,7 @@ export default function CouncilOrdersPage() {
   const [receiptError, setReceiptError] = useState("");
   const [selectedReceiptClasses, setSelectedReceiptClasses] = useState<Set<string>>(new Set());
   const requestVersion = useRef(0);
+  const classPaymentRequestVersion = useRef(0);
   const [optionsError, setOptionsError] = useState(false);
   const [optionsLoading, setOptionsLoading] = useState(true);
   const [optionsRetry, setOptionsRetry] = useState(0);
@@ -124,6 +156,22 @@ export default function CouncilOrdersPage() {
     date_to: dateTo ? new Date(`${dateTo}T23:59:59+08:00`).toISOString() : undefined,
   }), [dateFrom, dateTo]);
 
+  const loadClassPayments = useCallback(async () => {
+    const version = ++classPaymentRequestVersion.current;
+    setClassPaymentsLoading(true);
+    setClassPaymentsError("");
+    try {
+      const rows = await shopApi.classPaymentReport();
+      if (version !== classPaymentRequestVersion.current) return;
+      setClassPayments(rows);
+    } catch (error) {
+      if (version !== classPaymentRequestVersion.current) return;
+      setClassPaymentsError(apiErrorMessage(error, "無法載入班級收款明細，請重試。"));
+    } finally {
+      if (version === classPaymentRequestVersion.current) setClassPaymentsLoading(false);
+    }
+  }, []);
+
   const activityGroups = useMemo(() => {
     type ActivityGroup = {
       key: string;
@@ -156,6 +204,45 @@ export default function CouncilOrdersPage() {
     }
     return [...groups.values()];
   }, [activities, catalog]);
+
+  const collectionDateRangeInvalid = Boolean(
+    collectionDateFrom && collectionDateTo && collectionDateFrom > collectionDateTo,
+  );
+  const visibleClassPayments = useMemo(() => {
+    const query = collectionClassSearch.trim().toLocaleLowerCase("zh-TW");
+    if (collectionDateRangeInvalid) return [];
+    return classPayments.filter((payment) => {
+      const confirmedDate = taipeiDate(new Date(payment.confirmed_at));
+      if (collectionDateFrom && confirmedDate < collectionDateFrom) return false;
+      if (collectionDateTo && confirmedDate > collectionDateTo) return false;
+      if (collectionActivityId === "__general__" && payment.activity_id !== null) return false;
+      if (collectionActivityId && collectionActivityId !== "__general__"
+        && payment.activity_id !== collectionActivityId) return false;
+      if (collectionGrade && String(payment.grade) !== collectionGrade) return false;
+      if (query && !payment.class_label.toLocaleLowerCase("zh-TW").includes(query)) return false;
+      return true;
+    });
+  }, [
+    classPayments,
+    collectionDateFrom,
+    collectionDateTo,
+    collectionActivityId,
+    collectionGrade,
+    collectionClassSearch,
+    collectionDateRangeInvalid,
+  ]);
+  const collectionAmount = visibleClassPayments.reduce((total, payment) => total + payment.amount, 0);
+  const collectionClassCount = new Set(visibleClassPayments.map((payment) => payment.class_id)).size;
+  const classPaymentByScope = useMemo(() => {
+    const paymentsByScope = new Map<string, ClassPaymentReportItemOut>();
+    for (const payment of classPayments) {
+      paymentsByScope.set(
+        `${payment.class_id}:${payment.activity_id ?? "__general__"}`,
+        payment,
+      );
+    }
+    return paymentsByScope;
+  }, [classPayments]);
 
   const loadSummary = useCallback(async () => {
     const version = ++requestVersion.current;
@@ -282,7 +369,7 @@ export default function CouncilOrdersPage() {
     try {
       const result = await shopApi.setClassPaid(row.key, paid, activity.activityId);
       toast.success(`已更新「${activity.label}」${result.updated_orders} 筆訂單`);
-      await loadSummary();
+      await Promise.all([loadSummary(), loadClassPayments()]);
     } catch (e) {
       toast.error(apiErrorMessage(e, "更新整班繳費狀態失敗"));
     } finally {
@@ -297,6 +384,11 @@ export default function CouncilOrdersPage() {
     else if (tab === "orders") loadOrders();
     return () => { pendingRequests.current++; };
   }, [tab, loadSummary, loadQuantities, loadOrders]);
+
+  useEffect(() => {
+    if (tab !== "summary" || !canViewClassPaymentReport) return;
+    void loadClassPayments();
+  }, [tab, canViewClassPaymentReport, loadClassPayments]);
 
   const allProducts = useMemo(() =>
     catalog.flatMap((c) => [
@@ -357,7 +449,7 @@ export default function CouncilOrdersPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {canViewAdvancedStats && <Link href="/shop/admin?view=stats" className="btn btn-ghost min-h-11">進階訂購統計</Link>}
-          <button type="button" onClick={() => { if (tab === "summary") loadSummary(); else if (tab === "quantities") loadQuantities(); else if (tab === "analytics") setAnalyticsRefresh((value) => value + 1); else loadOrders(); }}
+          <button type="button" onClick={() => { if (tab === "summary") { void loadSummary(); if (canViewClassPaymentReport) void loadClassPayments(); } else if (tab === "quantities") loadQuantities(); else if (tab === "analytics") setAnalyticsRefresh((value) => value + 1); else loadOrders(); }}
             disabled={(tab !== "analytics" && loading) || mutationBusy} className="btn btn-ghost" aria-label="重新整理">
             <RefreshCw size={15} /> 重新整理
           </button>
@@ -488,6 +580,173 @@ export default function CouncilOrdersPage() {
       {/* Tab 1：班級彙總 */}
       {tab === "summary" && (
         <section>
+          {canViewClassPaymentReport && (
+            <section className="mb-5 space-y-3 rounded-lg p-4"
+              aria-labelledby="daily-class-payments-heading"
+              style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 id="daily-class-payments-heading" className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
+                    每日收款
+                  </h2>
+                  <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
+                    預設顯示今天；金額依目前有效的班聯已確認訂單計算。
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" className="btn btn-ghost min-h-11 px-3 text-sm"
+                    onClick={() => {
+                      const today = taipeiDate(new Date());
+                      setCollectionDateFrom(today);
+                      setCollectionDateTo(today);
+                    }}>
+                    今天
+                  </button>
+                  <button type="button" className="btn btn-ghost min-h-11 px-3 text-sm"
+                    onClick={() => {
+                      const today = taipeiDate(new Date());
+                      setCollectionDateFrom(today);
+                      setCollectionDateTo(today);
+                      setCollectionActivityId("");
+                      setCollectionGrade("");
+                      setCollectionClassSearch("");
+                    }}>
+                    清除篩選
+                  </button>
+                  <button type="button" className="btn btn-secondary min-h-11 px-3 text-sm"
+                    onClick={() => void loadClassPayments()}
+                    disabled={classPaymentsLoading}
+                    aria-label="重新載入收款明細">
+                    <RefreshCw size={15} /> 更新明細
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-end gap-3">
+                <label className="grid gap-1 text-sm">
+                  <span style={{ color: "var(--text-muted)" }}>收款日期（起）</span>
+                  <input type="date" className="input min-h-11" value={collectionDateFrom}
+                    onChange={(event) => setCollectionDateFrom(event.target.value)} />
+                </label>
+                <label className="grid gap-1 text-sm">
+                  <span style={{ color: "var(--text-muted)" }}>收款日期（迄）</span>
+                  <input type="date" className="input min-h-11" value={collectionDateTo}
+                    onChange={(event) => setCollectionDateTo(event.target.value)} />
+                </label>
+                <label className="grid min-w-48 gap-1 text-sm">
+                  <span style={{ color: "var(--text-muted)" }}>收款活動</span>
+                  <select className="input min-h-11" value={collectionActivityId}
+                    onChange={(event) => setCollectionActivityId(event.target.value)}>
+                    <option value="">全部活動</option>
+                    {activityGroups.map((group) => (
+                      <option key={group.key} value={group.activityId ?? "__general__"}>{group.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid min-w-36 gap-1 text-sm">
+                  <span style={{ color: "var(--text-muted)" }}>收款年級</span>
+                  <select className="input min-h-11" value={collectionGrade}
+                    onChange={(event) => setCollectionGrade(event.target.value)}>
+                    <option value="">全部年級</option>
+                    {gradeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid min-w-48 flex-1 gap-1 text-sm">
+                  <span style={{ color: "var(--text-muted)" }}>搜尋班級</span>
+                  <input className="input min-h-11" type="search" value={collectionClassSearch}
+                    onChange={(event) => setCollectionClassSearch(event.target.value)}
+                    placeholder="輸入班級名稱" />
+                </label>
+              </div>
+
+              {classPaymentsError && (
+                <div className="flex flex-wrap items-center justify-between gap-2" role="alert"
+                  style={{ color: "var(--danger)" }}>
+                  <span>{classPaymentsError}</span>
+                  <button type="button" className="btn btn-ghost min-h-11 px-3"
+                    onClick={() => void loadClassPayments()}>重試</button>
+                </div>
+              )}
+              {classPaymentsLoading ? (
+                <p role="status" className="py-6 text-center text-sm" style={{ color: "var(--text-secondary)" }}>
+                  正在載入收款明細…
+                </p>
+              ) : classPaymentsError ? null : (
+                <>
+                  <dl role="group" className="flex flex-wrap gap-x-8 gap-y-2 rounded-md px-3 py-2 text-sm"
+                    aria-label="收款統計">
+                    <div className="flex items-baseline gap-2">
+                      <dt style={{ color: "var(--text-secondary)" }}>收款金額</dt>
+                      <dd className="text-lg font-semibold tabular-nums" style={{ color: "var(--primary-text)" }}>
+                        {money(collectionAmount)}
+                      </dd>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <dt style={{ color: "var(--text-secondary)" }}>收款班級</dt>
+                      <dd className="text-lg font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>
+                        {collectionClassCount} 班
+                      </dd>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <dt style={{ color: "var(--text-secondary)" }}>收款項目</dt>
+                      <dd className="font-medium tabular-nums" style={{ color: "var(--text-primary)" }}>
+                        {visibleClassPayments.length} 筆
+                      </dd>
+                    </div>
+                  </dl>
+                  {collectionDateRangeInvalid ? (
+                    <p role="alert" className="py-4 text-center text-sm" style={{ color: "var(--danger)" }}>
+                      起始日期不可晚於結束日期。
+                    </p>
+                  ) : visibleClassPayments.length === 0 ? (
+                    <p role="status" className="py-6 text-center text-sm" style={{ color: "var(--text-secondary)" }}>
+                      這個日期與篩選條件沒有收款紀錄；可調整日期或清除篩選。
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto rounded-md" style={{ border: "1px solid var(--border)" }}>
+                      <table className="shop-mobile-table w-full min-w-[680px] text-sm" aria-label="收款班級明細">
+                        <thead>
+                          <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                            {["收款時間", "班級", "年級", "活動／商品", "訂單數", "收款金額"].map((label) => (
+                              <th key={label} scope="col" className="px-3 py-3 text-left text-xs font-semibold"
+                                style={{ color: "var(--text-muted)" }}>{label}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {visibleClassPayments.map((payment) => (
+                            <tr key={`${payment.class_id}:${payment.activity_id ?? "__general__"}`}
+                              style={{ borderBottom: "1px solid var(--border)" }}>
+                              <td data-label="收款時間" className="px-3 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>
+                                {taipeiDateTime(payment.confirmed_at)}
+                              </td>
+                              <td data-label="班級" className="px-3 py-3 font-medium" style={{ color: "var(--text-primary)" }}>
+                                {payment.class_label}
+                              </td>
+                              <td data-label="年級" className="px-3 py-3" style={{ color: "var(--text-secondary)" }}>
+                                {payment.grade} 年級
+                              </td>
+                              <td data-label="活動／商品" className="px-3 py-3" style={{ color: "var(--text-secondary)" }}>
+                                {payment.activity_label}
+                              </td>
+                              <td data-label="訂單數" className="px-3 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>
+                                {payment.order_count}
+                              </td>
+                              <td data-label="收款金額" className="px-3 py-3 font-semibold tabular-nums" style={{ color: "var(--success)" }}>
+                                {money(payment.amount)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </>
+              )}
+            </section>
+          )}
           <p className="mb-3 text-sm" style={{ color: "var(--text-secondary)" }}>同學已交給班代、尚未由班聯確認的款項，仍列在「班聯未確認」。</p>
           {summary && !loading && (
             <div className="mb-3 grid gap-3 sm:grid-cols-3">
@@ -578,7 +837,7 @@ export default function CouncilOrdersPage() {
               <div role="status" className="py-16 text-center text-sm" style={{ color: "var(--text-muted)" }}>目前範圍沒有資料，可清除篩選或改選其他活動。</div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="shop-mobile-table w-full min-w-[720px] text-sm">
+                <table className="shop-mobile-table w-full min-w-[720px] text-sm" aria-label="班級訂購與收款彙總">
                   <thead>
                     <tr style={{ borderBottom: "1px solid var(--border)" }}>
                       {canBatchDownloadReceipts && <th className="px-3 py-3 text-left">
@@ -638,12 +897,27 @@ export default function CouncilOrdersPage() {
                         {groupBy === "class" && canConfirmClassPayment && paymentActivityGroups.length > 0 && <td className="px-4 py-3">
                           <div className="flex min-w-56 flex-col gap-2">
                             {paymentActivityGroups.map((group) => {
+                              const paymentRecord = classPaymentByScope.get(
+                                `${row.key}:${group.activityId ?? "__general__"}`,
+                              );
                               return (
                                 <div key={group.key} className="flex flex-wrap items-center gap-1 border-t pt-1.5 first:border-t-0 first:pt-0"
                                   style={{ borderColor: "var(--border)" }}>
                                   <span className="w-full text-[11px]" style={{ color: "var(--text-muted)" }}>{group.label}</span>
                                   {row.key !== "none" && <>
-                                    {canConfirmClassPayment && <button type="button" disabled={mutationBusy}
+                                    {classPaymentsLoading ? (
+                                      <span role="status" className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                                        載入收款狀態…
+                                      </span>
+                                    ) : classPaymentsError ? (
+                                      <span className="text-xs" style={{ color: "var(--danger)" }}>
+                                        收款狀態無法確認
+                                      </span>
+                                    ) : paymentRecord ? (
+                                      <span role="status" className="text-xs font-medium" style={{ color: "var(--success)" }}>
+                                        已確認收款
+                                      </span>
+                                    ) : <button type="button" disabled={mutationBusy}
                                       onClick={() => updateClassPayment(row, group, true)}
                                       aria-label={`確認${row.label}的${group.label}收款`}
                                       className="btn btn-secondary min-h-11 px-3 text-xs disabled:opacity-50">
