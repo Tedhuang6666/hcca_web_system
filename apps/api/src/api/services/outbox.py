@@ -280,7 +280,7 @@ def _handle_shop_order_confirmed(payload: dict) -> None:
 
 
 def _handle_shop_class_payment_confirmed(payload: dict) -> None:
-    """班聯確認整班收款後，將該班訂購明細寄給班代。"""
+    """班聯確認整班收款後，寄送簡短摘要給班代。"""
     from api.core.config import settings
     from api.services.mail import enqueue_email
 
@@ -291,49 +291,10 @@ def _handle_shop_class_payment_confirmed(payload: dict) -> None:
 
     raw_class_label = str(payload.get("class_label") or "班級")
     raw_activity_name = str(payload.get("activity_name") or "一般商品")
-    total_amount = 0
-    collected_count = 0
-    order_rows = []
-    for order in orders:
-        if not isinstance(order, dict):
-            continue
-        total_price = int(order.get("total_price", 0) or 0)
-        total_amount += total_price
-        is_class_collected = bool(order.get("is_class_collected"))
-        collected_count += int(is_class_collected)
-        student_name = html_escape(str(order.get("student_name") or "同學"))
-        student_id = html_escape(str(order.get("student_id") or ""))
-        student_label = f"{student_name}（{student_id}）" if student_id else student_name
-        serial_number = html_escape(str(order.get("serial_number") or ""))
-        item_rows = []
-        for item in order.get("items", []):
-            if not isinstance(item, dict):
-                continue
-            product_name = html_escape(str(item.get("product_name") or "商品"))
-            quantity = int(item.get("quantity", 0) or 0)
-            subtotal = int(item.get("subtotal", 0) or 0)
-            options = []
-            for option in item.get("selected_options", []):
-                if not isinstance(option, dict) or not option.get("value"):
-                    continue
-                value = html_escape(str(option["value"]))
-                group_name = option.get("group_name")
-                options.append(f"{html_escape(str(group_name))}：{value}" if group_name else value)
-            option_text = f"（{'、'.join(options)}）" if options else ""
-            item_rows.append(f"{product_name} × {quantity}{option_text}，NT$ {subtotal:,}")
-        items_html = "<br>".join(item_rows) or "無商品明細"
-        collection_status = "班代已收款" if is_class_collected else "班代尚未收款"
-        order_rows.append(
-            "<p>"
-            f"<strong>學生</strong>：{student_label}<br>"
-            f"<strong>訂單編號</strong>：{serial_number}<br>"
-            f"<strong>訂購品項</strong><br>{items_html}<br>"
-            f"<strong>金額</strong>：NT$ {total_price:,}<br>"
-            f"{collection_status}"
-            "</p>"
-        )
-    if not order_rows:
+    valid_orders = [order for order in orders if isinstance(order, dict)]
+    if not valid_orders:
         return
+    total_amount = sum(int(order.get("total_price", 0) or 0) for order in valid_orders)
 
     subject_label = " ".join(f"【{value}】" for value in (raw_class_label, raw_activity_name))
     subject_label = subject_label.replace("\r", " ").replace("\n", " ")
@@ -343,9 +304,7 @@ def _handle_shop_class_payment_confirmed(payload: dict) -> None:
     base = html_escape(settings.FRONTEND_BASE_URL.rstrip("/"), quote=True)
     html = (
         f"<p>班聯會已確認<strong>{class_label}</strong>的「{activity_name}」款項。</p>"
-        f"<p>有效訂單 {len(order_rows)} 筆，訂購總額 NT$ {total_amount:,}；"
-        f"班代已登記收款 {collected_count} 筆，尚未登記 {len(order_rows) - collected_count} 筆。</p>"
-        f"{''.join(order_rows)}"
+        f"<p>有效訂單 {len(valid_orders)} 筆，訂購總額 NT$ {total_amount:,}。</p>"
         f'<p><a href="{base}/shop/class-orders">查看班級訂單</a></p>'
     )
     for email in cadre_emails:
