@@ -45,8 +45,8 @@ async def list_supplements(
 
 
 async def export_supplement_receipt(session: AsyncSession, order: Order) -> bytes:
-    if order.supplement_class_id is None or not order.is_paid:
-        raise ValueError("補收款確認繳費後才能下載收據")
+    if order.supplement_class_id is None:
+        raise ValueError("此訂單不是獨立補收款")
     if order.status in (OrderStatus.CANCELLED, OrderStatus.REFUNDED):
         raise ValueError("已取消或退款的訂單無法下載收據")
     if await session.get(SchoolClass, order.supplement_class_id) is None:

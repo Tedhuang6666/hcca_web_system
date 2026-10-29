@@ -225,7 +225,7 @@ async def export_class_receipts_pdf(
     printed_at: datetime | None = None,
     record_prints: bool = True,
 ) -> bytes:
-    """依班級順序合併收據，可選擇只匯出尚未確認收款的班級。"""
+    """依班級順序合併收據；全部未收款另納入個人與獨立補收款訂單。"""
     activity = await session.get(Activity, activity_id) if activity_id else None
     if activity_id and activity is None:
         raise ValueError("找不到此活動")
@@ -257,13 +257,38 @@ async def export_class_receipts_pdf(
     for school_class, order in rows:
         entry = orders_by_class.setdefault(school_class.id, (school_class, []))
         entry[1].append(order)
-    if not orders_by_class:
+    individual_orders: list[Order] = []
+    if unpaid_only and school_classes is None:
+        individual_orders = list(
+            (
+                await session.scalars(
+                    select(Order)
+                    .where(
+                        Order.class_id.is_(None),
+                        Order.is_paid.is_(False),
+                        Order.test_product_id.is_(None),
+                        Order.activity_id == activity_id
+                        if activity_id is not None
+                        else Order.activity_id.is_(None),
+                        Order.status.notin_((OrderStatus.CANCELLED, OrderStatus.REFUNDED)),
+                    )
+                    .options(
+                        selectinload(Order.items).selectinload(OrderItem.product),
+                        selectinload(Order.user),
+                        selectinload(Order.activity),
+                    )
+                    .order_by(Order.created_at, Order.id)
+                )
+            ).all()
+        )
+    if not orders_by_class and not individual_orders:
         if unpaid_only:
-            raise ValueError("此活動沒有尚未確認收款的班級")
+            raise ValueError("此活動沒有尚未確認收款的訂單")
         raise ValueError("此活動尚無有效訂單可產生收據")
     printed_at = printed_at or now_local()
 
     writer = PdfWriter()
+    printed_order_ids = [order.id for _, orders in orders_by_class.values() for order in orders]
     issued_on = local_today()
     for school_class, orders in orders_by_class.values():
         receipt = await asyncio.to_thread(
@@ -277,12 +302,17 @@ async def export_class_receipts_pdf(
         )
         for page in PdfReader(BytesIO(receipt)).pages:
             writer.add_page(page)
+    for order in individual_orders:
+        receipt = await render_individual_order_receipt(session, order, printed_at=printed_at)
+        for page in PdfReader(BytesIO(receipt)).pages:
+            writer.add_page(page)
+        printed_order_ids.append(order.id)
     result = BytesIO()
     writer.write(result)
     if record_prints:
         await record_order_receipts_printed(
             session,
-            (order.id for _, orders in orders_by_class.values() for order in orders),
+            printed_order_ids,
             printed_at=printed_at,
         )
     return result.getvalue()
@@ -373,11 +403,6 @@ async def export_changed_order_receipts_pdf(
         .order_by(Order.class_id, Order.created_at, Order.id)
     )
     changed_orders = list((await session.scalars(statement)).all())
-    changed_orders = [
-        order
-        for order in changed_orders
-        if order.class_id is not None or order.supplement_class_id is None or order.is_paid
-    ]
     if not changed_orders:
         raise ValueError("上次列印後沒有變更的有效訂單")
     printed_at = now_local()

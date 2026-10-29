@@ -254,7 +254,17 @@ async def test_supplement_collection_rejoins_original_class_and_has_own_receipt(
     assert (await client.get("/shop/orders/supplements")).status_code == 401
     assert (await authed_client_factory(outsider).get("/shop/orders/supplements")).json() == []
     assert (await actor.get("/shop/orders/supplements")).json()[0]["id"] == sid
-    assert (await actor.get(f"/shop/orders/{sid}/supplement-receipt.pdf")).status_code == 409
+    unpaid_receipt = await actor.get(f"/shop/orders/{sid}/supplement-receipt.pdf")
+    assert unpaid_receipt.status_code == 200
+    unpaid_text = "".join(
+        page.extract_text() for page in PdfReader(BytesIO(unpaid_receipt.content)).pages
+    )
+    assert "補收款" in unpaid_text and "34" in unpaid_text
+    unpaid_order = (await bc.get(f"/shop/orders/{sid}")).json()
+    assert unpaid_order["is_paid"] is False
+    assert unpaid_order["class_id"] is None
+    assert unpaid_order["supplement_class_id"] == str(sc.id)
+    assert (await client.get(f"/shop/orders/{sid}/supplement-receipt.pdf")).status_code == 401
     assert (
         await authed_client_factory(outsider).get(f"/shop/orders/{sid}/supplement-receipt.pdf")
     ).status_code == 404
@@ -293,7 +303,7 @@ async def test_supplement_collection_rejoins_original_class_and_has_own_receipt(
     assert receivable.class_id == sc.id and receivable.paid_amount == 34
     reversed_payment = await mc.patch(f"/shop/orders/{sid}/payment", json={"is_paid": False})
     assert reversed_payment.json()["class_id"] is None
-    assert (await actor.get(f"/shop/orders/{sid}/supplement-receipt.pdf")).status_code == 409
+    assert (await actor.get(f"/shop/orders/{sid}/supplement-receipt.pdf")).status_code == 200
 
 
 async def test_class_deadline_is_scoped_and_assisted_orders_can_bypass_it(
@@ -2803,6 +2813,12 @@ async def test_class_receipt_batch_combines_selected_classes_and_all_classes(
         order.activity_id = activity.id
     other_order = await _seed_order(db_session, buyer, class_id=classes[2].id, total_price=900)
     other_order.activity_id = other_activity.id
+    personal_order = await _seed_order(db_session, buyer, total_price=50)
+    personal_order.activity_id = activity.id
+    product = await _make_active_product(db_session, manager, price=50)
+    db_session.add(
+        OrderItem(order_id=personal_order.id, product_id=product.id, quantity=1, unit_price=50)
+    )
     await db_session.flush()
     ac = authed_client_factory(manager)
 
@@ -2831,10 +2847,123 @@ async def test_class_receipt_batch_combines_selected_classes_and_all_classes(
     assert all_response.status_code == 200
     all_pdf = PdfReader(BytesIO(all_response.content))
     all_text = "".join(page.extract_text() for page in all_pdf.pages)
-    assert len(all_pdf.pages) == 2
+    assert len(all_pdf.pages) == 3
     assert classes[0].class_code in all_text and classes[2].class_code in all_text
     assert classes[1].class_code not in all_text
     assert "900" not in all_text
+    assert personal_order.serial_number in "".join(all_text.split())
+    assert sorted(_receipt_totals(all_pdf)) == ["100", "100", "300", "300", "50", "50"]
+
+
+@pytest.mark.parametrize("with_activity", [False, True])
+async def test_unpaid_receipts_include_individual_and_supplement_orders_without_classes(
+    db_session, authed_client_factory, client, with_activity
+) -> None:
+    from io import BytesIO
+
+    from pypdf import PdfReader
+
+    from api.models.shop_order_receipt_print import ShopOrderReceiptPrint
+
+    school_class = await _make_class(db_session)
+    buyer = await _bare_user(db_session)
+    manager = await _bare_user(db_session)
+    await _grant_permission(db_session, manager, "shop:manage_orders")
+    activity = Activity(name="個人收據活動", status=ActivityStatus.ACTIVE)
+    other_activity = Activity(name="排除活動", status=ActivityStatus.ACTIVE)
+    db_session.add_all([activity, other_activity])
+    await db_session.flush()
+    activity_id = activity.id if with_activity else None
+    personal = await _seed_order(db_session, buyer, total_price=70)
+    supplement = await _seed_order(db_session, buyer, total_price=60, is_class_collected=True)
+    supplement.supplement_class_id = school_class.id
+    for order in (personal, supplement):
+        order.activity_id = activity_id
+    excluded = []
+    for amount, status, is_paid in (
+        (80, OrderStatus.PENDING, True),
+        (90, OrderStatus.CANCELLED, False),
+        (91, OrderStatus.REFUNDED, False),
+    ):
+        order = await _seed_order(db_session, buyer, total_price=amount, is_paid=is_paid)
+        order.activity_id = activity_id
+        order.status = status
+        excluded.append(order)
+    outside_scope = await _seed_order(db_session, buyer, total_price=92)
+    outside_scope.activity_id = other_activity.id
+    test_product = await _make_active_product(db_session, manager)
+    for order in (personal, supplement, *excluded):
+        db_session.add(
+            OrderItem(
+                order_id=order.id,
+                product_id=test_product.id,
+                quantity=1,
+                unit_price=order.total_price,
+            )
+        )
+    test_order = await _seed_order(db_session, buyer, total_price=93)
+    test_order.activity_id = activity_id
+    test_order.test_product_id = test_product.id
+    excluded.extend([outside_scope, test_order])
+    await db_session.flush()
+    payload = {"activity_id": str(activity_id) if activity_id else None, "unpaid_only": True}
+    path = "/shop/orders/classes/receipts.pdf"
+    assert (await client.post(path, json=payload)).status_code == 401
+    assert (await authed_client_factory(buyer).post(path, json=payload)).status_code == 403
+    response = await authed_client_factory(manager).post(path, json=payload)
+    assert response.status_code == 200, response.text
+    pdf = PdfReader(BytesIO(response.content))
+    text = "".join(page.extract_text() for page in pdf.pages)
+    compact_text = "".join(text.split())
+    assert len(pdf.pages) == 2
+    assert personal.serial_number in compact_text and supplement.serial_number in compact_text
+    assert "補收款" in text
+    assert sorted(_receipt_totals(pdf)) == ["60", "60", "70", "70"]
+    for order in excluded:
+        assert order.serial_number not in compact_text
+        assert await db_session.get(ShopOrderReceiptPrint, order.id) is None
+    for order in (personal, supplement):
+        await db_session.refresh(order)
+        assert order.is_paid is False and order.class_id is None
+        assert await db_session.get(ShopOrderReceiptPrint, order.id) is not None
+    assert supplement.supplement_class_id == school_class.id
+    assert supplement.is_class_collected is True
+    # 相同內容已由批次列印記錄，不應再出現在增量列印。
+    unchanged = await authed_client_factory(manager).post(
+        "/shop/orders/receipts/changed.pdf", json={"activity_id": payload["activity_id"]}
+    )
+    # 已繳費個人單尚未列印，仍應由增量列印正常列出。
+    assert unchanged.status_code == 200
+    changed_text = "".join(
+        page.extract_text() for page in PdfReader(BytesIO(unchanged.content)).pages
+    )
+    compact_changed_text = "".join(changed_text.split())
+    assert excluded[0].serial_number in compact_changed_text
+    assert personal.serial_number not in compact_changed_text
+    assert supplement.serial_number not in compact_changed_text
+
+
+async def test_changed_receipts_include_unpaid_supplements(db_session, authed_client_factory):
+    from io import BytesIO
+
+    from pypdf import PdfReader
+
+    school_class = await _make_class(db_session)
+    manager = await _bare_user(db_session)
+    await _grant_permission(db_session, manager, "shop:manage_orders")
+    order = await _seed_order(db_session, manager, total_price=60)
+    order.supplement_class_id = school_class.id
+    product = await _make_active_product(db_session, manager, price=60)
+    db_session.add(OrderItem(order_id=order.id, product_id=product.id, quantity=1, unit_price=60))
+    await db_session.flush()
+    ac = authed_client_factory(manager)
+    response = await ac.post("/shop/orders/receipts/changed.pdf", json={"activity_id": None})
+    assert response.status_code == 200, response.text
+    text = "".join(page.extract_text() for page in PdfReader(BytesIO(response.content)).pages)
+    assert order.serial_number in "".join(text.split()) and "補收款" in text
+    await db_session.refresh(order)
+    assert order.is_paid is False and order.class_id is None
+    assert order.supplement_class_id == school_class.id
 
 
 async def test_changed_receipts_print_only_updated_classes_and_individual_orders(

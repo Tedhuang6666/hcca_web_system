@@ -842,9 +842,9 @@ export default function CouncilOrdersPage() {
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg p-3"
               style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
               <div>
-                <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>班級簽收單</p>
+                <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>收款單據</p>
                 <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>
-                  可勾選班級列印；全部列印只包含未確認收款的班級。增量列印會重印有變更的整班收據，個人訂單則各印一張。
+                  可勾選班級列印；全部未繳款列印包含班級、個人訂購與獨立補收款。增量列印會重印有變更的整班收據，個人訂單則各印一張。列印不會登記繳費。
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -884,7 +884,7 @@ export default function CouncilOrdersPage() {
                     setReceiptError("");
                     return shopApi.downloadClassReceipts(batchReceiptActivityId, undefined, true);
                   }}
-                  label="列印所有未繳款班級收據"
+                  label="列印所有未繳款班級／個人收據"
                   disabled={mutationBusy || loading || !receiptActivityKey}
                   className="btn btn-ghost min-h-11 px-3 text-xs disabled:opacity-50"
                   onError={(error) => setReceiptError(apiErrorMessage(error, "簽收單下載失敗，請重試。"))}
