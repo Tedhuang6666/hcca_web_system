@@ -324,13 +324,13 @@ def _handle_shop_class_payment_confirmed(payload: dict) -> None:
         items_html = "<br>".join(item_rows) or "無商品明細"
         collection_status = "班代已收款" if is_class_collected else "班代尚未收款"
         order_rows.append(
-            "<tr>"
-            f"<td>{student_label}</td>"
-            f"<td>{serial_number}</td>"
-            f"<td>{items_html}</td>"
-            f"<td>NT$ {total_price:,}</td>"
-            f"<td>{collection_status}</td>"
-            "</tr>"
+            "<p>"
+            f"<strong>學生</strong>：{student_label}<br>"
+            f"<strong>訂單編號</strong>：{serial_number}<br>"
+            f"<strong>訂購品項</strong><br>{items_html}<br>"
+            f"<strong>金額</strong>：NT$ {total_price:,}<br>"
+            f"{collection_status}"
+            "</p>"
         )
     if not order_rows:
         return
@@ -345,10 +345,7 @@ def _handle_shop_class_payment_confirmed(payload: dict) -> None:
         f"<p>班聯會已確認<strong>{class_label}</strong>的「{activity_name}」款項。</p>"
         f"<p>有效訂單 {len(order_rows)} 筆，訂購總額 NT$ {total_amount:,}；"
         f"班代已登記收款 {collected_count} 筆，尚未登記 {len(order_rows) - collected_count} 筆。</p>"
-        '<table style="border-collapse:collapse;width:100%">'
-        "<thead><tr><th>學生</th><th>訂單編號</th><th>訂購品項</th>"
-        "<th>金額</th><th>班代收款</th></tr></thead>"
-        f"<tbody>{''.join(order_rows)}</tbody></table>"
+        f"{''.join(order_rows)}"
         f'<p><a href="{base}/shop/class-orders">查看班級訂單</a></p>'
     )
     for email in cadre_emails:

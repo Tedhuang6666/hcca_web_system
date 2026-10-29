@@ -180,3 +180,12 @@ def test_shop_class_payment_confirmation_emails_cadre_with_escaped_order_details
     assert "班代尚未收款" in body
     assert "&lt;115 班&gt;" in body
     assert "<script>" not in body
+
+    rendered = render_generic_message(str(messages[0][1]), body, {"body_format": "html"})
+    assert (
+        "<strong>學生</strong>：&lt;小明&gt;（11510）<br><strong>訂單編號</strong>：ORD-TEST-001"
+    ) in rendered
+    assert (
+        "<strong>訂購品項</strong><br>紀念衫&lt;script&gt; × 2（尺寸：M），NT$ 100<br>" in rendered
+    )
+    assert "<strong>金額</strong>：NT$ 100<br>班代尚未收款" in rendered
