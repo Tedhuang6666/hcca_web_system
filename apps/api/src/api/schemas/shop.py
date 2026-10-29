@@ -804,6 +804,8 @@ class CloseStatusItem(BaseModel):
     closes_at: datetime | None = None
     closed_at: datetime | None = None
     closed_by_name: str | None = None
+    class_collected_at: datetime | None = None
+    council_confirmed_at: datetime | None = None
 
 
 class CloseStatusOut(BaseModel):

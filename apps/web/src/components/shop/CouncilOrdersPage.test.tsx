@@ -60,22 +60,22 @@ describe("全校收款與訂單", () => {
   it("沒有另外建立活動也能在頁面上方全域鎖單商品批次", async () => {
     api.listActivities.mockResolvedValue([]);
     render(<CouncilOrdersPage />);
-    const closure = await screen.findByRole("region", { name: "活動鎖單" });
+    const closure = await screen.findByRole("region", { name: "活動結單與公開入口" });
     expect(closure).toBeVisible();
     expect(closure.closest("details")).toBeNull();
     expect(closure.compareDocumentPosition(screen.getByRole("navigation", { name: "班聯統籌工作" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    const lock = within(closure).getByRole("button", { name: "鎖單衣服" });
+    const lock = within(closure).getByRole("button", { name: "結單並隱藏入口衣服" });
     await waitFor(() => expect(lock).toBeEnabled());
     api.closeCategory.mockImplementationOnce(async () => {
       api.getCloseStatus.mockResolvedValue({ statuses: { shirts: { is_closed: true, is_global: true }, bags: { is_closed: false }, cards: { is_closed: false } } });
       return {};
     });
     fireEvent.click(lock);
-    expect(await within(closure).findByRole("status")).toHaveTextContent("學生與班代皆無法再訂購");
+    expect(await within(closure).findByRole("status")).toHaveTextContent("商品已從公開目錄隱藏");
     expect(api.closeCategory).toHaveBeenCalledWith("shirts", {});
     expect(api.getCloseStatus).toHaveBeenCalledWith(["shirts", "bags", "cards"]);
     await waitFor(() => expect(api.catalog).toHaveBeenCalledTimes(2));
-    expect(await within(closure).findByRole("button", { name: "重新開放衣服" })).toBeVisible();
+    expect(await within(closure).findByRole("button", { name: "重新開放並顯示衣服" })).toBeVisible();
   });
 
   it("唯讀班聯不顯示全域鎖單", async () => {
@@ -83,14 +83,14 @@ describe("全校收款與訂單", () => {
     access.permissions = new Set(["shop:view_all"]);
     render(<CouncilOrdersPage />);
     await screen.findByText("一年一班");
-    expect(screen.queryByRole("region", { name: "活動鎖單" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "活動結單與公開入口" })).not.toBeInTheDocument();
   });
 
   it.each(["shop:manage", "shop:manage_orders"])("具 %s 權限可直接找到全域鎖單", async (permission) => {
     access.isAdmin = false;
     access.permissions = new Set([permission]);
     render(<CouncilOrdersPage />);
-    expect(await screen.findByRole("button", { name: "鎖單衣服" })).toBeVisible();
+    expect(await screen.findByRole("button", { name: "結單並隱藏入口衣服" })).toBeVisible();
   });
 
   it("downloads the chosen class and activity and shows a retryable receipt error", async () => {

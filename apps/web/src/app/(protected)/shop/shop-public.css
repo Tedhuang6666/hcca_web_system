@@ -1157,6 +1157,106 @@
   color: var(--danger);
 }
 
+.shop-public-closed-page {
+  display: flex;
+  max-width: 48rem;
+  align-items: flex-start;
+  gap: 0.85rem;
+  margin: 1rem auto 3rem;
+  border: 1px solid var(--public-border);
+  border-radius: 0.85rem;
+  background: var(--public-surface);
+  padding: 1.25rem;
+  color: var(--public-muted);
+}
+
+.shop-public-closed-page > svg {
+  flex: 0 0 auto;
+  margin-top: 0.15rem;
+}
+
+.shop-public-closed-page h2 {
+  margin: 0;
+  color: var(--public-secondary);
+  font-size: 1rem;
+  font-weight: 750;
+}
+
+.shop-public-closed-page p {
+  margin: 0.35rem 0 0;
+  font-size: 0.86rem;
+  line-height: 1.6;
+}
+
+.shop-product-dialog--closed .shop-product-dialog-media {
+  filter: grayscale(1);
+  opacity: 0.68;
+}
+
+.shop-product-dialog--closed .shop-product-dialog-content {
+  filter: grayscale(1);
+  background: color-mix(in srgb, var(--public-surface) 78%, var(--public-muted) 22%);
+}
+
+.shop-product-dialog--closed .shop-product-purchase-bar {
+  background: color-mix(in srgb, var(--public-surface) 78%, var(--public-muted) 22%);
+}
+
+.shop-product-closed-note {
+  border: 1px solid var(--public-border);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--public-surface) 82%, var(--public-muted) 18%);
+  padding: 0.9rem;
+  color: var(--public-secondary);
+}
+
+.shop-product-closed-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+}
+
+.shop-product-closed-heading > svg {
+  flex: 0 0 auto;
+  margin-top: 0.1rem;
+  color: var(--public-muted);
+}
+
+.shop-product-closed-heading h4 {
+  margin: 0;
+  color: var(--public-secondary);
+  font-size: 0.9rem;
+  font-weight: 760;
+}
+
+.shop-product-closed-heading p {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+
+.shop-product-closed-times {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: 0.6rem 1rem;
+  margin: 0.85rem 0 0 1.65rem;
+  border-top: 1px solid var(--public-border);
+  padding-top: 0.7rem;
+}
+
+.shop-product-closed-times dt {
+  color: var(--public-muted);
+  font-size: 0.7rem;
+}
+
+.shop-product-closed-times dd {
+  margin: 0.15rem 0 0;
+  color: var(--public-secondary);
+  font-size: 0.78rem;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
 .shop-public-alert button {
   margin-left: auto;
   flex: 0 0 auto;

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import UTC, datetime
 
 from sqlalchemy import delete, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +23,7 @@ from api.models.shop import (
     ProductVariantGroup,
     ProductVariantOption,
     ShopDelegationLink,
+    ShopOrderClose,
     ShopPromotion,
     effective_product_deadline,
 )
@@ -532,12 +534,35 @@ async def build_catalog_tree(
         q = q.where(ProductCategory.activity_id == activity_id)
     categories = (await session.execute(q)).scalars().unique().all()
 
+    category_close_times: dict[uuid.UUID, datetime] = {}
+    if categories:
+        now = datetime.now(UTC)
+        close_rows = await session.scalars(
+            select(ShopOrderClose).where(
+                ShopOrderClose.category_id.in_([category.id for category in categories]),
+                ShopOrderClose.class_id.is_(None),
+                ShopOrderClose.is_active.is_(True),
+                or_(ShopOrderClose.closes_at.is_(None), ShopOrderClose.closes_at <= now),
+            )
+        )
+        for close_row in close_rows:
+            previous = category_close_times.get(close_row.category_id)
+            if previous is None or close_row.created_at > previous:
+                category_close_times[close_row.category_id] = close_row.created_at
+
     visible = {ProductStatus.ACTIVE, ProductStatus.SOLD_OUT}
     if include_testing:
         visible.add(ProductStatus.TESTING)
     tree: list[CatalogCategoryOut] = []
+    now = datetime.now(UTC)
     for category in categories:
-        if not include_closed and category.activity and category.activity.order_closed_at:
+        activity_deadline = category.activity.order_closes_at if category.activity else None
+        if activity_deadline is not None and activity_deadline.tzinfo is None:
+            activity_deadline = activity_deadline.replace(tzinfo=UTC)
+        activity_closed = bool(category.activity and category.activity.order_closed_at)
+        deadline_passed = activity_deadline is not None and activity_deadline <= now
+        category_closed = category.id in category_close_times
+        if not include_closed and (activity_closed or deadline_passed or category_closed):
             continue
         category_products = [
             CatalogProductOut(
@@ -602,7 +627,12 @@ async def build_catalog_tree(
                 activity_id=category.activity_id,
                 activity_name=category.activity.name if category.activity else None,
                 order_closes_at=category.activity.order_closes_at if category.activity else None,
-                order_closed_at=category.activity.order_closed_at if category.activity else None,
+                order_closed_at=(
+                    category.activity.order_closed_at
+                    if category.activity and category.activity.order_closed_at
+                    else category_close_times.get(category.id)
+                    or (activity_deadline if deadline_passed else None)
+                ),
                 activity_status=category.activity.status if category.activity else None,
                 image_url=category.image_url,
                 sort_order=category.sort_order,

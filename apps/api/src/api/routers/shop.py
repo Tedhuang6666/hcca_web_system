@@ -485,14 +485,22 @@ async def get_catalog(
     current_user: OptionalUser,
     activity_id: uuid.UUID | None = Query(None),
     include_closed: bool = Query(False, description="包含已結單活動，供登入後查詢與收款"),
+    direct_path: list[str] = Query(
+        default=[], description="只解析公開商品連結對應的分類與商品，可顯示已結單商品"
+    ),
 ) -> list[CatalogCategoryOut]:
-    if include_closed and current_user is None:
+    if include_closed and current_user is None and not direct_path:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="請先登入")
-    return await shop_svc.build_catalog_tree(
+    if direct_path and len(direct_path) not in (1, 2):
+        return []
+    catalog = await shop_svc.build_catalog_tree(
         session,
         activity_id=activity_id,
         include_testing=await can_test_products(session, current_user),
-        include_closed=include_closed,
+        include_closed=include_closed or bool(direct_path),
+    )
+    return (
+        shop_svc.filter_catalog_to_direct_product(catalog, direct_path) if direct_path else catalog
     )
 
 
@@ -2031,16 +2039,24 @@ async def get_close_status(
 ) -> CloseStatusOut:
     from api.services import school_class as class_svc_inner
 
+    own_class = await class_svc_inner.resolve_user_class(session, current_user)
     if class_id is None:
-        school_class = await class_svc_inner.resolve_user_class(session, current_user)
-        class_id = school_class.id if school_class else None
+        class_id = own_class.id if own_class else None
 
     close_map = await shop_svc.get_close_status(session, category_ids, class_id)
-    return CloseStatusOut(
-        statuses={
-            str(cid): item or CloseStatusItem(is_closed=False) for cid, item in close_map.items()
-        }
+    collection_details = await shop_svc.get_close_status_collection_details(
+        session,
+        category_ids,
+        class_id if current_user.is_superuser or (own_class and class_id == own_class.id) else None,
     )
+    statuses: dict[str, CloseStatusItem] = {}
+    for category_id, item in close_map.items():
+        status_item = item or CloseStatusItem(is_closed=False)
+        details = collection_details.get(category_id)
+        if details:
+            status_item = status_item.model_copy(update=details)
+        statuses[str(category_id)] = status_item
+    return CloseStatusOut(statuses=statuses)
 
 
 # ── 學生授權的家人代訂 ────────────────────────────────────────────────────────

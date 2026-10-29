@@ -6,12 +6,12 @@ import type { OrderOut } from "@/lib/types";
 
 const api = vi.hoisted(() => ({
   me: vi.fn(), catalog: vi.fn(), getCurrentRegistrations: vi.fn(), listAvailablePromotions: vi.fn(),
-  getProduct: vi.fn(), setCurrentRegistrationProduct: vi.fn(),
+  getProduct: vi.fn(), getCloseStatus: vi.fn(), myClass: vi.fn(), setCurrentRegistrationProduct: vi.fn(),
   previewCurrentPromotion: vi.fn(), applyCurrentPromotion: vi.fn(),
 }));
 vi.mock("@/lib/api", () => ({
   authApi: { refresh: api.me }, shopApi: api,
-  classApi: { myClass: vi.fn().mockResolvedValue(null) },
+  classApi: { myClass: api.myClass },
   apiErrorMessage: (error: Error) => error.message,
 }));
 vi.mock("@/hooks/useWS", () => ({ useWS: vi.fn() }));
@@ -47,6 +47,8 @@ beforeEach(() => {
   api.me.mockResolvedValue({ id: "tester", email: "tester@example.test", display_name: "測試人員" });
   api.catalog.mockResolvedValue([{ id: "goods", name: "商品", activity_id: "festival",
     sort_order: 0, products: [testingProduct, formalProduct], series: [] }]);
+  api.getCloseStatus.mockResolvedValue({ statuses: {} });
+  api.myClass.mockResolvedValue(null);
   api.getCurrentRegistrations.mockResolvedValue([formalOrder]);
   api.previewCurrentPromotion.mockResolvedValue({ eligible: false, reason_code: "no_promotion",
     subtotal_price: 200, discount_amount: 0, total_price: 200, shortfall: 0, quantity_shortfall: 0 });
@@ -167,6 +169,68 @@ it("shows a shared deadline once and keeps a product's extended deadline visible
   expect(screen.getByText(/活動結單：/)).toBeVisible();
   expect(within(screen.getByRole("article", { name: "正式商品商品" })).queryByText(/^截止/)).not.toBeInTheDocument();
   expect(within(screen.getByRole("article", { name: "延長預購商品商品" })).getByText(/^截止/)).toBeVisible();
+});
+
+it("shows old links to globally closed products as closed details with both collection times", async () => {
+  const closedProduct = { ...formalProduct, id: "closed-product", name: "結單商品" };
+  const closedCategory = {
+    id: "closed-category",
+    name: "已結單活動",
+    activity_id: "closed-activity",
+    activity_name: "已結單活動",
+    order_closed_at: "2026-10-20T10:00:00Z",
+    order_closes_at: null,
+    sort_order: 0,
+    products: [closedProduct],
+    series: [],
+  };
+  api.catalog.mockResolvedValue([closedCategory]);
+  api.myClass.mockResolvedValue({ id: "class-1", label: "一年一班" });
+  api.getCloseStatus.mockResolvedValue({ statuses: {
+    "closed-category": {
+      is_closed: true,
+      is_global: true,
+      closed_at: "2026-10-20T10:00:00Z",
+      class_collected_at: "2026-10-21T10:00:00Z",
+      council_confirmed_at: "2026-10-22T10:00:00Z",
+    },
+  } });
+  api.getProduct.mockResolvedValue({ ...closedProduct, variant_groups: [], media: [] });
+
+  render(<ShopPage productSlug={encodeURIComponent("結單商品")} />);
+
+  const dialog = await screen.findByRole("dialog");
+  expect(api.catalog).toHaveBeenCalledWith(undefined, false, ["結單商品"]);
+  expect(within(dialog).getByRole("heading", { name: "班聯已結單" })).toBeVisible();
+  expect(within(dialog).getByText(/商品已從公開目錄隱藏/)).toBeVisible();
+  expect(within(dialog).getByText("班代收款時間")).toBeVisible();
+  expect(within(dialog).getByText("班聯確認時間")).toBeVisible();
+  expect(within(dialog).getByText(/2026.*10.*21/)).toBeVisible();
+  expect(within(dialog).getByText(/2026.*10.*22/)).toBeVisible();
+  expect(screen.queryByRole("navigation", { name: "選擇商品活動" })).not.toBeInTheDocument();
+  expect(within(dialog).getByRole("button", { name: "班聯已結單" })).toBeDisabled();
+  expect(within(dialog).queryByRole("link", { name: "登入後登記商品" })).not.toBeInTheDocument();
+  expect(within(dialog).getByText("班聯已結單，此活動商品已停止訂購")).toBeVisible();
+  expect(within(dialog).queryByText(/代訂需要學生授權/)).not.toBeInTheDocument();
+});
+
+it("hides closed activities from the public catalog and shows an empty state", async () => {
+  api.catalog.mockResolvedValue([{
+    id: "closed-category",
+    name: "已結單活動",
+    activity_id: "closed-activity",
+    order_closed_at: "2026-10-20T10:00:00Z",
+    order_closes_at: null,
+    sort_order: 0,
+    products: [{ ...formalProduct, id: "closed-product", name: "結單商品" }],
+    series: [],
+  }]);
+
+  render(<ShopPage />);
+
+  expect(await screen.findByText("目前沒有可訂購的商品，請稍後再來看看。")).toBeVisible();
+  expect(screen.queryByText("結單商品")).not.toBeInTheDocument();
+  expect(screen.queryByRole("navigation", { name: "選擇商品活動" })).not.toBeInTheDocument();
 });
 
 it("keeps multiple activities switchable in the compact catalog", async () => {
