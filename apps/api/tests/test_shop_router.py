@@ -52,6 +52,159 @@ from api.services import shop as shop_svc
 _PNG_BYTES = b"\x89PNG\r\n\x1a\n data"
 
 
+@pytest.mark.parametrize("collection", ["regular", "class_paid", "collected", "council_separate"])
+async def test_assisted_individual_payment_notices_target_buyer(
+    db_session, client, authed_client_factory, monkeypatch, collection
+):
+    from api.services.outbox import _dispatch
+
+    sc = await _make_class(db_session)
+    cadre = await _bare_user(db_session, student_id="11501")
+    await class_svc.add_cadre(db_session, sc, user_id=cadre.id)
+    buyer = await _bare_user(db_session, student_id="11520")
+    outsider = await _bare_user(db_session, student_id="11620")
+    product = await _make_active_product(db_session, cadre, price=45)
+    actor = authed_client_factory(cadre)
+    if collection == "class_paid":
+        from api.models.shop_class_payment import ShopClassPayment
+
+        db_session.add(ShopClassPayment(class_id=sc.id, activity_id=None, is_paid=True))
+    elif collection == "collected":
+        await _seed_order(db_session, buyer, class_id=sc.id, is_class_collected=True)
+    elif collection == "council_separate":
+        await _grant_permission(db_session, cadre, "shop:manage_orders")
+    await db_session.flush()
+
+    path = "/shop/orders/assisted" if collection == "council_separate" else "/shop/orders/class"
+    payload = {"user_id": str(buyer.id), "items": [{"product_id": str(product.id), "quantity": 2}]}
+    if collection == "council_separate":
+        payload["collection_mode"] = "separate"
+    assert (await client.post(path, json=payload)).status_code == 401
+    assert (await authed_client_factory(outsider).post(path, json=payload)).status_code == 403
+    assert (await authed_client_factory(buyer).post(path, json=payload)).status_code == 403
+    assert not list(
+        await db_session.scalars(
+            select(OutboxEvent).where(OutboxEvent.event_type == "shop.order_payment_required")
+        )
+    )
+
+    response = await actor.post(path, json=payload)
+    assert response.status_code == 201, response.text
+    order = response.json()[0]
+    notices = list(
+        await db_session.scalars(
+            select(OutboxEvent).where(OutboxEvent.event_type == "shop.order_payment_required")
+        )
+    )
+    if collection == "regular":
+        assert order["class_id"] == str(sc.id)
+        assert notices == []
+        return
+    assert order["class_id"] is None
+    assert len(notices) == 1
+    assert notices[0].payload["order_id"] == order["id"]
+    assert notices[0].payload["buyer_email"] == buyer.email
+    assert notices[0].payload["reason"] == "supplement_created"
+    assert notices[0].payload["total_price"] == 90
+    messages = []
+    monkeypatch.setattr("api.services.mail.enqueue_email", lambda *args: messages.append(args))
+    await _dispatch(db_session, notices[0])
+    assert len(messages) == 1 and messages[0][0] == buyer.email
+    assert "需額外繳費" in messages[0][2]
+    assert "班聯會公告的繳費期限" in messages[0][2]
+    assert "逾期未繳，班聯會將取消您的訂單" in messages[0][2]
+    # 清除訂購資料也必須清掉待寄信件，避免寄出已不存在訂單的催款通知。
+    assert await shop_svc.clear_all_orders(db_session) >= 1
+    assert not list(
+        await db_session.scalars(
+            select(OutboxEvent).where(OutboxEvent.event_type == "shop.order_payment_required")
+        )
+    )
+
+
+@pytest.mark.parametrize("total_price", [0, 123])
+async def test_separating_order_notifies_once_with_existing_payment_deadline(
+    db_session, client, authed_client_factory, monkeypatch, total_price
+):
+    from api.services import receivable as receivable_svc
+    from api.services.outbox import _dispatch
+
+    sc = await _make_class(db_session)
+    cadre = await _bare_user(db_session, student_id="11501")
+    await class_svc.add_cadre(db_session, sc, user_id=cadre.id)
+    buyer = await _bare_user(db_session, student_id="11520")
+    other_class = await _make_class(db_session, start="11601", end="11640")
+    other_cadre = await _bare_user(db_session, student_id="11601")
+    await class_svc.add_cadre(db_session, other_class, user_id=other_cadre.id)
+    order = await _seed_order(db_session, buyer, class_id=sc.id, total_price=total_price)
+    receivable = await receivable_svc.sync_shop_order(db_session, order)
+    receivable.due_at = datetime(2026, 11, 5, 8, 30, tzinfo=UTC)
+    await db_session.flush()
+    path = f"/shop/orders/{order.id}/separate"
+    assert (await client.post(path)).status_code == 401
+    assert (await authed_client_factory(buyer).post(path)).status_code == 403
+    assert (await authed_client_factory(other_cadre).post(path)).status_code == 403
+    assert not list(
+        await db_session.scalars(
+            select(OutboxEvent).where(OutboxEvent.event_type == "shop.order_payment_required")
+        )
+    )
+    actor = authed_client_factory(cadre)
+    for _ in range(2):
+        response = await actor.post(path)
+        assert response.status_code == 200, response.text
+    notices = list(
+        await db_session.scalars(
+            select(OutboxEvent).where(OutboxEvent.event_type == "shop.order_payment_required")
+        )
+    )
+    if total_price == 0:
+        assert notices == []
+        return
+    assert len(notices) == 1
+    assert notices[0].payload["buyer_email"] == buyer.email
+    assert notices[0].payload["order_id"] == str(order.id)
+    assert notices[0].payload["reason"] == "separated_from_class"
+    assert notices[0].payload["payment_deadline"] == "2026/11/05 16:30（台北時間）"
+    messages = []
+    monkeypatch.setattr("api.services.mail.enqueue_email", lambda *args: messages.append(args))
+    await _dispatch(db_session, notices[0])
+    assert len(messages) == 1 and messages[0][0] == buyer.email
+    body = messages[0][2]
+    assert "移出班級統一收款" in body
+    assert "NT$ 123" in body
+    assert "2026/11/05 16:30（台北時間）" in body
+    assert "逾期未繳，班聯會將取消您的訂單" in body
+    assert "/shop/orders" in body
+
+
+async def test_individual_payment_notice_rolls_back_with_order_change(db_session):
+    from api.services.shop._supplements import separate_order
+
+    sc = await _make_class(db_session)
+    buyer = await _bare_user(db_session, student_id="11520")
+    order = await _seed_order(db_session, buyer, class_id=sc.id)
+    order_id, class_id, buyer_id = order.id, sc.id, buyer.id
+    async with db_session.begin_nested() as transaction:
+        await separate_order(db_session, order, actor_id=buyer_id)
+        assert (
+            await db_session.scalar(
+                select(func.count())
+                .select_from(OutboxEvent)
+                .where(OutboxEvent.event_type == "shop.order_payment_required")
+            )
+            == 1
+        )
+        await transaction.rollback()
+    await db_session.refresh(order)
+    assert order.id == order_id and order.class_id == class_id
+    assert not list(
+        await db_session.scalars(
+            select(OutboxEvent).where(OutboxEvent.event_type == "shop.order_payment_required")
+        )
+    )
+
+
 @pytest.mark.parametrize("code", ["shop:manage", "shop:manage_orders", "admin:all"])
 async def test_admin_assisted_order_across_classes(db_session, authed_client_factory, code):
     own_class = await _make_class(db_session)

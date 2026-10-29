@@ -50,6 +50,7 @@ from api.services.shop._catalog import (
     generate_order_serial,
     get_product,
 )
+from api.services.shop._payment_notifications import queue_individual_payment_notice
 from api.services.shop._promotions import PromotionAllocation, resolve_promotions
 from api.services.student_identity import has_student_identity
 
@@ -762,7 +763,14 @@ async def create_direct_order(
             council_override=council_override,
             supplement_class_id=class_id if supplement else None,
         )
-        await receivable_svc.sync_shop_order(session, order)
+        receivable = await receivable_svc.sync_shop_order(session, order)
+        if supplement:
+            await queue_individual_payment_notice(
+                session,
+                order,
+                reason="supplement_created",
+                due_at=receivable.due_at if receivable else None,
+            )
         orders.append(order)
     return orders
 
@@ -806,7 +814,7 @@ async def clear_all_orders(
 
     order_id_strings = {str(order_id) for order_id in order_ids}
     confirmations_query = select(OutboxEvent).where(
-        OutboxEvent.event_type == "shop.order_confirmed"
+        OutboxEvent.event_type.in_(("shop.order_confirmed", "shop.order_payment_required"))
     )
     if not clearing_tests:
         confirmations_query = confirmations_query.where(OutboxEvent.status == OutboxStatus.PENDING)

@@ -17,6 +17,38 @@ from api.services.outbox import (
 from api.services.outbox_tasks import process_outbox
 
 
+@pytest.mark.asyncio
+async def test_payment_required_notice_escapes_order_details_and_retries_on_queue_failure(
+    db_session, monkeypatch
+):
+    event = OutboxEvent(
+        event_type="shop.order_payment_required",
+        payload={
+            "buyer_email": "buyer@example.com",
+            "buyer_name": "<同學>",
+            "serial_number": "ORD-<test>",
+            "total_price": 1234,
+            "reason": "separated_from_class",
+            "payment_deadline": "<期限>",
+        },
+    )
+    messages = []
+    monkeypatch.setattr("api.services.mail.enqueue_email", lambda *args: messages.append(args))
+    await _dispatch(db_session, event)
+    assert len(messages) == 1
+    body = messages[0][2]
+    assert "&lt;同學&gt;" in body and "ORD-&lt;test&gt;" in body
+    assert "&lt;期限&gt;" in body
+    assert "<同學>" not in body and "<期限>" not in body
+    assert "NT$ 1,234" in body
+
+    with (
+        patch("api.services.mail.enqueue_email", side_effect=RuntimeError("queue unavailable")),
+        pytest.raises(RuntimeError, match="queue unavailable"),
+    ):
+        await _dispatch(db_session, event)
+
+
 def test_process_outbox_task_calls_process_pending_outbox() -> None:
     with patch(
         "api.services.outbox.process_pending_outbox",

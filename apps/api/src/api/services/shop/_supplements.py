@@ -10,6 +10,7 @@ from api.models.school_class import SchoolClass
 from api.models.shop import Order, OrderStatus
 from api.services import receivable as receivable_svc
 from api.services.shop._orders import _lock_class_orders, get_order
+from api.services.shop._payment_notifications import queue_individual_payment_notice
 from api.services.shop._receipts import (
     record_order_receipts_printed,
     render_individual_order_receipt,
@@ -76,13 +77,21 @@ async def separate_order(session: AsyncSession, order: Order, *, actor_id: uuid.
         raise ValueError("已繳費訂單請先撤銷繳費，再獨立收款")
     if order.status in (OrderStatus.CANCELLED, OrderStatus.REFUNDED):
         raise ValueError("已取消或退款的訂單無法獨立收款")
+    was_in_class = order.class_id is not None
     if order.supplement_class_id is None:
         order.supplement_class_id = original_class_id
         order.assisted_by_id = actor_id
         order.assistance_scope = "supplement"
     order.class_id = None
     order.school_class = None
-    await receivable_svc.sync_shop_order(session, order)
+    receivable = await receivable_svc.sync_shop_order(session, order)
+    if was_in_class:
+        await queue_individual_payment_notice(
+            session,
+            order,
+            reason="separated_from_class",
+            due_at=receivable.due_at if receivable else None,
+        )
     await session.flush()
     return await get_order(session, order.id) or order
 
