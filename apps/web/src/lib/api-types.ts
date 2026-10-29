@@ -10967,6 +10967,23 @@ export interface paths {
         patch: operations["update_order_payment_shop_orders__order_id__payment_patch"];
         trace?: never;
     };
+    "/shop/orders/{order_id}/rejoin-class": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 將補收訂單歸回原班 */
+        post: operations["rejoin_supplement_order_shop_orders__order_id__rejoin_class_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shop/orders/{order_id}/separate": {
         parameters: {
             query?: never;
@@ -56732,6 +56749,37 @@ export interface operations {
                 "application/json": components["schemas"]["OrderPaymentUpdate"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rejoin_supplement_order_shop_orders__order_id__rejoin_class_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

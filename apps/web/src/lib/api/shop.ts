@@ -161,6 +161,7 @@ export const shopApi = {
   createAdminAssistedOrder: (body: AdminAssistedOrderCreate) => post<OrderOut[]>("/shop/orders/assisted", body),
   listSupplementOrders: (offset = 0) => get<OrderListItem[]>(`/shop/orders/supplements?limit=500&offset=${offset}`),
   separateOrder: (id: string) => post<OrderOut>(`/shop/orders/${id}/separate`),
+  rejoinSupplementOrder: (id: string) => post<OrderOut>(`/shop/orders/${id}/rejoin-class`),
   downloadSupplementReceipt: async (id: string) => {
     const response = await authFetch(`${BASE}/shop/orders/${id}/supplement-receipt.pdf`, { credentials: "include" });
     if (!response.ok) throw new ApiError(response.status, await errorMessageFromResponse(response));
