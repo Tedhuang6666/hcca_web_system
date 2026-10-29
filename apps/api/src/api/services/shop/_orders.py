@@ -17,6 +17,7 @@ from api.models.activity_link import ActivityLink, ActivityLinkKind
 from api.models.outbox import OutboxEvent, OutboxStatus
 from api.models.receivable import Receivable, ReceivableSource
 from api.models.school_class import SchoolClass
+from api.models.seating import SeatAssignment, SeatAssignmentStatus
 from api.models.shop import (
     Cart,
     CartItem,
@@ -1228,8 +1229,8 @@ async def cancel_order(
         raise ValueError(f"訂單狀態 {order.status} 無法取消")
     if order.is_paid or order.is_class_collected:
         raise ValueError("班級幹部已登記收款，商品登記已鎖定")
-    await _assert_activity_order_unlocked(session, _order_activity_id(order))
     if not bypass_registration_window:
+        await _assert_activity_order_unlocked(session, _order_activity_id(order))
         for item in order.items:
             product = await get_product(session, item.product_id)
             if product is not None:
@@ -1260,6 +1261,96 @@ async def cancel_order(
     await receivable_svc.cancel_for_source(session, "shop_order", order.id)
     await session.flush()
     logger.info("訂單取消 serial=%s by=%s", order.serial_number, requested_by)
+    return order
+
+
+async def update_order_item_quantity(
+    session: AsyncSession,
+    order: Order,
+    item_id: uuid.UUID,
+    *,
+    quantity: int,
+) -> Order:
+    await _lock_class_orders(session, order.class_id)
+    await session.execute(select(User.id).where(User.id == order.user_id).with_for_update())
+    await session.execute(
+        select(Order)
+        .where(Order.id == order.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    refreshed = await get_order(session, order.id)
+    if refreshed is None:
+        raise ValueError("找不到此訂單")
+    order = refreshed
+    if order.status not in (OrderStatus.PENDING, OrderStatus.CONFIRMED):
+        raise ValueError(f"訂單狀態 {order.status} 無法修改")
+    if order.is_paid or order.is_class_collected:
+        raise ValueError("班級幹部已登記收款，商品登記已鎖定")
+    if order.test_product_id is not None:
+        raise ValueError("測試訂購請至商品頁調整")
+
+    item = next((row for row in order.items if row.id == item_id), None)
+    if item is None:
+        raise ValueError("找不到此品項")
+    if quantity < 0 or quantity > 100:
+        raise ValueError("訂購數量需介於 0 至 100 件")
+    if quantity == 0 and len(order.items) == 1:
+        raise ValueError("訂單至少需保留一項商品；如需取消整筆訂單，請取消訂單")
+
+    product = await session.scalar(
+        select(Product)
+        .where(Product.id == item.product_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if product is None:
+        raise ValueError("找不到此商品")
+
+    delta = quantity - item.quantity
+    if delta > 0:
+        if product.status not in (ProductStatus.ACTIVE, ProductStatus.SOLD_OUT):
+            raise ValueError(f"商品「{product.name}」目前無法增加數量")
+        if not product.is_unlimited and product.stock_quantity < delta:
+            raise ValueError(f"商品「{product.name}」庫存不足（剩餘 {product.stock_quantity} 件）")
+        product_quantity = sum(row.quantity for row in order.items if row.product_id == product.id)
+        await _assert_purchase_limit(
+            session,
+            product,
+            order.user_id,
+            product_quantity + delta,
+            excluding_order_id=order.id,
+        )
+
+    if quantity < item.quantity:
+        assigned_seats = await session.scalar(
+            select(func.count())
+            .select_from(SeatAssignment)
+            .where(
+                SeatAssignment.order_item_id == item.id,
+                SeatAssignment.status == SeatAssignmentStatus.ACTIVE,
+            )
+        )
+        if (assigned_seats or 0) > quantity:
+            raise ValueError("此品項已有劃位，請先解除多餘座位再調整數量")
+
+    if delta and not product.is_unlimited:
+        product.stock_quantity -= delta
+        if product.stock_quantity == 0:
+            product.status = ProductStatus.SOLD_OUT
+        elif product.status == ProductStatus.SOLD_OUT:
+            product.status = ProductStatus.ACTIVE
+
+    if quantity == 0:
+        order.items.remove(item)
+        await session.delete(item)
+    else:
+        item.quantity = quantity
+
+    order.subtotal_price = sum(row.quantity * row.unit_price for row in order.items)
+    await _apply_order_promotion(session, order, code=order.promotion_code)
+    await receivable_svc.sync_shop_order(session, order)
+    await session.flush()
     return order
 
 

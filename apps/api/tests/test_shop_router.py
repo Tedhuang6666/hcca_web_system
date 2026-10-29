@@ -2170,6 +2170,44 @@ async def test_manager_can_cancel_closed_alumni_order_and_restore_stock(
     assert product.stock_quantity == 2
 
 
+async def test_class_cadre_can_cancel_after_class_order_closure(
+    db_session, authed_client_factory
+):
+    sc = await _make_class(db_session)
+    cadre = await _bare_user(db_session, student_id="11501")
+    buyer = await _bare_user(db_session, student_id="11520")
+    await class_svc.add_cadre(db_session, sc, user_id=cadre.id)
+    product = await _make_active_product(db_session, cadre, stock=2)
+    orders = await shop_svc.create_direct_order(
+        db_session,
+        user_id=buyer.id,
+        class_id=sc.id,
+        data=ClassOrderUpsert(
+            user_id=buyer.id, items=[OrderItemCreate(product_id=product.id, quantity=1)]
+        ),
+    )
+    order = orders[0]
+    await shop_svc.close_category_for_class(
+        db_session,
+        category_id=product.category_id,
+        class_id=sc.id,
+        closed_by_id=cadre.id,
+    )
+
+    owner_cancel = await authed_client_factory(buyer).post(
+        f"/shop/orders/{order.id}/cancel", json={}
+    )
+    cadre_cancel = await authed_client_factory(cadre).post(
+        f"/shop/orders/{order.id}/cancel", json={}
+    )
+
+    assert owner_cancel.status_code == 409
+    assert cadre_cancel.status_code == 200
+    assert cadre_cancel.json()["status"] == "cancelled"
+    await db_session.refresh(product)
+    assert product.stock_quantity == 2
+
+
 @pytest.mark.parametrize("flag", ["is_paid", "is_class_collected"])
 async def test_manager_cannot_cancel_collected_order(
     db_session, admin_user, authed_client_factory, flag
@@ -2230,6 +2268,97 @@ async def test_update_order_items_by_owner_succeeds(db_session, authed_client_fa
     )
     assert resp.status_code == 200
     assert resp.json()["total_price"] == 30
+
+
+@pytest.mark.parametrize("code", ["shop:manage", "shop:manage_orders", "admin:all"])
+async def test_order_manager_can_adjust_quantity_after_class_order_closes(
+    db_session, authed_client_factory, code
+) -> None:
+    sc = await _make_class(db_session)
+    buyer = await _bare_user(db_session, student_id="11520")
+    manager = await _bare_user(db_session)
+    await _grant_permission(db_session, manager, code)
+    product = await _make_active_product(db_session, manager, price=100, stock=10)
+    orders = await shop_svc.create_direct_order(
+        db_session,
+        user_id=buyer.id,
+        class_id=sc.id,
+        data=ClassOrderUpsert(
+            user_id=buyer.id, items=[OrderItemCreate(product_id=product.id, quantity=2)]
+        ),
+    )
+    order = orders[0]
+    item = order.items[0]
+    product.price = 999
+    await shop_svc.close_category_for_class(
+        db_session,
+        category_id=product.category_id,
+        class_id=sc.id,
+        closed_by_id=manager.id,
+    )
+
+    response = await authed_client_factory(manager).patch(
+        f"/shop/orders/{order.id}/items/{item.id}", json={"quantity": 3}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["total_price"] == 300
+    assert response.json()["items"][0]["quantity"] == 3
+    assert response.json()["items"][0]["unit_price"] == 100
+    await db_session.refresh(product)
+    assert product.stock_quantity == 7
+
+
+@pytest.mark.parametrize("flag", ["is_paid", "is_class_collected"])
+async def test_order_manager_cannot_adjust_quantity_after_collection(
+    db_session, authed_client_factory, flag
+) -> None:
+    buyer = await _bare_user(db_session, student_id="11520")
+    manager = await _bare_user(db_session)
+    await _grant_permission(db_session, manager, "shop:manage_orders")
+    product = await _make_active_product(db_session, manager, stock=10)
+    orders = await shop_svc.create_direct_order(
+        db_session,
+        user_id=buyer.id,
+        class_id=None,
+        data=ClassOrderUpsert(
+            user_id=buyer.id, items=[OrderItemCreate(product_id=product.id, quantity=1)]
+        ),
+    )
+    order = orders[0]
+    setattr(order, flag, True)
+    await db_session.flush()
+
+    response = await authed_client_factory(manager).patch(
+        f"/shop/orders/{order.id}/items/{order.items[0].id}", json={"quantity": 2}
+    )
+
+    assert response.status_code == 409
+    await db_session.refresh(product)
+    assert product.stock_quantity == 9
+
+
+async def test_unrelated_user_cannot_adjust_order_item_quantity(
+    db_session, authed_client_factory
+) -> None:
+    buyer = await _bare_user(db_session, student_id="11520")
+    stranger = await _bare_user(db_session)
+    product = await _make_active_product(db_session, stranger, stock=10)
+    orders = await shop_svc.create_direct_order(
+        db_session,
+        user_id=buyer.id,
+        class_id=None,
+        data=ClassOrderUpsert(
+            user_id=buyer.id, items=[OrderItemCreate(product_id=product.id, quantity=1)]
+        ),
+    )
+    order = orders[0]
+    response = await authed_client_factory(stranger).patch(
+        f"/shop/orders/{order.id}/items/{order.items[0].id}", json={"quantity": 2}
+    )
+    assert response.status_code == 404
+    await db_session.refresh(product)
+    assert product.stock_quantity == 9
 
 
 async def test_update_order_payment_by_unrelated_user_returns_403(

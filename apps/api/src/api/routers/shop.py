@@ -107,6 +107,7 @@ from api.services.realtime_events import broadcast_order_updated
 from api.services.shop import _class_settlement as class_settlement_svc
 from api.services.shop import _delegation as delegation_svc
 from api.services.shop import _delegation_codes as delegation_code_svc
+from api.services.shop import _orders as orders_svc
 from api.services.shop import _supplements as supplement_svc
 from api.services.shop._analytics import sales_analytics
 from api.services.shop._analytics_report import create_sales_report
@@ -1780,11 +1781,11 @@ async def cancel_order(
     order = await _get_order_or_404(order_id, session, current_user)
     codes = await get_user_permission_codes(session, current_user.id)
     is_order_manager = current_user.is_superuser or bool(_PAYMENT_WRITE_CODES & set(codes))
-    bypass = is_order_manager
-    if not bypass and order.user_id != current_user.id:
+    is_class_cadre = False
+    if not is_order_manager:
         cadre_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
-        bypass = order.class_id is not None and order.class_id in cadre_ids
-        if not bypass:
+        is_class_cadre = order.class_id is not None and order.class_id in cadre_ids
+        if order.user_id != current_user.id and not is_class_cadre:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權取消此訂單")
     try:
         order = await shop_svc.cancel_order(
@@ -1792,8 +1793,8 @@ async def cancel_order(
             order,
             requested_by=current_user.id,
             reason=payload.reason,
-            bypass_owner_check=bypass,
-            bypass_registration_window=is_order_manager,
+            bypass_owner_check=is_order_manager or is_class_cadre,
+            bypass_registration_window=is_order_manager or is_class_cadre,
         )
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
@@ -2459,6 +2460,42 @@ async def update_owned_order_item(
     session: DbDep,
     current_user: CurrentUser,
 ) -> OrderOut | None:
+    codes = await get_user_permission_codes(session, current_user.id)
+    is_order_manager = current_user.is_superuser or bool(_PAYMENT_WRITE_CODES & set(codes))
+    if is_order_manager:
+        order = await _get_order_or_404(order_id, session, current_user)
+        try:
+            updated_order = await orders_svc.update_order_item_quantity(
+                session,
+                order,
+                item_id,
+                quantity=payload.quantity,
+            )
+        except StaleDataError as error:
+            raise HTTPException(status_code=409, detail="庫存已更新，請重新載入") from error
+        except shop_svc.PurchaseLimitError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        await audit_svc.record(
+            session,
+            entity_type="order",
+            entity_id=str(updated_order.id),
+            action="shop.order_item_quantity_update",
+            actor_id=str(current_user.id),
+            actor_email=current_user.email,
+            meta={
+                "serial_number": updated_order.serial_number,
+                "item_id": str(item_id),
+                "quantity": payload.quantity,
+            },
+            summary=f"調整商品訂單「{updated_order.serial_number}」品項數量",
+        )
+        refreshed = await shop_svc.get_order(session, updated_order.id)
+        result = refreshed or updated_order
+        await _broadcast_shop_order(result)
+        return shop_svc.serialize_order(result)
+
     order = await _delegation_result(
         delegation_svc.update_owned_item(
             session,
