@@ -88,7 +88,7 @@ export default function ShopPromotionPanel() {
       const [promotionRows, productRows, catalogRows, categoryRows, seriesRows] = await Promise.all([
         shopApi.listPromotions(),
         listAllProducts(),
-        shopApi.catalog(),
+        shopApi.catalog(undefined, true),
         shopApi.listCategories(),
         shopApi.listSeries(),
       ]);

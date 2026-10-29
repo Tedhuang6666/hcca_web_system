@@ -158,6 +158,96 @@ function flyProductIntoOrder() {
 
 const GENERAL_ACTIVITY_SCOPE = "none";
 
+function formatShopTimestamp(value: string | null | undefined) {
+  if (!value) return null;
+  const timestamp = new Date(value);
+  if (Number.isNaN(timestamp.getTime())) return "時間無法辨識";
+  return timestamp.toLocaleString("zh-TW", { timeZone: "Asia/Taipei" });
+}
+
+function resolveOrderClosureState(
+  status: CloseStatusItem | undefined,
+  activityClosedAt: string | null,
+  activityClosesAt: string | null,
+  now = Date.now(),
+) {
+  const deadline = status?.closes_at ?? activityClosesAt;
+  const closedAt = status?.closed_at ?? activityClosedAt;
+  const deadlinePassed = Boolean(deadline && new Date(deadline).getTime() <= now);
+  const closedAtMatchesDeadline = Boolean(
+    deadline && closedAt
+      && new Date(deadline).getTime() === new Date(closedAt).getTime(),
+  );
+  const deadlineClosure = deadlinePassed && (!closedAt || closedAtMatchesDeadline);
+  const councilClosed = Boolean(
+    (activityClosedAt || status?.is_global) && !deadlineClosure,
+  );
+  const classPaid = Boolean(status?.is_closed && !status.is_global);
+  return {
+    deadline,
+    closedAt: closedAt ?? (deadlinePassed ? deadline : null),
+    deadlinePassed,
+    councilClosed,
+    classPaid,
+    isClosed: councilClosed || classPaid || deadlinePassed,
+  };
+}
+
+function OrderClosureNotice({
+  status,
+  activityClosedAt,
+  activityClosesAt,
+}: {
+  status: CloseStatusItem | undefined;
+  activityClosedAt: string | null;
+  activityClosesAt: string | null;
+}) {
+  const closure = resolveOrderClosureState(status, activityClosedAt, activityClosesAt);
+  if (!closure.isClosed) return null;
+
+  const collectionTime = formatShopTimestamp(status?.class_collected_at);
+  const confirmationTime = formatShopTimestamp(
+    status?.council_confirmed_at ?? (!status?.is_global ? status?.closed_at : null),
+  );
+  const closureTime = formatShopTimestamp(closure.closedAt);
+  const heading = closure.councilClosed
+    ? "班聯已結單"
+    : closure.classPaid
+      ? "班聯已確認本班收款"
+      : "活動已到統一結單時間";
+  const description = closure.councilClosed
+    ? "活動商品已從公開目錄隱藏；此連結僅供查看商品與結單紀錄。"
+    : closure.classPaid
+      ? "本班商品登記已鎖定，其他班級仍可依活動狀態訂購。"
+      : "活動商品已停止登記。";
+
+  return (
+    <section className="shop-product-closed-note" aria-label="活動結單與收款狀態" role="status">
+      <div className="shop-product-closed-heading">
+        <CircleAlert size={18} aria-hidden="true" />
+        <div>
+          <h4>{heading}</h4>
+          <p>{description}</p>
+        </div>
+      </div>
+      <dl className="shop-product-closed-times">
+        <div>
+          <dt>班代收款時間</dt>
+          <dd>{collectionTime ?? (status ? "尚無收款紀錄" : "目前無法確認班級紀錄")}</dd>
+        </div>
+        <div>
+          <dt>班聯確認時間</dt>
+          <dd>{confirmationTime ?? (status ? "尚未確認收款" : "目前無法確認班級紀錄")}</dd>
+        </div>
+        {closureTime && <div>
+          <dt>活動結單時間</dt>
+          <dd>{closureTime}</dd>
+        </div>}
+      </dl>
+    </section>
+  );
+}
+
 
 // ── 商品變體選購 Modal ────────────────────────────────────────────────────────
 
@@ -165,7 +255,9 @@ function ProductModal({
   productId,
   getProduct,
   saveVariant,
-  classClosed,
+  closeStatus,
+  activityClosedAt,
+  activityClosesAt,
   isLoggedIn,
   authLoading,
   registrationLoadError,
@@ -187,7 +279,9 @@ function ProductModal({
   productId: string;
   getProduct: (id: string) => Promise<ProductOut>;
   saveVariant: (id: string, optionIds: string[], quantity: number) => Promise<{ added: boolean } | null>;
-  classClosed: boolean;
+  closeStatus: CloseStatusItem | undefined;
+  activityClosedAt: string | null;
+  activityClosesAt: string | null;
   isLoggedIn: boolean;
   authLoading: boolean;
   registrationLoadError: boolean;
@@ -381,7 +475,12 @@ function ProductModal({
   );
   const deadline = product ? productDeadline(product) : null;
   const testing = product?.status === "testing";
-  const deadlinePassed = !testing && Boolean(deadline && new Date(deadline).getTime() <= Date.now());
+  const closure = resolveOrderClosureState(closeStatus, activityClosedAt, activityClosesAt);
+  const deadlinePassed = !testing && (closure.deadlinePassed
+    || Boolean(deadline && new Date(deadline).getTime() <= Date.now()));
+  const councilClosed = closure.councilClosed;
+  const classPaid = closure.classPaid;
+  const orderClosed = closure.isClosed || deadlinePassed;
   const available = Boolean(
     product
       && (product.status === "active" || testing || registeredQuantity > 0)
@@ -392,7 +491,7 @@ function ProductModal({
     && !authLoading
     && !registrationLoadError
     && !registrationLocked
-    && (testing || !classClosed)
+    && (testing || !orderClosed)
     && !deadlinePassed;
   const canRegister = available && canEdit && maxSelectedQuantity > 0;
   const variantImage = variantGroups.reduce<string | null>((current, group) => {
@@ -450,7 +549,8 @@ function ProductModal({
     if (!canEdit) {
       toast.error(registrationLockMessage({
         registrationLocked,
-        classClosed,
+        classClosed: classPaid,
+        councilClosed,
         deadlinePassed,
       }));
       return false;
@@ -520,7 +620,8 @@ function ProductModal({
         aria-modal="true"
         aria-labelledby="product-modal-title"
         tabIndex={-1}
-        className="shop-product-dialog min-w-0 animate-scale-in">
+        className={`shop-product-dialog min-w-0 animate-scale-in${orderClosed ? " shop-product-dialog--closed" : ""}`}
+        data-order-closed={orderClosed || undefined}>
         <div className="shop-product-dialog-media">
           {product && displayMedia ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -591,6 +692,11 @@ function ProductModal({
           {product && !productLoading && !productLoadError && (
             <>
               <div className="shop-product-dialog-scroll">
+                <OrderClosureNotice
+                  status={closeStatus}
+                  activityClosedAt={activityClosedAt}
+                  activityClosesAt={activityClosesAt}
+                />
                 {bundleStep && <div className="shop-product-bundle-progress" role="status">
                   <strong>{bundleStep.name}</strong>
                   <span>第 {bundleStep.position} / {bundleStep.total} 項</span>
@@ -663,7 +769,11 @@ function ProductModal({
                   </div>
                 ))}
 
-                {!isLoggedIn ? (
+                {!testing && orderClosed ? (
+                  <p className="shop-product-purchase-hint" role="status">
+                    {registrationLockMessage({ registrationLocked, classClosed: classPaid, councilClosed, deadlinePassed })}
+                  </p>
+                ) : !isLoggedIn ? (
                   <p className="shop-product-purchase-hint" role="status">
                     {authLoading ? "正在確認登入狀態…" : "登入後即可登記商品。"}
                   </p>
@@ -682,9 +792,9 @@ function ProductModal({
                   <p className="shop-product-purchase-hint" role="alert">
                     目前無法讀取商品登記，請重新載入頁面後再修改。
                   </p>
-                ) : (registrationLocked || (!testing && classClosed) || deadlinePassed) ? (
+                ) : registrationLocked ? (
                   <p className="shop-product-purchase-hint" role="status">
-                    {registrationLockMessage({ registrationLocked, classClosed, deadlinePassed })}
+                    {registrationLockMessage({ registrationLocked, classClosed: false, deadlinePassed: false })}
                   </p>
                 ) : null}
               </div>
@@ -717,7 +827,15 @@ function ProductModal({
                   )}
                 </div>
                 <div className="shop-product-dialog-actions">
-                  {bundleStep && isLoggedIn ? (
+                  {!testing && orderClosed ? (
+                    <button type="button" className="shop-product-submit" disabled>
+                      {councilClosed
+                        ? "班聯已結單"
+                        : classPaid
+                          ? "班聯已確認本班收款"
+                          : "登記已截止"}
+                    </button>
+                  ) : bundleStep && isLoggedIn ? (
                     <button type="button" className="shop-product-submit"
                       disabled={loading || !canRegister || !allPicked || qty > maxSelectedQuantity}
                       aria-busy={loading}
@@ -791,6 +909,7 @@ function ProductModal({
 function ProductCard({
   product,
   classClosed,
+  councilClosed,
   registeredQuantity,
   canAdjustRegistration,
   href,
@@ -805,6 +924,7 @@ function ProductCard({
 }: {
   product: CatalogProductOut;
   classClosed: boolean;
+  councilClosed: boolean;
   registeredQuantity: number;
   canAdjustRegistration: boolean;
   href: string | null;
@@ -821,12 +941,14 @@ function ProductCard({
   const soldOut = product.status === "sold_out" || (testing && !product.is_unlimited && product.stock_quantity === 0);
   const deadline = productDeadline(product);
   const deadlinePassed = !testing && Boolean(deadline && new Date(deadline).getTime() <= Date.now());
-  const locked = (!testing && classClosed) || deadlinePassed;
+  const locked = (!testing && (classClosed || councilClosed)) || deadlinePassed;
   const disabled = (soldOut || locked) && registeredQuantity === 0;
   const statusLabel = testing
     ? "測試中・正式開放時清除試訂紀錄"
-    : classClosed
-    ? "本班已停止訂購"
+    : councilClosed
+      ? "班聯已結單"
+      : classClosed
+    ? "班聯已確認本班收款"
     : deadlinePassed
       ? "登記已截止"
       : registeredQuantity > 0
@@ -942,11 +1064,14 @@ type ShopPageProps = {
 
 export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {}) {
   const router = useRouter();
-  const catalogCacheKey = "shop/catalog/all:v2";
+  const directProductRoute = Boolean(topicSlug || productSlug);
+  const catalogCacheKey = directProductRoute ? "shop/catalog/direct:v1" : "shop/catalog/all:v2";
 
-  const [catalog, setCatalog] = useState<CatalogCategoryOut[]>(() => cacheGet<CatalogCategoryOut[]>(catalogCacheKey) ?? []);
+  const [catalog, setCatalog] = useState<CatalogCategoryOut[]>(() => directProductRoute
+    ? []
+    : cacheGet<CatalogCategoryOut[]>(catalogCacheKey) ?? []);
   const [catalogTime, setCatalogTime] = useState(Date.now);
-  const [loading, setLoading] = useState(!cacheHas(catalogCacheKey));
+  const [loading, setLoading] = useState(directProductRoute || !cacheHas(catalogCacheKey));
   const [loadError, setLoadError] = useState(false);
   const [openProduct, setOpenProduct] = useState<string | null>(null);
   const [routeProductNotFound, setRouteProductNotFound] = useState(false);
@@ -1056,14 +1181,26 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
 
   const loadCatalog = useCallback(() => {
     const generation = refreshGeneration.current;
-    if (!cacheHas(catalogCacheKey)) setLoading(true);
+    if (directProductRoute || !cacheHas(catalogCacheKey)) setLoading(true);
     setLoadError(false);
+    const routeSegments = topicSlug && productSlug
+      ? [topicSlug, productSlug]
+      : productSlug
+        ? [productSlug]
+        : undefined;
+    const directPath = routeSegments?.map((segment) => {
+      try {
+        return decodeURIComponent(segment);
+      } catch {
+        return segment;
+      }
+    });
     shopApi
-      .catalog()
+      .catalog(undefined, false, directPath)
       .then(async (data) => {
         if (generation !== refreshGeneration.current) return;
         setCatalog(data);
-        cacheSet(catalogCacheKey, data);
+        if (!directProductRoute) cacheSet(catalogCacheKey, data);
         try {
           const schoolClass = await classApi.myClass();
           if (generation !== refreshGeneration.current) return;
@@ -1086,7 +1223,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       })
       .catch(() => { if (generation === refreshGeneration.current) setLoadError(true); })
       .finally(() => { if (generation === refreshGeneration.current) setLoading(false); });
-  }, [catalogCacheKey]);
+  }, [catalogCacheKey, directProductRoute, productSlug, topicSlug]);
 
   const loadDelegation = useCallback(async (token: string, claim = false) => {
     const generation = refreshGeneration.current;
@@ -1319,9 +1456,29 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
     return null;
   }, [catalog, openProduct]);
 
-  const selectedCategory = productSlug
+  const displayedCatalog = directProductRoute && routeProductEntry
+    ? [routeProductEntry.category]
+    : directProductRoute
+      ? catalog
+      : catalog.filter((category) => (
+        !category.order_closed_at
+        && !(category.order_closes_at && new Date(category.order_closes_at).getTime() <= catalogTime)
+      ));
+  const selectedCategory = directProductRoute
     ? routeProductEntry?.category ?? null
-    : catalog.find((category) => category.id === selectedCategoryId) ?? catalog[0] ?? null;
+    : displayedCatalog.find((category) => category.id === selectedCategoryId)
+      ?? displayedCatalog[0]
+      ?? null;
+  const selectedCategoryCloseStatus = selectedCategory
+    ? closeStatus[selectedCategory.id]
+    : undefined;
+  const selectedCategoryClosure = resolveOrderClosureState(
+    selectedCategoryCloseStatus,
+    selectedCategory?.order_closed_at ?? null,
+    selectedCategory?.order_closes_at ?? null,
+    catalogTime,
+  );
+  const directLinkClosed = directProductRoute && selectedCategoryClosure.isClosed;
 
   useEffect(() => {
     const now = Date.now();
@@ -1668,19 +1825,35 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
 
       {loading ? (
         <ListPageSkeleton rows={4} showHeader={false} showFilters={false} />
-      ) : loadError && catalog.length === 0 ? null : catalog.length === 0 ? (
+      ) : loadError && displayedCatalog.length === 0 ? null : displayedCatalog.length === 0 ? (
         <div className="shop-public-empty">
           <Package className="mx-auto" size={36} strokeWidth={1.2} aria-hidden="true" />
           <p>目前沒有可訂購的商品，請稍後再來看看。</p>
         </div>
       ) : selectedCategory && (
-        <div>
-          {catalog.length > 1 && <section className="shop-public-activity-picker" aria-labelledby="shop-activity-title">
+        directLinkClosed ? (
+          <section className="shop-public-closed-page" aria-label="活動結單通知" role="status">
+            <CircleAlert size={22} aria-hidden="true" />
+            <div>
+              <h2>{selectedCategoryClosure.councilClosed
+                ? "班聯已結單"
+                : selectedCategoryClosure.classPaid
+                  ? "班聯已確認本班收款"
+                  : "活動已到統一結單時間"}</h2>
+              <p>{selectedCategoryClosure.councilClosed
+                ? "此活動商品已從公開目錄隱藏。這個舊連結僅供查看商品詳情與收款紀錄，無法訂購。"
+                : selectedCategoryClosure.classPaid
+                  ? "本班已完成收款確認，無法再登記；其他班級仍可依活動狀態查看商品。"
+                  : "此活動商品已停止登記。這個舊連結僅供查看商品詳情與收款紀錄，無法訂購。"}</p>
+            </div>
+          </section>
+        ) : <div>
+          {displayedCatalog.length > 1 && <section className="shop-public-activity-picker" aria-labelledby="shop-activity-title">
             <div className="shop-public-activity-heading">
               <h2 id="shop-activity-title">選擇活動</h2>
             </div>
             <nav className="shop-public-category-nav" aria-label="選擇商品活動">
-              {catalog.map((category) => {
+              {displayedCatalog.map((category) => {
                 const isSelected = category.id === selectedCategory.id;
                 const productCount = category.products.length
                   + category.series.reduce((sum, series) => sum + series.products.length, 0);
@@ -1734,20 +1907,11 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                 </div>
               </div>
             )}
-            {closeStatus[selectedCategory.id]?.is_closed && (
-              <div className="shop-public-alert mt-6">
-                <CircleAlert size={18} aria-hidden="true" />
-                <p>
-                  <strong>本班已停止訂購這個主題的商品</strong>
-                  {closeStatus[selectedCategory.id].closed_at && (
-                    <span className="ml-1 text-xs">
-                      （{new Date(closeStatus[selectedCategory.id].closed_at!).toLocaleString("zh-TW")}）
-                    </span>
-                  )}
-                  ，如需更改請聯繫班級幹部。
-                </p>
-              </div>
-            )}
+            <OrderClosureNotice
+              status={selectedCategoryCloseStatus}
+              activityClosedAt={selectedCategory.order_closed_at ?? null}
+              activityClosesAt={selectedCategory.order_closes_at ?? null}
+            />
             <div id="shop-product-selection" className="shop-public-series-list" tabIndex={-1}>
               {!selectedSeriesId && selectedCategory.products.length > 0 && (
                 <section className="shop-public-series">
@@ -1768,7 +1932,8 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                             : canOrderForSelf || product.status === "testing")}
                         onSelectBundle={(promotion) => selectBundleProduct(promotion, product.id)}
                         cardPrice={shopCardPrice(product, categoryPromotions, selectedCategory.activity_id ?? null, selectedCategoryRegistration)}
-                        classClosed={Boolean(closeStatus[selectedCategory.id]?.is_closed)}
+                        classClosed={Boolean(closeStatus[selectedCategory.id]?.is_closed && !closeStatus[selectedCategory.id]?.is_global)}
+                        councilClosed={Boolean(closeStatus[selectedCategory.id]?.is_global)}
                         registeredQuantity={registeredByProduct.get(product.id) ?? 0}
                         href={delegationToken || classMemberUserId ? null : shopProductHref(catalog, selectedCategory, product)}
                         onClick={() => setOpenProduct(product.id)}
@@ -1807,7 +1972,8 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                               : canOrderForSelf || product.status === "testing")}
                           onSelectBundle={(promotion) => selectBundleProduct(promotion, product.id)}
                           cardPrice={shopCardPrice(product, categoryPromotions, selectedCategory.activity_id ?? null, selectedCategoryRegistration)}
-                          classClosed={Boolean(closeStatus[selectedCategory.id]?.is_closed)}
+                          classClosed={Boolean(closeStatus[selectedCategory.id]?.is_closed && !closeStatus[selectedCategory.id]?.is_global)}
+                          councilClosed={Boolean(closeStatus[selectedCategory.id]?.is_global)}
                           registeredQuantity={registeredByProduct.get(product.id) ?? 0}
                           href={delegationToken || classMemberUserId ? null : shopProductHref(catalog, selectedCategory, product)}
                           onClick={() => setOpenProduct(product.id)}
@@ -1919,7 +2085,9 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
           } : undefined}
           getProduct={getProduct}
           saveVariant={saveVariant}
-          classClosed={Boolean(closeStatus[selectedCategory?.id ?? ""]?.is_closed)}
+          closeStatus={selectedCategory ? closeStatus[selectedCategory.id] : undefined}
+          activityClosedAt={selectedCategory?.order_closed_at ?? null}
+          activityClosesAt={selectedCategory?.order_closes_at ?? null}
           isLoggedIn={isLoggedIn}
           authLoading={authLoading}
           registrationLoadError={registrationLoadError || Boolean(classMemberUserId && classMemberAccess === "error")}

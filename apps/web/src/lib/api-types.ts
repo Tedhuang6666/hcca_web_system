@@ -15471,12 +15471,16 @@ export interface components {
         };
         /** CloseStatusItem */
         CloseStatusItem: {
+            /** Class Collected At */
+            class_collected_at?: string | null;
             /** Closed At */
             closed_at?: string | null;
             /** Closed By Name */
             closed_by_name?: string | null;
             /** Closes At */
             closes_at?: string | null;
+            /** Council Confirmed At */
+            council_confirmed_at?: string | null;
             /** Is Closed */
             is_closed: boolean;
             /**
@@ -55004,6 +55008,8 @@ export interface operations {
                 activity_id?: string | null;
                 /** @description 包含已結單活動，供登入後查詢與收款 */
                 include_closed?: boolean;
+                /** @description 只解析公開商品連結對應的分類與商品，可顯示已結單商品 */
+                direct_path?: string[];
             };
             header?: never;
             path?: never;

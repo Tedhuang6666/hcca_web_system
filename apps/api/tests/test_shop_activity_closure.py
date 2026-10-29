@@ -10,7 +10,9 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from api.models.activity import Activity, ActivityConvener, ActivityStatus
 from api.models.audit_log import AuditLog
-from api.models.shop import Product, ProductCategory
+from api.models.school_class import ClassManualMember, SchoolClass
+from api.models.shop import Order, Product, ProductCategory
+from api.models.shop_class_payment import ShopClassPayment
 from api.schemas.shop import (
     CartItemCreate,
     ClassOrderUpsert,
@@ -135,6 +137,105 @@ async def test_closed_activity_hidden_from_catalog_but_available_for_collection(
     )
     await manager.patch(f"/shop/activities/{activity.id}/order-closure", json={"is_closed": False})
     assert len((await client.get("/shop/catalog")).json()) == 4
+
+
+async def test_globally_closed_category_is_hidden_from_public_catalog_and_restored_on_reopen(
+    client, admin_user, authed_client_factory, closure_setup
+):
+    _, _, _, categories, _ = closure_setup
+    manager = authed_client_factory(admin_user)
+    category_id = categories[0].id
+
+    closed = await manager.post(f"/shop/categories/{category_id}/close", json={})
+    assert closed.status_code == 201
+    assert str(category_id) not in {row["id"] for row in (await client.get("/shop/catalog")).json()}
+
+    direct_link = await client.get("/shop/catalog", params={"direct_path": "商品0"})
+    assert direct_link.status_code == 200
+    direct_category = direct_link.json()[0]
+    assert direct_category["id"] == str(category_id)
+    assert [product["name"] for product in direct_category["products"]] == ["商品0"]
+
+    retained = await manager.get("/shop/catalog?include_closed=true")
+    closed_category = next(row for row in retained.json() if row["id"] == str(category_id))
+    assert closed_category["order_closed_at"] is not None
+
+    reopened = await manager.delete(f"/shop/categories/{category_id}/close")
+    assert reopened.status_code == 200
+    assert str(category_id) in {row["id"] for row in (await client.get("/shop/catalog")).json()}
+
+
+async def test_close_status_includes_class_collection_and_council_confirmation_times(
+    db_session, admin_user, authed_client_factory, client, make_user, closure_setup
+):
+    buyer, activity, _, categories, _ = closure_setup
+    school_class = SchoolClass(
+        academic_year=116,
+        class_code=f"{uuid.uuid4().hex[:6]}",
+        grade=1,
+        created_by=buyer.id,
+    )
+    db_session.add(school_class)
+    await db_session.flush()
+    db_session.add(ClassManualMember(class_id=school_class.id, user_id=buyer.id))
+    await db_session.flush()
+
+    earlier_collection = datetime(2026, 10, 20, 10, tzinfo=UTC)
+    latest_collection = datetime(2026, 10, 21, 10, tzinfo=UTC)
+    council_confirmation = datetime(2026, 10, 22, 10, tzinfo=UTC)
+    db_session.add_all(
+        [
+            Order(
+                serial_number=f"ORD-TEST-{uuid.uuid4().hex[:8]}",
+                user_id=buyer.id,
+                activity_id=activity.id,
+                category_id=categories[0].id,
+                class_id=school_class.id,
+                is_class_collected=True,
+                class_collected_at=earlier_collection,
+            ),
+            Order(
+                serial_number=f"ORD-TEST-{uuid.uuid4().hex[:8]}",
+                user_id=buyer.id,
+                activity_id=activity.id,
+                category_id=categories[1].id,
+                class_id=school_class.id,
+                is_class_collected=True,
+                class_collected_at=latest_collection,
+            ),
+            ShopClassPayment(
+                class_id=school_class.id,
+                activity_id=activity.id,
+                is_paid=True,
+                confirmed_at=council_confirmation,
+                confirmed_by_id=admin_user.id,
+            ),
+        ]
+    )
+    await db_session.flush()
+
+    endpoint = f"/shop/close-status?category_ids={categories[0].id}&class_id={school_class.id}"
+    assert (await client.get(endpoint)).status_code == 401
+
+    response = await authed_client_factory(admin_user).get(endpoint)
+    assert response.status_code == 200
+    status_item = response.json()["statuses"][str(categories[0].id)]
+    assert status_item["class_collected_at"] == latest_collection.isoformat()
+    assert status_item["council_confirmed_at"] == council_confirmation.isoformat()
+
+    member_status = await authed_client_factory(buyer).get(endpoint)
+    assert member_status.status_code == 200
+    assert (
+        member_status.json()["statuses"][str(categories[0].id)]["class_collected_at"]
+        == latest_collection.isoformat()
+    )
+
+    outsider = await make_user(student_id="310002", email="310002@hchs.hc.edu.tw")
+    outsider_status = await authed_client_factory(outsider).get(endpoint)
+    outsider_item = outsider_status.json()["statuses"][str(categories[0].id)]
+    assert outsider_status.status_code == 200
+    assert outsider_item["class_collected_at"] is None
+    assert outsider_item["council_confirmed_at"] is None
 
 
 async def test_closed_activity_locks_registration_cancel_promotion_and_preserves_orders(

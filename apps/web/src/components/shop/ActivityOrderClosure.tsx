@@ -53,8 +53,8 @@ export default function ActivityOrderClosure({ categories, disabled = false, onS
       setStatuses((rows) => ({ ...rows, [category.id]: { ...current, is_closed: !current.is_closed, is_global: !current.is_closed } }));
       onSaved();
       setMessage(!current.is_closed
-        ? `「${category.name}」已鎖單，學生與班代皆無法再訂購；既有訂單與收款保留。`
-        : `「${category.name}」已解除鎖單，訂購仍依原期限與商品狀態判定。`);
+        ? `「${category.name}」已由班聯結單，商品已從公開目錄隱藏；既有訂單與收款保留。`
+        : `「${category.name}」已重新開放並恢復公開顯示，訂購仍依原期限與商品狀態判定。`);
     } catch (cause) {
       setError(apiErrorMessage(cause, "活動鎖單狀態更新失敗，請再試一次。"));
     } finally {
@@ -66,10 +66,10 @@ export default function ActivityOrderClosure({ categories, disabled = false, onS
     <section aria-labelledby="activity-order-closure-title" className="card min-w-0 p-4">
       <h2 id="activity-order-closure-title" className="flex items-center gap-2 text-base font-semibold"
         style={{ color: "var(--text-primary)" }}>
-        <Lock size={18} aria-hidden="true" /> 活動鎖單
+        <Lock size={18} aria-hidden="true" /> 活動結單與公開入口
       </h2>
       <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
-        鎖單後，該批次所有商品停止訂購與班代代訂；既有訂單與收款保留。
+        結單會停止該活動的訂購與班代代訂，並隱藏公開商品入口；既有訂單與收款保留。重新開放後會恢復顯示。
       </p>
       {loadError && <div role="alert" className="mt-2 text-sm" style={{ color: "var(--danger)" }}>
         <p>{loadError}</p>
@@ -85,15 +85,19 @@ export default function ActivityOrderClosure({ categories, disabled = false, onS
               <div className="min-w-0 flex-1">
                 <h3 className="break-words text-sm font-medium" style={{ color: "var(--text-primary)" }}>{category.name}</h3>
                 <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
-                  {loading ? "載入狀態中…" : loadError || !status ? "狀態待確認" : closed ? "已鎖單" : "未鎖單"}
+                  {loading ? "載入狀態中…" : loadError || !status
+                    ? "狀態待確認"
+                    : closed
+                      ? "班聯已結單，公開入口已隱藏"
+                      : "尚未結單"}
                 </p>
               </div>
               <button type="button" disabled={disabled || loading || Boolean(loadError) || !status || busyId !== null}
-                aria-label={`${closed ? "重新開放" : "鎖單"}${category.name}`}
+                aria-label={`${closed ? "重新開放並顯示" : "結單並隱藏入口"}${category.name}`}
                 onClick={() => void toggleClosure(category)}
                 className="btn btn-secondary min-h-11 shrink-0">
                 {closed ? <LockOpen size={15} aria-hidden="true" /> : <Lock size={15} aria-hidden="true" />}
-                {busyId === category.id ? "更新中…" : closed ? "重新開放" : "鎖單"}
+                {busyId === category.id ? "更新中…" : closed ? "重新開放入口" : "結單並隱藏入口"}
               </button>
             </li>
           );

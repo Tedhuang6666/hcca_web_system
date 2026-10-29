@@ -14,6 +14,10 @@ describe("shop quantity API", () => {
     const url = new URL(String(fetchMock.mock.calls[1][0]), "http://localhost");
     expect(url.searchParams.get("include_closed")).toBe("true");
     expect(url.searchParams.get("activity_id")).toBe("activity-1");
+    await shopApi.catalog(undefined, false, ["主題名稱", "商品名稱"]);
+    const directUrl = new URL(String(fetchMock.mock.calls[2][0]), "http://localhost");
+    expect(directUrl.searchParams.getAll("direct_path")).toEqual(["主題名稱", "商品名稱"]);
+    expect(directUrl.searchParams.has("include_closed")).toBe(false);
   });
 
   it("downloads a class receipt for one activity and preserves server errors", async () => {

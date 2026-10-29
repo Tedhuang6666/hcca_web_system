@@ -35,6 +35,7 @@ from api.services.shop._catalog import (
     update_variant_group,
     update_variant_option,
 )
+from api.services.shop._catalog_links import filter_catalog_to_direct_product
 from api.services.shop._export import (
     export_orders_csv,
     export_orders_excel,
@@ -61,6 +62,7 @@ from api.services.shop._orders import (
     create_direct_order,
     get_class_member_registrations,
     get_close_status,
+    get_close_status_collection_details,
     get_current_registration,
     get_current_registrations,
     get_or_create_cart,
@@ -131,6 +133,7 @@ __all__ = [
     "update_variant_option",
     "delete_variant_option",
     "build_catalog_tree",
+    "filter_catalog_to_direct_product",
     # orders
     "_resolve_selected_options",
     "_options_signature",
@@ -182,6 +185,7 @@ __all__ = [
     "close_category_for_class",
     "reopen_category_for_class",
     "get_close_status",
+    "get_close_status_collection_details",
     "get_class_member_registrations",
     "_serialize_close",
     "order_quantities",

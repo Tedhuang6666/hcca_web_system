@@ -43,10 +43,11 @@ export const shopApi = {
   updateOrderItemQuantity: (orderId: string, itemId: string, quantity: number) =>
     patch<OrderOut | null>(`/shop/orders/${orderId}/items/${itemId}`, { quantity }),
   // 瀏覽
-  catalog: (activityId?: string, includeClosed = false) => {
+  catalog: (activityId?: string, includeClosed = false, directPath?: string[]) => {
     const q = new URLSearchParams();
     if (activityId) q.set("activity_id", activityId);
     if (includeClosed) q.set("include_closed", "true");
+    directPath?.forEach((segment) => q.append("direct_path", segment));
     const qs = q.toString();
     return get<CatalogCategoryOut[]>(`/shop/catalog${qs ? `?${qs}` : ""}`);
   },
