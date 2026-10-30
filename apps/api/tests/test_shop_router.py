@@ -449,6 +449,7 @@ async def test_supplement_collection_rejoins_original_class_and_has_own_receipt(
     report = await mc.get("/shop/orders/class-payments")
     report_rows = report.json()
     assert sum(row["amount"] for row in report_rows) == 51
+    assert [row["collection_type"] for row in report_rows] == ["class", "individual_order"]
     class_payment = next(row for row in report_rows if row["collection_type"] == "class")
     individual_payment = next(
         row for row in report_rows if row["collection_type"] == "individual_order"
@@ -2651,15 +2652,36 @@ async def test_class_payment_report_summarizes_confirmed_valid_orders(
     db_session: AsyncSession, authed_client_factory
 ) -> None:
     school_class = await _make_class(db_session)
+    first_class = await _make_class(db_session, start="11601", end="11640")
+    second_class = await _make_class(db_session, start="11701", end="11740")
+    school_class.grade = 2
+    school_class.class_code = "c03"
+    first_class.grade = 1
+    first_class.class_code = "c02"
+    second_class.grade = 1
+    second_class.class_code = "c01"
+    await db_session.flush()
     buyer = await _bare_user(db_session)
     manager = await _bare_user(db_session)
     await _grant_permission(db_session, manager, "shop:manage_orders")
     await _seed_order(db_session, buyer, class_id=school_class.id, total_price=100)
+    await _seed_order(db_session, buyer, class_id=first_class.id, total_price=50)
+    await _seed_order(db_session, buyer, class_id=second_class.id, total_price=25)
     cancelled_order = await _seed_order(
         db_session, buyer, class_id=school_class.id, total_price=200
     )
 
     client = authed_client_factory(manager)
+    first_confirmed = await client.patch(
+        f"/shop/orders/classes/{first_class.id}/payment",
+        json={"is_paid": True, "activity_id": None},
+    )
+    assert first_confirmed.status_code == 200
+    second_confirmed = await client.patch(
+        f"/shop/orders/classes/{second_class.id}/payment",
+        json={"is_paid": True, "activity_id": None},
+    )
+    assert second_confirmed.status_code == 200
     confirmed = await client.patch(
         f"/shop/orders/classes/{school_class.id}/payment",
         json={"is_paid": True, "activity_id": None},
@@ -2672,17 +2694,27 @@ async def test_class_payment_report_summarizes_confirmed_valid_orders(
 
     assert response.status_code == 200
     rows = response.json()
-    assert len(rows) == 1
-    assert rows[0]["class_id"] == str(school_class.id)
-    assert rows[0]["class_label"] == class_svc.class_display_label(school_class)
-    assert rows[0]["grade"] == school_class.grade
-    assert rows[0]["activity_id"] is None
+    assert len(rows) == 3
+    assert [row["class_id"] for row in rows] == [
+        str(second_class.id),
+        str(first_class.id),
+        str(school_class.id),
+    ]
+    assert rows[0]["class_label"] == class_svc.class_display_label(second_class)
+    assert rows[0]["grade"] == 1
     assert rows[0]["record_id"]
     assert rows[0]["collection_type"] == "class"
+    assert rows[0]["activity_id"] is None
     assert rows[0]["activity_label"] == "一般商品"
     assert rows[0]["confirmed_at"] is not None
-    assert rows[0]["amount"] == 100
+    assert rows[0]["amount"] == 25
     assert rows[0]["order_count"] == 1
+    assert rows[1]["class_label"] == class_svc.class_display_label(first_class)
+    assert rows[1]["grade"] == 1
+    assert rows[1]["amount"] == 50
+    assert rows[2]["class_label"] == class_svc.class_display_label(school_class)
+    assert rows[2]["grade"] == 2
+    assert rows[2]["amount"] == 100
 
 
 async def test_class_payment_report_requires_global_shop_read_permission(
