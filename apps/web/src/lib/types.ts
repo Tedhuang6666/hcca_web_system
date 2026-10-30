@@ -730,6 +730,7 @@ export type {
   SerialTemplateUpdate,
   SetFlagBody,
   ShopClassProductSummaryRow,
+  ShopClassRepresentativeRecipientOut,
   ShopClassSummaryOut,
   ShopDiscountType,
   ShopOrderCloseCreate,

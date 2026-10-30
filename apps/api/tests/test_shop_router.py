@@ -3734,6 +3734,62 @@ async def test_class_order_summary_for_cadre(db_session, authed_client_factory) 
     assert resp.json()["paid_amount"] == 200
 
 
+async def test_class_representative_reminder_targets_require_shop_view_permission(
+    client, authed_client_factory, member_user
+) -> None:
+    assert (
+        await client.get("/shop/orders/reminder-targets/class-representatives")
+    ).status_code == 401
+    response = await authed_client_factory(member_user).get(
+        "/shop/orders/reminder-targets/class-representatives"
+    )
+    assert response.status_code == 403
+
+
+async def test_class_representative_reminder_targets_include_only_active_account_holders(
+    db_session, authed_client_factory, admin_user
+) -> None:
+    active_class = await _make_class(db_session, creator=admin_user)
+    active_class.label = "高一一班"
+    inactive_class = await _make_class(db_session, creator=admin_user)
+    inactive_class.is_active = False
+    representative = await _bare_user(db_session, student_id="11501")
+    inactive_representative = await _bare_user(db_session, student_id="11502")
+    inactive_representative.is_active = False
+    await class_svc.assign_class_role(
+        db_session,
+        active_class,
+        role_key="class_representative",
+        data=ClassRoleAssign(user_id=representative.id),
+    )
+    await class_svc.assign_class_role(
+        db_session,
+        active_class,
+        role_key="class_representative",
+        data=ClassRoleAssign(user_id=inactive_representative.id),
+    )
+    await class_svc.assign_class_role(
+        db_session,
+        inactive_class,
+        role_key="class_representative",
+        data=ClassRoleAssign(user_id=representative.id),
+    )
+
+    response = await authed_client_factory(admin_user).get(
+        "/shop/orders/reminder-targets/class-representatives"
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == [
+        {
+            "class_id": str(active_class.id),
+            "class_label": "高一一班",
+            "user_id": str(representative.id),
+            "user_name": representative.display_name,
+        }
+    ]
+
+
 async def test_create_class_order_by_non_cadre_returns_403(
     db_session, authed_client_factory
 ) -> None:

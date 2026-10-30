@@ -45,6 +45,8 @@ import {
   PRESETS,
   SYSTEM_VARIABLES,
   TEMPLATE_KEY,
+  buildRecipientVariablesFromRows,
+  countAdditionalRecipientRows,
   normalizeVariableKey,
   type ComposeDraft,
   type RecipientRow,
@@ -211,6 +213,7 @@ function ComposeInner() {
           email: (r.email as string | null | undefined) ?? "",
           name: (r.name as string | null | undefined) ?? "",
           variables: { ...(r.variables as Record<string, string> ?? {}) },
+          userId: (r.user_id as string | null | undefined) ?? undefined,
         }));
         setRecipientRows(rows);
       })
@@ -333,20 +336,11 @@ function ComposeInner() {
     ],
   );
 
-  const buildRecipientVariables = useCallback((): EmailRecipientVariableInput[] => {
-    const allowed = new Set(
-      variableDefinitions.map((v) => v.key.trim()).filter(Boolean),
-    );
-    return recipientRows
-      .filter((r) => r.email.trim())
-      .map((r) => ({
-        email: r.email.trim(),
-        name: r.name.trim() || null,
-        variables: Object.fromEntries(
-          Object.entries(r.variables).filter(([k]) => allowed.has(k)),
-        ),
-      }));
-  }, [recipientRows, variableDefinitions]);
+  const buildRecipientVariables = useCallback(
+    (): EmailRecipientVariableInput[] =>
+      buildRecipientVariablesFromRows(recipientRows, variableDefinitions),
+    [recipientRows, variableDefinitions],
+  );
 
   const buildPayload = useCallback(
     (): EmailComposePayload => ({
@@ -384,6 +378,7 @@ function ComposeInner() {
       },
       preview_recipient: recipientRows[previewRecipientIndex]
         ? {
+            user_id: recipientRows[previewRecipientIndex].userId ?? null,
             email: recipientRows[previewRecipientIndex].email,
             name: recipientRows[previewRecipientIndex].name,
             variables: recipientRows[previewRecipientIndex].variables,
@@ -703,6 +698,7 @@ function ComposeInner() {
         email: (row.email as string | null | undefined) ?? "",
         name: (row.name as string | null | undefined) ?? "",
         variables: { ...(row.variables as Record<string, string> ?? {}) },
+        userId: (row.user_id as string | null | undefined) ?? undefined,
       })),
     );
     setPreviewRecipientIndex(0);
@@ -775,7 +771,9 @@ function ComposeInner() {
       toast.error(`有 ${invalidRecipientRows.length} 列電子郵件格式錯誤，請先修正`);
       return;
     }
-    const members = buildRecipientVariables();
+    const members = buildRecipientVariables().flatMap(({ email, name, variables }) =>
+      email?.trim() ? [{ email: email.trim(), name, variables }] : [],
+    );
     if (!hasRecipientSelection(recipients) && members.length === 0) {
       toast.error("目前沒有可儲存的收件人");
       return;
@@ -996,9 +994,7 @@ function ComposeInner() {
     toast.success(`已追加 ${importedRows.length} 列資料`);
   };
 
-  const importedRecipientCount = new Set(
-    recipientRows.map((row) => row.email.trim().toLowerCase()).filter(Boolean),
-  ).size;
+  const importedRecipientCount = countAdditionalRecipientRows(recipientRows, recipients);
   const estimatedRecipientCount = (count ?? 0) + importedRecipientCount;
   const invalidRecipientRows = recipientRows
     .map((row, index) => ({ row, index }))
@@ -1034,7 +1030,7 @@ function ComposeInner() {
       return false;
     }
     const importedRecipients = buildRecipientVariables();
-    if (needRecipients && !count && !importedRecipients.some((row) => row.email?.trim())) {
+    if (needRecipients && !count && !importedRecipients.some((row) => row.email?.trim() || row.user_id)) {
       toast.error("請選擇至少一位有效收件人");
       return false;
     }
@@ -1836,20 +1832,26 @@ function ComposeInner() {
                     {recipientRows.map((row, i) => (
                       <tr key={i}>
                         <td>
-                          <input
-                            className="input min-w-56"
-                            type="email"
-                            value={row.email}
-                            placeholder="user@example.com"
-                            style={{
-                              borderColor:
-                                row.email.trim() &&
-                                !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email.trim())
-                                  ? "var(--danger)"
-                                  : undefined,
-                            }}
-                            onChange={(e) => updateRecipientRow(i, { email: e.target.value })}
-                          />
+                          {row.userId ? (
+                            <span className="inline-flex min-h-11 min-w-56 items-center px-3 text-sm" style={{ color: "var(--text-secondary)" }}>
+                              平台帳號收件人
+                            </span>
+                          ) : (
+                            <input
+                              className="input min-w-56"
+                              type="email"
+                              value={row.email}
+                              placeholder="user@example.com"
+                              style={{
+                                borderColor:
+                                  row.email.trim() &&
+                                  !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email.trim())
+                                    ? "var(--danger)"
+                                    : undefined,
+                              }}
+                              onChange={(e) => updateRecipientRow(i, { email: e.target.value })}
+                            />
+                          )}
                         </td>
                         <td>
                           <input
@@ -2234,7 +2236,7 @@ function ComposeInner() {
                   {recipientRows.map((row, index) => (
                     <option key={`${row.email}-${index}`} value={index}>
                       {row.name || row.email || `第 ${index + 1} 列`}
-                      {row.name && row.email ? `（${row.email}）` : ""}
+                      {row.name && row.email ? `（${row.email}）` : row.userId ? "（平台帳號）" : ""}
                     </option>
                   ))}
                 </select>

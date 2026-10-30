@@ -10847,6 +10847,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop/orders/reminder-targets/class-representatives": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出目前班代繳款提醒收件人 */
+        get: operations["list_class_representative_reminder_targets_shop_orders_reminder_targets_class_representatives_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shop/orders/summary": {
         parameters: {
             query?: never;
@@ -18826,7 +18843,7 @@ export interface components {
                 [key: string]: unknown;
             };
             /** Recipient Variables */
-            recipient_variables?: components["schemas"]["EmailRecipientListMemberIn"][];
+            recipient_variables?: components["schemas"]["EmailPreflightRecipientInput"][];
             /** Variable Definitions */
             variable_definitions?: {
                 [key: string]: unknown;
@@ -18860,6 +18877,19 @@ export interface components {
             unique_count: number;
             /** Valid */
             valid: boolean;
+        };
+        /** EmailPreflightRecipientInput */
+        EmailPreflightRecipientInput: {
+            /** Email */
+            email?: string | null;
+            /** Name */
+            name?: string | null;
+            /** User Id */
+            user_id?: string | null;
+            /** Variables */
+            variables?: {
+                [key: string]: string;
+            };
         };
         /** EmailPreviewOut */
         EmailPreviewOut: {
@@ -29515,6 +29545,23 @@ export interface components {
              * @default 0
              */
             uncollected_quantity: number;
+        };
+        /** ShopClassRepresentativeRecipientOut */
+        ShopClassRepresentativeRecipientOut: {
+            /**
+             * Class Id
+             * Format: uuid
+             */
+            class_id: string;
+            /** Class Label */
+            class_label: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /** User Name */
+            user_name: string;
         };
         /** ShopClassSummaryOut */
         ShopClassSummaryOut: {
@@ -56496,6 +56543,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_class_representative_reminder_targets_shop_orders_reminder_targets_class_representatives_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopClassRepresentativeRecipientOut"][];
                 };
             };
         };

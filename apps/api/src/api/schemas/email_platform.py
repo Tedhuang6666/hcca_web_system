@@ -148,12 +148,19 @@ class EmailAttachmentOut(BaseModel):
     created_at: datetime
 
 
+class EmailPreflightRecipientInput(BaseModel):
+    user_id: uuid.UUID | None = None
+    email: EmailStr | None = None
+    name: str | None = Field(default=None, max_length=100)
+    variables: dict[str, str] = Field(default_factory=dict)
+
+
 class EmailPreflightInput(BaseModel):
     recipient_spec: dict = Field(default_factory=dict)
     variable_definitions: list[dict] = Field(default_factory=list)
     conditional_rules: list[EmailConditionalRule] = Field(default_factory=list, max_length=100)
     default_variables: dict[str, str] = Field(default_factory=dict)
-    recipient_variables: list[EmailRecipientListMemberIn] = Field(default_factory=list)
+    recipient_variables: list[EmailPreflightRecipientInput] = Field(default_factory=list)
     attachment_ids: list[uuid.UUID] = Field(default_factory=list)
 
 

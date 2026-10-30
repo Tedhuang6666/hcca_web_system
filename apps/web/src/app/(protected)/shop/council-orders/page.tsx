@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import ProductQuantitySummary from "@/components/shop/ProductQuantitySummary";
 import ShopSalesAnalytics from "@/components/shop/ShopSalesAnalytics";
 import AdminAssistedOrder from "@/components/shop/AdminAssistedOrder";
@@ -9,10 +10,10 @@ import SeparateOrderButton from "@/components/shop/SeparateOrderButton";
 import ActivityOrderClosure from "@/components/shop/ActivityOrderClosure";
 import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BarChart2, RefreshCw } from "lucide-react";
+import { BarChart2, Mail, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
-import { classApi, shopApi, apiErrorMessage } from "@/lib/api";
+import { classApi, emailApi, shopApi, apiErrorMessage } from "@/lib/api";
 import {
   planClassStatusRefresh,
   type ClassStatusCache,
@@ -22,15 +23,18 @@ import { usePermissions } from "@/hooks/usePermissions";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import Modal from "@/components/ui/Modal";
 import NumberInput from "@/components/ui/NumberInput";
+import { buildPaymentReminderDraft, type PaymentReminderKind } from "./paymentReminderDraft";
 import type {
   ActivityOut,
   CatalogCategoryOut,
   ClassPaymentReportItemOut,
   CloseStatusItem,
+  EmailRecipientVariableInput,
   OrderListItem,
   OrderQuantityRow,
   OrderSummaryOut,
   OrderSummaryRow,
+  ShopClassRepresentativeRecipientOut,
   SchoolClassListItem,
 } from "@/lib/types";
 
@@ -86,6 +90,7 @@ function CloseBadge({ status, partial = false }: { status: CloseStatusItem | und
 // ── 主頁面 ───────────────────────────────────────────────────────────────────
 
 export default function CouncilOrdersPage() {
+  const router = useRouter();
   const { isAdmin, permissions } = usePermissions();
   const hasAdminPermission = isAdmin || permissions.has("admin:all");
   const canConfirmClassPayment = hasAdminPermission
@@ -107,6 +112,7 @@ export default function CouncilOrdersPage() {
   const [receiptCategoryId, setReceiptCategoryId] = useState("");
   const [productId, setProductId] = useState("");
   const [isPaid, setIsPaid] = useState("");
+  const [classCollectedFilter, setClassCollectedFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -149,7 +155,12 @@ export default function CouncilOrdersPage() {
   const [quantityBusy, setQuantityBusy] = useState<string | null>(null);
   const [quantityError, setQuantityError] = useState("");
   const [quantityResult, setQuantityResult] = useState("");
+  const [reminderBusy, setReminderBusy] = useState<"orders" | "class_reps" | null>(null);
+  const [reminderError, setReminderError] = useState("");
+  const [reminderStatus, setReminderStatus] = useState("");
   const mutationBusy = paymentBusy !== null || cancelBusy || quantityBusy !== null;
+  const canCreateBatchReminders = canViewClassPaymentReport
+    && (hasAdminPermission || permissions.has("email:send_bulk"));
 
   useEffect(() => {
     let cancelled = false;
@@ -378,6 +389,178 @@ export default function CouncilOrdersPage() {
     }
   }, [grade, classId, isPaid, productId, categoryId, statusFilter, search, dateParams]);
 
+  const createReminderDraft = async (kind: PaymentReminderKind) => {
+    if (reminderBusy) return;
+    setReminderBusy(kind === "orders" ? "orders" : "class_reps");
+    setReminderError("");
+    setReminderStatus("");
+    try {
+      if (isPaid === "true") {
+        throw new Error("目前篩選為「班聯已確認」，請切換到未確認款項後再建立提醒。");
+      }
+      if (statusFilter === "cancelled" || statusFilter === "refunded") {
+        throw new Error("取消或退款訂單不適用繳款提醒，請清除訂單狀態篩選。");
+      }
+
+      let recipients: EmailRecipientVariableInput[] = [];
+      let classesWithoutRepresentatives = 0;
+
+      if (kind === "orders") {
+        if (classCollectedFilter === "true") {
+          throw new Error("目前篩選只顯示班代已收款訂單，沒有適合寄給訂購人的提醒對象。");
+        }
+        const params: Record<string, string> = {
+          my_only: "false",
+          limit: "500",
+          is_paid: "false",
+        };
+        if (grade) params.grade = grade;
+        if (classId) params.class_id = classId;
+        if (productId) params.product_id = productId;
+        if (categoryId) params.category_id = categoryId;
+        if (statusFilter === "pending" || statusFilter === "confirmed") params.status = statusFilter;
+        if (search.trim()) params.search = search.trim();
+        if (dateParams.date_from) params.date_from = dateParams.date_from;
+        if (dateParams.date_to) params.date_to = dateParams.date_to;
+
+        const rows: OrderListItem[] = [];
+        for (let offset = 0; ; offset += 500) {
+          const page = await shopApi.listOrders({ ...params, offset: String(offset) });
+          rows.push(...page);
+          if (page.length < 500) break;
+        }
+        const grouped = new Map<string, {
+          user_id: string;
+          name: string;
+          amount: number;
+          orderCount: number;
+          orderDetails: string[];
+        }>();
+        for (const order of rows) {
+          if (
+            order.is_paid
+            || order.is_class_collected
+            || order.test_product_id
+            || order.total_price <= 0
+            || (order.status !== "pending" && order.status !== "confirmed")
+          ) continue;
+          if (classCollectedFilter === "false" && order.is_class_collected) continue;
+          const recipient = grouped.get(order.user_id) ?? {
+            user_id: order.user_id,
+            name: order.user_name ?? "同學",
+            amount: 0,
+            orderCount: 0,
+            orderDetails: [],
+          };
+          const itemLabel = order.activity_name ?? order.category_name ?? "商品訂單";
+          recipient.amount += order.total_price;
+          recipient.orderCount += 1;
+          recipient.orderDetails.push(
+            `${order.serial_number}（${itemLabel}，${money(order.total_price)}）`,
+          );
+          grouped.set(order.user_id, recipient);
+        }
+        recipients = Array.from(grouped.values()).map((recipient) => ({
+          user_id: recipient.user_id,
+          name: recipient.name,
+          variables: {
+            order_details: recipient.orderDetails.join("；"),
+            unpaid_total: money(recipient.amount),
+            order_count: String(recipient.orderCount),
+          },
+        }));
+      } else {
+        const params: Parameters<typeof shopApi.orderSummary>[0] = {
+          group_by: "class",
+          is_paid: "false",
+          ...dateParams,
+        };
+        if (grade) params.grade = grade;
+        if (classId) params.class_id = classId;
+        if (productId) params.product_id = productId;
+        if (categoryId) params.category_id = categoryId;
+        if (statusFilter === "pending" || statusFilter === "confirmed") params.status = statusFilter;
+
+        const [summaryResult, representativeTargets]: [
+          OrderSummaryOut,
+          ShopClassRepresentativeRecipientOut[],
+        ] = await Promise.all([
+          shopApi.orderSummary(params),
+          shopApi.classRepresentativeReminderTargets(),
+        ]);
+        const unpaidClasses = summaryResult.rows.filter(
+          (row) => row.key !== "none" && row.unpaid_amount > 0,
+        );
+        const unpaidByClass = new Map(unpaidClasses.map((row) => [row.key, row]));
+        const representedClassIds = new Set<string>();
+        const grouped = new Map<string, {
+          user_id: string;
+          name: string;
+          total: number;
+          details: string[];
+          classIds: Set<string>;
+        }>();
+        for (const target of representativeTargets) {
+          const unpaidClass = unpaidByClass.get(target.class_id);
+          if (!unpaidClass) continue;
+          representedClassIds.add(target.class_id);
+          const recipient = grouped.get(target.user_id) ?? {
+            user_id: target.user_id,
+            name: target.user_name,
+            total: 0,
+            details: [],
+            classIds: new Set<string>(),
+          };
+          if (!recipient.classIds.has(target.class_id)) {
+            recipient.total += unpaidClass.unpaid_amount;
+            recipient.details.push(
+              `${unpaidClass.label}：${money(unpaidClass.unpaid_amount)}（${unpaidClass.order_count} 筆）`,
+            );
+            recipient.classIds.add(target.class_id);
+          }
+          grouped.set(target.user_id, recipient);
+        }
+        classesWithoutRepresentatives = unpaidClasses.filter(
+          (row) => !representedClassIds.has(row.key),
+        ).length;
+        recipients = Array.from(grouped.values()).map((recipient) => ({
+          user_id: recipient.user_id,
+          name: recipient.name,
+          variables: {
+            class_details: recipient.details.join("；"),
+            unpaid_total: money(recipient.total),
+            class_count: String(recipient.classIds.size),
+          },
+        }));
+      }
+
+      if (recipients.length === 0) {
+        throw new Error(
+          kind === "orders"
+            ? "目前篩選沒有尚未繳款且未交班代收款的有效訂單。"
+            : "目前篩選沒有可提醒的未確認班級與有效班代帳號。",
+        );
+      }
+
+      const draft = await emailApi.createMessage(buildPaymentReminderDraft(kind, recipients));
+      setReminderStatus(
+        classesWithoutRepresentatives > 0
+          ? `提醒草稿已建立；另有 ${classesWithoutRepresentatives} 個班級沒有有效班代帳號，未列入收件名單。`
+          : `提醒草稿已建立，包含 ${recipients.length} 位收件人。請檢查名單與內容後再寄送。`,
+      );
+      toast.success("提醒草稿已建立，請檢查收件名單與內容後再寄送。");
+      router.push(`/email?draft=${encodeURIComponent(draft.id)}`);
+    } catch (error) {
+      const message = error instanceof Error
+        ? error.message
+        : apiErrorMessage(error, "建立提醒草稿失敗，請稍後重試。");
+      setReminderError(message);
+      toast.error(message);
+    } finally {
+      setReminderBusy(null);
+    }
+  };
+
   const cancelOrder = async () => {
     if (!cancelTarget || cancelBusy) return;
     setCancelBusy(true);
@@ -486,6 +669,10 @@ export default function CouncilOrdersPage() {
     ]),
     [catalog],
   );
+  const visibleOrders = useMemo(
+    () => orders.filter((order) => !classCollectedFilter || String(order.is_class_collected) === classCollectedFilter),
+    [orders, classCollectedFilter],
+  );
 
   const gradeOptions = useMemo(() => {
     return [1, 2, 3, 4, 5, 6].map((g) => ({ value: String(g), label: `${g} 年級` }));
@@ -504,10 +691,10 @@ export default function CouncilOrdersPage() {
   const allReceiptRowsSelected = receiptRows.length > 0
     && receiptRows.every((row) => selectedReceiptClasses.has(row.key));
   const visibleCategoryIds = new Set(visibleActivityGroups.flatMap((group) => group.categories.map((category) => category.id)));
-  const hasFilters = Boolean(grade || classId || categoryId || productId || isPaid || statusFilter || dateFrom || dateTo || (tab === "orders" && search));
+  const hasFilters = Boolean(grade || classId || categoryId || productId || isPaid || classCollectedFilter || statusFilter || dateFrom || dateTo || (tab === "orders" && search));
   const resetFilters = () => {
     setGrade(""); setClassId(""); setCategoryId(""); setProductId("");
-    setIsPaid(""); setStatusFilter(""); setDateFrom(""); setDateTo(""); setSearch("");
+    setIsPaid(""); setClassCollectedFilter(""); setStatusFilter(""); setDateFrom(""); setDateTo(""); setSearch("");
     setReceiptCategoryId("");
     setSelectedReceiptClasses(new Set());
   };
@@ -576,6 +763,39 @@ export default function CouncilOrdersPage() {
               ))}
             </select>
           </label>
+          {canCreateBatchReminders && (
+            <>
+              <button
+                type="button"
+                className="btn btn-ghost min-h-11 px-3 text-sm"
+                disabled={mutationBusy || reminderBusy !== null}
+                onClick={() => {
+                  setTab("summary");
+                  setGroupBy("class");
+                  setIsPaid("false");
+                  setClassCollectedFilter("");
+                  setStatusFilter("");
+                  setSearch("");
+                }}
+              >
+                查看班聯未確認班級
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost min-h-11 px-3 text-sm"
+                disabled={mutationBusy || reminderBusy !== null}
+                onClick={() => {
+                  setTab("orders");
+                  setIsPaid("false");
+                  setClassCollectedFilter("false");
+                  setStatusFilter("");
+                  setSearch("");
+                }}
+              >
+                查看待繳訂購人
+              </button>
+            </>
+          )}
           {tab === "analytics" && <label className="grid gap-1 text-sm">
             <span style={{ color: "var(--text-muted)" }}>商品</span>
             <select className="input" value={productId} onChange={(e) => setProductId(e.target.value)}>
@@ -630,6 +850,14 @@ export default function CouncilOrdersPage() {
               <option value="false">班聯未確認</option>
             </select>
           </label>
+          {tab === "orders" && <label className="grid gap-1 text-sm">
+            <span style={{ color: "var(--text-muted)" }}>班代代收狀態</span>
+            <select className="input" value={classCollectedFilter} onChange={(event) => setClassCollectedFilter(event.target.value)}>
+              <option value="">全部</option>
+              <option value="false">尚未交班代收款</option>
+              <option value="true">班代已收款</option>
+            </select>
+          </label>}
           {tab !== "analytics" && <label className="grid gap-1 text-sm">
             <span style={{ color: "var(--text-muted)" }}>訂單狀態</span>
             <select className="input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
@@ -656,6 +884,9 @@ export default function CouncilOrdersPage() {
       </details>
         </fieldset>
       </section>
+
+      {reminderError && <p role="alert" className="text-sm" style={{ color: "var(--danger)" }}>{reminderError}</p>}
+      {reminderStatus && <p role="status" className="text-sm" style={{ color: "var(--success)" }}>{reminderStatus}</p>}
 
       {tab === "analytics" && <ShopSalesAnalytics refresh={analyticsRefresh} live={canViewAdvancedStats} scope={scopeLabels.join(" · ")} filters={{
         ...(grade ? { grade } : {}), ...(classId ? { class_id: classId } : {}),
@@ -848,6 +1079,27 @@ export default function CouncilOrdersPage() {
                   <p className="mt-1 text-xl font-bold" style={{ color: "var(--primary-text)" }}>{item.value}</p>
                 </div>
               ))}
+            </div>
+          )}
+
+          {canCreateBatchReminders && (
+            <div className="mb-4 flex flex-col gap-3 rounded-lg p-4 sm:flex-row sm:items-center sm:justify-between"
+              style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+              <div>
+                <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>班代繳款提醒</h2>
+                <p className="mt-1 max-w-2xl text-sm" style={{ color: "var(--text-secondary)" }}>
+                  依目前篩選建立個人化草稿；金額代表班聯尚未確認的款項，寄出前可檢查收件班級與內容。
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-primary min-h-11 whitespace-nowrap"
+                disabled={loading || mutationBusy || reminderBusy !== null}
+                onClick={() => void createReminderDraft("class_representatives")}
+              >
+                <Mail size={16} aria-hidden="true" />
+                {reminderBusy === "class_reps" ? "整理班級名單中…" : "建立班代提醒草稿"}
+              </button>
             </div>
           )}
 
@@ -1091,11 +1343,31 @@ export default function CouncilOrdersPage() {
         <section>
           {cancelResult && <p role="status" className="mb-3 text-sm">{cancelResult}</p>}
           {quantityResult && <p role="status" className="mb-3 text-sm">{quantityResult}</p>}
+          {canCreateBatchReminders && (
+            <div className="mb-3 flex flex-col gap-3 rounded-lg p-4 sm:flex-row sm:items-center sm:justify-between"
+              style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+              <div>
+                <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>訂購人繳款提醒</h2>
+                <p className="mt-1 max-w-2xl text-sm" style={{ color: "var(--text-secondary)" }}>
+                  只整理有效、尚未繳款且未交班代收款的訂單；同一位同學的多筆訂單會合併成一封草稿。
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-primary min-h-11 whitespace-nowrap"
+                disabled={loading || mutationBusy || reminderBusy !== null}
+                onClick={() => void createReminderDraft("orders")}
+              >
+                <Mail size={16} aria-hidden="true" />
+                {reminderBusy === "orders" ? "整理訂單名單中…" : "建立訂購人提醒草稿"}
+              </button>
+            </div>
+          )}
           {(
             <div className="overflow-hidden rounded-lg" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
               {loading ? (
                 <div role="status" className="py-16 text-center text-sm" style={{ color: "var(--text-muted)" }}>載入中...</div>
-              ) : !orders.length ? (
+              ) : !visibleOrders.length ? (
                 <div role="status" className="py-16 text-center text-sm" style={{ color: "var(--text-muted)" }}>目前範圍沒有訂單，可清除篩選或改用其他關鍵字。</div>
               ) : (
                 <div className="overflow-x-auto">
@@ -1109,9 +1381,9 @@ export default function CouncilOrdersPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {orders.map((order, idx) => (
+                      {visibleOrders.map((order, idx) => (
                         <Fragment key={order.id}>
-                          <tr style={idx < orders.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}>
+                          <tr style={idx < visibleOrders.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}>
                             <td className="px-4 py-3">
                               <Link href={`/shop/orders/${order.id}?from=council`} className="text-sm underline" style={{ color: "var(--primary-text)" }}>{order.serial_number}</Link>
                             </td>

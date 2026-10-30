@@ -625,6 +625,13 @@ class ClassPaymentReportItemOut(BaseModel):
     order_count: int
 
 
+class ShopClassRepresentativeRecipientOut(BaseModel):
+    class_id: uuid.UUID
+    class_label: str
+    user_id: uuid.UUID
+    user_name: str
+
+
 class ShopPromotionCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     activity_id: uuid.UUID | None = Field(None, description="適用活動；未指定時僅適用一般商品")
