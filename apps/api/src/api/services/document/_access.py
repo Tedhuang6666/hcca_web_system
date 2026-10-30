@@ -357,15 +357,83 @@ def can_anonymous_access_document(doc: Document) -> bool:
     ) and not is_sensitive_document(doc)
 
 
+class _DocumentAccessCache:
+    """只在一次列表組裝中共用；新請求必須重查任期與代理狀態。"""
+
+    def __init__(self, session: AsyncSession, user_id: uuid.UUID) -> None:
+        self.session = session
+        self.user_id = user_id
+        self.viewer: User | None = None
+        self.viewer_loaded = False
+        self.orgs_by_day: dict[date, set[uuid.UUID]] = {}
+        self.descendants_by_day: dict[date, set[uuid.UUID]] = {}
+        self.class_memberships: dict[uuid.UUID, bool] = {}
+        self.assignments: dict[tuple[uuid.UUID, uuid.UUID], DocumentApprovalDelegation | None] = {}
+        self.recipients: dict[uuid.UUID, list[DocumentRecipient]] = {}
+
+    async def get_viewer(self) -> User | None:
+        if not self.viewer_loaded:
+            self.viewer = await self.session.scalar(select(User).where(User.id == self.user_id))
+            self.viewer_loaded = True
+        return self.viewer
+
+    async def org_ids(self, day: date) -> set[uuid.UUID]:
+        from api.models.org import Position, UserPosition
+
+        if day not in self.orgs_by_day:
+            self.orgs_by_day[day] = set(
+                await self.session.scalars(
+                    select(Position.org_id)
+                    .join(UserPosition, UserPosition.position_id == Position.id)
+                    .where(UserPosition.user_id == self.user_id, *active_tenure_filter(day))
+                )
+            )
+        return self.orgs_by_day[day]
+
+    async def descendant_org_ids(self, day: date) -> set[uuid.UUID]:
+        if day not in self.descendants_by_day:
+            self.descendants_by_day[day] = await _get_active_descendant_org_ids(
+                self.session, list(await self.org_ids(day))
+            )
+        return self.descendants_by_day[day]
+
+    async def is_class_member(self, class_id: uuid.UUID) -> bool:
+        if class_id not in self.class_memberships:
+            self.class_memberships[class_id] = await _has_active_class_membership(
+                self.session, self.user_id, class_id
+            )
+        return self.class_memberships[class_id]
+
+    async def assignment(
+        self, principal_id: uuid.UUID, org_id: uuid.UUID
+    ) -> DocumentApprovalDelegation | None:
+        key = (principal_id, org_id)
+        if key not in self.assignments:
+            self.assignments[key] = await _resolve_active_delegate_assignment(
+                self.session, principal_user_id=principal_id, org_id=org_id
+            )
+        return self.assignments[key]
+
+    async def document_recipients(self, doc_id: uuid.UUID) -> list[DocumentRecipient]:
+        if doc_id not in self.recipients:
+            self.recipients[doc_id] = list(
+                await self.session.scalars(
+                    select(DocumentRecipient).where(DocumentRecipient.document_id == doc_id)
+                )
+            )
+        return self.recipients[doc_id]
+
+
 async def user_has_full_document_access(
     session: AsyncSession,
     doc: Document,
     user_id: uuid.UUID,
+    *,
+    _access_cache: _DocumentAccessCache | None = None,
 ) -> bool:
-    from api.models.org import Position, UserPosition
-
     if doc.created_by == user_id:
         return True
+    cache = _access_cache or _DocumentAccessCache(session, user_id)
 
     approver_ids = {a.approver_id for a in doc.approvals}
     delegate_ids = {a.delegate_id for a in doc.approvals if a.delegate_id}
@@ -377,56 +445,30 @@ async def user_has_full_document_access(
                 continue
             if approval.delegate_source != DelegateSource.ASSIGNMENT:
                 return True
-            assignment = await _resolve_active_delegate_assignment(
-                session,
-                principal_user_id=approval.approver_id,
-                org_id=doc.org_id,
-            )
+            assignment = await cache.assignment(approval.approver_id, doc.org_id)
             if assignment and assignment.delegate_user_id == user_id:
                 return True
 
-    viewer = await session.scalar(select(User).where(User.id == user_id))
-    if viewer and viewer.email:
-        recipient_result = await session.execute(
-            select(DocumentRecipient.id).where(
-                DocumentRecipient.document_id == doc.id,
-                DocumentRecipient.email.is_not(None),
-                DocumentRecipient.email == viewer.email,
-            )
-        )
-        if recipient_result.scalar_one_or_none() is not None:
+    viewer = await cache.get_viewer()
+    recipients = await cache.document_recipients(doc.id)
+    if viewer and viewer.email and any(recipient.email == viewer.email for recipient in recipients):
+        return True
+    for recipient in recipients:
+        if recipient.target_user_id == user_id:
             return True
-
-    target_result = await session.execute(
-        select(
-            DocumentRecipient.target_user_id,
-            DocumentRecipient.target_org_id,
-            DocumentRecipient.target_class_id,
-        ).where(DocumentRecipient.document_id == doc.id)
-    )
-    for target_user_id, target_org_id, target_class_id in target_result:
-        if target_user_id == user_id:
-            return True
-        if target_org_id is not None and await _has_active_org_membership(
-            session, user_id, target_org_id
+        if recipient.target_org_id is not None and recipient.target_org_id in await cache.org_ids(
+            datetime.now(UTC).date()
         ):
             return True
-        if target_class_id is not None and await _has_active_class_membership(
-            session, user_id, target_class_id
+        if recipient.target_class_id is not None and await cache.is_class_member(
+            recipient.target_class_id
         ):
             return True
 
     today = local_today()
-    result = await session.execute(
-        select(Position.org_id)
-        .join(UserPosition, UserPosition.position_id == Position.id)
-        .where(UserPosition.user_id == user_id, *active_tenure_filter(today))
-    )
-    viewer_org_ids = list(result.scalars().all())
     if doc.visibility_level == DocumentVisibility.SUBJECT_ONLY:
-        descendant_org_ids = await _get_active_descendant_org_ids(session, viewer_org_ids)
-        return doc.org_id in descendant_org_ids
-    return doc.org_id in viewer_org_ids
+        return doc.org_id in await cache.descendant_org_ids(today)
+    return doc.org_id in await cache.org_ids(today)
 
 
 async def check_document_access(
@@ -532,7 +574,8 @@ async def build_document_list_items(
     reveal_sensitive: bool = False,
 ) -> list[DocumentListItem]:
     access_docs: dict[uuid.UUID, Document] = {}
-    if viewer_id is not None:
+    access_cache = _DocumentAccessCache(session, viewer_id) if viewer_id is not None else None
+    if viewer_id is not None and not reveal_sensitive:
         sensitive_ids = [doc.id for doc in docs if is_sensitive_document(doc)]
         if sensitive_ids:
             approval_result = await session.execute(
@@ -568,6 +611,10 @@ async def build_document_list_items(
             recipients_by_doc: dict[uuid.UUID, list[DocumentRecipient]] = {}
             for recipient in recipient_result.scalars().all():
                 recipients_by_doc.setdefault(recipient.document_id, []).append(recipient)
+            assert access_cache is not None
+            access_cache.recipients = {
+                doc_id: recipients_by_doc.get(doc_id, []) for doc_id in sensitive_ids
+            }
             for doc in docs:
                 if doc.id not in sensitive_ids:
                     continue
@@ -580,7 +627,7 @@ async def build_document_list_items(
         item = DocumentListItem.model_validate(doc)
         if is_sensitive_document(doc) and not reveal_sensitive:
             has_full_access = viewer_id is not None and await user_has_full_document_access(
-                session, access_docs.get(doc.id, doc), viewer_id
+                session, access_docs.get(doc.id, doc), viewer_id, _access_cache=access_cache
             )
             if not has_full_access:
                 item = item.model_copy(

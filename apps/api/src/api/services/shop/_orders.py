@@ -7,7 +7,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import TypedDict
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import Select, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -968,7 +968,7 @@ async def get_current_registrations(
     session: AsyncSession, user_id: uuid.UUID, *, include_testing: bool = False
 ) -> list[Order]:
     result = await session.execute(
-        select(Order.id)
+        _order_detail_query()
         .where(
             Order.user_id == user_id,
             Order.status.in_((OrderStatus.PENDING, OrderStatus.CONFIRMED)),
@@ -977,12 +977,7 @@ async def get_current_registrations(
         )
         .order_by(Order.created_at.desc(), Order.updated_at.desc())
     )
-    orders: list[Order] = []
-    for order_id in result.scalars().all():
-        order = await get_order(session, order_id)
-        if order is not None:
-            orders.append(order)
-    return orders
+    return list(result.scalars().all())
 
 
 async def _get_class_member_orders(
@@ -993,7 +988,7 @@ async def _get_class_member_orders(
     lock: bool = False,
 ) -> list[Order]:
     query = (
-        select(Order.id)
+        _order_detail_query()
         .where(
             Order.user_id == user_id,
             Order.test_product_id.is_(None),
@@ -1006,12 +1001,7 @@ async def _get_class_member_orders(
     if lock:
         query = query.with_for_update()
     result = await session.execute(query)
-    orders: list[Order] = []
-    for order_id in result.scalars().all():
-        order = await get_order(session, order_id)
-        if order is not None:
-            orders.append(order)
-    return orders
+    return list(result.scalars().all())
 
 
 async def get_class_member_registrations(
@@ -1101,25 +1091,24 @@ async def _assert_product_registration_open(
                 raise ValueError("本班已截止，請聯繫班代協助加購")
 
 
-async def get_order(session: AsyncSession, order_id: uuid.UUID) -> Order | None:
-    result = await session.execute(
-        select(Order)
-        .options(
-            selectinload(Order.activity),
-            selectinload(Order.category),
-            selectinload(Order.items)
-            .selectinload(OrderItem.product)
-            .selectinload(Product.category),
-            selectinload(Order.items)
-            .selectinload(OrderItem.product)
-            .selectinload(Product.series)
-            .selectinload(ProductSeries.category),
-            selectinload(Order.applied_promotions).selectinload(ShopOrderPromotion.promotion),
-            selectinload(Order.school_class),
-            selectinload(Order.user),
-        )
-        .where(Order.id == order_id)
+def _order_detail_query() -> Select[tuple[Order]]:
+    """單筆與批次訂單共用預載入關聯，避免列表逐筆呼叫 get_order。"""
+    return select(Order).options(
+        selectinload(Order.activity),
+        selectinload(Order.category),
+        selectinload(Order.items).selectinload(OrderItem.product).selectinload(Product.category),
+        selectinload(Order.items)
+        .selectinload(OrderItem.product)
+        .selectinload(Product.series)
+        .selectinload(ProductSeries.category),
+        selectinload(Order.applied_promotions).selectinload(ShopOrderPromotion.promotion),
+        selectinload(Order.school_class),
+        selectinload(Order.user),
     )
+
+
+async def get_order(session: AsyncSession, order_id: uuid.UUID) -> Order | None:
+    result = await session.execute(_order_detail_query().where(Order.id == order_id))
     return result.scalar_one_or_none()
 
 

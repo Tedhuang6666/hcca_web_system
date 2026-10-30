@@ -5,17 +5,17 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import or_, select
+from sqlalchemy import or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.shop import Order, OrderStatus, ShopPromotion
 from api.services import receivable as receivable_svc
 from api.services.shop._orders import (
     _order_activity_id,
+    _order_detail_query,
     _promotion_product_quantities,
     _promotion_product_subtotals,
     _sync_order_promotions,
-    get_order,
 )
 from api.services.shop._promotions import (
     PromotionAllocation,
@@ -29,8 +29,8 @@ async def lock_promotion_orders(
     session: AsyncSession, *, activity_ids: set[uuid.UUID | None]
 ) -> list[Order]:
     # 舊登記單可能尚未寫入 activity_id；載入品項後再核對實際活動。
-    order_ids = await session.scalars(
-        select(Order.id)
+    orders = await session.scalars(
+        _order_detail_query()
         .where(
             Order.status.in_((OrderStatus.PENDING, OrderStatus.CONFIRMED)),
             Order.is_paid.is_(False),
@@ -41,12 +41,7 @@ async def lock_promotion_orders(
         .order_by(Order.created_at, Order.id)
         .with_for_update()
     )
-    orders = []
-    for order_id in order_ids.all():
-        order = await get_order(session, order_id)
-        if order is not None and _order_activity_id(order) in activity_ids:
-            orders.append(order)
-    return orders
+    return [order for order in orders.all() if _order_activity_id(order) in activity_ids]
 
 
 async def _save_allocations(

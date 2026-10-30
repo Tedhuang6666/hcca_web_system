@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from unittest.mock import patch
 
+from api.services import permission_tasks
 from api.services.permission_tasks import _invalidate_async, invalidate_expired_user_caches
 
 
@@ -22,6 +24,11 @@ def test_invalidate_expired_user_caches_task_returns_asyncio_run_result() -> Non
     assert result == {"invalidated": 2}
 
 
-async def test_invalidate_async_no_expired_positions_returns_zero() -> None:
+async def test_invalidate_async_no_expired_positions_returns_zero(db_session, monkeypatch) -> None:
+    @asynccontextmanager
+    async def use_test_session():
+        yield db_session
+
+    monkeypatch.setattr(permission_tasks, "task_session", use_test_session)
     result = await _invalidate_async()
     assert result == {"invalidated": 0}

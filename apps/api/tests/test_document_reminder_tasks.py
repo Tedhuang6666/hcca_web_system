@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from unittest.mock import patch
 
 import pytest
 
+from api.core import database as database_core
 from api.services.document_reminder_tasks import _process_overdue_async, send_document_reminders
 
 
@@ -38,7 +40,14 @@ def test_send_document_reminders_retries_on_failure() -> None:
         send_document_reminders()
 
 
-async def test_process_overdue_async_returns_structured_result() -> None:
+async def test_process_overdue_async_returns_structured_result(db_session, monkeypatch) -> None:
+    @asynccontextmanager
+    async def use_test_session():
+        yield db_session
+
+    # 背景 task 的獨立 session 預設讀 public schema；測試資料在專屬 schema。
+    # 使用同一個真實 PostgreSQL fixture，避免誤連未遷移的 public schema。
+    monkeypatch.setattr(database_core, "task_session", use_test_session)
     result = await _process_overdue_async()
     assert result["status"] == "ok"
     assert set(result.keys()) >= {

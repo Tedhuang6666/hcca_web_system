@@ -1099,20 +1099,27 @@ async def get_survey_stats(session: AsyncSession, survey: Survey) -> SurveyStats
     )
     total = total_result.scalar_one()
 
+    question_ids = [q.id for q in questions if q.question_type not in DISPLAY_QUESTION_TYPES]
+    answers_by_question: dict[uuid.UUID, list[SurveyAnswer]] = {}
+    if question_ids:
+        a_result = await session.execute(
+            select(SurveyAnswer)
+            .options(selectinload(SurveyAnswer.response).selectinload(SurveyResponse.respondent))
+            .join(SurveyResponse, SurveyAnswer.response_id == SurveyResponse.id)
+            .where(
+                SurveyResponse.survey_id == survey.id,
+                SurveyAnswer.question_id.in_(question_ids),
+            )
+        )
+        for answer in a_result.scalars():
+            answers_by_question.setdefault(answer.question_id, []).append(answer)
+
     # 各題統計
     question_stats: list[QuestionStats] = []
     for q in questions:
         if q.question_type in DISPLAY_QUESTION_TYPES:
             continue
-        # 此題所有答案
-        a_result = await session.execute(
-            select(SurveyAnswer)
-            .options(selectinload(SurveyAnswer.response).selectinload(SurveyResponse.respondent))
-            .join(SurveyResponse, SurveyAnswer.response_id == SurveyResponse.id)
-            .where(SurveyResponse.survey_id == survey.id)
-            .where(SurveyAnswer.question_id == q.id)
-        )
-        answers = list(a_result.scalars().all())
+        answers = answers_by_question.get(q.id, [])
 
         qs = QuestionStats(
             question_id=q.id,

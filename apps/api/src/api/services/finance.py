@@ -155,6 +155,9 @@ from api.services.finance_journal import (
     journal_with_lines as journal_with_lines,
 )
 from api.services.finance_journal import (
+    journals_with_lines as journals_with_lines,
+)
+from api.services.finance_journal import (
     mark_expense_paid as mark_expense_paid,
 )
 from api.services.finance_journal import (

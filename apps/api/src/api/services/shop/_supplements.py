@@ -9,7 +9,7 @@ from api.core.clock import now_local
 from api.models.school_class import SchoolClass
 from api.models.shop import Order, OrderStatus
 from api.services import receivable as receivable_svc
-from api.services.shop._orders import _lock_class_orders, get_order
+from api.services.shop._orders import _lock_class_orders, _order_detail_query, get_order
 from api.services.shop._payment_notifications import queue_individual_payment_notice
 from api.services.shop._receipts import (
     record_order_receipts_printed,
@@ -25,7 +25,7 @@ async def list_supplements(
     limit: int,
     offset: int,
 ) -> list[Order]:
-    query = select(Order.id).where(
+    query = _order_detail_query().where(
         Order.supplement_class_id.is_not(None),
         Order.status.notin_((OrderStatus.CANCELLED, OrderStatus.REFUNDED)),
     )
@@ -34,15 +34,10 @@ async def list_supplements(
         if class_ids:
             scopes.append(Order.supplement_class_id.in_(class_ids))
         query = query.where(or_(*scopes))
-    ids = await session.scalars(
+    orders = await session.scalars(
         query.order_by(Order.is_paid, Order.created_at.desc(), Order.id).limit(limit).offset(offset)
     )
-    orders = []
-    for order_id in ids:
-        order = await get_order(session, order_id)
-        if order is not None:
-            orders.append(order)
-    return orders
+    return list(orders.all())
 
 
 async def export_supplement_receipt(session: AsyncSession, order: Order) -> bytes:

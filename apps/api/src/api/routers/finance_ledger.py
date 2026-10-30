@@ -61,7 +61,7 @@ from api.schemas.finance import (
 )
 from api.services import audit as audit_svc
 from api.services import finance as service
-from api.services.permission import get_user_permission_codes_for_org
+from api.services.permission import get_user_permission_codes_by_org
 from api.services.storage import get_storage
 
 router = APIRouter()
@@ -87,12 +87,12 @@ async def list_ledgers(db: DbDep, user: CurrentUser) -> list[LedgerOut]:
     if user.is_superuser:
         return [LedgerOut.model_validate(ledger) for ledger in ledgers]
 
-    visible: list[LedgerOut] = []
-    for ledger in ledgers:
-        codes = await get_user_permission_codes_for_org(db, user.id, ledger.org_id)
-        if str(PermissionCode.FINANCE_VIEW) in codes:
-            visible.append(LedgerOut.model_validate(ledger))
-    return visible
+    codes_by_org = await get_user_permission_codes_by_org(db, user.id)
+    return [
+        LedgerOut.model_validate(ledger)
+        for ledger in ledgers
+        if str(PermissionCode.FINANCE_VIEW) in codes_by_org.get(ledger.org_id, frozenset())
+    ]
 
 
 @router.get(
@@ -383,10 +383,8 @@ async def list_journals(
     if status:
         stmt = stmt.where(JournalEntry.status == status)
     stmt = stmt.order_by(JournalEntry.entry_date.desc(), JournalEntry.created_at.desc())
-    return [
-        _journal_out(await service.journal_with_lines(db, row))
-        for row in (await db.execute(stmt)).scalars()
-    ]
+    entries = list((await db.scalars(stmt)).all())
+    return [_journal_out(row) for row in await service.journals_with_lines(db, entries)]
 
 
 @router.post(
