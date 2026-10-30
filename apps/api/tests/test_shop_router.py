@@ -2743,7 +2743,14 @@ async def test_council_class_payment_emails_cadres_full_class_orders_once(
     other_activity = Activity(name="其他活動", status=ActivityStatus.ACTIVE)
     db_session.add_all([activity, other_activity])
     await db_session.flush()
-    product = await _make_active_product(db_session, manager, price=50)
+    category = await _make_category(db_session, manager, activity_id=activity.id, name="紀念服飾")
+    other_category = await _make_category(
+        db_session, manager, activity_id=activity.id, name="紀念用品"
+    )
+    product = await _make_active_product(db_session, manager, price=50, category=category)
+    other_product = await _make_active_product(
+        db_session, manager, price=25, category=other_category
+    )
     product.name = "紀念衫"
 
     collected = await _seed_order(
@@ -2754,6 +2761,7 @@ async def test_council_class_payment_emails_cadres_full_class_orders_once(
         is_class_collected=True,
     )
     collected.activity_id = activity.id
+    collected.category_id = category.id
     db_session.add(
         OrderItem(
             order_id=collected.id,
@@ -2767,12 +2775,26 @@ async def test_council_class_payment_emails_cadres_full_class_orders_once(
         db_session, buyer_two, class_id=school_class.id, total_price=150
     )
     not_collected.activity_id = activity.id
+    not_collected.category_id = category.id
     db_session.add(
         OrderItem(
             order_id=not_collected.id,
             product_id=product.id,
             quantity=3,
             unit_price=50,
+        )
+    )
+    other_topic_order = await _seed_order(
+        db_session, buyer_two, class_id=school_class.id, total_price=25
+    )
+    other_topic_order.activity_id = activity.id
+    other_topic_order.category_id = other_category.id
+    db_session.add(
+        OrderItem(
+            order_id=other_topic_order.id,
+            product_id=other_product.id,
+            quantity=1,
+            unit_price=25,
         )
     )
     another_activity_order = await _seed_order(
@@ -2791,8 +2813,9 @@ async def test_council_class_payment_emails_cadres_full_class_orders_once(
     payload = {"is_paid": True, "activity_id": str(activity.id)}
     response = await ac.patch(path, json=payload)
     assert response.status_code == 200
-    assert response.json()["updated_orders"] == 2
+    assert response.json()["updated_orders"] == 3
     assert collected.is_paid is True and not_collected.is_paid is True
+    assert other_topic_order.is_paid is True
     assert another_activity_order.is_paid is False and another_class_order.is_paid is False
 
     confirmation = await db_session.scalar(
@@ -2803,9 +2826,13 @@ async def test_council_class_payment_emails_cadres_full_class_orders_once(
     assert confirmation.payload["class_label"] == (
         f"{school_class.academic_year} 學年度 {school_class.class_code} 班"
     )
-    assert confirmation.payload["activity_name"] == "校慶商品"
+    assert confirmation.payload["topic_names"] == ["紀念服飾", "紀念用品"]
     orders_by_serial = {item["serial_number"]: item for item in confirmation.payload["orders"]}
-    assert set(orders_by_serial) == {collected.serial_number, not_collected.serial_number}
+    assert set(orders_by_serial) == {
+        collected.serial_number,
+        not_collected.serial_number,
+        other_topic_order.serial_number,
+    }
     first_details = orders_by_serial[collected.serial_number]
     assert first_details["student_name"] == buyer_one.display_name
     assert first_details["student_id"] == buyer_one.student_id

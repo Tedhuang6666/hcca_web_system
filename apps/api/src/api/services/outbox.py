@@ -327,20 +327,26 @@ def _handle_shop_class_payment_confirmed(payload: dict) -> None:
         return
 
     raw_class_label = str(payload.get("class_label") or "班級")
-    raw_activity_name = str(payload.get("activity_name") or "一般商品")
+    topic_names = payload.get("topic_names")
+    valid_topic_names = (
+        sorted({name.strip() for name in topic_names if isinstance(name, str) and name.strip()})
+        if isinstance(topic_names, list)
+        else []
+    )
+    raw_topic_name = "、".join(valid_topic_names) or str(payload.get("activity_name") or "一般商品")
     valid_orders = [order for order in orders if isinstance(order, dict)]
     if not valid_orders:
         return
     total_amount = sum(int(order.get("total_price", 0) or 0) for order in valid_orders)
 
-    subject_label = " ".join(f"【{value}】" for value in (raw_class_label, raw_activity_name))
+    subject_label = " ".join(f"【{value}】" for value in (raw_class_label, raw_topic_name))
     subject_label = subject_label.replace("\r", " ").replace("\n", " ")
     subject = f"【班聯收款確認】{subject_label}"
     class_label = html_escape(raw_class_label)
-    activity_name = html_escape(raw_activity_name)
+    topic_name = html_escape(raw_topic_name)
     base = html_escape(settings.FRONTEND_BASE_URL.rstrip("/"), quote=True)
     html = (
-        f"<p>班聯會已確認<strong>{class_label}</strong>的「{activity_name}」款項。</p>"
+        f"<p>班聯會已確認<strong>{class_label}</strong>的商品主題「{topic_name}」款項。</p>"
         f"<p>有效訂單 {len(valid_orders)} 筆，訂購總額 NT$ {total_amount:,}。</p>"
         f'<p><a href="{base}/shop/class-orders">查看班級訂單</a></p>'
     )
