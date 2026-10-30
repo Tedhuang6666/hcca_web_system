@@ -3,6 +3,7 @@
 import asyncio
 import uuid
 from datetime import UTC, date, datetime, timedelta
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy import select
@@ -23,6 +24,7 @@ from api.schemas.shop import (
     ProductCreate,
     ProductSeriesCreate,
 )
+from api.services import school_class as class_svc
 from api.services import shop as shop_svc
 from api.services.shop._deadlines import set_activity_order_closure
 from api.services.shop._orders import _assert_activity_open
@@ -164,6 +166,41 @@ async def test_globally_closed_category_is_hidden_from_public_catalog_and_restor
     reopened = await manager.delete(f"/shop/categories/{category_id}/close")
     assert reopened.status_code == 200
     assert str(category_id) in {row["id"] for row in (await client.get("/shop/catalog")).json()}
+
+
+@pytest.mark.parametrize(
+    ("is_admin", "explicit_class", "expected_resolutions"),
+    [(True, True, 0), (True, False, 1), (False, True, 1)],
+)
+async def test_close_status_resolves_own_class_only_when_needed(
+    db_session,
+    admin_user,
+    authed_client_factory,
+    closure_setup,
+    monkeypatch,
+    is_admin,
+    explicit_class,
+    expected_resolutions,
+):
+    buyer, _, _, categories, _ = closure_setup
+    school_class = SchoolClass(academic_year=116, class_code="101", created_by=admin_user.id)
+    db_session.add(school_class)
+    await db_session.flush()
+    db_session.add(ClassManualMember(class_id=school_class.id, user_id=buyer.id))
+    await db_session.flush()
+    resolver = AsyncMock(wraps=class_svc.resolve_user_class)
+    monkeypatch.setattr(class_svc, "resolve_user_class", resolver)
+    params = {"category_ids": str(categories[0].id)}
+    if explicit_class:
+        params["class_id"] = str(school_class.id)
+
+    response = await authed_client_factory(admin_user if is_admin else buyer).get(
+        "/shop/close-status", params=params
+    )
+
+    assert response.status_code == 200
+    assert response.json()["statuses"][str(categories[0].id)]["is_closed"] is False
+    assert resolver.await_count == expected_resolutions
 
 
 async def test_close_status_includes_class_collection_and_council_confirmation_times(
