@@ -343,7 +343,7 @@ def _spec_from_selector(sel: RecipientSelector) -> dict:
 
 def _is_bulk(sel: RecipientSelector) -> bool:
     return bool(
-        len(sel.user_ids) + len(sel.external_emails) > 1
+        len(sel.user_ids) + len(_normalize_external_emails(sel.external_emails)) > 1
         or sel.position_ids
         or sel.org_ids
         or sel.include_all

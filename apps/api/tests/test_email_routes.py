@@ -273,6 +273,26 @@ async def test_external_email_recipients_can_be_previewed_and_saved(
 
 
 @pytest.mark.asyncio
+async def test_multiple_external_emails_require_bulk_permission(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await _seed_user(db_session, "external-bulk-sender@school.edu", ["email:send"])
+    _override_user(user)
+
+    response = await client.post(
+        "/email/messages",
+        json={
+            "subject": "外部批次通知",
+            "action": "draft",
+            "recipients": {"external_emails": ["first@example.org", "second@example.org"]},
+        },
+    )
+
+    assert response.status_code == 403
+    assert "email:send_bulk" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
 async def test_send_commits_recipient_before_enqueue(
     client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1044,7 +1064,7 @@ async def test_create_message_idempotency_key_returns_existing_draft(
 async def test_create_message_send_exceeding_daily_quota_returns_429(
     client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    user = await _seed_user(db_session, "quota-user@school.edu", ["email:send"])
+    user = await _seed_user(db_session, "quota-user@school.edu", ["email:send_bulk"])
     _override_user(user)
     monkeypatch.setattr("api.services.email_dispatch.settings.EMAIL_DAILY_QUOTA_PER_USER", 1)
     monkeypatch.setattr("api.routers.email.enqueue_rendered", lambda *args, **kwargs: ["task-id"])
