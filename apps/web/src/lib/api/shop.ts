@@ -10,6 +10,8 @@ import type {
 } from "../types";
 import { authFetch, BASE, get, post, put, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
 
+type ReceiptScope = Pick<ClassReceiptBatchCreate, "activity_id" | "category_id">;
+
 // ── 商店 ──────────────────────────────────────────────────────────────────────
 
 export const shopApi = {
@@ -194,21 +196,21 @@ export const shopApi = {
     if (!response.ok) throw new ApiError(response.status, await errorMessageFromResponse(response));
     return response;
   },
-  downloadClassReceipts: async (activityId: string | null, classIds?: string[], unpaidOnly = false) => {
+  downloadClassReceipts: async (scope: ReceiptScope, classIds?: string[], unpaidOnly = false) => {
     const response = await authFetch(`${BASE}/shop/orders/classes/receipts.pdf`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...csrfHeaders("POST") },
-      body: JSON.stringify({ activity_id: activityId, class_ids: classIds ?? null, unpaid_only: unpaidOnly } satisfies ClassReceiptBatchCreate),
+      body: JSON.stringify({ ...scope, class_ids: classIds ?? null, unpaid_only: unpaidOnly } satisfies ClassReceiptBatchCreate),
       credentials: "include",
     });
     if (!response.ok) throw new ApiError(response.status, await errorMessageFromResponse(response));
     return response;
   },
-  downloadChangedOrderReceipts: async (activityId: string | null) => {
+  downloadChangedOrderReceipts: async (scope: ReceiptScope) => {
     const response = await authFetch(`${BASE}/shop/orders/receipts/changed.pdf`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...csrfHeaders("POST") },
-      body: JSON.stringify({ activity_id: activityId } satisfies ChangedOrderReceiptCreate),
+      body: JSON.stringify(scope satisfies ChangedOrderReceiptCreate),
       credentials: "include",
     });
     if (!response.ok) throw new ApiError(response.status, await errorMessageFromResponse(response));

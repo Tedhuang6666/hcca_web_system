@@ -43,7 +43,7 @@ describe("shop quantity API", () => {
     }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await shopApi.downloadClassReceipts("activity-1", ["class-1", "class-2"]);
+    await shopApi.downloadClassReceipts({ activity_id: "activity-1" }, ["class-1", "class-2"]);
     const selectedRequest = fetchMock.mock.calls[0];
     expect(String(selectedRequest[0])).toMatch(/\/shop\/orders\/classes\/receipts\.pdf$/);
     expect(selectedRequest[1].method).toBe("POST");
@@ -54,30 +54,47 @@ describe("shop quantity API", () => {
       unpaid_only: false,
     });
 
-    await shopApi.downloadClassReceipts("activity-1");
+    await shopApi.downloadClassReceipts({ activity_id: "activity-1" });
     expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({
       activity_id: "activity-1",
       class_ids: null,
       unpaid_only: false,
     });
 
-    await shopApi.downloadClassReceipts("activity-1", undefined, true);
+    await shopApi.downloadClassReceipts({ activity_id: "activity-1" }, undefined, true);
     expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({
       activity_id: "activity-1",
       class_ids: null,
       unpaid_only: true,
     });
 
-    await shopApi.downloadChangedOrderReceipts("activity-1");
+    await shopApi.downloadChangedOrderReceipts({ activity_id: "activity-1" });
     expect(String(fetchMock.mock.calls[3][0])).toMatch(/\/shop\/orders\/receipts\/changed\.pdf$/);
     expect(JSON.parse(fetchMock.mock.calls[3][1].body)).toEqual({ activity_id: "activity-1" });
 
-    await shopApi.downloadClassReceipts(null);
+    await shopApi.downloadClassReceipts({ activity_id: null });
     expect(JSON.parse(fetchMock.mock.calls[4][1].body)).toEqual({
       activity_id: null,
       class_ids: null,
       unpaid_only: false,
     });
+  });
+
+  it("supports exact topic scopes for receipt downloads", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("%PDF-1.7", {
+      headers: { "Content-Type": "application/pdf" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await shopApi.downloadClassReceipts({ category_id: "category-1" }, undefined, true);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      category_id: "category-1",
+      class_ids: null,
+      unpaid_only: true,
+    });
+
+    await shopApi.downloadChangedOrderReceipts({ category_id: "category-1" });
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ category_id: "category-1" });
   });
 
   afterEach(() => {
