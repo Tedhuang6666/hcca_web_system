@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import uuid
 from datetime import date
 
@@ -206,6 +205,32 @@ async def get_org_permission_codes(db: AsyncSession, org_id: uuid.UUID) -> froze
     return frozenset(codes)
 
 
+async def get_user_permission_codes_by_org(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    on_date: date | None = None,
+) -> dict[uuid.UUID, frozenset[str]]:
+    """同一使用者的有效組織權限批次查詢；不對同一 session 並行送出 SQL。"""
+    check_date = on_date or local_today()
+    rows = await db.execute(
+        select(Position.org_id, Permission.code)
+        .select_from(UserPosition)
+        .join(Position, UserPosition.position_id == Position.id)
+        .outerjoin(Permission, Permission.position_id == Position.id)
+        .where(UserPosition.user_id == user_id, *active_tenure_filter(check_date))
+    )
+    codes_by_org: dict[uuid.UUID, set[str]] = {}
+    for org_id, code in rows:
+        codes = codes_by_org.setdefault(org_id, set())
+        if code:
+            codes.add(code)
+    defaults = await _get_org_default_permission_codes_by_org(db, set(codes_by_org))
+    return {
+        org_id: frozenset(codes | defaults.get(org_id, set()))
+        for org_id, codes in codes_by_org.items()
+    }
+
+
 async def get_user_org_ids_with_permission(
     db: AsyncSession,
     user_id: uuid.UUID,
@@ -217,32 +242,8 @@ async def get_user_org_ids_with_permission(
 
     用於前端過濾「可選組織下拉」：只顯示使用者有相應操作權限的組織。
     """
-    check_date = on_date or local_today()
-
-    result = await db.execute(
-        select(Position.org_id)
-        .join(Permission, Permission.position_id == Position.id)
-        .join(UserPosition, UserPosition.position_id == Position.id)
-        .where(
-            UserPosition.user_id == user_id,
-            Permission.code == permission_code,
-            *active_tenure_filter(check_date),
-        )
-        .distinct()
-    )
-    org_ids = set(result.scalars().all())
-    all_org_ids = await get_user_org_ids(db, user_id, on_date=check_date)
-    if all_org_ids:
-        per_org_codes = await asyncio.gather(
-            *[
-                get_user_permission_codes_for_org(db, user_id, oid, on_date=check_date)
-                for oid in all_org_ids
-            ]
-        )
-        for oid, codes in zip(all_org_ids, per_org_codes, strict=False):
-            if permission_code in codes:
-                org_ids.add(oid)
-    return list(org_ids)
+    codes_by_org = await get_user_permission_codes_by_org(db, user_id, on_date=on_date)
+    return [org_id for org_id, codes in codes_by_org.items() if permission_code in codes]
 
 
 async def get_user_org_ids_with_any_permission(
@@ -254,32 +255,8 @@ async def get_user_org_ids_with_any_permission(
     """回傳使用者在哪些組織內擁有任一指定權限碼。"""
     if not permission_codes:
         return []
-    check_date = on_date or local_today()
-
-    result = await db.execute(
-        select(Position.org_id)
-        .join(Permission, Permission.position_id == Position.id)
-        .join(UserPosition, UserPosition.position_id == Position.id)
-        .where(
-            UserPosition.user_id == user_id,
-            Permission.code.in_(permission_codes),
-            *active_tenure_filter(check_date),
-        )
-        .distinct()
-    )
-    org_ids = set(result.scalars().all())
-    all_org_ids = await get_user_org_ids(db, user_id, on_date=check_date)
-    if all_org_ids:
-        per_org_codes = await asyncio.gather(
-            *[
-                get_user_permission_codes_for_org(db, user_id, oid, on_date=check_date)
-                for oid in all_org_ids
-            ]
-        )
-        for oid, codes in zip(all_org_ids, per_org_codes, strict=False):
-            if permission_codes & set(codes):
-                org_ids.add(oid)
-    return list(org_ids)
+    codes_by_org = await get_user_permission_codes_by_org(db, user_id, on_date=on_date)
+    return [org_id for org_id, codes in codes_by_org.items() if permission_codes & codes]
 
 
 async def get_org_leader_user_id(

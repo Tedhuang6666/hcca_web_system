@@ -8,6 +8,7 @@ from datetime import UTC, date, datetime
 from fastapi import HTTPException
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from api.models.finance import (
     BudgetSubmissionStatus,
@@ -19,6 +20,7 @@ from api.models.finance import (
     ExpensePaymentStatus,
     ExpenseProcurementStatus,
     FinanceAccountType,
+    FinanceBudget,
     FinanceBudgetAllocation,
     FinanceBudgetNode,
     FinanceBudgetSubmission,
@@ -33,13 +35,14 @@ from api.schemas.finance import (
     ChartAccountUpdate,
     ExpenseBudgetUpdate,
     ExpenseClaimCreate,
+    ExpenseClaimItemCreate,
     ExpenseProcurementUpdate,
     ExpenseReimbursementCreate,
     JournalCreate,
     ManualJournalUpdate,
     TransferCreate,
 )
-from api.services.finance_core import _claim_item_total, get_budget, validate_evidence_key
+from api.services.finance_core import _claim_item_total, validate_evidence_key
 
 
 async def update_chart_account(
@@ -524,6 +527,73 @@ async def create_transfer(
     )
 
 
+async def _claim_budget_node_scopes(
+    db: AsyncSession, node_ids: set[uuid.UUID]
+) -> dict[uuid.UUID, tuple[uuid.UUID, uuid.UUID, bool]]:
+    if not node_ids:
+        return {}
+    child = aliased(FinanceBudgetNode)
+    has_child = (
+        select(child.id).where(child.parent_id == FinanceBudgetNode.id, child.is_active).exists()
+    )
+    rows = await db.execute(
+        select(
+            FinanceBudgetNode.id,
+            FinanceBudget.ledger_id,
+            FinanceBudget.period_id,
+            has_child,
+        )
+        .join(FinanceBudget, FinanceBudget.id == FinanceBudgetNode.budget_id)
+        .where(FinanceBudgetNode.id.in_(node_ids))
+    )
+    return {
+        node_id: (ledger_id, period_id, child_exists)
+        for node_id, ledger_id, period_id, child_exists in rows
+    }
+
+
+def _validate_claim_budget_node(
+    scope: tuple[uuid.UUID, uuid.UUID, bool] | None,
+    ledger_id: uuid.UUID,
+    period_id: uuid.UUID,
+) -> None:
+    if scope is None:
+        raise HTTPException(400, "預算條目不存在")
+    if scope[:2] != (ledger_id, period_id):
+        raise HTTPException(400, "預算條目不屬於此帳本或會計期間")
+    if scope[2]:
+        raise HTTPException(400, "報帳只能對應最末層預算條目")
+
+
+async def _add_claim_items(
+    db: AsyncSession,
+    entry_id: uuid.UUID,
+    items: list[ExpenseClaimItemCreate],
+    user_id: uuid.UUID,
+) -> None:
+    claim_items = [
+        ExpenseClaimItem(
+            journal_entry_id=entry_id,
+            **item.model_dump(exclude={"evidence"}),
+        )
+        for item in items
+    ]
+    db.add_all(claim_items)
+    await db.flush()
+    db.add_all(
+        [
+            ExpenseClaimItemEvidence(
+                item_id=claim_item.id,
+                uploaded_by_id=user_id,
+                **evidence.model_dump(),
+            )
+            for claim_item, item in zip(claim_items, items, strict=True)
+            for evidence in item.evidence
+        ]
+    )
+    await db.flush()
+
+
 async def create_expense_claim(
     db: AsyncSession, ledger_id: uuid.UUID, body: ExpenseClaimCreate, user_id: uuid.UUID
 ) -> JournalEntry:
@@ -553,21 +623,14 @@ async def create_expense_claim(
         if not payable:
             raise HTTPException(400, "找不到代墊應付款科目")
         payment_account_id = payable.id
+    budget_scopes = await _claim_budget_node_scopes(
+        db, {item.budget_node_id for item in body.items if item.budget_node_id is not None}
+    )
     for item in body.items:
         if item.budget_node_id:
-            node = await db.get(FinanceBudgetNode, item.budget_node_id)
-            if not node:
-                raise HTTPException(400, "預算條目不存在")
-            budget = await get_budget(db, node.budget_id)
-            if budget.ledger_id != ledger_id or budget.period_id != body.period_id:
-                raise HTTPException(400, "預算條目不屬於此帳本或會計期間")
-            has_child = await db.scalar(
-                select(FinanceBudgetNode.id)
-                .where(FinanceBudgetNode.parent_id == node.id, FinanceBudgetNode.is_active)
-                .limit(1)
+            _validate_claim_budget_node(
+                budget_scopes.get(item.budget_node_id), ledger_id, body.period_id
             )
-            if has_child:
-                raise HTTPException(400, "報帳只能對應最末層預算條目")
         for evidence in item.evidence:
             validate_evidence_key(evidence.storage_key, ledger_id)
     entry = await create_journal(
@@ -597,35 +660,7 @@ async def create_expense_claim(
     entry.proposing_org_id = body.proposing_org_id
     entry.advanced_by_id = body.advanced_by_id
     entry.payment_method = body.payment_method
-    for item in body.items:
-        claim_item = ExpenseClaimItem(
-            journal_entry_id=entry.id,
-            name=item.name,
-            unit_price=item.unit_price,
-            tax_rate=item.tax_rate,
-            quantity=item.quantity,
-            unit=item.unit,
-            budget_node_id=item.budget_node_id,
-            budget_exception_note=item.budget_exception_note,
-        )
-        db.add(claim_item)
-        await db.flush()
-        db.add_all(
-            [
-                ExpenseClaimItemEvidence(
-                    item_id=claim_item.id,
-                    storage_key=evidence.storage_key,
-                    filename=evidence.filename,
-                    content_type=evidence.content_type,
-                    file_size=evidence.file_size,
-                    evidence_type=evidence.evidence_type,
-                    note=evidence.note,
-                    uploaded_by_id=user_id,
-                )
-                for evidence in item.evidence
-            ]
-        )
-    await db.flush()
+    await _add_claim_items(db, entry.id, body.items, user_id)
     return entry
 
 
@@ -704,21 +739,14 @@ async def update_expense_claim(
         if not payable:
             raise HTTPException(400, "找不到代墊應付款科目")
         payment_account_id = payable.id
+    budget_scopes = await _claim_budget_node_scopes(
+        db, {item.budget_node_id for item in body.items if item.budget_node_id is not None}
+    )
     for item in body.items:
         if item.budget_node_id:
-            node = await db.get(FinanceBudgetNode, item.budget_node_id)
-            if not node:
-                raise HTTPException(400, "預算條目不存在")
-            budget = await get_budget(db, node.budget_id)
-            if budget.ledger_id != entry.ledger_id or budget.period_id != body.period_id:
-                raise HTTPException(400, "預算條目不屬於此帳本或會計期間")
-            has_child = await db.scalar(
-                select(FinanceBudgetNode.id)
-                .where(FinanceBudgetNode.parent_id == node.id, FinanceBudgetNode.is_active)
-                .limit(1)
+            _validate_claim_budget_node(
+                budget_scopes.get(item.budget_node_id), entry.ledger_id, body.period_id
             )
-            if has_child:
-                raise HTTPException(400, "報帳只能對應最末層預算條目")
         for evidence in item.evidence:
             validate_evidence_key(evidence.storage_key, entry.ledger_id)
 
@@ -747,28 +775,11 @@ async def update_expense_claim(
     credit_line.debit = 0
     credit_line.credit = amount
 
-    old_items = list(
-        (
-            await db.execute(
-                select(ExpenseClaimItem).where(ExpenseClaimItem.journal_entry_id == entry.id)
-            )
-        ).scalars()
+    old_item_ids = select(ExpenseClaimItem.id).where(ExpenseClaimItem.journal_entry_id == entry.id)
+    await db.execute(
+        delete(ExpenseClaimItemEvidence).where(ExpenseClaimItemEvidence.item_id.in_(old_item_ids))
     )
-    old_evidence = list(
-        (
-            await db.execute(
-                select(ExpenseClaimItemEvidence).where(
-                    ExpenseClaimItemEvidence.item_id.in_([item.id for item in old_items])
-                )
-            )
-        ).scalars()
-        if old_items
-        else []
-    )
-    for evidence in old_evidence:
-        await db.delete(evidence)
-    for item in old_items:
-        await db.delete(item)
+    await db.execute(delete(ExpenseClaimItem).where(ExpenseClaimItem.journal_entry_id == entry.id))
     await db.flush()
 
     entry.period_id = body.period_id
@@ -790,35 +801,7 @@ async def update_expense_claim(
             entry.claim_status = ExpenseClaimStatus.PENDING_REVIEW
             entry.reviewed_by_id = None
 
-    for item in body.items:
-        claim_item = ExpenseClaimItem(
-            journal_entry_id=entry.id,
-            name=item.name,
-            unit_price=item.unit_price,
-            tax_rate=item.tax_rate,
-            quantity=item.quantity,
-            unit=item.unit,
-            budget_node_id=item.budget_node_id,
-            budget_exception_note=item.budget_exception_note,
-        )
-        db.add(claim_item)
-        await db.flush()
-        db.add_all(
-            [
-                ExpenseClaimItemEvidence(
-                    item_id=claim_item.id,
-                    storage_key=evidence.storage_key,
-                    filename=evidence.filename,
-                    content_type=evidence.content_type,
-                    file_size=evidence.file_size,
-                    evidence_type=evidence.evidence_type,
-                    note=evidence.note,
-                    uploaded_by_id=user_id,
-                )
-                for evidence in item.evidence
-            ]
-        )
-    await db.flush()
+    await _add_claim_items(db, entry.id, body.items, user_id)
     return entry
 
 
@@ -837,52 +820,104 @@ async def account_balances(db: AsyncSession, ledger_id: uuid.UUID) -> dict[uuid.
     return {row[0]: int(row[1]) for row in rows}
 
 
-async def journal_with_lines(db: AsyncSession, entry: JournalEntry) -> dict:
-    lines = list(
+async def journals_with_lines(db: AsyncSession, entries: list[JournalEntry]) -> list[dict]:
+    """批次讀取傳票明細，每 500 筆分批以限制 IN 參數及關聯查詢大小。"""
+    result: list[dict] = []
+    for start in range(0, len(entries), 500):
+        result.extend(await _journal_batch(db, entries[start : start + 500]))
+    return result
+
+
+async def _journal_batch(db: AsyncSession, entries: list[JournalEntry]) -> list[dict]:
+    entry_ids = [entry.id for entry in entries]
+    line_rows = await db.execute(
+        select(JournalLine, ChartAccount.name, ChartAccount.account_type)
+        .join(ChartAccount)
+        .where(JournalLine.entry_id.in_(entry_ids))
+        .order_by(JournalLine.debit.desc(), JournalLine.created_at, JournalLine.id)
+    )
+    lines_by_entry: dict[uuid.UUID, list[tuple[JournalLine, str, str]]] = {}
+    for line, account_name, account_type in line_rows:
+        lines_by_entry.setdefault(line.entry_id, []).append((line, account_name, account_type))
+    creator_names = dict(
         (
             await db.execute(
-                select(JournalLine, ChartAccount.name, ChartAccount.account_type)
-                .join(ChartAccount)
-                .where(JournalLine.entry_id == entry.id)
-                .order_by(JournalLine.debit.desc(), JournalLine.created_at, JournalLine.id)
+                select(User.id, User.display_name).where(
+                    User.id.in_({entry.created_by_id for entry in entries})
+                )
             )
         ).all()
     )
-    creator_name = await db.scalar(select(User.display_name).where(User.id == entry.created_by_id))
-    evidence_count = 0
-    if entry.source_type == "expense_claim":
-        evidence_count = int(
-            await db.scalar(
-                select(func.count())
-                .select_from(ExpenseClaimItemEvidence)
-                .join(ExpenseClaimItem)
-                .where(ExpenseClaimItem.journal_entry_id == entry.id)
-            )
-            or 0
-        )
-    effective_amount = None
-    if entry.source_type == "manual_entry" and entry.source_event == "opening":
-        original_amount = sum(
-            line.debit - line.credit
-            for line, _, account_type in lines
-            if account_type == FinanceAccountType.ASSET
-        )
-        posted_adjustments = int(
-            await db.scalar(
-                select(func.coalesce(func.sum(JournalLine.debit - JournalLine.credit), 0))
-                .join(JournalEntry, JournalEntry.id == JournalLine.entry_id)
-                .join(ChartAccount, ChartAccount.id == JournalLine.account_id)
-                .where(
-                    JournalEntry.source_type == "manual_entry",
-                    JournalEntry.source_event.like("opening_adjustment:%"),
-                    JournalEntry.source_id == entry.id,
-                    JournalEntry.status == JournalStatus.POSTED,
-                    ChartAccount.account_type == FinanceAccountType.ASSET,
+    claim_ids = [entry.id for entry in entries if entry.source_type == "expense_claim"]
+    evidence_counts: dict[uuid.UUID, int] = {}
+    if claim_ids:
+        evidence_counts = dict(
+            (
+                await db.execute(
+                    select(ExpenseClaimItem.journal_entry_id, func.count())
+                    .join(ExpenseClaimItemEvidence)
+                    .where(ExpenseClaimItem.journal_entry_id.in_(claim_ids))
+                    .group_by(ExpenseClaimItem.journal_entry_id)
                 )
-            )
-            or 0
+            ).all()
         )
-        effective_amount = original_amount + posted_adjustments
+    opening_ids = {
+        entry.id
+        for entry in entries
+        if entry.source_type == "manual_entry" and entry.source_event == "opening"
+    }
+    adjustments: dict[uuid.UUID, int] = {}
+    if opening_ids:
+        adjustments = dict(
+            (
+                await db.execute(
+                    select(JournalEntry.source_id, func.sum(JournalLine.debit - JournalLine.credit))
+                    .join(JournalLine, JournalLine.entry_id == JournalEntry.id)
+                    .join(ChartAccount, ChartAccount.id == JournalLine.account_id)
+                    .where(
+                        JournalEntry.source_type == "manual_entry",
+                        JournalEntry.source_event.like("opening_adjustment:%"),
+                        JournalEntry.source_id.in_(opening_ids),
+                        JournalEntry.status == JournalStatus.POSTED,
+                        ChartAccount.account_type == FinanceAccountType.ASSET,
+                    )
+                    .group_by(JournalEntry.source_id)
+                )
+            ).all()
+        )
+    rows = []
+    for entry in entries:
+        lines = lines_by_entry.get(entry.id, [])
+        effective_amount = None
+        if entry.id in opening_ids:
+            effective_amount = sum(
+                line.debit - line.credit
+                for line, _, account_type in lines
+                if account_type == FinanceAccountType.ASSET
+            ) + adjustments.get(entry.id, 0)
+        rows.append(
+            _journal_payload(
+                entry,
+                lines,
+                creator_names.get(entry.created_by_id),
+                evidence_counts.get(entry.id, 0),
+                effective_amount,
+            )
+        )
+    return rows
+
+
+async def journal_with_lines(db: AsyncSession, entry: JournalEntry) -> dict:
+    return (await journals_with_lines(db, [entry]))[0]
+
+
+def _journal_payload(
+    entry: JournalEntry,
+    lines: list[tuple[JournalLine, str, str]],
+    creator_name: str | None,
+    evidence_count: int,
+    effective_amount: int | None,
+) -> dict:
     return {
         "id": entry.id,
         "reference_no": f"FIN-{entry.entry_date:%y%m%d}-{entry.id.hex[:6].upper()}",

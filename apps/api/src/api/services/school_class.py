@@ -302,17 +302,19 @@ async def ensure_class_default_roles(
         select(ClassRoleBinding).where(ClassRoleBinding.class_id == sc.id)
     )
     existing = {binding.role_key: binding for binding in existing_result.scalars().all()}
+    codes_by_position: dict[uuid.UUID, set[str]] = {}
+    if existing:
+        for position_id, code in await session.execute(
+            select(Permission.position_id, Permission.code).where(
+                Permission.position_id.in_([binding.position_id for binding in existing.values()])
+            )
+        ):
+            codes_by_position.setdefault(position_id, set()).add(code)
     bindings: list[ClassRoleBinding] = []
     for role_key, (title, codes, weight) in CLASS_ROLE_DEFINITIONS.items():
         if role_key in existing:
             binding = existing[role_key]
-            existing_codes = set(
-                (
-                    await session.scalars(
-                        select(Permission.code).where(Permission.position_id == binding.position_id)
-                    )
-                ).all()
-            )
+            existing_codes = codes_by_position.get(binding.position_id, set())
             for code in codes:
                 if code not in existing_codes:
                     session.add(Permission(position_id=binding.position_id, code=code))
@@ -343,18 +345,41 @@ async def list_class_roles(session: AsyncSession, sc: SchoolClass) -> list[dict]
         .options(selectinload(ClassRoleBinding.position).selectinload(Position.permissions))
         .where(ClassRoleBinding.class_id == sc.id)
     )
-    rows: list[dict] = []
-    for binding in result.scalars().all():
-        holders_result = await session.execute(
-            select(UserPosition)
-            .options(selectinload(UserPosition.user))
-            .where(
-                UserPosition.position_id == binding.position_id,
-                UserPosition.start_date <= today,
-                (UserPosition.end_date.is_(None)) | (UserPosition.end_date >= today),
-            )
-            .order_by(UserPosition.start_date.desc())
+    bindings = list(result.scalars().all())
+    position_ids = [binding.position_id for binding in bindings]
+    holders_by_position: dict[uuid.UUID, list[UserPosition]] = {}
+    for holder in await session.scalars(
+        select(UserPosition)
+        .options(selectinload(UserPosition.user))
+        .where(
+            UserPosition.position_id.in_(position_ids),
+            UserPosition.start_date <= today,
+            (UserPosition.end_date.is_(None)) | (UserPosition.end_date >= today),
         )
+        .order_by(UserPosition.start_date.desc())
+    ):
+        holders_by_position.setdefault(holder.position_id, []).append(holder)
+    people_by_position: dict[uuid.UUID, list[PersonAffiliation]] = {}
+    for affiliation in await session.scalars(
+        select(PersonAffiliation)
+        .join(PersonAffiliation.person)
+        .options(selectinload(PersonAffiliation.person))
+        .where(
+            PersonAffiliation.class_id == sc.id,
+            PersonAffiliation.position_id.in_(position_ids),
+            PersonAffiliation.kind == PersonAffiliationKind.CLASS_ROLE,
+            PersonAffiliation.status.in_(
+                [PersonAffiliationStatus.ACTIVE, PersonAffiliationStatus.PENDING_USER]
+            ),
+            PersonAffiliation.start_date <= today,
+            (PersonAffiliation.end_date.is_(None)) | (PersonAffiliation.end_date >= today),
+            Person.user_id.is_(None),
+        )
+        .order_by(PersonAffiliation.start_date.desc())
+    ):
+        people_by_position.setdefault(affiliation.position_id, []).append(affiliation)
+    rows: list[dict] = []
+    for binding in bindings:
         holders = [
             {
                 "user_position_id": up.id,
@@ -365,25 +390,8 @@ async def list_class_roles(session: AsyncSession, sc: SchoolClass) -> list[dict]
                 "start_date": up.start_date,
                 "end_date": up.end_date,
             }
-            for up in holders_result.scalars().all()
+            for up in holders_by_position.get(binding.position_id, [])
         ]
-        person_holders_result = await session.execute(
-            select(PersonAffiliation)
-            .join(PersonAffiliation.person)
-            .options(selectinload(PersonAffiliation.person))
-            .where(
-                PersonAffiliation.class_id == sc.id,
-                PersonAffiliation.position_id == binding.position_id,
-                PersonAffiliation.kind == PersonAffiliationKind.CLASS_ROLE,
-                PersonAffiliation.status.in_(
-                    [PersonAffiliationStatus.ACTIVE, PersonAffiliationStatus.PENDING_USER]
-                ),
-                PersonAffiliation.start_date <= today,
-                (PersonAffiliation.end_date.is_(None)) | (PersonAffiliation.end_date >= today),
-                Person.user_id.is_(None),
-            )
-            .order_by(PersonAffiliation.start_date.desc())
-        )
         person_holders = [
             {
                 "affiliation_id": affiliation.id,
@@ -395,7 +403,7 @@ async def list_class_roles(session: AsyncSession, sc: SchoolClass) -> list[dict]
                 "end_date": affiliation.end_date,
                 "status": affiliation.status,
             }
-            for affiliation in person_holders_result.scalars().all()
+            for affiliation in people_by_position.get(binding.position_id, [])
             if affiliation.person is not None
         ]
         label = CLASS_ROLE_DEFINITIONS.get(binding.role_key, (binding.role_key, [], 0))[0]

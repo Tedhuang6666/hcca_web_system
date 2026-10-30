@@ -445,7 +445,7 @@ async def test_supplement_collection_rejoins_original_class_and_has_own_receipt(
     assert receipt.status_code == 200
     text = "".join(page.extract_text() for page in PdfReader(BytesIO(receipt.content)).pages)
     assert "補收款" in text and "34" in text
-    assert "51" not in text
+    assert _receipt_totals(PdfReader(BytesIO(receipt.content))) == ["34", "34"]
     report = await mc.get("/shop/orders/class-payments")
     assert report.json()[0]["amount"] == 51
     original_after = (await bc.get(f"/shop/orders/{original_id}")).json()
@@ -2392,9 +2392,7 @@ async def test_manager_can_cancel_closed_alumni_order_and_restore_stock(
     assert product.stock_quantity == 2
 
 
-async def test_class_cadre_can_cancel_after_class_order_closure(
-    db_session, authed_client_factory
-):
+async def test_class_cadre_can_cancel_after_class_order_closure(db_session, authed_client_factory):
     sc = await _make_class(db_session)
     cadre = await _bare_user(db_session, student_id="11501")
     buyer = await _bare_user(db_session, student_id="11520")
@@ -2902,7 +2900,8 @@ async def test_class_receipt_contains_all_active_orders_in_class_and_activity(
     assert "收執聯" in text and "存根聯" in text
     assert _receipt_totals(pdf) == ["370", "370"]
     assert text.count("400") == 2
-    assert text.count("優惠折抵") == 2 and text.count("-30") == 2
+    assert text.count("優惠折抵") == 2
+    assert sum(line.strip() == "優惠折抵 -30" for line in text.splitlines()) == 2
     assert text.count("尺寸：L") == 2
     assert text.count("紀念衫") == 2  # 相同規格與成交單價已合併。
     date_fields = []
