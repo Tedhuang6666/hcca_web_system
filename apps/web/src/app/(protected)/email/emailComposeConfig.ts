@@ -4,6 +4,7 @@ import type {
   EmailButtonStyle,
   EmailCardRow,
   EmailConditionalRule,
+  EmailRecipientVariableInput,
   EmailVariableDefinition,
   RecipientSelector,
 } from "@/lib/types";
@@ -125,7 +126,50 @@ export const normalizeVariableKey = (rawName: string) =>
     .slice(0, 64);
 
 /** 逐收件人指定不同內容的一列（表格編輯，取代手寫 JSON） */
-export type RecipientRow = { email: string; name: string; variables: Record<string, string> };
+export type RecipientRow = {
+  email: string;
+  name: string;
+  variables: Record<string, string>;
+  userId?: string;
+};
+
+export function buildRecipientVariablesFromRows(
+  rows: RecipientRow[],
+  definitions: EmailVariableDefinition[],
+): EmailRecipientVariableInput[] {
+  const allowed = new Set(definitions.map((definition) => definition.key.trim()).filter(Boolean));
+  return rows
+    .filter((row) => row.email.trim() || row.userId)
+    .map((row) => ({
+      user_id: row.userId || null,
+      email: row.email.trim() || null,
+      name: row.name.trim() || null,
+      variables: Object.fromEntries(
+        Object.entries(row.variables).filter(([key]) => allowed.has(key)),
+      ),
+    }));
+}
+
+/** Count manual rows that are not already included by the recipient selector. */
+export function countAdditionalRecipientRows(
+  rows: RecipientRow[],
+  selector: RecipientSelector,
+): number {
+  const selectedUserIds = new Set(selector.user_ids ?? []);
+  const selectedEmails = new Set(
+    (selector.external_emails ?? []).map((email) => email.trim().toLowerCase()),
+  );
+
+  return new Set(
+    rows.flatMap((row) => {
+      if (row.userId) {
+        return selectedUserIds.has(row.userId) ? [] : [`user:${row.userId}`];
+      }
+      const email = row.email.trim().toLowerCase();
+      return email && !selectedEmails.has(email) ? [`email:${email}`] : [];
+    }),
+  ).size;
+}
 
 /** 自動暫存的草稿內容（不含收件人） */
 export type ComposeDraft = {

@@ -6,7 +6,7 @@ import type {
   ShopSalesAnalyticsOut,
   ShopSalesReportCreate,
   ClassOrderCreate, ShopDelegatedOrderOut, ShopDelegationCodeOut, ShopDelegationContextOut, ShopDelegationCreate, ShopDelegationOut,
-  ActivityOut, CatalogCategoryOut, ClassPaymentOut, ClassPaymentReportItemOut, CloseStatusOut, OrderListItem, OrderOut, OrderQuantityRow, OrderSummaryOut, ProductCategoryOut, ProductOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut, ShopClassSummaryOut, ShopOrderCloseOut, ShopOrdersClearOut, ShopPromotionCreate, ShopPromotionOut, ShopPromotionPreviewOut, ShopPromotionPublicOut, ShopPromotionUpdate,
+  ActivityOut, CatalogCategoryOut, ClassPaymentOut, ClassPaymentReportItemOut, CloseStatusOut, OrderListItem, OrderOut, OrderQuantityRow, OrderSummaryOut, ProductCategoryOut, ProductOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut, ShopClassRepresentativeRecipientOut, ShopClassSummaryOut, ShopOrderCloseOut, ShopOrdersClearOut, ShopPromotionCreate, ShopPromotionOut, ShopPromotionPreviewOut, ShopPromotionPublicOut, ShopPromotionUpdate,
 } from "../types";
 import { authFetch, BASE, get, post, put, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
 
@@ -188,6 +188,8 @@ export const shopApi = {
       },
     ),
   classPaymentReport: () => get<ClassPaymentReportItemOut[]>("/shop/orders/class-payments"),
+  classRepresentativeReminderTargets: () =>
+    get<ShopClassRepresentativeRecipientOut[]>("/shop/orders/reminder-targets/class-representatives"),
   downloadClassReceipt: async (classId: string, activityId: string | null) => {
     const query = activityId ? `?${new URLSearchParams({ activity_id: activityId })}` : "";
     const response = await authFetch(`${BASE}/shop/orders/classes/${classId}/receipt.pdf${query}`, {

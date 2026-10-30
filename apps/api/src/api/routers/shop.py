@@ -76,6 +76,7 @@ from api.schemas.shop import (
     ProductVariantOptionUpdate,
     ShopActivityDeadlineUpdate,
     ShopActivityOrderClosureUpdate,
+    ShopClassRepresentativeRecipientOut,
     ShopClassSummaryOut,
     ShopDelegatedOrderOut,
     ShopDelegationAccess,
@@ -1173,6 +1174,19 @@ async def list_orders(
         include_testing=await can_test_products(session, current_user),
     )
     return [shop_svc.serialize_order_list_item(o) for o in orders]
+
+
+@router.get(
+    "/orders/reminder-targets/class-representatives",
+    response_model=list[ShopClassRepresentativeRecipientOut],
+    summary="列出目前班代繳款提醒收件人",
+    dependencies=[Depends(require_any(*_ADMIN_VIEW_CODES))],
+)
+async def list_class_representative_reminder_targets(
+    session: DbDep,
+) -> list[ShopClassRepresentativeRecipientOut]:
+    rows = await class_svc.list_class_representative_recipients(session)
+    return [ShopClassRepresentativeRecipientOut(**row) for row in rows]
 
 
 @router.get(

@@ -3,6 +3,22 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { shopApi } from "./shop";
 
 describe("shop quantity API", () => {
+  it("loads active class representative accounts for payment reminders", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify([
+      { class_id: "class-1", class_label: "高一一班", user_id: "rep-1", user_name: "班代" },
+    ]), {
+      headers: { "Content-Type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(shopApi.classRepresentativeReminderTargets()).resolves.toEqual([
+      { class_id: "class-1", class_label: "高一一班", user_id: "rep-1", user_name: "班代" },
+    ]);
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(
+      /\/shop\/orders\/reminder-targets\/class-representatives$/,
+    );
+  });
+
   it("收款用目錄明確保留已結單活動，一般商品目錄沿用隱藏預設", async () => {
     const fetchMock = vi.fn().mockImplementation(async () => new Response("[]", {
       headers: { "Content-Type": "application/json" },

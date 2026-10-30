@@ -140,6 +140,65 @@ async def test_bulk_recipients_without_bulk_permission_returns_403(
 
 
 @pytest.mark.asyncio
+async def test_multiple_explicit_accounts_require_bulk_permission(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    sender = await _seed_user(db_session, "sender-no-bulk@school.edu", ["email:send"])
+    recipients = [
+        await _seed_user(db_session, f"buyer-{index}@school.edu", []) for index in range(2)
+    ]
+    _override_user(sender)
+
+    response = await client.post(
+        "/email/messages",
+        json={
+            "subject": "批次繳款提醒",
+            "action": "draft",
+            "recipients": {"user_ids": [str(recipient.id) for recipient in recipients]},
+        },
+    )
+
+    assert response.status_code == 403
+    assert "email:send_bulk" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_bulk_permission_allows_explicit_accounts_and_single_account_stays_available(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    recipients = [
+        await _seed_user(db_session, f"reminder-target-{index}@school.edu", [])
+        for index in range(2)
+    ]
+    sender = await _seed_user(db_session, "sender-bulk@school.edu", ["email:send_bulk"])
+    _override_user(sender)
+
+    response = await client.post(
+        "/email/messages",
+        json={
+            "subject": "批次繳款提醒",
+            "action": "draft",
+            "recipients": {"user_ids": [str(recipient.id) for recipient in recipients]},
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["status"] == "draft"
+
+    single_sender = await _seed_user(db_session, "sender-single@school.edu", ["email:send"])
+    _override_user(single_sender)
+    single_response = await client.post(
+        "/email/messages",
+        json={
+            "subject": "個別信件",
+            "action": "draft",
+            "recipients": {"user_ids": [str(recipients[0].id)]},
+        },
+    )
+    assert single_response.status_code == 201, single_response.text
+
+
+@pytest.mark.asyncio
 async def test_preview_recipients_resolves_position_members(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:

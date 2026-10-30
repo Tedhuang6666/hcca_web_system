@@ -250,7 +250,13 @@ async def run_preflight(
     users, resolved_emails = await resolve_recipients(
         db, **spec_to_resolve_kwargs(payload.recipient_spec)
     )
-    raw_emails = [*resolved_emails, *[str(row.email) for row in payload.recipient_variables]]
+    resolved_user_ids = {str(user.id) for user in users}
+    external_rows = [
+        row
+        for row in payload.recipient_variables
+        if row.email and str(row.user_id or "") not in resolved_user_ids
+    ]
+    raw_emails = [*resolved_emails, *[str(row.email) for row in external_rows]]
     normalized = [_normalize_email(value) for value in raw_emails if value.strip()]
     counts: dict[str, int] = {}
     for email in normalized:
@@ -269,7 +275,7 @@ async def run_preflight(
                     student_id=user.student_id,
                 )
             )
-    for row in payload.recipient_variables:
+    for row in external_rows:
         normalized_email = _normalize_email(str(row.email))
         if normalized_email in duplicate_recipients_by_email:
             duplicate_recipients_by_email[normalized_email].append(
@@ -296,11 +302,14 @@ async def run_preflight(
         .scalars()
         .all()
     )
-    by_email = {_normalize_email(str(row.email)): row for row in payload.recipient_variables}
+    by_user_id = {str(row.user_id): row for row in payload.recipient_variables if row.user_id}
+    by_email = {
+        _normalize_email(str(row.email)): row for row in payload.recipient_variables if row.email
+    }
     missing_names: list[str] = []
     missing_variables: list[str] = []
     for user, email in zip(users, resolved_emails, strict=False):
-        imported = by_email.get(_normalize_email(email))
+        imported = by_user_id.get(str(user.id)) or by_email.get(_normalize_email(email))
         name = (imported.name if imported else None) or user.display_name
         variables = {
             **definition_defaults,
@@ -315,6 +324,10 @@ async def run_preflight(
         except ValueError as exc:
             missing_variables.append(str(exc))
     for row in payload.recipient_variables:
+        if row.user_id and str(row.user_id) in resolved_user_ids:
+            continue
+        if not row.email:
+            continue
         if not row.name:
             missing_names.append(str(row.email))
         try:

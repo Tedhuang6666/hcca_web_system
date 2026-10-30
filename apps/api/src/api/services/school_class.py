@@ -215,6 +215,37 @@ async def list_class_representative_overview(session: AsyncSession) -> list[dict
     ]
 
 
+async def list_class_representative_recipients(
+    session: AsyncSession,
+) -> list[dict[str, object]]:
+    """列出目前有效班級中有帳號的班代，供具商品檢視權限的提醒流程使用。"""
+    today = local_today()
+    result = await session.execute(
+        select(SchoolClass, User.id, User.display_name)
+        .join(ClassRoleBinding, ClassRoleBinding.class_id == SchoolClass.id)
+        .join(UserPosition, UserPosition.position_id == ClassRoleBinding.position_id)
+        .join(User, User.id == UserPosition.user_id)
+        .where(
+            SchoolClass.is_active.is_(True),
+            ClassRoleBinding.role_key == ClassRoleKey.CLASS_REPRESENTATIVE,
+            UserPosition.start_date <= today,
+            (UserPosition.end_date.is_(None)) | (UserPosition.end_date >= today),
+            User.is_active.is_(True),
+        )
+        .distinct()
+        .order_by(SchoolClass.academic_year.desc(), SchoolClass.class_code, User.display_name)
+    )
+    return [
+        {
+            "class_id": school_class.id,
+            "class_label": class_display_label(school_class) or "未命名班級",
+            "user_id": user_id,
+            "user_name": user_name,
+        }
+        for school_class, user_id, user_name in result.all()
+    ]
+
+
 async def list_recipient_options(session: AsyncSession) -> list[SchoolClass]:
     """回傳可作為公文受文者的現行班級，避免把班級當成自治組織。"""
     result = await session.execute(

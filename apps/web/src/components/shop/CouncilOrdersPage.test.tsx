@@ -4,14 +4,16 @@ import CouncilOrdersPage from "@/app/(protected)/shop/council-orders/page";
 
 const api = vi.hoisted(() => ({
   catalog: vi.fn(), listActivities: vi.fn(), recipientOptions: vi.fn(), orderSummary: vi.fn(), orderQuantities: vi.fn(),
-  classPaymentReport: vi.fn(),
+  classPaymentReport: vi.fn(), classRepresentativeReminderTargets: vi.fn(), createMessage: vi.fn(),
   listSupplementOrders: vi.fn(),
   listOrders: vi.fn(), getCloseStatus: vi.fn(), closeCategory: vi.fn(), reopenCategory: vi.fn(), setClassPaid: vi.fn(),
   cancelOrder: vi.fn(), updateOrderItemQuantity: vi.fn(), downloadClassReceipt: vi.fn(), downloadClassReceipts: vi.fn(), downloadChangedOrderReceipts: vi.fn(),
 }));
 const access = vi.hoisted(() => ({ isAdmin: true, permissions: new Set<string>() }));
 const notifications = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
-vi.mock("@/lib/api", () => ({ shopApi: api, classApi: api, apiErrorMessage: (_: unknown, fallback: string) => fallback }));
+const navigation = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
+vi.mock("@/lib/api", () => ({ shopApi: api, classApi: api, emailApi: api, apiErrorMessage: (_: unknown, fallback: string) => fallback }));
 vi.mock("@/hooks/usePermissions", () => ({ usePermissions: () => access }));
 vi.mock("sonner", () => ({ toast: notifications }));
 
@@ -34,6 +36,8 @@ beforeEach(() => {
   api.recipientOptions.mockResolvedValue([]);
   api.orderSummary.mockResolvedValue(summary());
   api.classPaymentReport.mockResolvedValue([]);
+  api.classRepresentativeReminderTargets.mockResolvedValue([]);
+  api.createMessage.mockResolvedValue({ id: "reminder-draft-id" });
   api.listSupplementOrders.mockResolvedValue([]);
   api.orderQuantities.mockResolvedValue([]);
   api.listOrders.mockResolvedValue([]);
@@ -228,10 +232,67 @@ describe("全校收款與訂單", () => {
   });
 
   const order = {
-    id: "old-order", serial_number: "ORD-TEST", user_name: "測試訂購人", class_label: null,
+    id: "old-order", serial_number: "ORD-TEST", user_id: "buyer-1", user_name: "測試訂購人", class_label: null,
     status: "pending", total_price: 300, is_paid: false, is_class_collected: false,
     created_at: "2026-10-21T00:00:00Z",
   };
+
+  it("creates one personalized reminder for each buyer with eligible unpaid orders", async () => {
+    api.listOrders.mockResolvedValue([
+      { ...order, id: "order-1", serial_number: "ORD-001", total_price: 300 },
+      { ...order, id: "order-2", serial_number: "ORD-002", total_price: 200 },
+      { ...order, id: "collected", user_id: "buyer-2", serial_number: "ORD-COLLECTED", is_class_collected: true },
+      { ...order, id: "paid", user_id: "buyer-3", serial_number: "ORD-PAID", is_paid: true },
+      { ...order, id: "cancelled", user_id: "buyer-4", serial_number: "ORD-CANCELLED", status: "cancelled" },
+    ]);
+    await openPage();
+    fireEvent.click(screen.getByRole("button", { name: "查看待繳訂購人" }));
+    await screen.findByText("ORD-001");
+    fireEvent.click(screen.getByRole("button", { name: "建立訂購人提醒草稿" }));
+
+    await waitFor(() => expect(api.createMessage).toHaveBeenCalledTimes(1));
+    const draft = api.createMessage.mock.calls[0][0];
+    expect(draft.recipients?.user_ids).toEqual(["buyer-1"]);
+    expect(draft.recipient_variables).toEqual([
+      expect.objectContaining({
+        user_id: "buyer-1",
+        variables: {
+          order_details: expect.stringContaining("ORD-001"),
+          unpaid_total: "NT$500",
+          order_count: "2",
+        },
+      }),
+    ]);
+    expect(draft.recipient_variables[0].variables.order_details).toContain("ORD-002");
+    expect(navigation.push).toHaveBeenCalledWith("/email?draft=reminder-draft-id");
+  });
+
+  it("creates personalized reminders for representatives of unpaid classes", async () => {
+    api.orderSummary.mockResolvedValue({
+      ...summary(),
+      rows: [{ key: "class-1", label: "高一一班", order_count: 2, item_count: 2, total_amount: 500, paid_amount: 0, unpaid_amount: 500 }],
+    });
+    api.classRepresentativeReminderTargets.mockResolvedValue([
+      { class_id: "class-1", class_label: "高一一班", user_id: "rep-1", user_name: "班代甲" },
+    ]);
+    await openPage();
+    const createDraft = screen.getByRole("button", { name: "建立班代提醒草稿" });
+    await waitFor(() => expect(createDraft).toBeEnabled());
+    fireEvent.click(createDraft);
+
+    await waitFor(() => expect(api.createMessage).toHaveBeenCalledTimes(1));
+    const draft = api.createMessage.mock.calls[0][0];
+    expect(draft.recipients?.user_ids).toEqual(["rep-1"]);
+    expect(draft.recipient_variables[0]).toMatchObject({
+      user_id: "rep-1",
+      variables: {
+        class_details: "高一一班：NT$500（2 筆）",
+        unpaid_total: "NT$500",
+        class_count: "1",
+      },
+    });
+    expect(navigation.push).toHaveBeenCalledWith("/email?draft=reminder-draft-id");
+  });
 
   async function openOrders(row = order) {
     api.listOrders.mockResolvedValue([row]);

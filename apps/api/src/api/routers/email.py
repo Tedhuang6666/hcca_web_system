@@ -342,7 +342,13 @@ def _spec_from_selector(sel: RecipientSelector) -> dict:
 
 
 def _is_bulk(sel: RecipientSelector) -> bool:
-    return bool(sel.position_ids or sel.org_ids or sel.include_all or sel.include_school)
+    return bool(
+        len(sel.user_ids) + len(sel.external_emails) > 1
+        or sel.position_ids
+        or sel.org_ids
+        or sel.include_all
+        or sel.include_school
+    )
 
 
 def _normalize_external_emails(values: list[str]) -> list[str]:
@@ -594,7 +600,7 @@ async def _resolve_personalized_recipients(
 
 
 async def _ensure_can_send(db: AsyncSession, user: User, sel: RecipientSelector) -> None:
-    """二段權限檢查：寄給職位 / 組織 / 全體需 email:send_bulk。"""
+    """二段權限檢查：批次收件（含明確帳號）需 email:send_bulk。"""
     if not _is_bulk(sel) or user.is_superuser:
         return
     codes = await get_user_permission_codes(db, user.id)
