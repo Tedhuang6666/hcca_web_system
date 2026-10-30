@@ -104,7 +104,7 @@ export default function CouncilOrdersPage() {
   const [grade, setGrade] = useState("");
   const [classId, setClassId] = useState("");
   const [categoryId, setCategoryId] = useState("");
-  const [receiptActivityKey, setReceiptActivityKey] = useState("");
+  const [receiptCategoryId, setReceiptCategoryId] = useState("");
   const [productId, setProductId] = useState("");
   const [isPaid, setIsPaid] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -500,9 +500,6 @@ export default function CouncilOrdersPage() {
     categories: group.categories.filter((category) => category.id === categoryId),
   }));
   const canBatchDownloadReceipts = canConfirmClassPayment && groupBy === "class";
-  const batchReceiptActivityId = receiptActivityKey && receiptActivityKey !== "__general__"
-    ? receiptActivityKey
-    : null;
   const receiptRows = summary?.rows.filter((row) => row.key !== "none") ?? [];
   const allReceiptRowsSelected = receiptRows.length > 0
     && receiptRows.every((row) => selectedReceiptClasses.has(row.key));
@@ -511,7 +508,7 @@ export default function CouncilOrdersPage() {
   const resetFilters = () => {
     setGrade(""); setClassId(""); setCategoryId(""); setProductId("");
     setIsPaid(""); setStatusFilter(""); setDateFrom(""); setDateTo(""); setSearch("");
-    setReceiptActivityKey("");
+    setReceiptCategoryId("");
     setSelectedReceiptClasses(new Set());
   };
   const scopeLabels = [
@@ -570,8 +567,7 @@ export default function CouncilOrdersPage() {
             <select className="input" value={categoryId} onChange={(e) => {
               setCategoryId(e.target.value);
               setProductId("");
-              setReceiptActivityKey(e.target.value
-                ? catalog.find((category) => category.id === e.target.value)?.activity_id ?? "__general__" : "");
+              setReceiptCategoryId(e.target.value);
               setSelectedReceiptClasses(new Set());
             }}>
               <option value="">全部活動</option>
@@ -882,17 +878,16 @@ export default function CouncilOrdersPage() {
                   收據範圍
                   <select
                     className="input min-h-11"
-                    aria-label="收據活動"
-                    value={receiptActivityKey}
+                    aria-label="收據主題"
+                    value={receiptCategoryId}
                     onChange={(event) => {
-                      setReceiptActivityKey(event.target.value);
+                      setReceiptCategoryId(event.target.value);
                       setSelectedReceiptClasses(new Set());
                     }}
                   >
-                    <option value="">請選擇活動或一般商品</option>
-                    <option value="__general__">一般商品</option>
-                    {activityGroups.filter((group) => group.activityId).map((group) => (
-                      <option key={group.key} value={group.key}>{group.label}</option>
+                    <option value="">請選擇商品主題</option>
+                    {catalog.map((category) => (
+                      <option key={category.id} value={category.id}>{category.name}</option>
                     ))}
                   </select>
                 </label>
@@ -902,30 +897,32 @@ export default function CouncilOrdersPage() {
                 <AnimatedDownloadButton
                   request={() => {
                     setReceiptError("");
-                    return shopApi.downloadClassReceipts(batchReceiptActivityId, [...selectedReceiptClasses]);
+                    return shopApi.downloadClassReceipts(
+                      { category_id: receiptCategoryId }, [...selectedReceiptClasses]
+                    );
                   }}
                   label={`下載所選 ${selectedReceiptClasses.size} 班 PDF`}
-                  disabled={mutationBusy || loading || !receiptActivityKey || selectedReceiptClasses.size === 0}
+                  disabled={mutationBusy || loading || !receiptCategoryId || selectedReceiptClasses.size === 0}
                   className="btn btn-secondary min-h-11 px-3 text-xs disabled:opacity-50"
                   onError={(error) => setReceiptError(apiErrorMessage(error, "簽收單下載失敗，請重試。"))}
                 />
                 <AnimatedDownloadButton
                   request={() => {
                     setReceiptError("");
-                    return shopApi.downloadClassReceipts(batchReceiptActivityId, undefined, true);
+                    return shopApi.downloadClassReceipts({ category_id: receiptCategoryId }, undefined, true);
                   }}
                   label="列印所有未繳款班級／個人收據"
-                  disabled={mutationBusy || loading || !receiptActivityKey}
+                  disabled={mutationBusy || loading || !receiptCategoryId}
                   className="btn btn-ghost min-h-11 px-3 text-xs disabled:opacity-50"
                   onError={(error) => setReceiptError(apiErrorMessage(error, "簽收單下載失敗，請重試。"))}
                 />
                 <AnimatedDownloadButton
                   request={() => {
                     setReceiptError("");
-                    return shopApi.downloadChangedOrderReceipts(batchReceiptActivityId);
+                    return shopApi.downloadChangedOrderReceipts({ category_id: receiptCategoryId });
                   }}
                   label="列印上次列印後有變更的班級／個人訂單"
-                  disabled={mutationBusy || loading || !receiptActivityKey}
+                  disabled={mutationBusy || loading || !receiptCategoryId}
                   className="btn btn-ghost min-h-11 px-3 text-xs disabled:opacity-50"
                   onError={(error) => setReceiptError(apiErrorMessage(error, "簽收單下載失敗，請重試。"))}
                 />

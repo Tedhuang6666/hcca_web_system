@@ -576,7 +576,10 @@ class ClassPaymentUpdate(BaseModel):
 
 
 class ClassReceiptBatchCreate(BaseModel):
-    activity_id: uuid.UUID | None = Field(description="收據活動；null 代表一般商品")
+    activity_id: uuid.UUID | None = Field(
+        default=None, description="收據活動；保留相容舊呼叫，null 時依主題或一般商品處理"
+    )
+    category_id: uuid.UUID | None = Field(default=None, description="收據商品主題")
     class_ids: list[uuid.UUID] | None = Field(
         default=None,
         min_length=1,
@@ -590,7 +593,10 @@ class ClassReceiptBatchCreate(BaseModel):
 
 
 class ChangedOrderReceiptCreate(BaseModel):
-    activity_id: uuid.UUID | None = Field(description="收據活動；null 代表一般商品")
+    activity_id: uuid.UUID | None = Field(
+        default=None, description="收據活動；保留相容舊呼叫，null 時依主題或一般商品處理"
+    )
+    category_id: uuid.UUID | None = Field(default=None, description="收據商品主題")
 
 
 class ClassCollectionUpdate(BaseModel):

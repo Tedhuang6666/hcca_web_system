@@ -3008,6 +3008,72 @@ async def test_class_receipt_batch_combines_selected_classes_and_all_classes(
     assert sorted(_receipt_totals(all_pdf)) == ["100", "100", "300", "300", "50", "50"]
 
 
+async def test_receipt_batch_and_changed_downloads_scope_to_product_topic(
+    db_session, authed_client_factory, monkeypatch
+) -> None:
+    from io import BytesIO
+
+    from pypdf import PdfReader
+
+    from api.services.shop import _receipts
+
+    school_class = await _make_class(db_session)
+    buyer = await _bare_user(db_session)
+    manager = await _bare_user(db_session)
+    await _grant_permission(db_session, manager, "shop:manage_orders")
+    activity = Activity(name="同活動", status=ActivityStatus.ACTIVE)
+    db_session.add(activity)
+    await db_session.flush()
+    topic_a = await _make_category(db_session, manager, activity_id=activity.id, name="主題甲")
+    topic_b = await _make_category(db_session, manager, activity_id=activity.id, name="主題乙")
+    products = [
+        await _make_active_product(db_session, manager, price=100, category=topic_a),
+        await _make_active_product(db_session, manager, price=200, category=topic_b),
+    ]
+    orders = [
+        await _seed_order(db_session, buyer, class_id=school_class.id, total_price=amount)
+        for amount in (100, 200)
+    ]
+    for order, topic, product in zip(orders, (topic_a, topic_b), products, strict=True):
+        order.activity_id = activity.id
+        order.category_id = topic.id
+        db_session.add(
+            OrderItem(
+                order_id=order.id,
+                product_id=product.id,
+                quantity=1,
+                unit_price=order.total_price,
+                selected_options=[],
+            )
+        )
+    await db_session.flush()
+
+    client = authed_client_factory(manager)
+    batch = await client.post(
+        "/shop/orders/classes/receipts.pdf",
+        json={"category_id": str(topic_a.id), "class_ids": [str(school_class.id)]},
+    )
+    assert batch.status_code == 200, batch.text
+    batch_pdf = PdfReader(BytesIO(batch.content))
+    batch_text = "".join(page.extract_text() for page in batch_pdf.pages)
+    assert "主題甲" in batch_text and "主題乙" not in batch_text
+    assert _receipt_totals(batch_pdf) == ["100", "100"]
+
+    first_print = datetime.now(UTC) + timedelta(seconds=1)
+    monkeypatch.setattr(_receipts, "now_local", lambda: first_print)
+    orders[0].total_price = 125
+    orders[0].updated_at = first_print + timedelta(seconds=1)
+    await db_session.flush()
+    changed = await client.post(
+        "/shop/orders/receipts/changed.pdf", json={"category_id": str(topic_a.id)}
+    )
+    assert changed.status_code == 200, changed.text
+    changed_pdf = PdfReader(BytesIO(changed.content))
+    changed_text = "".join(page.extract_text() for page in changed_pdf.pages)
+    assert "主題甲" in changed_text and "主題乙" not in changed_text
+    assert _receipt_totals(changed_pdf) == ["125", "125"]
+
+
 @pytest.mark.parametrize("with_activity", [False, True])
 async def test_unpaid_receipts_include_individual_and_supplement_orders_without_classes(
     db_session, authed_client_factory, client, with_activity

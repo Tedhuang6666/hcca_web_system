@@ -14764,9 +14764,14 @@ export interface components {
         ChangedOrderReceiptCreate: {
             /**
              * Activity Id
-             * @description 收據活動；null 代表一般商品
+             * @description 收據活動；保留相容舊呼叫，null 時依主題或一般商品處理
              */
-            activity_id: string | null;
+            activity_id?: string | null;
+            /**
+             * Category Id
+             * @description 收據商品主題
+             */
+            category_id?: string | null;
         };
         /**
          * ChannelPref
@@ -15149,9 +15154,14 @@ export interface components {
         ClassReceiptBatchCreate: {
             /**
              * Activity Id
-             * @description 收據活動；null 代表一般商品
+             * @description 收據活動；保留相容舊呼叫，null 時依主題或一般商品處理
              */
-            activity_id: string | null;
+            activity_id?: string | null;
+            /**
+             * Category Id
+             * @description 收據商品主題
+             */
+            category_id?: string | null;
             /**
              * Class Ids
              * @description 指定班級；未提供時依匯出選項選取班級
