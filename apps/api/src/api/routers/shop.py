@@ -2244,7 +2244,11 @@ async def get_close_status(
 ) -> CloseStatusOut:
     from api.services import school_class as class_svc_inner
 
-    own_class = await class_svc_inner.resolve_user_class(session, current_user)
+    # 管理員一次查詢多個班級時，指定的 class_id 已足夠決定資料範圍；
+    # 一般使用者仍需解析自己的班級，才能判斷是否可顯示收款細節。
+    own_class = None
+    if class_id is None or not current_user.is_superuser:
+        own_class = await class_svc_inner.resolve_user_class(session, current_user)
     if class_id is None:
         class_id = own_class.id if own_class else None
 

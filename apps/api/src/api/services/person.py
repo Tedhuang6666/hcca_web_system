@@ -528,23 +528,65 @@ async def sync_people_from_existing_data(db: AsyncSession) -> None:
             )
         ).all()
     )
+    positions = {
+        position.id: position
+        for position in await db.scalars(
+            select(Position).where(Position.id.in_({item.position_id for item in user_positions}))
+        )
+    }
+    # 列表每次載入都會補同步；先讀取既有歸屬，避免逐帳號／班級重查同一份資料。
+    affiliations_by_scope = {
+        (
+            item.person_id,
+            item.kind,
+            item.class_id,
+            item.org_id,
+            item.position_id,
+            item.role_key,
+        ): item
+        for item in await db.scalars(
+            select(PersonAffiliation).where(
+                PersonAffiliation.person_id.in_(
+                    [person.id for person in people_by_user_id.values()]
+                ),
+                PersonAffiliation.status.in_(
+                    [PersonAffiliationStatus.ACTIVE, PersonAffiliationStatus.PENDING_USER]
+                ),
+            )
+        )
+    }
     for user_position in user_positions:
         user = users_by_id.get(user_position.user_id)
         if user is None:
             continue
-        affiliation = await record_affiliation_for_user_position(
-            db,
-            user=user,
-            kind=PersonAffiliationKind.ORG_POSITION,
-            position_id=user_position.position_id,
-            start_date=user_position.start_date,
-            end_date=user_position.end_date,
-            synced_user_position_id=user_position.id,
-            source=PersonAffiliationSource.RBAC_SYNC,
+        position = positions.get(user_position.position_id)
+        scope = (
+            people_by_user_id[user.id].id,
+            PersonAffiliationKind.ORG_POSITION,
+            None,
+            position.org_id if position else None,
+            user_position.position_id,
+            None,
         )
+        affiliation = affiliations_by_scope.get(scope)
+        if affiliation is None or affiliation.status == PersonAffiliationStatus.ENDED:
+            affiliation = await record_affiliation_for_user_position(
+                db,
+                user=user,
+                kind=PersonAffiliationKind.ORG_POSITION,
+                position_id=user_position.position_id,
+                start_date=user_position.start_date,
+                end_date=user_position.end_date,
+                synced_user_position_id=user_position.id,
+                source=PersonAffiliationSource.RBAC_SYNC,
+            )
+            affiliations_by_scope[scope] = affiliation
+        elif affiliation.synced_user_position_id is None:
+            affiliation.synced_user_position_id = user_position.id
         if user_position.end_date is not None and user_position.end_date < local_today():
             affiliation.status = PersonAffiliationStatus.ENDED
             await db.flush()
+    await db.flush()
 
     memberships = list(
         (
@@ -556,11 +598,33 @@ async def sync_people_from_existing_data(db: AsyncSession) -> None:
             )
         ).all()
     )
+    cadres = list(
+        (await db.scalars(select(ClassCadre).where(ClassCadre.user_id.in_(user_ids)))).all()
+    )
+    classes = {
+        school_class.id: school_class
+        for school_class in await db.scalars(
+            select(SchoolClass).where(
+                SchoolClass.id.in_({item.class_id for item in [*memberships, *cadres]})
+            )
+        )
+    }
     for membership in memberships:
         person = people_by_user_id.get(membership.user_id)
         if person is None:
             continue
-        await create_affiliation(
+        school_class = classes.get(membership.class_id)
+        scope = (
+            person.id,
+            PersonAffiliationKind.CLASS_MEMBER,
+            membership.class_id,
+            school_class.org_id if school_class else None,
+            None,
+            None,
+        )
+        if scope in affiliations_by_scope:
+            continue
+        affiliations_by_scope[scope] = await create_affiliation(
             db,
             data=PersonAffiliationCreate(
                 person_id=person.id,
@@ -573,17 +637,43 @@ async def sync_people_from_existing_data(db: AsyncSession) -> None:
             ),
         )
 
-    cadres = list(
-        (await db.scalars(select(ClassCadre).where(ClassCadre.user_id.in_(user_ids)))).all()
+    cadre_bindings = {
+        binding.class_id: binding
+        for binding in await db.scalars(
+            select(ClassRoleBinding).where(
+                ClassRoleBinding.class_id.in_({cadre.class_id for cadre in cadres}),
+                ClassRoleBinding.role_key == "class_cadre",
+            )
+        )
+    }
+    positions.update(
+        (position.id, position)
+        for position in await db.scalars(
+            select(Position).where(
+                Position.id.in_({binding.position_id for binding in cadre_bindings.values()})
+            )
+        )
     )
     for cadre in cadres:
         person = people_by_user_id.get(cadre.user_id)
         if person is None:
             continue
-        school_class = await db.get(SchoolClass, cadre.class_id)
+        school_class = classes.get(cadre.class_id)
         if school_class is None:
             continue
-        await create_affiliation(
+        binding = cadre_bindings.get(cadre.class_id)
+        position = positions.get(binding.position_id) if binding else None
+        scope = (
+            person.id,
+            PersonAffiliationKind.CLASS_ROLE,
+            school_class.id,
+            school_class.org_id or (position.org_id if position else None),
+            binding.position_id if binding else None,
+            "class_cadre",
+        )
+        if scope in affiliations_by_scope:
+            continue
+        affiliations_by_scope[scope] = await create_affiliation(
             db,
             data=PersonAffiliationCreate(
                 person_id=person.id,

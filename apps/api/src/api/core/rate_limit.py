@@ -9,6 +9,7 @@ import time
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 
+from fastapi.routing import iter_route_contexts
 from redis.exceptions import RedisError
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -162,7 +163,9 @@ class SimpleRateLimitMiddleware:
             routes = getattr(router, "routes", None)
             if routes:
                 patterns: dict[str, list[tuple[re.Pattern[str], str]]] = {}
-                for route in routes:
+                # include_router() 在目前 FastAPI 版本保留延遲掛載的 router；
+                # 必須展開有效路由，才會包含巢狀 include 的完整 prefix。
+                for route in iter_route_contexts(routes):
                     route_path = getattr(route, "path", None)
                     path_regex = getattr(route, "path_regex", None)
                     if not isinstance(route_path, str) or path_regex is None:
