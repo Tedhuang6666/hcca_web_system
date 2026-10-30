@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.core.clock import local_today
-from api.models.activity import Activity
 from api.models.org import UserPosition
 from api.models.school_class import ClassCadre, ClassRoleBinding, ClassRoleKey, SchoolClass
 from api.models.shop import Order, OrderItem, OrderStatus
@@ -66,7 +65,6 @@ async def queue_class_payment_confirmation(
     if not cadre_emails:
         return
 
-    activity = await session.get(Activity, activity_id) if activity_id else None
     activity_filter = (
         Order.activity_id.is_(None) if activity_id is None else Order.activity_id == activity_id
     )
@@ -82,6 +80,7 @@ async def queue_class_payment_confirmation(
                 )
                 .options(
                     selectinload(Order.user),
+                    selectinload(Order.category),
                     selectinload(Order.items).selectinload(OrderItem.product),
                 )
                 .order_by(Order.created_at, Order.id)
@@ -91,6 +90,13 @@ async def queue_class_payment_confirmation(
     if not orders:
         return
 
+    topic_names = sorted(
+        {
+            order.category.name.strip()
+            for order in orders
+            if order.category is not None and order.category.name.strip()
+        }
+    )
     order_details = [
         {
             "serial_number": order.serial_number,
@@ -117,7 +123,7 @@ async def queue_class_payment_confirmation(
         payload={
             "cadre_emails": cadre_emails,
             "class_label": class_display_label(school_class) or school_class.class_code,
-            "activity_name": activity.name if activity else "一般商品",
+            "topic_names": topic_names,
             "orders": order_details,
         },
     )

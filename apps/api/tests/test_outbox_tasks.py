@@ -181,7 +181,7 @@ def test_shop_class_payment_confirmation_emails_cadre_with_concise_summary(
         {
             "cadre_emails": ["cadre@example.com"],
             "class_label": "<115 班>",
-            "activity_name": "校慶商品",
+            "topic_names": ["紀念服飾<script>", "紀念用品"],
             "orders": [
                 {
                     "serial_number": "ORD-TEST-001",
@@ -205,8 +205,11 @@ def test_shop_class_payment_confirmation_emails_cadre_with_concise_summary(
     assert len(messages) == 1
     assert messages[0][0] == "cadre@example.com"
     assert "班聯收款確認" in str(messages[0][1])
+    assert "紀念服飾<script>" in str(messages[0][1])
+    assert "紀念用品" in str(messages[0][1])
     body = str(messages[0][2])
     assert "有效訂單 1 筆，訂購總額 NT$ 100。" in body
+    assert "商品主題「紀念服飾&lt;script&gt;、紀念用品」" in body
     assert "/shop/class-orders" in body
     assert "查看班級訂單" in body
     assert "&lt;115 班&gt;" in body
