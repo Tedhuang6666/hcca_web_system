@@ -365,7 +365,7 @@ async def order_summary(
 
 
 async def class_payment_report(session: AsyncSession) -> list[ClassPaymentReportItemOut]:
-    """列出班級收款及獨立補收訂單，分別依各自確認時間計算。"""
+    """依年級、班級排序列出收款，獨立補收訂單排在班級收款之後。"""
     result = await session.execute(
         select(
             ShopClassPayment.id,
@@ -408,9 +408,11 @@ async def class_payment_report(session: AsyncSession) -> list[ClassPaymentReport
             Activity.name,
         )
         .order_by(
-            ShopClassPayment.confirmed_at.desc(),
             SchoolClass.grade,
             SchoolClass.class_code,
+            SchoolClass.id,
+            ShopClassPayment.confirmed_at.desc(),
+            ShopClassPayment.id,
         )
     )
     rows = [
@@ -458,6 +460,13 @@ async def class_payment_report(session: AsyncSession) -> list[ClassPaymentReport
             Order.paid_at.is_not(None),
             Order.status.notin_((OrderStatus.CANCELLED, OrderStatus.REFUNDED)),
         )
+        .order_by(
+            SchoolClass.grade,
+            SchoolClass.class_code,
+            SchoolClass.id,
+            Order.paid_at.desc(),
+            Order.id,
+        )
     )
     rows.extend(
         ClassPaymentReportItemOut(
@@ -483,11 +492,7 @@ async def class_payment_report(session: AsyncSession) -> list[ClassPaymentReport
         ) in individual_result.all()
         if class_id is not None and paid_at is not None
     )
-    return sorted(
-        rows,
-        key=lambda row: (row.confirmed_at, row.collection_type, row.class_label),
-        reverse=True,
-    )
+    return rows
 
 
 async def order_quantities(
