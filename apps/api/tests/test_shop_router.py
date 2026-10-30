@@ -447,7 +447,18 @@ async def test_supplement_collection_rejoins_original_class_and_has_own_receipt(
     assert "補收款" in text and "34" in text
     assert _receipt_totals(PdfReader(BytesIO(receipt.content))) == ["34", "34"]
     report = await mc.get("/shop/orders/class-payments")
-    assert report.json()[0]["amount"] == 51
+    report_rows = report.json()
+    assert sum(row["amount"] for row in report_rows) == 51
+    class_payment = next(row for row in report_rows if row["collection_type"] == "class")
+    individual_payment = next(
+        row for row in report_rows if row["collection_type"] == "individual_order"
+    )
+    assert class_payment["amount"] == 17
+    assert class_payment["order_count"] == 1
+    assert individual_payment["record_id"] == sid
+    assert individual_payment["amount"] == 34
+    assert individual_payment["order_count"] == 1
+    assert individual_payment["confirmed_at"] == confirmed.json()["paid_at"]
     original_after = (await bc.get(f"/shop/orders/{original_id}")).json()
     assert original_after["is_paid"] and original_after["total_price"] == 17
     receivable = await db_session.scalar(
@@ -2666,6 +2677,8 @@ async def test_class_payment_report_summarizes_confirmed_valid_orders(
     assert rows[0]["class_label"] == class_svc.class_display_label(school_class)
     assert rows[0]["grade"] == school_class.grade
     assert rows[0]["activity_id"] is None
+    assert rows[0]["record_id"]
+    assert rows[0]["collection_type"] == "class"
     assert rows[0]["activity_label"] == "一般商品"
     assert rows[0]["confirmed_at"] is not None
     assert rows[0]["amount"] == 100

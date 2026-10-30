@@ -615,6 +615,8 @@ class ClassPaymentOut(BaseModel):
 
 
 class ClassPaymentReportItemOut(BaseModel):
+    record_id: uuid.UUID
+    collection_type: Literal["class", "individual_order"]
     class_id: uuid.UUID
     class_label: str
     grade: int

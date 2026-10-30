@@ -365,9 +365,10 @@ async def order_summary(
 
 
 async def class_payment_report(session: AsyncSession) -> list[ClassPaymentReportItemOut]:
-    """列出班聯目前確認收款的班級／活動及其有效已繳訂單金額。"""
+    """列出班級收款及獨立補收訂單，分別依各自確認時間計算。"""
     result = await session.execute(
         select(
+            ShopClassPayment.id,
             ShopClassPayment.class_id,
             SchoolClass,
             ShopClassPayment.activity_id,
@@ -384,6 +385,7 @@ async def class_payment_report(session: AsyncSession) -> list[ClassPaymentReport
                 Order.class_id == ShopClassPayment.class_id,
                 Order.activity_id.is_not_distinct_from(ShopClassPayment.activity_id),
                 Order.test_product_id.is_(None),
+                Order.supplement_class_id.is_(None),
                 Order.is_paid.is_(True),
                 Order.status.notin_((OrderStatus.CANCELLED, OrderStatus.REFUNDED)),
             ),
@@ -411,8 +413,10 @@ async def class_payment_report(session: AsyncSession) -> list[ClassPaymentReport
             SchoolClass.class_code,
         )
     )
-    return [
+    rows = [
         ClassPaymentReportItemOut(
+            record_id=payment_id,
+            collection_type="class",
             class_id=class_id,
             class_label=class_svc.class_display_label(school_class) or "未命名班級",
             grade=school_class.grade,
@@ -423,6 +427,7 @@ async def class_payment_report(session: AsyncSession) -> list[ClassPaymentReport
             order_count=int(order_count),
         )
         for (
+            payment_id,
             class_id,
             school_class,
             activity_id,
@@ -433,6 +438,56 @@ async def class_payment_report(session: AsyncSession) -> list[ClassPaymentReport
         ) in result.all()
         if confirmed_at is not None
     ]
+
+    individual_result = await session.execute(
+        select(
+            Order.id,
+            Order.supplement_class_id,
+            SchoolClass,
+            Order.activity_id,
+            Activity.name,
+            Order.paid_at,
+            Order.total_price,
+        )
+        .join(SchoolClass, SchoolClass.id == Order.supplement_class_id)
+        .outerjoin(Activity, Activity.id == Order.activity_id)
+        .where(
+            Order.supplement_class_id.is_not(None),
+            Order.test_product_id.is_(None),
+            Order.is_paid.is_(True),
+            Order.paid_at.is_not(None),
+            Order.status.notin_((OrderStatus.CANCELLED, OrderStatus.REFUNDED)),
+        )
+    )
+    rows.extend(
+        ClassPaymentReportItemOut(
+            record_id=order_id,
+            collection_type="individual_order",
+            class_id=class_id,
+            class_label=class_svc.class_display_label(school_class) or "未命名班級",
+            grade=school_class.grade,
+            activity_id=activity_id,
+            activity_label=activity_name or "一般商品",
+            confirmed_at=paid_at,
+            amount=int(amount),
+            order_count=1,
+        )
+        for (
+            order_id,
+            class_id,
+            school_class,
+            activity_id,
+            activity_name,
+            paid_at,
+            amount,
+        ) in individual_result.all()
+        if class_id is not None and paid_at is not None
+    )
+    return sorted(
+        rows,
+        key=lambda row: (row.confirmed_at, row.collection_type, row.class_label),
+        reverse=True,
+    )
 
 
 async def order_quantities(

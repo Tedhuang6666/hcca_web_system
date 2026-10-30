@@ -69,28 +69,37 @@ describe("全校收款與訂單", () => {
     const now = new Date();
     api.classPaymentReport.mockResolvedValue([
       {
+        record_id: "class-payment-one-festival", collection_type: "class",
         class_id: "class-one", class_label: "一年一班", grade: 1, activity_id: "festival",
         activity_label: "校慶", confirmed_at: now.toISOString(), amount: 100, order_count: 2,
       },
       {
+        record_id: "class-payment-one-winter", collection_type: "class",
         class_id: "class-one", class_label: "一年一班", grade: 1, activity_id: "winter",
         activity_label: "冬季活動", confirmed_at: now.toISOString(), amount: 50, order_count: 1,
       },
       {
+        record_id: "class-payment-two-festival", collection_type: "class",
         class_id: "class-two", class_label: "二年一班", grade: 2, activity_id: "festival",
         activity_label: "校慶", confirmed_at: now.toISOString(), amount: 300, order_count: 3,
       },
       {
+        record_id: "class-payment-old", collection_type: "class",
         class_id: "class-old", class_label: "三年一班", grade: 3, activity_id: "festival",
         activity_label: "校慶", confirmed_at: new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString(),
         amount: 900, order_count: 4,
+      },
+      {
+        record_id: "individual-order-one", collection_type: "individual_order",
+        class_id: "class-one", class_label: "一年一班", grade: 1, activity_id: "festival",
+        activity_label: "校慶", confirmed_at: now.toISOString(), amount: 25, order_count: 1,
       },
     ]);
     await openPage();
 
     const report = screen.getByRole("region", { name: "每日收款" });
     const statistics = within(report).getByRole("group", { name: "收款統計" });
-    expect(within(statistics).getByText("NT$450")).toBeVisible();
+    expect(within(statistics).getByText("NT$475")).toBeVisible();
     expect(within(statistics).getByText("2 班")).toBeVisible();
     fireEvent.change(within(report).getByRole("combobox", { name: "收款活動" }), {
       target: { value: "festival" },
@@ -102,17 +111,23 @@ describe("全校收款與訂單", () => {
       target: { value: "一年一班" },
     });
 
-    expect(within(statistics).getByText("NT$100")).toBeVisible();
+    expect(within(statistics).getByText("NT$125")).toBeVisible();
     expect(within(statistics).getByText("1 班")).toBeVisible();
-    const details = within(report).getByRole("table", { name: "收款班級明細" });
+    const details = within(report).getByRole("table", { name: "收款明細" });
     expect(details).toHaveTextContent("校慶");
+    expect(within(details).getByText("一年一班（個人訂單）")).toBeVisible();
     expect(within(details).queryByText("冬季活動")).not.toBeInTheDocument();
   });
 
   it("已確認收款的班級顯示狀態，不再顯示確認按鈕", async () => {
     api.classPaymentReport.mockResolvedValue([{
+      record_id: "class-payment", collection_type: "class",
       class_id: "class", class_label: "一年一班", grade: 1, activity_id: "festival",
       activity_label: "校慶", confirmed_at: new Date().toISOString(), amount: 100, order_count: 1,
+    }, {
+      record_id: "individual-order", collection_type: "individual_order",
+      class_id: "class", class_label: "一年一班", grade: 1, activity_id: "festival",
+      activity_label: "校慶", confirmed_at: new Date().toISOString(), amount: 25, order_count: 1,
     }]);
     await openPage();
 

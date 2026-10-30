@@ -265,6 +265,7 @@ export default function CouncilOrdersPage() {
   const classPaymentByScope = useMemo(() => {
     const paymentsByScope = new Map<string, ClassPaymentReportItemOut>();
     for (const payment of classPayments) {
+      if (payment.collection_type === "individual_order") continue;
       paymentsByScope.set(
         `${payment.class_id}:${payment.activity_id ?? "__general__"}`,
         payment,
@@ -909,7 +910,7 @@ export default function CouncilOrdersPage() {
                     每日收款
                   </h2>
                   <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
-                    預設顯示今天；金額依目前有效的班聯已確認訂單計算。
+                    預設顯示今天；班級依班聯確認時間計算，獨立收款的個人訂單依逐筆確認時間列入。
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -1025,7 +1026,7 @@ export default function CouncilOrdersPage() {
                     </p>
                   ) : (
                     <div className="overflow-x-auto rounded-md" style={{ border: "1px solid var(--border)" }}>
-                      <table className="shop-mobile-table w-full min-w-[680px] text-sm" aria-label="收款班級明細">
+                      <table className="shop-mobile-table w-full min-w-[680px] text-sm" aria-label="收款明細">
                         <thead>
                           <tr style={{ borderBottom: "1px solid var(--border)" }}>
                             {["收款時間", "班級", "年級", "活動／商品", "訂單數", "收款金額"].map((label) => (
@@ -1036,13 +1037,15 @@ export default function CouncilOrdersPage() {
                         </thead>
                         <tbody>
                           {visibleClassPayments.map((payment) => (
-                            <tr key={`${payment.class_id}:${payment.activity_id ?? "__general__"}`}
+                            <tr key={`${payment.collection_type}:${payment.record_id}`}
                               style={{ borderBottom: "1px solid var(--border)" }}>
                               <td data-label="收款時間" className="px-3 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>
                                 {taipeiDateTime(payment.confirmed_at)}
                               </td>
                               <td data-label="班級" className="px-3 py-3 font-medium" style={{ color: "var(--text-primary)" }}>
-                                {payment.class_label}
+                                {payment.collection_type === "individual_order"
+                                  ? `${payment.class_label}（個人訂單）`
+                                  : payment.class_label}
                               </td>
                               <td data-label="年級" className="px-3 py-3" style={{ color: "var(--text-secondary)" }}>
                                 {payment.grade} 年級

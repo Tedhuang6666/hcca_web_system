@@ -15145,6 +15145,11 @@ export interface components {
             /** Class Label */
             class_label: string;
             /**
+             * Collection Type
+             * @enum {string}
+             */
+            collection_type: "class" | "individual_order";
+            /**
              * Confirmed At
              * Format: date-time
              */
@@ -15153,6 +15158,11 @@ export interface components {
             grade: number;
             /** Order Count */
             order_count: number;
+            /**
+             * Record Id
+             * Format: uuid
+             */
+            record_id: string;
         };
         /** ClassPaymentUpdate */
         ClassPaymentUpdate: {
