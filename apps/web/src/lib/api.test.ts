@@ -227,6 +227,36 @@ describe("API helpers", () => {
     vi.unstubAllGlobals();
   });
 
+  it("retains timeouts with evidence of background suspension and late timers", async () => {
+    vi.mocked(reportClientError).mockClear();
+    vi.useFakeTimers();
+    let now = 0;
+    const clock = vi.spyOn(performance, "now").mockImplementation(() => now);
+    const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    vi.stubGlobal("fetch", vi.fn((_input: string, init: RequestInit) => new Promise((_resolve, reject) => {
+      init.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+    })));
+    try {
+      const pending = fetchWithRetry("/admin/navigation-profiles/me", {}, {}, 0);
+      const assertion = expect(pending).rejects.toThrow("後端 API 回應逾時");
+      now = 90_000;
+      visibility.mockReturnValue("visible");
+      document.dispatchEvent(new Event("visibilitychange"));
+      now = 112_000;
+      await vi.advanceTimersByTimeAsync(15_000);
+      await assertion;
+      expect(reportClientError).toHaveBeenCalledWith(expect.objectContaining({
+        scope: "api.timeout",
+        diagnostics: expect.objectContaining({
+          visibility_at_start: "hidden", request_elapsed_ms: 112_000,
+          request_hidden_ms: 90_000, timeout_timer_delay_ms: 97_000,
+        }),
+      }));
+    } finally {
+      clock.mockRestore(); visibility.mockRestore(); vi.useRealTimers(); vi.unstubAllGlobals();
+    }
+  });
+
   it("reports network failures with a query-free API path and retry context", async () => {
     vi.mocked(reportClientError).mockClear();
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));

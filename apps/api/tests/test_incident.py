@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from datetime import UTC, datetime, timedelta
 from io import StringIO
 from uuid import uuid4
@@ -248,6 +249,33 @@ async def test_export_incidents_csv_contains_event_timeline(
     assert slow_query["slow_query_template"] == "SELECT * FROM survey_answers WHERE survey_id = ?"
     assert slow_query["slow_query_max_ms"] == "1234.5"
     assert slow_query["severity"] == IncidentSeverity.P2
+
+
+async def test_slow_query_export_keeps_predicates_and_correlation(db_session: AsyncSession) -> None:
+    template = "SELECT " + ", ".join(f"orders.column_{i}" for i in range(30))
+    template += " FROM orders WHERE orders.class_id = ? GROUP BY orders.activity_id"
+    report = await export_incidents_csv(
+        db_session,
+        slow_queries=[
+            {
+                "template": template,
+                "max_ms": 1_097.4,
+                "occurrences": 3,
+                "fingerprint": "e" * 64,
+                "template_truncated": False,
+                "measurement": "sqlalchemy_cursor_wall_time",
+                "threshold_ms": 50,
+                "max_trace_id": "a" * 32,
+                "max_request_path": "/shop/close-status",
+            }
+        ],
+    )
+    row = next(csv.DictReader(StringIO(report)))
+    assert row["slow_query_template"] == template
+    evidence = json.loads(row["event_timeline"])[0]["details"]
+    assert evidence["max_trace_id"] == "a" * 32
+    assert evidence["measurement"] == "sqlalchemy_cursor_wall_time"
+    assert evidence["template_truncated"] is False
 
 
 async def test_export_excludes_closed_history_before_applying_limit(db_session) -> None:

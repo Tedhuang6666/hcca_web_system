@@ -15616,8 +15616,12 @@ export interface components {
             csp_line_number?: number | null;
             /** Csp Source Origin */
             csp_source_origin?: string | null;
+            /** Document Ready State */
+            document_ready_state?: string | null;
             /** Error Column */
             error_column?: number | null;
+            /** Error Digest */
+            error_digest?: string | null;
             /** Error Line */
             error_line?: number | null;
             /** Error Name */
@@ -15626,12 +15630,24 @@ export interface components {
             error_source?: string | null;
             /** Failure Kind */
             failure_kind?: ("offline" | "network" | "timeout" | "csp" | "resource") | null;
+            /** Image Complete */
+            image_complete?: boolean | null;
+            /** Image Connected */
+            image_connected?: boolean | null;
+            /** Image Loading */
+            image_loading?: string | null;
+            /** Image Natural Width */
+            image_natural_width?: number | null;
             /** Online At Start */
             online_at_start?: boolean | null;
+            /** Render Source */
+            render_source?: string | null;
             /** Request Attempts */
             request_attempts?: number | null;
             /** Request Elapsed Ms */
             request_elapsed_ms?: number | null;
+            /** Request Hidden Ms */
+            request_hidden_ms?: number | null;
             /** Request Method */
             request_method?: ("GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS" | "UNKNOWN") | null;
             /** Request Path */
@@ -15650,6 +15666,10 @@ export interface components {
             resource_origin?: string | null;
             /** Resource Path */
             resource_path?: string | null;
+            /** Resource Probe Result */
+            resource_probe_result?: ("response" | "network_error" | "skipped") | null;
+            /** Resource Probe Status */
+            resource_probe_status?: number | null;
             /** Resource Protocol */
             resource_protocol?: string | null;
             /** Resource Status */
@@ -15660,6 +15680,10 @@ export interface components {
             resource_transfer_bytes?: number | null;
             /** Response Request Id */
             response_request_id?: string | null;
+            /** Route Path */
+            route_path?: string | null;
+            /** Timeout Timer Delay Ms */
+            timeout_timer_delay_ms?: number | null;
             /** Visibility At Start */
             visibility_at_start?: ("visible" | "hidden" | "prerender") | null;
         };

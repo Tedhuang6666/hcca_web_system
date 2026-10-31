@@ -45,10 +45,15 @@ export interface ClientErrorDiagnostics {
   request_phase?: "headers" | "body";
   online_at_start?: boolean;
   visibility_at_start?: "visible" | "hidden" | "prerender";
+  request_hidden_ms?: number;
+  timeout_timer_delay_ms?: number;
   error_name?: string;
   error_source?: string;
   error_line?: number;
   error_column?: number;
+  error_digest?: string;
+  render_source?: string;
+  route_path?: string;
   response_request_id?: string;
   csp_directive?: string;
   csp_disposition?: "enforce" | "report";
@@ -64,6 +69,13 @@ export interface ClientErrorDiagnostics {
   resource_transfer_bytes?: number;
   resource_encoded_bytes?: number;
   resource_protocol?: string;
+  resource_probe_status?: number;
+  resource_probe_result?: "response" | "network_error" | "skipped";
+  image_connected?: boolean;
+  image_complete?: boolean;
+  image_natural_width?: number;
+  image_loading?: string;
+  document_ready_state?: string;
 }
 
 export interface ClientErrorReceipt {
@@ -233,8 +245,13 @@ export function reportClientError(input: ClientErrorInput): Promise<ClientErrorR
 }
 
 function errorDetails(value: unknown): { message: string; stack?: string } {
-  if (value instanceof Error) {
-    return { message: value.message || value.name, stack: value.stack };
+  // Error objects can come from another realm and fail instanceof Error.
+  if (typeof value === "object" && value !== null && "message" in value
+    && typeof value.message === "string") {
+    return {
+      message: value.message,
+      ...("stack" in value && typeof value.stack === "string" ? { stack: value.stack } : {}),
+    };
   }
   if (typeof value === "string") return { message: value };
   try {
@@ -417,7 +434,9 @@ function resourceEvidence(url: string | null): ClientErrorDiagnostics {
     if (!["http:", "https:"].includes(parsed.protocol)) return {};
     const entries = typeof performance.getEntriesByName === "function"
       ? performance.getEntriesByName(parsed.href, "resource") : [];
-    const timing = entries.at(-1) as PerformanceResourceTiming | undefined;
+    // Diagnostic HEAD probes must not be mistaken for the failed image request.
+    const timing = entries.filter(entry => (entry as PerformanceResourceTiming).initiatorType !== "fetch")
+      .at(-1) as PerformanceResourceTiming | undefined;
     return {
       resource_path: parsed.pathname.slice(0, MAX_PATH_LENGTH),
       resource_timing_available: Boolean(timing),
@@ -437,6 +456,43 @@ function resourceEvidence(url: string | null): ClientErrorDiagnostics {
 /** 安裝 window error / unhandledrejection 入口，涵蓋未經 React boundary 的錯誤。 */
 export function installGlobalClientErrorReporter(): () => void {
   if (typeof window === "undefined") return () => undefined;
+
+  let active = true;
+  let probeCount = 0;
+  const imageProbes = new Map<string, Promise<ClientErrorDiagnostics>>();
+  const probeImage = (url: string | null): Promise<ClientErrorDiagnostics> => {
+    const skipped = { resource_probe_result: "skipped" as const };
+    if (!url) return Promise.resolve(skipped);
+    let parsed: URL;
+    try {
+      parsed = new URL(url, window.location.href);
+    } catch {
+      return Promise.resolve(skipped);
+    }
+    // Only probe our public shop assets, never API URLs, signed URLs or third parties.
+    if (parsed.origin !== window.location.origin || parsed.search
+      || !/^\/shop\/[^?#]+\.(?:webp|avif|png|jpe?g)$/i.test(parsed.pathname)) {
+      return Promise.resolve(skipped);
+    }
+    const existing = imageProbes.get(parsed.href);
+    if (existing) return existing;
+    if (probeCount >= 4 || navigator.onLine === false) return Promise.resolve(skipped);
+    probeCount += 1;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 3_000);
+    const probe = Promise.resolve().then(() => fetch(parsed.href, {
+      method: "HEAD", credentials: "same-origin", cache: "no-store", redirect: "error",
+      signal: controller.signal,
+    })).then((response): ClientErrorDiagnostics => ({
+      resource_probe_result: "response", resource_probe_status: response.status,
+    })).catch((): ClientErrorDiagnostics => ({ resource_probe_result: "network_error" }))
+      .finally(() => {
+        window.clearTimeout(timer);
+        imageProbes.delete(parsed.href);
+      });
+    imageProbes.set(parsed.href, probe);
+    return probe;
+  };
 
   const recentCspReports = new Map<string, number>();
   const shouldReportCspViolation = (fingerprint: string): boolean => {
@@ -475,8 +531,9 @@ export function installGlobalClientErrorReporter(): () => void {
     }
     const safeResource = normalizedTransientResourceUrl(failedResource);
     const resourceOrigin = safeHttpOrigin(failedResource);
-    reportClientError({
+    const input: ClientErrorInput = {
       ...details,
+      pathname: window.location.pathname,
       message: resource
         ? `${details.message || "資源載入失敗"}${failedResource ? ` [${safeResource}]` : ""}`
         : details.message,
@@ -496,9 +553,35 @@ export function installGlobalClientErrorReporter(): () => void {
               error_line: event.lineno,
               error_column: event.colno,
               ...(event.error instanceof Error ? { error_name: event.error.name.slice(0, 100) } : {}),
+              ...(event.error && typeof event.error.digest === "string"
+                ? { error_digest: event.error.digest.slice(0, 128) } : {}),
+              document_ready_state: document.readyState,
             },
           }),
-    });
+    };
+    if (target instanceof HTMLImageElement) {
+      const image = target;
+      const evidence: ClientErrorDiagnostics = {
+        ...input.diagnostics,
+        image_connected: image.isConnected,
+        image_complete: image.complete,
+        image_natural_width: image.naturalWidth,
+        image_loading: image.loading || "auto",
+      };
+      // Let the element's own error handler finish replacing a failed source.
+      void Promise.resolve().then(async () => {
+        if (!active || resourceUrl(image) !== failedResource
+          || (image.complete && image.naturalWidth > 0)) return;
+        const probe = await probeImage(failedResource);
+        if (!active || resourceUrl(image) !== failedResource
+          || (image.complete && image.naturalWidth > 0)) return;
+        await reportClientError({
+          ...input, diagnostics: { ...evidence, ...resourceEvidence(failedResource), ...probe },
+        });
+      }).catch(() => undefined);
+    } else {
+      void reportClientError(input);
+    }
   };
   const onUnhandledRejection = (event: PromiseRejectionEvent) => {
     if (isExpectedAbortRejection(event.reason)) return;
@@ -535,6 +618,7 @@ export function installGlobalClientErrorReporter(): () => void {
   window.addEventListener("unhandledrejection", onUnhandledRejection);
   window.addEventListener("securitypolicyviolation", onSecurityPolicyViolation);
   return () => {
+    active = false;
     window.removeEventListener("error", onError, true);
     window.removeEventListener("unhandledrejection", onUnhandledRejection);
     window.removeEventListener("securitypolicyviolation", onSecurityPolicyViolation);
