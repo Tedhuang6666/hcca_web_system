@@ -83,14 +83,30 @@ function transportErrorName(error: unknown): string {
 
 function createRequestTimeout(signal: AbortSignal | null | undefined, timeoutMs: number) {
   const controller = new AbortController();
+  const startedAt = performance.now();
+  let timerDelayMs: number | undefined;
+  let hiddenMs = 0;
+  let hiddenAt = typeof document !== "undefined" && document.visibilityState === "hidden"
+    ? startedAt : undefined;
+  const onVisibilityChange = () => {
+    if (hiddenAt !== undefined) hiddenMs += performance.now() - hiddenAt;
+    hiddenAt = document.visibilityState === "hidden" ? performance.now() : undefined;
+  };
+  if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVisibilityChange);
   const onAbort = () => controller.abort(signal?.reason);
   const timer = setTimeout(() => {
+    timerDelayMs = Math.max(0, performance.now() - startedAt - timeoutMs);
     controller.abort(new Error(`API request timed out after ${timeoutMs}ms`));
     signal?.removeEventListener("abort", onAbort);
   }, timeoutMs);
   const cleanup = () => {
     clearTimeout(timer);
     signal?.removeEventListener("abort", onAbort);
+    if (hiddenAt !== undefined) {
+      hiddenMs += performance.now() - hiddenAt;
+      hiddenAt = undefined;
+    }
+    if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisibilityChange);
   };
 
   if (signal?.aborted) onAbort();
@@ -99,6 +115,11 @@ function createRequestTimeout(signal: AbortSignal | null | undefined, timeoutMs:
   return {
     signal: controller.signal,
     cleanup,
+    evidence: (): ClientErrorDiagnostics => ({
+      request_hidden_ms: Math.min(86_400_000, Math.max(0,
+        hiddenMs + (hiddenAt !== undefined ? performance.now() - hiddenAt : 0))),
+      ...(timerDelayMs !== undefined ? { timeout_timer_delay_ms: Math.min(86_400_000, timerDelayMs) } : {}),
+    }),
   };
 }
 
@@ -214,6 +235,7 @@ export async function fetchWithRetry(
   const onlineAtStart = typeof navigator === "undefined" ? undefined : navigator.onLine;
   const visibilityAtStart = typeof document === "undefined" ? undefined : document.visibilityState;
   const evidence = (): ClientErrorDiagnostics => ({
+    ...timeout.evidence(),
     request_elapsed_ms: Math.min(86_400_000, Math.max(0, performance.now() - startedAt)),
     online_at_start: onlineAtStart,
     visibility_at_start: visibilityAtStart,

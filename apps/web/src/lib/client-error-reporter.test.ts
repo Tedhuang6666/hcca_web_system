@@ -3,12 +3,74 @@ import { describe, expect, it, vi } from "vitest";
 import { installGlobalClientErrorReporter, reportClientError } from "./client-error-reporter";
 
 describe("client error reporter", () => {
-  it("records exact resource paths and browser timing without retaining URL queries", () => {
+  it("preserves cross-realm React error stacks and digests", () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const uninstall = installGlobalClientErrorReporter();
+    try {
+      window.dispatchEvent(new ErrorEvent("error", { error: {
+        message: "Minified React error #419", stack: "Error: SSR failure\n at render (app.js:1:2)",
+        digest: "ssr-419-regression",
+      } }));
+      const payload = JSON.parse(String(fetchMock.mock.calls[0][1].body));
+      expect(payload.message).toBe("Minified React error #419");
+      expect(payload.stack).toContain("at render");
+      expect(payload.context.diagnostics.error_digest).toBe("ssr-419-regression");
+    } finally { uninstall(); }
+  });
+
+  it("filters an image error only when its source was replaced or it recovered", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const uninstall = installGlobalClientErrorReporter();
+    const img = document.createElement("img");
+    img.src = "/shop/104/replaced.webp";
+    document.body.append(img);
+    try {
+      img.dispatchEvent(new Event("error"));
+      img.src = "/shop/104/fallback.webp";
+      await Promise.resolve();
+      Object.defineProperties(img, { complete: { value: true }, naturalWidth: { value: 100 } });
+      img.dispatchEvent(new Event("error"));
+      await Promise.resolve();
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally { uninstall(); img.remove(); }
+  });
+
+  it("bounds public asset probes and keeps external tile failures without probing them", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 404 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const uninstall = installGlobalClientErrorReporter();
+    const images = Array.from({ length: 6 }, (_, i) => {
+      const img = document.createElement("img");
+      img.src = i === 5 ? "https://tile.openstreetmap.org/16/1/2.png" : `/shop/104/probe-${i}.webp`;
+      document.body.append(img);
+      return img;
+    });
+    try {
+      for (const image of images) image.dispatchEvent(new Event("error"));
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(10));
+      const probes = fetchMock.mock.calls.filter(([, init]) => init.method === "HEAD");
+      expect(probes).toHaveLength(4);
+      expect(probes.every(([url]) => String(url).startsWith(window.location.origin))).toBe(true);
+      const reports = fetchMock.mock.calls.filter(([, init]) => init.method === "POST")
+        .map(([, init]) => JSON.parse(String(init.body)));
+      expect(reports).toHaveLength(6);
+      expect(reports.find(report => report.message.includes("openstreetmap"))
+        .context.diagnostics.resource_probe_result).toBe("skipped");
+      expect(reports.filter(report => report.context.diagnostics.resource_probe_status === 404)).toHaveLength(4);
+    } finally { uninstall(); images.forEach(image => image.remove()); }
+  });
+
+  it("records exact resource paths and browser timing without retaining URL queries", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
     vi.stubGlobal("fetch", fetchMock);
     vi.stubGlobal("performance", { getEntriesByName: vi.fn().mockReturnValue([{
       responseStatus: 404, duration: 125, transferSize: 380, encodedBodySize: 80,
-      nextHopProtocol: "h2",
+      nextHopProtocol: "h2", initiatorType: "img",
+    }, {
+      responseStatus: 200, duration: 5, transferSize: 0, encodedBodySize: 0,
+      nextHopProtocol: "h2", initiatorType: "fetch",
     }]) });
     const uninstall = installGlobalClientErrorReporter();
     const img = document.createElement("img");
@@ -16,6 +78,7 @@ describe("client error reporter", () => {
     document.body.append(img);
     try {
       img.dispatchEvent(new Event("error"));
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
       const payload = JSON.parse(String(fetchMock.mock.calls[0][1].body));
       expect(payload.context.diagnostics).toEqual(expect.objectContaining({
         resource_path: "/shop/104/evidence-01.webp", resource_status: 404,
@@ -28,7 +91,7 @@ describe("client error reporter", () => {
     }
   });
 
-  it("marks missing resource timing explicitly without inventing an HTTP status", () => {
+  it("marks missing resource timing explicitly without inventing an HTTP status", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
     vi.stubGlobal("fetch", fetchMock);
     vi.stubGlobal("performance", { getEntriesByName: vi.fn().mockReturnValue([]) });
@@ -38,9 +101,13 @@ describe("client error reporter", () => {
     document.body.append(img);
     try {
       img.dispatchEvent(new Event("error"));
-      const payload = JSON.parse(String(fetchMock.mock.calls[0][1].body));
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+      expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: "HEAD", credentials: "same-origin" });
+      const payload = JSON.parse(String(fetchMock.mock.calls[1][1].body));
       expect(payload.context.diagnostics.resource_timing_available).toBe(false);
       expect(payload.context.diagnostics.resource_status).toBeUndefined();
+      expect(payload.context.diagnostics.resource_probe_status).toBe(202);
+      expect(payload.context.diagnostics.image_connected).toBe(true);
     } finally {
       uninstall(); img.remove(); vi.unstubAllGlobals();
     }
@@ -166,7 +233,7 @@ describe("client error reporter", () => {
     uninstall();
   });
 
-  it("groups cache-busted resources and RSC CSP violations without hiding the first report", () => {
+  it("groups cache-busted resources and RSC CSP violations without hiding the first report", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
     vi.stubGlobal("fetch", fetchMock);
     const uninstall = installGlobalClientErrorReporter();
@@ -192,9 +259,10 @@ describe("client error reporter", () => {
       window.dispatchEvent(event);
     }
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    const resourcePayload = JSON.parse(String(fetchMock.mock.calls[0][1].body));
-    const cspPayload = JSON.parse(String(fetchMock.mock.calls[1][1].body));
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    const payloads = fetchMock.mock.calls.map(call => JSON.parse(String(call[1].body)));
+    const resourcePayload = payloads.find(payload => payload.scope === "resource:img");
+    const cspPayload = payloads.find(payload => payload.scope === "securitypolicyviolation");
     expect(resourcePayload.message).toContain("%7Basset%7D.png");
     expect(resourcePayload.message).not.toContain("signature=");
     expect(resourcePayload.context.diagnostics).toMatchObject({

@@ -224,6 +224,41 @@ async def test_client_error_endpoint_is_anonymous_and_returns_error_id(
     assert "do-not-retain" not in str(received["context"])
 
 
+def test_client_diagnostics_accept_incident_evidence_and_reject_invalid_values() -> None:
+    from pydantic import ValidationError
+
+    from api.routers.admin_system import ClientErrorDiagnostics
+
+    diagnostics = ClientErrorDiagnostics.model_validate(
+        {
+            "request_hidden_ms": 90_000,
+            "timeout_timer_delay_ms": 97_000,
+            "resource_probe_status": 403,
+            "resource_probe_result": "response",
+            "image_connected": True,
+            "image_complete": True,
+            "image_natural_width": 0,
+            "image_loading": "lazy",
+            "error_digest": "ssr-cause",
+            "render_source": "server-rendering",
+            "route_path": "/admin/system?token=private#hash",
+            "document_ready_state": "complete",
+        }
+    )
+    assert diagnostics.route_path == "/admin/system"
+    assert diagnostics.resource_probe_status == 403
+    assert diagnostics.model_dump(exclude_none=True)["request_hidden_ms"] == 90_000
+    for invalid in (
+        {"request_hidden_ms": -1},
+        {"timeout_timer_delay_ms": float("inf")},
+        {"resource_probe_status": 999},
+        {"image_natural_width": -1},
+        {"error_digest": "x" * 129},
+    ):
+        with pytest.raises(ValidationError):
+            ClientErrorDiagnostics.model_validate(invalid)
+
+
 async def test_validation_errors_are_recorded(
     client: AsyncClient,
     isolated_error_audit,

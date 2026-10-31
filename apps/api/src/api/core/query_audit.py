@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 import threading
@@ -19,6 +20,8 @@ from dataclasses import dataclass, field
 
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
+
+from api.core.trace_context import get_trace_id
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +44,7 @@ _query_counters: ContextVar[_RequestQueryCounters | None] = ContextVar(
 SLOW_QUERY_MS = 50.0  # 單筆 query > 50ms 視為慢查詢
 N_PLUS_ONE_THRESHOLD = 20  # 單一 request 超過此 query 數會 WARN
 _SLOW_RING_MAX = 100
+_TEMPLATE_MAX_LENGTH = 4_000
 
 
 @dataclass
@@ -51,11 +55,18 @@ class SlowQuerySample:
     last_seen: float = field(default_factory=time.time)
     max_ms: float = 0.0
     paths: dict[str, int] = field(default_factory=dict)
+    fingerprint: str = ""
+    template_truncated: bool = False
+    max_trace_id: str | None = None
+    max_request_path: str | None = None
 
     def update(self, elapsed_ms: float, request_path: str | None = None) -> None:
         self.occurrences += 1
         self.last_seen = time.time()
-        self.max_ms = max(self.max_ms, elapsed_ms)
+        if elapsed_ms > self.max_ms:
+            self.max_ms = elapsed_ms
+            self.max_trace_id = get_trace_id()
+            self.max_request_path = request_path
         if request_path:
             self.paths[request_path] = self.paths.get(request_path, 0) + 1
 
@@ -67,11 +78,11 @@ _listeners_installed = False
 
 
 def _normalize_statement(statement: str) -> str:
-    """去除字面值/數字以聚合相同模板的查詢。截斷過長字串。"""
+    """去除字面值/數字；聚合前保留完整 SQL，避免相同 SELECT 前綴混併。"""
     s = re.sub(r"'[^']*'", "?", statement)
     s = re.sub(r"\b\d+\b", "?", s)
     s = re.sub(r"\s+", " ", s).strip()
-    return s[:240]
+    return s
 
 
 def _is_noise_statement(statement: str) -> bool:
@@ -82,20 +93,29 @@ def _is_noise_statement(statement: str) -> bool:
 
 def _record_slow_sample(statement: str, elapsed_ms: float, request_path: str | None = None) -> None:
     template = _normalize_statement(statement)
+    fingerprint = hashlib.sha256(template.encode()).hexdigest()
     with _slow_lock:
-        sample = _slow_index.get(template)
+        sample = _slow_index.get(fingerprint)
         if sample:
             sample.update(elapsed_ms, request_path)
             return
-        sample = SlowQuerySample(template=template, elapsed_ms=elapsed_ms, max_ms=elapsed_ms)
+        sample = SlowQuerySample(
+            template=template[:_TEMPLATE_MAX_LENGTH],
+            elapsed_ms=elapsed_ms,
+            max_ms=elapsed_ms,
+            fingerprint=fingerprint,
+            template_truncated=len(template) > _TEMPLATE_MAX_LENGTH,
+            max_trace_id=get_trace_id(),
+            max_request_path=request_path,
+        )
         if request_path:
             sample.paths[request_path] = 1
         _slow_samples.append(sample)
-        _slow_index[template] = sample
+        _slow_index[fingerprint] = sample
         # 維持 index 與 ring buffer 一致：被擠出的元素也要從 index 移除
         # （deque 上限自動擠出舊元素，但 dict 不會跟著縮，這裡用集合校正）
         if len(_slow_index) > _SLOW_RING_MAX:
-            alive = {s.template for s in _slow_samples}
+            alive = {s.fingerprint for s in _slow_samples}
             for k in list(_slow_index.keys()):
                 if k not in alive:
                     _slow_index.pop(k, None)
@@ -112,6 +132,12 @@ def get_slow_queries(top: int = 10) -> list[dict[str, object]]:
             "max_ms": round(s.max_ms, 1),
             "occurrences": s.occurrences,
             "last_seen": s.last_seen,
+            "fingerprint": s.fingerprint,
+            "template_truncated": s.template_truncated,
+            "measurement": "sqlalchemy_cursor_wall_time",
+            "threshold_ms": SLOW_QUERY_MS,
+            "max_trace_id": s.max_trace_id,
+            "max_request_path": s.max_request_path,
             "paths": [
                 {"path": path, "occurrences": occurrences}
                 for path, occurrences in sorted(

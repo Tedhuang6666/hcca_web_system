@@ -697,7 +697,7 @@ async def export_incidents_csv(
             ]
         )
     for sample in slow_queries or []:
-        template = sanitize_incident_text(str(sample.get("template") or ""), 240)
+        template = sanitize_incident_text(str(sample.get("template") or ""), 4_000)
         occurrences = sample.get("occurrences") or 0
         paths = sample.get("paths") if isinstance(sample.get("paths"), list) else []
         try:
@@ -711,6 +711,21 @@ async def export_incidents_csv(
         except (TypeError, ValueError, OSError):
             last_seen_at = ""
         safe_paths = sanitize_incident_details(paths)
+        query_evidence = {
+            "paths": safe_paths,
+            **{
+                key: sample[key]
+                for key in (
+                    "fingerprint",
+                    "template_truncated",
+                    "measurement",
+                    "threshold_ms",
+                    "max_trace_id",
+                    "max_request_path",
+                )
+                if key in sample
+            },
+        }
         writer.writerow(
             [
                 "",
@@ -733,7 +748,7 @@ async def export_incidents_csv(
                 "",
                 "",
                 json.dumps(
-                    [{"event_type": "slow_query_observed", "details": {"paths": safe_paths}}],
+                    [{"event_type": "slow_query_observed", "details": query_evidence}],
                     ensure_ascii=False,
                 ),
                 "slow_query",
