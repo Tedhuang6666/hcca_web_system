@@ -1463,7 +1463,15 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       : catalog.filter((category) => (
         !category.order_closed_at
         && !(category.order_closes_at && new Date(category.order_closes_at).getTime() <= catalogTime)
+        && !closeStatus[category.id]?.is_closed
       ));
+  const hasDisplayedClosedActivity = displayedCatalog.some(
+    (category) => closeStatus[category.id]?.is_closed,
+  );
+  const openProductDisplayed = !loading && displayedCatalog.some((category) => (
+    category.products.some((product) => product.id === openProduct)
+    || category.series.some((series) => series.products.some((product) => product.id === openProduct))
+  ));
   const selectedCategory = directProductRoute
     ? routeProductEntry?.category ?? null
     : displayedCatalog.find((category) => category.id === selectedCategoryId)
@@ -1765,16 +1773,16 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
         <details
           className="shop-class-summary"
           aria-label="我的班級"
-          data-closed={Object.values(closeStatus).some((status) => status.is_closed) || undefined}>
+          data-closed={hasDisplayedClosedActivity || undefined}>
           <summary>
             <span>我的班級：{myClass.label ?? `${myClass.academic_year} 學年度 ${myClass.class_code} 班`}
               {myClass.seat_number ? ` · ${myClass.seat_number} 號` : " · 座號尚未登錄"}
             </span>
-            {Object.values(closeStatus).some((status) => status.is_closed) && <strong>部分活動已結單</strong>}
+            {hasDisplayedClosedActivity && <strong>部分活動已結單</strong>}
             <ChevronDown size={16} aria-hidden="true" />
           </summary>
           <div className="shop-public-context">
-            {Object.values(closeStatus).some((status) => status.is_closed)
+            {hasDisplayedClosedActivity
               ? <CircleAlert size={18} style={{ color: "var(--danger)" }} aria-hidden />
               : <CircleCheck size={18} style={{ color: "var(--success)" }} aria-hidden />}
             <div>
@@ -2060,7 +2068,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
         </div>
       </Modal>}
 
-      {openProduct && (!delegationToken || delegationContext?.can_edit) && (
+      {openProduct && openProductDisplayed && (!delegationToken || delegationContext?.can_edit) && (
         <ProductModal
           productId={openProduct}
           promotions={categoryPromotions}

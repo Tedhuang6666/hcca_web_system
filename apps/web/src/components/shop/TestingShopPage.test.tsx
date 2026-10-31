@@ -233,6 +233,67 @@ it("hides closed activities from the public catalog and shows an empty state", a
   expect(screen.queryByRole("navigation", { name: "選擇商品活動" })).not.toBeInTheDocument();
 });
 
+it.each(["activity", "deadline", "global", "class-paid"] as const)(
+  "hides an activity closed by %s without closure or payment notices",
+  async (reason) => {
+    window.history.replaceState({}, "", "/shop?product=closed-product");
+    window.localStorage.setItem("hcca:pref:shop:category:v1", JSON.stringify("closed-category"));
+    api.myClass.mockResolvedValue({ id: "class-1", label: "一年一班" });
+    api.catalog.mockResolvedValue([
+      { id: "closed-category", name: "已結單活動", sort_order: 0, series: [],
+        order_closed_at: reason === "activity" ? "2026-10-20T10:00:00Z" : null,
+        order_closes_at: reason === "deadline" ? "2026-10-20T10:00:00Z" : null,
+        products: [{ ...formalProduct, id: "closed-product", name: "結單商品" }] },
+      { id: "winter", name: "冬季預購", sort_order: 1, series: [],
+        products: [{ ...formalProduct, id: "winter-product", name: "冬季商品" }] },
+    ]);
+    api.getCloseStatus.mockResolvedValue({ statuses: {
+      "closed-category": { is_closed: true, is_global: reason !== "class-paid" },
+      winter: { is_closed: false },
+    } });
+
+    render(<ShopPage />);
+
+    expect(await screen.findByRole("link", { name: "查看商品：冬季商品" })).toBeVisible();
+    expect(screen.queryByText("已結單活動")).not.toBeInTheDocument();
+    expect(screen.queryByText("結單商品")).not.toBeInTheDocument();
+    expect(screen.queryByText("部分活動已結單")).not.toBeInTheDocument();
+    expect(screen.queryByText("班聯已確認本班收款")).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "活動結單通知" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "選擇商品活動" })).not.toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "我的班級" })).not.toHaveAttribute("data-closed");
+  },
+);
+
+it("shows the empty catalog without notices when the class has paid for every activity", async () => {
+  api.myClass.mockResolvedValue({ id: "class-1", label: "一年一班" });
+  api.getCloseStatus.mockResolvedValue({ statuses: {
+    goods: { is_closed: true, is_global: false },
+  } });
+
+  render(<ShopPage />);
+
+  expect(await screen.findByText("目前沒有可訂購的商品，請稍後再來看看。")).toBeVisible();
+  expect(screen.queryByRole("article")).not.toBeInTheDocument();
+  expect(screen.queryByText("部分活動已結單")).not.toBeInTheDocument();
+  expect(screen.queryByText("班聯已確認本班收款")).not.toBeInTheDocument();
+  expect(screen.getByRole("group", { name: "我的班級" })).not.toHaveAttribute("data-closed");
+});
+
+it("ignores closure statuses for activities absent from the catalog", async () => {
+  api.myClass.mockResolvedValue({ id: "class-1", label: "一年一班" });
+  api.getCloseStatus.mockResolvedValue({ statuses: {
+    "hidden-category": { is_closed: true, is_global: true },
+  } });
+
+  render(<ShopPage />);
+
+  expect(await screen.findByRole("link", { name: "查看商品：正式商品" })).toBeVisible();
+  expect(screen.queryByText("部分活動已結單")).not.toBeInTheDocument();
+  expect(screen.getByRole("group", { name: "我的班級" })).not.toHaveAttribute("data-closed");
+});
+
 it("keeps multiple activities switchable in the compact catalog", async () => {
   api.catalog.mockResolvedValue([
     { id: "goods", name: "校慶預購", sort_order: 0, products: [formalProduct], series: [] },
