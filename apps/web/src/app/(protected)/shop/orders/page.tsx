@@ -67,16 +67,16 @@ export default function OrdersPage() {
       const catalog = await shopApi.catalog().catch(() => []);
       const images = new Map<string, string | null>();
       for (const category of catalog) {
-        for (const product of category.products) images.set(product.id, product.image_url ?? null);
+        for (const product of category.products) images.set(product.id, product.image_url || null);
         for (const series of category.series) {
-          for (const product of series.products) images.set(product.id, product.image_url ?? null);
+          for (const product of series.products) images.set(product.id, product.image_url || null);
         }
       }
 
-      await Promise.all(productIds.filter((id) => !images.has(id)).map(async (id) => {
+      await Promise.all(productIds.filter((id) => !images.get(id)).map(async (id) => {
         try {
           const product = await shopApi.getProduct(id);
-          images.set(id, product.image_url ?? null);
+          images.set(id, product.image_url || product.media[0]?.image_url || null);
         } catch {
           images.set(id, null);
         }

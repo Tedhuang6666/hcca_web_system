@@ -74,6 +74,24 @@ describe("我的預購", () => {
     expect(api.listOrders).toHaveBeenCalledWith({ limit: "500", offset: "0", my_only: "true" });
   });
 
+  it("uses the first product media image when the catalog image is empty", async () => {
+    api.catalog.mockResolvedValue([{
+      products: [{ id: "bag", image_url: null }],
+      series: [],
+    }]);
+    api.getProduct.mockResolvedValue({
+      image_url: null,
+      media: [{ image_url: "/uploads/bag-gallery.png" }],
+    });
+    api.listOrders.mockResolvedValue([order]);
+    render(<OrdersPage />);
+
+    expect(await screen.findByAltText("")).toHaveAttribute(
+      "src", expect.stringContaining("bag-gallery.png"),
+    );
+    expect(api.getProduct).toHaveBeenCalledWith("bag");
+  });
+
   it("shows an empty state when every registration was cancelled or refunded", async () => {
     api.listOrders.mockResolvedValue([{ ...order, status: "cancelled" }, { ...order, status: "refunded" }]);
     render(<OrdersPage />);
