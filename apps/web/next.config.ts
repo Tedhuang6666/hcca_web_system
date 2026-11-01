@@ -45,6 +45,15 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "*.s3.amazonaws.com" },
     ],
   },
+  async redirects() {
+    return [
+      {
+        source: "/admin/system/observability",
+        destination: "/admin/system?tab=observability",
+        permanent: false,
+      },
+    ];
+  },
   async headers() {
     return [
       {
