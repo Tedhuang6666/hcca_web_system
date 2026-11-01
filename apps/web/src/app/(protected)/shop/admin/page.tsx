@@ -1,4 +1,5 @@
 "use client";
+import { productGallery } from "@/lib/shop-product-media";
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -57,14 +58,23 @@ function Thumb({ url, size = 44 }: { url: string | null; size?: number }) {
   );
 }
 
-function ImageField({ value, onChange }: { value: string | null; onChange: (u: string | null) => void }) {
-  const upload = (file: File, reportProgress: (progress: number) => void) =>
-    shopApi.uploadImage(file, reportProgress);
+function ImageField({ value, onChange, onUploadingChange, disabled = false }: {
+  value: string | null;
+  onChange: (u: string | null) => void;
+  onUploadingChange?: (uploading: boolean) => void;
+  disabled?: boolean;
+}) {
+  const upload = async (file: File, reportProgress: (progress: number) => void) => {
+    onUploadingChange?.(true);
+    try { return await shopApi.uploadImage(file, reportProgress); }
+    finally { onUploadingChange?.(false); }
+  };
   return (
     <div className="flex items-start gap-3">
       <Thumb url={value} size={48} />
       <div className="min-w-0 flex-1">
         <AnimatedFileUpload
+          disabled={disabled}
           accept="image/*"
           label={value ? "拖曳新圖片到這裡" : "拖曳商品圖片到這裡"}
           hint="支援點擊選取或貼上圖片"
@@ -73,7 +83,7 @@ function ImageField({ value, onChange }: { value: string | null; onChange: (u: s
         />
       </div>
       {value && (
-        <button onClick={() => onChange(null)} className="text-xs" style={{ color: "var(--text-muted)" }}>
+        <button disabled={disabled} onClick={() => onChange(null)} className="text-xs" style={{ color: "var(--text-muted)" }}>
           移除
         </button>
       )}
@@ -317,14 +327,20 @@ function ProductFormModal({
   const [selectedCategoryId, setSelectedCategoryId] = useState(categoryId);
   const [extraOpen, setExtraOpen] = useState(false);
   const [pendingProduct, setPendingProduct] = useState<ProductOut | null>(null);
-  const [variantDrafts, setVariantDrafts] = useState<{ id: string; name: string; text: string }[]>([]);
+  const [variantDrafts, setVariantDrafts] = useState<{ id: string; name: string; text: string; images: Record<string, string> }[]>([]);
   const variantRef = useRef<HTMLDivElement>(null);
-  type ProductMediaDraft = { id: string; image_url: string | null; kind: "product" | "model" };
+  type ProductMediaDraft = { id: string; image_url: string | null; kind: "product" | "model"; label: string };
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [imageUrl, setImageUrl] = useState<string | null>(initial?.image_url ?? null);
   const [media, setMedia] = useState<ProductMediaDraft[]>(
-    () => (initial?.media ?? []).map(({ id, image_url, kind }) => ({ id, image_url, kind })),
+    () => {
+      const photos = (initial?.media ?? []).map(({ id, image_url, kind, label }) => ({ id, image_url, kind, label: label ?? "" }));
+      if (initial?.image_url && !photos.some((photo) => photo.image_url === initial.image_url)) {
+        photos.unshift({ id: crypto.randomUUID(), image_url: initial.image_url, kind: "product", label: "" });
+      }
+      return photos;
+    },
   );
   const [price, setPrice] = useState(String(initial?.price ?? 0));
   const [stock, setStock] = useState(String(initial?.stock_quantity ?? 0));
@@ -364,7 +380,7 @@ function ProductFormModal({
     const results = await Promise.allSettled(selected.map((file) => shopApi.uploadImage(file)));
     const uploaded = results.flatMap((result) =>
       result.status === "fulfilled"
-        ? [{ id: crypto.randomUUID(), image_url: result.value.url, kind: "product" as const }]
+        ? [{ id: crypto.randomUUID(), image_url: result.value.url, kind: "product" as const, label: "" }]
         : [],
     );
     setMedia((current) => [...current, ...uploaded].slice(0, 20));
@@ -414,7 +430,7 @@ function ProductFormModal({
       name: draft.name.trim(),
       sort_order,
       options: uniqueSmartOptions(parseSmartOptionsText(draft.text)).map((option, index) => ({
-        ...option, sort_order: index,
+        ...option, image_url: draft.images[option.value] || null, sort_order: index,
       })),
     }));
     if (!editing && variantGroups.some((group) => !group.name || group.name.length > 100
@@ -429,8 +445,8 @@ function ProductFormModal({
         name: name.trim(),
         description: description.trim() || null,
         image_url: imageUrl,
-        media: media.flatMap(({ image_url, kind }, sort_order) =>
-          image_url && image_url !== imageUrl ? [{ image_url, kind, sort_order }] : []),
+        media: media.flatMap(({ image_url, kind, label }, sort_order) =>
+          image_url ? [{ image_url, kind, label: label.trim() || null, sort_order }] : []),
         price: priceValue,
         stock_quantity: Number.isInteger(stockValue) && stockValue >= 0 ? stockValue : 0,
         is_unlimited: unlimited,
@@ -538,7 +554,7 @@ function ProductFormModal({
           <div>
             <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>商品照片</h3>
             <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-              可一次選取多張；尚未設定主圖時，首張會自動設為主圖。最多 20 張。
+              可標註正面、背面或徽章，讓購買者快速切換；首張會自動設為主圖。最多 20 張。
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
@@ -569,6 +585,12 @@ function ProductFormModal({
               style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
               <Thumb url={item.image_url} size={56} />
               <div className="min-w-0 flex-1 space-y-2">
+                <Field label={`第 ${index + 1} 張照片標註（選填）`}>
+                  <input value={item.label} maxLength={100} placeholder="例如：正面、背面、徽章"
+                    onChange={(event) => setMedia((current) => current.map((entry) =>
+                      entry.id === item.id ? { ...entry, label: event.target.value } : entry))}
+                    className="input w-full" />
+                </Field>
                 <Field label="照片用途">
                   <select value={item.kind}
                     onChange={(event) => setMedia((current) => current.map((entry) =>
@@ -591,6 +613,9 @@ function ProductFormModal({
                 onClick={() => {
                   if (imageUrl === item.image_url) setImageUrl(null);
                   setMedia((current) => current.filter((entry) => entry.id !== item.id));
+                  setVariantDrafts((current) => current.map((draft) => ({ ...draft,
+                    images: Object.fromEntries(Object.entries(draft.images).filter(([, url]) => url !== item.image_url)),
+                  })));
                 }}
                 className="btn btn-ghost min-h-11 px-3 text-xs">移除</button>
             </div>
@@ -619,11 +644,24 @@ function ProductFormModal({
                     onChange={(event) => setVariantDrafts((current) => current.map((row) => row.id === draft.id ? { ...row, text: event.target.value } : row))} />
                 </Field>
                 <p className="text-xs" style={{ color: "var(--text-secondary)" }}>加價可寫 XL:50，表示 XL 加 50 元；未填加價就是原價。</p>
+                {uniqueSmartOptions(parseSmartOptionsText(draft.text)).map((option) => (
+                  <Field key={option.value} label={`${draft.name || `規格 ${index + 1}`}・${option.value} 圖片`}>
+                    <select className="input w-full" value={draft.images[option.value] ?? ""}
+                      onChange={(event) => setVariantDrafts((current) => current.map((row) => row.id === draft.id
+                        ? { ...row, images: { ...row.images, [option.value]: event.target.value } } : row))}>
+                      <option value="">不指定圖片</option>
+                      {media.map((photo, photoIndex) => photo.image_url && <option key={photo.id} value={photo.image_url}>
+                        {photo.label.trim() || `商品照片 ${photoIndex + 1}`}
+                      </option>)}
+                    </select>
+                  </Field>
+                ))}
+                {draft.text.trim() && <p className="text-xs" style={{ color: "var(--text-secondary)" }}>從上方商品照片指定對應圖片，點選選項時會自動顯示。</p>}
               </div>
             ))}
             <div className="flex flex-wrap gap-2">
               {["尺寸", "顏色", "自訂規格"].map((label) => <button key={label} type="button" className="btn btn-secondary min-h-11 text-sm"
-                onClick={() => setVariantDrafts((current) => [...current, { id: crypto.randomUUID(), name: label === "自訂規格" ? "" : label, text: "" }])}>加入{label}</button>)}
+                onClick={() => setVariantDrafts((current) => [...current, { id: crypto.randomUUID(), name: label === "自訂規格" ? "" : label, text: "", images: {} }])}>加入{label}</button>)}
             </div>
             {fieldError("variants")}
           </div>
@@ -705,11 +743,13 @@ function ProductFormModal({
 function OptionModal({
   groupId,
   initial,
+  photos,
   onClose,
   onSaved,
 }: {
   groupId: string;
   initial: ProductVariantOptionOut | null;
+  photos: { image_url: string; label: string }[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -718,8 +758,9 @@ function OptionModal({
   const [priceDelta, setPriceDelta] = useState(String(initial?.price_delta ?? 0));
   const [imageUrl, setImageUrl] = useState<string | null>(initial?.image_url ?? null);
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
   return (
-    <Modal title={`${editing ? "編輯" : "新增"}選項`} onClose={onClose} size="sm">
+    <Modal title={`${editing ? "編輯" : "新增"}選項`} onClose={() => { if (!busy && !uploading) onClose(); }} size="sm">
       <div className="space-y-3">
         <Field label="選項值">
           <input value={value} onChange={(e) => setValue(e.target.value)} className="input w-full"
@@ -729,10 +770,18 @@ function OptionModal({
           <input value={priceDelta} onChange={(e) => setPriceDelta(e.target.value)} className="input w-full" inputMode="numeric" />
         </Field>
         <Field label="選項圖片（選填）">
-          <ImageField value={imageUrl} onChange={setImageUrl} />
+          <ImageField value={imageUrl} onChange={setImageUrl} onUploadingChange={setUploading} disabled={busy || uploading} />
         </Field>
+        {photos.length > 0 && <Field label="使用商品照片">
+          <select className="input w-full" disabled={busy || uploading} value={photos.some((photo) => photo.image_url === imageUrl) ? imageUrl! : ""}
+            onChange={(event) => setImageUrl(event.target.value || null)}>
+            <option value="">不使用商品照片</option>
+            {photos.map((photo) => <option key={photo.image_url} value={photo.image_url}>{photo.label}</option>)}
+          </select>
+        </Field>}
+        <p className="text-xs" style={{ color: "var(--text-secondary)" }}>購買者點選此選項時，會自動切換到這張圖片。</p>
         <div className="flex gap-3 pt-1">
-          <button disabled={busy} onClick={async () => {
+          <button disabled={busy || uploading} onClick={async () => {
             if (!value.trim()) { toast.error("請輸入選項值"); return; }
             setBusy(true);
             try {
@@ -750,9 +799,9 @@ function OptionModal({
             } finally { setBusy(false); }
           }} className="btn flex-1"
             style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
-            {busy ? "儲存中…" : "儲存"}
+            {uploading ? "圖片上傳中…" : busy ? "儲存中…" : "儲存"}
           </button>
-          <button onClick={onClose} className="btn btn-ghost px-5">取消</button>
+          <button disabled={busy || uploading} onClick={onClose} className="btn btn-ghost px-5">取消</button>
         </div>
       </div>
     </Modal>
@@ -1082,6 +1131,7 @@ function VariantManager({
         <OptionModal
           groupId={optionModal.groupId}
           initial={optionModal.option}
+          photos={productGallery(product)}
           onClose={() => setOptionModal(null)}
           onSaved={() => { setOptionModal(null); onChanged(); }}
         />

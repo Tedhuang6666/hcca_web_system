@@ -25429,6 +25429,11 @@ export interface components {
              */
             kind: "product" | "model";
             /**
+             * Label
+             * @description 圖片標註，例如正面、背面
+             */
+            label?: string | null;
+            /**
              * Sort Order
              * @default 0
              */
@@ -25448,6 +25453,8 @@ export interface components {
              * @enum {string}
              */
             kind: "product" | "model";
+            /** Label */
+            label?: string | null;
             /** Sort Order */
             sort_order: number;
         };

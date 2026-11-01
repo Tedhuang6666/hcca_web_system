@@ -142,6 +142,7 @@ class ProductSeriesOut(BaseModel):
 
 class ProductMediaCreate(BaseModel):
     image_url: str = Field(min_length=1, description="圖片路徑")
+    label: str | None = Field(None, max_length=100, description="圖片標註，例如正面、背面")
     kind: Literal["product", "model"] = "product"
     sort_order: int = Field(0, ge=0)
 
@@ -151,6 +152,7 @@ class ProductMediaOut(BaseModel):
 
     id: uuid.UUID
     image_url: str
+    label: str | None = None
     kind: Literal["product", "model"]
     sort_order: int
 

@@ -819,6 +819,70 @@ async def _make_active_product(
 # ── 圖片上傳 ──────────────────────────────────────────────────────────────────
 
 
+async def test_product_media_labels_and_option_images_round_trip(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant_permission(db_session, member_user, "shop:manage")
+    category = await _make_category(db_session, member_user)
+    ac = authed_client_factory(member_user)
+    created = await ac.post(
+        "/shop/products",
+        json={
+            "category_id": str(category.id),
+            "name": "舞會門票",
+            "price": 100,
+            "image_url": "/front.png",
+            "media": [
+                {"image_url": "/front.png", "label": "正面"},
+                {"image_url": "/back.png", "label": "背面", "sort_order": 1},
+            ],
+            "variant_groups": [
+                {"name": "加購", "options": [{"value": "徽章", "image_url": "/badge.png"}]}
+            ],
+        },
+    )
+    assert created.status_code == 201
+    product = created.json()
+    assert [item["label"] for item in product["media"]] == ["正面", "背面"]
+    option = product["variant_groups"][0]["options"][0]
+    assert option["image_url"] == "/badge.png"
+    product_id = product["id"]
+
+    # 一般欄位 PATCH 不應清掉照片或標註。
+    updated = await ac.patch(f"/shop/products/{product_id}", json={"price": 200})
+    assert updated.status_code == 200
+    assert updated.json()["media"][0]["label"] == "正面"
+    updated = await ac.patch(
+        f"/shop/products/{product_id}",
+        json={"media": [{"image_url": "/front.png", "label": None}]},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["media"][0]["label"] is None
+    fetched = await ac.get(f"/shop/products/{product_id}")
+    assert fetched.status_code == 200
+    assert fetched.json()["media"][0]["label"] is None
+    assert fetched.json()["variant_groups"][0]["options"][0]["image_url"] == "/badge.png"
+    invalid = await ac.patch(
+        f"/shop/products/{product_id}",
+        json={"media": [{"image_url": "/front.png", "label": "長" * 101}]},
+    )
+    assert invalid.status_code == 422
+
+
+async def test_product_media_labels_require_management_permission(
+    db_session, member_user, client, authed_client_factory
+) -> None:
+    product = await _make_active_product(db_session, member_user)
+    payload = {"media": [{"image_url": "/front.png", "label": "正面"}]}
+    anonymous = await client.patch(f"/shop/products/{product.id}", json=payload)
+    assert anonymous.status_code == 401
+    other_user = await _bare_user(db_session)
+    forbidden = await authed_client_factory(other_user).patch(
+        f"/shop/products/{product.id}", json=payload
+    )
+    assert forbidden.status_code == 403
+
+
 async def test_upload_image_without_permission_returns_403(
     client, db_session, member_user, authed_client_factory
 ) -> None:

@@ -268,6 +268,7 @@ class ProductMedia(Base):
         nullable=False,
     )
     image_url: Mapped[str] = mapped_column(Text, nullable=False)
+    label: Mapped[str | None] = mapped_column(String(100), nullable=True)
     kind: Mapped[str] = mapped_column(String(20), nullable=False, default="product")
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 

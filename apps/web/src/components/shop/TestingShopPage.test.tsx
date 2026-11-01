@@ -40,6 +40,53 @@ const formalOrder: OrderOut = {
 
 afterEach(() => { vi.unstubAllGlobals(); });
 
+it("圖片標註可快捷切換，多組規格以最後點選的圖片為準", async () => {
+  api.getProduct.mockResolvedValue({ ...formalProduct, name: "正式商品", image_url: "/front.png",
+    media: [
+      { id: "front", image_url: "/front.png", label: "正面", kind: "product" },
+      { id: "back", image_url: "/back.png", label: "背面", kind: "product" },
+    ],
+    variant_groups: [
+      { id: "ticket", name: "門票", options: [
+        { id: "badge", value: "徽章", price_delta: 50, is_active: true, image_url: "/badge.png" },
+        { id: "plain", value: "不加購", price_delta: 0, is_active: true, image_url: null },
+      ] },
+      { id: "color", name: "顏色", options: [
+        { id: "blue", value: "藍色", price_delta: 0, is_active: true, image_url: "/blue.png" },
+      ] },
+    ],
+  });
+  render(<ShopPage />);
+  fireEvent.click(await screen.findByRole("link", { name: "查看商品：正式商品" }));
+  const front = await screen.findByRole("button", { name: "顯示正面" });
+  expect(screen.getByRole("img", { name: "正式商品・正面" })).toHaveAttribute("src", expect.stringContaining("/front.png"));
+  expect(screen.getAllByRole("button", { name: "顯示正面" })).toHaveLength(1);
+  fireEvent.click(screen.getByRole("button", { name: "顯示背面" }));
+  expect(screen.getByRole("img", { name: "正式商品・背面" })).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: /^藍色/ }));
+  expect(screen.getByRole("img", { name: "正式商品・藍色" })).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: /徽章.*\+50/ }));
+  expect(screen.getByRole("img", { name: "正式商品・徽章" })).toHaveAttribute("src", expect.stringContaining("/badge.png"));
+  expect(screen.getByRole("button", { name: "顯示徽章" })).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(screen.getByRole("button", { name: "不加購" }));
+  expect(screen.getByRole("img", { name: "正式商品・徽章" })).toBeVisible();
+  front.focus();
+  fireEvent.click(front);
+  expect(front).toHaveFocus();
+  expect(front).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("img", { name: "正式商品・正面" })).toBeVisible();
+});
+
+it("沒有標註的舊照片仍有可辨識的切換名稱", async () => {
+  api.getProduct.mockResolvedValue({ ...formalProduct, image_url: "/old.png", variant_groups: [],
+    media: [{ id: "model", image_url: "/model.png", kind: "model" }] });
+  render(<ShopPage />);
+  fireEvent.click(await screen.findByRole("link", { name: "查看商品：正式商品" }));
+  expect(await screen.findByRole("button", { name: "顯示商品主圖" })).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(screen.getByRole("button", { name: "顯示模特兒宣傳照 1" }));
+  expect(screen.getByRole("img", { name: "正式商品・模特兒宣傳照 1" })).toBeVisible();
+});
+
 beforeEach(() => {
   vi.resetAllMocks();
   window.localStorage.clear();

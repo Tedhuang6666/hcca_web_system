@@ -300,7 +300,10 @@ async def create_product(
         status=ProductStatus.DRAFT,
         media=[
             ProductMedia(
-                image_url=item.image_url, kind=item.kind, sort_order=item.sort_order or index
+                image_url=item.image_url,
+                label=item.label,
+                kind=item.kind,
+                sort_order=item.sort_order or index,
             )
             for index, item in enumerate(data.media)
         ],
