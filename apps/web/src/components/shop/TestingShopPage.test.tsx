@@ -233,7 +233,7 @@ it("hides closed activities from the public catalog and shows an empty state", a
   expect(screen.queryByRole("navigation", { name: "選擇商品活動" })).not.toBeInTheDocument();
 });
 
-it.each(["activity", "deadline", "global", "class-paid"] as const)(
+it.each(["activity", "deadline", "global"] as const)(
   "hides an activity closed by %s without closure or payment notices",
   async (reason) => {
     window.history.replaceState({}, "", "/shop?product=closed-product");
@@ -248,7 +248,7 @@ it.each(["activity", "deadline", "global", "class-paid"] as const)(
         products: [{ ...formalProduct, id: "winter-product", name: "冬季商品" }] },
     ]);
     api.getCloseStatus.mockResolvedValue({ statuses: {
-      "closed-category": { is_closed: true, is_global: reason !== "class-paid" },
+      "closed-category": { is_closed: true, is_global: true },
       winter: { is_closed: false },
     } });
 
@@ -266,19 +266,83 @@ it.each(["activity", "deadline", "global", "class-paid"] as const)(
   },
 );
 
-it("shows the empty catalog without notices when the class has paid for every activity", async () => {
+it("keeps products visible with a closure notice when the class has paid", async () => {
   api.myClass.mockResolvedValue({ id: "class-1", label: "一年一班" });
+  api.getCurrentRegistrations.mockResolvedValue([]);
   api.getCloseStatus.mockResolvedValue({ statuses: {
     goods: { is_closed: true, is_global: false },
   } });
 
   render(<ShopPage />);
 
-  expect(await screen.findByText("目前沒有可訂購的商品，請稍後再來看看。")).toBeVisible();
-  expect(screen.queryByRole("article")).not.toBeInTheDocument();
-  expect(screen.queryByText("部分活動已結單")).not.toBeInTheDocument();
-  expect(screen.queryByText("班聯已確認本班收款")).not.toBeInTheDocument();
-  expect(screen.getByRole("group", { name: "我的班級" })).not.toHaveAttribute("data-closed");
+  expect(await screen.findByRole("heading", { name: "班聯已確認本班收款" })).toBeVisible();
+  expect(screen.queryByText("目前沒有可訂購的商品，請稍後再來看看。")).not.toBeInTheDocument();
+  const product = screen.getByRole("link", { name: "查看商品：正式商品" });
+  expect(product).toBeVisible();
+  expect(product).toHaveAttribute("aria-disabled", "true");
+  fireEvent.click(product);
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(api.setCurrentRegistrationProduct).not.toHaveBeenCalled();
+});
+
+it.each(["direct", "series", "route"] as const)("allows authorized testing after class closure (%s)", async (placement) => {
+  const inSeries = placement === "series";
+  api.myClass.mockResolvedValue({ id: "class-1", label: "一年一班" });
+  api.getCloseStatus.mockResolvedValue({ statuses: {
+    goods: { is_closed: true, is_global: false },
+  } });
+  api.catalog.mockResolvedValue([{ id: "goods", name: "商品", activity_id: "festival",
+    sort_order: 0, products: inSeries ? [] : [testingProduct], series: inSeries
+      ? [{ id: "series", name: "校慶系列", products: [testingProduct] }] : [] }]);
+  api.setCurrentRegistrationProduct.mockResolvedValue({ ...formalOrder, id: "test-order",
+    test_product_id: "testing", total_price: 100, subtotal_price: 100,
+    items: [{ ...formalOrder.items[0], product_id: "testing", product_name: "測試限定商品", quantity: 1, subtotal: 100 }],
+  });
+
+  render(<ShopPage productSlug={placement === "route" ? encodeURIComponent(testingProduct.name) : undefined} />);
+
+  fireEvent.click(await screen.findByRole("link", { name: "查看商品：測試限定商品" }));
+  expect(screen.queryByRole("region", { name: "活動結單通知" })).not.toBeInTheDocument();
+  expect(within(await screen.findByRole("dialog")).queryByRole("heading", {
+    name: "班聯已確認本班收款",
+  })).not.toBeInTheDocument();
+  const register = await screen.findByRole("button", { name: "登記購買 · NT$100" });
+  await waitFor(() => expect(register).toBeEnabled());
+  fireEvent.click(register);
+  await waitFor(() => expect(api.setCurrentRegistrationProduct).toHaveBeenCalledWith(
+    "testing", { variants: [{ option_ids: [], quantity: 1 }] },
+  ));
+});
+
+it("loads the catalog after authentication so testing products are not lost during session refresh", async () => {
+  let finishAuthentication!: () => void;
+  const authentication = new Promise<void>((resolve) => { finishAuthentication = resolve; });
+  let authenticated = false;
+  api.me.mockImplementation(async () => {
+    await authentication;
+    authenticated = true;
+    return { id: "tester", display_name: "測試人員", email: "tester@example.test" };
+  });
+  api.catalog.mockImplementation(async () => authenticated
+    ? [{ id: "goods", name: "商品", sort_order: 0, products: [testingProduct], series: [] }]
+    : []);
+
+  render(<ShopPage />);
+
+  expect(api.catalog).not.toHaveBeenCalled();
+  await act(async () => { finishAuthentication(); });
+  expect(await screen.findByRole("link", { name: "查看商品：測試限定商品" })).toBeVisible();
+});
+
+it("still loads the public catalog when authentication is unavailable", async () => {
+  api.me.mockRejectedValue(new Error("尚未登入"));
+  api.catalog.mockResolvedValue([{ id: "goods", name: "商品", sort_order: 0,
+    products: [formalProduct], series: [] }]);
+
+  render(<ShopPage />);
+
+  expect(await screen.findByRole("link", { name: "查看商品：正式商品" })).toBeVisible();
+  expect(screen.queryByRole("link", { name: "查看商品：測試限定商品" })).not.toBeInTheDocument();
 });
 
 it("ignores closure statuses for activities absent from the catalog", async () => {

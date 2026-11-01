@@ -39,6 +39,22 @@ describe("活動結單與多活動預購", () => {
     expect(defaultShopCategory([closed], "closed", now)).toBe(closed);
     expect(defaultShopCategory([], null, now)).toBeNull();
   });
+  it("班級截止保留有庫存的測試商品，正式商品與班聯結單仍受限制", () => {
+    const testing = category("testing", [{ ...product, status: "testing", sale_start: future }]);
+    expect(categoryOrderable(category("formal", [product]), now, true)).toBe(false);
+    expect(categoryOrderable(testing, now, true)).toBe(true);
+    expect(categoryOrderable({ ...testing, order_closed_at: past }, now, true)).toBe(false);
+    expect(categoryOrderable({ ...testing, order_closes_at: past }, now, true)).toBe(false);
+    expect(categoryOrderable(category("sold", [{ ...product, status: "testing", stock_quantity: 0 }]), now, true)).toBe(false);
+  });
+  it("班級截止後優先選擇仍可試訂的系列商品", () => {
+    const formal = category("formal", [product]);
+    const testing = { ...category("testing", []), series: [{ id: "series", name: "系列", sort_order: 0,
+      products: [{ ...product, status: "testing" as const }] }] };
+    expect(defaultShopCategory([formal, testing], "formal", now, {
+      formal: { is_closed: true }, testing: { is_closed: true },
+    })?.id).toBe("testing");
+  });
   it("以台北時間輸入與儲存，清除時間回傳明確的 null", () => {
     expect(deadlineInputValue("2026-10-22T12:00:00Z")).toBe("2026-10-22T20:00");
     expect(deadlineFromInput("2026-10-22T20:00")).toBe("2026-10-22T12:00:00.000Z");

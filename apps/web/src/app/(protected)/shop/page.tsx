@@ -475,7 +475,8 @@ function ProductModal({
   );
   const deadline = product ? productDeadline(product) : null;
   const testing = product?.status === "testing";
-  const closure = resolveOrderClosureState(closeStatus, activityClosedAt, activityClosesAt);
+  const productCloseStatus = testing && !closeStatus?.is_global ? undefined : closeStatus;
+  const closure = resolveOrderClosureState(productCloseStatus, activityClosedAt, activityClosesAt);
   const deadlinePassed = !testing && (closure.deadlinePassed
     || Boolean(deadline && new Date(deadline).getTime() <= Date.now()));
   const councilClosed = closure.councilClosed;
@@ -693,7 +694,7 @@ function ProductModal({
             <>
               <div className="shop-product-dialog-scroll">
                 <OrderClosureNotice
-                  status={closeStatus}
+                  status={productCloseStatus}
                   activityClosedAt={activityClosedAt}
                   activityClosesAt={activityClosesAt}
                 />
@@ -1291,13 +1292,14 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
     const token = readShopDelegationToken();
     setDelegationToken(token);
     setDelegationOpen((alreadyOpen) => alreadyOpen || Boolean(token));
-    if (!token) {
+    const loadShop = () => {
       loadCatalog();
       const generation = refreshGeneration.current;
       void shopApi.listAvailablePromotions()
         .then((promotions) => { if (active && generation === refreshGeneration.current) setAvailablePromotions(promotions); })
         .catch(() => { if (active && generation === refreshGeneration.current) setAvailablePromotions([]); });
-    } else {
+    };
+    if (token) {
       setCatalog([]);
       setLoading(true);
     }
@@ -1313,16 +1315,20 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       setDelegationToken(currentToken);
       if (currentToken) {
         await loadDelegation(currentToken);
-      } else if (!new URLSearchParams(window.location.search).get("class_member_user_id")) {
-        const generation = refreshGeneration.current;
-        try {
-          const orders = await loadCurrentRegistrations();
-          if (active && generation === refreshGeneration.current) setRegistrations(orders);
-        }
-        catch (error) {
-          if (!active || generation !== refreshGeneration.current) return;
-          setRegistrationLoadError(true);
-          toast.error(apiErrorMessage(error, "無法載入商品登記"));
+      } else {
+        // 公開目錄不會以 401 觸發刷新，必須先確認登入才能取得測試商品。
+        loadShop();
+        if (!new URLSearchParams(window.location.search).get("class_member_user_id")) {
+          const generation = refreshGeneration.current;
+          try {
+            const orders = await loadCurrentRegistrations();
+            if (active && generation === refreshGeneration.current) setRegistrations(orders);
+          }
+          catch (error) {
+            if (!active || generation !== refreshGeneration.current) return;
+            setRegistrationLoadError(true);
+            toast.error(apiErrorMessage(error, "無法載入商品登記"));
+          }
         }
       }
     }).catch(() => {
@@ -1331,6 +1337,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       setIsLoggedIn(false);
       setRegistrations([]);
       if (token) setLoading(false);
+      else loadShop();
     }).finally(() => { if (active) setAuthLoading(false); });
     return () => { active = false; };
   }, [loadCatalog, loadDelegation, loadCurrentRegistrations]);
@@ -1463,7 +1470,8 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       : catalog.filter((category) => (
         !category.order_closed_at
         && !(category.order_closes_at && new Date(category.order_closes_at).getTime() <= catalogTime)
-        && !closeStatus[category.id]?.is_closed
+        // 班級截止只限制正式登記；保留商品與原因，亦不遮蔽有權限的試訂。
+        && !(closeStatus[category.id]?.is_closed && closeStatus[category.id]?.is_global)
       ));
   const hasDisplayedClosedActivity = displayedCatalog.some(
     (category) => closeStatus[category.id]?.is_closed,
@@ -1486,7 +1494,9 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
     selectedCategory?.order_closes_at ?? null,
     catalogTime,
   );
-  const directLinkClosed = directProductRoute && selectedCategoryClosure.isClosed;
+  const directLinkClosed = directProductRoute && selectedCategoryClosure.isClosed
+    && (selectedCategoryClosure.councilClosed || selectedCategoryClosure.deadlinePassed
+      || routeProductEntry?.product.status !== "testing");
 
   useEffect(() => {
     const now = Date.now();
