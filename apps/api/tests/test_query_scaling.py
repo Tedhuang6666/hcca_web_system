@@ -321,7 +321,7 @@ async def test_batch_claim_validation_keeps_scope_and_leaf_checks(db_session, cl
 
 @pytest.mark.parametrize("document_count", [1, 40])
 async def test_sensitive_document_lists_share_lookups_within_one_request(
-    db_session, admin_user, make_user, query_counter, document_count, record_property
+    db_session, admin_user, make_user, query_counter, document_count, monkeypatch, record_property
 ):
     viewer = await make_user()
     orgs = [Org(name="受文機關"), Org(name="發文機關")]
@@ -371,7 +371,13 @@ async def test_sensitive_document_lists_share_lookups_within_one_request(
 
     # 下一次請求必須重新檢查已失效的任期。
     ended = await db_session.get(UserPosition, tenure_id)
-    ended.end_date = local_today() - timedelta(days=1)
+    utc_today = datetime.now(UTC).date()
+    taipei_today = utc_today + timedelta(days=1)
+    monkeypatch.setattr(
+        "api.services.document._access.local_today",
+        lambda: taipei_today,
+    )
+    ended.end_date = taipei_today - timedelta(days=1)
     ended.start_date = ended.end_date - timedelta(days=1)
     await db_session.flush()
     restricted = await build_document_list_items(db_session, docs, viewer_id=viewer_id)

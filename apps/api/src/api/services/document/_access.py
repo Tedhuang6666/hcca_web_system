@@ -457,7 +457,7 @@ async def user_has_full_document_access(
         if recipient.target_user_id == user_id:
             return True
         if recipient.target_org_id is not None and recipient.target_org_id in await cache.org_ids(
-            datetime.now(UTC).date()
+            local_today()
         ):
             return True
         if recipient.target_class_id is not None and await cache.is_class_member(
