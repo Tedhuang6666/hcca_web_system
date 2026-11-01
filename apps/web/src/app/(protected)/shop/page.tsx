@@ -173,7 +173,7 @@ function resolveOrderClosureState(
   now = Date.now(),
 ) {
   const deadline = status?.closes_at ?? activityClosesAt;
-  const closedAt = status?.closed_at ?? activityClosedAt;
+  const closedAt = activityClosedAt ?? (status?.is_global ? status.closed_at : null);
   const deadlinePassed = Boolean(deadline && new Date(deadline).getTime() <= now);
   const closedAtMatchesDeadline = Boolean(
     deadline && closedAt
@@ -219,7 +219,7 @@ function OrderClosureNotice({
   const description = closure.councilClosed
     ? "活動商品已從公開目錄隱藏；此連結僅供查看商品與結單紀錄。"
     : closure.classPaid
-      ? "本班商品登記已鎖定，其他班級仍可依活動狀態訂購。"
+      ? "本班此活動的商品登記已暫停，其他班級與本班其他活動仍可訂購。"
       : "活動商品已停止登記。";
 
   return (
@@ -1461,12 +1461,10 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       : catalog.filter((category) => (
         !category.order_closed_at
         && !(category.order_closes_at && new Date(category.order_closes_at).getTime() <= catalogTime)
-        // 班級截止只限制正式登記；保留商品與原因，亦不遮蔽有權限的試訂。
         && !(closeStatus[category.id]?.is_closed && closeStatus[category.id]?.is_global)
+        // 本班已暫停的活動不再佔用訂購入口；有權限的測試商品仍保留。
+        && (!closeStatus[category.id]?.is_closed || categoryOrderable(category, catalogTime, true))
       ));
-  const hasDisplayedClosedActivity = displayedCatalog.some(
-    (category) => closeStatus[category.id]?.is_closed,
-  );
   const openProductDisplayed = !loading && displayedCatalog.some((category) => (
     category.products.some((product) => product.id === openProduct)
     || category.series.some((series) => series.products.some((product) => product.id === openProduct))
@@ -1773,19 +1771,15 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       {myClass && (
         <details
           className="shop-class-summary"
-          aria-label="我的班級"
-          data-closed={hasDisplayedClosedActivity || undefined}>
+          aria-label="我的班級">
           <summary>
             <span>我的班級：{myClass.label ?? `${myClass.academic_year} 學年度 ${myClass.class_code} 班`}
               {myClass.seat_number ? ` · ${myClass.seat_number} 號` : " · 座號尚未登錄"}
             </span>
-            {hasDisplayedClosedActivity && <strong>部分活動已結單</strong>}
             <ChevronDown size={16} aria-hidden="true" />
           </summary>
           <div className="shop-public-context">
-            {hasDisplayedClosedActivity
-              ? <CircleAlert size={18} style={{ color: "var(--danger)" }} aria-hidden />
-              : <CircleCheck size={18} style={{ color: "var(--success)" }} aria-hidden />}
+            <CircleCheck size={18} style={{ color: "var(--success)" }} aria-hidden />
             <div>
               <p>
                 <strong>我的班級：{myClass.label ?? `${myClass.academic_year} 學年度 ${myClass.class_code} 班`}</strong>
@@ -1852,7 +1846,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
               <p>{selectedCategoryClosure.councilClosed
                 ? "此活動商品已從公開目錄隱藏。這個舊連結僅供查看商品詳情與收款紀錄，無法訂購。"
                 : selectedCategoryClosure.classPaid
-                  ? "本班已完成收款確認，無法再登記；其他班級仍可依活動狀態查看商品。"
+                  ? "本班此活動已完成收款確認，暫停登記；其他班級與本班其他活動仍可訂購。"
                   : "此活動商品已停止登記。這個舊連結僅供查看商品詳情與收款紀錄，無法訂購。"}</p>
             </div>
           </section>
