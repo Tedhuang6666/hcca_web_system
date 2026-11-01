@@ -355,6 +355,44 @@ it("hides a paid class activity and keeps another activity orderable", async () 
   ));
 });
 
+it("refreshes an empty locked catalog after payment is revoked while away", async () => {
+  api.me.mockResolvedValue({ id: "tester", student_id: "student-1" });
+  api.myClass.mockResolvedValue({ id: "class-1", label: "一年一班" });
+  api.getCurrentRegistrations.mockResolvedValue([]);
+  api.catalog.mockResolvedValue([{ id: "dance", name: "聯合舞會", activity_id: null,
+    sort_order: 0, products: [formalProduct], series: [] }]);
+  api.getCloseStatus.mockResolvedValueOnce({ statuses: { dance: { is_closed: true } } });
+  api.getCloseStatus.mockResolvedValue({ statuses: { dance: { is_closed: false } } });
+
+  render(<ShopPage />);
+
+  expect(await screen.findByText("目前沒有可訂購的商品，請稍後再來看看。")).toBeVisible();
+  fireEvent.focus(window);
+  const product = await screen.findByRole("link", { name: "查看商品：正式商品" });
+  expect(product).toBeVisible();
+  expect(api.catalog).toHaveBeenCalledTimes(2);
+  fireEvent.click(product);
+  await waitFor(() => expect(screen.getByRole("button", { name: "登記購買 · NT$100" })).toBeEnabled());
+});
+
+it("refreshes a closed direct link without closing the open product dialog", async () => {
+  api.me.mockResolvedValue({ id: "tester", student_id: "student-1" });
+  api.myClass.mockResolvedValue({ id: "class-1", label: "一年一班" });
+  api.getCurrentRegistrations.mockResolvedValue([]);
+  api.catalog.mockResolvedValue([{ id: "goods", name: "校商", activity_id: null,
+    sort_order: 0, products: [formalProduct], series: [] }]);
+  api.getCloseStatus.mockResolvedValueOnce({ statuses: { goods: { is_closed: true } } });
+  api.getCloseStatus.mockResolvedValue({ statuses: { goods: { is_closed: false } } });
+
+  render(<ShopPage productSlug={encodeURIComponent(formalProduct.name)} />);
+
+  const dialog = await screen.findByRole("dialog");
+  expect(await within(dialog).findByRole("button", { name: "班聯已確認本班收款" })).toBeDisabled();
+  fireEvent.focus(window);
+  await waitFor(() => expect(within(dialog).getByRole("button", { name: "登記購買 · NT$100" })).toBeEnabled());
+  expect(dialog).toBeVisible();
+});
+
 it("keeps the same activity orderable for another class without payment confirmation", async () => {
   api.me.mockResolvedValue({ id: "tester", display_name: "測試同學", email: "student@example.test", student_id: "student-2" });
   api.myClass.mockResolvedValue({ id: "class-2", label: "一年二班" });

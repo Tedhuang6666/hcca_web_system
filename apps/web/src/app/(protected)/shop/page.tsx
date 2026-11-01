@@ -1078,6 +1078,8 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
   const [delegationError, setDelegationError] = useState("");
   const [delegationBusy, setDelegationBusy] = useState(false);
   const refreshGeneration = useRef(0);
+  const catalogRefresh = useRef<{ generation: number; key: string; promise: Promise<void> } | null>(null);
+  const catalogLoaded = useRef<string | null>(null);
   const mutationBusy = useRef(false);
   const currentRegistrationRefresh = useRef<Promise<OrderOut[]> | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -1173,7 +1175,11 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
 
   const loadCatalog = useCallback(() => {
     const generation = refreshGeneration.current;
-    if (directProductRoute || !cacheHas(catalogCacheKey)) setLoading(true);
+    const key = JSON.stringify([catalogCacheKey, topicSlug, productSlug]);
+    if (catalogRefresh.current?.generation === generation && catalogRefresh.current.key === key) {
+      return catalogRefresh.current.promise;
+    }
+    if (catalogLoaded.current !== key && (directProductRoute || !cacheHas(catalogCacheKey))) setLoading(true);
     setLoadError(false);
     const routeSegments = topicSlug && productSlug
       ? [topicSlug, productSlug]
@@ -1187,34 +1193,44 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
         return segment;
       }
     });
-    shopApi
+    const request = shopApi
       .catalog(undefined, false, directPath)
       .then(async (data) => {
-        if (generation !== refreshGeneration.current) return;
+        if (generation !== refreshGeneration.current || catalogRefresh.current?.promise !== request) return;
+        catalogLoaded.current = key;
         setCatalog(data);
         if (!directProductRoute) cacheSet(catalogCacheKey, data);
         try {
           const schoolClass = await classApi.myClass();
-          if (generation !== refreshGeneration.current) return;
+          if (generation !== refreshGeneration.current || catalogRefresh.current?.promise !== request) return;
           setMyClass(schoolClass);
           setClassLoadFailed(false);
           if (schoolClass && data.length) {
             const catIds = data.map((c) => c.id);
             const status = await shopApi.getCloseStatus(catIds, schoolClass.id);
-            if (generation !== refreshGeneration.current) return;
+            if (generation !== refreshGeneration.current || catalogRefresh.current?.promise !== request) return;
             setCloseStatus(status.statuses);
           } else {
             setCloseStatus({});
           }
         } catch {
-          if (generation === refreshGeneration.current) {
+          if (generation === refreshGeneration.current && catalogRefresh.current?.promise === request) {
             setMyClass(null);
             setClassLoadFailed(true);
           }
         }
       })
-      .catch(() => { if (generation === refreshGeneration.current) setLoadError(true); })
-      .finally(() => { if (generation === refreshGeneration.current) setLoading(false); });
+      .catch(() => {
+        if (generation === refreshGeneration.current && catalogRefresh.current?.promise === request) setLoadError(true);
+      })
+      .finally(() => {
+        if (catalogRefresh.current?.promise === request) {
+          catalogRefresh.current = null;
+          if (generation === refreshGeneration.current) setLoading(false);
+        }
+      });
+    catalogRefresh.current = { generation, key, promise: request };
+    return request;
   }, [catalogCacheKey, directProductRoute, productSlug, topicSlug]);
 
   const loadDelegation = useCallback(async (token: string, claim = false) => {
@@ -1382,6 +1398,21 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
     window.addEventListener("hashchange", changeContext);
     return () => window.removeEventListener("hashchange", changeContext);
   }, [isLoggedIn, delegationToken, classMemberUserId, loadCatalog, loadDelegation, loadClassMemberOrders, loadCurrentRegistrations]);
+
+  useEffect(() => {
+    if (authLoading || delegationToken) return;
+    const refresh = () => {
+      if (!mutationBusy.current && document.visibilityState !== "hidden") void loadCatalog();
+    };
+    const timer = window.setInterval(refresh, 30_000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [authLoading, delegationToken, loadCatalog]);
 
   const refreshRegistrations = useCallback(async () => {
     if (!isLoggedIn || authLoading || mutationBusy.current || document.visibilityState === "hidden") return;

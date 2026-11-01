@@ -50,6 +50,10 @@ from api.services.shop._catalog import (
     generate_order_serial,
     get_product,
 )
+from api.services.shop._class_payment_scope import (
+    class_payment_for_scope,
+    paid_general_category_ids,
+)
 from api.services.shop._payment_notifications import queue_individual_payment_notice
 from api.services.shop._promotions import PromotionAllocation, resolve_promotions
 from api.services.student_identity import has_student_identity
@@ -512,6 +516,10 @@ async def _create_order_from_items(
         if any(
             (existing.is_paid or existing.is_class_collected)
             and _order_activity_id(existing) == activity_id
+            and (
+                activity_id is not None
+                or any(_product_order_scope(item.product) == order_scope for item in existing.items)
+            )
             for existing in paid_orders
         ):
             raise ValueError("已收款登記已鎖定，請先確認補收款原班級")
@@ -715,7 +723,7 @@ async def create_direct_order(
     council_override = assistance_scope in {"council_assisted", "council_separate"}
     cart_items = await _order_items_to_cart_items(session, data.items)
     orders: list[Order] = []
-    for (activity_id, _category_id), activity_items in (
+    for (activity_id, category_id), activity_items in (
         await _group_cart_items_by_activity(session, cart_items)
     ).items():
         supplement = assistance_scope == "council_separate"
@@ -730,19 +738,22 @@ async def create_direct_order(
             )
             supplement = supplement or any(closed.values())
         if assisted_by_id is not None and class_id is not None:
-            class_paid = await session.scalar(
-                select(ShopClassPayment.id).where(
-                    ShopClassPayment.class_id == class_id,
-                    ShopClassPayment.activity_id == activity_id,
-                    ShopClassPayment.is_paid.is_(True),
-                )
-            )
+            class_paid = await class_payment_for_scope(session, class_id, activity_id, category_id)
             collected = await session.scalar(
                 select(Order.id)
                 .where(
                     Order.user_id == user_id,
                     Order.class_id == class_id,
                     Order.activity_id == activity_id,
+                    True
+                    if activity_id is not None
+                    else or_(
+                        Order.category_id == category_id,
+                        Order.category_id.is_(None)
+                        & Order.items.any(
+                            OrderItem.product.has(_product_category_filter(category_id))
+                        ),
+                    ),
                     Order.test_product_id.is_(None),
                     Order.status.in_((OrderStatus.PENDING, OrderStatus.CONFIRMED)),
                     or_(Order.is_paid.is_(True), Order.is_class_collected.is_(True)),
@@ -1062,7 +1073,8 @@ async def _assert_product_registration_open(
         await _assert_activity_order_unlocked(session, _product_activity_id(product))
         return
     await _assert_activity_open(session, product)
-    await _assert_class_order_unlocked(session, class_id, _product_activity_id(product))
+    activity_id, category_scope = _product_order_scope(product)
+    await _assert_class_order_unlocked(session, class_id, activity_id, category_scope)
     if product.status != ProductStatus.ACTIVE and not (
         allow_sold_out and product.status == ProductStatus.SOLD_OUT
     ):
@@ -1466,7 +1478,10 @@ async def _lock_class_orders(session: AsyncSession, class_id: uuid.UUID | None) 
 
 
 async def _assert_class_order_unlocked(
-    session: AsyncSession, class_id: uuid.UUID | None, activity_id: uuid.UUID | None
+    session: AsyncSession,
+    class_id: uuid.UUID | None,
+    activity_id: uuid.UUID | None,
+    category_id: uuid.UUID | None = None,
 ) -> None:
     if class_id is None:
         return
@@ -1474,13 +1489,7 @@ async def _assert_class_order_unlocked(
     await session.execute(
         select(SchoolClass.id).where(SchoolClass.id == class_id).with_for_update(read=True)
     )
-    payment = await session.scalar(
-        select(ShopClassPayment.id).where(
-            ShopClassPayment.class_id == class_id,
-            ShopClassPayment.activity_id == activity_id,
-            ShopClassPayment.is_paid.is_(True),
-        )
-    )
+    payment = await class_payment_for_scope(session, class_id, activity_id, category_id)
     if payment is not None:
         raise ValueError("班聯已確認本班收款，商品登記已鎖定")
 
@@ -1513,6 +1522,11 @@ async def get_close_status(
         else []
     )
     paid_scopes = {payment.activity_id: payment for payment in payments}
+    paid_categories = (
+        await paid_general_category_ids(session, class_id)
+        if class_id is not None and None in paid_scopes
+        else set()
+    )
     q = (
         select(ShopOrderClose)
         .options(selectinload(ShopOrderClose.closed_by))
@@ -1539,7 +1553,9 @@ async def get_close_status(
                 closes_at=deadline,
                 closed_at=activity.order_closed_at or deadline,
             )
-        elif payment := paid_scopes.get(category.activity_id):
+        elif (category.activity_id is not None or category.id in paid_categories) and (
+            payment := paid_scopes.get(category.activity_id)
+        ):
             result[category.id] = CloseStatusItem(
                 is_closed=True,
                 closed_at=payment.confirmed_at,
@@ -1626,6 +1642,9 @@ async def get_close_status_collection_details(
         for payment in payments
         if payment.confirmed_at is not None
     }
+    paid_categories = (
+        await paid_general_category_ids(session, class_id) if None in confirmation_times else set()
+    )
 
     for category in categories:
         result[category.id] = CloseStatusCollectionDetails(
@@ -1635,7 +1654,11 @@ async def get_close_status_collection_details(
                 else collected_categories.get(category.id)
             )
             or collected_categories.get(category.id),
-            council_confirmed_at=confirmation_times.get(category.activity_id),
+            council_confirmed_at=(
+                confirmation_times.get(category.activity_id)
+                if category.activity_id is not None or category.id in paid_categories
+                else None
+            ),
         )
     return result
 

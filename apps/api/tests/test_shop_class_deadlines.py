@@ -266,9 +266,95 @@ async def test_payment_locks_empty_class_and_future_categories_but_not_other_sco
         general.id
     ] is None
     await pay_class(s, activity_id=None)
+    # 空的一般商品收款紀錄不能推論每個未綁活動的主題都已收款。
     assert (await shop_svc.get_close_status(db_session, [general.id], s["class"].id))[
         general.id
-    ].is_closed
+    ] is None
+
+
+@pytest.mark.parametrize("legacy_order", [False, True])
+async def test_paid_general_theme_does_not_lock_unpaid_merchandise_or_dance(
+    db_session, class_deadlines, legacy_order
+):
+    s = class_deadlines
+    s["category"].activity_id = None
+    await db_session.flush()
+    created = await s["student"].put(registration_path(s), json={"variants": [{"quantity": 1}]})
+    assert created.status_code == 200, created.text
+    old_order = await shop_svc.get_order(db_session, created.json()["id"])
+    if legacy_order:
+        old_order.category_id = None
+    await pay_class(s, activity_id=None)
+
+    for name in ("新校商", "聯合舞會"):
+        category = await shop_svc.create_category(
+            db_session, data=ProductCategoryCreate(name=name), created_by=s["buyer"].id
+        )
+        product = await shop_svc.create_product(
+            db_session,
+            data=ProductCreate(category_id=category.id, name=name, price=100, is_unlimited=True),
+            created_by=s["buyer"].id,
+        )
+        await shop_svc.activate_product(db_session, product)
+        status_response = await s["student"].get(
+            "/shop/close-status", params={"category_ids": str(category.id)}
+        )
+        item = status_response.json()["statuses"][str(category.id)]
+        assert item["is_closed"] is False
+        assert item["council_confirmed_at"] is None
+        registered = await s["student"].put(
+            f"/shop/registrations/current/products/{product.id}",
+            json={"variants": [{"quantity": 1}]},
+        )
+        assert registered.status_code == 200, registered.text
+        assert registered.json()["is_paid"] is False
+        assert registered.json()["is_class_collected"] is False
+        assisted = await s["cadre"].post(
+            "/shop/orders/class",
+            json={
+                "user_id": str(s["buyer"].id),
+                "items": [{"product_id": str(product.id), "quantity": 1}],
+            },
+        )
+        assert assisted.status_code == 201, assisted.text
+        assert assisted.json()[0]["class_id"] == str(s["class"].id)
+        assert assisted.json()[0]["supplement_class_id"] is None
+        link = await s["student"].post(
+            "/shop/delegation-links", json={"name": "家人", "category_id": str(category.id)}
+        )
+        assert link.status_code == 201, link.text
+        accessed = await s["manager"].post(
+            "/shop/delegation/access", json={"token": link.json()["token"]}
+        )
+        assert accessed.status_code == 200, accessed.text
+        assert accessed.json()["closed_category_ids"] == []
+
+    # 原主題的收款鎖仍在，另一班不受影響。
+    assert (await status(s))["is_closed"] is True
+    assert (await status(s))["council_confirmed_at"] is not None
+    assert (
+        await s["student"].put(registration_path(s), json={"variants": [{"quantity": 2}]})
+    ).status_code == 409
+    assert (
+        await s["outsider"].put(registration_path(s), json={"variants": [{"quantity": 1}]})
+    ).status_code == 200
+
+
+@pytest.mark.parametrize("inactive_status", ["cancelled", "refunded"])
+async def test_inactive_paid_order_does_not_lock_general_category(
+    db_session, class_deadlines, inactive_status
+):
+    s = class_deadlines
+    s["category"].activity_id = None
+    await db_session.flush()
+    created = await s["student"].put(registration_path(s), json={"variants": [{"quantity": 1}]})
+    assert created.status_code == 200, created.text
+    await pay_class(s, activity_id=None)
+    order = await shop_svc.get_order(db_session, created.json()["id"])
+    order.status = inactive_status
+    await db_session.flush()
+    assert (await status(s))["is_closed"] is False
+    assert (await status(s))["council_confirmed_at"] is None
 
 
 async def test_payment_revocation_obeys_unified_cutoff(db_session, class_deadlines):

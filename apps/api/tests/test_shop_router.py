@@ -69,10 +69,26 @@ async def test_assisted_individual_payment_notices_target_buyer(
         from api.models.shop_class_payment import ShopClassPayment
 
         db_session.add(ShopClassPayment(class_id=sc.id, activity_id=None, is_paid=True))
-    elif collection == "collected":
-        await _seed_order(db_session, buyer, class_id=sc.id, is_class_collected=True)
     elif collection == "council_separate":
         await _grant_permission(db_session, cadre, "shop:manage_orders")
+    if collection in {"class_paid", "collected"}:
+        # 收款必須對應同一主題的實際訂單，空的一般收款紀錄無法辨識商品範圍。
+        existing = await _seed_order(
+            db_session,
+            buyer,
+            class_id=sc.id,
+            is_paid=collection == "class_paid",
+            is_class_collected=collection == "collected",
+        )
+        existing.category_id = product.category_id or product.series.category_id
+        db_session.add(
+            OrderItem(
+                order_id=existing.id,
+                product_id=product.id,
+                quantity=1,
+                unit_price=product.price,
+            )
+        )
     await db_session.flush()
 
     path = "/shop/orders/assisted" if collection == "council_separate" else "/shop/orders/class"
