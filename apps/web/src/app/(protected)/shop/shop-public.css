@@ -45,6 +45,16 @@
 .shop-council-page { min-width: 0; }
 .shop-admin-page .input { min-height: 44px; max-width: 100%; }
 .shop-admin-page label { min-width: 0; }
+.shop-product-form .input { min-height: 44px; max-width: 100%; font-size: 16px; }
+.shop-product-form label { min-width: 0; }
+.shop-product-form :is(button, a, summary) { min-height: 44px; }
+.shop-product-form :is(input, textarea, select, button, a, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+.shop-product-actions { display: flex; gap: 0.75rem; width: 100%; }
+.shop-product-actions > button { flex: 1; min-width: 0; }
+.modal-footer:has(.shop-product-actions) { padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); }
 .shop-admin-page :is(button, a):focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 3px;
