@@ -52,6 +52,7 @@ import { categoryOrderable, defaultShopCategory, productDeadline } from "@/lib/s
 import ShopLookbook from "@/components/shop/ShopLookbook";
 import { hasShopLookbook, lookbookPhotoUrl, productLookbook } from "@/lib/shop-lookbook";
 import { registrationLockMessage, registrationVariantKey } from "@/lib/shop-registration";
+import { productGallery } from "@/lib/shop-product-media";
 
 function Thumb({ url, alt, size = 64 }: { url: string | null; alt: string; size?: number }) {
   if (!url) {
@@ -313,11 +314,25 @@ function ProductModal({
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const mediaSwipeRef = useRef<{ pointerId: number; x: number; y: number } | null>(null);
+  const galleryRef = useRef<HTMLDivElement>(null);
   const registrationUpdateInFlightRef = useRef(false);
   const activeProductRef = useRef<string | null>(productId);
   const registrationItemsRef = useRef(registration?.items ?? []);
   const loadedProductId = product?.id ?? null;
   const registrationId = registration?.id ?? null;
+
+  useEffect(() => {
+    const gallery = galleryRef.current;
+    const selected = gallery?.querySelector<HTMLElement>('[aria-pressed="true"]');
+    if (!gallery || !selected) return;
+    // 只移動縮圖列，避免 scrollIntoView 連帶捲動商品視窗而裁切標題。
+    const start = selected.getBoundingClientRect().left - gallery.getBoundingClientRect().left
+      + gallery.scrollLeft;
+    if (start < gallery.scrollLeft) gallery.scrollLeft = start;
+    else if (start + selected.offsetWidth > gallery.scrollLeft + gallery.clientWidth) {
+      gallery.scrollLeft = start + selected.offsetWidth - gallery.clientWidth;
+    }
+  }, [selectedMediaIndex]);
 
   const loadProduct = useCallback(async () => {
     setProduct(null);
@@ -421,21 +436,7 @@ function ProductModal({
   if (!mounted) return null;
 
   const variantGroups = product?.variant_groups ?? [];
-  const media = product
-    ? [
-        ...(productLookbook(product.name)?.photos ?? []).map((photo) => ({
-          image_url: lookbookPhotoUrl(photo.id),
-          thumbnail_url: lookbookPhotoUrl(photo.id, 480),
-          kind: "model" as const,
-        })),
-        ...(product.image_url ? [{ image_url: product.image_url, thumbnail_url: product.image_url, kind: "cover" as const }] : []),
-        ...(product.media ?? []).map((item) => ({
-          image_url: item.image_url,
-          thumbnail_url: item.image_url,
-          kind: item.kind,
-        })),
-      ]
-    : [];
+  const media = product ? productGallery(product) : [];
   const delta = variantGroups.reduce((sum, g) => {
     const opt = (g.options ?? []).find((o) => o.id === picked[g.id]);
     return sum + (opt?.price_delta ?? 0);
@@ -500,16 +501,8 @@ function ProductModal({
     return option?.image_url || current;
   }, null);
   const selectedMedia = selectedMediaIndex === null ? null : media[selectedMediaIndex] ?? null;
-  const displayMedia = selectedMedia ?? (variantImage
-    ? { image_url: variantImage, kind: "option" as const }
-    : media[0] ?? null);
-  const displayLabel = displayMedia?.kind === "model"
-    ? "模特兒宣傳照"
-    : displayMedia?.kind === "option"
-      ? "所選規格"
-      : displayMedia?.kind === "cover"
-        ? "商品主圖"
-        : "商品照片";
+  const displayMedia = selectedMedia ?? media.find((item) => item.image_url === variantImage) ?? media[0] ?? null;
+  const displayLabel = displayMedia?.label ?? "商品照片";
 
   const startMediaSwipe = (event: React.PointerEvent<HTMLImageElement>) => {
     if (media.length < 2 || (event.pointerType === "mouse" && event.button !== 0)) return;
@@ -640,27 +633,23 @@ function ProductModal({
               <Package size={48} strokeWidth={1.2} aria-hidden="true" />
             </div>
           )}
+          {product && displayMedia && <p className="shop-product-dialog-caption" role="status" aria-live="polite">{displayLabel}</p>}
           {product && media.length > 1 && (
-            <div className="shop-product-dialog-gallery" role="group" aria-label="商品圖片">
+            <div ref={galleryRef} className="shop-product-dialog-gallery" role="group" aria-label="商品圖片">
               {media.map((item, index) => {
-                const label = item.kind === "model"
-                  ? "模特兒宣傳照"
-                  : item.kind === "cover"
-                    ? "商品主圖"
-                    : "商品照片";
-                const selected = selectedMediaIndex === index || (
-                  selectedMediaIndex === null && index === 0 && !variantImage
-                );
+                const selected = item.image_url === displayMedia?.image_url;
                 return (
                   <button
                     key={`${item.image_url}-${index}`}
                     type="button"
                     onClick={() => setSelectedMediaIndex(index)}
-                    aria-label={`顯示${label} ${index + 1}`}
+                    aria-label={`顯示${item.label}`}
                     aria-pressed={selected}
+                    title={item.label}
                     className="shop-product-dialog-gallery-item">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={uploadUrl(item.thumbnail_url)} alt="" loading="lazy" />
+                    <span>{item.label}</span>
                   </button>
                 );
               })}
@@ -743,7 +732,9 @@ function ProductModal({
                             <button
                               key={o.id}
                               onClick={() => {
-                                setSelectedMediaIndex(null);
+                                if (o.image_url) {
+                                  setSelectedMediaIndex(media.findIndex((item) => item.image_url === o.image_url));
+                                }
                                 const nextPicked = { ...picked, [g.id]: o.id };
                                 setPicked(nextPicked);
                                 const nextKey = Object.values(nextPicked).sort().join(",");

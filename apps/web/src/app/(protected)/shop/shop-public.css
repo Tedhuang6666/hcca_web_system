@@ -1355,9 +1355,9 @@
 }
 
 .shop-product-dialog-gallery-item {
-  width: 4rem;
-  height: 4rem;
-  flex: 0 0 4rem;
+  width: 5rem;
+  min-height: 5.25rem;
+  flex: 0 0 5rem;
   overflow: hidden;
   border: 1px solid var(--public-border);
   border-radius: 0.55rem;
@@ -1375,9 +1375,35 @@
 .shop-product-dialog-gallery .shop-product-dialog-gallery-item img {
   display: block;
   width: 100%;
-  height: 100%;
+  height: 3.5rem;
   min-height: 0;
   object-fit: cover;
+}
+
+.shop-product-dialog-gallery-item span {
+  display: block;
+  overflow: hidden;
+  padding: 0.3rem;
+  color: var(--public-secondary);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shop-product-dialog-caption {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  max-width: calc(100% - 4.5rem);
+  margin: 0;
+  border-radius: 0.35rem;
+  background: var(--public-surface);
+  padding: 0.35rem 0.6rem;
+  color: var(--public-secondary);
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+  pointer-events: none;
 }
 
 .shop-product-dialog-content {
@@ -2356,9 +2382,8 @@
   }
 
   .shop-product-dialog-gallery-item {
-    width: 3.5rem;
-    height: 3.5rem;
-    flex-basis: 3.5rem;
+    width: 4.5rem;
+    flex-basis: 4.5rem;
   }
 }
 
