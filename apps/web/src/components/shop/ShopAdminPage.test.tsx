@@ -6,7 +6,7 @@ const api = vi.hoisted(() => ({
   listCategories: vi.fn(), listProducts: vi.fn(), listActivities: vi.fn(),
   list: vi.fn(), recipientOptions: vi.fn(), orderSummary: vi.fn(),
   listSeries: vi.fn(), createProduct: vi.fn(), getProduct: vi.fn(),
-  testProduct: vi.fn(), activateProduct: vi.fn(),
+  testProduct: vi.fn(), activateProduct: vi.fn(), updateProduct: vi.fn(), uploadImage: vi.fn(),
 }));
 const navigation = vi.hoisted(() => ({ search: "" }));
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(navigation.search) }));
@@ -177,7 +177,7 @@ describe("商品管理與統計", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "商品名稱" }), { target: { value: "紀念袋" } });
     const price = screen.getByRole("spinbutton", { name: "售價（新台幣元）" });
     fireEvent.change(price, { target: { value: "-1" } });
-    fireEvent.click(screen.getByRole("button", { name: "建立草稿商品" }));
+    fireEvent.click(screen.getByRole("button", { name: "儲存草稿" }));
     expect(screen.getByRole("alert")).toHaveTextContent("售價請填寫 0 或正整數");
     expect(price).toHaveFocus();
     expect(price).toHaveAttribute("aria-invalid", "true");
@@ -186,15 +186,132 @@ describe("商品管理與統計", () => {
     fireEvent.change(price, { target: { value: "100" } });
     const stock = screen.getByRole("spinbutton", { name: "可訂購數量（件）" });
     fireEvent.change(stock, { target: { value: "1.5" } });
-    fireEvent.click(screen.getByRole("button", { name: "建立草稿商品" }));
+    fireEvent.click(screen.getByRole("button", { name: "儲存草稿" }));
     expect(screen.getByRole("alert")).toHaveTextContent("可訂購數量請填寫 0 或正整數");
     expect(api.createProduct).not.toHaveBeenCalled();
     fireEvent.change(stock, { target: { value: "50" } });
-    fireEvent.click(screen.getByRole("button", { name: "建立草稿商品" }));
+    fireEvent.click(screen.getByRole("button", { name: "儲存草稿" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("商品尚未儲存，請重試");
     expect(screen.getByRole("textbox", { name: "商品名稱" })).toHaveValue("紀念袋");
     expect(price).toHaveValue(100);
     expect(stock).toHaveValue(50);
     expect(api.createProduct).toHaveBeenCalledWith(expect.objectContaining({ price: 100, stock_quantity: 50 }));
+  });
+
+  it("直接從新增入口選主題，一次儲存商品與批次規格後上架", async () => {
+    api.listCategories.mockResolvedValue([{ id: "first", name: "校慶" }, { id: "second", name: "畢業季" }]);
+    const draft = { id: "new", category_id: "second", name: "畢業紀念衫", price: 300, stock_quantity: 50, status: "draft", variant_groups: [] };
+    api.createProduct.mockResolvedValue(draft);
+    api.activateProduct.mockResolvedValue({ ...draft, status: "active" });
+    api.getProduct.mockResolvedValue({ ...draft, status: "active" });
+    render(<ShopAdminPage />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "新增商品" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "新增商品" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "商品主題" }), { target: { value: "second" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "商品名稱" }), { target: { value: "畢業紀念衫" } });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "售價（新台幣元）" }), { target: { value: "300" } });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "可訂購數量（件）" }), { target: { value: "50" } });
+    fireEvent.click(screen.getByRole("button", { name: "加入尺寸" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "規格 1 選項（逗號或換行分隔）" }), { target: { value: "S, M, M, XL:50" } });
+    fireEvent.click(screen.getByRole("button", { name: "加入顏色" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "規格 2 選項（逗號或換行分隔）" }), { target: { value: "黑\n白" } });
+    fireEvent.click(screen.getByRole("button", { name: "建立並上架" }));
+    await waitFor(() => expect(api.activateProduct).toHaveBeenCalledWith("new"));
+    expect(api.createProduct).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      category_id: "second", series_id: null, name: "畢業紀念衫", price: 300, stock_quantity: 50,
+      variant_groups: [
+        { name: "尺寸", sort_order: 0, options: [
+          { value: "S", price_delta: 0, image_url: null, sort_order: 0 },
+          { value: "M", price_delta: 0, image_url: null, sort_order: 1 },
+          { value: "XL", price_delta: 50, image_url: null, sort_order: 2 },
+        ] },
+        { name: "顏色", sort_order: 1, options: [
+          { value: "黑", price_delta: 0, image_url: null, sort_order: 0 },
+          { value: "白", price_delta: 0, image_url: null, sort_order: 1 },
+        ] },
+      ],
+    }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "新增商品" })).not.toBeInTheDocument());
+  });
+
+  it.each([false, true])("上架失敗保留草稿，重試不重複建立商品（伺服器已上架：%s）", async (alreadyActive) => {
+    const draft = { id: "new", category_id: "cat", name: "紀念袋", price: 100, status: "draft", variant_groups: [] };
+    api.listCategories.mockResolvedValue([{ id: "cat", name: "校慶" }]);
+    api.createProduct.mockResolvedValue(draft);
+    api.getProduct.mockResolvedValue({ ...draft, status: alreadyActive ? "active" : "draft" });
+    api.activateProduct.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce({ ...draft, status: "active" });
+    render(<ShopAdminPage />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "新增商品" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "新增商品" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "商品名稱" }), { target: { value: "紀念袋" } });
+    fireEvent.click(screen.getByRole("button", { name: "建立並上架" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("草稿已儲存");
+    expect(screen.getByRole("button", { name: "保留草稿並關閉" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "重試上架" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "新增商品" })).not.toBeInTheDocument());
+    expect(api.createProduct).toHaveBeenCalledTimes(1);
+    expect(api.activateProduct).toHaveBeenCalledTimes(alreadyActive ? 1 : 2);
+  });
+
+  it("規格未填完整時聚焦提示，建立失敗保留規格供重試；草稿不自動上架", async () => {
+    api.listCategories.mockResolvedValue([{ id: "cat", name: "校慶" }]);
+    api.createProduct.mockRejectedValueOnce(new Error("offline"));
+    render(<ShopAdminPage />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "新增商品" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "新增商品" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "商品名稱" }), { target: { value: "紀念衫" } });
+    fireEvent.click(screen.getByRole("button", { name: "加入尺寸" }));
+    fireEvent.click(screen.getByRole("button", { name: "儲存草稿" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("請填寫每組規格名稱與至少一個選項");
+    expect(screen.getByLabelText("商品規格")).toHaveFocus();
+    expect(api.createProduct).not.toHaveBeenCalled();
+    const options = screen.getByRole("textbox", { name: "規格 1 選項（逗號或換行分隔）" });
+    fireEvent.change(options, { target: { value: "S, M" } });
+    fireEvent.click(screen.getByRole("button", { name: "儲存草稿" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("商品尚未儲存");
+    expect(options).toHaveValue("S, M");
+    expect(api.activateProduct).not.toHaveBeenCalled();
+  });
+
+  it("收合的限購設定無效時會自動展開並聚焦，編輯保留原本的選填資料", async () => {
+    const product = { id: "old", category_id: "cat", name: "紀念袋", price: 100, stock_quantity: 20,
+      description: "原本描述", max_quantity_per_user: 2, requires_seating: false, status: "draft", variant_groups: [] };
+    api.listCategories.mockResolvedValue([{ id: "cat", name: "校慶" }]);
+    api.listProducts.mockResolvedValue([product]);
+    api.updateProduct.mockRejectedValue(new Error("offline"));
+    render(<ShopAdminPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /校慶/ }));
+    fireEvent.click((await screen.findAllByRole("button", { name: "編輯" }))[0]);
+    const limit = screen.getByLabelText("每人限購數量（留空表示不限購）");
+    expect(limit).toHaveValue(2);
+    fireEvent.change(limit, { target: { value: "-1" } });
+    fireEvent.click(screen.getByRole("button", { name: "儲存商品" }));
+    await waitFor(() => expect(limit).toHaveFocus());
+    expect(limit.closest("details")).toHaveAttribute("open");
+    fireEvent.change(limit, { target: { value: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: "儲存商品" }));
+    await waitFor(() => expect(api.updateProduct).toHaveBeenCalledWith("old", expect.objectContaining({ description: "原本描述", max_quantity_per_user: 3 })));
+    expect(api.activateProduct).not.toHaveBeenCalled();
+  });
+
+  it("照片上傳完成前禁止儲存，完成後可連同主圖儲存草稿", async () => {
+    const draft = { id: "photo", category_id: "cat", name: "紀念袋", price: 0, stock_quantity: 0, status: "draft", variant_groups: [] };
+    api.listCategories.mockResolvedValue([{ id: "cat", name: "校慶" }]);
+    api.createProduct.mockResolvedValue(draft);
+    api.getProduct.mockResolvedValue(draft);
+    let finishUpload!: (result: { url: string }) => void;
+    api.uploadImage.mockImplementation(() => new Promise((resolve) => { finishUpload = resolve; }));
+    render(<ShopAdminPage />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "新增商品" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "新增商品" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "商品名稱" }), { target: { value: "紀念袋" } });
+    fireEvent.change(screen.getByLabelText("一次選取多張商品照片"), { target: { files: [new File(["photo"], "bag.png", { type: "image/png" })] } });
+    expect(screen.getByRole("button", { name: "儲存草稿" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "照片上傳中…" })).toBeDisabled();
+    await act(async () => finishUpload({ url: "/uploads/bag.png" }));
+    fireEvent.click(screen.getByRole("button", { name: "儲存草稿" }));
+    await waitFor(() => expect(api.createProduct).toHaveBeenCalledWith(expect.objectContaining({ image_url: "/uploads/bag.png", variant_groups: [] })));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(api.activateProduct).not.toHaveBeenCalled();
   });
 });

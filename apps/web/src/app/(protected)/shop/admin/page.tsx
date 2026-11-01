@@ -300,18 +300,25 @@ function NewSeriesModal({
 
 function ProductFormModal({
   categoryId,
+  categories,
   seriesId,
   initial,
   onClose,
   onSaved,
 }: {
   categoryId: string;
+  categories: ProductCategoryOut[];
   seriesId: string | null;
   initial: ProductOut | null;
   onClose: () => void;
-  onSaved: (product: ProductOut) => void;
+  onSaved: (product: ProductOut, close?: boolean) => void;
 }) {
   const editing = initial !== null;
+  const [selectedCategoryId, setSelectedCategoryId] = useState(categoryId);
+  const [extraOpen, setExtraOpen] = useState(false);
+  const [pendingProduct, setPendingProduct] = useState<ProductOut | null>(null);
+  const [variantDrafts, setVariantDrafts] = useState<{ id: string; name: string; text: string }[]>([]);
+  const variantRef = useRef<HTMLDivElement>(null);
   type ProductMediaDraft = { id: string; image_url: string | null; kind: "product" | "model" };
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
@@ -330,13 +337,16 @@ function ProductFormModal({
   const [seatingMode, setSeatingMode] = useState<string>(initial?.seating_mode ?? "at_purchase");
   const [busy, setBusy] = useState(false);
   const [mediaUploadsInProgress, setMediaUploadsInProgress] = useState(0);
-  type ProductField = "name" | "price" | "stock" | "limit";
+  type ProductField = "name" | "price" | "stock" | "limit" | "variants";
   const [formError, setFormError] = useState<{ field: ProductField | null; message: string } | null>(null);
-  const fieldRefs = useRef<Record<ProductField, HTMLInputElement | null>>({ name: null, price: null, stock: null, limit: null });
+  const fieldRefs = useRef<Partial<Record<ProductField, HTMLInputElement | null>>>({});
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const showFieldError = (field: ProductField, message: string) => {
     setFormError({ field, message });
-    fieldRefs.current[field]?.focus();
+    if (field === "limit") setExtraOpen(true);
+    if (field === "variants") variantRef.current?.focus();
+    else if (field === "limit") requestAnimationFrame(() => fieldRefs.current[field]?.focus());
+    else fieldRefs.current[field]?.focus();
   };
   const fieldError = (field: ProductField) => formError?.field === field ? (
     <p id={`shop-product-${field}-error`} role="alert" className="mt-1 text-sm" style={{ color: "var(--danger)" }}>{formError.message}</p>
@@ -366,24 +376,140 @@ function ProductFormModal({
     setMediaUploadsInProgress((count) => Math.max(0, count - selected.length));
   };
 
+  const publishProduct = async (draft: ProductOut, checkStatus = false) => {
+    setBusy(true);
+    setFormError(null);
+    try {
+      const current = checkStatus ? await shopApi.getProduct(draft.id) : draft;
+      const published = current.status === "active"
+        ? current
+        : await shopApi.activateProduct(draft.id);
+      onSaved(published);
+      toast.success("商品已上架，已開放訂購");
+    } catch (error) {
+      onSaved(draft, false);
+      setFormError({ field: null, message: apiErrorMessage(error, "草稿已儲存，但尚未確認上架成功。請重試上架，或保留草稿稍後處理。") });
+    } finally { setBusy(false); }
+  };
+
+  const saveProduct = async (publish: boolean) => {
+    setFormError(null);
+    if (!name.trim()) { showFieldError("name", "請填寫商品名稱。"); return; }
+    const priceValue = Number(price);
+    const stockValue = Number(stock);
+    if (!price.trim() || !Number.isInteger(priceValue) || priceValue < 0) {
+      showFieldError("price", "售價請填寫 0 或正整數，單位為新台幣元。");
+      return;
+    }
+    if (!unlimited && (!stock.trim() || !Number.isInteger(stockValue) || stockValue < 0)) {
+      showFieldError("stock", "可訂購數量請填寫 0 或正整數；不限量時請勾選「不限制總訂購數量」。");
+      return;
+    }
+    const maxQuantity = maxQuantityPerUser.trim() ? Number(maxQuantityPerUser) : null;
+    if (maxQuantity !== null && (!Number.isInteger(maxQuantity) || maxQuantity < 1)) {
+      showFieldError("limit", "每人限購數量請填寫正整數，或留空表示不限購。");
+      return;
+    }
+    const variantGroups = variantDrafts.map((draft, sort_order) => ({
+      name: draft.name.trim(),
+      sort_order,
+      options: uniqueSmartOptions(parseSmartOptionsText(draft.text)).map((option, index) => ({
+        ...option, sort_order: index,
+      })),
+    }));
+    if (!editing && variantGroups.some((group) => !group.name || group.name.length > 100
+      || group.options.length === 0 || group.options.some((option) => option.value.length > 100
+        || !Number.isSafeInteger(option.price_delta)))) {
+      showFieldError("variants", "請填寫每組規格名稱與至少一個選項；名稱及選項最多 100 字，加價須為整數。");
+      return;
+    }
+    setBusy(true);
+    try {
+      const body = {
+        name: name.trim(),
+        description: description.trim() || null,
+        image_url: imageUrl,
+        media: media.flatMap(({ image_url, kind }, sort_order) =>
+          image_url && image_url !== imageUrl ? [{ image_url, kind, sort_order }] : []),
+        price: priceValue,
+        stock_quantity: Number.isInteger(stockValue) && stockValue >= 0 ? stockValue : 0,
+        is_unlimited: unlimited,
+        max_quantity_per_user: maxQuantity,
+        sale_end: deadlineFromInput(saleEnd),
+        requires_seating: requiresSeating,
+        seating_mode: requiresSeating ? seatingMode : null,
+      };
+      const savedProduct = editing
+        ? await shopApi.updateProduct(initial!.id, {
+            ...body,
+            category_id: selectedCategoryId,
+            series_id: seriesId,
+          })
+        : await shopApi.createProduct({
+            ...body,
+            variant_groups: variantGroups,
+            category_id: selectedCategoryId,
+            series_id: seriesId,
+          });
+      if (publish) {
+        setPendingProduct(savedProduct);
+        await publishProduct(savedProduct);
+      } else {
+        onSaved(savedProduct);
+        toast.success(editing ? "商品已更新" : "草稿已儲存，可稍後繼續編輯與上架");
+      }
+    } catch (e) {
+      setFormError({ field: null, message: apiErrorMessage(e, "商品尚未儲存，請重試；你填寫的內容已保留。") });
+    } finally { setBusy(false); }
+  };
+
   return (
-    <Modal title={`${editing ? "編輯" : "新增"}商品`} onClose={onClose} size="md">
-      <div className="space-y-3">
+    <Modal title={`${editing ? "編輯" : "新增"}商品`} onClose={() => { if (!busy && mediaUploadsInProgress === 0) onClose(); }} size="xl"
+      footer={(
+        <>
+          {formError?.field === null && <p role="alert" className="w-full text-sm" style={{ color: "var(--danger)" }}>{formError.message}</p>}
+          <div className="shop-product-actions">
+            {pendingProduct ? (
+              <>
+                <button type="button" disabled={busy} onClick={onClose} className="btn btn-secondary min-h-11">保留草稿並關閉</button>
+                <button type="button" disabled={busy} onClick={() => void publishProduct(pendingProduct, true)} className="btn btn-primary min-h-11">{busy ? "上架中…" : "重試上架"}</button>
+              </>
+            ) : (
+              <>
+                <button type="button" disabled={busy || mediaUploadsInProgress > 0} onClick={() => void saveProduct(false)} className={`btn min-h-11 ${editing ? "btn-primary" : "btn-secondary"}`}>
+                  {busy ? "儲存中…" : editing ? "儲存商品" : "儲存草稿"}
+                </button>
+                {!editing && <button type="button" disabled={busy || mediaUploadsInProgress > 0} onClick={() => void saveProduct(true)} className="btn btn-primary min-h-11">
+                  {mediaUploadsInProgress > 0 ? "照片上傳中…" : busy ? "儲存與上架中…" : "建立並上架"}
+                </button>}
+              </>
+            )}
+          </div>
+        </>
+      )}>
+      {pendingProduct ? (
+        <div className="space-y-3" role="status">
+          <h3 className="text-lg font-semibold">{pendingProduct.name}・草稿已儲存</h3>
+          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>商品與規格已保留，重試上架不會重複建立商品。</p>
+        </div>
+      ) : <div className="shop-product-form space-y-5">
+        {!editing && !seriesId && categories.length > 1 ? (
+          <Field label="商品主題">
+            <select className="input w-full" value={selectedCategoryId} onChange={(event) => setSelectedCategoryId(event.target.value)}>
+              {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+            </select>
+          </Field>
+        ) : <p className="text-sm" style={{ color: "var(--text-secondary)" }}>商品主題：{categories.find((category) => category.id === selectedCategoryId)?.name}{seriesId ? "／目前系列" : ""}</p>}
         <div>
           <Field label="商品名稱">
-            <input value={name} onChange={(e) => setName(e.target.value)} className="input w-full"
+            <input maxLength={200} placeholder="例如：校慶紀念衫" value={name} onChange={(e) => setName(e.target.value)} className="input w-full"
               ref={(node) => { fieldRefs.current.name = node; }}
               aria-invalid={formError?.field === "name" || undefined}
               aria-describedby={formError?.field === "name" ? "shop-product-name-error" : undefined} />
           </Field>
           {fieldError("name")}
         </div>
-        <Field label="商品描述（選填）">
-          <textarea value={description} onChange={(e) => setDescription(e.target.value)}
-            className="input w-full min-h-28 resize-y" rows={4}
-            placeholder="可分行填寫規格、取貨方式或注意事項" />
-        </Field>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <Field label="售價（新台幣元）">
               <input type="number" min={0} step={1} value={price} onChange={(e) => setPrice(e.target.value)} className="input w-full" inputMode="numeric"
@@ -404,43 +530,11 @@ function ProductFormModal({
             {fieldError("stock")}
           </div>
         </div>
-        <label className="flex items-center gap-2 text-xs" style={{ color: "var(--text-secondary)" }}>
+        <label className="flex min-h-11 items-center gap-3 text-sm" style={{ color: "var(--text-secondary)" }}>
           <input type="checkbox" checked={unlimited} onChange={(e) => setUnlimited(e.target.checked)} />
           不限制總訂購數量
         </label>
-        <div>
-          <Field label="每人限購數量（留空表示不限購）">
-            <input
-              type="number"
-              min={1}
-              step={1}
-              inputMode="numeric"
-              value={maxQuantityPerUser}
-              ref={(node) => { fieldRefs.current.limit = node; }}
-              aria-invalid={formError?.field === "limit" || undefined}
-              aria-describedby={formError?.field === "limit" ? "shop-product-limit-error" : undefined}
-              onChange={(e) => setMaxQuantityPerUser(e.target.value)}
-              className="input w-full"
-              placeholder="例如：1"
-            />
-          </Field>
-          {fieldError("limit")}
-          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-            同一帳號累計計算；取消或退款的訂單不計入。
-          </p>
-        </div>
-        <Field label="單品截止時間（台北時間，選填）">
-          <input type="datetime-local" value={saleEnd} onChange={(e) => setSaleEnd(e.target.value)}
-            className="input w-full" />
-          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-            留空沿用班聯統一截止時間；單品可提前截止，設定較晚時間仍受統一期限限制。
-          </p>
-          {initial?.effective_sale_end && <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>
-            目前有效截止：{new Date(initial.effective_sale_end).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}
-          </p>}
-        </Field>
-        <section className="space-y-2 rounded-lg p-3"
-          style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+        <section className="space-y-3">
           <div>
             <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>商品照片</h3>
             <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
@@ -503,93 +597,105 @@ function ProductFormModal({
           ))}
           {media.length === 0 && <p className="text-xs" style={{ color: "var(--text-muted)" }}>尚未新增商品照片。</p>}
         </section>
-        <div className="rounded-lg p-3 space-y-2" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-          <label className="flex items-center gap-2 text-xs" style={{ color: "var(--text-secondary)" }}>
-            <input type="checkbox" checked={requiresSeating} onChange={(e) => setRequiresSeating(e.target.checked)} />
-            此為需劃位票種（電影 / 演唱會等）
-          </label>
-          {requiresSeating && (
-            <>
-              <Field label="劃位時機">
-                <select value={seatingMode} onChange={(e) => setSeatingMode(e.target.value)} className="input w-full">
-                  <option value="at_purchase">購買即劃位</option>
-                  <option value="scheduled">指定時間開放後自助劃位</option>
-                  <option value="admin_assign">管理員依到場順序代為劃位</option>
-                </select>
+        {!editing && (
+          <div ref={variantRef} tabIndex={-1} aria-label="商品規格" aria-describedby={formError?.field === "variants" ? "shop-product-variants-error" : undefined} className="space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold">尺寸、顏色等規格（選填）</h3>
+              <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>有不同款式才需要新增；訂購時每組規格都須選一項。</p>
+            </div>
+            {variantDrafts.map((draft, index) => (
+              <div key={draft.id} className="space-y-3 border-b pb-4" style={{ borderColor: "var(--border)" }}>
+                <div className="flex items-end gap-2">
+                  <div className="min-w-0 flex-1">
+                    <Field label={`規格 ${index + 1} 名稱`}>
+                      <input maxLength={100} className="input w-full" value={draft.name} placeholder="例如：尺寸"
+                        onChange={(event) => setVariantDrafts((current) => current.map((row) => row.id === draft.id ? { ...row, name: event.target.value } : row))} />
+                    </Field>
+                  </div>
+                  <button type="button" className="btn btn-ghost min-h-11" aria-label={`移除規格 ${index + 1}`} onClick={() => setVariantDrafts((current) => current.filter((row) => row.id !== draft.id))}>移除</button>
+                </div>
+                <Field label={`規格 ${index + 1} 選項（逗號或換行分隔）`}>
+                  <textarea rows={2} className="input w-full resize-y" value={draft.text} placeholder={draft.name === "顏色" ? "黑, 白, 藍" : "S, M, L, XL:50"}
+                    onChange={(event) => setVariantDrafts((current) => current.map((row) => row.id === draft.id ? { ...row, text: event.target.value } : row))} />
+                </Field>
+                <p className="text-xs" style={{ color: "var(--text-secondary)" }}>加價可寫 XL:50，表示 XL 加 50 元；未填加價就是原價。</p>
+              </div>
+            ))}
+            <div className="flex flex-wrap gap-2">
+              {["尺寸", "顏色", "自訂規格"].map((label) => <button key={label} type="button" className="btn btn-secondary min-h-11 text-sm"
+                onClick={() => setVariantDrafts((current) => [...current, { id: crypto.randomUUID(), name: label === "自訂規格" ? "" : label, text: "" }])}>加入{label}</button>)}
+            </div>
+            {fieldError("variants")}
+          </div>
+        )}
+        <details open={extraOpen} onToggle={(event) => setExtraOpen(event.currentTarget.open)} className="border-t" style={{ borderColor: "var(--border)" }}>
+          <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">更多設定（描述、限購、截止時間、劃位）</summary>
+          <div className="space-y-4 pt-2">
+            <Field label="商品描述（選填）">
+              <textarea value={description} onChange={(e) => setDescription(e.target.value)}
+                className="input w-full min-h-28 resize-y" rows={4}
+                placeholder="可分行填寫規格、取貨方式或注意事項" />
+            </Field>
+            <div>
+              <Field label="每人限購數量（留空表示不限購）">
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  inputMode="numeric"
+                  value={maxQuantityPerUser}
+                  ref={(node) => { fieldRefs.current.limit = node; }}
+                  aria-invalid={formError?.field === "limit" || undefined}
+                  aria-describedby={formError?.field === "limit" ? "shop-product-limit-error" : undefined}
+                  onChange={(e) => setMaxQuantityPerUser(e.target.value)}
+                  className="input w-full"
+                  placeholder="例如：1"
+                />
               </Field>
-              {editing && (
-                <Link href={`/seating/admin/${initial!.id}`} className="btn btn-ghost text-xs">
-                  → 管理場次與座位圖
-                </Link>
+              {fieldError("limit")}
+              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                同一帳號累計計算；取消或退款的訂單不計入。
+              </p>
+            </div>
+            <Field label="單品截止時間（台北時間，選填）">
+              <input type="datetime-local" value={saleEnd} onChange={(e) => setSaleEnd(e.target.value)}
+                className="input w-full" />
+              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                留空沿用班聯統一截止時間；單品可提前截止，設定較晚時間仍受統一期限限制。
+              </p>
+              {initial?.effective_sale_end && <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>
+                目前有效截止：{new Date(initial.effective_sale_end).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}
+              </p>}
+            </Field>
+            <div className="rounded-lg p-3 space-y-2" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+              <label className="flex items-center gap-2 text-xs" style={{ color: "var(--text-secondary)" }}>
+                <input type="checkbox" checked={requiresSeating} onChange={(e) => setRequiresSeating(e.target.checked)} />
+                此為需劃位票種（電影 / 演唱會等）
+              </label>
+              {requiresSeating && (
+                <>
+                  <Field label="劃位時機">
+                    <select value={seatingMode} onChange={(e) => setSeatingMode(e.target.value)} className="input w-full">
+                      <option value="at_purchase">購買即劃位</option>
+                      <option value="scheduled">指定時間開放後自助劃位</option>
+                      <option value="admin_assign">管理員依到場順序代為劃位</option>
+                    </select>
+                  </Field>
+                  {editing && (
+                    <Link href={`/seating/admin/${initial!.id}`} className="btn btn-ghost text-xs">
+                      → 管理場次與座位圖
+                    </Link>
+                  )}
+                  {!editing && (
+                    <p className="text-xs" style={{ color: "var(--text-muted)" }}>儲存後即可在商品上「管理場次與座位圖」。</p>
+                  )}
+                </>
               )}
-              {!editing && (
-                <p className="text-xs" style={{ color: "var(--text-muted)" }}>儲存後即可在商品上「管理場次與座位圖」。</p>
-              )}
-            </>
-          )}
-        </div>
-        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-          {editing ? "尺寸、顏色等規格可在商品詳情設定。" : "先建立草稿，再設定尺寸、顏色等規格；按「上架」後才會開放訂購。"}
-        </p>
-        {formError?.field === null && <p role="alert" className="text-sm" style={{ color: "var(--danger)" }}>{formError.message}</p>}
-        <div className="flex gap-3 pt-1">
-          <button disabled={busy || mediaUploadsInProgress > 0} onClick={async () => {
-            setFormError(null);
-            if (!name.trim()) { showFieldError("name", "請填寫商品名稱。"); return; }
-            const priceValue = Number(price);
-            const stockValue = Number(stock);
-            if (!price.trim() || !Number.isInteger(priceValue) || priceValue < 0) {
-              showFieldError("price", "售價請填寫 0 或正整數，單位為新台幣元。");
-              return;
-            }
-            if (!unlimited && (!stock.trim() || !Number.isInteger(stockValue) || stockValue < 0)) {
-              showFieldError("stock", "可訂購數量請填寫 0 或正整數；不限量時請勾選「不限制總訂購數量」。");
-              return;
-            }
-            const maxQuantity = maxQuantityPerUser.trim() ? Number(maxQuantityPerUser) : null;
-            if (maxQuantity !== null && (!Number.isInteger(maxQuantity) || maxQuantity < 1)) {
-              showFieldError("limit", "每人限購數量請填寫正整數，或留空表示不限購。");
-              return;
-            }
-            setBusy(true);
-            try {
-              const body = {
-                name: name.trim(),
-                description: description.trim() || null,
-                image_url: imageUrl,
-                media: media.flatMap(({ image_url, kind }, sort_order) =>
-                  image_url && image_url !== imageUrl ? [{ image_url, kind, sort_order }] : []),
-                price: priceValue,
-                stock_quantity: Number.isInteger(stockValue) && stockValue >= 0 ? stockValue : 0,
-                is_unlimited: unlimited,
-                max_quantity_per_user: maxQuantity,
-                sale_end: deadlineFromInput(saleEnd),
-                requires_seating: requiresSeating,
-                seating_mode: requiresSeating ? seatingMode : null,
-              };
-              const savedProduct = editing
-                ? await shopApi.updateProduct(initial!.id, {
-                    ...body,
-                    category_id: categoryId,
-                    series_id: seriesId,
-                  })
-                : await shopApi.createProduct({
-                    ...body,
-                    category_id: categoryId,
-                    series_id: seriesId,
-                  });
-              onSaved(savedProduct);
-              toast.success(editing ? "商品已更新" : "商品已建立");
-            } catch (e) {
-              setFormError({ field: null, message: apiErrorMessage(e, "商品尚未儲存，請重試；你填寫的內容已保留。") });
-            } finally { setBusy(false); }
-          }} className="btn flex-1"
-            style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
-            {mediaUploadsInProgress > 0 ? "照片上傳中…" : busy ? "儲存中…" : editing ? "儲存商品" : "建立草稿商品"}
-          </button>
-          <button onClick={onClose} className="btn btn-ghost px-5">取消</button>
-        </div>
-      </div>
+            </div>
+          </div>
+        </details>
+        {editing && <p className="text-xs" style={{ color: "var(--text-secondary)" }}>尺寸、顏色等既有規格可在商品詳情設定。</p>}
+      </div>}
     </Modal>
   );
 }
@@ -1631,6 +1737,8 @@ export default function ShopAdminPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           {tab !== "catalog" && <Link href="/shop/admin" className="btn btn-secondary min-h-11">返回商品設定</Link>}
+          {tab === "catalog" && <button type="button" className="btn btn-primary min-h-11" disabled={catalogLoading || !!catalogError || categories.length === 0}
+            onClick={() => setProductModal({ initial: null, seriesId: null })}>新增商品</button>}
           {tab === "catalog" && <Link href="/shop/admin?view=promotions" className="btn btn-secondary min-h-11">設定優惠</Link>}
           {tab === "catalog" && <Link href="/shop/council-orders#activity-order-closure-title" className="btn btn-secondary min-h-11">活動鎖單</Link>}
           {tab === "catalog" && <Link href="/shop" className="btn btn-ghost min-h-11">查看商品頁</Link>}
@@ -1825,14 +1933,19 @@ export default function ShopAdminPage() {
               onClose={() => setSeriesModal(null)}
               onSaved={() => { setSeriesModal(null); loadSeries(cat.id); }} />
       )}
-      {productModal && cat && (
+      {productModal && categories.length > 0 && (
         <ProductFormModal
-          categoryId={productModal.initial?.category_id ?? cat.id}
+          categoryId={productModal.initial?.category_id ?? cat?.id ?? categories[0].id}
+          categories={categories}
           seriesId={productModal.initial?.series_id ?? productModal.seriesId ?? null}
           initial={productModal.initial}
           onClose={() => setProductModal(null)}
-          onSaved={(savedProduct) => {
-            setProductModal(null);
+          onSaved={(savedProduct, close = true) => {
+            if (close) setProductModal(null);
+            if (savedProduct.category_id !== cat?.id) {
+              setCat(categories.find((category) => category.id === savedProduct.category_id) ?? null);
+              setSeries(null);
+            }
             if (savedProduct.series_id) {
               setProducts((current) => current.some((item) => item.id === savedProduct.id)
                 ? current.map((item) => item.id === savedProduct.id ? savedProduct : item)
