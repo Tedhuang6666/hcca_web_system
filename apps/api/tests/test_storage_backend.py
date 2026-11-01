@@ -142,3 +142,45 @@ async def test_s3_get_url_inline_disposition():
     backend, fake = _s3_backend_with_fake_client()
     await backend.get_url("doc1/abc.pdf", disposition="inline")
     assert fake.last_params["ResponseContentDisposition"] == "inline"
+
+
+@pytest.mark.parametrize(
+    "filename",
+    ("../../outside.pdf", "..\\..\\outside.pdf", "/outside.pdf", "..%2f..%2foutside.pdf"),
+)
+async def test_local_upload_filename_cannot_choose_storage_path(tmp_path, filename):
+    backend = LocalStorageBackend(base_dir=str(tmp_path / "uploads"))
+    outside = tmp_path / "outside.pdf"
+    outside.write_bytes(b"existing outside file")
+    content = b"%PDF-1.4 attachment"
+
+    stored = await backend.save(_upload(filename, content), prefix="petitions/CASE")
+
+    path = backend.local_path(stored.storage_key)
+    assert path is not None
+    assert path.parent == tmp_path / "uploads" / "petitions" / "CASE"
+    assert len(path.stem) == 32
+    assert all(character in "0123456789abcdef" for character in path.stem)
+    assert path.suffix == ".pdf"
+    assert await backend.read_bytes(stored.storage_key) == content
+    assert outside.read_bytes() == b"existing outside file"
+
+
+@pytest.mark.parametrize("storage_key", ("../outside.pdf", "petitions/../../outside.pdf"))
+async def test_local_read_rejects_path_outside_storage_root(tmp_path, storage_key):
+    backend = LocalStorageBackend(base_dir=str(tmp_path / "uploads"))
+    (tmp_path / "outside.pdf").write_bytes(b"outside storage root")
+
+    with pytest.raises(FileNotFoundError):
+        await backend.read_bytes(storage_key)
+
+
+async def test_local_read_rejects_symlink_outside_storage_root(tmp_path):
+    backend = LocalStorageBackend(base_dir=str(tmp_path / "uploads"))
+    outside = tmp_path / "outside.pdf"
+    outside.write_bytes(b"outside storage root")
+    (tmp_path / "uploads" / "linked.pdf").symlink_to(outside)
+
+    assert backend.local_path("linked.pdf") is None
+    with pytest.raises(FileNotFoundError):
+        await backend.read_bytes("linked.pdf")
