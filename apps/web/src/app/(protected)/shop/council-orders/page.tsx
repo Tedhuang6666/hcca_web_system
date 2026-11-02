@@ -39,7 +39,8 @@ import type {
   SchoolClassListItem,
 } from "@/lib/types";
 
-type Tab = "summary" | "quantities" | "orders" | "analytics";
+type Tab = "summary" | "assisted" | "supplements" | "daily" | "receipts"
+  | "quantities" | "orders" | "analytics" | "closure";
 type LoadSummaryOptions = StatusRefreshOptions;
 
 const CLOSE_STATUS_CACHE_TTL_MS = 30_000;
@@ -101,7 +102,22 @@ export default function CouncilOrdersPage() {
     || permissions.has("shop:view_all")
     || permissions.has("finance:view");
   const canViewAdvancedStats = hasAdminPermission || permissions.has("shop:manage");
-  const [tab, setTab] = useState<Tab>("summary");
+  const [selectedTab, setTab] = useState<Tab>("summary");
+  const tabs = ([
+    { key: "summary", label: "班級繳款", visible: true },
+    { key: "assisted", label: "幫同學代訂", visible: canConfirmClassPayment },
+    { key: "supplements", label: "追加補收款", visible: canConfirmClassPayment },
+    { key: "daily", label: "每日收款", visible: canViewClassPaymentReport },
+    { key: "receipts", label: "收款單據", visible: canConfirmClassPayment },
+    { key: "quantities", label: "商品總量", visible: true },
+    { key: "orders", label: "查找訂單", visible: true },
+    { key: "analytics", label: "銷售分析", visible: true },
+    { key: "closure", label: "結單設定", visible: canConfirmClassPayment },
+  ] satisfies { key: Tab; label: string; visible: boolean }[]).filter((item) => item.visible);
+  const tab = tabs.find((item) => item.key === selectedTab)?.key ?? "summary";
+  const hasOrderFilters = ["summary", "receipts", "quantities", "orders", "analytics"].includes(tab);
+  const showsSummary = tab === "summary" || tab === "receipts";
+  const [assistedBusy, setAssistedBusy] = useState(false);
   const [classDetail, setClassDetail] = useState<{ id: string; label: string; source: "summary" | "collection" } | null>(null);
   const [analyticsRefresh, setAnalyticsRefresh] = useState(0);
   const [supplementRefresh, setSupplementRefresh] = useState(0);
@@ -160,7 +176,7 @@ export default function CouncilOrdersPage() {
   const [reminderBusy, setReminderBusy] = useState<"orders" | "class_reps" | null>(null);
   const [reminderError, setReminderError] = useState("");
   const [reminderStatus, setReminderStatus] = useState("");
-  const mutationBusy = paymentBusy !== null || cancelBusy || quantityBusy !== null;
+  const mutationBusy = paymentBusy !== null || cancelBusy || quantityBusy !== null || assistedBusy;
   const canCreateBatchReminders = canViewClassPaymentReport
     && (hasAdminPermission || permissions.has("email:send_bulk"));
 
@@ -621,14 +637,14 @@ export default function CouncilOrdersPage() {
 
   useEffect(() => {
     const pendingRequests = requestVersion;
-    if (tab === "summary") loadSummary();
+    if (tab === "summary" || tab === "receipts") loadSummary();
     else if (tab === "quantities") loadQuantities();
     else if (tab === "orders") loadOrders();
     return () => { pendingRequests.current++; };
   }, [tab, loadSummary, loadQuantities, loadOrders]);
 
   useEffect(() => {
-    if (tab !== "summary" || !canViewClassPaymentReport) return;
+    if (tab !== "daily" || !canViewClassPaymentReport) return;
     void loadClassPayments();
   }, [tab, canViewClassPaymentReport, loadClassPayments]);
 
@@ -658,7 +674,7 @@ export default function CouncilOrdersPage() {
     ...group, label: selectedCategory?.name ?? group.label,
     categories: group.categories.filter((category) => category.id === categoryId),
   }));
-  const canBatchDownloadReceipts = canConfirmClassPayment && groupBy === "class";
+  const canBatchDownloadReceipts = tab === "receipts" && canConfirmClassPayment && groupBy === "class";
   const receiptRows = summary?.rows.filter((row) => row.key !== "none") ?? [];
   const allReceiptRowsSelected = receiptRows.length > 0
     && receiptRows.every((row) => selectedReceiptClasses.has(row.key));
@@ -689,35 +705,54 @@ export default function CouncilOrdersPage() {
             <BarChart2 size={22} /> 班聯工作
           </h1>
           <p className="mt-2 max-w-2xl text-sm" style={{ color: "var(--text-muted)" }}>
-            點擊班級可查看每位同學的訂購品項、數量並快捷加購；也可確認活動收款、下載簽收單 PDF。
+            先選擇要處理的工作；點擊班級可查看同學的訂購明細並快捷加購。
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {canViewAdvancedStats && <Link href="/shop/admin?view=stats" className="btn btn-ghost min-h-11">進階訂購統計</Link>}
-          <button type="button" onClick={() => { if (tab === "summary") { void loadSummary({ refreshCloseStatus: true }); if (canViewClassPaymentReport) void loadClassPayments(); } else if (tab === "quantities") loadQuantities(); else if (tab === "analytics") setAnalyticsRefresh((value) => value + 1); else loadOrders(); }}
-            disabled={(tab !== "analytics" && loading) || mutationBusy} className="btn btn-ghost" aria-label="重新整理">
+          <button type="button" onClick={() => {
+            if (showsSummary) void loadSummary({ refreshCloseStatus: true });
+            else if (tab === "daily") void loadClassPayments();
+            else if (tab === "supplements") setSupplementRefresh((value) => value + 1);
+            else if (tab === "quantities") void loadQuantities();
+            else if (tab === "orders") void loadOrders();
+            else if (tab === "analytics") setAnalyticsRefresh((value) => value + 1);
+            else setOptionsRetry((value) => value + 1);
+          }}
+            disabled={(hasOrderFilters && tab !== "analytics" && loading) || mutationBusy} className="btn btn-ghost" aria-label="重新整理">
             <RefreshCw size={15} /> 重新整理
           </button>
         </div>
       </header>
 
-      {canConfirmClassPayment && <ActivityOrderClosure categories={catalog} disabled={mutationBusy || optionsLoading}
-        onSaved={() => { closeStatusCache.current = null; setOptionsRetry((value) => value + 1); }} />}
-
-      {canConfirmClassPayment && <AdminAssistedOrder catalog={catalog} classes={classes} optionsError={optionsError} optionsLoading={optionsLoading}
-        onRetry={() => setOptionsRetry((value) => value + 1)}
-        onCreated={() => { setSupplementRefresh((value) => value + 1); if (tab === "summary") void loadSummary(); else if (tab === "quantities") void loadQuantities(); else if (tab === "orders") void loadOrders(); else setAnalyticsRefresh((value) => value + 1); }} />}
-      {canConfirmClassPayment && <SupplementOrders canCollect canRejoin classes={classes} refreshKey={supplementRefresh}
-        onCollected={() => { void loadSummary(); void loadClassPayments(); }}
-        onRejoined={() => { setSupplementRefresh((value) => value + 1); void loadOrders(); void loadSummary(); }} />}
-
-      <nav className="shop-task-switch" aria-label="班聯統籌工作">
-        {([["summary", "班級繳款"], ["quantities", "商品總量"], ["orders", "查找訂單"], ["analytics", "銷售分析"]] as const).map(([key, label]) => (
-          <button key={key} type="button" disabled={mutationBusy} aria-pressed={tab === key} onClick={() => setTab(key)}>{label}</button>
+      <nav className="shop-task-switch shop-council-tasks" aria-label="班聯統籌工作">
+        {tabs.map(({ key, label }) => (
+          <button key={key} id={`council-task-${key}`} type="button" disabled={mutationBusy}
+            aria-pressed={tab === key} aria-controls="council-work-panel" onClick={() => {
+              if (key === "receipts") setGroupBy("class");
+              setTab(key);
+            }}>{label}</button>
         ))}
       </nav>
 
-      <section className="space-y-3 rounded-lg p-4" aria-label="統計範圍" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+      <div id="council-work-panel" role="group" aria-labelledby={`council-task-${tab}`} className="min-w-0 space-y-5">
+      {canConfirmClassPayment && <div hidden={tab !== "closure"}>
+        <ActivityOrderClosure categories={catalog} disabled={mutationBusy || optionsLoading}
+          onSaved={() => { closeStatusCache.current = null; setOptionsRetry((value) => value + 1); }} />
+      </div>}
+      {canConfirmClassPayment && <div hidden={tab !== "assisted"}>
+        <AdminAssistedOrder defaultOpen catalog={catalog} classes={classes} optionsError={optionsError} optionsLoading={optionsLoading}
+        onRetry={() => setOptionsRetry((value) => value + 1)}
+        onBusyChange={setAssistedBusy}
+        onCreated={() => { setSupplementRefresh((value) => value + 1); }} />
+      </div>}
+      {canConfirmClassPayment && <div hidden={tab !== "supplements"}>
+        <SupplementOrders canCollect canRejoin classes={classes} refreshKey={supplementRefresh}
+        onCollected={() => { void loadSummary(); void loadClassPayments(); }}
+        onRejoined={() => { setSupplementRefresh((value) => value + 1); void loadOrders(); void loadSummary(); }} />
+      </div>}
+
+      {hasOrderFilters && <section className="space-y-3 rounded-lg p-4" aria-label="統計範圍" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
         <fieldset disabled={mutationBusy} className="min-w-0 space-y-3">
         <legend className="sr-only">篩選訂單</legend>
         <div className="flex flex-wrap items-end gap-3">
@@ -856,7 +891,7 @@ export default function CouncilOrdersPage() {
         </div>
       </details>
         </fieldset>
-      </section>
+      </section>}
 
       {reminderError && <p role="alert" className="text-sm" style={{ color: "var(--danger)" }}>{reminderError}</p>}
       {reminderStatus && <p role="status" className="text-sm" style={{ color: "var(--success)" }}>{reminderStatus}</p>}
@@ -888,12 +923,7 @@ export default function CouncilOrdersPage() {
           });
         }}
         onCreated={() => { setSupplementRefresh((value) => value + 1); void loadSummary({ refreshCloseStatus: true }); }} />}
-      {tab !== "analytics" && loadError && <p role="alert" className="p-4" style={{ color: "var(--danger)" }}>{loadError}</p>}
-      <div hidden={tab !== "analytics" && Boolean(loadError)}>
-      {/* Tab 1：班級彙總 */}
-      {tab === "summary" && (
-        <section>
-          {canViewClassPaymentReport && (
+          {tab === "daily" && canViewClassPaymentReport && (
             <section className="mb-5 space-y-3 rounded-lg p-4"
               aria-labelledby="daily-class-payments-heading"
               style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
@@ -1062,8 +1092,13 @@ export default function CouncilOrdersPage() {
               )}
             </section>
           )}
+      {hasOrderFilters && tab !== "analytics" && loadError && <p role="alert" className="p-4" style={{ color: "var(--danger)" }}>{loadError}</p>}
+      <div hidden={hasOrderFilters && tab !== "analytics" && Boolean(loadError)}>
+      {/* Tab 1：班級彙總 */}
+      {showsSummary && (
+        <section>
           <p className="mb-3 text-sm" style={{ color: "var(--text-secondary)" }}>同學已交給班代、尚未由班聯確認的款項，仍列在「班聯未確認」。</p>
-          {summary && !loading && (
+          {tab === "summary" && summary && !loading && (
             <div className="mb-3 grid gap-3 sm:grid-cols-3">
               {[
                 { label: "訂購金額", value: money(summary.total_amount) },
@@ -1078,7 +1113,7 @@ export default function CouncilOrdersPage() {
             </div>
           )}
 
-          {canCreateBatchReminders && (
+          {tab === "summary" && canCreateBatchReminders && (
             <div className="mb-4 flex flex-col gap-3 rounded-lg p-4 sm:flex-row sm:items-center sm:justify-between"
               style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
               <div>
@@ -1100,9 +1135,9 @@ export default function CouncilOrdersPage() {
           )}
 
 
-          {groupBy === "class" && canConfirmClassPayment && (
+          {tab === "receipts" && (
             <p className="mb-3 text-sm" style={{ color: "var(--text-secondary)" }}>
-              簽收單可在收款確認前下載，也可選取多班合併成一份 PDF。登記收款請使用上方「登記班級收款」。
+              簽收單可在收款確認前下載，也可選取多班合併成一份 PDF。登記收款請切換至「班級繳款」。
             </p>
           )}
           {receiptError && <p role="alert" className="mb-3 text-sm" style={{ color: "var(--danger)" }}>{receiptError}</p>}
@@ -1124,6 +1159,8 @@ export default function CouncilOrdersPage() {
                     value={receiptCategoryId}
                     onChange={(event) => {
                       setReceiptCategoryId(event.target.value);
+                      setCategoryId(event.target.value);
+                      setProductId("");
                       setSelectedReceiptClasses(new Set());
                     }}
                   >
@@ -1437,6 +1474,7 @@ export default function CouncilOrdersPage() {
         </section>
       )}
 
+      </div>
       </div>
 
       {cancelTarget && <Modal title="取消訂單" size="sm" mobileFullscreen={false} onClose={() => { if (!cancelBusy) setCancelTarget(null); }}>

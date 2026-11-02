@@ -55,6 +55,31 @@ async function openPage() {
   await screen.findByRole("table", { name: "班級訂購與收款彙總" });
 }
 
+function switchTask(name: string) {
+  fireEvent.click(within(screen.getByRole("navigation", { name: "班聯統籌工作" }))
+    .getByRole("button", { name }));
+}
+
+it("依工作切換內容，切回代訂保留未送出的資料", async () => {
+  await openPage();
+  expect(screen.getByRole("navigation", { name: "班聯統籌工作" })).toHaveTextContent("追加補收款");
+  expect(screen.getByRole("region", { name: "登記班級收款" })).toBeVisible();
+  expect(screen.queryByRole("region", { name: "每日收款" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("combobox", { name: "代訂班級" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("combobox", { name: "收據主題" })).not.toBeInTheDocument();
+
+  switchTask("幫同學代訂");
+  expect(screen.getByRole("combobox", { name: "代訂班級" })).toBeVisible();
+  expect(screen.queryByRole("region", { name: "統計範圍" })).not.toBeInTheDocument();
+  fireEvent.change(screen.getByRole("textbox", { name: "代訂備註（選填）" }), { target: { value: "下課再確認尺寸" } });
+  switchTask("追加補收款");
+  expect(await screen.findByRole("heading", { name: "追加訂單補收款" })).toBeVisible();
+  switchTask("幫同學代訂");
+  expect(screen.getByRole("textbox", { name: "代訂備註（選填）" })).toHaveValue("下課再確認尺寸");
+  expect(within(screen.getByRole("navigation", { name: "班聯統籌工作" }))
+    .getByRole("button", { name: "幫同學代訂" })).toHaveAttribute("aria-pressed", "true");
+});
+
 it("點擊彙總或收款名單中的班級可查看同學明細", async () => {
   api.listOrderRecipients.mockResolvedValue([]);
   await openPage();
@@ -75,13 +100,30 @@ it("only offers school-wide assisted ordering to order managers", async () => {
   access.permissions = new Set(["shop:view_all"]);
   const view = render(<CouncilOrdersPage />);
   await screen.findByText("一年一班");
-  expect(screen.queryByText("幫同學代訂")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "幫同學代訂" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "追加補收款" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "收款單據" })).not.toBeInTheDocument();
   access.permissions = new Set(["shop:manage_orders"]);
   view.rerender(<CouncilOrdersPage />);
-  expect(screen.getByText("幫同學代訂")).toBeVisible();
+  expect(screen.getByRole("button", { name: "幫同學代訂" })).toBeVisible();
 });
 
 describe("全校收款與訂單", () => {
+  it("彙總載入失敗仍可獨立查每日收款，重新整理只刷新目前工作", async () => {
+    api.orderSummary.mockRejectedValue(new Error("offline"));
+    api.classPaymentReport.mockRejectedValueOnce(new Error("offline")).mockResolvedValue([]);
+    render(<CouncilOrdersPage />);
+    await screen.findByText("載入失敗，請重新整理後再試。");
+    expect(api.classPaymentReport).not.toHaveBeenCalled();
+    switchTask("每日收款");
+    const report = screen.getByRole("region", { name: "每日收款" });
+    expect(await within(report).findByRole("alert")).toHaveTextContent("無法載入班級收款明細");
+    fireEvent.click(screen.getByRole("button", { name: "重新整理" }));
+    expect(await within(report).findByRole("group", { name: "收款統計" })).toBeVisible();
+    expect(api.classPaymentReport).toHaveBeenCalledTimes(2);
+    expect(api.listOrders).not.toHaveBeenCalled();
+  });
+
   it("依日期、活動、年級與班級搜尋每日收款明細", async () => {
     const now = new Date();
     api.classPaymentReport.mockResolvedValue([
@@ -114,9 +156,10 @@ describe("全校收款與訂單", () => {
     ]);
     await openPage();
 
+    switchTask("每日收款");
     const report = screen.getByRole("region", { name: "每日收款" });
-    const statistics = within(report).getByRole("group", { name: "收款統計" });
-    expect(within(statistics).getByText("NT$475")).toBeVisible();
+    const statistics = await within(report).findByRole("group", { name: "收款統計" });
+    expect(await within(statistics).findByText("NT$475")).toBeVisible();
     expect(within(statistics).getByText("2 班")).toBeVisible();
     fireEvent.change(within(report).getByRole("combobox", { name: "收款活動" }), {
       target: { value: "festival" },
@@ -150,6 +193,7 @@ describe("全校收款與訂單", () => {
     access.permissions = new Set(["shop:view_all"]);
     await openPage();
 
+    switchTask("每日收款");
     expect(screen.getByRole("region", { name: "每日收款" })).toBeVisible();
     expect(screen.queryByRole("button", { name: /確認.*收款/ })).not.toBeInTheDocument();
   });
@@ -165,13 +209,14 @@ describe("全校收款與訂單", () => {
     expect(await within(workspace).findByRole("button", { name: "核對一年一班收款" })).toBeVisible();
   });
 
-  it("沒有另外建立活動也能在頁面上方全域鎖單商品批次", async () => {
+  it("沒有另外建立活動也能從結單設定全域鎖單商品批次", async () => {
     api.listActivities.mockResolvedValue([]);
     render(<CouncilOrdersPage />);
+    switchTask("結單設定");
     const closure = await screen.findByRole("region", { name: "班聯結單與公開入口" });
     expect(closure).toBeVisible();
     expect(closure.closest("details")).toBeNull();
-    expect(closure.compareDocumentPosition(screen.getByRole("navigation", { name: "班聯統籌工作" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(closure.compareDocumentPosition(screen.getByRole("navigation", { name: "班聯統籌工作" })) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     const lock = within(closure).getByRole("button", { name: "結單並隱藏入口衣服" });
     await waitFor(() => expect(lock).toBeEnabled());
     api.closeCategory.mockImplementationOnce(async () => {
@@ -198,6 +243,7 @@ describe("全校收款與訂單", () => {
     access.isAdmin = false;
     access.permissions = new Set([permission]);
     render(<CouncilOrdersPage />);
+    switchTask("結單設定");
     expect(await screen.findByRole("button", { name: "結單並隱藏入口衣服" })).toBeVisible();
   });
 
@@ -234,6 +280,7 @@ describe("全校收款與訂單", () => {
     });
     api.downloadClassReceipts.mockResolvedValue(new Blob(["%PDF-1.7"], { type: "application/pdf" }));
     await openPage();
+    switchTask("收款單據");
     const receiptTopic = screen.getByRole("combobox", { name: "收據主題" });
     expect(receiptTopic).toHaveTextContent("衣服");
     expect(receiptTopic).toHaveTextContent("袋子");

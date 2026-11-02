@@ -43,6 +43,15 @@
 .shop-class-orders-page :is(button, summary, input):focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .shop-council-page button, .shop-council-page .input { min-height: 44px; }
 .shop-council-page { min-width: 0; }
+.shop-council-page [hidden] { display: none; }
+.shop-council-tasks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.shop-council-tasks button { min-width: 0; }
+@media (min-width: 768px) {
+  .shop-council-tasks { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+@media (min-width: 1280px) {
+  .shop-council-tasks { grid-template-columns: repeat(9, minmax(0, 1fr)); }
+}
 .shop-admin-page .input { min-height: 44px; max-width: 100%; }
 .shop-admin-page label { min-width: 0; }
 .shop-product-form .input { min-height: 44px; max-width: 100%; font-size: 16px; }
