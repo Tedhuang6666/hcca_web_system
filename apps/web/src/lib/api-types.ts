@@ -15177,6 +15177,8 @@ export interface components {
         ClassPaymentOut: {
             /** Activity Id */
             activity_id?: string | null;
+            /** Category Id */
+            category_id?: string | null;
             /**
              * Class Id
              * Format: uuid
@@ -15229,6 +15231,11 @@ export interface components {
              * @description 本次更新的活動；null 代表一般商品
              */
             activity_id: string | null;
+            /**
+             * Category Id
+             * @description 未綁活動時，只更新此商品主題的收款
+             */
+            category_id?: string | null;
             /**
              * Is Paid
              * @description 班聯會是否已收到款項

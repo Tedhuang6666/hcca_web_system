@@ -5092,3 +5092,133 @@ async def test_expired_product_testing_permission_does_not_grant_access(
             },
         )
     ).status_code == 403
+
+
+async def test_category_collection_does_not_collect_or_unlock_other_topics(
+    db_session, authed_client_factory
+) -> None:
+    manager = await _bare_user(db_session)
+    buyer = await _bare_user(db_session)
+    school_class = await _make_class(db_session, creator=manager)
+    other_class = await _make_class(db_session, start="11550", end="11590", creator=manager)
+    love = await shop_svc.create_category(
+        db_session, data=ProductCategoryCreate(name="傳情"), created_by=manager.id
+    )
+    dance = await shop_svc.create_category(
+        db_session, data=ProductCategoryCreate(name="舞會"), created_by=manager.id
+    )
+    products = [
+        await shop_svc.create_product(
+            db_session,
+            data=ProductCreate(name=category.name, price=amount, category_id=category.id),
+            created_by=manager.id,
+        )
+        for category, amount in [(love, 100), (dance, 300)]
+    ]
+    orders = []
+    for category, product, amount, class_id in [
+        (love, products[0], 100, school_class.id),
+        (dance, products[1], 300, school_class.id),
+        (love, products[0], 100, other_class.id),
+    ]:
+        order = await _seed_order(db_session, buyer, class_id=class_id, total_price=amount)
+        order.category_id = category.id
+        db_session.add(
+            OrderItem(order_id=order.id, product_id=product.id, quantity=1, unit_price=amount)
+        )
+        orders.append(order)
+    await _grant_permission(db_session, manager, "shop:manage_orders")
+    await db_session.flush()
+    ac = authed_client_factory(manager)
+    path = f"/shop/orders/classes/{school_class.id}/payment"
+    for category in [love, dance]:
+        response = await ac.patch(
+            path,
+            json={
+                "is_paid": True,
+                "activity_id": None,
+                "category_id": str(category.id),
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["updated_orders"] == 1
+        assert response.json()["category_id"] == str(category.id)
+        assert orders[0].is_paid is True
+        assert orders[2].is_paid is False
+        if category == love:
+            assert orders[1].is_paid is False
+            status = await shop_svc.get_close_status(
+                db_session, [love.id, dance.id], school_class.id
+            )
+            assert status[love.id] is not None
+            assert status[dance.id] is None
+    response = await ac.patch(
+        path,
+        json={
+            "is_paid": False,
+            "activity_id": None,
+            "category_id": str(love.id),
+        },
+    )
+    assert response.status_code == 200
+    assert orders[0].is_paid is False
+    assert orders[1].is_paid is True
+    status = await shop_svc.get_close_status(db_session, [love.id, dance.id], school_class.id)
+    assert status[love.id] is None
+    assert status[dance.id] is not None
+
+
+@pytest.mark.parametrize("permission", [None, "shop:view_all", "class:shop_collect"])
+async def test_category_collection_requires_council_permission(
+    db_session, client, authed_client_factory, permission
+) -> None:
+    user = await _bare_user(db_session)
+    school_class = await _make_class(db_session, creator=user)
+    if permission:
+        await _grant_permission(db_session, user, permission)
+    ac = authed_client_factory(user) if permission else client
+    response = await ac.patch(
+        f"/shop/orders/classes/{school_class.id}/payment",
+        json={
+            "is_paid": True,
+            "activity_id": None,
+            "category_id": str(uuid.uuid4()),
+        },
+    )
+    assert response.status_code == (403 if permission else 401)
+
+
+async def test_category_collection_rejects_linked_or_missing_topic(
+    db_session, authed_client_factory
+):
+    manager = await _bare_user(db_session)
+    school_class = await _make_class(db_session, creator=manager)
+    org = Org(name="收款範圍測試")
+    activity = Activity(name="正式活動", org=org, status=ActivityStatus.ACTIVE)
+    db_session.add_all([org, activity])
+    await db_session.flush()
+    category = await shop_svc.create_category(
+        db_session,
+        data=ProductCategoryCreate(
+            name="綁定活動主題",
+            activity_id=activity.id,
+        ),
+        created_by=manager.id,
+    )
+    await _grant_permission(db_session, manager, "shop:manage_orders")
+    ac = authed_client_factory(manager)
+    path = f"/shop/orders/classes/{school_class.id}/payment"
+    for activity_id, category_id in [
+        (None, category.id),
+        (activity.id, category.id),
+        (None, uuid.uuid4()),
+    ]:
+        response = await ac.patch(
+            path,
+            json={
+                "is_paid": True,
+                "activity_id": str(activity_id) if activity_id else None,
+                "category_id": str(category_id),
+            },
+        )
+        assert response.status_code == 400

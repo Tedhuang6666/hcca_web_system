@@ -264,7 +264,14 @@ async def set_class_paid(
     is_paid: bool,
     actor_id: uuid.UUID,
     activity_id: uuid.UUID | None,
+    category_id: uuid.UUID | None = None,
 ) -> list[Order]:
+    if category_id is not None:
+        category = await session.get(ProductCategory, category_id)
+        if category is None:
+            raise ValueError("找不到此商品主題")
+        if activity_id is not None or category.activity_id is not None:
+            raise ValueError("已綁活動的主題請依完整活動收款")
     await session.execute(
         select(SchoolClass.id).where(SchoolClass.id == class_id).with_for_update()
     )
@@ -279,7 +286,7 @@ async def set_class_paid(
     if payment is None:
         payment = ShopClassPayment(class_id=class_id, activity_id=activity_id)
         session.add(payment)
-    if payment.is_paid != is_paid:
+    if category_id is None and payment.is_paid != is_paid:
         payment.is_paid = is_paid
         payment.confirmed_at = datetime.now(UTC) if is_paid else None
         payment.confirmed_by_id = actor_id if is_paid else None
@@ -287,13 +294,19 @@ async def set_class_paid(
     activity_filter = (
         Order.activity_id.is_(None) if activity_id is None else Order.activity_id == activity_id
     )
+    scope_filters = [activity_filter]
+    if category_id is not None:
+        from api.services.shop._receipts import _receipt_order_scope
+
+        scope_filters.append(_receipt_order_scope(None, category_id))
     orders = list(
         (
             await session.execute(
                 select(Order)
                 .where(
                     Order.class_id == class_id,
-                    activity_filter,
+                    *scope_filters,
+                    Order.test_product_id.is_(None),
                     Order.status.notin_([OrderStatus.CANCELLED, OrderStatus.REFUNDED]),
                 )
                 .order_by(Order.id)
@@ -309,6 +322,28 @@ async def set_class_paid(
             await set_order_paid(session, order, is_paid=is_paid, actor_id=actor_id)
             if is_paid:
                 newly_paid_orders.append(order)
+    if category_id is not None:
+        # 一般商品共用舊收款紀錄；是否鎖定各主題仍由實際已繳訂單判斷。
+        # 撤銷一個主題不能清掉其他主題的收款確認。
+        has_paid_orders = await session.scalar(
+            select(Order.id)
+            .where(
+                Order.class_id == class_id,
+                Order.activity_id.is_(None),
+                Order.test_product_id.is_(None),
+                Order.is_paid.is_(True),
+                Order.status.notin_([OrderStatus.CANCELLED, OrderStatus.REFUNDED]),
+            )
+            .limit(1)
+        )
+        payment.is_paid = has_paid_orders is not None
+        if is_paid and newly_paid_orders:
+            payment.confirmed_at = datetime.now(UTC)
+            payment.confirmed_by_id = actor_id
+        elif not payment.is_paid:
+            payment.confirmed_at = None
+            payment.confirmed_by_id = None
+        await session.flush()
     if newly_paid_orders:
         from api.services.shop._class_payment_notifications import (
             queue_class_payment_confirmation,

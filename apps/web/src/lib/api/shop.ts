@@ -186,11 +186,12 @@ export const shopApi = {
     patch<OrderOut>(`/shop/orders/${id}/payment`, { is_paid: isPaid }),
   setClassCollected: (id: string, collected: boolean) =>
     patch<OrderOut>(`/shop/orders/${id}/collection`, { is_class_collected: collected }),
-  setClassPaid: (classId: string, isPaid: boolean, activityId: string | null) =>
+  setClassPaid: (classId: string, isPaid: boolean, activityId: string | null, categoryId?: string) =>
     patch<ClassPaymentOut>(
       `/shop/orders/classes/${classId}/payment`, {
         is_paid: isPaid,
         activity_id: activityId,
+        ...(categoryId ? { category_id: categoryId } : {}),
       },
     ),
   classPaymentReport: () => get<ClassPaymentReportItemOut[]>("/shop/orders/class-payments"),

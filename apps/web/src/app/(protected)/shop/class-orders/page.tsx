@@ -1,6 +1,8 @@
 "use client";
 
 import NumberInput from "@/components/ui/NumberInput";
+import Modal from "@/components/ui/Modal";
+import CollectionActivityPicker from "@/components/shop/CollectionActivityPicker";
 import SeparateOrderButton from "@/components/shop/SeparateOrderButton";
 import ClassOrderDeadline from "@/components/shop/ClassOrderDeadline";
 import SupplementOrders from "@/components/shop/SupplementOrders";
@@ -117,7 +119,13 @@ export default function ClassOrdersPage() {
   const [paidFilter, setPaidFilter] = useState<PaidFilter>("all");
   const [assistedFilter, setAssistedFilter] = useState<AssistedFilter>("all");
   const [activityFilter, setActivityFilter] = useState("all");
-  const [ledgerActivityKey, setLedgerActivityKey] = useState("");
+  const [ledgerActivityKeys, setLedgerActivityKeys] = useState<string[]>([]);
+  const [collectionConfirmation, setCollectionConfirmation] = useState<{
+    memberId: string; name: string; activityLabel: string;
+    activities: { label: string; amount: number }[];
+    orderIds: string[]; amount: number; collected: boolean;
+  } | null>(null);
+  const collectionSubmitting = useRef(false);
   const [composerActivityKey, setComposerActivityKey] = useState<string | null>(null);
   const [recipientMode, setRecipientMode] = useState<"single" | "batch">("single");
   const [batchStudentIds, setBatchStudentIds] = useState<string[]>([]);
@@ -243,54 +251,13 @@ export default function ClassOrdersPage() {
     return Array.from(rows.values()).sort((a, b) => a.label.localeCompare(b.label, "zh-Hant"));
   }, [activityOrders, activityLabel, catalog]);
 
-  const defaultLedgerActivityKey = useMemo(() => {
-    const uncollectedOrderCounts = new Map<string, number>();
-    const orderCounts = new Map<string, number>();
-    const activeProductCounts = new Map<string, number>();
-
-    for (const order of activityOrders) {
-      if (!isCollectableOrder(order)) continue;
-      const key = orderScopeKey(order);
-      orderCounts.set(key, (orderCounts.get(key) ?? 0) + 1);
-      if (!order.is_class_collected) {
-        uncollectedOrderCounts.set(key, (uncollectedOrderCounts.get(key) ?? 0) + 1);
-      }
-    }
-    for (const product of activeProducts) {
-      const key = orderScopeKey({ activity_id: product.activity_id, category_id: product.categoryId });
-      activeProductCounts.set(key, (activeProductCounts.get(key) ?? 0) + 1);
-    }
-
-    let selectedRow = activityRows[0];
-    for (const row of activityRows.slice(1)) {
-      if (!selectedRow) {
-        selectedRow = row;
-        continue;
-      }
-      const uncollectedCount = uncollectedOrderCounts.get(row.key) ?? 0;
-      const selectedUncollectedCount = uncollectedOrderCounts.get(selectedRow.key) ?? 0;
-      const orderCount = orderCounts.get(row.key) ?? 0;
-      const selectedOrderCount = orderCounts.get(selectedRow.key) ?? 0;
-      const productCount = activeProductCounts.get(row.key) ?? 0;
-      const selectedProductCount = activeProductCounts.get(selectedRow.key) ?? 0;
-
-      if (uncollectedCount > selectedUncollectedCount
-        || (uncollectedCount === selectedUncollectedCount && orderCount > selectedOrderCount)
-        || (uncollectedCount === selectedUncollectedCount && orderCount === selectedOrderCount
-          && productCount > selectedProductCount)) {
-        selectedRow = row;
-      }
-    }
-    return selectedRow?.key ?? "none";
-  }, [activeProducts, activityOrders, activityRows]);
-
-  const activeLedgerKey = activityRows.some((row) => row.key === ledgerActivityKey)
-    ? ledgerActivityKey : defaultLedgerActivityKey;
-  const ledgerActivity = activityRows.find((row) => row.key === activeLedgerKey);
+  const ledgerActivities = activityRows.filter((row) => ledgerActivityKeys.includes(row.key));
+  const activeLedgerKey = ledgerActivities.length === 1 ? ledgerActivities[0].key : "";
+  const ledgerActivityLabel = ledgerActivities.map((row) => row.label).join("、");
   const seatRows = useMemo(() => {
     const ordersByMember = new Map<string, OrderListItem[]>();
     for (const order of activityOrders) {
-      if (orderScopeKey(order) !== activeLedgerKey || !isCollectableOrder(order)) continue;
+      if (!ledgerActivityKeys.includes(orderScopeKey(order)) || !isCollectableOrder(order)) continue;
       const memberOrders = ordersByMember.get(order.user_id) ?? [];
       memberOrders.push(order);
       ordersByMember.set(order.user_id, memberOrders);
@@ -317,7 +284,7 @@ export default function ClassOrdersPage() {
     }
     return rows.sort((a, b) => (a.seat ?? Number.POSITIVE_INFINITY) - (b.seat ?? Number.POSITIVE_INFINITY)
       || a.name.localeCompare(b.name, "zh-Hant"));
-  }, [activityOrders, activeLedgerKey, members]);
+  }, [activityOrders, ledgerActivityKeys, members]);
 
   const filteredSeatRows = seatRows.filter((row) =>
     `${row.seat ?? ""} ${row.name}`.includes(seatSearch.trim())
@@ -797,23 +764,42 @@ export default function ClassOrdersPage() {
   };
 
   const setSeatCollected = async (memberId: string, collected: boolean) => {
+    if (!ledgerActivities.length || busy !== null || batchBusy) return;
     const row = seatRows.find((item) => item.id === memberId);
     const targets = row?.orders.filter((order) => order.is_class_collected !== collected) ?? [];
     if (!targets.length) return;
+    setCollectionConfirmation({
+      memberId, name: row?.name ?? "同學", activityLabel: ledgerActivityLabel,
+      activities: ledgerActivities.map((activity) => ({ label: activity.label,
+        amount: targets.filter((order) => orderScopeKey(order) === activity.key).reduce((sum, order) => sum + order.total_price, 0),
+      })).filter((activity) => activity.amount > 0), orderIds: targets.map((order) => order.id),
+      amount: targets.reduce((sum, order) => sum + order.total_price, 0), collected,
+    });
+  };
+
+  const confirmSeatCollection = async () => {
+    if (!collectionConfirmation || collectionSubmitting.current) return;
+    const target = collectionConfirmation;
+    collectionSubmitting.current = true;
+    const targets = target.orderIds;
+    const collected = target.collected;
+    const memberId = target.memberId;
     setBusy(`seat:${memberId}`);
     try {
-      const results = await Promise.allSettled(targets.map((order) => shopApi.setClassCollected(order.id, collected)));
+      const results = await Promise.allSettled(targets.map((id) => shopApi.setClassCollected(id, collected)));
       const failed = results.filter((result) => result.status === "rejected");
+      setCollectionConfirmation(null);
       if (failed.length) {
         toast.error(`已更新 ${targets.length - failed.length} 筆，${failed.length} 筆未完成。請確認更新後的狀態再試。`);
         return;
       }
-      toast.success(`${row?.name ?? "同學"}的${ledgerActivity?.label ?? "活動"}預購已${collected ? "記錄收款" : "撤銷收款"}`);
+      toast.success(`${target.name}的${target.activityLabel}預購已${collected ? "記錄收款" : "撤銷收款"}`);
     } catch (error) {
       toast.error(apiErrorMessage(error, "收款狀態更新失敗"));
     } finally {
       await load();
       setBusy(null);
+      collectionSubmitting.current = false;
     }
   };
 
@@ -983,7 +969,7 @@ export default function ClassOrdersPage() {
 
   const clearFilters = () => {
     setActivityFilter("all");
-    setLedgerActivityKey("");
+    setLedgerActivityKeys([]);
     setProductFilter("");
     setPaidFilter("all");
     setAssistedFilter("all");
@@ -1651,26 +1637,35 @@ export default function ClassOrdersPage() {
         </section>
       )}
 
+      {collectionConfirmation && <Modal title={collectionConfirmation.collected ? "核對同學收款" : "撤銷同學收款"}
+        size="sm" mobileFullscreen={false} onClose={() => { if (!collectionSubmitting.current) setCollectionConfirmation(null); }}>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-3 text-sm">
+          <dt>收款明細</dt><dd className="space-y-2">{collectionConfirmation.activities.map((activity) => <p key={activity.label} className="flex flex-wrap justify-between gap-x-3"><strong>{activity.label}</strong><span className="tabular-nums">{money(activity.amount)}</span></p>)}</dd>
+          <dt>同學</dt><dd>{collectionConfirmation.name}</dd>
+          <dt>{collectionConfirmation.collected ? "本次合計" : "撤銷合計"}</dt>
+          <dd className="text-lg font-semibold tabular-nums">{money(collectionConfirmation.amount)}</dd>
+        </dl>
+        <p className="mt-4 text-sm" style={{ color: "var(--text-secondary)" }}>只登記上列活動的款項。</p>
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
+          <button type="button" className="btn btn-ghost min-h-11" disabled={busy !== null}
+            onClick={() => setCollectionConfirmation(null)}>返回核對</button>
+          <button type="button" className="btn btn-primary min-h-11" disabled={busy !== null}
+            onClick={() => void confirmSeatCollection()}>{busy !== null ? "處理中…" : collectionConfirmation.collected ? "確認收到款項" : "確認撤銷收款"}</button>
+        </div>
+      </Modal>}
       <div hidden={workspace !== "collect"} className="space-y-5">
         <section aria-labelledby="seat-collection-heading" className="space-y-3">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h2 id="seat-collection-heading" className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>登記收款</h2>
-              <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>找到同學，核對金額；真的收到錢後，再按「已收到」。</p>
+              <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>先勾選本次收款活動，再找同學核對各項金額；收到錢後登記。</p>
             </div>
-            {activityRows.length > 0 && (
-              <label className="grid gap-1 text-sm" style={{ color: "var(--text-secondary)" }}>
-                活動
-                <select className="input min-h-11 min-w-44" aria-label="收款活動" value={activeLedgerKey}
-                  onChange={(event) => { setLedgerActivityKey(event.target.value); setActivityFilter(event.target.value); setProductFilter(""); setSelectedIds([]); }}>
-                  {activityRows.map((row) => (
-                    <option key={row.key} value={row.key}>{row.label}</option>
-                  ))}
-                </select>
-              </label>
-            )}
           </div>
-          {activityRows.length > 0 && (loading ? (
+          {activityRows.length > 0 && <CollectionActivityPicker options={activityRows} selected={ledgerActivityKeys}
+            disabled={busy !== null || batchBusy || loading || catalogFailed || loadFailed}
+            onChange={(keys) => { setLedgerActivityKeys(keys); setSelectedIds([]); }} />}
+          {ledgerActivities.length > 0 && <p className="text-base font-semibold">本次收款：{ledgerActivityLabel}</p>}
+          {ledgerActivities.length > 0 && (loading ? (
             <p className="rounded-lg px-4 py-3 text-sm" role="status"
               style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
               正在載入全班收款統計…
@@ -1683,7 +1678,7 @@ export default function ClassOrdersPage() {
           ) : (
             <div className="rounded-lg px-4 py-3" role="group" aria-label="全班收款統計"
               style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
-              <p className="mb-2 text-xs" style={{ color: "var(--text-secondary)" }}>全班進度 · {ledgerActivity?.label}（不受下方篩選影響）</p>
+              <p className="mb-2 text-xs" style={{ color: "var(--text-secondary)" }}>全班進度 · {ledgerActivityLabel}（不受下方篩選影響）</p>
               <dl className="grid gap-y-2 text-sm sm:grid-cols-2 sm:gap-x-6">
                 <div className="flex items-baseline justify-between gap-3">
                   <dt style={{ color: "var(--text-secondary)" }}>全班應收</dt>
@@ -1705,6 +1700,8 @@ export default function ClassOrdersPage() {
               style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
               {loading ? "正在載入活動與座號收款資料…" : loadFailed ? "無法載入活動與座號收款資料，請重新整理後再試。" : "目前沒有可收款的活動；活動開放或有同學完成預購後，收款資料會顯示在這裡。"}
             </p>
+          ) : !ledgerActivities.length ? (
+            <p role="status" className="py-4 text-sm" style={{ color: "var(--text-secondary)" }}>請先逐項勾選本次要收款的活動。</p>
           ) : (
             <>
               <div className="flex flex-wrap gap-2">
@@ -1736,6 +1733,7 @@ export default function ClassOrdersPage() {
                           </div>
                           <p className="text-sm" style={{ color: "var(--text-secondary)", overflowWrap: "anywhere" }}>
                             {summarizeOrderItems(row.orders.flatMap((order) => order.items ?? [])) || (row.orders.length ? "品項資訊請查看明細" : "尚未登記")}
+                            {ledgerActivities.length > 1 && <span className="mt-1 block text-xs">{ledgerActivities.map((activity) => `${activity.label} ${money(row.orders.filter((order) => orderScopeKey(order) === activity.key && !order.is_class_collected).reduce((sum, order) => sum + order.total_price, 0))}`).join("／")}</span>}
                           </p>
                           <p className="flex items-baseline justify-between gap-3 text-sm">
                             <span style={{ color: "var(--text-secondary)" }}>{outstanding > 0 ? row.collected > 0 ? "還要補收" : "還要收" : row.orders.length ? "已收齊" : "尚未訂購"}</span>
@@ -1765,7 +1763,7 @@ export default function ClassOrdersPage() {
                     })}
                   </div>
                   <div className="hidden overflow-x-auto md:block">
-                  <table className="w-full text-sm" aria-label={`${ledgerActivity?.label ?? "活動"}各座號收款`}>
+                  <table className="w-full text-sm" aria-label={`${ledgerActivityLabel || "活動"}各座號收款`}>
                     <thead style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}>
                       <tr>
                         {["同學", "預購品項", "還要收", "收款"].map((heading) => (
@@ -1785,6 +1783,7 @@ export default function ClassOrdersPage() {
                             </th>
                             <td className="max-w-64 px-3 py-3" style={{ color: "var(--text-secondary)", overflowWrap: "anywhere" }}>
                               {summarizeOrderItems(row.orders.flatMap((order) => order.items ?? [])) || (row.orders.length ? "品項資訊請查看明細" : "尚未登記")}
+                            {ledgerActivities.length > 1 && <span className="mt-1 block text-xs">{ledgerActivities.map((activity) => `${activity.label} ${money(row.orders.filter((order) => orderScopeKey(order) === activity.key && !order.is_class_collected).reduce((sum, order) => sum + order.total_price, 0))}`).join("／")}</span>}
                             </td>
                             <td className="px-3 py-3 font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>
                               {outstanding > 0 ? <>{row.collected > 0 && <span className="block text-xs">待補收</span>}{money(outstanding)}</> : row.orders.length ? "已收齊" : "尚未訂購"}

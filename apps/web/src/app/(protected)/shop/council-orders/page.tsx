@@ -8,6 +8,7 @@ import AdminAssistedOrder from "@/components/shop/AdminAssistedOrder";
 import SupplementOrders from "@/components/shop/SupplementOrders";
 import SeparateOrderButton from "@/components/shop/SeparateOrderButton";
 import ActivityOrderClosure from "@/components/shop/ActivityOrderClosure";
+import ClassPaymentWorkspace from "@/components/shop/ClassPaymentWorkspace";
 import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BarChart2, Mail, RefreshCw } from "lucide-react";
@@ -33,7 +34,6 @@ import type {
   OrderListItem,
   OrderQuantityRow,
   OrderSummaryOut,
-  OrderSummaryRow,
   ShopClassRepresentativeRecipientOut,
   SchoolClassListItem,
 } from "@/lib/types";
@@ -262,18 +262,6 @@ export default function CouncilOrdersPage() {
   ]);
   const collectionAmount = visibleClassPayments.reduce((total, payment) => total + payment.amount, 0);
   const collectionClassCount = new Set(visibleClassPayments.map((payment) => payment.class_id)).size;
-  const classPaymentByScope = useMemo(() => {
-    const paymentsByScope = new Map<string, ClassPaymentReportItemOut>();
-    for (const payment of classPayments) {
-      if (payment.collection_type === "individual_order") continue;
-      paymentsByScope.set(
-        `${payment.class_id}:${payment.activity_id ?? "__general__"}`,
-        payment,
-      );
-    }
-    return paymentsByScope;
-  }, [classPayments]);
-
   const loadSummary = useCallback(async (options?: LoadSummaryOptions) => {
     const version = ++requestVersion.current;
     setLoading(true);
@@ -629,27 +617,6 @@ export default function CouncilOrdersPage() {
     }
   };
 
-  const updateClassPayment = async (
-    row: OrderSummaryRow,
-    activity: { activityId: string | null; label: string },
-    paid: boolean,
-  ) => {
-    if (row.key === "none") return;
-    const action = paid ? "確認已繳費" : "撤銷繳費確認";
-    if (!window.confirm(`要為「${row.label}」的「${activity.label}」${action}嗎？會更新該班這個活動的所有有效訂單，不受商品、日期或收款篩選限制。${paid ? "確認後將鎖定本班此活動的訂購。" : "撤銷後仍須遵守班聯統一截止時間。"}`)) return;
-    const busyKey = `${row.key}:${activity.activityId ?? "__general__"}`;
-    setPaymentBusy(busyKey);
-    try {
-      const result = await shopApi.setClassPaid(row.key, paid, activity.activityId);
-      toast.success(`已更新「${activity.label}」${result.updated_orders} 筆訂單`);
-      await Promise.all([loadSummary({ refreshClassId: row.key }), loadClassPayments()]);
-    } catch (e) {
-      toast.error(apiErrorMessage(e, "更新整班繳費狀態失敗"));
-    } finally {
-      setPaymentBusy(null);
-    }
-  };
-
   useEffect(() => {
     const pendingRequests = requestVersion;
     if (tab === "summary") loadSummary();
@@ -680,9 +647,11 @@ export default function CouncilOrdersPage() {
   }, []);
 
   const selectedCategory = catalog.find((category) => category.id === categoryId);
+  const analyticsCategory = selectedCategory ?? catalog[0];
+  const analyticsProductId = allProducts.some((product) => product.id === productId
+    && product.catId === analyticsCategory?.id) ? productId : "";
   const visibleActivityGroups = activityGroups.filter((group) => !categoryId
     || group.categories.some((category) => category.id === categoryId));
-  const paymentActivityGroups = visibleActivityGroups;
   const actionActivityGroups = !categoryId ? [] : visibleActivityGroups.map((group) => ({
     ...group, label: selectedCategory?.name ?? group.label,
     categories: group.categories.filter((category) => category.id === categoryId),
@@ -700,10 +669,10 @@ export default function CouncilOrdersPage() {
     setSelectedReceiptClasses(new Set());
   };
   const scopeLabels = [
-    selectedCategory?.name ?? "全部活動",
+    (tab === "analytics" ? analyticsCategory?.name : selectedCategory?.name) ?? "全部活動",
     grade && `${grade} 年級`,
     classes.find((item) => item.id === classId)?.label,
-    allProducts.find((item) => item.id === productId)?.name,
+    allProducts.find((item) => item.id === (tab === "analytics" ? analyticsProductId : productId))?.name,
     isPaid === "true" ? "班聯已確認" : isPaid === "false" ? "班聯未確認" : "全部收款狀態",
     statusFilter && tab !== "analytics" ? { pending: "待確認訂單", confirmed: "已確認訂單", cancelled: "已取消訂單", refunded: "已退款訂單" }[statusFilter] : tab === "orders" ? "全部訂單狀態" : "排除取消與退款",
     (dateFrom || dateTo) && `${dateFrom || (tab === "analytics" ? "迄日前 29 天" : "不限起日")} 至 ${dateTo || (tab === "analytics" ? "今天" : "不限迄日")}`,
@@ -751,14 +720,15 @@ export default function CouncilOrdersPage() {
         <legend className="sr-only">篩選訂單</legend>
         <div className="flex flex-wrap items-end gap-3">
           <label className="grid gap-1 text-sm">
-            <span style={{ color: "var(--text-muted)" }}>活動</span>
-            <select className="input" value={categoryId} onChange={(e) => {
+            <span style={{ color: "var(--text-muted)" }}>{tab === "analytics" ? "分析主題" : "活動"}</span>
+            <select className="input" value={tab === "analytics" ? analyticsCategory?.id ?? "" : categoryId} onChange={(e) => {
               setCategoryId(e.target.value);
               setProductId("");
               setReceiptCategoryId(e.target.value);
               setSelectedReceiptClasses(new Set());
             }}>
-              <option value="">全部活動</option>
+              {tab !== "analytics" && <option value="">全部活動</option>}
+              {tab === "analytics" && !catalog.length && <option value="">尚無可分析的主題</option>}
               {catalog.map((category) => (
                 <option key={category.id} value={category.id}>{category.name}</option>
               ))}
@@ -799,9 +769,9 @@ export default function CouncilOrdersPage() {
           )}
           {tab === "analytics" && <label className="grid gap-1 text-sm">
             <span style={{ color: "var(--text-muted)" }}>商品</span>
-            <select className="input" value={productId} onChange={(e) => setProductId(e.target.value)}>
+            <select className="input" value={analyticsProductId} onChange={(e) => setProductId(e.target.value)}>
               <option value="">全部商品</option>
-              {allProducts.filter((p) => visibleCategoryIds.has(p.catId) && (!categoryId || p.catId === categoryId)).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              {allProducts.filter((p) => p.catId === analyticsCategory?.id).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </label>}
           {hasFilters && <button type="button" className="btn btn-ghost" onClick={resetFilters}>清除篩選</button>}
@@ -889,12 +859,20 @@ export default function CouncilOrdersPage() {
       {reminderError && <p role="alert" className="text-sm" style={{ color: "var(--danger)" }}>{reminderError}</p>}
       {reminderStatus && <p role="status" className="text-sm" style={{ color: "var(--success)" }}>{reminderStatus}</p>}
 
-      {tab === "analytics" && <ShopSalesAnalytics refresh={analyticsRefresh} live={canViewAdvancedStats} scope={scopeLabels.join(" · ")} filters={{
+      {tab === "analytics" && analyticsCategory && <ShopSalesAnalytics key={analyticsCategory.id} refresh={analyticsRefresh} live={canViewAdvancedStats} scope={scopeLabels.join(" · ")} filters={{
         ...(grade ? { grade } : {}), ...(classId ? { class_id: classId } : {}),
-        ...(categoryId ? { category_id: categoryId } : {}), ...(productId ? { product_id: productId } : {}),
+        category_id: analyticsCategory.id, ...(analyticsProductId ? { product_id: analyticsProductId } : {}),
         ...(isPaid ? { is_paid: isPaid } : {}), ...(dateFrom ? { date_from: dateFrom } : {}),
         ...(dateTo ? { date_to: dateTo } : {}),
       }} />}
+      {tab === "analytics" && !analyticsCategory && <p role="status" className="p-4" style={{ color: "var(--text-secondary)" }}>
+        {optionsLoading ? "正在載入分析主題…" : optionsError ? "請先重新載入主題，再查看銷售分析。" : "尚無可分析的主題。"}
+      </p>}
+      {tab === "summary" && canConfirmClassPayment && <ClassPaymentWorkspace
+        catalog={catalog} activities={activities} optionsLoading={optionsLoading} optionsError={optionsError}
+        refreshKey={supplementRefresh} disabled={mutationBusy} onBusyChange={setPaymentBusy}
+        onChanged={() => { void loadSummary({ refreshCloseStatus: true }); void loadClassPayments(); }}
+      />}
       {tab !== "analytics" && loadError && <p role="alert" className="p-4" style={{ color: "var(--danger)" }}>{loadError}</p>}
       <div hidden={tab !== "analytics" && Boolean(loadError)}>
       {/* Tab 1：班級彙總 */}
@@ -1107,15 +1085,9 @@ export default function CouncilOrdersPage() {
           )}
 
 
-          {groupBy === "class" && !categoryId && summary && summary.rows.length > 0 && (
+          {groupBy === "class" && canConfirmClassPayment && (
             <p className="mb-3 text-sm" style={{ color: "var(--text-secondary)" }}>
-              目前顯示全部活動彙總；每班操作都會標示活動名稱，確認收款與簽收單只套用該班該活動。
-            </p>
-          )}
-
-          {groupBy === "class" && canConfirmClassPayment && paymentActivityGroups.length > 0 && (
-            <p className="mb-3 text-sm" style={{ color: "var(--text-secondary)" }}>
-              各班操作只處理標示活動中的有效訂單，不受商品、日期或收款篩選影響。簽收單可在收款確認前下載，也可選取多班合併成一份 PDF。
+              簽收單可在收款確認前下載，也可選取多班合併成一份 PDF。登記收款請使用上方「登記班級收款」。
             </p>
           )}
           {receiptError && <p role="alert" className="mb-3 text-sm" style={{ color: "var(--danger)" }}>{receiptError}</p>}
@@ -1210,7 +1182,7 @@ export default function CouncilOrdersPage() {
                           })}
                         />
                       </th>}
-                      {[groupBy === "class" ? "班級" : groupBy === "grade" ? "年級" : "學生", "訂單數", "訂購金額", "班聯已確認", "班聯未確認", ...(groupBy === "class" ? actionActivityGroups.map((group) => group.label + "訂購狀態") : []), ...(groupBy === "class" && canConfirmClassPayment && paymentActivityGroups.length > 0 ? ["班聯操作"] : [])].map((h, i) => (
+                      {[groupBy === "class" ? "班級" : groupBy === "grade" ? "年級" : "學生", "訂單數", "訂購金額", "班聯已確認", "班聯未確認", ...(groupBy === "class" ? actionActivityGroups.map((group) => group.label + "訂購狀態") : [])].map((h, i) => (
                         <th key={i} className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "var(--text-muted)" }}>{h}</th>
                       ))}
                     </tr>
@@ -1248,65 +1220,6 @@ export default function CouncilOrdersPage() {
                             />
                           </td>
                         );})}
-                        {groupBy === "class" && canConfirmClassPayment && paymentActivityGroups.length > 0 && <td className="px-4 py-3">
-                          <div className="flex min-w-56 flex-col gap-2">
-                            {paymentActivityGroups.map((group) => {
-                              const paymentRecord = classPaymentByScope.get(
-                                `${row.key}:${group.activityId ?? "__general__"}`,
-                              );
-                              return (
-                                <div key={group.key} className="flex flex-wrap items-center gap-1 border-t pt-1.5 first:border-t-0 first:pt-0"
-                                  style={{ borderColor: "var(--border)" }}>
-                                  <span className="w-full text-[11px]" style={{ color: "var(--text-muted)" }}>{group.label}</span>
-                                  {row.key !== "none" && <>
-                                    {classPaymentsLoading ? (
-                                      <span role="status" className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                                        載入收款狀態…
-                                      </span>
-                                    ) : classPaymentsError ? (
-                                      <span className="text-xs" style={{ color: "var(--danger)" }}>
-                                        收款狀態無法確認
-                                      </span>
-                                    ) : paymentRecord ? (
-                                      <span role="status" className="text-xs font-medium" style={{ color: "var(--success)" }}>
-                                        已確認收款
-                                      </span>
-                                    ) : <button type="button" disabled={mutationBusy}
-                                      onClick={() => updateClassPayment(row, group, true)}
-                                      aria-label={`確認${row.label}的${group.label}收款`}
-                                      className="btn btn-secondary min-h-11 px-3 text-xs disabled:opacity-50">
-                                      確認收款
-                                    </button>}
-                                    {canConfirmClassPayment && <AnimatedDownloadButton
-                                      request={() => {
-                                        setReceiptError("");
-                                        return shopApi.downloadClassReceipt(row.key, group.activityId);
-                                      }}
-                                      label="下載簽收單 PDF"
-                                      aria-label={`下載${row.label}的${group.label}簽收單 PDF`}
-                                      disabled={mutationBusy}
-                                      className="btn btn-ghost min-h-11 px-3 text-xs"
-                                      onError={(error) => setReceiptError(apiErrorMessage(error, "簽收單下載失敗，請重試。"))}
-                                    />}
-                                    <details className="min-w-0">
-                                      <summary className="flex min-h-11 cursor-pointer items-center text-xs underline underline-offset-2"
-                                        style={{ color: "var(--text-secondary)" }}>其他操作</summary>
-                                      <div className="flex flex-wrap gap-2 pb-1">
-                                        {canConfirmClassPayment && <button type="button" disabled={mutationBusy}
-                                          onClick={() => updateClassPayment(row, group, false)}
-                                          aria-label={`撤銷${row.label}的${group.label}收款確認`}
-                                          className="btn btn-ghost min-h-11 px-3 text-xs disabled:opacity-50">
-                                          撤銷收款確認
-                                        </button>}
-
-                                      </div>
-                                    </details>
-                                  </>}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </td>}
                       </tr>
                     ))}
                   </tbody>

@@ -2082,13 +2082,17 @@ async def update_class_payment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此班級")
     if payload.activity_id is not None:
         or_404(await activity_svc.get_activity(session, payload.activity_id), "找不到此活動")
-    orders = await shop_svc.set_class_paid(
-        session,
-        class_id,
-        is_paid=payload.is_paid,
-        actor_id=current_user.id,
-        activity_id=payload.activity_id,
-    )
+    try:
+        orders = await shop_svc.set_class_paid(
+            session,
+            class_id,
+            is_paid=payload.is_paid,
+            actor_id=current_user.id,
+            activity_id=payload.activity_id,
+            category_id=payload.category_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     await audit_svc.record(
         session,
         entity_type="school_class",
@@ -2100,6 +2104,7 @@ async def update_class_payment(
             "is_paid": payload.is_paid,
             "order_count": len(orders),
             "activity_id": str(payload.activity_id) if payload.activity_id else None,
+            "category_id": str(payload.category_id) if payload.category_id else None,
         },
         summary=f"班聯會標示整班{'已繳費' if payload.is_paid else '未繳費'}（單一活動）",
     )
@@ -2108,6 +2113,7 @@ async def update_class_payment(
     return ClassPaymentOut(
         class_id=class_id,
         activity_id=payload.activity_id,
+        category_id=payload.category_id,
         updated_orders=len(orders),
         is_paid=payload.is_paid,
     )

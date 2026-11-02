@@ -651,6 +651,9 @@ class OrderPaymentUpdate(BaseModel):
 class ClassPaymentUpdate(BaseModel):
     is_paid: bool = Field(description="班聯會是否已收到款項")
     activity_id: uuid.UUID | None = Field(description="本次更新的活動；null 代表一般商品")
+    category_id: uuid.UUID | None = Field(
+        default=None, description="未綁活動時，只更新此商品主題的收款"
+    )
 
 
 class ClassReceiptBatchCreate(BaseModel):
@@ -688,6 +691,7 @@ class ClassPaymentOut(BaseModel):
 
     class_id: uuid.UUID
     activity_id: uuid.UUID | None = None
+    category_id: uuid.UUID | None = None
     updated_orders: int
     is_paid: bool
 
