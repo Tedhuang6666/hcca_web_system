@@ -28,7 +28,7 @@ import type {
 } from "@/lib/types";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import { usePersistedState } from "@/hooks/usePersistedState";
-import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
+import { eligibleShopCatalog } from "@/lib/shop-catalog-visibility";
 import { orderScopeKey, catalogScopeKey } from "@/lib/shop-order-scope";
 import { refreshAutomaticRegistrationPromotions } from "@/lib/shop-registration-promotions";
 import DelegationLinks from "@/components/shop/DelegationLinks";
@@ -1064,13 +1064,10 @@ type ShopPageProps = {
 export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {}) {
   const router = useRouter();
   const directProductRoute = Boolean(topicSlug || productSlug);
-  const catalogCacheKey = directProductRoute ? "shop/catalog/direct:v1" : "shop/catalog/all:v2";
 
-  const [catalog, setCatalog] = useState<CatalogCategoryOut[]>(() => directProductRoute
-    ? []
-    : cacheGet<CatalogCategoryOut[]>(catalogCacheKey) ?? []);
+  const [catalog, setCatalog] = useState<CatalogCategoryOut[]>([]);
   const [catalogTime, setCatalogTime] = useState(Date.now);
-  const [loading, setLoading] = useState(directProductRoute || !cacheHas(catalogCacheKey));
+  const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [openProduct, setOpenProduct] = useState<string | null>(null);
   const [routeProductNotFound, setRouteProductNotFound] = useState(false);
@@ -1182,11 +1179,11 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
 
   const loadCatalog = useCallback(() => {
     const generation = refreshGeneration.current;
-    const key = JSON.stringify([catalogCacheKey, topicSlug, productSlug]);
+    const key = JSON.stringify([directProductRoute, topicSlug, productSlug]);
     if (catalogRefresh.current?.generation === generation && catalogRefresh.current.key === key) {
       return catalogRefresh.current.promise;
     }
-    if (catalogLoaded.current !== key && (directProductRoute || !cacheHas(catalogCacheKey))) setLoading(true);
+    if (catalogLoaded.current !== key) setLoading(true);
     setLoadError(false);
     const routeSegments = topicSlug && productSlug
       ? [topicSlug, productSlug]
@@ -1206,7 +1203,6 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
         if (generation !== refreshGeneration.current || catalogRefresh.current?.promise !== request) return;
         catalogLoaded.current = key;
         setCatalog(data);
-        if (!directProductRoute) cacheSet(catalogCacheKey, data);
         try {
           const schoolClass = await classApi.myClass();
           if (generation !== refreshGeneration.current || catalogRefresh.current?.promise !== request) return;
@@ -1238,7 +1234,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       });
     catalogRefresh.current = { generation, key, promise: request };
     return request;
-  }, [catalogCacheKey, directProductRoute, productSlug, topicSlug]);
+  }, [directProductRoute, productSlug, topicSlug]);
 
   const loadDelegation = useCallback(async (token: string, claim = false) => {
     const generation = refreshGeneration.current;
@@ -1492,11 +1488,13 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
     return null;
   }, [catalog, openProduct]);
 
+  const visibleCatalog = useMemo(() => classMemberUserId ? catalog : eligibleShopCatalog(catalog),
+    [catalog, classMemberUserId]);
   const displayedCatalog = directProductRoute && routeProductEntry
-    ? [routeProductEntry.category]
+    ? visibleCatalog.filter((category) => category.id === routeProductEntry.category.id)
     : directProductRoute
-      ? catalog
-      : catalog.filter((category) => (
+      ? visibleCatalog
+      : visibleCatalog.filter((category) => (
         !category.order_closed_at
         && !(category.order_closes_at && new Date(category.order_closes_at).getTime() <= catalogTime)
         && !(closeStatus[category.id]?.is_closed && closeStatus[category.id]?.is_global)
@@ -1508,7 +1506,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
     || category.series.some((series) => series.products.some((product) => product.id === openProduct))
   ));
   const selectedCategory = directProductRoute
-    ? routeProductEntry?.category ?? null
+    ? displayedCatalog.find((category) => category.id === routeProductEntry?.category.id) ?? null
     : displayedCatalog.find((category) => category.id === selectedCategoryId)
       ?? displayedCatalog[0]
       ?? null;
@@ -1617,10 +1615,10 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
     (series) => !selectedSeriesId || series.id === selectedSeriesId,
   ) ?? [];
 
-  const catalogProducts = new Map(catalog.flatMap((category) => [
+  const catalogProducts = new Map(visibleCatalog.flatMap((category) => [
     ...category.products, ...category.series.flatMap((series) => series.products),
   ]).map((product) => [product.id, product]));
-  const catalogCategoryByProductId = new Map(catalog.flatMap((category) => [
+  const catalogCategoryByProductId = new Map(visibleCatalog.flatMap((category) => [
     ...category.products.map((product) => [product.id, category] as const),
     ...category.series.flatMap((series) => series.products.map((product) => [product.id, category] as const)),
   ]));
@@ -1632,6 +1630,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
     if (promotion.activity_id != null && promotion.activity_id !== selectedCategory.activity_id) return false;
 
     const targets = promotion.target_products ?? [];
+    if (targets.some((target) => !catalogProducts.has(target.id))) return false;
     const targetScopes = new Set(targets.flatMap((target) => {
       const category = catalogCategoryByProductId.get(target.id);
       return category ? [activityScopeKey(category)] : [];
@@ -1976,7 +1975,8 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                         classClosed={Boolean(closeStatus[selectedCategory.id]?.is_closed && !closeStatus[selectedCategory.id]?.is_global)}
                         councilClosed={Boolean(closeStatus[selectedCategory.id]?.is_global)}
                         registeredQuantity={registeredByProduct.get(product.id) ?? 0}
-                        href={delegationToken || classMemberUserId ? null : shopProductHref(catalog, selectedCategory, product)}
+                        href={delegationToken || classMemberUserId ? null : shopProductHref(catalog,
+                          catalog.find((category) => category.id === selectedCategory.id) ?? selectedCategory, product)}
                         onClick={() => setOpenProduct(product.id)}
                       />
                     ))}
@@ -2016,7 +2016,8 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                           classClosed={Boolean(closeStatus[selectedCategory.id]?.is_closed && !closeStatus[selectedCategory.id]?.is_global)}
                           councilClosed={Boolean(closeStatus[selectedCategory.id]?.is_global)}
                           registeredQuantity={registeredByProduct.get(product.id) ?? 0}
-                          href={delegationToken || classMemberUserId ? null : shopProductHref(catalog, selectedCategory, product)}
+                          href={delegationToken || classMemberUserId ? null : shopProductHref(catalog,
+                            catalog.find((category) => category.id === selectedCategory.id) ?? selectedCategory, product)}
                           onClick={() => setOpenProduct(product.id)}
                         />
                       ))}

@@ -63,6 +63,21 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("原商品頁的家人代訂模式", () => {
+  it("shows only tickets allowed for the student receiving the delegated order", async () => {
+    const staff = { ...product, id: "staff", name: "學生指定工作票", purchase_allowed: true };
+    const regular = { ...product, id: "regular", name: "家長自己的可購票種", purchase_allowed: false };
+    api.accessDelegation.mockResolvedValue({ ...context, registration: null,
+      catalog: [{ ...context.catalog![0], products: [regular], series: [
+        { id: "staff-tickets", name: "指定票種", sort_order: 0, products: [staff] },
+      ] }] });
+
+    render(<ShopPage />);
+
+    expect(await screen.findByRole("button", { name: "查看商品：學生指定工作票" })).toBeVisible();
+    expect(screen.queryByText("家長自己的可購票種")).not.toBeInTheDocument();
+    expect(api.catalog).not.toHaveBeenCalled();
+  });
+
   it("一般同學收款後可加購，且數量下限保留本人已收款品項", async () => {
     window.history.replaceState({}, "", "/shop?product=bag");
     const collected = { ...order, is_class_collected: true, items: [order.items[0]],

@@ -9,6 +9,7 @@ const api = vi.hoisted(() => ({
   getProduct: vi.fn(), getCloseStatus: vi.fn(), myClass: vi.fn(), setCurrentRegistrationProduct: vi.fn(),
   previewCurrentPromotion: vi.fn(), applyCurrentPromotion: vi.fn(),
 }));
+const catalogCache = vi.hoisted(() => ({ get: vi.fn(), has: vi.fn(), set: vi.fn() }));
 vi.mock("@/lib/api", () => ({
   authApi: { refresh: api.me }, shopApi: api,
   classApi: { myClass: api.myClass },
@@ -21,7 +22,7 @@ vi.mock("next/link", () => ({
     <a {...props} onClick={(event) => { event.preventDefault(); props.onClick?.(event); }}>{children}</a>
   ),
 }));
-vi.mock("@/lib/api-cache", () => ({ cacheGet: () => null, cacheHas: () => false, cacheSet: vi.fn() }));
+vi.mock("@/lib/api-cache", () => ({ cacheGet: catalogCache.get, cacheHas: catalogCache.has, cacheSet: catalogCache.set }));
 
 const testingProduct = {
   id: "testing", name: "測試限定商品", price: 100, image_url: null, status: "testing" as const,
@@ -103,6 +104,65 @@ beforeEach(() => {
   api.getProduct.mockImplementation((id: string) => Promise.resolve({
     ...(id === "testing" ? testingProduct : formalProduct), variant_groups: [], media: [],
   }));
+});
+
+it("only shows eligible tickets and removes empty series, themes and related bundle offers", async () => {
+  const hidden = { ...formalProduct, id: "restricted", name: "工作人員票", purchase_allowed: false,
+    purchase_restriction: "您不符合購買資格" };
+  const visible = { ...formalProduct, id: "public", name: "一般預售票", purchase_allowed: true };
+  api.catalog.mockResolvedValue([
+    { id: "dance", name: "聯合舞會", sort_order: 0, products: [hidden], series: [
+      { id: "public-tickets", name: "公開票種", sort_order: 0, products: [visible, hidden] },
+      { id: "staff-tickets", name: "工作票種", sort_order: 1, products: [hidden] },
+    ] },
+    { id: "performers", name: "表演人員專屬", sort_order: 1, products: [hidden], series: [] },
+  ]);
+  api.listAvailablePromotions.mockResolvedValue([{ id: "restricted-bundle", name: "限定工作套組",
+    discount_type: "bundle_price", discount_value: 100, min_order_price: 0, min_quantity: 1,
+    target_products: [visible, hidden] }]);
+
+  render(<ShopPage />);
+
+  expect(await screen.findByRole("link", { name: "查看商品：一般預售票" })).toBeVisible();
+  expect(within(screen.getByRole("heading", { name: "聯合舞會", level: 2 }).parentElement!)
+    .getByText("1 件商品")).toBeVisible();
+  expect(screen.getByRole("link", { name: "查看商品：一般預售票" })).toHaveAttribute("href",
+    `/shop/${encodeURIComponent("聯合舞會")}/${encodeURIComponent("一般預售票")}`);
+  for (const name of ["工作人員票", "工作票種", "表演人員專屬", "限定工作套組", "您不符合購買資格"]) {
+    expect(screen.queryByText(name)).not.toBeInTheDocument();
+  }
+  expect(screen.queryByRole("navigation", { name: "選擇商品活動" })).not.toBeInTheDocument();
+});
+
+it("does not open a restricted ticket through its direct link", async () => {
+  api.catalog.mockResolvedValue([{ id: "dance", name: "聯合舞會", sort_order: 0, series: [],
+    products: [{ ...formalProduct, name: "工作人員票", purchase_allowed: false }] }]);
+
+  render(<ShopPage productSlug="工作人員票" />);
+
+  expect(await screen.findByText("目前沒有可訂購的商品，請稍後再來看看。")).toBeVisible();
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(screen.queryByText("工作人員票")).not.toBeInTheDocument();
+  expect(api.getProduct).not.toHaveBeenCalled();
+});
+
+it("waits for current account eligibility instead of showing another account's cached tickets", async () => {
+  const cached = [{ id: "old", name: "上一個帳號的票種", sort_order: 0, series: [],
+    products: [{ ...formalProduct, name: "上一個帳號的指定票", purchase_allowed: true }] }];
+  catalogCache.get.mockReturnValue(cached);
+  catalogCache.has.mockReturnValue(true);
+  let authenticate!: (user: { id: string; student_id: string }) => void;
+  api.me.mockReturnValue(new Promise((resolve) => { authenticate = resolve; }));
+  api.catalog.mockResolvedValue([{ id: "dance", name: "聯合舞會", sort_order: 0, series: [],
+    products: [{ ...formalProduct, name: "本人的指定票", purchase_allowed: true }] }]);
+
+  render(<ShopPage />);
+
+  expect(screen.queryByText("上一個帳號的指定票")).not.toBeInTheDocument();
+  expect(api.catalog).not.toHaveBeenCalled();
+  await act(async () => { authenticate({ id: "current-student", student_id: "310001" }); });
+  expect(await screen.findByRole("link", { name: "查看商品：本人的指定票" })).toBeVisible();
+  expect(screen.queryByText("上一個帳號的指定票")).not.toBeInTheDocument();
 });
 
 it("refreshes the latest automatic promotion on an existing registration", async () => {
