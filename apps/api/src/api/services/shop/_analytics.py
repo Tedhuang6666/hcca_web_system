@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from collections import defaultdict
 from datetime import UTC, date, datetime, time, timedelta
@@ -20,6 +21,7 @@ from api.schemas.shop_analytics import (
     ShopSalesMetrics,
     ShopSalesPeriod,
     ShopSalesRow,
+    ShopSalesVariantRow,
 )
 from api.services.school_class import class_display_label
 from api.services.shop._analytics_insights import build_sales_insights
@@ -156,7 +158,8 @@ def _summarize(
         row.gross_amount += amount if gross is None else gross
         row.discount_amount += 0 if gross is None else gross - amount
 
-    for order in orders:
+    # 同一選項改名後仍依識別碼合併，顯示期間內最近一筆訂單的名稱快照。
+    for order in sorted(orders, key=lambda order: (order.created_at, str(order.id)), reverse=True):
         items = [
             item
             for item in order.items
@@ -272,24 +275,48 @@ def _summarize(
                     product_id=product.id,
                     product_name=product.name,
                 )
-            options = (
-                " / ".join(
-                    f"{option['group_name']}：{option['value']}"
-                    for option in sorted(
-                        item.selected_options or [], key=lambda option: option.get("group_name", "")
-                    )
-                )
-                or "無規格"
+            options = _sales_options(item.selected_options or [])
+            option_label = (
+                " / ".join(f"{group}：{value}" for _, _, group, value in options) or "無規格"
+            )
+            variant_key = json.dumps(
+                [str(product.id), sorted((group, option) for group, option, _, _ in options)],
+                ensure_ascii=False,
             )
             add(
                 "variants",
-                f"{product.id}:{options}",
-                f"{product.name} · {options}",
+                variant_key,
+                f"{product.name} · {option_label}",
                 order,
                 item.quantity,
                 amounts[item.id],
                 item_gross,
             )
+            cross_meta["variants"].setdefault(
+                variant_key,
+                dict(product_id=product.id, product_name=product.name, option_label=option_label),
+            )
+            for group_key, option_key, group_name, value in options:
+                key = json.dumps([str(product.id), group_key, option_key], ensure_ascii=False)
+                add(
+                    "variant_options",
+                    key,
+                    f"{product.name} · {group_name}：{value}",
+                    order,
+                    item.quantity,
+                    amounts[item.id],
+                    item_gross,
+                )
+                cross_meta["variant_options"].setdefault(
+                    key,
+                    dict(
+                        product_id=product.id,
+                        product_name=product.name,
+                        group_key=group_key,
+                        group_name=group_name,
+                        option_label=value,
+                    ),
+                )
 
     metrics.buyer_count = len(buyers)
     metrics.median_order_amount = float(median(positive_amounts)) if positive_amounts else 0
@@ -324,6 +351,25 @@ def _summarize(
     def rows(kind: str) -> list[ShopSalesRow]:
         return sorted(groups[kind].values(), key=lambda row: (-row.item_count, row.label))
 
+    def variant_rows(kind: str) -> list[ShopSalesVariantRow]:
+        result = []
+        for row in rows(kind):
+            meta = cross_meta[kind][row.key]
+            product = groups["products"][str(meta["product_id"])]
+            result.append(
+                ShopSalesVariantRow(
+                    **row.model_dump(),
+                    **meta,
+                    item_share=round(row.item_count / product.item_count * 100, 2)
+                    if product.item_count
+                    else 0,
+                    amount_share=round(row.total_amount / product.total_amount * 100, 2)
+                    if product.total_amount
+                    else 0,
+                )
+            )
+        return result
+
     bands = (
         [("zero", "NT$0")]
         + [(str(i), f"NT${i * 500 + 1:,}–{(i + 1) * 500:,}") for i in range(6)]
@@ -349,7 +395,8 @@ def _summarize(
         grades=rows("grades"),
         classes=rows("classes"),
         products=rows("products"),
-        variants=rows("variants"),
+        variants=variant_rows("variants"),
+        variant_options=variant_rows("variant_options"),
         sources=rows("sources"),
         amount_bands=amount_bands,
         item_bands=item_bands,
@@ -383,3 +430,15 @@ def _summarize(
             for row in rows("class_products")
         ],
     )
+
+
+def _sales_options(snapshots: list[dict]) -> list[tuple[str, str, str, str]]:
+    """保留歷史快照，ID 優先；無 ID 的舊明細依名稱識別，不靠顯示分隔符分組。"""
+    options = {}
+    for option in snapshots:
+        group_name = str(option.get("group_name", ""))
+        value = str(option.get("value", ""))
+        group_key = f"id:{option['group_id']}" if option.get("group_id") else f"name:{group_name}"
+        option_key = f"id:{option['option_id']}" if option.get("option_id") else f"value:{value}"
+        options[group_key, option_key] = (group_key, option_key, group_name, value)
+    return sorted(options.values(), key=lambda option: (option[2], option[3], option[0], option[1]))

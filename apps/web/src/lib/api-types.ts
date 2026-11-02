@@ -30509,8 +30509,10 @@ export interface components {
             sources: components["schemas"]["ShopSalesRow"][];
             /** Statuses */
             statuses: components["schemas"]["ShopSalesRow"][];
+            /** Variant Options */
+            variant_options: components["schemas"]["ShopSalesVariantRow"][];
             /** Variants */
-            variants: components["schemas"]["ShopSalesRow"][];
+            variants: components["schemas"]["ShopSalesVariantRow"][];
             /** Weekday Hours */
             weekday_hours: components["schemas"]["ShopSalesRow"][];
             /** Weekdays */
@@ -30577,6 +30579,71 @@ export interface components {
              * @default 0
              */
             paid_amount: number;
+            /**
+             * Total Amount
+             * @default 0
+             */
+            total_amount: number;
+        };
+        /** ShopSalesVariantRow */
+        ShopSalesVariantRow: {
+            /**
+             * Amount Share
+             * @default 0
+             */
+            amount_share: number;
+            /**
+             * Buyer Count
+             * @default 0
+             */
+            buyer_count: number;
+            /**
+             * Discount Amount
+             * @default 0
+             */
+            discount_amount: number;
+            /**
+             * Gross Amount
+             * @default 0
+             */
+            gross_amount: number;
+            /** Group Key */
+            group_key: string | null;
+            /** Group Name */
+            group_name: string | null;
+            /**
+             * Item Count
+             * @default 0
+             */
+            item_count: number;
+            /**
+             * Item Share
+             * @default 0
+             */
+            item_share: number;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Option Label */
+            option_label: string;
+            /**
+             * Order Count
+             * @default 0
+             */
+            order_count: number;
+            /**
+             * Paid Amount
+             * @default 0
+             */
+            paid_amount: number;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Product Name */
+            product_name: string;
             /**
              * Total Amount
              * @default 0

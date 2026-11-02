@@ -7,6 +7,7 @@ import { useWS } from "@/hooks/useWS";
 import type { ShopSalesAnalyticsOut, ShopSalesMetrics } from "@/lib/types";
 import ShopSalesTrend from "./ShopSalesTrend";
 import ShopSalesDeepAnalysis from "./ShopSalesDeepAnalysis";
+import ShopSalesVariants from "./ShopSalesVariants";
 import "./shop-sales-analytics.css";
 
 const number = (value: number) =>
@@ -61,6 +62,11 @@ function exportCsv(data: ShopSalesAnalyticsOut, scope: string) {
       "訂購金額",
       "班聯已確認",
       "累積金額",
+      "商品",
+      "規格組",
+      "選項／組合",
+      "商品內銷量占比（%）",
+      "商品內金額占比（%）",
     ],
   ];
   for (const [name, period] of [["選定區間", data.current]] as const) {
@@ -72,6 +78,7 @@ function exportCsv(data: ShopSalesAnalyticsOut, scope: string) {
       ["classes", "班級"],
       ["products", "商品"],
       ["variants", "規格"],
+      ["variant_options", "單一選項"],
       ["sources", "訂購方式"],
       ["weekdays", "星期"],
       ["weekday_hours", "星期與時段"],
@@ -93,6 +100,9 @@ function exportCsv(data: ShopSalesAnalyticsOut, scope: string) {
           row.total_amount,
           row.paid_amount,
           "cumulative_amount" in row ? Number(row.cumulative_amount) : "",
+          ...("product_name" in row && "option_label" in row
+            ? [row.product_name, row.group_name ?? "", row.option_label, row.item_share, row.amount_share]
+            : ["", "", "", "", ""]),
         ]);
     }
   }
@@ -350,6 +360,7 @@ export default function ShopSalesAnalytics({
             </section>
           )}
           <ShopSalesTrend current={current} />
+          <ShopSalesVariants current={current} />
           <ShopSalesDeepAnalysis current={current} />
           <details className="sales-detail">
             <summary>統計口徑與資料限制</summary>

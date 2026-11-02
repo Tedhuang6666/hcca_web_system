@@ -46,6 +46,16 @@ class ShopSalesDay(ShopSalesRow):
     cumulative_amount: int = 0
 
 
+class ShopSalesVariantRow(ShopSalesRow):
+    product_id: UUID
+    product_name: str
+    option_label: str
+    group_key: str | None = None
+    group_name: str | None = None
+    item_share: float = 0
+    amount_share: float = 0
+
+
 class ShopSalesCrossRow(ShopSalesRow):
     dimension_key: str
     dimension_label: str
@@ -66,7 +76,8 @@ class ShopSalesPeriod(SalesOut):
     grades: list[ShopSalesRow] = Field(default_factory=list)
     classes: list[ShopSalesRow] = Field(default_factory=list)
     products: list[ShopSalesRow] = Field(default_factory=list)
-    variants: list[ShopSalesRow] = Field(default_factory=list)
+    variants: list[ShopSalesVariantRow] = Field(default_factory=list)
+    variant_options: list[ShopSalesVariantRow] = Field(default_factory=list)
     hours: list[ShopSalesRow] = Field(default_factory=list)
     amount_bands: list[ShopSalesRow] = Field(default_factory=list)
     item_bands: list[ShopSalesRow] = Field(default_factory=list)

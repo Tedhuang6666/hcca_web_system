@@ -3,11 +3,11 @@ import {
   fireEvent,
   render,
   screen,
-  waitFor,
   within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ShopSalesAnalytics from "./ShopSalesAnalytics";
+import ShopSalesVariants from "./ShopSalesVariants";
 import type {
   ShopSalesAnalyticsOut,
   ShopSalesMetrics,
@@ -90,7 +90,8 @@ function period(): ShopSalesPeriod {
     grades: [row],
     classes: [row],
     products: [{ ...row, label: "紀念衫" }],
-    variants: [{ ...row, label: "紀念衫 · 尺寸：L" }],
+    variants: [{ ...row, label: "紀念衫 · 尺寸：L", product_id: "one", product_name: "紀念衫", option_label: "尺寸：L", group_key: null, group_name: null, item_share: 100, amount_share: 100 }],
+    variant_options: [],
     hours: [row],
     sources: [row],
     amount_bands: [row],
@@ -130,6 +131,33 @@ function fixture(): ShopSalesAnalyticsOut {
     insights: [{ title: "商品集中度", detail: "紀念衫占本期金額 100%。" }],
   };
 }
+
+it("同商品選項能依銷量與金額排行，規格組分開且切換商品不殘留", () => {
+  const current = period();
+  current.products = [{ ...row, key: "shirt", label: "紀念衫", item_count: 4, total_amount: 800 }, { ...row, key: "bag", label: "袋子" }];
+  const variant = { ...current.variants[0], product_id: "shirt", product_name: "紀念衫" };
+  current.variants = [
+    { ...variant, key: "red", option_label: "紅／L", item_count: 3, total_amount: 150, item_share: 75, amount_share: 18.75 },
+    { ...variant, key: "blue", option_label: "藍／L", item_count: 1, total_amount: 650, item_share: 25, amount_share: 81.25 },
+  ];
+  current.variant_options = [
+    ...current.variants.map((entry) => ({ ...entry, group_key: "color", group_name: "顏色", option_label: entry.key === "red" ? "紅" : "藍" })),
+    { ...variant, key: "large", group_key: "size", group_name: "尺寸", option_label: "L", item_count: 4, total_amount: 800, item_share: 100, amount_share: 100 },
+  ];
+  const view = render(<ShopSalesVariants current={current} />);
+  expect(within(screen.getByRole("list", { name: "選項銷量比較" })).getAllByRole("listitem")[0]).toHaveTextContent("紅／L");
+  fireEvent.click(screen.getByRole("button", { name: "依金額比較" }));
+  expect(within(screen.getByRole("list", { name: "選項金額比較" })).getAllByRole("listitem")[0]).toHaveTextContent("藍／L");
+  expect(screen.getByRole("cell", { name: "81.25%" })).toBeVisible();
+  fireEvent.change(screen.getByRole("combobox", { name: "比較方式" }), { target: { value: "size" } });
+  expect(screen.getByRole("listitem")).toHaveTextContent("LNT$800");
+  expect(screen.queryByText("紅／L")).not.toBeInTheDocument();
+  fireEvent.change(screen.getByRole("combobox", { name: "比較商品" }), { target: { value: "bag" } });
+  expect(screen.getByRole("combobox", { name: "比較方式" })).toHaveValue("");
+  expect(screen.getByText("此範圍沒有可比較的選項。")).toBeVisible();
+  view.rerender(<ShopSalesVariants current={{ ...current, products: [], variants: [], variant_options: [] }} />);
+  expect(screen.getByRole("combobox", { name: "比較商品" })).toBeDisabled();
+});
 beforeEach(() => {
   vi.resetAllMocks();
   api.salesAnalytics.mockResolvedValue(fixture());

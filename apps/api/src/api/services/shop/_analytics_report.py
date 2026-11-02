@@ -20,7 +20,12 @@ from api.core.clock import TAIPEI
 from api.models.activity import Activity
 from api.models.school_class import SchoolClass
 from api.models.shop import Product, ProductCategory
-from api.schemas.shop_analytics import ShopSalesAnalyticsOut, ShopSalesReportCreate, ShopSalesRow
+from api.schemas.shop_analytics import (
+    ShopSalesAnalyticsOut,
+    ShopSalesReportCreate,
+    ShopSalesRow,
+    ShopSalesVariantRow,
+)
 from api.services.official_print import _font_faces, render_print_pdf
 from api.services.shop._analytics import sales_analytics
 
@@ -46,6 +51,7 @@ DIMENSIONS = [
     ("classes", "班級"),
     ("products", "商品"),
     ("variants", "規格"),
+    ("variant_options", "單一選項"),
     ("sources", "訂購方式"),
     ("weekdays", "星期"),
     ("hours", "時段"),
@@ -58,6 +64,8 @@ DIMENSIONS = [
     ("class_products", "班級與商品"),
 ]
 NOTES = (
+    "規格組合與單一選項占比皆以該商品的件數／折扣後金額為分母。單一選項會跨規格組重複計入，不可跨組加總。僅列有有效訂單的選項，未售出選項不列入。",
+    "規格依訂單快照統計，有識別碼時依識別碼合併並顯示期間最近名稱；缺少識別碼的舊資料依名稱分組。規格刪除或停用不影響歷史訂購統計。",
     "有效訂購金額、件數及人數排除測試、取消與退款；訂單狀態表另外列出取消與退款，金額是原訂單快照，不代表退款實際撥付額。",
     "日期、時段與星期皆採台北時間及訂單建立日期；追加、減購與取消會回算原日期，並非每日異動流水帳。",
     "品項／主題僅統計符合的明細，整單折扣按原價比例與最大餘數法分攤；平均客單價及中位數排除零元訂單。",
@@ -174,6 +182,22 @@ def _row_values(row: ShopSalesRow) -> list:
 ROW_HEADERS = ["項目", "訂單", "人數", "件數", "訂購金額", "已確認", "未確認", "折抵"]
 
 
+def _variant_table(rows: list[ShopSalesVariantRow]) -> tuple[list[str], list[list]]:
+    return (
+        ["商品", "規格／選項", *ROW_HEADERS[1:], "商品內銷量占比（%）", "商品內金額占比（%）"],
+        [
+            [
+                row.product_name,
+                f"{row.group_name}：{row.option_label}" if row.group_name else row.option_label,
+                *_row_values(row)[1:],
+                row.item_share,
+                row.amount_share,
+            ]
+            for row in rows
+        ],
+    )
+
+
 def render_sales_pdf(data: ShopSalesAnalyticsOut, scope: str) -> bytes:
     esc = html.escape
     current = data.current
@@ -202,7 +226,12 @@ def render_sales_pdf(data: ShopSalesAnalyticsOut, scope: str) -> bytes:
     sections.append("</section>")
     for key, title in DIMENSIONS:
         sections.append(f'<section class="page"><h2>{esc(title)}分析</h2>')
-        sections.append(_table(ROW_HEADERS, [_row_values(row) for row in getattr(current, key)]))
+        if key in ("variants", "variant_options"):
+            sections.append(_table(*_variant_table(getattr(current, key))))
+        else:
+            sections.append(
+                _table(ROW_HEADERS, [_row_values(row) for row in getattr(current, key)])
+            )
         sections.append("</section>")
     sections.append('<section class="page"><h2>每日完整明細</h2>')
     sections.append(
@@ -308,7 +337,10 @@ def render_sales_excel(data: ShopSalesAnalyticsOut, scope: str) -> bytes:
         chart.set_categories(Reference(daily, min_col=1, min_row=2, max_row=daily.max_row))
         daily.add_chart(chart, anchor)
     for key, label in DIMENSIONS:
-        _sheet(workbook, label, ROW_HEADERS, [_row_values(row) for row in getattr(period, key)])
+        if key in ("variants", "variant_options"):
+            _sheet(workbook, label, *_variant_table(getattr(period, key)))
+        else:
+            _sheet(workbook, label, ROW_HEADERS, [_row_values(row) for row in getattr(period, key)])
     buffer = BytesIO()
     workbook.save(buffer)
     return buffer.getvalue()

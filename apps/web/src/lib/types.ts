@@ -9,6 +9,7 @@ export type {
   ShopSalesMetrics,
   ShopSalesPeriod,
   ShopSalesRow,
+  ShopSalesVariantRow,
   ShopSalesDay,
   ShopSalesCrossRow,
   ShopSalesInsight,
