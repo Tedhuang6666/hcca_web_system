@@ -13,10 +13,11 @@ type Entry = { scope: Scope; row: OrderSummaryRow };
 type Confirmation = { entries: Entry[]; paid: boolean; classLabel: string };
 
 export default function ClassPaymentWorkspace({ catalog, activities, optionsLoading, optionsError, refreshKey, disabled,
-  onChanged, onBusyChange,
+  onChanged, onBusyChange, onViewClass,
 }: {
   catalog: CatalogCategoryOut[]; activities: ActivityOut[]; optionsLoading: boolean; optionsError: boolean;
   refreshKey: number; disabled: boolean; onChanged: () => void; onBusyChange: (busy: string | null) => void;
+  onViewClass?: (classId: string, label: string) => void;
 }) {
   const scopes = useMemo(() => {
     const groups = new Map<string, Scope>();
@@ -139,7 +140,12 @@ export default function ClassPaymentWorkspace({ catalog, activities, optionsLoad
                       const unpaid = item.entries.reduce((sum, { row }) => sum + row.unpaid_amount, 0);
                       const paid = item.entries.reduce((sum, { row }) => sum + row.paid_amount, 0);
                       return <li key={classId} className="space-y-3 py-4">
-                        <h3 className="font-semibold">{item.label}</h3>
+                        <h3 className="font-semibold">{onViewClass ? <button type="button"
+                          className="min-h-11 text-left underline underline-offset-4" disabled={disabled}
+                          data-class-orders-id={classId} data-class-orders-source="collection"
+                          aria-label={`查看${item.label}訂購明細`} onClick={() => onViewClass(classId, item.label)}>
+                          {item.label}
+                        </button> : item.label}</h3>
                         <dl className="max-w-md space-y-2 text-sm">{item.entries.map(({ scope, row }) => <div key={scope.key} className="flex flex-wrap justify-between gap-x-4">
                           <dt>{scope.label}</dt><dd className="tabular-nums">待收 {money(row.unpaid_amount)}{row.paid_amount > 0 && <span className="ml-2" style={{ color: "var(--text-secondary)" }}>已確認 {money(row.paid_amount)}</span>}</dd>
                         </div>)}</dl>

@@ -16,20 +16,26 @@ type DraftItem = {
   unit_price: number;
 };
 
-export default function AdminAssistedOrder({ catalog, classes, optionsError, optionsLoading = false, onRetry, onCreated }: {
+export default function AdminAssistedOrder({ catalog, classes, optionsError, optionsLoading = false, onRetry, onCreated,
+  initialClassId = "", initialStudentId = "", defaultOpen = false, onBusyChange,
+}: {
   catalog: CatalogCategoryOut[];
   classes: SchoolClassListItem[];
   optionsError: boolean;
   optionsLoading?: boolean;
   onRetry: () => void;
   onCreated: () => void;
+  initialClassId?: string;
+  initialStudentId?: string;
+  defaultOpen?: boolean;
+  onBusyChange?: (busy: boolean) => void;
 }) {
-  const [classId, setClassId] = useState("");
+  const [classId, setClassId] = useState(initialClassId);
   const [members, setMembers] = useState<ClassMemberOut[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
   const [membersError, setMembersError] = useState("");
   const [retry, setRetry] = useState(0);
-  const [studentId, setStudentId] = useState("");
+  const [studentId, setStudentId] = useState(initialStudentId);
   const [search, setSearch] = useState("");
   const [productId, setProductId] = useState("");
   const [product, setProduct] = useState<ProductOut | null>(null);
@@ -88,6 +94,7 @@ export default function AdminAssistedOrder({ catalog, classes, optionsError, opt
     if (!student || !items.length || savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
+    onBusyChange?.(true);
     setError("");
     setResult("");
     try {
@@ -107,11 +114,12 @@ export default function AdminAssistedOrder({ catalog, classes, optionsError, opt
     } finally {
       savingRef.current = false;
       setSaving(false);
+      onBusyChange?.(false);
     }
   };
 
   return (
-    <details className="rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--card-bg)" }}>
+    <details open={defaultOpen} className="rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--card-bg)" }}>
       <summary className="min-h-11 cursor-pointer content-center font-semibold">幫同學代訂</summary>
       <p className="my-3 text-sm" style={{ color: "var(--text-secondary)" }}>可替全校同學代訂，包含尚未登入的名冊學生。班聯可在結單後協助代訂，仍須符合庫存及商品規格；追加款由該筆訂購同學自行付款，班代不代墊，結單後的追加一律獨立補收款。</p>
       {optionsLoading ? <p role="status">載入班級與商品中…</p>
@@ -122,7 +130,7 @@ export default function AdminAssistedOrder({ catalog, classes, optionsError, opt
           <legend className="sr-only">代訂資料</legend>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="grid gap-1 text-sm">代訂班級
-              <select className="input min-h-11 text-base" value={classId} disabled={items.length > 0} onChange={(event) => {
+              <select className="input min-h-11 text-base" value={classId} disabled={Boolean(initialClassId) || items.length > 0} onChange={(event) => {
                 setClassId(event.target.value); setStudentId(""); setMembers([]); setMembersLoading(false); setMembersError(""); setSearch(""); setResult("");
               }}>
                 <option value="">請選擇班級</option>
@@ -137,7 +145,7 @@ export default function AdminAssistedOrder({ catalog, classes, optionsError, opt
           {membersError && <div role="alert">{membersError}<button type="button" className="btn btn-ghost" onClick={() => setRetry((value) => value + 1)}>重試名冊</button></div>}
           {classId && !membersLoading && !membersError && !visibleMembers.length && <p role="status">沒有符合的同學，請調整搜尋或確認班級名冊。</p>}
           <label className="grid gap-1 text-sm">代訂同學
-            <select className="input min-h-11 text-base" value={studentId} disabled={!classId || membersLoading || Boolean(membersError) || items.length > 0} onChange={(event) => { setStudentId(event.target.value); setResult(""); }}>
+            <select className="input min-h-11 text-base" value={studentId} disabled={Boolean(initialStudentId) || !classId || membersLoading || Boolean(membersError) || items.length > 0} onChange={(event) => { setStudentId(event.target.value); setResult(""); }}>
               <option value="">請選擇同學</option>
               {visibleMembers.map((member) => <option key={member.id} value={member.id}>{member.seat_number ? `${member.seat_number} 號 · ` : ""}{member.display_name}{member.student_id ? `（${member.student_id}）` : ""}</option>)}
             </select>

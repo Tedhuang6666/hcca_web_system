@@ -9,6 +9,7 @@ import SupplementOrders from "@/components/shop/SupplementOrders";
 import SeparateOrderButton from "@/components/shop/SeparateOrderButton";
 import ActivityOrderClosure from "@/components/shop/ActivityOrderClosure";
 import ClassPaymentWorkspace from "@/components/shop/ClassPaymentWorkspace";
+import CouncilClassOrders from "@/components/shop/CouncilClassOrders";
 import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BarChart2, Mail, RefreshCw } from "lucide-react";
@@ -101,6 +102,7 @@ export default function CouncilOrdersPage() {
     || permissions.has("finance:view");
   const canViewAdvancedStats = hasAdminPermission || permissions.has("shop:manage");
   const [tab, setTab] = useState<Tab>("summary");
+  const [classDetail, setClassDetail] = useState<{ id: string; label: string; source: "summary" | "collection" } | null>(null);
   const [analyticsRefresh, setAnalyticsRefresh] = useState(0);
   const [supplementRefresh, setSupplementRefresh] = useState(0);
   const [groupBy, setGroupBy] = useState<"class" | "grade" | "user">("class");
@@ -687,7 +689,7 @@ export default function CouncilOrdersPage() {
             <BarChart2 size={22} /> 班聯工作
           </h1>
           <p className="mt-2 max-w-2xl text-sm" style={{ color: "var(--text-muted)" }}>
-            可直接在班級列確認指定活動收款並下載簽收單 PDF；也能依活動篩選，再查看商品數量或訂單。
+            點擊班級可查看每位同學的訂購品項、數量並快捷加購；也可確認活動收款、下載簽收單 PDF。
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -872,7 +874,20 @@ export default function CouncilOrdersPage() {
         catalog={catalog} activities={activities} optionsLoading={optionsLoading} optionsError={optionsError}
         refreshKey={supplementRefresh} disabled={mutationBusy} onBusyChange={setPaymentBusy}
         onChanged={() => { void loadSummary({ refreshCloseStatus: true }); void loadClassPayments(); }}
+        onViewClass={(id, label) => setClassDetail({ id, label, source: "collection" })}
       />}
+      {classDetail && <CouncilClassOrders key={classDetail.id} target={classDetail} catalog={catalog} classes={classes}
+        canOrder={canConfirmClassPayment} optionsLoading={optionsLoading} optionsError={optionsError}
+        onRetryOptions={() => setOptionsRetry((value) => value + 1)} onClose={() => {
+          setClassDetail(null);
+          requestAnimationFrame(() => {
+            const trigger = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-class-orders-id]"))
+              .find((button) => button.dataset.classOrdersId === classDetail.id && button.dataset.classOrdersSource === classDetail.source);
+            const fallback = document.querySelector<HTMLButtonElement>('[aria-label="班聯統籌工作"] [aria-pressed="true"]');
+            (trigger ?? fallback)?.focus();
+          });
+        }}
+        onCreated={() => { setSupplementRefresh((value) => value + 1); void loadSummary({ refreshCloseStatus: true }); }} />}
       {tab !== "analytics" && loadError && <p role="alert" className="p-4" style={{ color: "var(--danger)" }}>{loadError}</p>}
       <div hidden={tab !== "analytics" && Boolean(loadError)}>
       {/* Tab 1：班級彙總 */}
@@ -1204,7 +1219,14 @@ export default function CouncilOrdersPage() {
                             })}
                           />
                         </td>}
-                        <td className="px-4 py-3 font-medium" style={{ color: "var(--text-primary)" }}>{row.label}</td>
+                        <td className="px-4 py-3 font-medium" style={{ color: "var(--text-primary)" }}>
+                          {groupBy === "class" && row.key !== "none" ? <button type="button"
+                            className="min-h-11 text-left underline underline-offset-4" disabled={mutationBusy}
+                            data-class-orders-id={row.key} data-class-orders-source="summary"
+                            aria-label={`查看${row.label}訂購明細`} onClick={() => setClassDetail({ id: row.key, label: row.label, source: "summary" })}>
+                            {row.label}
+                          </button> : row.label}
+                        </td>
                         <td data-label="訂單數" className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>{row.order_count}</td>
                         <td data-label="應繳" className="px-4 py-3 text-xs">{money(row.total_amount)}</td>
                         <td data-label="班聯已確認" className="px-4 py-3 text-xs" style={{ color: "var(--success)" }}>{money(row.paid_amount)}</td>

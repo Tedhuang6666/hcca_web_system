@@ -6,6 +6,7 @@ const api = vi.hoisted(() => ({
   catalog: vi.fn(), listActivities: vi.fn(), recipientOptions: vi.fn(), orderSummary: vi.fn(), orderQuantities: vi.fn(),
   classPaymentReport: vi.fn(), classRepresentativeReminderTargets: vi.fn(), createMessage: vi.fn(),
   listSupplementOrders: vi.fn(),
+  listOrderRecipients: vi.fn(),
   listOrders: vi.fn(), getCloseStatus: vi.fn(), closeCategory: vi.fn(), reopenCategory: vi.fn(), setClassPaid: vi.fn(),
   cancelOrder: vi.fn(), updateOrderItemQuantity: vi.fn(), downloadClassReceipt: vi.fn(), downloadClassReceipts: vi.fn(), downloadChangedOrderReceipts: vi.fn(),
 }));
@@ -51,7 +52,23 @@ async function openPage() {
   render(<CouncilOrdersPage />);
   await screen.findByRole("table", { name: "班級訂購與收款彙總" });
   fireEvent.click(screen.getByText(/更多篩選：/));
+  await screen.findByRole("table", { name: "班級訂購與收款彙總" });
 }
+
+it("點擊彙總或收款名單中的班級可查看同學明細", async () => {
+  api.listOrderRecipients.mockResolvedValue([]);
+  await openPage();
+  const summaryTable = await screen.findByRole("table", { name: "班級訂購與收款彙總" });
+  fireEvent.click(within(summaryTable).getByRole("button", { name: "查看一年一班訂購明細" }));
+  expect(await screen.findByRole("dialog", { name: "一年一班 · 訂購明細" })).toBeVisible();
+  await screen.findByText("此班尚無名冊或有效訂購。");
+  expect(api.listOrders).toHaveBeenCalledWith({ class_id: "class", my_only: "false", limit: "500", offset: "0" });
+  fireEvent.click(screen.getByRole("button", { name: "關閉" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "校慶" }));
+  const workspace = screen.getByRole("region", { name: "登記班級收款" });
+  fireEvent.click(await within(workspace).findByRole("button", { name: "查看一年一班訂購明細" }));
+  expect(await screen.findByRole("dialog", { name: "一年一班 · 訂購明細" })).toBeVisible();
+});
 
 it("only offers school-wide assisted ordering to order managers", async () => {
   access.isAdmin = false;
