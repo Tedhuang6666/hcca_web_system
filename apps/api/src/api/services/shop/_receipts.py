@@ -1,4 +1,4 @@
-"""依班級與活動產生班聯會收款簽收單。"""
+"""依班級與商品主題產生班聯會收款簽收單。"""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import re
 import unicodedata
 import uuid
 from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import date, datetime
 from io import BytesIO
 from pathlib import Path
@@ -16,7 +17,7 @@ from pypdf import PdfReader, PdfWriter
 from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import Load, selectinload
 
 from api.core.clock import TAIPEI, local_today, now_local
 from api.models.activity import Activity
@@ -31,6 +32,92 @@ _RECEIPT_TEMPLATE = Path(__file__).with_name("templates") / "class_receipt.pdf"
 _RECEIPT_COLUMNS = ((40, 136), (184, 46), (238, 60), (306, 100), (414, 158))
 _RECEIPT_ROW_TOPS = (159.1, 182.0, 204.9, 228.0, 250.9, 273.9, 296.9)
 _RECEIPT_COPY_OFFSET = 345.77
+
+
+@dataclass(frozen=True)
+class _ReceiptOrder:
+    """僅供列印的主題品項與金額，不變更原始訂單。"""
+
+    items: list[OrderItem]
+    total_price: int
+
+
+def _receipt_order_options() -> tuple[Load, ...]:
+    return (
+        selectinload(Order.items).selectinload(OrderItem.product).selectinload(Product.category),
+        selectinload(Order.items)
+        .selectinload(OrderItem.product)
+        .selectinload(Product.series)
+        .selectinload(ProductSeries.category),
+        selectinload(Order.category),
+        selectinload(Order.user),
+        selectinload(Order.activity),
+    )
+
+
+def _receipt_orders_by_topic(
+    orders: list[Order], fallback_label: str
+) -> dict[uuid.UUID | None, tuple[str, list[_ReceiptOrder]]]:
+    topics: dict[uuid.UUID | None, tuple[str, list[_ReceiptOrder]]] = {}
+    for order in orders:
+        items_by_topic: dict[uuid.UUID | None, tuple[str, list[OrderItem]]] = {}
+        for item in order.items:
+            product = item.product
+            category = product.category or (product.series.category if product.series else None)
+            category = category or order.category
+            topic_id = category.id if category else None
+            label = category.name if category else fallback_label
+            items_by_topic.setdefault(topic_id, (label, []))[1].append(item)
+        if not items_by_topic:
+            category = order.category
+            items_by_topic[category.id if category else None] = (
+                category.name if category else fallback_label,
+                [],
+            )
+        # 舊訂單可能跨主題；按成交品項金額分攤實付總額，累計取整避免尾差遺失。
+        subtotal = sum(item.unit_price * item.quantity for item in order.items)
+        cumulative_subtotal = allocated_total = 0
+        for topic_id in sorted(items_by_topic, key=str):
+            label, items = items_by_topic[topic_id]
+            cumulative_subtotal += sum(item.unit_price * item.quantity for item in items)
+            target_total = (
+                order.total_price * cumulative_subtotal // subtotal
+                if subtotal
+                else order.total_price
+            )
+            topics.setdefault(topic_id, (label, []))[1].append(
+                _ReceiptOrder(items=items, total_price=target_total - allocated_total)
+            )
+            allocated_total = target_total
+    return topics
+
+
+async def _render_topic_receipts_pdf(
+    class_label: str,
+    academic_year: int,
+    fallback_label: str,
+    orders: list[Order],
+    issued_on: date,
+    printed_at: datetime,
+    *,
+    serial_number: str | None = None,
+) -> bytes:
+    writer = PdfWriter()
+    for label, topic_orders in _receipt_orders_by_topic(orders, fallback_label).values():
+        receipt = await asyncio.to_thread(
+            _render_class_receipt_pdf,
+            class_label,
+            academic_year,
+            f"{label} · {serial_number}" if serial_number else label,
+            topic_orders,
+            issued_on,
+            printed_at,
+        )
+        for page in PdfReader(BytesIO(receipt)).pages:
+            writer.add_page(page)
+    result = BytesIO()
+    writer.write(result)
+    return result.getvalue()
 
 
 def _receipt_text_lines(value: str, width: float, font_size: float = 12) -> list[str]:
@@ -71,7 +158,7 @@ def _render_class_receipt_pdf(
     class_label: str,
     academic_year: int,
     activity_name: str,
-    orders: list[Order],
+    orders: list[Order] | list[_ReceiptOrder],
     issued_on: date,
     printed_at: datetime | None = None,
 ) -> bytes:
@@ -267,7 +354,7 @@ async def export_class_receipts_pdf(
     printed_at: datetime | None = None,
     record_prints: bool = True,
 ) -> bytes:
-    """依班級順序合併收據；全部未收款另納入個人與獨立補收款訂單。"""
+    """依班級、商品主題各自開立收據；全部未收款另納入個人與獨立補收款。"""
     category, activity, scoped_activity_id = await _resolve_receipt_scope(
         session, activity_id=activity_id, category_id=category_id
     )
@@ -280,7 +367,7 @@ async def export_class_receipts_pdf(
             _receipt_order_scope(scoped_activity_id, category_id),
             Order.status.notin_([OrderStatus.CANCELLED, OrderStatus.REFUNDED]),
         )
-        .options(selectinload(Order.items).selectinload(OrderItem.product))
+        .options(*_receipt_order_options())
         .order_by(SchoolClass.class_code, SchoolClass.id, Order.created_at, Order.id)
     )
     if school_classes is not None:
@@ -311,11 +398,7 @@ async def export_class_receipts_pdf(
                         _receipt_order_scope(scoped_activity_id, category_id),
                         Order.status.notin_((OrderStatus.CANCELLED, OrderStatus.REFUNDED)),
                     )
-                    .options(
-                        selectinload(Order.items).selectinload(OrderItem.product),
-                        selectinload(Order.user),
-                        selectinload(Order.activity),
-                    )
+                    .options(*_receipt_order_options())
                     .order_by(Order.created_at, Order.id)
                 )
             ).all()
@@ -330,8 +413,7 @@ async def export_class_receipts_pdf(
     printed_order_ids = [order.id for _, orders in orders_by_class.values() for order in orders]
     issued_on = local_today()
     for school_class, orders in orders_by_class.values():
-        receipt = await asyncio.to_thread(
-            _render_class_receipt_pdf,
+        receipt = await _render_topic_receipts_pdf(
             school_class.label or school_class.class_code,
             school_class.academic_year,
             receipt_label,
@@ -398,14 +480,14 @@ async def render_individual_order_receipt(
         buyer_name = f"{class_label} {buyer_name} 補收款"
         academic_year = school_class.academic_year
     activity_name = receipt_label or (order.activity.name if order.activity else "一般商品")
-    return await asyncio.to_thread(
-        _render_class_receipt_pdf,
+    return await _render_topic_receipts_pdf(
         buyer_name,
         academic_year,
-        f"{activity_name} · {order.serial_number}",
+        activity_name,
         [order],
         local_today(),
         printed_at,
+        serial_number=order.serial_number,
     )
 
 
@@ -437,11 +519,7 @@ async def export_changed_order_receipts_pdf(
                 exists(changed_item),
             ),
         )
-        .options(
-            selectinload(Order.items).selectinload(OrderItem.product),
-            selectinload(Order.user),
-            selectinload(Order.activity),
-        )
+        .options(*_receipt_order_options())
         .order_by(Order.class_id, Order.created_at, Order.id)
     )
     changed_orders = list((await session.scalars(statement)).all())
