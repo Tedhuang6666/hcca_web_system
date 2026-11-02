@@ -279,7 +279,7 @@ function ProductModal({
 }: {
   productId: string;
   getProduct: (id: string) => Promise<ProductOut>;
-  saveVariant: (id: string, optionIds: string[], quantity: number) => Promise<{ added: boolean } | null>;
+  saveVariant: ReturnType<typeof useShopRegistration>["saveVariant"];
   closeStatus: CloseStatusItem | undefined;
   activityClosedAt: string | null;
   activityClosesAt: string | null;
@@ -452,6 +452,11 @@ function ProductModal({
     .filter((item) => registrationVariantKey(item.selected_options) === selectedOptionIds.join(","))
     .reduce((total, item) => total + item.quantity, 0);
   const lockedSelectedQuantity = lockedVariantQuantities.get(selectedOptionIds.join(",")) ?? 0;
+  const singlePurchase = product?.max_quantity_per_user === 1
+    || (product?.purchase_allowed === false && registeredQuantity === 1);
+  const replacingVariant = singlePurchase && registeredQuantity === 1
+    && selectedRegistrationQuantity === 0
+    && ![...lockedVariantQuantities.values()].some((quantity) => quantity > 0);
   const minimumSelectedQuantity = Math.max(
     lockedSelectedQuantity, selectedRegistrationQuantity > 0 ? 0 : 1,
   );
@@ -472,7 +477,8 @@ function ProductModal({
     : 0;
   const maxSelectedQuantity = Math.max(
     0,
-    maxSelectableQuantity - (registeredQuantity - selectedRegistrationQuantity),
+    Math.min(singlePurchase ? 1 : 100, maxSelectableQuantity)
+      - (replacingVariant ? 0 : registeredQuantity - selectedRegistrationQuantity),
   );
   const deadline = product ? productDeadline(product) : null;
   const testing = product?.status === "testing";
@@ -557,7 +563,7 @@ function ProductModal({
       const key = [...optionIds].sort().join(",");
       const wasRegistered = registeredItems.some((item) =>
         registrationVariantKey(item.selected_options) === key && item.quantity > 0);
-      const saved = await saveVariant(product.id, optionIds, quantity);
+      const saved = await saveVariant(product.id, optionIds, quantity, replacingVariant && quantity > 0);
       if (activeProductRef.current !== product.id) return false;
       if (!saved) {
         setRegistrationUpdateError(true);
@@ -803,7 +809,7 @@ function ProductModal({
                   <label>數量</label>
                   {maxSelectedQuantity === 0 ? (
                     <p>{registeredQuantity > 0 ? "目前已達可登記數量。" : "目前沒有可登記數量。"}</p>
-                  ) : product.max_quantity_per_user === 1 ? (
+                  ) : singlePurchase ? (
                     <p>每人限購 1 件</p>
                   ) : (
                     <div className="shop-product-quantity">
@@ -830,7 +836,7 @@ function ProductModal({
                           ? "班聯已確認本班收款"
                           : "登記已截止"}
                     </button>
-                  ) : product.purchase_allowed === false && isLoggedIn && selectedRegistrationQuantity === 0 ? (
+                  ) : product.purchase_allowed === false && isLoggedIn && selectedRegistrationQuantity === 0 && !replacingVariant ? (
                     <button type="button" className="shop-product-submit" disabled>不符合購買資格</button>
                   ) : bundleStep && isLoggedIn ? (
                     <button type="button" className="shop-product-submit"
@@ -868,7 +874,7 @@ function ProductModal({
                       aria-busy={loading}>
                       {loading
                         ? "處理中…"
-                        : `登記購買 · NT$${offerTotal.toLocaleString()}`}
+                        : `${replacingVariant ? "更新選項" : "登記購買"} · NT$${offerTotal.toLocaleString()}`}
                     </button>
                   ) : (
                     <Link
@@ -1488,8 +1494,10 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
     return null;
   }, [catalog, openProduct]);
 
-  const visibleCatalog = useMemo(() => classMemberUserId ? catalog : eligibleShopCatalog(catalog),
-    [catalog, classMemberUserId]);
+  const visibleCatalog = useMemo(() => classMemberUserId ? catalog : eligibleShopCatalog(catalog,
+    new Set(registrations.filter((order) => order.status !== "cancelled")
+      .flatMap((order) => order.items.filter((item) => item.quantity > 0).map((item) => item.product_id)))),
+  [catalog, classMemberUserId, registrations]);
   const displayedCatalog = directProductRoute && routeProductEntry
     ? visibleCatalog.filter((category) => category.id === routeProductEntry.category.id)
     : directProductRoute

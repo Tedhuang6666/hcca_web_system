@@ -141,7 +141,7 @@ export function useShopRegistration(options: RegistrationOptions) {
     note(preview.reason ?? "優惠已套用。");
   }
 
-  async function saveVariant(productId: string, optionIds: string[], quantity: number) {
+  async function saveVariant(productId: string, optionIds: string[], quantity: number, replaceExisting = false) {
     const snapshot = current.current;
     if (!mounted.current || snapshot.productId !== productId) return null;
     const view = registrationView(snapshot);
@@ -152,7 +152,8 @@ export function useShopRegistration(options: RegistrationOptions) {
       throw new Error("目前無法修改這份商品登記，請重新確認登入與授權。");
     }
     const key = [...optionIds].sort().join(",");
-    if (quantity < (view.lockedVariantQuantities.get(key) ?? 0)) {
+    if (quantity < (view.lockedVariantQuantities.get(key) ?? 0)
+      || (replaceExisting && [...view.lockedVariantQuantities].some(([variant, locked]) => variant !== key && locked > 0))) {
       throw new Error("已收款或鎖定的登記數量必須保留。");
     }
     const variants = new Map<string, { option_ids: string[]; quantity: number }>();
@@ -163,6 +164,7 @@ export function useShopRegistration(options: RegistrationOptions) {
       variants.set(variant, { option_ids: ids, quantity: (variants.get(variant)?.quantity ?? 0) + item.quantity });
     }
     const wasRegistered = (variants.get(key)?.quantity ?? 0) > 0;
+    if (replaceExisting) variants.clear();
     variants.delete(key);
     if (quantity > 0) variants.set(key, { option_ids: [...optionIds].sort(), quantity });
 

@@ -135,6 +135,7 @@ it("only shows eligible tickets and removes empty series, themes and related bun
 });
 
 it("does not open a restricted ticket through its direct link", async () => {
+  api.getCurrentRegistrations.mockResolvedValue([]);
   api.catalog.mockResolvedValue([{ id: "dance", name: "聯合舞會", sort_order: 0, series: [],
     products: [{ ...formalProduct, name: "工作人員票", purchase_allowed: false }] }]);
 
@@ -144,6 +145,78 @@ it("does not open a restricted ticket through its direct link", async () => {
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(screen.queryByText("工作人員票")).not.toBeInTheDocument();
   expect(api.getProduct).not.toHaveBeenCalled();
+});
+
+it.each(["product", "group"])("keeps a purchased %s-limited ticket editable and removable", async (limit) => {
+  const ticket = { ...formalProduct, max_quantity_per_user: limit === "product" ? 1 : null,
+    remaining_quantity_for_user: 0, purchase_group: limit === "group" ? "tickets" : null,
+    purchase_allowed: false, purchase_restriction: "同組商品合計限購一件，您已有訂購的票券" };
+  const option = (id: string) => ({ group_id: "type", group_name: "票種", option_id: id,
+    value: id, price_delta: 0 });
+  const original: OrderOut = { ...formalOrder, total_price: 100, subtotal_price: 100,
+    items: [{ ...formalOrder.items[0], quantity: 1, subtotal: 100, selected_options: [option("A")] }] };
+  const changed: OrderOut = { ...original,
+    items: [{ ...original.items[0], selected_options: [option("B")] }] };
+  api.me.mockResolvedValue({ id: "tester", student_id: "310001" });
+  api.catalog.mockResolvedValue([{ id: "goods", name: "商品", activity_id: "festival",
+    sort_order: 0, products: [], series: [
+      { id: "tickets", name: "門票", sort_order: 0, products: [ticket] },
+    ] }]);
+  api.getCurrentRegistrations.mockResolvedValue([original]);
+  api.getProduct.mockResolvedValue({ ...ticket, variant_groups: [
+    { id: "type", name: "票種", options: ["A", "B"].map((id) => ({
+      id, value: id, price_delta: 0, is_active: true,
+    })) },
+  ], media: [] });
+  api.setCurrentRegistrationProduct.mockRejectedValueOnce(new Error("暫時無法更新，請重試"))
+    .mockResolvedValueOnce(changed).mockResolvedValueOnce({ ...original, status: "cancelled", items: [] });
+  render(<ShopPage />);
+
+  fireEvent.click(await screen.findByRole("link", { name: "查看商品：正式商品" }));
+  expect(await screen.findByRole("button", { name: "移除這項登記" })).toBeEnabled();
+  fireEvent.click(screen.getByRole("button", { name: "B" }));
+  const update = screen.getByRole("button", { name: "更新選項 · NT$100" });
+  expect(update).toBeEnabled();
+  fireEvent.click(update);
+  expect(await screen.findByRole("alert")).toHaveTextContent("暫時無法更新，請重試");
+  expect(screen.getByRole("button", { name: "B" })).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(update);
+  expect(await screen.findByRole("button", { name: "移除這項登記" })).toBeEnabled();
+  expect(api.setCurrentRegistrationProduct).toHaveBeenLastCalledWith("formal", {
+    variants: [{ option_ids: ["B"], quantity: 1 }],
+  });
+  fireEvent.click(screen.getByRole("button", { name: "完成" }));
+  fireEvent.click(screen.getByRole("link", { name: "查看商品：正式商品" }));
+  const remove = await screen.findByRole("button", { name: "移除這項登記" });
+  expect(screen.getByRole("button", { name: "B" })).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(remove);
+  await waitFor(() => expect(api.setCurrentRegistrationProduct).toHaveBeenLastCalledWith("formal", { variants: [] }));
+});
+
+it("keeps a single-purchase product visible when the catalog refreshes after registration", async () => {
+  const ticket = { ...formalProduct, max_quantity_per_user: 1, purchase_allowed: true };
+  const catalog = (purchaseAllowed: boolean) => [{ id: "goods", name: "商品", activity_id: "festival",
+    sort_order: 0, products: [{ ...ticket, purchase_allowed: purchaseAllowed }], series: [] }];
+  const registered: OrderOut = { ...formalOrder, total_price: 100, subtotal_price: 100,
+    items: [{ ...formalOrder.items[0], quantity: 1, subtotal: 100 }] };
+  api.me.mockResolvedValue({ id: "tester", student_id: "310001" });
+  api.getCurrentRegistrations.mockResolvedValue([]);
+  api.catalog.mockResolvedValue(catalog(true));
+  api.getProduct.mockResolvedValue({ ...ticket, variant_groups: [], media: [] });
+  api.setCurrentRegistrationProduct.mockResolvedValue(registered);
+  render(<ShopPage />);
+  fireEvent.click(await screen.findByRole("link", { name: "查看商品：正式商品" }));
+  fireEvent.click(await screen.findByRole("button", { name: "登記購買 · NT$100" }));
+  expect(await screen.findByRole("button", { name: "移除這項登記" })).toBeEnabled();
+
+  api.catalog.mockResolvedValue(catalog(false));
+  api.getCurrentRegistrations.mockResolvedValue([registered]);
+  fireEvent.focus(window);
+  await waitFor(() => expect(api.catalog).toHaveBeenCalledTimes(2));
+  expect(screen.getByRole("link", { name: "查看商品：正式商品" })).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "完成" }));
+  fireEvent.click(screen.getByRole("link", { name: "查看商品：正式商品" }));
+  expect(await screen.findByRole("button", { name: "移除這項登記" })).toBeEnabled();
 });
 
 it("waits for current account eligibility instead of showing another account's cached tickets", async () => {

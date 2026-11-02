@@ -132,6 +132,22 @@ it("preserves sibling variants, other activities and test orders when replacing 
   expect(result.current.orders.map((row) => row.id)).toEqual(["other-activity", "trial", "order"]);
 });
 
+it("replaces the previous variant in one request for a single-purchase product", async () => {
+  const { result } = setup();
+  await act(async () => { await result.current.saveVariant("shirt", ["new-option"], 1, true); });
+  expect(api.setCurrentRegistrationProduct).toHaveBeenCalledWith("shirt", {
+    variants: [{ option_ids: ["new-option"], quantity: 1 }],
+  });
+});
+
+it("rejects replacing a collected variant and keeps its registration", async () => {
+  const paid = { ...order, is_paid: true, items: [order.items[0]] };
+  const { result } = setup({ registrations: [paid] });
+  await expect(result.current.saveVariant("shirt", ["new-option"], 1, true)).rejects.toThrow("已收款或鎖定");
+  expect(api.setCurrentRegistrationProduct).not.toHaveBeenCalled();
+  expect(result.current.orders).toEqual([paid]);
+});
+
 it("rejects an old identity's saved response and accepts a later write for the current identity", async () => {
   const old = deferred<OrderOut>();
   api.setDelegationProduct.mockReturnValueOnce(old.promise);
