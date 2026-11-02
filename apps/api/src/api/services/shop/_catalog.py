@@ -45,6 +45,7 @@ from api.schemas.shop import (
 )
 from api.services._base import apply_updates
 from api.services.shop._purchase_rules import purchase_restrictions
+from api.services.shop._visibility import has_purchase_qualifications, public_product_condition
 
 logger = logging.getLogger(__name__)
 
@@ -215,6 +216,7 @@ async def list_products(
     series_id: uuid.UUID | None = None,
     status: ProductStatus | None = None,
     include_testing: bool = False,
+    public_only: bool = False,
     limit: int = 20,
     offset: int = 0,
 ) -> list[Product]:
@@ -265,6 +267,8 @@ async def list_products(
         q = q.where(Product.status == status)
     if not include_testing:
         q = q.where(Product.status != ProductStatus.TESTING)
+    if public_only:
+        q = q.where(public_product_condition())
     q = q.order_by(Product.created_at.desc()).limit(limit).offset(offset)
     result = await session.execute(q)
     return list(result.scalars().unique().all())
@@ -640,7 +644,9 @@ async def build_catalog_tree(
                 seating_mode=product.seating_mode,
             )
             for product in sorted(category.products, key=lambda item: item.created_at)
-            if product.series_id is None and product.status in visible
+            if product.series_id is None
+            and product.status in visible
+            and (buyer is not None or not has_purchase_qualifications(product))
         ]
         series_out: list[CatalogSeriesOut] = []
         for series in sorted(category.series, key=lambda s: (s.sort_order, s.created_at)):
@@ -667,7 +673,7 @@ async def build_catalog_tree(
                     seating_mode=p.seating_mode,
                 )
                 for p in sorted(series.products, key=lambda x: x.created_at)
-                if p.status in visible
+                if p.status in visible and (buyer is not None or not has_purchase_qualifications(p))
             ]
             series_out.append(
                 CatalogSeriesOut(

@@ -121,6 +121,7 @@ from api.services.shop._purchase_rules import (
     purchase_restrictions,
 )
 from api.services.shop._testing import can_test_products, start_product_testing
+from api.services.shop._visibility import has_purchase_qualifications
 from api.services.storage import get_storage
 
 logger = logging.getLogger(__name__)
@@ -540,6 +541,7 @@ async def list_products(
         series_id=series_id,
         status=status_filter,
         include_testing=await can_test_products(session, current_user),
+        public_only=current_user is None,
         limit=limit,
         offset=offset,
     )
@@ -560,6 +562,8 @@ async def get_product(
     product_id: uuid.UUID, session: DbDep, current_user: OptionalUser
 ) -> ProductOut:
     product = await _get_product_or_404(product_id, session, current_user)
+    if current_user is None and has_purchase_qualifications(product):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此商品")
     product_out = ProductOut.model_validate(product)
     remaining = await shop_svc.remaining_product_quantity(
         session, product, current_user.id if current_user else None

@@ -34,6 +34,7 @@ from api.schemas.shop import (
     ShopPromotionUpdate,
 )
 from api.services._base import apply_updates
+from api.services.shop._visibility import public_product_condition
 
 
 @dataclass(frozen=True)
@@ -733,6 +734,7 @@ async def list_public_promotions(
     if not include_testing:
         filters.append(~ShopPromotion.target_products.any(Product.status == ProductStatus.TESTING))
     if user_id is None:
+        filters.append(~ShopPromotion.target_products.any(~public_product_condition()))
         filters.append(
             and_(
                 ShopPromotion.target_user_id.is_(None),

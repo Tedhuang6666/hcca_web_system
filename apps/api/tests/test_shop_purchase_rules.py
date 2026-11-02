@@ -101,7 +101,7 @@ async def test_rules_roundtrip_privacy_and_patch_semantics(tickets, client):
     assert (await tickets["admin"].get(path + "/purchase-rules")).json() == stored
     for endpoint in (path, "/shop/products", "/shop/catalog"):
         public = await client.get(endpoint)
-        assert public.status_code == 200
+        assert public.status_code == (404 if endpoint == path else 200)
         assert "310001" not in public.text and "310002" not in public.text
         assert "purchase_rules" not in public.text
     assert (await tickets["student"].get(path)).json()["purchase_allowed"] is True
