@@ -41,6 +41,8 @@ import Modal from "@/components/ui/Modal";
 import { resolveShopProductPath, shopProductHref } from "@/lib/shop-product-url";
 import { cleanupAnimatedElement, shouldAnimateProductFlight } from "@/lib/shop-product-flight";
 import ShopPrice from "@/components/shop/ShopPrice";
+import OptionPrice from "@/components/shop/OptionPrice";
+import { referenceDelta, referencePrice, registrationReferenceSubtotal } from "@/lib/shop-reference-price";
 import BundleOffer from "@/components/shop/BundleOffer";
 import BundleCarousel from "@/components/shop/BundleCarousel";
 import BundleAddOn from "@/components/shop/BundleAddOn";
@@ -442,6 +444,10 @@ function ProductModal({
     return sum + (opt?.price_delta ?? 0);
   }, 0);
   const unitPrice = (product?.price ?? 0) + delta;
+  const originalUnitPrice = (product ? referencePrice(product) : 0) + variantGroups.reduce((sum, group) => {
+    const option = group.options.find((row) => row.id === picked[group.id]);
+    return sum + (option ? referenceDelta(option) : 0);
+  }, 0);
   const offerPrice = product ? productOfferPrice(product, promotions, activityId, registration, delta) : unitPrice;
   const offerTotal = product ? productOfferPrice(product, promotions, activityId, registration, delta, qty) : unitPrice * qty;
   const allPicked = variantGroups.every((g) => picked[g.id]);
@@ -699,7 +705,10 @@ function ProductModal({
                 </div>}
                 <div className="shop-product-dialog-heading">
                   <h3 id="product-modal-title">{product.name}</h3>
-                  <ShopPrice original={unitPrice} current={offerPrice} />
+                  <ShopPrice original={originalUnitPrice} current={offerPrice} />
+                  {originalUnitPrice > offerPrice && <p className="shop-product-purchase-hint">
+                    每件省 NT${(originalUnitPrice - offerPrice).toLocaleString()}，套組與其他優惠依登記合計計算。
+                  </p>}
                   {bundleStep && <p className="shop-product-purchase-hint">正在選購「{bundleStep.name}」，每項各一件；選齊後享套組價。</p>}
                   {!bundleStep && bundleAddOn?.(loading || !canEdit)}
                   {editingDescription && <p className="shop-product-purchase-hint">{editingDescription}</p>}
@@ -755,11 +764,7 @@ function ProductModal({
                               aria-pressed={sel}>
                               {o.image_url && <Thumb url={o.image_url} alt={o.value} size={28} />}
                               <span>{o.value}</span>
-                              {o.price_delta !== 0 && (
-                                <span className="shop-product-option-price">
-                                  {o.price_delta > 0 ? `+${o.price_delta}` : o.price_delta}
-                                </span>
-                              )}
+                              <OptionPrice option={o} />
                             </button>
                           );
                         })}
@@ -1632,6 +1637,9 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
   const catalogProducts = new Map(visibleCatalog.flatMap((category) => [
     ...category.products, ...category.series.flatMap((series) => series.products),
   ]).map((product) => [product.id, product]));
+  const referenceSubtotal = selectedCategoryTotals
+    ? registrationReferenceSubtotal(selectedCategoryTotals.items, catalogProducts) : 0;
+  const totalSaving = referenceSubtotal - (selectedCategoryTotals?.total_price ?? 0);
   const catalogCategoryByProductId = new Map(visibleCatalog.flatMap((category) => [
     ...category.products.map((product) => [product.id, category] as const),
     ...category.series.flatMap((series) => series.products.map((product) => [product.id, category] as const)),
@@ -2043,12 +2051,12 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
             {selectedCategoryTotals && selectedCategoryTotals.items.length > 0 && (
               <div className="shop-registration-price" role="status" aria-live="polite">
                 <div><strong>目前登記合計</strong>
-                  {selectedCategoryTotals.discount_amount > 0 && <p>
-                    {selectedCategoryTotals.applied_promotions?.map((promotion) => promotion.name).join("、") || "已套用優惠"}
-                    {` · 共省 NT$${selectedCategoryTotals.discount_amount.toLocaleString()}`}
+                  {totalSaving > 0 && <p>
+                    {selectedCategoryTotals.applied_promotions?.map((promotion) => promotion.name).join("、") || "商品與規格優惠"}
+                    {` · 共省 NT$${totalSaving.toLocaleString()}`}
                   </p>}
                 </div>
-                <ShopPrice original={selectedCategoryTotals.subtotal_price} current={selectedCategoryTotals.total_price} />
+                <ShopPrice original={referenceSubtotal} current={selectedCategoryTotals.total_price} />
               </div>
             )}
             {bundlePromotions.length > 0 && <section className="shop-bundles" aria-labelledby="shop-bundles-title">

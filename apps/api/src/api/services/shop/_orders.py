@@ -174,6 +174,7 @@ def _resolve_selected_options(product: Product, option_ids: list[uuid.UUID]) -> 
                 "option_id": str(option.id),
                 "value": option.value,
                 "price_delta": option.price_delta,
+                "original_price_delta": option.original_price_delta,
             }
         )
     return snapshot

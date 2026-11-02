@@ -2,6 +2,7 @@ import { ArrowUpRight } from "lucide-react";
 import type { CatalogProductOut, ShopPromotionPublicOut } from "@/lib/types";
 import ShopPrice from "./ShopPrice";
 import { productOrderable } from "@/lib/shop-deadlines";
+import { referencePrice } from "@/lib/shop-reference-price";
 
 export default function ProductCardOffers({ product, promotions, products, disabled, onSelectBundle }: {
   product: CatalogProductOut;
@@ -57,7 +58,7 @@ export default function ProductCardOffers({ product, promotions, products, disab
           <p>{promotion.discount_type === "fixed" ? "單件購買價（每筆折抵一次）"
             : promotion.code || promotion.min_quantity > 1 || promotion.min_order_price > original
               ? "符合條件時單件價" : "單件優惠價"}</p>
-          <ShopPrice original={original} current={singlePrice} suffix={product.has_variants ? " 起" : undefined} />
+          <ShopPrice original={referencePrice(product)} current={singlePrice} suffix={product.has_variants ? " 起" : undefined} />
         </> : <p>{promotion.discount_type === "percentage"
           ? `指定商品合購減價 ${promotion.discount_value}%`
           : `整筆登記折抵 NT$${promotion.discount_value.toLocaleString()}`}</p>}

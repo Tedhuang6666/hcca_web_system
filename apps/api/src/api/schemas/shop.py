@@ -18,15 +18,30 @@ class ProductVariantOptionCreate(BaseModel):
     value: str = Field(..., min_length=1, max_length=100, description="選項值，如「黑」「中」")
     image_url: str | None = None
     price_delta: int = Field(0, description="加價（新台幣，可為 0）")
+    original_price_delta: int | None = Field(None, description="原始加價；留空不顯示原價")
     sort_order: int = 0
+
+    @model_validator(mode="after")
+    def validate_original_price_delta(self) -> Self:
+        if self.original_price_delta is not None and self.original_price_delta < self.price_delta:
+            raise ValueError("原始加價不得低於實際加價")
+        return self
 
 
 class ProductVariantOptionUpdate(BaseModel):
     value: str | None = Field(None, min_length=1, max_length=100)
     image_url: str | None = None
     price_delta: int | None = None
+    original_price_delta: int | None = None
     sort_order: int | None = None
     is_active: bool | None = None
+
+    @field_validator("price_delta")
+    @classmethod
+    def reject_null_price_delta(cls, value: int | None) -> int:
+        if value is None:
+            raise ValueError("實際加價不可為 null")
+        return value
 
 
 class ProductVariantOptionOut(BaseModel):
@@ -37,6 +52,7 @@ class ProductVariantOptionOut(BaseModel):
     value: str
     image_url: str | None
     price_delta: int
+    original_price_delta: int | None = None
     sort_order: int
     is_active: bool
 
@@ -232,6 +248,7 @@ class ProductCreate(BaseModel):
     description: str | None = None
     image_url: str | None = None
     price: int = Field(..., ge=0, description="售價（新台幣）")
+    original_price: int | None = Field(None, ge=0, description="原價；留空不顯示原價")
     stock_quantity: int = Field(0, ge=0, description="庫存（is_unlimited=True 時忽略）")
     is_unlimited: bool = False
     purchase_rules: ProductPurchaseRules = Field(default_factory=ProductPurchaseRules)
@@ -247,6 +264,12 @@ class ProductCreate(BaseModel):
     variant_groups: list[ProductVariantGroupCreate] = Field(default_factory=list)
     media: list[ProductMediaCreate] = Field(default_factory=list, max_length=20)
 
+    @model_validator(mode="after")
+    def validate_original_price(self) -> Self:
+        if self.original_price is not None and self.original_price < self.price:
+            raise ValueError("原價不得低於售價")
+        return self
+
 
 class ProductUpdate(BaseModel):
     category_id: uuid.UUID | None = None
@@ -255,6 +278,7 @@ class ProductUpdate(BaseModel):
     description: str | None = None
     image_url: str | None = None
     price: int | None = Field(None, ge=0)
+    original_price: int | None = Field(None, ge=0)
     stock_quantity: int | None = Field(None, ge=0)
     is_unlimited: bool | None = None
     purchase_rules: ProductPurchaseRules | None = Field(
@@ -269,6 +293,13 @@ class ProductUpdate(BaseModel):
     seating_mode: str | None = None
     media: list[ProductMediaCreate] | None = Field(None, max_length=20)
 
+    @field_validator("price")
+    @classmethod
+    def reject_null_price(cls, value: int | None) -> int:
+        if value is None:
+            raise ValueError("售價不可為 null")
+        return value
+
 
 class ProductOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -278,6 +309,7 @@ class ProductOut(BaseModel):
     description: str | None
     image_url: str | None
     price: int
+    original_price: int | None = None
     stock_quantity: int
     is_unlimited: bool
     max_quantity_per_user: int | None = None
@@ -308,6 +340,7 @@ class CatalogProductOut(BaseModel):
     name: str
     image_url: str | None = None
     price: int
+    original_price: int | None = None
     status: ProductStatus
     stock_quantity: int
     is_unlimited: bool
@@ -353,6 +386,7 @@ class SelectedOption(BaseModel):
     option_id: uuid.UUID
     value: str
     price_delta: int = 0
+    original_price_delta: int | None = None
 
 
 # ── 購物車 ───────────────────────────────────────────────────────────────────

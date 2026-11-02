@@ -344,6 +344,7 @@ function ProductFormModal({
     },
   );
   const [price, setPrice] = useState(String(initial?.price ?? 0));
+  const [originalPrice, setOriginalPrice] = useState(initial?.original_price == null ? "" : String(initial.original_price));
   const [stock, setStock] = useState(String(initial?.stock_quantity ?? 0));
   const [unlimited, setUnlimited] = useState(initial?.is_unlimited ?? false);
   const [maxQuantityPerUser, setMaxQuantityPerUser] = useState(
@@ -365,7 +366,7 @@ function ProductFormModal({
   const [seatingMode, setSeatingMode] = useState<string>(initial?.seating_mode ?? "at_purchase");
   const [busy, setBusy] = useState(false);
   const [mediaUploadsInProgress, setMediaUploadsInProgress] = useState(0);
-  type ProductField = "name" | "price" | "stock" | "limit" | "variants";
+  type ProductField = "name" | "price" | "originalPrice" | "stock" | "limit" | "variants";
   const [formError, setFormError] = useState<{ field: ProductField | null; message: string } | null>(null);
   const fieldRefs = useRef<Partial<Record<ProductField, HTMLInputElement | null>>>({});
   const mediaInputRef = useRef<HTMLInputElement>(null);
@@ -430,6 +431,11 @@ function ProductFormModal({
       showFieldError("price", "售價請填寫 0 或正整數，單位為新台幣元。");
       return;
     }
+    const originalPriceValue = originalPrice.trim() ? Number(originalPrice) : null;
+    if (originalPriceValue !== null && (!Number.isSafeInteger(originalPriceValue) || originalPriceValue < priceValue)) {
+      showFieldError("originalPrice", "原價請填寫不低於售價的整數，或留空取消原價顯示。");
+      return;
+    }
     if (!unlimited && (!stock.trim() || !Number.isInteger(stockValue) || stockValue < 0)) {
       showFieldError("stock", "可訂購數量請填寫 0 或正整數；不限量時請勾選「不限制總訂購數量」。");
       return;
@@ -461,6 +467,7 @@ function ProductFormModal({
         media: media.flatMap(({ image_url, kind, label }, sort_order) =>
           image_url ? [{ image_url, kind, label: label.trim() || null, sort_order }] : []),
         price: priceValue,
+        original_price: originalPriceValue,
         stock_quantity: Number.isInteger(stockValue) && stockValue >= 0 ? stockValue : 0,
         is_unlimited: unlimited,
         max_quantity_per_user: maxQuantity,
@@ -540,6 +547,16 @@ function ProductFormModal({
           {fieldError("name")}
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <Field label="原價（新台幣元，選填）">
+              <input type="number" min={0} step={1} value={originalPrice} onChange={(e) => setOriginalPrice(e.target.value)} className="input w-full" inputMode="numeric"
+                ref={(node) => { fieldRefs.current.originalPrice = node; }}
+                aria-invalid={formError?.field === "originalPrice" || undefined}
+                aria-describedby={formError?.field === "originalPrice" ? "shop-product-originalPrice-error" : "shop-product-original-price-help"} />
+            </Field>
+            {fieldError("originalPrice")}
+            <p id="shop-product-original-price-help" className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>低於原價時顯示劃線價；套組與其他優惠以售價繼續計算。</p>
+          </div>
           <div>
             <Field label="售價（新台幣元）">
               <input type="number" min={0} step={1} value={price} onChange={(e) => setPrice(e.target.value)} className="input w-full" inputMode="numeric"
@@ -780,6 +797,8 @@ function OptionModal({
   const editing = initial !== null;
   const [value, setValue] = useState(initial?.value ?? "");
   const [priceDelta, setPriceDelta] = useState(String(initial?.price_delta ?? 0));
+  const [originalDelta, setOriginalDelta] = useState(initial?.original_price_delta == null ? "" : String(initial.original_price_delta));
+  const [priceError, setPriceError] = useState("");
   const [imageUrl, setImageUrl] = useState<string | null>(initial?.image_url ?? null);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -790,9 +809,15 @@ function OptionModal({
           <input value={value} onChange={(e) => setValue(e.target.value)} className="input w-full"
             placeholder="如：黑、中、XL" />
         </Field>
-        <Field label="加價（可為 0 或負數）">
-          <input value={priceDelta} onChange={(e) => setPriceDelta(e.target.value)} className="input w-full" inputMode="numeric" />
+        <Field label="原始加價（選填）">
+          <input type="number" step={1} value={originalDelta} onChange={(e) => setOriginalDelta(e.target.value)} className="input w-full" inputMode="numeric"
+            aria-invalid={!!priceError || undefined} aria-describedby={priceError ? "shop-option-price-error" : undefined} />
         </Field>
+        <Field label="優惠後加價（可為 0 或負數）">
+          <input type="number" step={1} value={priceDelta} onChange={(e) => setPriceDelta(e.target.value)} className="input w-full" inputMode="numeric"
+            aria-invalid={!!priceError || undefined} aria-describedby={priceError ? "shop-option-price-error" : undefined} />
+        </Field>
+        {priceError && <p id="shop-option-price-error" role="alert" className="text-sm" style={{ color: "var(--danger)" }}>{priceError}</p>}
         <Field label="選項圖片（選填）">
           <ImageField value={imageUrl} onChange={setImageUrl} onUploadingChange={setUploading} disabled={busy || uploading} />
         </Field>
@@ -807,11 +832,20 @@ function OptionModal({
         <div className="flex gap-3 pt-1">
           <button disabled={busy || uploading} onClick={async () => {
             if (!value.trim()) { toast.error("請輸入選項值"); return; }
+            const current = Number(priceDelta);
+            const original = originalDelta.trim() ? Number(originalDelta) : null;
+            if (!priceDelta.trim() || !Number.isSafeInteger(current)
+              || (original !== null && (!Number.isSafeInteger(original) || original < current))) {
+              setPriceError("加價須為整數，原始加價不得低於優惠後加價；原始加價可留空。");
+              return;
+            }
+            setPriceError("");
             setBusy(true);
             try {
               const body = {
                 value: value.trim(),
-                price_delta: Number(priceDelta) || 0,
+                price_delta: current,
+                original_price_delta: original,
                 image_url: imageUrl,
               };
               if (editing) await shopApi.updateVariantOption(initial!.id, body);
@@ -873,6 +907,7 @@ function VariantGroupModal({
         const copied = source?.options.map((option) => ({
           value: option.value,
           price_delta: option.price_delta,
+          original_price_delta: option.original_price_delta,
           image_url: option.image_url,
         })) ?? [];
         const pasted = parseSmartOptionsText(optionsText);
@@ -959,6 +994,7 @@ function SmartOptionsModal({
   const copiedOptions: SmartOptionDraft[] = source?.options.map((option) => ({
     value: option.value,
     price_delta: includePrice ? option.price_delta : 0,
+    original_price_delta: includePrice ? option.original_price_delta : null,
     image_url: includeImage ? option.image_url : null,
   })) ?? [];
   const drafts = uniqueSmartOptions([...copiedOptions, ...parseSmartOptionsText(optionsText)]);
@@ -978,6 +1014,7 @@ function SmartOptionsModal({
         shopApi.addVariantOption(target.id, {
           value: option.value,
           price_delta: option.price_delta,
+          original_price_delta: option.original_price_delta,
           image_url: option.image_url,
           sort_order: target.options.length + index,
         })

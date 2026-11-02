@@ -1585,6 +1585,9 @@
 }
 
 .shop-product-option-price {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
   color: var(--public-accent-text);
 }
 

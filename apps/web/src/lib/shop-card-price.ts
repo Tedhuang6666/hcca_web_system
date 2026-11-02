@@ -1,17 +1,18 @@
 import type { OrderOut, ShopPromotionPublicOut } from "./types";
 import { productOfferPrice } from "./shop-promotion-price";
+import { referencePrice, registrationReferenceSubtotal } from "./shop-reference-price";
 
 export type ShopCardPrice = { original: number; current: number; note?: string };
 
 // 已登記品項的價格取自實際折抵結果，不再以「只買一件」重新判斷優惠門檻。
 export function shopCardPrice(
-  product: { id: string; price: number },
+  product: { id: string; price: number; original_price?: number | null },
   promotions: ShopPromotionPublicOut[],
   activityId: string | null,
   registration: OrderOut | null,
 ): ShopCardPrice {
   const fallback = {
-    original: product.price,
+    original: referencePrice(product),
     current: productOfferPrice(product, promotions, activityId, registration),
   };
   if (!registration || (registration.activity_id ?? null) !== activityId
@@ -53,8 +54,9 @@ export function shopCardPrice(
   }
   if (discount <= 0) return fallback;
   const current = Math.max(0, gross - discount) / quantity;
+  const original = registrationReferenceSubtotal(selected, new Map([[product.id, product]])) / quantity;
   return {
-    original: Math.round(gross / quantity * 100) / 100,
+    original: Math.round(original * 100) / 100,
     current: Math.round(current * 100) / 100,
     note: !Number.isInteger(current) ? "折後平均單價（約）" : `依已登記 ${quantity} 件計算`,
   };

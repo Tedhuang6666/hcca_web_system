@@ -66,7 +66,7 @@ it("圖片標註可快捷切換，多組規格以最後點選的圖片為準", a
   expect(screen.getByRole("img", { name: "正式商品・背面" })).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: /^藍色/ }));
   expect(screen.getByRole("img", { name: "正式商品・藍色" })).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: /徽章.*\+50/ }));
+  fireEvent.click(screen.getByRole("button", { name: /徽章.*\+NT\$50/ }));
   expect(screen.getByRole("img", { name: "正式商品・徽章" })).toHaveAttribute("src", expect.stringContaining("/badge.png"));
   expect(screen.getByRole("button", { name: "顯示徽章" })).toHaveAttribute("aria-pressed", "true");
   fireEvent.click(screen.getByRole("button", { name: "不加購" }));

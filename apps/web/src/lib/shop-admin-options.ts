@@ -3,6 +3,7 @@ import type { ProductVariantGroupOut } from "@/lib/types";
 export type SmartOptionDraft = {
   value: string;
   price_delta: number;
+  original_price_delta?: number | null;
   image_url: string | null;
 };
 

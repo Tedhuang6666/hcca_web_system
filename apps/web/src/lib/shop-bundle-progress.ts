@@ -1,5 +1,6 @@
 import type { CatalogProductOut, OrderOut, ShopPromotionPublicOut } from "@/lib/types";
 import { productOrderable } from "@/lib/shop-deadlines";
+import { referencePrice } from "@/lib/shop-reference-price";
 
 export function bundleProductAvailable(product: CatalogProductOut | undefined, now = Date.now()) {
   return Boolean(product && productOrderable(product, now));
@@ -22,7 +23,7 @@ export function bundleProgress(
     : targets.filter((target) => (quantities.get(target.id) ?? 0) <= completedSets);
   const pricesKnown = targets.length > 0 && targets.every((target) => products.has(target.id));
   const original = pricesKnown
-    ? targets.reduce((sum, target) => sum + products.get(target.id)!.price, 0) : null;
+    ? targets.reduce((sum, target) => sum + referencePrice(products.get(target.id)!), 0) : null;
   return {
     quantities, completedSets, missing, started,
     original,

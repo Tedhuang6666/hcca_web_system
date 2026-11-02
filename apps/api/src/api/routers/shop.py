@@ -1077,7 +1077,10 @@ async def update_variant_option(
     group = await _get_variant_group_or_404(option.group_id, session)
     product = await _get_product_or_404(group.product_id, session, current_user)
     await _require_shop_manager(session, current_user, _product_activity(product))
-    return await shop_svc.update_variant_option(session, option, data=payload)
+    try:
+        return await shop_svc.update_variant_option(session, option, data=payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.delete(

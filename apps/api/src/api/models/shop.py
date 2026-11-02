@@ -151,6 +151,10 @@ class Product(Base, TimestampMixin):
             "category_id IS NOT NULL OR series_id IS NOT NULL",
             name="ck_products_category_or_series",
         ),
+        CheckConstraint(
+            "original_price IS NULL OR original_price >= price",
+            name="ck_products_original_price",
+        ),
         Index(
             "ix_products_category_status_created",
             "category_id",
@@ -176,6 +180,8 @@ class Product(Base, TimestampMixin):
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 售價（新台幣，整數）；變體加價另計於 ProductVariantOption.price_delta
     price: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # 原價僅供價差呈現；訂單及促銷仍以 price 計算。
+    original_price: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # 庫存數量（-1 = 無限量）
     stock_quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_unlimited: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -310,6 +316,12 @@ class ProductVariantOption(Base, TimestampMixin):
     """變體選項（如「黑」「中」），可附圖片並設定加價"""
 
     __tablename__ = "product_variant_options"
+    __table_args__ = (
+        CheckConstraint(
+            "original_price_delta IS NULL OR original_price_delta >= price_delta",
+            name="ck_product_variant_options_original_price_delta",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     group_id: Mapped[uuid.UUID] = mapped_column(
@@ -322,6 +334,7 @@ class ProductVariantOption(Base, TimestampMixin):
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 加價（新台幣，整數，可為 0）
     price_delta: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    original_price_delta: Mapped[int | None] = mapped_column(Integer, nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="true"

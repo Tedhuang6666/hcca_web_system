@@ -14767,6 +14767,8 @@ export interface components {
             is_unlimited: boolean;
             /** Name */
             name: string;
+            /** Original Price */
+            original_price?: number | null;
             /** Price */
             price: number;
             /**
@@ -25443,6 +25445,11 @@ export interface components {
              */
             name: string;
             /**
+             * Original Price
+             * @description 原價；留空不顯示原價
+             */
+            original_price?: number | null;
+            /**
              * Price
              * @description 售價（新台幣）
              */
@@ -25562,6 +25569,8 @@ export interface components {
             media: components["schemas"]["ProductMediaOut"][];
             /** Name */
             name: string;
+            /** Original Price */
+            original_price?: number | null;
             /** Price */
             price: number;
             /**
@@ -25746,6 +25755,8 @@ export interface components {
             media?: components["schemas"]["ProductMediaCreate"][] | null;
             /** Name */
             name?: string | null;
+            /** Original Price */
+            original_price?: number | null;
             /** Price */
             price?: number | null;
             /** @description 完整替換購買資格；未提供則保留，null 清除限制 */
@@ -25812,6 +25823,11 @@ export interface components {
             /** Image Url */
             image_url?: string | null;
             /**
+             * Original Price Delta
+             * @description 原始加價；留空不顯示原價
+             */
+            original_price_delta?: number | null;
+            /**
              * Price Delta
              * @description 加價（新台幣，可為 0）
              * @default 0
@@ -25844,6 +25860,8 @@ export interface components {
             image_url: string | null;
             /** Is Active */
             is_active: boolean;
+            /** Original Price Delta */
+            original_price_delta?: number | null;
             /** Price Delta */
             price_delta: number;
             /** Sort Order */
@@ -25857,6 +25875,8 @@ export interface components {
             image_url?: string | null;
             /** Is Active */
             is_active?: boolean | null;
+            /** Original Price Delta */
+            original_price_delta?: number | null;
             /** Price Delta */
             price_delta?: number | null;
             /** Sort Order */
@@ -29489,6 +29509,8 @@ export interface components {
              * Format: uuid
              */
             option_id: string;
+            /** Original Price Delta */
+            original_price_delta?: number | null;
             /**
              * Price Delta
              * @default 0

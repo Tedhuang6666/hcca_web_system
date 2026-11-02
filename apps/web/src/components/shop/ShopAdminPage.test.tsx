@@ -47,6 +47,30 @@ async function openStats() {
 }
 
 describe("商品管理與統計", () => {
+  it("檢查原價與售價後送出，儲存失敗仍保留原價", async () => {
+    api.listCategories.mockResolvedValue([{ id: "category", name: "校慶商品", is_active: true }]);
+    api.createProduct.mockRejectedValueOnce(new Error("offline"));
+    render(<ShopAdminPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /校慶商品/ }));
+    fireEvent.click(screen.getAllByRole("button", { name: "新增單一商品" })[0]);
+    fireEvent.change(screen.getByRole("textbox", { name: "商品名稱" }), { target: { value: "紀念衫" } });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "售價（新台幣元）" }), { target: { value: "300" } });
+    const original = screen.getByRole("spinbutton", { name: "原價（新台幣元，選填）" });
+    fireEvent.change(original, { target: { value: "200" } });
+    fireEvent.click(screen.getByRole("button", { name: "儲存草稿" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("原價請填寫不低於售價的整數");
+    expect(original).toHaveFocus();
+    expect(api.createProduct).not.toHaveBeenCalled();
+    fireEvent.change(original, { target: { value: "400" } });
+    fireEvent.click(screen.getByRole("button", { name: "儲存草稿" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("商品尚未儲存，請重試");
+    expect(original).toHaveValue(400);
+    expect(api.createProduct).toHaveBeenCalledWith(expect.objectContaining({ price: 300, original_price: 400 }));
+    fireEvent.change(original, { target: { value: "" } });
+    api.createProduct.mockRejectedValueOnce(new Error("offline"));
+    fireEvent.click(screen.getByRole("button", { name: "儲存草稿" }));
+    await waitFor(() => expect(api.createProduct).toHaveBeenLastCalledWith(expect.objectContaining({ original_price: null })));
+  });
   it("以直接入口取代商品頁的活動期限區塊", async () => {
     render(<ShopAdminPage />);
     await screen.findByText(/尚未建立商品主題/);

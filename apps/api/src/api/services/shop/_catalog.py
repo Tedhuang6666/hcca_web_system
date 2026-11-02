@@ -227,6 +227,7 @@ async def list_products(
             Product.description,
             Product.image_url,
             Product.price,
+            Product.original_price,
             Product.stock_quantity,
             Product.is_unlimited,
             Product.max_quantity_per_user,
@@ -294,6 +295,7 @@ async def create_product(
         description=data.description,
         image_url=data.image_url,
         price=data.price,
+        original_price=data.original_price,
         stock_quantity=data.stock_quantity,
         is_unlimited=data.is_unlimited,
         max_quantity_per_user=data.max_quantity_per_user,
@@ -337,6 +339,7 @@ async def create_product(
                     value=option_data.value,
                     image_url=option_data.image_url,
                     price_delta=option_data.price_delta,
+                    original_price_delta=option_data.original_price_delta,
                     sort_order=option_data.sort_order or oi,
                 )
             )
@@ -356,6 +359,9 @@ async def update_product(
     ):
         raise ValueError(f"商品狀態 {product.status} 不允許編輯")
     payload = data.model_dump(exclude_unset=True)
+    original_price = payload.get("original_price", product.original_price)
+    if original_price is not None and original_price < payload.get("price", product.price):
+        raise ValueError("原價不得低於售價")
     if "purchase_rules" in payload:
         payload["purchase_rules"] = (
             data.purchase_rules.model_dump(exclude={"exclusive_product_ids"})
@@ -489,6 +495,7 @@ async def add_variant_group(
                 value=option_data.value,
                 image_url=option_data.image_url,
                 price_delta=option_data.price_delta,
+                original_price_delta=option_data.original_price_delta,
                 sort_order=option_data.sort_order or oi,
             )
         )
@@ -529,6 +536,7 @@ async def add_variant_option(
         value=data.value,
         image_url=data.image_url,
         price_delta=data.price_delta,
+        original_price_delta=data.original_price_delta,
         sort_order=data.sort_order,
     )
     session.add(option)
@@ -542,6 +550,10 @@ async def update_variant_option(
     *,
     data: ProductVariantOptionUpdate,
 ) -> ProductVariantOption:
+    payload = data.model_dump(exclude_unset=True)
+    original = payload.get("original_price_delta", option.original_price_delta)
+    if original is not None and original < payload.get("price_delta", option.price_delta):
+        raise ValueError("原始加價不得低於實際加價")
     apply_updates(option, data)
     await session.flush()
     return option
@@ -628,6 +640,7 @@ async def build_catalog_tree(
                 name=product.name,
                 image_url=_catalog_image_url(product),
                 price=product.price,
+                original_price=product.original_price,
                 status=product.status,
                 stock_quantity=product.stock_quantity,
                 is_unlimited=product.is_unlimited,
@@ -659,6 +672,7 @@ async def build_catalog_tree(
                     name=p.name,
                     image_url=_catalog_image_url(p),
                     price=p.price,
+                    original_price=p.original_price,
                     status=p.status,
                     stock_quantity=p.stock_quantity,
                     is_unlimited=p.is_unlimited,
