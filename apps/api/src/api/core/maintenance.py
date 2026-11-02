@@ -277,7 +277,12 @@ async def set_module_maintenance(
             await redis_client.set(key, json.dumps(state))
     except RedisError:
         logger.error("set_module_maintenance failed id=%s", module_id, exc_info=True)
-    _cache.pop(key, None)
+        _cache.pop(key, None)
+    else:
+        # The writing worker must observe its new state immediately. Besides
+        # avoiding a redundant Redis read, this keeps a just-closed module from
+        # briefly appearing open if that read hits the middleware timeout.
+        _cache_set(key, state)
     return state
 
 

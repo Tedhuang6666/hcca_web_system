@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import contextlib
+from unittest.mock import AsyncMock
 
+import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -180,6 +182,28 @@ async def test_closed_module_blocks_admin_and_reports_closed(
     assert body["module_closed"] is True
     assert body["mode"] == "closed"
     assert "系統關閉中" in body["detail"]
+
+
+async def test_set_module_maintenance_caches_successful_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    redis_set = AsyncMock()
+    redis_get = AsyncMock()
+    monkeypatch.setattr(maint.redis_client, "set", redis_set)
+    monkeypatch.setattr(maint.redis_client, "get", redis_get)
+    maint.clear_cache()
+
+    expected = await maint.set_module_maintenance(
+        "shop",
+        on=True,
+        mode="closed",
+        source="manual",
+        reason="本學期停用",
+    )
+
+    assert await maint.get_module_maintenance("shop") == expected
+    redis_set.assert_awaited_once()
+    redis_get.assert_not_awaited()
 
 
 async def test_closed_module_browser_navigation_redirects_to_status_page(
