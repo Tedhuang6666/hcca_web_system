@@ -21,7 +21,8 @@ from api.core.database import get_db
 from api.core.permission_codes import ALL_PERMISSION_CODES, PermissionCode
 from api.dependencies.auth import get_current_active_user, get_optional_user
 from api.dependencies.permissions import require_any, require_permission
-from api.models.school_class import SchoolClass
+from api.models.person import Person
+from api.models.school_class import ClassRosterEntry, SchoolClass
 from api.models.shop import (
     Order,
     OrderStatus,
@@ -123,6 +124,7 @@ from api.services.shop._purchase_rules import (
 from api.services.shop._testing import can_test_products, start_product_testing
 from api.services.shop._visibility import has_purchase_qualifications
 from api.services.storage import get_storage
+from api.services.student_identity_rules import SCHOOL_EMAIL_DOMAIN
 
 logger = logging.getLogger(__name__)
 
@@ -500,6 +502,7 @@ async def get_catalog(
     current_user: OptionalUser,
     activity_id: uuid.UUID | None = Query(None),
     include_closed: bool = Query(False, description="包含已結單活動，供登入後查詢與收款"),
+    class_member_id: uuid.UUID | None = Query(None, description="班代代購的學生或名冊 ID"),
     direct_path: list[str] = Query(
         default=[], description="只解析公開商品連結對應的分類與商品，可顯示已結單商品"
     ),
@@ -508,12 +511,13 @@ async def get_catalog(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="請先登入")
     if direct_path and len(direct_path) not in (1, 2):
         return []
+    buyer = await _class_purchase_buyer(session, current_user, class_member_id)
     catalog = await shop_svc.build_catalog_tree(
         session,
         activity_id=activity_id,
         include_testing=await can_test_products(session, current_user),
         include_closed=include_closed or bool(direct_path),
-        buyer=current_user,
+        buyer=buyer,
     )
     return (
         shop_svc.filter_catalog_to_direct_product(catalog, direct_path) if direct_path else catalog
@@ -559,19 +563,27 @@ async def list_products(
 
 @router.get("/products/{product_id}", response_model=ProductOut, summary="取得商品詳情")
 async def get_product(
-    product_id: uuid.UUID, session: DbDep, current_user: OptionalUser
+    product_id: uuid.UUID,
+    session: DbDep,
+    current_user: OptionalUser,
+    class_member_id: uuid.UUID | None = Query(None, description="班代代購的學生或名冊 ID"),
 ) -> ProductOut:
+    buyer = await _class_purchase_buyer(session, current_user, class_member_id)
     product = await _get_product_or_404(product_id, session, current_user)
     if current_user is None and has_purchase_qualifications(product):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此商品")
     product_out = ProductOut.model_validate(product)
     remaining = await shop_svc.remaining_product_quantity(
-        session, product, current_user.id if current_user else None
+        session, product, buyer.id if buyer else None
     )
-    restriction = await product_purchase_restriction(session, product, current_user)
+    restriction = await product_purchase_restriction(session, product, buyer)
+    purchase_limit = product.max_quantity_per_user
+    if class_member_id and (product.purchase_rules or {}).get("exclusive_group"):
+        purchase_limit = 1
     return product_out.model_copy(
         update={
             "remaining_quantity_for_user": remaining,
+            "max_quantity_per_user": purchase_limit,
             "purchase_allowed": restriction is None,
             "purchase_restriction": restriction,
         }
@@ -1321,6 +1333,49 @@ async def _get_class_member_target(
             status_code=status.HTTP_403_FORBIDDEN, detail="無權管理此學生的商品登記"
         )
     return target, target_class, list(class_ids)
+
+
+async def _class_purchase_buyer(
+    session: AsyncSession, actor: User | None, member_id: uuid.UUID | None
+) -> User | None:
+    if member_id is None:
+        return actor
+    if actor is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="請先登入")
+    target = await session.get(User, member_id)
+    if target is not None:
+        target, _, _ = await _get_class_member_target(session, actor, target.id)
+        if not target.is_active:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="此學生帳號已停用")
+        return target
+    entry = await session.get(ClassRosterEntry, member_id)
+    if entry is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此學生")
+    school_class = await session.get(SchoolClass, entry.class_id)
+    class_ids = await _class_order_scope_ids(session, actor)
+    if (
+        school_class is None
+        or not school_class.is_active
+        or (not actor.is_superuser and entry.class_id not in class_ids)
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權替此學生訂購")
+    target = await session.get(User, entry.user_id) if entry.user_id else None
+    if target is None:
+        target = await session.scalar(
+            select(User)
+            .join(Person, Person.user_id == User.id)
+            .where(Person.student_id == entry.student_id)
+        )
+    if target is None:
+        target = await session.scalar(select(User).where(User.student_id == entry.student_id))
+    if target is not None:
+        return await _class_purchase_buyer(session, actor, target.id)
+    # 查詢資格不預建帳號；使用與實際名冊代訂相同的學號及預設校內信箱。
+    return User(
+        id=entry.id,
+        student_id=entry.student_id,
+        email=f"g0{entry.student_id}@{SCHOOL_EMAIL_DOMAIN}",
+    )
 
 
 @router.get(

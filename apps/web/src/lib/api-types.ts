@@ -14774,6 +14774,8 @@ export interface components {
              * @default true
              */
             purchase_allowed: boolean;
+            /** Purchase Group */
+            purchase_group?: string | null;
             /** Purchase Restriction */
             purchase_restriction?: string | null;
             /**
@@ -55415,6 +55417,8 @@ export interface operations {
                 activity_id?: string | null;
                 /** @description 包含已結單活動，供登入後查詢與收款 */
                 include_closed?: boolean;
+                /** @description 班代代購的學生或名冊 ID */
+                class_member_id?: string | null;
                 /** @description 只解析公開商品連結對應的分類與商品，可顯示已結單商品 */
                 direct_path?: string[];
             };
@@ -57176,7 +57180,10 @@ export interface operations {
     };
     get_product_shop_products__product_id__get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 班代代購的學生或名冊 ID */
+                class_member_id?: string | null;
+            };
             header?: never;
             path: {
                 product_id: string;

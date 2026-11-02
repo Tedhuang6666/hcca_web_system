@@ -633,6 +633,7 @@ async def build_catalog_tree(
                 is_unlimited=product.is_unlimited,
                 purchase_allowed=restrictions[product.id] is None,
                 purchase_restriction=restrictions[product.id],
+                purchase_group=(product.purchase_rules or {}).get("exclusive_group"),
                 sale_start=product.sale_start,
                 sale_end=product.sale_end,
                 effective_sale_end=effective_product_deadline(
@@ -663,6 +664,7 @@ async def build_catalog_tree(
                     is_unlimited=p.is_unlimited,
                     purchase_allowed=restrictions[p.id] is None,
                     purchase_restriction=restrictions[p.id],
+                    purchase_group=(p.purchase_rules or {}).get("exclusive_group"),
                     sale_start=p.sale_start,
                     sale_end=p.sale_end,
                     effective_sale_end=effective_product_deadline(

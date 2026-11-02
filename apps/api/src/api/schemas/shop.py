@@ -313,6 +313,7 @@ class CatalogProductOut(BaseModel):
     is_unlimited: bool
     purchase_allowed: bool = True
     purchase_restriction: str | None = None
+    purchase_group: str | None = None
     sale_start: datetime | None = None
     sale_end: datetime | None = None
     effective_sale_end: datetime | None = None

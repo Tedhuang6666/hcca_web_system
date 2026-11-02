@@ -1185,7 +1185,8 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
 
   const loadCatalog = useCallback(() => {
     const generation = refreshGeneration.current;
-    const key = JSON.stringify([directProductRoute, topicSlug, productSlug]);
+    const memberId = new URLSearchParams(window.location.search).get("class_member_user_id") ?? undefined;
+    const key = JSON.stringify([directProductRoute, topicSlug, productSlug, memberId]);
     if (catalogRefresh.current?.generation === generation && catalogRefresh.current.key === key) {
       return catalogRefresh.current.promise;
     }
@@ -1203,8 +1204,8 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
         return segment;
       }
     });
-    const request = shopApi
-      .catalog(undefined, false, directPath)
+    const request = (memberId ? shopApi.catalog(undefined, false, directPath, memberId)
+      : shopApi.catalog(undefined, false, directPath))
       .then(async (data) => {
         if (generation !== refreshGeneration.current || catalogRefresh.current?.promise !== request) return;
         catalogLoaded.current = key;
@@ -1494,9 +1495,14 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
     return null;
   }, [catalog, openProduct]);
 
-  const visibleCatalog = useMemo(() => classMemberUserId ? catalog : eligibleShopCatalog(catalog,
-    new Set(registrations.filter((order) => order.status !== "cancelled")
-      .flatMap((order) => order.items.filter((item) => item.quantity > 0).map((item) => item.product_id)))),
+  const visibleCatalog = useMemo(() => eligibleShopCatalog(classMemberUserId ? catalog.map((category) => {
+    const registered = new Set(registrations.flatMap((order) => order.items.map((item) => item.product_id)));
+    const products = (items: typeof category.products) => items.map((product) => registered.has(product.id)
+      ? { ...product, purchase_allowed: true } : product);
+    return { ...category, products: products(category.products),
+      series: category.series.map((series) => ({ ...series, products: products(series.products) })) };
+  }) : catalog, new Set(registrations.filter((order) => order.status !== "cancelled")
+    .flatMap((order) => order.items.filter((item) => item.quantity > 0).map((item) => item.product_id)))),
   [catalog, classMemberUserId, registrations]);
   const displayedCatalog = directProductRoute && routeProductEntry
     ? visibleCatalog.filter((category) => category.id === routeProductEntry.category.id)

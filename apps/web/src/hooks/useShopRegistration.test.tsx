@@ -73,6 +73,8 @@ it("owns source selection for both the editable view and the submitted variants"
 it("preserves collected quantities and uses the classmate response without changing their promotions", async () => {
   const paid = { ...order, id: "paid", is_paid: true, items: [order.items[0]] };
   const { result } = setup({ registrations: [paid, order], classMemberUserId: "student", couponCode: "SAVE" });
+  await result.current.getProduct("shirt");
+  expect(api.getProduct).toHaveBeenCalledWith("shirt", "student");
   await expect(result.current.saveVariant("shirt", [], 0)).rejects.toThrow("已收款或鎖定");
   expect(api.setClassMemberProduct).not.toHaveBeenCalled();
   api.setClassMemberProduct.mockResolvedValue([paid]);

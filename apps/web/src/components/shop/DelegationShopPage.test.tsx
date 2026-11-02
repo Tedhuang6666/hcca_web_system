@@ -404,7 +404,10 @@ describe("原商品頁的家人代訂模式", () => {
       items: [{ ...order.items[0], id: "editable-item", quantity: 1, subtotal: 100 }],
     };
     window.history.replaceState({}, "", "/shop?class_member_user_id=student&class_member_name=%E7%A4%BA%E7%AF%84%E7%94%B2");
-    api.catalog.mockResolvedValue(context.catalog);
+    api.catalog.mockResolvedValue([{ ...context.catalog![0], products: [
+      { ...product, purchase_allowed: false },
+      { ...product, id: "restricted", name: "無資格購買的票券", purchase_allowed: false },
+    ] }]);
     api.listAvailablePromotions.mockResolvedValue([]);
     api.listClassMemberRegistrations.mockResolvedValue([paidOrder, editableOrder]);
     api.getProduct.mockResolvedValue({ ...product, variant_groups: [], media: [] });
@@ -412,11 +415,14 @@ describe("原商品頁的家人代訂模式", () => {
     render(<ShopPage />);
 
     expect(await screen.findByText("調整對象：示範甲")).toBeVisible();
+    expect(api.catalog).toHaveBeenCalledWith(undefined, false, undefined, "student");
     const card = await screen.findByRole("article", { name: "紀念袋商品" });
+    expect(screen.queryByText("無資格購買的票券")).not.toBeInTheDocument();
     expect(await within(card).findByText("已登記 6 件")).toBeVisible();
     fireEvent.click(within(card).getByRole("button", { name: "查看商品：紀念袋" }));
     expect(await screen.findByText("已收款或鎖定 5 件，調整時會保留這個數量。"))
       .toBeVisible();
+    expect(api.getProduct).toHaveBeenCalledWith("bag", "student");
     expect(screen.getByRole("button", { name: "移除可調整數量" })).toBeEnabled();
     const decrease = await screen.findByRole("button", { name: "減少數量" });
     fireEvent.click(decrease);

@@ -84,7 +84,8 @@ export function useShopRegistration(options: RegistrationOptions) {
 
   const getProduct = useCallback(async (id: string) => {
     const token = identity.delegationToken;
-    const product = await (token ? shopApi.getDelegationProduct(token, id) : shopApi.getProduct(id));
+    const product = await (token ? shopApi.getDelegationProduct(token, id)
+      : identity.classMemberUserId ? shopApi.getProduct(id, identity.classMemberUserId) : shopApi.getProduct(id));
     if (!mounted.current || currentIdentity.current !== identity) throw new SupersededRegistration();
     return product;
   }, [identity]);

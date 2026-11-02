@@ -50,10 +50,11 @@ export const shopApi = {
   updateOrderItemQuantity: (orderId: string, itemId: string, quantity: number) =>
     patch<OrderOut | null>(`/shop/orders/${orderId}/items/${itemId}`, { quantity }),
   // 瀏覽
-  catalog: (activityId?: string, includeClosed = false, directPath?: string[]) => {
+  catalog: (activityId?: string, includeClosed = false, directPath?: string[], classMemberId?: string) => {
     const q = new URLSearchParams();
     if (activityId) q.set("activity_id", activityId);
     if (includeClosed) q.set("include_closed", "true");
+    if (classMemberId) q.set("class_member_id", classMemberId);
     directPath?.forEach((segment) => q.append("direct_path", segment));
     const qs = q.toString();
     return get<CatalogCategoryOut[]>(`/shop/catalog${qs ? `?${qs}` : ""}`);
@@ -62,7 +63,7 @@ export const shopApi = {
     const qs = params ? "?" + new URLSearchParams(params).toString() : "";
     return get<ProductOut[]>(`/shop/products${qs}`);
   },
-  getProduct: (id: string) => get<ProductOut>(`/shop/products/${id}`),
+  getProduct: (id: string, classMemberId?: string) => get<ProductOut>(`/shop/products/${id}${classMemberId ? `?class_member_id=${encodeURIComponent(classMemberId)}` : ""}`),
   getProductPurchaseRules: (id: string) => get<ProductPurchaseRules>(`/shop/products/${id}/purchase-rules`),
   purchaseGroupOptions: (categoryId: string) => get<ProductPurchaseGroupOptionOut[]>(`/shop/purchase-group-options?category_id=${encodeURIComponent(categoryId)}`),
   purchasePermissions: (activityId?: string | null) =>

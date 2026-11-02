@@ -9,7 +9,12 @@ from api.core.clock import local_today
 from api.models.activity import Activity, ActivityConvener, ActivityStatus
 from api.models.org import Org, Permission, Position, UserPosition
 from api.models.shop import Order
-from api.schemas.school_class import ClassStudentRangeCreate, SchoolClassCreate
+from api.models.user import User
+from api.schemas.school_class import (
+    ClassRosterEntryCreate,
+    ClassStudentRangeCreate,
+    SchoolClassCreate,
+)
 from api.schemas.shop import (
     ClassOrderUpsert,
     OrderItemCreate,
@@ -80,6 +85,161 @@ def registration(product, quantity=1):
     return f"/shop/registrations/current/products/{product.id}", {
         "variants": [{"option_ids": [], "quantity": quantity}] if quantity else [],
     }
+
+
+@pytest.fixture
+async def representative(tickets, db_session, make_user, authed_client_factory):
+    user = await make_user(student_id="310003", email="g0310003@hchs.hc.edu.tw")
+    await class_svc.add_cadre(db_session, tickets["class"], user_id=user.id)
+    return authed_client_factory(user)
+
+
+@pytest.mark.parametrize(
+    "rules,allowed",
+    [
+        ({"allowed_grades": [3]}, True),
+        ({"allowed_grades": [1]}, False),
+        ({"required_permissions": ["shop:manage"]}, False),
+        ({"allowed_identifiers": ["310001"]}, True),
+        ({"blocked_identifiers": ["310001"]}, False),
+    ],
+)
+async def test_class_purchase_browsing_and_submission_use_recipient_rules(
+    tickets, representative, rules, allowed
+):
+    product = tickets["products"][0]
+    assert (
+        await tickets["admin"].patch(f"/shop/products/{product.id}", json={"purchase_rules": rules})
+    ).status_code == 200
+    query = {"class_member_id": str(tickets["buyer"].id)}
+    detail = await representative.get(f"/shop/products/{product.id}", params=query)
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["purchase_allowed"] is allowed
+    catalog = await representative.get("/shop/catalog", params=query)
+    assert catalog.status_code == 200, catalog.text
+    item = next(
+        item
+        for category in catalog.json()
+        for item in category["products"]
+        if item["id"] == str(product.id)
+    )
+    assert item["purchase_allowed"] is allowed
+    response = await representative.post(
+        "/shop/orders/class",
+        json={
+            "user_id": str(tickets["buyer"].id),
+            "items": [{"product_id": str(product.id), "quantity": 1}],
+        },
+    )
+    assert response.status_code == (201 if allowed else 422), response.text
+
+
+async def test_class_purchase_browsing_requires_same_class_and_active_account(
+    tickets, representative, client, db_session, make_user
+):
+    from uuid import uuid4
+
+    product = tickets["products"][0]
+    outsider = await make_user(student_id="110001")
+    for path in ("/shop/catalog", f"/shop/products/{product.id}"):
+        query = {"class_member_id": str(tickets["buyer"].id)}
+        assert (await client.get(path, params=query)).status_code == 401
+        assert (await tickets["other"].get(path, params=query)).status_code == 403
+        assert (
+            await representative.get(path, params={"class_member_id": str(outsider.id)})
+        ).status_code == 403
+        assert (
+            await representative.get(path, params={"class_member_id": str(uuid4())})
+        ).status_code == 404
+    tickets["buyer"].is_active = False
+    await db_session.flush()
+    assert (await representative.get("/shop/catalog", params=query)).status_code == 403
+
+
+async def test_class_assisted_designation_and_group_limit_cannot_be_bypassed(
+    tickets, representative, db_session
+):
+    normal, work, _ = tickets["products"]
+    await shop_svc.update_product(
+        db_session,
+        work,
+        data=ProductUpdate(
+            purchase_rules=ProductPurchaseRules(
+                exclusive_group="115 演唱會", designated_only=True, allowed_identifiers=["310001"]
+            )
+        ),
+    )
+    query = {"class_member_id": str(tickets["buyer"].id)}
+    assert (await representative.get(f"/shop/products/{normal.id}", params=query)).json()[
+        "purchase_allowed"
+    ] is False
+    detail = (await representative.get(f"/shop/products/{work.id}", params=query)).json()
+    assert detail["purchase_allowed"] is True
+    assert detail["max_quantity_per_user"] == 1
+    body = {
+        "user_id": str(tickets["buyer"].id),
+        "items": [{"product_id": str(work.id), "quantity": 2}],
+    }
+    assert (await representative.post("/shop/orders/class", json=body)).status_code == 422
+    body["items"][0]["quantity"] = 1
+    assert (await representative.post("/shop/orders/class", json=body)).status_code == 201
+    assert (await representative.post("/shop/orders/class", json=body)).status_code == 422
+    assert (await representative.get(f"/shop/products/{work.id}", params=query)).json()[
+        "purchase_allowed"
+    ] is False
+    await shop_svc.update_product(
+        db_session,
+        work,
+        data=ProductUpdate(purchase_rules=ProductPurchaseRules(exclusive_group="115 演唱會")),
+    )
+    body["items"] = [{"product_id": str(normal.id), "quantity": 1}]
+    assert (await representative.post("/shop/orders/class", json=body)).status_code == 422
+    assert (
+        await representative.put(
+            f"/shop/orders/class/members/{tickets['buyer'].id}/products/{normal.id}",
+            json={"variants": [{"option_ids": [], "quantity": 1}]},
+        )
+    ).status_code == 422
+    body["user_id"] = str(tickets["other_buyer"].id)
+    body["items"].append({"product_id": str(work.id), "quantity": 1})
+    assert (await representative.post("/shop/orders/class", json=body)).status_code == 422
+    assert await db_session.scalar(select(func.count()).select_from(Order)) == 1
+
+
+async def test_class_roster_purchase_browsing_does_not_create_account(
+    tickets, representative, db_session
+):
+    entry = await class_svc.add_roster_entry(
+        db_session,
+        tickets["class"],
+        data=ClassRosterEntryCreate(student_id="310020", seat_number=20),
+    )
+    product = tickets["products"][1]
+    await shop_svc.update_product(
+        db_session,
+        product,
+        data=ProductUpdate(
+            purchase_rules=ProductPurchaseRules(
+                exclusive_group="115 演唱會",
+                designated_only=True,
+                allowed_identifiers=["g0310020@hchs.hc.edu.tw"],
+                allowed_grades=[3],
+            )
+        ),
+    )
+    before = await db_session.scalar(select(func.count()).select_from(User))
+    query = {"class_member_id": str(entry.id)}
+    response = await representative.get("/shop/catalog", params=query)
+    assert response.status_code == 200, response.text
+    products = {item["id"]: item for category in response.json() for item in category["products"]}
+    assert products[str(product.id)]["purchase_allowed"] is True
+    assert products[str(tickets["products"][0].id)]["purchase_allowed"] is False
+    assert (await representative.get(f"/shop/products/{product.id}", params=query)).json()[
+        "purchase_allowed"
+    ] is True
+    assert await db_session.scalar(select(func.count()).select_from(User)) == before
+    assert entry.user_id is None
+    assert (await tickets["other"].get("/shop/catalog", params=query)).status_code == 403
 
 
 async def test_rules_roundtrip_privacy_and_patch_semantics(tickets, client):

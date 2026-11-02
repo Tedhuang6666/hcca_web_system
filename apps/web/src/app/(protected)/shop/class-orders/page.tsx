@@ -151,6 +151,17 @@ export default function ClassOrdersPage() {
   const [quantity, setQuantity] = useState(1);
   const [optionIds, setOptionIds] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState("");
+  const composerRecipientIds = useMemo(() => recipientMode === "batch" ? batchStudentIds : [studentId].filter(Boolean),
+    [recipientMode, batchStudentIds, studentId]);
+  const recipientKey = composerRecipientIds.map((id) => {
+    const member = members.find((item) => item.id === id);
+    return member?.user_id ?? member?.roster_entry_id ?? id;
+  }).sort().join(",");
+  const [purchaseOptions, setPurchaseOptions] = useState<{ key: string; allowed: Set<string> } | null>(null);
+  const [purchaseOptionsError, setPurchaseOptionsError] = useState<string | null>(null);
+  const [purchaseOptionsRetry, setPurchaseOptionsRetry] = useState(0);
+  const purchaseOptionsReady = purchaseOptions?.key === recipientKey;
+  const purchaseOptionsFailed = purchaseOptionsError === recipientKey;
 
   // 取消確認
   const [cancelTarget, setCancelTarget] = useState<OrderListItem | null>(null);
@@ -167,11 +178,19 @@ export default function ClassOrdersPage() {
     [catalogProducts, catalog, closeStatus],
   );
   const formProducts = useMemo(
-    () => activeProducts.filter((product) =>
-      editOrder
-        ? orderScopeKey({ activity_id: product.activity_id, category_id: product.categoryId }) === orderScopeKey(editOrder)
-        : composerActivityKey === null || orderScopeKey({ activity_id: product.activity_id, category_id: product.categoryId }) === composerActivityKey),
-    [activeProducts, editOrder, composerActivityKey],
+    () => {
+      const reserved = [...assistedItems, ...assistedOrderDrafts.filter((draft) => composerRecipientIds.includes(draft.student_id)).flatMap((draft) => draft.items)];
+      const reservedGroups = new Set(reserved.map((item) => catalogProducts.find((product) => product.id === item.product_id)?.purchase_group).filter(Boolean));
+      return activeProducts.filter((product) => {
+        const existing = editOrder?.items.some((item) => item.product_id === product.id);
+        const groupReserved = product.purchase_group && reservedGroups.has(product.purchase_group);
+        const allowed = existing || (purchaseOptionsReady && purchaseOptions.allowed.has(product.id) && !groupReserved);
+        const scope = orderScopeKey({ activity_id: product.activity_id, category_id: product.categoryId });
+        return allowed && (editOrder ? scope === orderScopeKey(editOrder)
+          : composerActivityKey === null || scope === composerActivityKey);
+      });
+    },
+    [activeProducts, editOrder, composerActivityKey, assistedItems, assistedOrderDrafts, catalogProducts, composerRecipientIds, purchaseOptionsReady, purchaseOptions],
   );
   const orderProductResults = useMemo(() => {
     const needle = orderProductSearch.trim().toLocaleLowerCase("zh-Hant");
@@ -308,8 +327,10 @@ export default function ClassOrdersPage() {
     .map((group) => optionIds[group.id])
     .filter((optionId): optionId is string => Boolean(optionId)) ?? [];
   const currentItemReady = Boolean(
-    orderProductId && productDetail?.id === orderProductId && currentOptionIds.length === productDetail.variant_groups.length,
+    selectedOrderProduct && productDetail?.id === orderProductId && currentOptionIds.length === productDetail.variant_groups.length
+      && (productDetail.purchase_allowed !== false || editOrder?.items.some((item) => item.product_id === orderProductId)),
   );
+  const quantityLimit = Math.min(100, selectedOrderProduct?.purchase_group ? 1 : productDetail?.max_quantity_per_user ?? 100);
   const currentUnitPrice = (productDetail?.price ?? 0) + (productDetail?.variant_groups ?? [])
     .reduce((total, group) => {
       const option = group.options.find((item) => item.id === optionIds[group.id]);
@@ -318,7 +339,7 @@ export default function ClassOrdersPage() {
   const assistedTotal = assistedItems.reduce((total, item) => total + item.quantity * item.unit_price, 0)
     + (currentItemReady && orderProductId ? quantity * currentUnitPrice : 0);
   const currentDraftItemCount = assistedItems.length + (currentItemReady ? 1 : 0);
-  const recipientIds = recipientMode === "batch" ? batchStudentIds : [studentId].filter(Boolean);
+  const recipientIds = composerRecipientIds;
   const selectedStudent = members.find((member) => member.id === studentId);
   const sortedMembers = [...members].sort((a, b) =>
     (a.seat_number ?? 1000) - (b.seat_number ?? 1000)
@@ -457,6 +478,22 @@ export default function ClassOrdersPage() {
   useEffect(() => { void loadCatalog(); }, [loadCatalog]);
 
   useEffect(() => {
+    let active = true;
+    setPurchaseOptions(null);
+    setPurchaseOptionsError(null);
+    if (!recipientKey) return;
+    Promise.all(recipientKey.split(",").map((id) => shopApi.catalog(undefined, true, undefined, id)))
+      .then((catalogs) => {
+        if (!active) return;
+        const choices = catalogs.map((tree) => new Set(flattenCatalog(tree)
+          .filter((product) => product.purchase_allowed !== false).map((product) => product.id)));
+        setPurchaseOptions({ key: recipientKey, allowed: new Set([...choices[0]].filter((id) => choices.every((choice) => choice.has(id)))) });
+      })
+      .catch(() => { if (active) setPurchaseOptionsError(recipientKey); });
+    return () => { active = false; };
+  }, [recipientKey, purchaseOptionsRetry, catalog]);
+
+  useEffect(() => {
     if (myClassId && catalog.length) void loadCloseStatus(catalog.map((cat) => cat.id), myClassId);
   }, [catalog, myClassId, loadCloseStatus]);
 
@@ -468,7 +505,7 @@ export default function ClassOrdersPage() {
       setOptionIds({});
       return;
     }
-    shopApi.getProduct(orderProductId)
+    shopApi.getProduct(orderProductId, recipientKey.split(",")[0] || undefined)
       .then((product) => {
         if (!active) return;
         setProductDetail(product);
@@ -488,7 +525,7 @@ export default function ClassOrdersPage() {
         toast.error(apiErrorMessage(e, "商品載入失敗"));
       });
     return () => { active = false; };
-  }, [editOrder, orderProductId]);
+  }, [editOrder, orderProductId, recipientKey]);
 
   const openCreate = () => {
     setWorkspace("order");
@@ -576,6 +613,20 @@ export default function ClassOrdersPage() {
     }
   };
 
+  const validPurchaseGroups = (items: AssistedItemDraft[]) => {
+    const quantities = new Map<string, number>();
+    for (const item of items) {
+      const group = catalogProducts.find((product) => product.id === item.product_id)?.purchase_group;
+      if (!group) continue;
+      quantities.set(group, (quantities.get(group) ?? 0) + item.quantity);
+    }
+    if ([...quantities.values()].some((count) => count > 1)) {
+      toast.error("同組商品每位同學合計只能訂購一張，請調整清單");
+      return false;
+    }
+    return true;
+  };
+
   const addCurrentProduct = () => {
     if (!recipientIds.length) { toast.error("請先選擇同班學生"); return; }
     if (!orderProductId || !productDetail) {
@@ -604,6 +655,7 @@ export default function ClassOrdersPage() {
       option_label: optionLabel,
       unit_price: currentUnitPrice,
     }]);
+    if (!validPurchaseGroups(nextItems)) return;
     if (nextItems.some((item) => item.quantity > 100)) {
       toast.error("同一商品規格每次最多登記 100 件，請調整數量");
       return;
@@ -641,7 +693,9 @@ export default function ClassOrdersPage() {
   const updateComposerItem = (item: AssistedItemDraft, nextQuantity: number) => {
     const key = (entry: AssistedItemDraft) => JSON.stringify([entry.product_id, [...entry.option_ids].sort(), entry.unit_price]);
     const items = currentComposerItems().filter((entry) => key(entry) !== key(item));
-    setAssistedItems(nextQuantity ? [...items, { ...item, quantity: nextQuantity }] : items);
+    const nextItems = nextQuantity ? [...items, { ...item, quantity: nextQuantity }] : items;
+    if (!validPurchaseGroups(nextItems)) return;
+    setAssistedItems(nextItems);
     setOrderProductId("");
     setOrderProductSearch("");
     setOptionIds({});
@@ -674,6 +728,7 @@ export default function ClassOrdersPage() {
     const items = currentComposerItems();
     if (!items.length) { toast.error("請先加入至少一項商品"); return; }
     const drafts = buildDrafts(items);
+    if (drafts.some((draft) => !validPurchaseGroups(draft.items))) return;
     if (drafts.some((draft) => draft.items.some((item) => item.quantity > 100))) {
       toast.error("同一位同學的同一商品規格每次最多 100 件");
       return;
@@ -845,6 +900,8 @@ export default function ClassOrdersPage() {
     const draftsToSubmit = editOrder
       ? []
       : currentItems.length ? buildDrafts(currentItems) : assistedOrderDrafts;
+    if (editOrder ? !validPurchaseGroups(currentItems)
+      : draftsToSubmit.some((draft) => !validPurchaseGroups(draft.items))) return;
     if (currentItems.some((item) => item.quantity > 100)
       || draftsToSubmit.some((draft) => draft.items.some((item) => item.quantity > 100))) {
       toast.error("同一位同學的同一商品規格每次最多 100 件");
@@ -1279,7 +1336,12 @@ export default function ClassOrdersPage() {
           {recipientIds.length > 0 && <>
           {(!editOrder || editProductsOpen) && <>
           <h3 className="mb-3 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>選商品與規格</h3>
-          <fieldset ref={productOptionsRef} disabled={creating || catalogFailed || !recipientIds.length || membersLoading || membersLoadFailed} className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {!purchaseOptionsReady && <p role={purchaseOptionsFailed ? "alert" : "status"} className="mb-3 text-sm">
+            {purchaseOptionsFailed ? "無法確認同學的購買資格，請重新載入。" : "正在確認同學可訂購的商品…"}
+            {purchaseOptionsFailed && <button type="button" className="btn btn-ghost min-h-11 ml-2" onClick={() => setPurchaseOptionsRetry((value) => value + 1)}>重新確認購買資格</button>}
+          </p>}
+          {recipientMode === "batch" && purchaseOptionsReady && <p className="mb-3 text-sm" style={{ color: "var(--text-muted)" }}>只顯示所有已選同學都能訂購的商品。</p>}
+          <fieldset ref={productOptionsRef} disabled={creating || catalogFailed || !purchaseOptionsReady || !recipientIds.length || membersLoading || membersLoadFailed} className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <legend className="sr-only">加入商品與規格</legend>
             <div className="grid min-w-0 gap-2 sm:col-span-2 xl:col-span-3">
               {!orderProductId && <>
@@ -1296,7 +1358,7 @@ export default function ClassOrdersPage() {
                   <p role="status" className="px-3 py-4 text-sm" style={{ color: "var(--text-muted)" }}>
                     {orderProductSearch.trim()
                       ? "找不到符合的商品，請試試商品名稱、分類或系列。"
-                      : "目前沒有可訂商品。"}
+                      : "目前沒有符合所選同學資格的可訂商品。"}
                   </p>
                 ) : (
                   <ul className="divide-y" style={{ borderColor: "var(--border)" }}>
@@ -1340,6 +1402,7 @@ export default function ClassOrdersPage() {
               {orderProductId && !productDetail && <p role={productDetailFailed ? "alert" : "status"} className="text-sm">
                 {productDetailFailed ? "無法載入商品規格，請點「換商品」重新選擇。" : "正在載入商品規格…"}
               </p>}
+              {productDetail?.purchase_allowed === false && !editOrder && <p role="alert">{productDetail.purchase_restriction ?? "此同學目前無法訂購此商品，請重新選擇。"}</p>}
             </div>
             {productDetail?.variant_groups.map((group) => {
               const options = group.options.filter((option) => option.is_active);
@@ -1416,9 +1479,10 @@ export default function ClassOrdersPage() {
             })}
             {orderProductId && <label className="grid max-w-32 gap-1 text-sm">
               <span style={{ color: "var(--text-muted)" }}>{recipientMode === "batch" ? "每位數量" : "數量"}</span>
-              <NumberInput className="input min-h-11" type="number" min={1} max={100} value={quantity}
-                onChange={(e) => setQuantity(Math.max(1, Math.min(100, Number(e.target.value) || 1)))} />
+              <NumberInput className="input min-h-11" type="number" min={1} max={quantityLimit} value={quantity}
+                onChange={(e) => setQuantity(Math.max(1, Math.min(quantityLimit, Number(e.target.value) || 1)))} />
             </label>}
+            {orderProductId && selectedOrderProduct?.purchase_group && <p role="status" className="text-sm">同組商品每人限購一張</p>}
             {orderProductId && <div className="flex items-end sm:col-span-2 xl:col-span-3">
               <button type="button" onClick={addCurrentProduct}
                 disabled={!currentItemReady || creating}
@@ -1457,7 +1521,7 @@ export default function ClassOrdersPage() {
                     </div>
                     <label className="flex items-center gap-2 text-xs">
                       {recipientMode === "batch" ? "每人數量" : "數量"}
-                      <NumberInput className="input min-h-11 w-20 text-center tabular-nums" type="number" min={1} max={100}
+                      <NumberInput className="input min-h-11 w-20 text-center tabular-nums" type="number" min={1} max={catalogProducts.find((product) => product.id === item.product_id)?.purchase_group ? 1 : 100}
                         disabled={creating} value={item.quantity} aria-label={recipientMode === "batch" ? "每人" + item.product_name + "數量" : item.product_name + "數量"}
                         onChange={(event) => updateComposerItem(item, Math.max(1, Math.min(100, Number(event.target.value) || 1)))} />
                     </label>
