@@ -49,10 +49,8 @@ beforeEach(() => {
 });
 
 async function openPage() {
-  render(<CouncilOrdersPage />);
-  await screen.findByRole("table", { name: "班級訂購與收款彙總" });
+  await act(async () => { render(<CouncilOrdersPage />); });
   fireEvent.click(screen.getByText(/更多篩選：/));
-  await screen.findByRole("table", { name: "班級訂購與收款彙總" });
 }
 
 function switchTask(name: string) {
@@ -83,13 +81,14 @@ it("依工作切換內容，切回代訂保留未送出的資料", async () => {
 it("點擊彙總或收款名單中的班級可查看同學明細", async () => {
   api.listOrderRecipients.mockResolvedValue([]);
   await openPage();
+  fireEvent.click(screen.getByRole("radio", { name: "校慶" }));
   const summaryTable = await screen.findByRole("table", { name: "班級訂購與收款彙總" });
   fireEvent.click(within(summaryTable).getByRole("button", { name: "查看一年一班訂購明細" }));
   expect(await screen.findByRole("dialog", { name: "一年一班 · 訂購明細" })).toBeVisible();
   await screen.findByText("此班尚無名冊或有效訂購。");
-  expect(api.listOrders).toHaveBeenCalledWith({ class_id: "class", my_only: "false", limit: "500", offset: "0" });
+  expect(api.listOrders).toHaveBeenCalledWith({ class_id: "class", activity_id: "festival", my_only: "false", limit: "500", offset: "0" });
   fireEvent.click(screen.getByRole("button", { name: "關閉" }));
-  fireEvent.click(screen.getByRole("checkbox", { name: "校慶" }));
+  fireEvent.click(screen.getByRole("radio", { name: "校慶" }));
   const workspace = screen.getByRole("region", { name: "登記班級收款" });
   fireEvent.click(await within(workspace).findByRole("button", { name: "查看一年一班訂購明細" }));
   expect(await screen.findByRole("dialog", { name: "一年一班 · 訂購明細" })).toBeVisible();
@@ -112,7 +111,8 @@ describe("全校收款與訂單", () => {
   it("彙總載入失敗仍可獨立查每日收款，重新整理只刷新目前工作", async () => {
     api.orderSummary.mockRejectedValue(new Error("offline"));
     api.classPaymentReport.mockRejectedValueOnce(new Error("offline")).mockResolvedValue([]);
-    render(<CouncilOrdersPage />);
+    await openPage();
+    fireEvent.click(screen.getByRole("radio", { name: "校慶" }));
     await screen.findByText("載入失敗，請重新整理後再試。");
     expect(api.classPaymentReport).not.toHaveBeenCalled();
     switchTask("每日收款");
@@ -182,7 +182,7 @@ describe("全校收款與訂單", () => {
   it("已收齊的活動不再提供確認按鈕", async () => {
     await openPage();
     api.orderSummary.mockResolvedValue({ ...summary(), rows: [{ ...summary().rows[0], paid_amount: 300, unpaid_amount: 0 }] });
-    fireEvent.click(screen.getByRole("checkbox", { name: "校慶" }));
+    fireEvent.click(screen.getByRole("radio", { name: "校慶" }));
     const workspace = screen.getByRole("region", { name: "登記班級收款" });
     expect(await within(workspace).findByText("已收齊")).toBeVisible();
     expect(within(workspace).queryByRole("button", { name: /核對.*收款/ })).not.toBeInTheDocument();
@@ -201,7 +201,7 @@ describe("全校收款與訂單", () => {
   it("無法取得所選活動金額時不提供收款按鈕，並可重試", async () => {
     await openPage();
     api.orderSummary.mockRejectedValueOnce(new Error("offline"));
-    fireEvent.click(screen.getByRole("checkbox", { name: "校慶" }));
+    fireEvent.click(screen.getByRole("radio", { name: "校慶" }));
     const workspace = screen.getByRole("region", { name: "登記班級收款" });
     expect(await within(workspace).findByRole("alert")).toHaveTextContent("無法載入本次活動");
     expect(within(workspace).queryByRole("button", { name: /核對.*收款/ })).not.toBeInTheDocument();
@@ -249,7 +249,7 @@ describe("全校收款與訂單", () => {
 
   it("downloads the chosen class and activity and shows a retryable receipt error", async () => {
     await openPage();
-    fireEvent.click(screen.getByRole("checkbox", { name: "校慶" }));
+    fireEvent.click(screen.getByRole("radio", { name: "校慶" }));
     const workspace = screen.getByRole("region", { name: "登記班級收款" });
     const download = await within(workspace).findByRole("button", { name: "下載一年一班的校慶簽收單 PDF" });
     fireEvent.click(within(workspace).getByText("簽收單與其他操作"));
@@ -351,7 +351,8 @@ describe("全校收款與訂單", () => {
       { class_id: "class-1", class_label: "高一一班", user_id: "rep-1", user_name: "班代甲" },
     ]);
     await openPage();
-    const createDraft = screen.getByRole("button", { name: "建立班代提醒草稿" });
+    fireEvent.click(screen.getByRole("radio", { name: "校慶" }));
+    const createDraft = await screen.findByRole("button", { name: "建立班代提醒草稿" });
     await waitFor(() => expect(createDraft).toBeEnabled());
     fireEvent.click(createDraft);
 
@@ -461,11 +462,11 @@ describe("全校收款與訂單", () => {
     expect(screen.queryByRole("button", { name: "取消訂單 ORD-TEST" })).not.toBeInTheDocument();
   });
 
-  it("先逐項勾選活動，核對後只送出已勾選活動", async () => {
+  it("先選擇單一活動，核對後只送出目前活動", async () => {
     await openPage();
     const workspace = screen.getByRole("region", { name: "登記班級收款" });
     expect(within(workspace).queryByRole("button", { name: /核對.*收款/ })).not.toBeInTheDocument();
-    fireEvent.click(within(workspace).getByRole("checkbox", { name: "校慶" }));
+    fireEvent.click(within(workspace).getByRole("radio", { name: "校慶" }));
     fireEvent.click(await within(workspace).findByRole("button", { name: "核對一年一班收款" }));
     const dialog = screen.getByRole("dialog", { name: "核對班級收款" });
     expect(dialog).toHaveTextContent("校慶");
@@ -477,23 +478,24 @@ describe("全校收款與訂單", () => {
     expect(window.confirm).not.toHaveBeenCalled();
   });
 
-  it("同時勾選多個活動，逐項核對金額後收款", async () => {
+  it("切換活動會取代前一活動，不會合併收款金額", async () => {
     await openPage();
     api.orderSummary.mockImplementation(async (params: { activity_id?: string }) => ({
       ...summary(), rows: [{ ...summary().rows[0], total_amount: params.activity_id === "winter" ? 100 : 300,
         unpaid_amount: params.activity_id === "winter" ? 100 : 300 }],
     }));
     const workspace = screen.getByRole("region", { name: "登記班級收款" });
-    fireEvent.click(within(workspace).getByRole("checkbox", { name: "校慶" }));
-    fireEvent.click(within(workspace).getByRole("checkbox", { name: "冬季活動" }));
+    fireEvent.click(within(workspace).getByRole("radio", { name: "校慶" }));
+    fireEvent.click(within(workspace).getByRole("radio", { name: "冬季活動" }));
     fireEvent.click(await within(workspace).findByRole("button", { name: "核對一年一班收款" }));
     const dialog = screen.getByRole("dialog", { name: "核對班級收款" });
-    expect(dialog).toHaveTextContent("校慶NT$300");
+    expect(dialog).not.toHaveTextContent("校慶");
     expect(dialog).toHaveTextContent("冬季活動NT$100");
-    expect(dialog).toHaveTextContent("本次合計NT$400");
+    expect(dialog).toHaveTextContent("本次合計NT$100");
+    expect(within(workspace).getByRole("radio", { name: "校慶", hidden: true })).not.toBeChecked();
     fireEvent.click(within(dialog).getByRole("button", { name: "確認收到款項" }));
-    await waitFor(() => expect(api.setClassPaid).toHaveBeenCalledTimes(2));
-    expect(api.setClassPaid).toHaveBeenCalledWith("class", true, "festival", undefined);
+    await waitFor(() => expect(api.setClassPaid).toHaveBeenCalledTimes(1));
+    expect(api.setClassPaid).not.toHaveBeenCalledWith("class", true, "festival", undefined);
     expect(api.setClassPaid).toHaveBeenCalledWith("class", true, "winter", undefined);
   });
 
@@ -505,7 +507,7 @@ describe("全校收款與訂單", () => {
     api.listActivities.mockResolvedValue([]);
     await openPage();
     const workspace = screen.getByRole("region", { name: "登記班級收款" });
-    fireEvent.click(within(workspace).getByRole("checkbox", { name: "傳情" }));
+    fireEvent.click(within(workspace).getByRole("radio", { name: "傳情" }));
     fireEvent.click(await within(workspace).findByRole("button", { name: "核對一年一班收款" }));
     const dialog = screen.getByRole("dialog", { name: "核對班級收款" });
     expect(dialog).not.toHaveTextContent("舞會");
@@ -514,29 +516,26 @@ describe("全校收款與訂單", () => {
     expect(api.setClassPaid).toHaveBeenCalledTimes(1);
   });
 
-  it("部分成功只保留失敗活動，重試不會重送已完成款項", async () => {
+  it("目前活動收款失敗時保留核對內容，重試只送出此活動", async () => {
     await openPage();
-    api.setClassPaid.mockResolvedValueOnce({}).mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce({});
+    api.setClassPaid.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce({});
     const workspace = screen.getByRole("region", { name: "登記班級收款" });
-    fireEvent.click(within(workspace).getByRole("checkbox", { name: "校慶" }));
-    fireEvent.click(within(workspace).getByRole("checkbox", { name: "冬季活動" }));
+    fireEvent.click(within(workspace).getByRole("radio", { name: "冬季活動" }));
     fireEvent.click(await within(workspace).findByRole("button", { name: "核對一年一班收款" }));
     fireEvent.click(screen.getByRole("button", { name: "確認收到款項" }));
-    const alert = await screen.findByText(/1 個活動已完成，1 個未完成/);
-    expect(alert).toHaveAttribute("role", "alert");
+    expect(await screen.findByText(/0 個活動已完成，1 個未完成/)).toHaveAttribute("role", "alert");
     const dialog = screen.getByRole("dialog", { name: "核對班級收款" });
     expect(dialog).not.toHaveTextContent("校慶");
     expect(dialog).toHaveTextContent("冬季活動");
     fireEvent.click(within(dialog).getByRole("button", { name: "確認收到款項" }));
-    await waitFor(() => expect(api.setClassPaid).toHaveBeenCalledTimes(3));
-    expect(api.setClassPaid.mock.calls.filter((call) => call[2] === "festival")).toHaveLength(1);
-    expect(api.setClassPaid.mock.calls.filter((call) => call[2] === "winter")).toHaveLength(2);
+    await waitFor(() => expect(api.setClassPaid).toHaveBeenCalledTimes(2));
+    expect(api.setClassPaid.mock.calls.every((call) => call[2] === "winter")).toBe(true);
   });
 
   it("取消核對不更新款項，送出期間不能重複提交或關閉", async () => {
     await openPage();
     const workspace = screen.getByRole("region", { name: "登記班級收款" });
-    fireEvent.click(within(workspace).getByRole("checkbox", { name: "校慶" }));
+    fireEvent.click(within(workspace).getByRole("radio", { name: "校慶" }));
     fireEvent.click(await within(workspace).findByRole("button", { name: "核對一年一班收款" }));
     fireEvent.click(screen.getByRole("button", { name: "返回核對" }));
     expect(api.setClassPaid).not.toHaveBeenCalled();
@@ -559,10 +558,10 @@ describe("全校收款與訂單", () => {
     api.orderSummary.mockImplementation((params: { activity_id?: string }) => params.activity_id === "festival"
       ? new Promise((resolve) => { resolveOld = resolve; }) : Promise.resolve(summary("最新班級")));
     const workspace = screen.getByRole("region", { name: "登記班級收款" });
-    fireEvent.click(within(workspace).getByRole("checkbox", { name: "校慶" }));
+    fireEvent.click(within(workspace).getByRole("radio", { name: "校慶" }));
     expect(within(workspace).getByRole("status")).toHaveTextContent("正在載入所選活動");
-    fireEvent.click(within(workspace).getByRole("checkbox", { name: "校慶" }));
-    fireEvent.click(within(workspace).getByRole("checkbox", { name: "冬季活動" }));
+    fireEvent.click(within(workspace).getByRole("radio", { name: "校慶" }));
+    fireEvent.click(within(workspace).getByRole("radio", { name: "冬季活動" }));
     expect(await within(workspace).findByRole("button", { name: "核對最新班級收款" })).toBeVisible();
     await act(async () => resolveOld(summary("過期班級")));
     expect(within(workspace).queryByText("過期班級")).not.toBeInTheDocument();
@@ -574,6 +573,7 @@ describe("全校收款與訂單", () => {
       { id: "general", name: "一般主題", activity_id: null, series: [], products: [] },
     ]);
     await openPage();
+    switchTask("商品總量");
     const select = screen.getByRole("combobox", { name: "活動" });
     expect(select).toHaveTextContent("衣服");
     expect(select).toHaveTextContent("袋子");
@@ -583,9 +583,9 @@ describe("全校收款與訂單", () => {
     fireEvent.change(select, { target: { value: "shirts" } });
     fireEvent.change(screen.getByRole("combobox", { name: "商品" }), { target: { value: "shirt" } });
     fireEvent.change(select, { target: { value: "bags" } });
-    await waitFor(() => expect(api.orderSummary).toHaveBeenLastCalledWith(expect.objectContaining({ category_id: "bags" })));
-    expect(api.orderSummary.mock.lastCall?.[0]).not.toHaveProperty("product_id");
-    expect(api.orderSummary.mock.lastCall?.[0]).not.toHaveProperty("activity_id");
+    await waitFor(() => expect(api.orderQuantities).toHaveBeenLastCalledWith(expect.objectContaining({ category_id: "bags" })));
+    expect(api.orderQuantities.mock.lastCall?.[0]).not.toHaveProperty("product_id");
+    expect(api.orderQuantities.mock.lastCall?.[0]).not.toHaveProperty("activity_id");
     expect(screen.getByRole("combobox", { name: "商品" })).toHaveValue("");
     expect(screen.queryByRole("option", { name: "紀念衫" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "商品總量" }));
@@ -601,19 +601,19 @@ describe("全校收款與訂單", () => {
   it("ignores an older response after switching activity", async () => {
     await openPage();
     let resolveOld!: (value: ReturnType<typeof summary>) => void;
-    api.orderSummary.mockImplementation((params: { category_id?: string }) => params.category_id === "shirts"
+    api.orderSummary.mockImplementation((params: { activity_id?: string }) => params.activity_id === "festival"
       ? new Promise((resolve) => { resolveOld = resolve; })
       : Promise.resolve(summary("最新班級")));
-    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "shirts" } });
-    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "cards" } });
-    await screen.findByText("最新班級");
+    fireEvent.click(screen.getByRole("radio", { name: "校慶" }));
+    fireEvent.click(screen.getByRole("radio", { name: "冬季活動" }));
+    await screen.findAllByText("最新班級");
     await act(async () => resolveOld(summary("過期班級")));
     expect(screen.queryByText("過期班級")).not.toBeInTheDocument();
   });
 
   it("班聯透過確認收款鎖單，沒有手動班級開關", async () => {
     await openPage();
-    fireEvent.click(screen.getByRole("checkbox", { name: "校慶" }));
+    fireEvent.click(screen.getByRole("radio", { name: "校慶" }));
     expect(await screen.findByRole("button", { name: "核對一年一班收款" })).toBeVisible();
     expect(screen.queryByText("批次管理訂購")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "整批停止訂購" })).not.toBeInTheDocument();
@@ -623,7 +623,8 @@ describe("全校收款與訂單", () => {
   it("does not present an unavailable closure status as open", async () => {
     api.getCloseStatus.mockRejectedValue(new Error("offline"));
     await openPage();
-    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "shirts" } });
+    fireEvent.click(screen.getByRole("radio", { name: "校慶" }));
+
     await waitFor(() => expect(api.getCloseStatus).toHaveBeenCalled());
     expect(screen.getAllByText("狀態待確認").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "停止訂購" })).not.toBeInTheDocument();

@@ -39,6 +39,22 @@ beforeEach(() => {
   api.createAdminAssistedOrder.mockResolvedValue([{ total_price: 100 }]);
 });
 
+it("從收款活動進入明細時，訂單、補收與合計僅包含該活動", async () => {
+  api.listOrders.mockResolvedValue([
+    order({ category_id: "cat", activity_name: null, category_name: "紀念品" }),
+    order({ id: "other", category_id: "other", total_price: 900, activity_name: "另一活動" }),
+  ]);
+  api.listSupplementOrders.mockResolvedValue([
+    order({ id: "other-supplement", category_id: "other", class_id: null, supplement_class_id: "class-1", total_price: 900 }),
+  ]);
+  render(<CouncilClassOrders target={{ id: "class-1", label: "一年一班", scope: { key: "category:cat", label: "紀念品" } }}
+    catalog={catalog} classes={[]} canOrder optionsLoading={false} optionsError={false}
+    onRetryOptions={vi.fn()} onCreated={onCreated} onClose={onClose} />);
+  expect(await screen.findByText("1 人已訂購 · 共 2 件 · 合計 NT$200")).toBeVisible();
+  expect(screen.queryByText(/另一活動/)).not.toBeInTheDocument();
+  expect(api.listOrders).toHaveBeenCalledWith(expect.objectContaining({ category_id: "cat", general_only: "true" }));
+});
+
 it("列出全班與未訂購者，合併品項數量、排除取消並標示本班補收", async () => {
   api.listOrders.mockResolvedValue([order(), order({ id: "order-2", is_class_collected: true }), order({ id: "cancelled", status: "cancelled" })]);
   api.listSupplementOrders.mockResolvedValue([

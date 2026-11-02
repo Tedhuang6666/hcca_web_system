@@ -14,7 +14,7 @@ import { toast } from "sonner";
 
 import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 import { classApi, shopApi, apiErrorMessage } from "@/lib/api";
-import { orderScopeKey, catalogScopeKey } from "@/lib/shop-order-scope";
+import { orderScopeKey, catalogScopeKey, orderScopeParams, isOrderingClosed } from "@/lib/shop-order-scope";
 import { mergeDraftItems, summarizeOrderItems } from "@/lib/shop-order-items";
 import { flattenCatalog, money } from "@/lib/shop-class-orders";
 import type {
@@ -54,6 +54,7 @@ type AssistedOrderDraft = {
 type ActivityOptionRow = {
   key: string;
   label: string;
+  closed: boolean;
 };
 
 const CLASS_ORDER_PAGE_SIZE = 500;
@@ -103,6 +104,7 @@ export default function ClassOrdersPage() {
   const [membersLoading, setMembersLoading] = useState(true);
   const [membersLoadFailed, setMembersLoadFailed] = useState(false);
   const [catalogFailed, setCatalogFailed] = useState(false);
+  const [catalogLoading, setCatalogLoading] = useState(true);
   const [submitMessage, setSubmitMessage] = useState("");
   const [catalog, setCatalog] = useState<CatalogCategoryOut[]>([]);
   const [myClassId, setMyClassId] = useState<string | null>(null);
@@ -119,14 +121,13 @@ export default function ClassOrdersPage() {
   const [paidFilter, setPaidFilter] = useState<PaidFilter>("all");
   const [assistedFilter, setAssistedFilter] = useState<AssistedFilter>("all");
   const [activityFilter, setActivityFilter] = useState("all");
-  const [ledgerActivityKeys, setLedgerActivityKeys] = useState<string[]>([]);
+  const [selectedActivityKey, setSelectedActivityKey] = useState<string | null>(null);
   const [collectionConfirmation, setCollectionConfirmation] = useState<{
     memberId: string; name: string; activityLabel: string;
     activities: { label: string; amount: number }[];
     orderIds: string[]; amount: number; collected: boolean;
   } | null>(null);
   const collectionSubmitting = useRef(false);
-  const [composerActivityKey, setComposerActivityKey] = useState<string | null>(null);
   const [recipientMode, setRecipientMode] = useState<"single" | "batch">("single");
   const [batchStudentIds, setBatchStudentIds] = useState<string[]>([]);
   const [recipientFilter, setRecipientFilter] = useState("");
@@ -168,68 +169,6 @@ export default function ClassOrdersPage() {
   const [cancelReason, setCancelReason] = useState("");
 
   const catalogProducts = useMemo(() => flattenCatalog(catalog), [catalog]);
-  const activeProducts = useMemo(
-    () => catalogProducts.filter((product) => {
-      const category = catalog.find((item) => item.id === product.categoryId);
-      return product.status === "active" && !category?.order_closed_at
-        && !(closeStatus[product.categoryId]?.is_closed && closeStatus[product.categoryId]?.is_global)
-        && (!category?.order_closes_at || new Date(category.order_closes_at).getTime() > Date.now());
-    }),
-    [catalogProducts, catalog, closeStatus],
-  );
-  const formProducts = useMemo(
-    () => {
-      const reserved = [...assistedItems, ...assistedOrderDrafts.filter((draft) => composerRecipientIds.includes(draft.student_id)).flatMap((draft) => draft.items)];
-      const reservedGroups = new Set(reserved.map((item) => catalogProducts.find((product) => product.id === item.product_id)?.purchase_group).filter(Boolean));
-      return activeProducts.filter((product) => {
-        const existing = editOrder?.items.some((item) => item.product_id === product.id);
-        const groupReserved = product.purchase_group && reservedGroups.has(product.purchase_group);
-        const allowed = existing || (purchaseOptionsReady && purchaseOptions.allowed.has(product.id) && !groupReserved);
-        const scope = orderScopeKey({ activity_id: product.activity_id, category_id: product.categoryId });
-        return allowed && (editOrder ? scope === orderScopeKey(editOrder)
-          : composerActivityKey === null || scope === composerActivityKey);
-      });
-    },
-    [activeProducts, editOrder, composerActivityKey, assistedItems, assistedOrderDrafts, catalogProducts, composerRecipientIds, purchaseOptionsReady, purchaseOptions],
-  );
-  const orderProductResults = useMemo(() => {
-    const needle = orderProductSearch.trim().toLocaleLowerCase("zh-Hant");
-    if (!needle) return formProducts;
-    return formProducts.filter((product) =>
-      [product.name, product.category, product.series]
-        .some((value) => value.toLocaleLowerCase("zh-Hant").includes(needle)),
-    );
-  }, [formProducts, orderProductSearch]);
-  const selectedOrderProduct = formProducts.find((product) => product.id === orderProductId);
-  const productRows = useMemo(() => {
-    const rows = new Map(productSummary.product_rows.map((row) => [row.product_id, row]));
-    for (const product of activeProducts) {
-      if (activityFilter !== "all" && `category:${product.categoryId}` !== activityFilter) continue;
-      if (rows.has(product.id)) continue;
-      rows.set(product.id, {
-        product_id: product.id,
-        product_name: product.name,
-        quantity: 0,
-        total_amount: 0,
-        collected_order_count: 0,
-        uncollected_order_count: 0,
-        collected_quantity: 0,
-        uncollected_quantity: 0,
-        collected_amount: 0,
-        uncollected_amount: 0,
-      });
-    }
-    return [...rows.values()].sort((a, b) => a.product_name.localeCompare(b.product_name, "zh-Hant"));
-  }, [activeProducts, activityFilter, productSummary.product_rows]);
-  const productFilterOptions = useMemo(() => {
-    const byId = new Map<string, string>();
-    for (const p of catalogProducts) {
-      if (activityFilter === "all" || `category:${p.categoryId}` === activityFilter) byId.set(p.id, p.name);
-    }
-    for (const row of productRows) byId.set(row.product_id, row.product_name);
-    return Array.from(byId.entries()).sort((a, b) => a[1].localeCompare(b[1], "zh-Hant"));
-  }, [activityFilter, catalogProducts, productRows]);
-
   const activityLabels = useMemo(() => {
     const namesById = new Map<string, Set<string>>();
     for (const category of catalog) {
@@ -252,31 +191,96 @@ export default function ClassOrdersPage() {
     const rows = new Map<string, ActivityOptionRow>();
     for (const category of catalog) {
       const key = catalogScopeKey(category);
-      if (!rows.has(key)) rows.set(key, {
-        key,
-        label: category.activity_name ?? category.name,
-      });
+      const row = rows.get(key);
+      const closed = isOrderingClosed(category);
+      rows.set(key, { key, label: category.activity_name ?? category.name, closed: row ? row.closed && closed : closed });
     }
     for (const order of activityOrders) {
       if (!isCollectableOrder(order)) continue;
       const key = orderScopeKey(order);
-      const row = rows.get(key) ?? {
-        key,
-        label: order.category_name ?? activityLabel(key),
-      };
-      row.label = order.activity_name ?? order.category_name ?? row.label;
-      rows.set(key, row);
+      const row = rows.get(key) ?? { key, label: order.category_name ?? activityLabel(key), closed: true };
+      rows.set(key, { ...row, label: order.activity_name ?? order.category_name ?? row.label });
     }
     return Array.from(rows.values()).sort((a, b) => a.label.localeCompare(b.label, "zh-Hant"));
   }, [activityOrders, activityLabel, catalog]);
+  const activeLedgerKey = useMemo(() => {
+    if (catalogLoading) return "";
+    if (selectedActivityKey !== null) return activityRows.some((row) => row.key === selectedActivityKey) ? selectedActivityKey : "";
+    const open = activityRows.filter((row) => !row.closed);
+    return open.length === 1 ? open[0].key : "";
+  }, [activityRows, catalogLoading, selectedActivityKey]);
+  const ledgerActivities = activityRows.filter((row) => row.key === activeLedgerKey);
+  const ledgerActivityLabel = ledgerActivities[0]?.label ?? "請先選擇活動";
+  const composerActivityKey = activeLedgerKey;
+  const scopedCatalog = catalog.filter((category) => catalogScopeKey(category) === activeLedgerKey);
+  const activeProducts = useMemo(
+    () => catalogProducts.filter((product) => {
+      const category = catalog.find((item) => item.id === product.categoryId);
+      return product.status === "active" && !(category && isOrderingClosed(category))
+        && !(closeStatus[product.categoryId]?.is_closed && closeStatus[product.categoryId]?.is_global)
+        && (!category?.order_closes_at || new Date(category.order_closes_at).getTime() > Date.now());
+    }),
+    [catalogProducts, catalog, closeStatus],
+  );
+  const formProducts = useMemo(
+    () => {
+      const reserved = [...assistedItems, ...assistedOrderDrafts.filter((draft) => composerRecipientIds.includes(draft.student_id)).flatMap((draft) => draft.items)];
+      const reservedGroups = new Set(reserved.map((item) => catalogProducts.find((product) => product.id === item.product_id)?.purchase_group).filter(Boolean));
+      return activeProducts.filter((product) => {
+        const existing = editOrder?.items.some((item) => item.product_id === product.id);
+        const groupReserved = product.purchase_group && reservedGroups.has(product.purchase_group);
+        const allowed = existing || (purchaseOptionsReady && purchaseOptions.allowed.has(product.id) && !groupReserved);
+        const scope = orderScopeKey({ activity_id: product.activity_id, category_id: product.categoryId });
+        return allowed && (editOrder ? scope === orderScopeKey(editOrder)
+          : scope === composerActivityKey);
+      });
+    },
+    [activeProducts, editOrder, composerActivityKey, assistedItems, assistedOrderDrafts, catalogProducts, composerRecipientIds, purchaseOptionsReady, purchaseOptions],
+  );
+  const orderProductResults = useMemo(() => {
+    const needle = orderProductSearch.trim().toLocaleLowerCase("zh-Hant");
+    if (!needle) return formProducts;
+    return formProducts.filter((product) =>
+      [product.name, product.category, product.series]
+        .some((value) => value.toLocaleLowerCase("zh-Hant").includes(needle)),
+    );
+  }, [formProducts, orderProductSearch]);
+  const selectedOrderProduct = formProducts.find((product) => product.id === orderProductId);
+  const productRows = useMemo(() => {
+    const rows = new Map(productSummary.product_rows.map((row) => [row.product_id, row]));
+    for (const product of activeProducts) {
+      if (orderScopeKey({ activity_id: product.activity_id, category_id: product.categoryId }) !== activeLedgerKey) continue;
+      if (activityFilter !== "all" && `category:${product.categoryId}` !== activityFilter) continue;
+      if (rows.has(product.id)) continue;
+      rows.set(product.id, {
+        product_id: product.id,
+        product_name: product.name,
+        quantity: 0,
+        total_amount: 0,
+        collected_order_count: 0,
+        uncollected_order_count: 0,
+        collected_quantity: 0,
+        uncollected_quantity: 0,
+        collected_amount: 0,
+        uncollected_amount: 0,
+      });
+    }
+    return [...rows.values()].sort((a, b) => a.product_name.localeCompare(b.product_name, "zh-Hant"));
+  }, [activeProducts, activeLedgerKey, activityFilter, productSummary.product_rows]);
+  const productFilterOptions = useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const p of catalogProducts) {
+      if (orderScopeKey({ activity_id: p.activity_id, category_id: p.categoryId }) !== activeLedgerKey) continue;
+      if (activityFilter === "all" || `category:${p.categoryId}` === activityFilter) byId.set(p.id, p.name);
+    }
+    for (const row of productRows) byId.set(row.product_id, row.product_name);
+    return Array.from(byId.entries()).sort((a, b) => a[1].localeCompare(b[1], "zh-Hant"));
+  }, [activeLedgerKey, activityFilter, catalogProducts, productRows]);
 
-  const ledgerActivities = activityRows.filter((row) => ledgerActivityKeys.includes(row.key));
-  const activeLedgerKey = ledgerActivities.length === 1 ? ledgerActivities[0].key : "";
-  const ledgerActivityLabel = ledgerActivities.map((row) => row.label).join("、");
   const seatRows = useMemo(() => {
     const ordersByMember = new Map<string, OrderListItem[]>();
     for (const order of activityOrders) {
-      if (!ledgerActivityKeys.includes(orderScopeKey(order)) || !isCollectableOrder(order)) continue;
+      if (orderScopeKey(order) !== activeLedgerKey || !isCollectableOrder(order)) continue;
       const memberOrders = ordersByMember.get(order.user_id) ?? [];
       memberOrders.push(order);
       ordersByMember.set(order.user_id, memberOrders);
@@ -303,7 +307,7 @@ export default function ClassOrdersPage() {
     }
     return rows.sort((a, b) => (a.seat ?? Number.POSITIVE_INFINITY) - (b.seat ?? Number.POSITIVE_INFINITY)
       || a.name.localeCompare(b.name, "zh-Hant"));
-  }, [activityOrders, ledgerActivityKeys, members]);
+  }, [activityOrders, activeLedgerKey, members]);
 
   const filteredSeatRows = seatRows.filter((row) =>
     `${row.seat ?? ""} ${row.name}`.includes(seatSearch.trim())
@@ -315,11 +319,11 @@ export default function ClassOrdersPage() {
     collected: totals.collected + row.collected,
   }), { amount: 0, collected: 0 }), [seatRows]);
 
-  const filterActivityRows = catalog.map((category) => ({
+  const filterActivityRows = scopedCatalog.map((category) => ({
     key: `category:${category.id}`, label: category.name,
   }));
   const selectedActivityLabel = activityFilter === "all"
-    ? "全部活動"
+    ? ledgerActivityLabel
     : activityFilter === "none" ? "一般商品"
       : filterActivityRows.find((row) => row.key === activityFilter)?.label ?? "所選主題";
 
@@ -410,32 +414,27 @@ export default function ClassOrdersPage() {
     }
   }, []);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (refreshMembers = true) => {
     const version = ++loadVersion.current;
     setLoading(true);
     setLoadFailed(false);
-    const scope = activityFilter === "all" ? {}
-      : activityFilter === "none" ? { general_only: "true" }
-        : { category_id: activityFilter.slice("category:".length) };
+    const scope = {
+      ...orderScopeParams(activeLedgerKey),
+      ...(activityFilter.startsWith("category:") ? { category_id: activityFilter.slice(9) } : {}),
+    };
     const params: ClassOrderQuery = { ...scope };
     if (paidFilter !== "all") params.is_class_collected = paidFilter === "paid" ? "true" : "false";
     if (assistedFilter === "assisted") params.assisted_only = "true";
     if (productFilter) params.product_id = productFilter;
     if (memberFilter) params.member_user_id = memberFilter;
-    const hasFilters = activityFilter !== "all" || paidFilter !== "all"
-      || assistedFilter !== "all"
-      || productFilter !== ""
-      || memberFilter !== "";
-    const filteredOrdersPromise = listAllClassOrders(params);
-    const activityOrdersPromise = hasFilters
-      ? listAllClassOrders()
-      : filteredOrdersPromise;
+    const filteredOrdersPromise = activeLedgerKey ? listAllClassOrders(params) : Promise.resolve([]);
+    const activityOrdersPromise = listAllClassOrders();
     try {
       const [orderItems, activityItems, productStatus] = await Promise.all([
         filteredOrdersPromise,
         activityOrdersPromise,
-        shopApi.classSummary(scope),
-        loadMembers(),
+        activeLedgerKey ? shopApi.classSummary(scope) : Promise.resolve(emptySummary),
+        refreshMembers ? loadMembers() : Promise.resolve(),
       ]);
       if (version !== loadVersion.current) return;
       setOrders(orderItems);
@@ -450,7 +449,7 @@ export default function ClassOrdersPage() {
     } finally {
       if (version === loadVersion.current) setLoading(false);
     }
-  }, [activityFilter, assistedFilter, paidFilter, productFilter, memberFilter, loadMembers]);
+  }, [activeLedgerKey, activityFilter, assistedFilter, paidFilter, productFilter, memberFilter, loadMembers]);
 
   const loadCloseStatus = useCallback(async (catIds: string[], classId: string) => {
     if (!catIds.length) return;
@@ -462,16 +461,19 @@ export default function ClassOrdersPage() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(false); }, [load]);
+  useEffect(() => { void loadMembers(); }, [loadMembers]);
 
   const loadCatalog = useCallback(async () => {
     setCatalogFailed(false);
+    setCatalogLoading(true);
     try {
       setCatalog(await shopApi.catalog(undefined, true));
     } catch {
       setCatalogFailed(true);
       setCatalog([]);
     } finally {
+      setCatalogLoading(false);
     }
   }, []);
 
@@ -535,7 +537,6 @@ export default function ClassOrdersPage() {
     }
     setFormOpen(true);
     setEditOrder(null);
-    setComposerActivityKey(null);
     setStudentId("");
     setBatchStudentIds([]);
     setRecipientFilter("");
@@ -560,7 +561,6 @@ export default function ClassOrdersPage() {
     setRecipientFilter("");
     setOrderProductSearch("");
     setStudentId(memberId);
-    setComposerActivityKey(activeLedgerKey);
   };
 
   const openEdit = async (order: OrderListItem) => {
@@ -572,7 +572,6 @@ export default function ClassOrdersPage() {
     }
     setWorkspace("order");
     setFormOpen(true);
-    setComposerActivityKey(null);
     setEditOrder(null);
     setEditProductsOpen(false);
     setRecipientMode("single");
@@ -1026,7 +1025,6 @@ export default function ClassOrdersPage() {
 
   const clearFilters = () => {
     setActivityFilter("all");
-    setLedgerActivityKeys([]);
     setProductFilter("");
     setPaidFilter("all");
     setAssistedFilter("all");
@@ -1044,11 +1042,33 @@ export default function ClassOrdersPage() {
           <p className="mt-2 text-sm" style={{ color: "var(--text-secondary)" }}>幫同學訂購，或登記已收到的款項。</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={load} className="btn btn-ghost min-h-11 min-w-11" aria-label="重新整理">
+          <button type="button" onClick={() => void load()} className="btn btn-ghost min-h-11 min-w-11" aria-label="重新整理">
             <RefreshCw size={15} /> <span className="hidden sm:inline">重新整理</span>
           </button>
         </div>
       </header>
+
+      {activityRows.length > 0 && <section className="space-y-2" aria-label="目前處理活動">
+        <CollectionActivityPicker options={activityRows} selected={activeLedgerKey || null} label="活動（商品主題）"
+          disabled={busy !== null || batchBusy || creating || loading || catalogLoading || catalogFailed || loadFailed
+            || Boolean(editOrder || collectionConfirmation || cancelTarget || orderProductId)
+            || assistedItems.length > 0 || assistedOrderDrafts.length > 0}
+          onChange={(key) => {
+            if (key === activeLedgerKey) return;
+            loadVersion.current += 1;
+            setSelectedActivityKey(key);
+            setActivityFilter("all");
+            setOrders([]);
+            setProductSummary(emptySummary);
+            setLoading(true);
+            setProductFilter(""); setMemberFilter(""); setQuery(""); setPaidFilter("all"); setAssistedFilter("all");
+            setSelectedIds([]); setOrderPage(0); setSeatSearch(""); setSeatFilter("all");
+            setStudentId(""); setBatchStudentIds([]); setNotes(""); setOrderProductSearch(""); setSubmitMessage("");
+          }} />
+        {(assistedItems.length > 0 || assistedOrderDrafts.length > 0 || orderProductId || editOrder) && <p className="text-sm" style={{ color: "var(--text-secondary)" }}>請先完成目前的代訂或修改，再切換活動。</p>}
+        <p className="font-semibold">目前活動：{ledgerActivityLabel}</p>
+      </section>}
+      {!activeLedgerKey && !loading && activityRows.length > 0 && <p role="status">請先選擇活動，再代訂、收款或查詢訂單。</p>}
 
       {loadFailed && (
         <p className="rounded-md px-3 py-2 text-sm" role="alert"
@@ -1094,7 +1114,7 @@ export default function ClassOrdersPage() {
           </button>
           <details>
             <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">追加訂單與補收款</summary>
-            {myClassId && <SupplementOrders canRejoin onRejoined={() => { void load(); }} />}
+            {myClassId && activeLedgerKey && <SupplementOrders key={activeLedgerKey} activityKey={activeLedgerKey} canRejoin onRejoined={() => { void load(); }} />}
           </details>
           <details>
             <summary className="min-h-11 cursor-pointer py-3 text-sm">加購與繳款說明</summary>
@@ -1105,12 +1125,12 @@ export default function ClassOrdersPage() {
         </div>
       </details>
 
-      {workspace === "details" && (
+      {workspace === "details" && activeLedgerKey && (
         <label className="flex flex-wrap items-center gap-3 text-sm font-medium">
           整理活動
           <select className="input min-h-11 w-full sm:w-auto" aria-label="整理活動" value={activityFilter}
             onChange={(event) => { setActivityFilter(event.target.value); setProductFilter(""); setSelectedIds([]); }}>
-            <option value="all">全部活動</option>
+            <option value="all">目前活動全部商品</option>
             {filterActivityRows.map((row) => <option key={row.key} value={row.key}>{row.label}</option>)}
           </select>
           <span style={{ color: "var(--text-muted)" }}>商品統計與訂單清單依所選活動整理</span>
@@ -1121,7 +1141,7 @@ export default function ClassOrdersPage() {
       {workspace === "order" && catalogFailed && (
         <p role="alert">無法載入可訂購商品。<button type="button" className="btn btn-ghost min-h-11" onClick={() => window.location.reload()}>重新載入</button></p>
       )}
-      {workspace === "order" && formOpen && (
+      {workspace === "order" && formOpen && activeLedgerKey && (
         <section id="class-order-form" className="scroll-mt-5 rounded-lg p-4" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
           {editOrder && <div className="mb-3 flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
@@ -1201,11 +1221,6 @@ export default function ClassOrdersPage() {
               </button>
             </div>
             </details>
-          )}
-          {!editOrder && composerActivityKey && (
-            <button type="button" className="btn btn-ghost mb-3 min-h-11 px-3 text-xs"
-              disabled={assistedItems.length > 0 || Boolean(orderProductId)}
-              onClick={() => setComposerActivityKey(null)}>改看全部活動商品</button>
           )}
           {(editOrder || recipientMode === "single") && (
             <section className="mb-5" aria-label="訂購同學">
@@ -1722,12 +1737,9 @@ export default function ClassOrdersPage() {
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h2 id="seat-collection-heading" className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>登記收款</h2>
-              <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>先勾選本次收款活動，再找同學核對各項金額；收到錢後登記。</p>
+              <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>依頁面上方的目前活動核對同學款項；收到錢後登記。</p>
             </div>
           </div>
-          {activityRows.length > 0 && <CollectionActivityPicker options={activityRows} selected={ledgerActivityKeys}
-            disabled={busy !== null || batchBusy || loading || catalogFailed || loadFailed}
-            onChange={(keys) => { setLedgerActivityKeys(keys); setSelectedIds([]); }} />}
           {ledgerActivities.length > 0 && <p className="text-base font-semibold">本次收款：{ledgerActivityLabel}</p>}
           {ledgerActivities.length > 0 && (loading ? (
             <p className="rounded-lg px-4 py-3 text-sm" role="status"
@@ -1765,7 +1777,7 @@ export default function ClassOrdersPage() {
               {loading ? "正在載入活動與座號收款資料…" : loadFailed ? "無法載入活動與座號收款資料，請重新整理後再試。" : "目前沒有可收款的活動；活動開放或有同學完成預購後，收款資料會顯示在這裡。"}
             </p>
           ) : !ledgerActivities.length ? (
-            <p role="status" className="py-4 text-sm" style={{ color: "var(--text-secondary)" }}>請先逐項勾選本次要收款的活動。</p>
+            <p role="status" className="py-4 text-sm" style={{ color: "var(--text-secondary)" }}>請在頁面上方選擇本次要收款的活動。</p>
           ) : (
             <>
               <div className="flex flex-wrap gap-2">
@@ -1891,9 +1903,9 @@ export default function ClassOrdersPage() {
         </section>
 
       </div>
-      {myClassId && <ClassOrderDeadline classId={myClassId} categories={catalog} onSaved={() => void loadCloseStatus(catalog.map((category) => category.id), myClassId)} />}
+      {myClassId && activeLedgerKey && <ClassOrderDeadline key={activeLedgerKey} classId={myClassId} categories={scopedCatalog} onSaved={() => void loadCloseStatus(scopedCatalog.map((category) => category.id), myClassId)} />}
 
-      <div hidden={workspace !== "details"} className="space-y-5">
+      <div hidden={workspace !== "details" || !activeLedgerKey} className="space-y-5">
 
       <div className="space-y-5">
         {/* 訂單列表 */}
@@ -1933,8 +1945,7 @@ export default function ClassOrdersPage() {
                 {productFilterOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
               </select>
               <select className="input min-h-11" value={activityFilter} onChange={(e) => { setActivityFilter(e.target.value); setProductFilter(""); setSelectedIds([]); }} aria-label="依活動篩選">
-                <option value="all">全部活動</option>
-                <option value="none">一般商品</option>
+                <option value="all">目前活動全部商品</option>
                 {filterActivityRows.map((row) => (
                   <option key={row.key} value={row.key}>{row.label}</option>
                 ))}

@@ -118,7 +118,7 @@ export default function CouncilOrdersPage() {
   const hasOrderFilters = ["summary", "receipts", "quantities", "orders", "analytics"].includes(tab);
   const showsSummary = tab === "summary" || tab === "receipts";
   const [assistedBusy, setAssistedBusy] = useState(false);
-  const [classDetail, setClassDetail] = useState<{ id: string; label: string; source: "summary" | "collection" } | null>(null);
+  const [classDetail, setClassDetail] = useState<{ id: string; label: string; source: "summary" | "collection"; scope?: { key: string; label: string } } | null>(null);
   const [analyticsRefresh, setAnalyticsRefresh] = useState(0);
   const [supplementRefresh, setSupplementRefresh] = useState(0);
   const [groupBy, setGroupBy] = useState<"class" | "grade" | "user">("class");
@@ -127,6 +127,7 @@ export default function CouncilOrdersPage() {
   const [grade, setGrade] = useState("");
   const [classId, setClassId] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [paymentScope, setPaymentScope] = useState<{ key: string; label: string } | null>(null);
   const [receiptCategoryId, setReceiptCategoryId] = useState("");
   const [productId, setProductId] = useState("");
   const [isPaid, setIsPaid] = useState("");
@@ -146,6 +147,7 @@ export default function CouncilOrdersPage() {
   const [activities, setActivities] = useState<ActivityOut[]>([]);
   const [classes, setClasses] = useState<SchoolClassListItem[]>([]);
   const [summary, setSummary] = useState<OrderSummaryOut | null>(null);
+  const [summaryScopeKey, setSummaryScopeKey] = useState<string | null>(null);
   const [classPayments, setClassPayments] = useState<ClassPaymentReportItemOut[]>([]);
   const [classPaymentsLoading, setClassPaymentsLoading] = useState(true);
   const [classPaymentsError, setClassPaymentsError] = useState("");
@@ -282,6 +284,10 @@ export default function CouncilOrdersPage() {
   const collectionClassCount = new Set(visibleClassPayments.map((payment) => payment.class_id)).size;
   const loadSummary = useCallback(async (options?: LoadSummaryOptions) => {
     const version = ++requestVersion.current;
+    if (tab === "summary" && canConfirmClassPayment && !paymentScope) {
+      setSummary(null); setLoading(false); setLoadError("");
+      return;
+    }
     setLoading(true);
     setLoadError("");
     try {
@@ -291,10 +297,15 @@ export default function CouncilOrdersPage() {
       if (isPaid) params.is_paid = isPaid;
       if (productId) params.product_id = productId;
       if (categoryId) params.category_id = categoryId;
+      if (tab === "summary" && canConfirmClassPayment && paymentScope) {
+        if (paymentScope.key.startsWith("category:")) params.category_id = paymentScope.key.slice(9);
+        else { delete params.category_id; params.activity_id = paymentScope.key; }
+      }
       if (statusFilter) params.status = statusFilter;
       const data = await shopApi.orderSummary(params);
       if (version !== requestVersion.current) return;
       setSummary(data);
+      setSummaryScopeKey(tab === "summary" ? paymentScope?.key ?? null : null);
 
       // 結單狀態只依班級與分類變化；短時間快取，避免切換分頁或篩選時重複查詢。
       if (groupBy === "class" && data.rows.length && catalog.length) {
@@ -340,7 +351,7 @@ export default function CouncilOrdersPage() {
     } finally {
       if (version === requestVersion.current) setLoading(false);
     }
-  }, [groupBy, grade, classId, isPaid, productId, categoryId, statusFilter, catalog, dateParams]);
+  }, [groupBy, grade, classId, isPaid, productId, categoryId, statusFilter, catalog, dateParams, tab, canConfirmClassPayment, paymentScope]);
 
   const loadQuantities = useCallback(async () => {
     const version = ++requestVersion.current;
@@ -425,6 +436,10 @@ export default function CouncilOrdersPage() {
         if (classId) params.class_id = classId;
         if (productId) params.product_id = productId;
         if (categoryId) params.category_id = categoryId;
+        if (tab === "summary" && paymentScope) {
+          if (paymentScope.key.startsWith("category:")) params.category_id = paymentScope.key.slice(9);
+          else { delete params.category_id; params.activity_id = paymentScope.key; }
+        }
         if (statusFilter === "pending" || statusFilter === "confirmed") params.status = statusFilter;
         if (search.trim()) params.search = search.trim();
         if (dateParams.date_from) params.date_from = dateParams.date_from;
@@ -486,6 +501,10 @@ export default function CouncilOrdersPage() {
         if (classId) params.class_id = classId;
         if (productId) params.product_id = productId;
         if (categoryId) params.category_id = categoryId;
+        if (tab === "summary" && paymentScope) {
+          if (paymentScope.key.startsWith("category:")) params.category_id = paymentScope.key.slice(9);
+          else { delete params.category_id; params.activity_id = paymentScope.key; }
+        }
         if (statusFilter === "pending" || statusFilter === "confirmed") params.status = statusFilter;
 
         const [summaryResult, representativeTargets]: [
@@ -687,7 +706,8 @@ export default function CouncilOrdersPage() {
     setSelectedReceiptClasses(new Set());
   };
   const scopeLabels = [
-    (tab === "analytics" ? analyticsCategory?.name : selectedCategory?.name) ?? "全部活動",
+    (tab === "summary" && canConfirmClassPayment ? paymentScope?.label ?? "請先選擇活動"
+      : tab === "analytics" ? analyticsCategory?.name : selectedCategory?.name) ?? "全部活動",
     grade && `${grade} 年級`,
     classes.find((item) => item.id === classId)?.label,
     allProducts.find((item) => item.id === (tab === "analytics" ? analyticsProductId : productId))?.name,
@@ -756,7 +776,7 @@ export default function CouncilOrdersPage() {
         <fieldset disabled={mutationBusy} className="min-w-0 space-y-3">
         <legend className="sr-only">篩選訂單</legend>
         <div className="flex flex-wrap items-end gap-3">
-          <label className="grid gap-1 text-sm">
+          {!(tab === "summary" && canConfirmClassPayment) && <label className="grid gap-1 text-sm">
             <span style={{ color: "var(--text-muted)" }}>{tab === "analytics" ? "分析主題" : "活動"}</span>
             <select className="input" value={tab === "analytics" ? analyticsCategory?.id ?? "" : categoryId} onChange={(e) => {
               setCategoryId(e.target.value);
@@ -770,7 +790,7 @@ export default function CouncilOrdersPage() {
                 <option key={category.id} value={category.id}>{category.name}</option>
               ))}
             </select>
-          </label>
+          </label>}
           {canCreateBatchReminders && (
             <>
               <button
@@ -847,7 +867,9 @@ export default function CouncilOrdersPage() {
               <span style={{ color: "var(--text-muted)" }}>商品</span>
               <select className="input" value={productId} onChange={(e) => setProductId(e.target.value)}>
                 <option value="">全部商品</option>
-                {allProducts.filter((p) => visibleCategoryIds.has(p.catId) && (!categoryId || p.catId === categoryId)).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {allProducts.filter((p) => visibleCategoryIds.has(p.catId) && (!categoryId || p.catId === categoryId)
+                  && (tab !== "summary" || !canConfirmClassPayment || catalog.some((category) => category.id === p.catId
+                    && (category.activity_id ?? `category:${category.id}`) === paymentScope?.key))).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
           </label>}
           <label className="grid gap-1 text-sm">
@@ -907,9 +929,14 @@ export default function CouncilOrdersPage() {
       </p>}
       {tab === "summary" && canConfirmClassPayment && <ClassPaymentWorkspace
         catalog={catalog} activities={activities} optionsLoading={optionsLoading} optionsError={optionsError}
+        selectedScopeKey={paymentScope?.key ?? null} onScopeChange={(scope) => {
+          requestVersion.current += 1;
+          setPaymentScope(scope); setSummary(null); setLoading(true);
+          setCategoryId(""); setProductId(""); setSelectedReceiptClasses(new Set());
+        }}
         refreshKey={supplementRefresh} disabled={mutationBusy} onBusyChange={setPaymentBusy}
         onChanged={() => { void loadSummary({ refreshCloseStatus: true }); void loadClassPayments(); }}
-        onViewClass={(id, label) => setClassDetail({ id, label, source: "collection" })}
+        onViewClass={(id, label, scope) => setClassDetail({ id, label, source: "collection", scope })}
       />}
       {classDetail && <CouncilClassOrders key={classDetail.id} target={classDetail} catalog={catalog} classes={classes}
         canOrder={canConfirmClassPayment} optionsLoading={optionsLoading} optionsError={optionsError}
@@ -1095,7 +1122,7 @@ export default function CouncilOrdersPage() {
       {hasOrderFilters && tab !== "analytics" && loadError && <p role="alert" className="p-4" style={{ color: "var(--danger)" }}>{loadError}</p>}
       <div hidden={hasOrderFilters && tab !== "analytics" && Boolean(loadError)}>
       {/* Tab 1：班級彙總 */}
-      {showsSummary && (
+      {showsSummary && (tab !== "summary" || !canConfirmClassPayment || (paymentScope && summaryScopeKey === paymentScope.key)) && (
         <section>
           <p className="mb-3 text-sm" style={{ color: "var(--text-secondary)" }}>同學已交給班代、尚未由班聯確認的款項，仍列在「班聯未確認」。</p>
           {tab === "summary" && summary && !loading && (
@@ -1260,7 +1287,7 @@ export default function CouncilOrdersPage() {
                           {groupBy === "class" && row.key !== "none" ? <button type="button"
                             className="min-h-11 text-left underline underline-offset-4" disabled={mutationBusy}
                             data-class-orders-id={row.key} data-class-orders-source="summary"
-                            aria-label={`查看${row.label}訂購明細`} onClick={() => setClassDetail({ id: row.key, label: row.label, source: "summary" })}>
+                            aria-label={`查看${row.label}訂購明細`} onClick={() => setClassDetail({ id: row.key, label: row.label, source: "summary", scope: tab === "summary" ? paymentScope ?? undefined : undefined })}>
                             {row.label}
                           </button> : row.label}
                         </td>

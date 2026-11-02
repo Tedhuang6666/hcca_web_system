@@ -7,36 +7,43 @@ import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import CollectionActivityPicker from "@/components/shop/CollectionActivityPicker";
 import Modal from "@/components/ui/Modal";
 import { money } from "@/lib/shop-class-orders";
+import { isOrderingClosed } from "@/lib/shop-order-scope";
 
-type Scope = { key: string; label: string; activityId: string | null; categoryId?: string; topics: string[] };
+type Scope = { key: string; label: string; activityId: string | null; categoryId?: string; topics: string[]; closed: boolean };
 type Entry = { scope: Scope; row: OrderSummaryRow };
 type Confirmation = { entries: Entry[]; paid: boolean; classLabel: string };
 
 export default function ClassPaymentWorkspace({ catalog, activities, optionsLoading, optionsError, refreshKey, disabled,
-  onChanged, onBusyChange, onViewClass,
+  onChanged, onBusyChange, onViewClass, selectedScopeKey, onScopeChange,
 }: {
   catalog: CatalogCategoryOut[]; activities: ActivityOut[]; optionsLoading: boolean; optionsError: boolean;
   refreshKey: number; disabled: boolean; onChanged: () => void; onBusyChange: (busy: string | null) => void;
-  onViewClass?: (classId: string, label: string) => void;
+  onViewClass?: (classId: string, label: string, scope: { key: string; label: string }) => void;
+  selectedScopeKey?: string | null;
+  onScopeChange?: (scope: { key: string; label: string }) => void;
 }) {
   const scopes = useMemo(() => {
     const groups = new Map<string, Scope>();
     for (const activity of activities) groups.set(activity.id, {
       key: activity.id, label: activity.name, activityId: activity.id, topics: [],
+      closed: isOrderingClosed({ ...activity, activity_status: activity.status }),
     });
     for (const category of catalog) {
       const key = category.activity_id ?? `category:${category.id}`;
       const group = groups.get(key) ?? {
         key, label: category.activity_name ?? category.name, activityId: category.activity_id ?? null,
-        categoryId: category.activity_id ? undefined : category.id, topics: [],
+        categoryId: category.activity_id ? undefined : category.id, topics: [], closed: true,
       };
       group.topics.push(category.name);
+      // 有任一主題仍可訂購時，整個活動仍列在目前活動。
+      group.closed = group.topics.length === 1 ? isOrderingClosed(category) : group.closed && isOrderingClosed(category);
       groups.set(key, group);
     }
     return [...groups.values()];
   }, [activities, catalog]);
-  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
-  const selectedScopes = useMemo(() => scopes.filter((scope) => selectedKeys.includes(scope.key)), [scopes, selectedKeys]);
+  const [localSelectedKey, setSelectedKey] = useState<string | null>(null);
+  const selectedKey = selectedScopeKey === undefined ? localSelectedKey : selectedScopeKey;
+  const selectedScopes = useMemo(() => scopes.filter((scope) => scope.key === selectedKey), [scopes, selectedKey]);
   const selectionKey = selectedScopes.map((scope) => scope.key).join(",");
   const [search, setSearch] = useState("");
   const [result, setResult] = useState<{ key: string; entries: Entry[] } | null>(null);
@@ -115,13 +122,17 @@ export default function ClassPaymentWorkspace({ catalog, activities, optionsLoad
     style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
     <div>
       <h2 id="class-collection-heading" className="text-lg font-semibold">登記班級收款</h2>
-      <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>逐項勾選這次收到的活動款項，再找到班級核對明細與合計。</p>
+      <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>先選一個活動，再找到班級核對該活動的款項。</p>
     </div>
-    <CollectionActivityPicker options={scopes} selected={selectedKeys} disabled={disabled || optionsLoading || optionsError}
-      onChange={(keys) => { setSelectedKeys(keys); setMessage(""); setError(""); setReceiptError(""); setResult(null); }} />
+    <CollectionActivityPicker options={scopes} selected={selectedKey} disabled={disabled || saving || Boolean(confirmation) || optionsLoading || optionsError}
+      onChange={(key) => {
+        const scope = scopes.find((item) => item.key === key)!;
+        setSelectedKey(key); onScopeChange?.(scope);
+        setMessage(""); setError(""); setReceiptError(""); setResult(null);
+      }} />
     {optionsLoading ? <p role="status">正在載入收款活動…</p>
       : optionsError ? <p role="alert">無法載入收款活動，請使用頁面上方的重新載入。</p>
-        : !selectedScopes.length ? <p role="status" className="text-sm" style={{ color: "var(--text-secondary)" }}>請先勾選本次要收款的活動。</p>
+        : !selectedScopes.length ? <p role="status" className="text-sm" style={{ color: "var(--text-secondary)" }}>請先選擇本次要收款的活動。</p>
           : <>
             <div className="space-y-1" aria-label="本次收款範圍">
               <p className="font-semibold">本次收款：{selectedScopes.map((scope) => scope.label).join("、")}</p>
@@ -143,7 +154,7 @@ export default function ClassPaymentWorkspace({ catalog, activities, optionsLoad
                         <h3 className="font-semibold">{onViewClass ? <button type="button"
                           className="min-h-11 text-left underline underline-offset-4" disabled={disabled}
                           data-class-orders-id={classId} data-class-orders-source="collection"
-                          aria-label={`查看${item.label}訂購明細`} onClick={() => onViewClass(classId, item.label)}>
+                          aria-label={`查看${item.label}訂購明細`} onClick={() => onViewClass(classId, item.label, item.entries[0].scope)}>
                           {item.label}
                         </button> : item.label}</h3>
                         <dl className="max-w-md space-y-2 text-sm">{item.entries.map(({ scope, row }) => <div key={scope.key} className="flex flex-wrap justify-between gap-x-4">
@@ -151,7 +162,7 @@ export default function ClassPaymentWorkspace({ catalog, activities, optionsLoad
                         </div>)}</dl>
                         <div className="flex flex-wrap items-center gap-2">
                           {unpaid > 0 ? <button type="button" className="btn btn-secondary min-h-11 px-3 text-sm" disabled={disabled}
-                            onClick={() => openConfirmation(item.entries, true)} aria-label={`核對${item.label}收款`}>核對收款合計 {money(unpaid)}</button>
+                            onClick={() => openConfirmation(item.entries, true)} aria-label={`核對${item.label}收款`}>核對{selectedScopes[0].label}收款 {money(unpaid)}</button>
                             : <span className="text-sm" role="status">已收齊</span>}
                           <details>
                             <summary className="min-h-11 cursor-pointer py-3 text-sm">簽收單與其他操作</summary>

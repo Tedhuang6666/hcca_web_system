@@ -3,13 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import { apiErrorMessage, shopApi } from "@/lib/api";
 import { money } from "@/lib/shop-class-orders";
+import { orderScopeKey } from "@/lib/shop-order-scope";
 import type { OrderListItem, SchoolClassListItem } from "@/lib/types";
 
-export default function SupplementOrders({ canCollect = false, canRejoin = false, refreshKey = 0, classes = [], onCollected, onRejoined }: {
+export default function SupplementOrders({ canCollect = false, canRejoin = false, refreshKey = 0, classes = [], activityKey, onCollected, onRejoined }: {
   canCollect?: boolean;
   canRejoin?: boolean;
   refreshKey?: number;
   classes?: SchoolClassListItem[];
+  activityKey?: string;
   onCollected?: () => void;
   onRejoined?: () => void;
 }) {
@@ -108,8 +110,9 @@ export default function SupplementOrders({ canCollect = false, canRejoin = false
     }
   }
 
-  const pending = orders.filter((order) => !order.is_paid);
-  const visible = showPaid ? orders : pending;
+  const scopedOrders = activityKey ? orders.filter((order) => orderScopeKey(order) === activityKey) : orders;
+  const pending = scopedOrders.filter((order) => !order.is_paid);
+  const visible = showPaid ? scopedOrders : pending;
   return <section className="rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--card-bg)" }} aria-labelledby="supplement-orders-title">
     <h2 id="supplement-orders-title" className="font-semibold">追加訂單補收款</h2>
     <p className="mt-2 text-sm" style={{ color: "var(--text-secondary)" }}>追加款由該筆訂購同學自行繳款，班代不代墊，暫不列入班級金額。收據可隨時下載，下載不會登記繳費；班聯登記繳費後，訂單自動歸回原班級。結單不影響既有訂單收款。</p>

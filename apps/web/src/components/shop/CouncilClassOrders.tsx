@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiErrorMessage, shopApi } from "@/lib/api";
 import { money } from "@/lib/shop-class-orders";
+import { catalogScopeKey, orderScopeKey, orderScopeParams } from "@/lib/shop-order-scope";
 import type { CatalogCategoryOut, ClassMemberOut, OrderListItem, SchoolClassListItem } from "@/lib/types";
 import Modal from "@/components/ui/Modal";
 import AdminAssistedOrder from "./AdminAssistedOrder";
@@ -46,7 +47,7 @@ function itemSummary(orders: OrderListItem[]) {
 export default function CouncilClassOrders({ target, catalog, classes, canOrder, optionsLoading, optionsError,
   onRetryOptions, onCreated, onClose,
 }: {
-  target: { id: string; label: string };
+  target: { id: string; label: string; scope?: { key: string; label: string } };
   catalog: CatalogCategoryOut[];
   classes: SchoolClassListItem[];
   canOrder: boolean;
@@ -68,19 +69,21 @@ export default function CouncilClassOrders({ target, catalog, classes, canOrder,
     setData(null);
     setError("");
     Promise.all([
-      allPages((offset) => shopApi.listOrders({ my_only: "false", class_id: target.id, limit: "500", offset: String(offset) })),
+      allPages((offset) => shopApi.listOrders({ my_only: "false", class_id: target.id,
+        ...(target.scope ? orderScopeParams(target.scope.key) : {}), limit: "500", offset: String(offset) })),
       canOrder ? shopApi.listOrderRecipients(target.id) : Promise.resolve([]),
       canOrder ? allPages((offset) => shopApi.listSupplementOrders(offset)) : Promise.resolve([]),
     ]).then(([orders, members, supplements]) => {
       if (!active) return;
       const unique = new Map(orders.map((order) => [order.id, order]));
       for (const order of supplements) if (order.supplement_class_id === target.id) unique.set(order.id, order);
-      setData({ orders: [...unique.values()].filter((order) => !["cancelled", "refunded"].includes(order.status)), members });
+      setData({ orders: [...unique.values()].filter((order) => !["cancelled", "refunded"].includes(order.status)
+        && (!target.scope || orderScopeKey(order) === target.scope.key)), members });
     }).catch((cause) => {
       if (active) setError(apiErrorMessage(cause, "無法載入班級訂購明細，請重試。"));
     });
     return () => { active = false; };
-  }, [target.id, canOrder, retry]);
+  }, [target.id, target.scope, canOrder, retry]);
 
   const rows = useMemo(() => {
     if (!data) return [];
@@ -105,7 +108,7 @@ export default function CouncilClassOrders({ target, catalog, classes, canOrder,
 
   return <Modal title={`${target.label} · 訂購明細`} size="3xl" onClose={() => { if (!saving) onClose(); }}>
     <p className="mb-4 text-sm" style={{ color: "var(--text-secondary)" }}>
-      顯示此班全部活動的有效訂購，取消與退款不計入。{canOrder
+      {target.scope ? `目前活動：${target.scope.label}。` : "顯示此班全部活動的有效訂購，"}取消與退款不計入。{canOrder
         ? "包含尚未訂購的名冊同學；獨立補收另外標示。"
         : "唯讀權限僅顯示已有班級訂單的同學。"}
     </p>
@@ -114,7 +117,7 @@ export default function CouncilClassOrders({ target, catalog, classes, canOrder,
         返回明細（未送出的加購清單將清除）
       </button>
       <h3 className="mb-3 font-semibold">替 {recipient.display_name} 快捷加購</h3>
-      <AdminAssistedOrder key={recipient.id} catalog={catalog} classes={classes}
+      <AdminAssistedOrder key={recipient.id} catalog={target.scope ? catalog.filter((category) => catalogScopeKey(category) === target.scope!.key) : catalog} classes={classes}
         initialClassId={target.id} initialStudentId={recipient.id} defaultOpen
         optionsError={optionsError} optionsLoading={optionsLoading} onRetry={onRetryOptions} onBusyChange={setSaving}
         onCreated={() => { setRetry((value) => value + 1); onCreated(); }} />
