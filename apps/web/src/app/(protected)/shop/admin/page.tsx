@@ -10,6 +10,7 @@ import { uploadUrl } from "@/lib/config";
 import { usePermissions } from "@/hooks/usePermissions";
 import Modal from "@/components/ui/Modal";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
+import ProductPurchaseRulesEditor, { emptyPurchaseRules, type PurchaseRulesDraft } from "@/components/shop/ProductPurchaseRulesEditor";
 import type {
   ActivityOut,
   SchoolClassListItem,
@@ -349,6 +350,17 @@ function ProductFormModal({
     initial?.max_quantity_per_user == null ? "" : String(initial.max_quantity_per_user),
   );
   const [saleEnd, setSaleEnd] = useState(deadlineInputValue(initial?.sale_end ?? null));
+  const [purchaseRules, setPurchaseRules] = useState<PurchaseRulesDraft>(emptyPurchaseRules);
+  const [rulesState, setRulesState] = useState<"loading" | "ready" | "error">(editing ? "loading" : "ready");
+  const [rulesAttempt, setRulesAttempt] = useState(0);
+  useEffect(() => {
+    if (!initial?.id) return;
+    let active = true;
+    shopApi.getProductPurchaseRules(initial.id).then((rules) => {
+      if (active) { setPurchaseRules({ ...emptyPurchaseRules, ...rules }); setRulesState("ready"); }
+    }).catch(() => { if (active) setRulesState("error"); });
+    return () => { active = false; };
+  }, [initial?.id, rulesAttempt]);
   const [requiresSeating, setRequiresSeating] = useState(initial?.requires_seating ?? false);
   const [seatingMode, setSeatingMode] = useState<string>(initial?.seating_mode ?? "at_purchase");
   const [busy, setBusy] = useState(false);
@@ -409,6 +421,7 @@ function ProductFormModal({
   };
 
   const saveProduct = async (publish: boolean) => {
+    if (rulesState !== "ready") return;
     setFormError(null);
     if (!name.trim()) { showFieldError("name", "請填寫商品名稱。"); return; }
     const priceValue = Number(price);
@@ -451,6 +464,7 @@ function ProductFormModal({
         stock_quantity: Number.isInteger(stockValue) && stockValue >= 0 ? stockValue : 0,
         is_unlimited: unlimited,
         max_quantity_per_user: maxQuantity,
+        purchase_rules: purchaseRules,
         sale_end: deadlineFromInput(saleEnd),
         requires_seating: requiresSeating,
         seating_mode: requiresSeating ? seatingMode : null,
@@ -492,10 +506,10 @@ function ProductFormModal({
               </>
             ) : (
               <>
-                <button type="button" disabled={busy || mediaUploadsInProgress > 0} onClick={() => void saveProduct(false)} className={`btn min-h-11 ${editing ? "btn-primary" : "btn-secondary"}`}>
+                <button type="button" disabled={busy || mediaUploadsInProgress > 0 || rulesState !== "ready"} onClick={() => void saveProduct(false)} className={`btn min-h-11 ${editing ? "btn-primary" : "btn-secondary"}`}>
                   {busy ? "儲存中…" : editing ? "儲存商品" : "儲存草稿"}
                 </button>
-                {!editing && <button type="button" disabled={busy || mediaUploadsInProgress > 0} onClick={() => void saveProduct(true)} className="btn btn-primary min-h-11">
+                {!editing && <button type="button" disabled={busy || mediaUploadsInProgress > 0 || rulesState !== "ready"} onClick={() => void saveProduct(true)} className="btn btn-primary min-h-11">
                   {mediaUploadsInProgress > 0 ? "照片上傳中…" : busy ? "儲存與上架中…" : "建立並上架"}
                 </button>}
               </>
@@ -666,6 +680,16 @@ function ProductFormModal({
             {fieldError("variants")}
           </div>
         )}
+        {rulesState === "ready" ? <ProductPurchaseRulesEditor value={purchaseRules} onChange={setPurchaseRules}
+          categoryId={selectedCategoryId} productId={initial?.id ?? null}
+          activityId={categories.find((category) => category.id === selectedCategoryId)?.activity_id ?? null} disabled={busy} />
+          : rulesState === "loading" ? <p role="status" className="text-sm">正在讀取購買資格…</p>
+            : <p role="alert" className="text-sm" style={{ color: "var(--danger)" }}>
+              購買資格讀取失敗，為保留原有名單，請重新讀取後再儲存。
+              <button type="button" className="btn btn-secondary min-h-11" onClick={() => {
+                setRulesState("loading"); setRulesAttempt((current) => current + 1);
+              }}>重新讀取購買資格</button>
+            </p>}
         <details open={extraOpen} onToggle={(event) => setExtraOpen(event.currentTarget.open)} className="border-t" style={{ borderColor: "var(--border)" }}>
           <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">更多設定（描述、限購、截止時間、劃位）</summary>
           <div className="space-y-4 pt-2">

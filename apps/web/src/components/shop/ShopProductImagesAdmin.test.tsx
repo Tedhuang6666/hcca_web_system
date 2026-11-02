@@ -5,6 +5,7 @@ import ShopAdminPage from "@/app/(protected)/shop/admin/page";
 const api = vi.hoisted(() => ({
   listCategories: vi.fn(), listProducts: vi.fn(), listSeries: vi.fn(), createProduct: vi.fn(),
   updateProduct: vi.fn(), getProduct: vi.fn(), uploadImage: vi.fn(), updateVariantOption: vi.fn(),
+  getProductPurchaseRules: vi.fn(), purchasePermissions: vi.fn(), purchaseGroupOptions: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams() }));
 vi.mock("@/lib/api", () => ({ shopApi: api, apiErrorMessage: (_: unknown, fallback: string) => fallback }));
@@ -16,6 +17,9 @@ beforeEach(() => {
   api.listCategories.mockResolvedValue([{ id: "cat", name: "舞會" }]);
   api.listSeries.mockResolvedValue([]);
   api.listProducts.mockResolvedValue([]);
+  api.getProductPurchaseRules.mockResolvedValue({ allowed_grades: [], required_permissions: [], allowed_identifiers: [], blocked_identifiers: [], exclusive_group: null, designated_only: false });
+  api.purchasePermissions.mockResolvedValue([]);
+  api.purchaseGroupOptions.mockResolvedValue([]);
 });
 
 afterEach(() => vi.restoreAllMocks());
@@ -61,6 +65,7 @@ it("舊主圖可補標註，修改商品不會丟失主圖標註", async () => {
   fireEvent.click(await screen.findByRole("button", { name: /舞會/ }));
   fireEvent.click((await screen.findAllByRole("button", { name: "編輯" }))[0]);
   fireEvent.change(screen.getByLabelText("第 1 張照片標註（選填）"), { target: { value: "正面" } });
+  await screen.findByText("購買資格");
   fireEvent.click(screen.getByRole("button", { name: "儲存商品" }));
   await waitFor(() => expect(api.updateProduct).toHaveBeenCalledWith("old", expect.objectContaining({
     image_url: "/front.png", media: [{ image_url: "/front.png", label: "正面", kind: "product", sort_order: 0 }],

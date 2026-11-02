@@ -465,7 +465,7 @@ function ProductModal({
         0,
         Math.min(
           100,
-          product.is_unlimited ? 100 : product.stock_quantity + registeredQuantity,
+          product.purchase_allowed === false ? registeredQuantity : product.is_unlimited ? 100 : product.stock_quantity + registeredQuantity,
           remainingForUser == null ? 100 : remainingForUser + registeredQuantity,
         ),
       )
@@ -761,6 +761,9 @@ function ProductModal({
                   </div>
                 ))}
 
+                {product.purchase_allowed === false && isLoggedIn && <p className="shop-product-purchase-hint" role="status">
+                  {product.purchase_restriction ?? "您目前不符合此商品的購買資格"}
+                </p>}
                 {!testing && orderClosed ? (
                   <p className="shop-product-purchase-hint" role="status">
                     {registrationLockMessage({ registrationLocked, classClosed: classPaid, councilClosed, deadlinePassed })}
@@ -827,6 +830,8 @@ function ProductModal({
                           ? "班聯已確認本班收款"
                           : "登記已截止"}
                     </button>
+                  ) : product.purchase_allowed === false && isLoggedIn && selectedRegistrationQuantity === 0 ? (
+                    <button type="button" className="shop-product-submit" disabled>不符合購買資格</button>
                   ) : bundleStep && isLoggedIn ? (
                     <button type="button" className="shop-product-submit"
                       disabled={loading || !canRegister || !allPicked || qty > maxSelectedQuantity}
@@ -935,7 +940,9 @@ function ProductCard({
   const deadlinePassed = !testing && Boolean(deadline && new Date(deadline).getTime() <= Date.now());
   const locked = (!testing && (classClosed || councilClosed)) || deadlinePassed;
   const disabled = (soldOut || locked) && registeredQuantity === 0;
-  const statusLabel = testing
+  const statusLabel = product.purchase_allowed === false
+    ? product.purchase_restriction ?? "購買資格受限"
+    : testing
     ? "測試中・正式開放時清除試訂紀錄"
     : councilClosed
       ? "班聯已結單"
@@ -1043,7 +1050,7 @@ function ProductCard({
       </button>
     )}
     <ProductCardOffers product={product} promotions={promotions} products={products}
-      disabled={disabled || offersLocked} onSelectBundle={onSelectBundle} />
+      disabled={disabled || offersLocked || product.purchase_allowed === false} onSelectBundle={onSelectBundle} />
   </article>;
 }
 

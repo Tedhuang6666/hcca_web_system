@@ -11106,6 +11106,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop/products/{product_id}/purchase-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 讀取商品購買資格與名單（限商品管理者） */
+        get: operations["get_product_purchase_rules_shop_products__product_id__purchase_rules_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shop/products/{product_id}/test": {
         parameters: {
             query?: never;
@@ -11191,6 +11208,40 @@ export interface paths {
         head?: never;
         /** 更新校商優惠 */
         patch: operations["update_promotion_shop_promotions__promotion_id__patch"];
+        trace?: never;
+    };
+    "/shop/purchase-group-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 同組限購可選商品（含主題下所有系列） */
+        get: operations["list_purchase_group_options_shop_purchase_group_options_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shop/purchase-permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 商品購買資格可選權限（限商品管理者） */
+        get: operations["list_purchase_permissions_shop_purchase_permissions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/shop/registrations": {
@@ -14718,6 +14769,13 @@ export interface components {
             name: string;
             /** Price */
             price: number;
+            /**
+             * Purchase Allowed
+             * @default true
+             */
+            purchase_allowed: boolean;
+            /** Purchase Restriction */
+            purchase_restriction?: string | null;
             /**
              * Requires Seating
              * @default false
@@ -25380,6 +25438,7 @@ export interface components {
              * @description 售價（新台幣）
              */
             price: number;
+            purchase_rules?: components["schemas"]["ProductPurchaseRules"];
             /**
              * Requires Seating
              * @description 是否為需劃位票種
@@ -25496,6 +25555,13 @@ export interface components {
             name: string;
             /** Price */
             price: number;
+            /**
+             * Purchase Allowed
+             * @default true
+             */
+            purchase_allowed: boolean;
+            /** Purchase Restriction */
+            purchase_restriction?: string | null;
             /** Remaining Quantity For User */
             remaining_quantity_for_user?: number | null;
             /**
@@ -25526,6 +25592,55 @@ export interface components {
             variant_groups: components["schemas"]["ProductVariantGroupOut"][];
             /** Version */
             version: number;
+        };
+        /** ProductPurchaseGroupOptionOut */
+        ProductPurchaseGroupOptionOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /** ProductPurchasePermissionOut */
+        ProductPurchasePermissionOut: {
+            /** Code */
+            code: string;
+            /** Group */
+            group: string;
+            /** Label */
+            label: string;
+        };
+        /**
+         * ProductPurchaseRules
+         * @description 各條件需同時符合；同一條件內任一符合，禁止名單優先。
+         */
+        ProductPurchaseRules: {
+            /** Allowed Grades */
+            allowed_grades?: (1 | 2 | 3)[];
+            /** Allowed Identifiers */
+            allowed_identifiers?: string[];
+            /** Blocked Identifiers */
+            blocked_identifiers?: string[];
+            /**
+             * Designated Only
+             * @description 僅指定名單可購買，並鎖定同組其他票種
+             * @default false
+             */
+            designated_only: boolean;
+            /**
+             * Exclusive Group
+             * @description 所有同名群組商品，每人合計限購一件
+             */
+            exclusive_group?: string | null;
+            /**
+             * Exclusive Product Ids
+             * @description 同主題內合計限購一件的商品；包含本商品
+             */
+            exclusive_product_ids?: string[];
+            /** Required Permissions */
+            required_permissions?: string[];
         };
         /** ProductSeriesCreate */
         ProductSeriesCreate: {
@@ -25624,6 +25739,8 @@ export interface components {
             name?: string | null;
             /** Price */
             price?: number | null;
+            /** @description 完整替換購買資格；未提供則保留，null 清除限制 */
+            purchase_rules?: components["schemas"]["ProductPurchaseRules"] | null;
             /** Requires Seating */
             requires_seating?: boolean | null;
             /** Sale End */
@@ -57207,6 +57324,37 @@ export interface operations {
             };
         };
     };
+    get_product_purchase_rules_shop_products__product_id__purchase_rules_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductPurchaseRules"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     test_product_shop_products__product_id__test_post: {
         parameters: {
             query?: never;
@@ -57429,6 +57577,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ShopPromotionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_purchase_group_options_shop_purchase_group_options_get: {
+        parameters: {
+            query: {
+                category_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductPurchaseGroupOptionOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_purchase_permissions_shop_purchase_permissions_get: {
+        parameters: {
+            query?: {
+                activity_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductPurchasePermissionOut"][];
                 };
             };
             /** @description Validation Error */

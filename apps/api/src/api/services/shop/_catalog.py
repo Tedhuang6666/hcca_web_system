@@ -27,6 +27,7 @@ from api.models.shop import (
     ShopPromotion,
     effective_product_deadline,
 )
+from api.models.user import User
 from api.schemas.shop import (
     CatalogCategoryOut,
     CatalogProductOut,
@@ -43,6 +44,7 @@ from api.schemas.shop import (
     ProductVariantOptionUpdate,
 )
 from api.services._base import apply_updates
+from api.services.shop._purchase_rules import purchase_restrictions
 
 logger = logging.getLogger(__name__)
 
@@ -226,6 +228,7 @@ async def list_products(
             Product.stock_quantity,
             Product.is_unlimited,
             Product.max_quantity_per_user,
+            Product.purchase_rules,
             Product.status,
             Product.version,
             Product.category_id,
@@ -290,6 +293,7 @@ async def create_product(
         stock_quantity=data.stock_quantity,
         is_unlimited=data.is_unlimited,
         max_quantity_per_user=data.max_quantity_per_user,
+        purchase_rules=data.purchase_rules.model_dump(exclude={"exclusive_product_ids"}),
         category_id=category.id,
         series_id=series.id if series else None,
         created_by=created_by,
@@ -310,6 +314,9 @@ async def create_product(
     )
     session.add(product)
     await session.flush()
+
+    if data.purchase_rules.exclusive_product_ids:
+        await sync_purchase_group(session, product, data.purchase_rules.exclusive_product_ids)
 
     for gi, group_data in enumerate(data.variant_groups):
         group = ProductVariantGroup(
@@ -345,6 +352,12 @@ async def update_product(
     ):
         raise ValueError(f"商品狀態 {product.status} 不允許編輯")
     payload = data.model_dump(exclude_unset=True)
+    if "purchase_rules" in payload:
+        payload["purchase_rules"] = (
+            data.purchase_rules.model_dump(exclude={"exclusive_product_ids"})
+            if data.purchase_rules is not None
+            else {}
+        )
     if "series_id" in payload or "category_id" in payload:
         target_series_id = payload.get("series_id", product.series_id)
         target_series = await get_series(session, target_series_id) if target_series_id else None
@@ -366,8 +379,33 @@ async def update_product(
         setattr(product, field, value)
     if media_data is not None:
         product.media = [ProductMedia(**item) for item in media_data]
+    if data.purchase_rules and "exclusive_product_ids" in data.purchase_rules.model_fields_set:
+        await sync_purchase_group(session, product, data.purchase_rules.exclusive_product_ids)
     await session.flush()
     return await get_product(session, product.id) or product
+
+
+async def sync_purchase_group(
+    session: AsyncSession, product: Product, product_ids: list[uuid.UUID]
+) -> None:
+    if not product_ids:
+        if (product.purchase_rules or {}).get("designated_only"):
+            raise ValueError("指定票種請勾選要一起限購的商品")
+        product.purchase_rules = {**(product.purchase_rules or {}), "exclusive_group": None}
+        return
+    ids = set(product_ids) | {product.id}
+    members = list(
+        await session.scalars(
+            select(Product).where(Product.id.in_(ids)).order_by(Product.id).with_for_update()
+        )
+    )
+    if len(members) != len(ids):
+        raise ValueError("部分限購商品已不存在，請重新讀取商品清單")
+    if any(member.category_id != product.category_id for member in members):
+        raise ValueError("同組限購只能選擇同一商品主題內的商品")
+    group_id = str(uuid.uuid4())
+    for member in members:
+        member.purchase_rules = {**(member.purchase_rules or {}), "exclusive_group": group_id}
 
 
 async def activate_product(session: AsyncSession, product: Product) -> Product:
@@ -516,6 +554,7 @@ async def build_catalog_tree(
     activity_id: uuid.UUID | None = None,
     include_testing: bool = False,
     include_closed: bool = False,
+    buyer: User | None = None,
 ) -> list[CatalogCategoryOut]:
     q = (
         select(ProductCategory)
@@ -536,6 +575,11 @@ async def build_catalog_tree(
     if activity_id:
         q = q.where(ProductCategory.activity_id == activity_id)
     categories = (await session.execute(q)).scalars().unique().all()
+    restrictions = await purchase_restrictions(
+        session,
+        [product for category in categories for product in category.products],
+        buyer,
+    )
 
     category_close_times: dict[uuid.UUID, datetime] = {}
     if categories:
@@ -576,6 +620,8 @@ async def build_catalog_tree(
                 status=product.status,
                 stock_quantity=product.stock_quantity,
                 is_unlimited=product.is_unlimited,
+                purchase_allowed=restrictions[product.id] is None,
+                purchase_restriction=restrictions[product.id],
                 sale_start=product.sale_start,
                 sale_end=product.sale_end,
                 effective_sale_end=effective_product_deadline(
@@ -602,6 +648,8 @@ async def build_catalog_tree(
                     status=p.status,
                     stock_quantity=p.stock_quantity,
                     is_unlimited=p.is_unlimited,
+                    purchase_allowed=restrictions[p.id] is None,
+                    purchase_restriction=restrictions[p.id],
                     sale_start=p.sale_start,
                     sale_end=p.sale_end,
                     effective_sale_end=effective_product_deadline(

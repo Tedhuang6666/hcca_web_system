@@ -8,6 +8,7 @@ from typing import Literal, Self
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from api.core.permission_codes import validate_permission_codes
 from api.models.shop import OrderStatus, ProductStatus, ShopDiscountType
 
 # ── 變體 ─────────────────────────────────────────────────────────────────────
@@ -157,6 +158,73 @@ class ProductMediaOut(BaseModel):
     sort_order: int
 
 
+class ProductPurchaseRules(BaseModel):
+    """各條件需同時符合；同一條件內任一符合，禁止名單優先。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    allowed_grades: list[Literal[1, 2, 3]] = Field(default_factory=list, max_length=3)
+    required_permissions: list[str] = Field(default_factory=list, max_length=100)
+    allowed_identifiers: list[str] = Field(default_factory=list, max_length=2000)
+    blocked_identifiers: list[str] = Field(default_factory=list, max_length=2000)
+    exclusive_group: str | None = Field(
+        None, max_length=100, description="所有同名群組商品，每人合計限購一件"
+    )
+    exclusive_product_ids: list[uuid.UUID] = Field(
+        default_factory=list, max_length=100, description="同主題內合計限購一件的商品；包含本商品"
+    )
+    designated_only: bool = Field(False, description="僅指定名單可購買，並鎖定同組其他票種")
+
+    @field_validator("exclusive_group")
+    @classmethod
+    def normalize_group(cls, value: str | None) -> str | None:
+        return (value.strip() or None) if value else None
+
+    @model_validator(mode="after")
+    def require_designated_group(self) -> Self:
+        if self.designated_only and not self.exclusive_group and not self.exclusive_product_ids:
+            raise ValueError("指定票種必須設定限購群組，才能鎖定同組其他票種")
+        return self
+
+    @field_validator("required_permissions")
+    @classmethod
+    def validate_permissions(cls, values: list[str]) -> list[str]:
+        values = list(dict.fromkeys(value.strip() for value in values))
+        if validate_permission_codes(values):
+            raise ValueError("請選擇有效的系統權限")
+        return values
+
+    @field_validator("allowed_identifiers", "blocked_identifiers")
+    @classmethod
+    def normalize_identifiers(cls, values: list[str]) -> list[str]:
+        normalized = []
+        for value in values:
+            value = value.strip().lower()
+            if not value:
+                continue
+            if any(char.isspace() for char in value):
+                raise ValueError("名單請填寫學號或 Email，不可包含空白")
+            if "@" in value:
+                local, _, domain = value.partition("@")
+                if not local or not domain or "@" in domain or len(value) > 255:
+                    raise ValueError("名單的 Email 格式不正確")
+            elif not value.isascii() or not value.isdigit() or len(value) > 20:
+                raise ValueError("名單請填寫數字學號或 Email")
+            normalized.append(value)
+        return list(dict.fromkeys(normalized))
+
+
+class ProductPurchasePermissionOut(BaseModel):
+    code: str
+    label: str
+    group: str
+
+
+class ProductPurchaseGroupOptionOut(BaseModel):
+    id: uuid.UUID
+    name: str
+
+
 class ProductCreate(BaseModel):
     category_id: uuid.UUID | None = Field(None, description="所屬主題 ID；單一商品可不選系列")
     series_id: uuid.UUID | None = Field(None, description="所屬系列 ID；可留空直接放在主題下")
@@ -166,6 +234,7 @@ class ProductCreate(BaseModel):
     price: int = Field(..., ge=0, description="售價（新台幣）")
     stock_quantity: int = Field(0, ge=0, description="庫存（is_unlimited=True 時忽略）")
     is_unlimited: bool = False
+    purchase_rules: ProductPurchaseRules = Field(default_factory=ProductPurchaseRules)
     max_quantity_per_user: int | None = Field(
         None, ge=1, description="每位使用者累計購買上限；留空表示不限購"
     )
@@ -188,6 +257,9 @@ class ProductUpdate(BaseModel):
     price: int | None = Field(None, ge=0)
     stock_quantity: int | None = Field(None, ge=0)
     is_unlimited: bool | None = None
+    purchase_rules: ProductPurchaseRules | None = Field(
+        None, description="完整替換購買資格；未提供則保留，null 清除限制"
+    )
     max_quantity_per_user: int | None = Field(
         None, ge=1, description="每位使用者累計購買上限；設為 null 表示不限購"
     )
@@ -210,6 +282,8 @@ class ProductOut(BaseModel):
     is_unlimited: bool
     max_quantity_per_user: int | None = None
     remaining_quantity_for_user: int | None = None
+    purchase_allowed: bool = True
+    purchase_restriction: str | None = None
     status: ProductStatus
     version: int
     category_id: uuid.UUID | None = None
@@ -237,6 +311,8 @@ class CatalogProductOut(BaseModel):
     status: ProductStatus
     stock_quantity: int
     is_unlimited: bool
+    purchase_allowed: bool = True
+    purchase_restriction: str | None = None
     sale_start: datetime | None = None
     sale_end: datetime | None = None
     effective_sale_end: datetime | None = None

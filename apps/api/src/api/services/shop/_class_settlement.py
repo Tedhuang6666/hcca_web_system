@@ -41,6 +41,7 @@ from api.services.shop._orders import (
     _sync_order_promotions,
     set_order_paid,
 )
+from api.services.shop._purchase_rules import assert_product_purchase_allowed
 
 
 async def _settle_registration_orders(session: AsyncSession, orders: Iterable[Order]) -> None:
@@ -134,6 +135,7 @@ async def set_class_member_product(
     requested_total = sum(quantity for quantity, _ in requested.values())
     quantity_delta = requested_total - existing_quantity
     if quantity_delta > 0:
+        await assert_product_purchase_allowed(session, product, user)
         await _assert_purchase_limit(session, product, user.id, quantity_delta)
     if not product.is_unlimited:
         if quantity_delta > product.stock_quantity:

@@ -249,7 +249,7 @@ async def context(
     session: AsyncSession, actor: User, token: str, *, claim: bool = False
 ) -> ShopDelegationContextOut:
     link, user = await resolve_link(session, actor, token, claim=claim)
-    catalog = await _catalog.build_catalog_tree(session, activity_id=link.activity_id)
+    catalog = await _catalog.build_catalog_tree(session, activity_id=link.activity_id, buyer=user)
     catalog = [row for row in catalog if link.activity_id or row.id == link.category_id]
     school_class = await class_svc.resolve_user_class(session, user)
     closes = await _orders.get_close_status(
@@ -380,8 +380,15 @@ async def delegated_product(
         raise DelegationError("找不到此商品", 404)
     assert_product_scope(link, product)
     remaining = await _orders.remaining_product_quantity(session, product, user.id)
+    from api.services.shop._purchase_rules import product_purchase_restriction
+
+    restriction = await product_purchase_restriction(session, product, user)
     return ProductOut.model_validate(product).model_copy(
-        update={"remaining_quantity_for_user": remaining}
+        update={
+            "remaining_quantity_for_user": remaining,
+            "purchase_allowed": restriction is None,
+            "purchase_restriction": restriction,
+        }
     )
 
 

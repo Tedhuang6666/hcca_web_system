@@ -56,6 +56,10 @@ from api.services.shop._class_payment_scope import (
 )
 from api.services.shop._payment_notifications import queue_individual_payment_notice
 from api.services.shop._promotions import PromotionAllocation, resolve_promotions
+from api.services.shop._purchase_rules import (
+    assert_group_purchase_limit,
+    assert_product_purchase_allowed,
+)
 from api.services.student_identity import has_student_identity
 
 logger = logging.getLogger(__name__)
@@ -262,7 +266,16 @@ async def _assert_purchase_limit(
     requested_quantity: int,
     *,
     excluding_order_id: uuid.UUID | None = None,
+    check_group: bool = True,
 ) -> None:
+    if check_group:
+        await assert_group_purchase_limit(
+            session,
+            user_id,
+            {product.id: requested_quantity},
+            excluding_order_id=excluding_order_id,
+            excluding_product_id=product.id,
+        )
     limit = product.max_quantity_per_user
     if limit is None:
         return
@@ -322,6 +335,14 @@ async def add_cart_item(session: AsyncSession, user_id: uuid.UUID, *, data: Cart
         raise ValueError("找不到此商品")
     if product.status != ProductStatus.ACTIVE:
         raise ValueError(f"商品「{product.name}」不在上架狀態")
+    buyer = await session.get(User, user_id)
+    if buyer is None:
+        raise ValueError("找不到訂購人")
+    await assert_product_purchase_allowed(session, product, buyer)
+    cart_quantities: dict[uuid.UUID, int] = {product.id: data.quantity}
+    for item in cart.items:
+        cart_quantities[item.product_id] = cart_quantities.get(item.product_id, 0) + item.quantity
+    await assert_group_purchase_limit(session, user_id, cart_quantities)
 
     cart_quantity = sum(item.quantity for item in cart.items if item.product_id == product.id)
     await _assert_purchase_limit(session, product, user_id, cart_quantity + data.quantity)
@@ -351,6 +372,18 @@ async def update_cart_item(
     if target is None:
         raise ValueError("找不到購物車品項")
     product = target.product
+    if quantity > target.quantity:
+        cart_quantities: dict[uuid.UUID, int] = {}
+        for item in cart.items:
+            cart_quantities[item.product_id] = cart_quantities.get(item.product_id, 0) + (
+                quantity if item.id == target.id else item.quantity
+            )
+        await assert_group_purchase_limit(session, user_id, cart_quantities)
+    if quantity > target.quantity:
+        buyer = await session.get(User, user_id)
+        if buyer is None:
+            raise ValueError("找不到訂購人")
+        await assert_product_purchase_allowed(session, product, buyer)
     cart_quantity = sum(item.quantity for item in cart.items if item.product_id == product.id)
     await _assert_purchase_limit(
         session, product, user_id, cart_quantity - target.quantity + quantity
@@ -581,12 +614,21 @@ async def _create_order_from_items(
                 user_id,
                 quantity,
                 excluding_order_id=order.id if replacing else None,
+                check_group=False,
             )
+
+    await assert_group_purchase_limit(
+        session,
+        user_id,
+        requested_quantities,
+        excluding_order_id=order.id if replacing and order else None,
+    )
 
     for cart_item in cart_items:
         product = await get_product(session, cart_item.product_id)
         if product is None:
             raise ValueError("購物車含已不存在的商品")
+        await assert_product_purchase_allowed(session, product, buyer)
         product_scope = _product_order_scope(product)
         if product_scope != order_scope:
             raise ValueError("同一筆訂單只能包含同一活動的商品")
@@ -1318,6 +1360,10 @@ async def update_order_item_quantity(
 
     delta = quantity - item.quantity
     if delta > 0:
+        buyer = await session.get(User, order.user_id)
+        if buyer is None:
+            raise ValueError("找不到訂購人")
+        await assert_product_purchase_allowed(session, product, buyer)
         if product.status not in (ProductStatus.ACTIVE, ProductStatus.SOLD_OUT):
             raise ValueError(f"商品「{product.name}」目前無法增加數量")
         if not product.is_unlimited and product.stock_quantity < delta:

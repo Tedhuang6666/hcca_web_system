@@ -9,6 +9,8 @@ import type {
   ActivityOut, CatalogCategoryOut, ClassPaymentOut, ClassPaymentReportItemOut, CloseStatusOut, OrderListItem, OrderOut, OrderQuantityRow, OrderSummaryOut, ProductCategoryOut, ProductOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut, ShopClassRepresentativeRecipientOut, ShopClassSummaryOut, ShopOrderCloseOut, ShopOrdersClearOut, ShopPromotionCreate, ShopPromotionOut, ShopPromotionPreviewOut, ShopPromotionPublicOut, ShopPromotionUpdate,
 } from "../types";
 import { authFetch, BASE, get, post, put, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
+import type { ProductPurchaseRules, ProductPurchasePermissionOut } from "../types";
+import type { ProductPurchaseGroupOptionOut } from "../types";
 
 type ReceiptScope = Pick<ClassReceiptBatchCreate, "activity_id" | "category_id">;
 
@@ -61,6 +63,10 @@ export const shopApi = {
     return get<ProductOut[]>(`/shop/products${qs}`);
   },
   getProduct: (id: string) => get<ProductOut>(`/shop/products/${id}`),
+  getProductPurchaseRules: (id: string) => get<ProductPurchaseRules>(`/shop/products/${id}/purchase-rules`),
+  purchaseGroupOptions: (categoryId: string) => get<ProductPurchaseGroupOptionOut[]>(`/shop/purchase-group-options?category_id=${encodeURIComponent(categoryId)}`),
+  purchasePermissions: (activityId?: string | null) =>
+    get<ProductPurchasePermissionOut[]>(`/shop/purchase-permissions${activityId ? `?activity_id=${encodeURIComponent(activityId)}` : ""}`),
 
   // 商品登記
   getCurrentRegistration: () => get<OrderOut | null>("/shop/registrations/current"),

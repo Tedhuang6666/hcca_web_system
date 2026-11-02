@@ -7,6 +7,7 @@ const api = vi.hoisted(() => ({
   list: vi.fn(), recipientOptions: vi.fn(), orderSummary: vi.fn(),
   listSeries: vi.fn(), createProduct: vi.fn(), getProduct: vi.fn(),
   testProduct: vi.fn(), activateProduct: vi.fn(), updateProduct: vi.fn(), uploadImage: vi.fn(),
+  getProductPurchaseRules: vi.fn(), purchasePermissions: vi.fn(), purchaseGroupOptions: vi.fn(),
 }));
 const navigation = vi.hoisted(() => ({ search: "" }));
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(navigation.search) }));
@@ -27,6 +28,9 @@ beforeEach(() => {
   api.listActivities.mockResolvedValue([{ id: "festival", name: "校慶" }, { id: "winter", name: "冬季活動" }]);
   api.orderSummary.mockResolvedValue(summary("初始班級"));
   api.listSeries.mockResolvedValue([]);
+  api.getProductPurchaseRules.mockResolvedValue({ allowed_grades: [], required_permissions: [], allowed_identifiers: [], blocked_identifiers: [], exclusive_group: null, designated_only: false });
+  api.purchasePermissions.mockResolvedValue([]);
+  api.purchaseGroupOptions.mockResolvedValue([]);
 });
 
 async function openStats() {
@@ -282,6 +286,7 @@ describe("商品管理與統計", () => {
     render(<ShopAdminPage />);
     fireEvent.click(await screen.findByRole("button", { name: /校慶/ }));
     fireEvent.click((await screen.findAllByRole("button", { name: "編輯" }))[0]);
+    await screen.findByText("購買資格");
     const limit = screen.getByLabelText("每人限購數量（留空表示不限購）");
     expect(limit).toHaveValue(2);
     fireEvent.change(limit, { target: { value: "-1" } });
@@ -314,4 +319,30 @@ describe("商品管理與統計", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(api.activateProduct).not.toHaveBeenCalled();
   });
+});
+
+it("購買資格讀取失敗時不允許儲存，重試後保留名單再送出", async () => {
+  const product = { id: "rules-product", category_id: "rules-cat", name: "高三票", price: 100,
+    stock_quantity: 20, status: "active", variant_groups: [] };
+  api.listCategories.mockResolvedValue([{ id: "rules-cat", name: "購買資格測試" }]);
+  api.listProducts.mockResolvedValue([product]);
+  api.getProductPurchaseRules.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce({
+    allowed_grades: [3], blocked_identifiers: ["310002"], required_permissions: [], allowed_identifiers: [],
+    exclusive_group: "校慶", designated_only: false,
+  });
+  api.updateProduct.mockResolvedValue(product);
+  api.getProduct.mockResolvedValue(product);
+  render(<ShopAdminPage />);
+  fireEvent.click(await screen.findByRole("button", { name: /購買資格測試/ }));
+  fireEvent.click((await screen.findAllByRole("button", { name: "編輯" }))[0]);
+  expect(await screen.findByRole("alert")).toHaveTextContent("購買資格讀取失敗");
+  expect(screen.getByRole("button", { name: "儲存商品" })).toBeDisabled();
+  expect(api.updateProduct).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "重新讀取購買資格" }));
+  expect(await screen.findByLabelText("高三")).toBeChecked();
+  expect(screen.getByLabelText("禁止購買名單")).toHaveValue("310002");
+  fireEvent.click(screen.getByRole("button", { name: "儲存商品" }));
+  await waitFor(() => expect(api.updateProduct).toHaveBeenCalledWith("rules-product", expect.objectContaining({
+    purchase_rules: expect.objectContaining({ allowed_grades: [3], blocked_identifiers: ["310002"], exclusive_group: "校慶" }),
+  })));
 });

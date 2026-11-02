@@ -18,7 +18,7 @@ from sqlalchemy.orm.exc import StaleDataError
 
 from api.core.clock import local_today
 from api.core.database import get_db
-from api.core.permission_codes import PermissionCode
+from api.core.permission_codes import ALL_PERMISSION_CODES, PermissionCode
 from api.dependencies.auth import get_current_active_user, get_optional_user
 from api.dependencies.permissions import require_any, require_permission
 from api.models.school_class import SchoolClass
@@ -64,6 +64,9 @@ from api.schemas.shop import (
     ProductCategoryUpdate,
     ProductCreate,
     ProductOut,
+    ProductPurchaseGroupOptionOut,
+    ProductPurchasePermissionOut,
+    ProductPurchaseRules,
     ProductSeriesCreate,
     ProductSeriesOut,
     ProductSeriesUpdate,
@@ -113,6 +116,10 @@ from api.services.shop import _supplements as supplement_svc
 from api.services.shop._analytics import sales_analytics
 from api.services.shop._analytics_report import create_sales_report
 from api.services.shop._deadlines import set_activity_order_closure, set_activity_order_deadline
+from api.services.shop._purchase_rules import (
+    product_purchase_restriction,
+    purchase_restrictions,
+)
 from api.services.shop._testing import can_test_products, start_product_testing
 from api.services.storage import get_storage
 
@@ -505,6 +512,7 @@ async def get_catalog(
         activity_id=activity_id,
         include_testing=await can_test_products(session, current_user),
         include_closed=include_closed or bool(direct_path),
+        buyer=current_user,
     )
     return (
         shop_svc.filter_catalog_to_direct_product(catalog, direct_path) if direct_path else catalog
@@ -524,8 +532,8 @@ async def list_products(
     status_filter: ProductStatus | None = Query(None, alias="status"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
-) -> list[Product]:
-    return await shop_svc.list_products(
+) -> list[ProductOut]:
+    products = await shop_svc.list_products(
         session,
         activity_id=activity_id,
         category_id=category_id,
@@ -535,6 +543,16 @@ async def list_products(
         limit=limit,
         offset=offset,
     )
+    restrictions = await purchase_restrictions(session, products, current_user)
+    return [
+        ProductOut.model_validate(product).model_copy(
+            update={
+                "purchase_allowed": restrictions[product.id] is None,
+                "purchase_restriction": restrictions[product.id],
+            }
+        )
+        for product in products
+    ]
 
 
 @router.get("/products/{product_id}", response_model=ProductOut, summary="取得商品詳情")
@@ -546,7 +564,66 @@ async def get_product(
     remaining = await shop_svc.remaining_product_quantity(
         session, product, current_user.id if current_user else None
     )
-    return product_out.model_copy(update={"remaining_quantity_for_user": remaining})
+    restriction = await product_purchase_restriction(session, product, current_user)
+    return product_out.model_copy(
+        update={
+            "remaining_quantity_for_user": remaining,
+            "purchase_allowed": restriction is None,
+            "purchase_restriction": restriction,
+        }
+    )
+
+
+@router.get(
+    "/products/{product_id}/purchase-rules",
+    response_model=ProductPurchaseRules,
+    summary="讀取商品購買資格與名單（限商品管理者）",
+)
+async def get_product_purchase_rules(
+    product_id: uuid.UUID, session: DbDep, current_user: CurrentUser
+) -> ProductPurchaseRules:
+    product = await _get_product_or_404(product_id, session, current_user)
+    await _require_shop_manager(session, current_user, _product_activity(product))
+    rules = ProductPurchaseRules.model_validate(product.purchase_rules or {})
+    if rules.exclusive_group:
+        members = await session.scalars(
+            select(Product.id).where(
+                Product.purchase_rules["exclusive_group"].as_string() == rules.exclusive_group,
+                Product.category_id == product.category_id,
+            )
+        )
+        rules.exclusive_product_ids = list(members)
+    return rules
+
+
+@router.get(
+    "/purchase-group-options",
+    response_model=list[ProductPurchaseGroupOptionOut],
+    summary="同組限購可選商品（含主題下所有系列）",
+)
+async def list_purchase_group_options(
+    category_id: uuid.UUID, session: DbDep, current_user: CurrentUser
+) -> list[ProductPurchaseGroupOptionOut]:
+    category = await _get_category_or_404(category_id, session)
+    await _require_shop_manager(session, current_user, category.activity_id)
+    products = await session.execute(
+        select(Product.id, Product.name)
+        .where(Product.category_id == category.id)
+        .order_by(Product.name, Product.id)
+    )
+    return [ProductPurchaseGroupOptionOut(id=row.id, name=row.name) for row in products]
+
+
+@router.get(
+    "/purchase-permissions",
+    response_model=list[ProductPurchasePermissionOut],
+    summary="商品購買資格可選權限（限商品管理者）",
+)
+async def list_purchase_permissions(
+    session: DbDep, current_user: CurrentUser, activity_id: uuid.UUID | None = None
+) -> list[dict]:
+    await _require_shop_manager(session, current_user, activity_id)
+    return ALL_PERMISSION_CODES
 
 
 # ── 優惠管理 ──────────────────────────────────────────────────────────────────

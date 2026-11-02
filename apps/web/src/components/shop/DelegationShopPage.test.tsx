@@ -27,7 +27,7 @@ vi.mock("@/lib/api-cache", () => ({ cacheGet: () => null, cacheHas: () => false,
 
 const product = {
   id: "bag", name: "紀念袋", price: 100, image_url: null, status: "active" as const,
-  is_unlimited: true, stock_quantity: 10, has_variants: false, requires_seating: false,
+  purchase_allowed: true, is_unlimited: true, stock_quantity: 10, has_variants: false, requires_seating: false,
   seating_mode: null, sale_start: null, sale_end: "2099-10-12T00:00:00Z",
 };
 const order: OrderOut = {

@@ -181,6 +181,10 @@ class Product(Base, TimestampMixin):
     is_unlimited: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # 每位使用者累計購買上限；None 表示不限購。
     max_quantity_per_user: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 名單僅供商品管理端讀取；公開回應只提供目前購買者的資格判定。
+    purchase_rules: Mapped[dict] = mapped_column(
+        JSONDict, nullable=False, default=dict, server_default="{}"
+    )
     status: Mapped[ProductStatus] = mapped_column(
         Enum(ProductStatus, name="productstatus"),
         nullable=False,

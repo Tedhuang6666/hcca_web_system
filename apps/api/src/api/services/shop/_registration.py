@@ -39,6 +39,7 @@ from api.services.shop._orders import (
     get_current_registration,
     get_current_registrations,
 )
+from api.services.shop._purchase_rules import assert_product_purchase_allowed
 from api.services.shop._testing import can_test_products
 
 logger = logging.getLogger("api.services.shop._orders")
@@ -175,6 +176,8 @@ async def set_current_registration_product(
             variants[signature] = (quantity - locked_quantity, selected)
 
     requested_total = sum(quantity for quantity, _ in variants.values())
+    if requested_total > existing_quantity:
+        await assert_product_purchase_allowed(session, product, user)
     await _assert_purchase_limit(
         session,
         product,
