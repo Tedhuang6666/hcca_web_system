@@ -575,9 +575,16 @@ async def build_catalog_tree(
     if activity_id:
         q = q.where(ProductCategory.activity_id == activity_id)
     categories = (await session.execute(q)).scalars().unique().all()
+    catalog_products = [product for category in categories for product in category.products]
+    catalog_products.extend(
+        product
+        for category in categories
+        for series in category.series
+        for product in series.products
+    )
     restrictions = await purchase_restrictions(
         session,
-        [product for category in categories for product in category.products],
+        catalog_products,
         buyer,
     )
 
