@@ -23,6 +23,9 @@ def uploads_app(tmp_path) -> Starlette:
     private_dir = uploads / "petitions" / "CASE"
     private_dir.mkdir(parents=True)
     (private_dir / "private.pdf").write_bytes(b"private petition attachment")
+    private_vendor_dir = uploads / "recommended-vendors" / "vendor-1"
+    private_vendor_dir.mkdir(parents=True)
+    (private_vendor_dir / "menu.pdf").write_bytes(b"inactive vendor menu")
     (tmp_path / "outside.pdf").write_bytes(b"outside storage root")
     return Starlette(routes=[Mount("/uploads", PublicUploadsStaticFiles(directory=uploads))])
 
@@ -39,6 +42,7 @@ async def test_public_upload_is_still_accessible(uploads_app) -> None:
     "request_path",
     (
         "/uploads/petitions/CASE/private.pdf",
+        "/uploads/recommended-vendors/vendor-1/menu.pdf",
         "/uploads/announcements/../petitions/CASE/private.pdf",
         "/uploads/announcements/%2e%2e/petitions/CASE/private.pdf",
         "/uploads/announcements/..%2fpetitions/CASE/private.pdf",
@@ -54,4 +58,5 @@ async def test_public_upload_route_rejects_traversal(uploads_app, request_path) 
 
     assert response.status_code == 404
     assert b"private petition attachment" not in response.content
+    assert b"inactive vendor menu" not in response.content
     assert b"outside storage root" not in response.content

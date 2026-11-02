@@ -50,7 +50,7 @@
 		}
 	}
 
-	@public_uploads path /uploads/announcements/* /uploads/merchandise-submissions/templates/* /uploads/surveys/* /uploads/public-site/* /uploads/recommended-vendors/*
+	@public_uploads path /uploads/announcements/* /uploads/merchandise-submissions/templates/* /uploads/surveys/* /uploads/public-site/*
 	handle @public_uploads {
 		header Cache-Control "public, max-age=604800, s-maxage=2592000, stale-while-revalidate=604800"
 		reverse_proxy api-green:8000 {

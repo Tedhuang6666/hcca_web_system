@@ -8,9 +8,11 @@
     URL 就能下載受存取控制的附件。
 
 修法：
-    公開媒體（公告圖片、商品圖、問卷圖、官網素材）以具名前綴儲存：
-        announcements/{id}/...、shop/...、surveys/...、public-site/...
+    公開媒體（公告圖片、商品圖、問卷圖、官網素材與投稿範本）以具名前綴儲存：
+        announcements/{id}/...、merchandise-submissions/templates/...、shop/...、
+        surveys/...、public-site/...
     這些需要以 <img src="/uploads/..."> 形式被未登入訪客嵌入，故仍靜態服務。
+    推薦商家菜單可能隨商家或菜單狀態撤下，只能走會檢查公開狀態的菜單下載端點。
     公文附件則使用「裸 UUID」前綴（uploads/{document_id}/...），不在允許清單內，
     故一律 404；附件存取改走已授權的端點：
         GET /documents/{doc_id}/attachments/{att_id}/download
@@ -35,7 +37,6 @@ PUBLIC_UPLOAD_PREFIXES: tuple[str, ...] = (
     "shop/",
     "surveys/",
     "public-site/",
-    "recommended-vendors/",
 )
 
 
