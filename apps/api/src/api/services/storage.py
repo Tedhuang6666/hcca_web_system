@@ -351,19 +351,21 @@ class LocalStorageBackend(StorageBackend):
         return f"/uploads/{validate_storage_key(storage_key)}"
 
     def local_path(self, storage_key: str) -> Path | None:
-        """正規化後仍須落在 self._base 底下，否則視為不存在。
+        """實體路徑必須對應原 storage key，不能以符號連結切換到另一份資源。
 
-        目前所有呼叫端的 storage_key 皆為伺服器產生（uuid4 + 白名單副檔名），
-        不受使用者輸入影響；這層檢查是縱深防禦，避免未來任何呼叫端不慎把
-        使用者輸入傳進來時，"../../etc/passwd" 這類路徑跳脫仍能被擋下。
+        上傳時由伺服器產生 key（uuid4 + 白名單副檔名）；公開圖片入口仍接受
+        請求中的 key，因此讀取時也必須驗證，擋下 "../../etc/passwd" 這類路徑。
+        僅檢查根目錄不足以保護公開／私有資源：公開圖片的 key 若連到同一根目錄
+        內的私有附件，仍會繞過領域授權。因此根目錄以下不允許符號連結改指路徑。
         """
         try:
             parts = _storage_key_parts(storage_key)
         except ValueError:
             return None
         base = self._base.resolve()
-        candidate = self._base.joinpath(*parts).resolve()
-        if not candidate.is_relative_to(base):
+        requested = base.joinpath(*parts)
+        candidate = requested.resolve()
+        if candidate != requested:
             return None
         return candidate
 
