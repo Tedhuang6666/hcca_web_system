@@ -1600,6 +1600,10 @@
   color: var(--public-accent-text);
 }
 
+.shop-product-option-price del {
+  color: var(--public-secondary);
+}
+
 .shop-product-quantity button {
   width: 2.75rem;
   height: 2.75rem;
