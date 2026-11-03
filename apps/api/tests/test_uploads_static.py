@@ -14,6 +14,19 @@ def test_private_upload_prefixes_are_not_public() -> None:
     assert not _is_public_path("550e8400-e29b-41d4-a716-446655440000/private.pdf")
 
 
+@pytest.mark.parametrize(
+    "path",
+    (
+        "shop/../550e8400-e29b-41d4-a716-446655440000/private.pdf",
+        r"shop\..\550e8400-e29b-41d4-a716-446655440000\private.pdf",
+        "shop/../../outside.pdf",
+        "shop/..",
+    ),
+)
+def test_is_public_path_rejects_unnormalized_traversal(path: str) -> None:
+    assert not _is_public_path(path)
+
+
 @pytest.fixture
 def uploads_app(tmp_path) -> Starlette:
     uploads = tmp_path / "uploads"

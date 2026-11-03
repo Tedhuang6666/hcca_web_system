@@ -24,6 +24,8 @@
 
 from __future__ import annotations
 
+import posixpath
+
 from starlette.responses import PlainTextResponse, Response
 from starlette.staticfiles import StaticFiles
 from starlette.types import Scope
@@ -39,8 +41,12 @@ PUBLIC_UPLOAD_PREFIXES: tuple[str, ...] = (
 )
 
 
-def _is_public_path(normalized: str) -> bool:
-    return normalized.startswith(PUBLIC_UPLOAD_PREFIXES)
+def _is_public_path(path: str) -> bool:
+    # 自行折疊 `..`，不依賴呼叫端已正規化；折疊後逃出根目錄或含 `..` 一律拒絕。
+    collapsed = posixpath.normpath(path.replace("\\", "/").lstrip("/"))
+    if collapsed == ".." or collapsed.startswith("../"):
+        return False
+    return collapsed.startswith(tuple(p.rstrip("/") + "/" for p in PUBLIC_UPLOAD_PREFIXES))
 
 
 class PublicUploadsStaticFiles(StaticFiles):
