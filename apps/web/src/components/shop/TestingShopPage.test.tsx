@@ -41,6 +41,52 @@ const formalOrder: OrderOut = {
 
 afterEach(() => { vi.unstubAllGlobals(); });
 
+it("商品圖集可用前後按鈕與鍵盤切換，顯示張數且不超出首尾", async () => {
+  api.getProduct.mockResolvedValue({ ...formalProduct, image_url: "/front.png", variant_groups: [],
+    media: [
+      { id: "front", image_url: "/front.png", label: "正面", kind: "product" },
+      { id: "back", image_url: "/back.png", label: "背面", kind: "product" },
+      { id: "detail", image_url: "/detail.png", label: "細節", kind: "product" },
+    ] });
+  render(<ShopPage />);
+  fireEvent.click(await screen.findByRole("link", { name: "查看商品：正式商品" }));
+  expect(await screen.findByRole("button", { name: "上一張商品圖片" })).toBeDisabled();
+  expect(screen.getByLabelText("第 1 張，共 3 張")).toHaveTextContent("1 / 3");
+  fireEvent.click(screen.getByRole("button", { name: "下一張商品圖片" }));
+  expect(screen.getByRole("img", { name: "正式商品・背面" })).toBeVisible();
+  const gallery = screen.getByRole("group", { name: "商品圖片" });
+  fireEvent.keyDown(gallery, { key: "End" });
+  expect(screen.getByRole("button", { name: "顯示細節" })).toHaveFocus();
+  expect(screen.getByRole("button", { name: "下一張商品圖片" })).toBeDisabled();
+  expect(screen.getByLabelText("第 3 張，共 3 張")).toBeVisible();
+  fireEvent.keyDown(gallery, { key: "ArrowLeft" });
+  expect(screen.getByRole("button", { name: "顯示背面" })).toHaveFocus();
+  expect(screen.getByRole("button", { name: "顯示背面" })).toHaveAttribute("aria-pressed", "true");
+  fireEvent.keyDown(gallery, { key: "Home" });
+  fireEvent.keyDown(gallery, { key: "ArrowLeft" });
+  expect(screen.getByRole("button", { name: "顯示正面" })).toHaveFocus();
+  expect(screen.getByLabelText("第 1 張，共 3 張")).toBeVisible();
+  fireEvent.keyDown(gallery, { key: "ArrowRight" });
+  fireEvent.click(screen.getByRole("button", { name: "上一張商品圖片" }));
+  expect(screen.getByRole("img", { name: "正式商品・正面" })).toBeVisible();
+});
+
+it("單張圖片省略切換列，圖片失敗可重試且不影響購買", async () => {
+  api.me.mockResolvedValue({ id: "tester", email: "tester@example.test", can_create_shop_delegation: true });
+  api.getProduct.mockResolvedValue({ ...formalProduct, image_url: "/front.png", variant_groups: [], media: [] });
+  render(<ShopPage />);
+  fireEvent.click(await screen.findByRole("link", { name: "查看商品：正式商品" }));
+  const image = await screen.findByRole("img", { name: "正式商品・商品主圖" });
+  expect(screen.queryByRole("group", { name: "商品圖片" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "下一張商品圖片" })).not.toBeInTheDocument();
+  fireEvent.error(image);
+  expect(screen.getByText("圖片暫時無法顯示")).toBeVisible();
+  expect(screen.getByRole("button", { name: "增加數量" })).toBeEnabled();
+  fireEvent.click(screen.getByRole("button", { name: "重新載入圖片" }));
+  expect(screen.getByRole("img", { name: "正式商品・商品主圖" })).toHaveAttribute("src", expect.stringContaining("/front.png"));
+  expect(screen.queryByText("圖片暫時無法顯示")).not.toBeInTheDocument();
+});
+
 it("圖片標註可快捷切換，多組規格以最後點選的圖片為準", async () => {
   api.getProduct.mockResolvedValue({ ...formalProduct, name: "正式商品", image_url: "/front.png",
     media: [

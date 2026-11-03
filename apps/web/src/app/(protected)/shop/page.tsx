@@ -7,6 +7,8 @@ import { useRouter } from "next/navigation";
 import {
   ArrowUpRight,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   CircleAlert,
   CircleCheck,
   ClipboardList,
@@ -306,6 +308,7 @@ function ProductModal({
   const [product, setProduct] = useState<ProductOut | null>(null);
   const [picked, setPicked] = useState<Record<string, string>>({});
   const [selectedMediaIndex, setSelectedMediaIndex] = useState<number | null>(null);
+  const [failedMediaUrl, setFailedMediaUrl] = useState<string | null>(null);
   const [qty, setQty] = useState(1);
   const [loading, setLoading] = useState(false);
   const [productLoading, setProductLoading] = useState(true);
@@ -515,6 +518,7 @@ function ProductModal({
   const selectedMedia = selectedMediaIndex === null ? null : media[selectedMediaIndex] ?? null;
   const displayMedia = selectedMedia ?? media.find((item) => item.image_url === variantImage) ?? media[0] ?? null;
   const displayLabel = displayMedia?.label ?? "商品照片";
+  const displayMediaIndex = media.findIndex((item) => item.image_url === displayMedia?.image_url);
 
   const startMediaSwipe = (event: React.PointerEvent<HTMLImageElement>) => {
     if (media.length < 2 || (event.pointerType === "mouse" && event.button !== 0)) return;
@@ -629,25 +633,67 @@ function ProductModal({
         className={`shop-product-dialog min-w-0 animate-scale-in${orderClosed ? " shop-product-dialog--closed" : ""}`}
         data-order-closed={orderClosed || undefined}>
         <div className="shop-product-dialog-media">
-          {product && displayMedia ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              data-product-flight-source
-              src={uploadUrl(displayMedia.image_url)}
-              alt={`${product.name}・${displayLabel}`}
-              draggable={false}
-              onPointerDown={startMediaSwipe}
-              onPointerUp={finishMediaSwipe}
-              onPointerCancel={cancelMediaSwipe}
-            />
-          ) : (
-            <div className="shop-product-dialog-placeholder" data-product-flight-source>
-              <Package size={48} strokeWidth={1.2} aria-hidden="true" />
-            </div>
-          )}
-          {product && displayMedia && <p className="shop-product-dialog-caption" role="status" aria-live="polite">{displayLabel}</p>}
+          <div className="shop-product-dialog-stage">
+            {product && displayMedia ? (
+              failedMediaUrl === displayMedia.image_url ? (
+                <div className="shop-product-dialog-placeholder" role="status">
+                  <Package size={36} strokeWidth={1.2} aria-hidden="true" />
+                  <p>圖片暫時無法顯示</p>
+                  <button type="button" className="shop-product-retry" onClick={() => setFailedMediaUrl(null)}>重新載入圖片</button>
+                </div>
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={displayMedia.image_url}
+                  data-product-flight-source
+                  src={uploadUrl(displayMedia.image_url)}
+                  alt={`${product.name}・${displayLabel}`}
+                  draggable={false}
+                  onError={() => setFailedMediaUrl(displayMedia.image_url)}
+                  onPointerDown={startMediaSwipe}
+                  onPointerUp={finishMediaSwipe}
+                  onPointerCancel={cancelMediaSwipe}
+                />
+              )
+            ) : (
+              <div className="shop-product-dialog-placeholder" data-product-flight-source>
+                <Package size={48} strokeWidth={1.2} aria-hidden="true" />
+                {product && <p>此商品尚未提供圖片</p>}
+              </div>
+            )}
+            {product && media.length > 1 && <>
+              <button type="button" className="shop-product-gallery-nav shop-product-gallery-nav--previous"
+                aria-label="上一張商品圖片" disabled={displayMediaIndex <= 0}
+                onClick={() => setSelectedMediaIndex(displayMediaIndex - 1)}>
+                <ChevronLeft size={20} aria-hidden="true" />
+              </button>
+              <button type="button" className="shop-product-gallery-nav shop-product-gallery-nav--next"
+                aria-label="下一張商品圖片" disabled={displayMediaIndex >= media.length - 1}
+                onClick={() => setSelectedMediaIndex(displayMediaIndex + 1)}>
+                <ChevronRight size={20} aria-hidden="true" />
+              </button>
+            </>}
+          </div>
+          {product && displayMedia && <div className="shop-product-dialog-caption" role="status" aria-live="polite" aria-atomic="true">
+            <span title={displayLabel}>{displayLabel}</span>
+            {media.length > 1 && <span aria-label={`第 ${displayMediaIndex + 1} 張，共 ${media.length} 張`}>
+              {displayMediaIndex + 1} / {media.length}
+            </span>}
+          </div>}
           {product && media.length > 1 && (
-            <div ref={galleryRef} className="shop-product-dialog-gallery" role="group" aria-label="商品圖片">
+            <div ref={galleryRef} className="shop-product-dialog-gallery" role="group" aria-label="商品圖片"
+              onKeyDown={(event) => {
+                let index = displayMediaIndex;
+                if (event.key === "ArrowLeft") index -= 1;
+                else if (event.key === "ArrowRight") index += 1;
+                else if (event.key === "Home") index = 0;
+                else if (event.key === "End") index = media.length - 1;
+                else return;
+                event.preventDefault();
+                index = Math.max(0, Math.min(media.length - 1, index));
+                setSelectedMediaIndex(index);
+                galleryRef.current?.querySelectorAll("button")[index]?.focus({ preventScroll: true });
+              }}>
               {media.map((item, index) => {
                 const selected = item.image_url === displayMedia?.image_url;
                 return (
@@ -661,7 +707,6 @@ function ProductModal({
                     className="shop-product-dialog-gallery-item">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={uploadUrl(item.thumbnail_url)} alt="" loading="lazy" />
-                    <span>{item.label}</span>
                   </button>
                 );
               })}
