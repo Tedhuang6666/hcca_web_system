@@ -285,7 +285,8 @@ export default function OrderDetailPage() {
     ?? (order.status === "cancelled" || order.status === "refunded"
       || order.is_paid || order.is_class_collected ? 0 : order.total_price);
   const currentRegistration = detailOrders.find((relatedOrder) => relatedOrder.id === currentRegistrationId);
-  const canModifyRegistration = currentRegistration?.user_id === currentUserId
+  const isGift = order.assistance_scope === "council_gift";
+  const canModifyRegistration = !isGift && (currentRegistration?.user_id === currentUserId
     ? (currentRegistration.status === "pending" || currentRegistration.status === "confirmed")
       && !currentRegistration.is_paid
       && !currentRegistration.is_class_collected
@@ -294,8 +295,9 @@ export default function OrderDetailPage() {
       && delegatedEditableItemIds.size > 0
       && (currentRegistration.status === "pending" || currentRegistration.status === "confirmed")
       && !currentRegistration.is_paid
-      && !currentRegistration.is_class_collected);
-  const classOrders = detailOrders.filter((relatedOrder) => relatedOrder.class_id);
+      && !currentRegistration.is_class_collected));
+  const classOrders = detailOrders.filter((relatedOrder) => relatedOrder.class_id
+    && relatedOrder.assistance_scope !== "council_gift");
   const collectedClassOrders = classOrders.filter((relatedOrder) => relatedOrder.is_class_collected);
   const paidOrders = detailOrders.filter((relatedOrder) => relatedOrder.is_paid);
   const notes = [...new Set(detailOrders.flatMap((relatedOrder) => {
@@ -351,7 +353,7 @@ export default function OrderDetailPage() {
           </div>}
           <div>
             <dt style={{ color: "var(--text-muted)" }}>正式繳費狀態</dt>
-            <dd>{paidOrders.length === detailOrders.length ? "班聯會已確認"
+            <dd>{isGift ? "贈送，免付款" : paidOrders.length === detailOrders.length ? "班聯會已確認"
               : paidOrders.length > 0 ? "部分款項已確認" : "尚未確認"}</dd>
           </div>
         </dl>

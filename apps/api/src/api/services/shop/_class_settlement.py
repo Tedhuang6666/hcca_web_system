@@ -111,7 +111,7 @@ async def set_class_member_product(
     for order, item in product_lines:
         signature = _options_signature(item.selected_options or [])
         current_options.setdefault(signature, item.selected_options or [])
-        if order.is_paid or order.is_class_collected:
+        if order.is_paid or order.is_class_collected or order.assistance_scope == "council_gift":
             locked_quantities[signature] = locked_quantities.get(signature, 0) + item.quantity
         else:
             editable_lines.setdefault(signature, []).append((order, item))
@@ -190,6 +190,7 @@ async def set_class_member_product(
                         for candidate in orders
                         if not candidate.is_paid
                         and not candidate.is_class_collected
+                        and candidate.assistance_scope != "council_gift"
                         and all(
                             item.product is not None and _product_order_scope(item.product) == scope
                             for item in candidate.items
@@ -250,6 +251,8 @@ async def set_class_member_product(
 async def set_class_collected(
     session: AsyncSession, order: Order, *, collected: bool, actor_id: uuid.UUID
 ) -> Order:
+    if order.assistance_scope == "council_gift":
+        raise ValueError("贈送訂單免付款，無須登記收款")
     order.is_class_collected = collected
     order.class_collected_at = datetime.now(UTC) if collected else None
     order.class_collected_by_id = actor_id if collected else None
@@ -306,6 +309,7 @@ async def set_class_paid(
                 .where(
                     Order.class_id == class_id,
                     *scope_filters,
+                    Order.assistance_scope != "council_gift",
                     Order.test_product_id.is_(None),
                     Order.status.notin_([OrderStatus.CANCELLED, OrderStatus.REFUNDED]),
                 )

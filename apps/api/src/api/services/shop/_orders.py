@@ -530,6 +530,9 @@ async def _create_order_from_items(
 ) -> Order:
     if replace_order is not None and replace_order.test_product_id is not None:
         raise ValueError("測試訂購請至商品頁調整")
+    if replace_order is not None and replace_order.assistance_scope == "council_gift":
+        raise ValueError("贈送訂單不可修改品項，請取消後重新贈送")
+    gift = assistance_scope == "council_gift"
     await _lock_class_orders(session, class_id)
     # 與學生／家人即時登記共用使用者鎖，避免不同商品同時送出時各自建單。
     await session.execute(select(User.id).where(User.id == user_id).with_for_update())
@@ -558,7 +561,7 @@ async def _create_order_from_items(
         ):
             raise ValueError("已收款登記已鎖定，請先確認補收款原班級")
     order = replace_order
-    if order is None and supplement_class_id is None:
+    if order is None and supplement_class_id is None and not gift:
         order = await get_current_registration(
             session,
             user_id,
@@ -648,7 +651,7 @@ async def _create_order_from_items(
 
         option_ids = [uuid.UUID(str(o["option_id"])) for o in (cart_item.selected_options or [])]
         selected = _resolve_selected_options(product, option_ids)
-        unit_price = product.price + _options_delta(selected)
+        unit_price = 0 if gift else product.price + _options_delta(selected)
 
         if not product.is_unlimited:
             if product.stock_quantity < cart_item.quantity:
@@ -763,14 +766,17 @@ async def create_direct_order(
     payment_method: str = "cash_on_pickup",
 ) -> list[Order]:
     await _lock_class_orders(session, class_id)
-    council_override = assistance_scope in {"council_assisted", "council_separate"}
+    gift = assistance_scope == "council_gift"
+    if gift and (assisted_by_id is None or not (data.notes and data.notes.strip())):
+        raise ValueError("贈送訂單必須保留操作人與贈送原因")
+    council_override = assistance_scope in {"council_assisted", "council_separate", "council_gift"}
     cart_items = await _order_items_to_cart_items(session, data.items)
     orders: list[Order] = []
     for (activity_id, category_id), activity_items in (
         await _group_cart_items_by_activity(session, cart_items)
     ).items():
         supplement = assistance_scope == "council_separate"
-        if council_override:
+        if council_override and not gift:
             categories = {
                 product.category or (product.series.category if product.series else None)
                 for item in activity_items
@@ -780,7 +786,7 @@ async def create_direct_order(
                 session, [category.id for category in categories if category is not None], None
             )
             supplement = supplement or any(closed.values())
-        if assisted_by_id is not None and class_id is not None:
+        if assisted_by_id is not None and class_id is not None and not gift:
             class_paid = await class_payment_for_scope(session, class_id, activity_id, category_id)
             collected = await session.scalar(
                 select(Order.id)
@@ -817,6 +823,9 @@ async def create_direct_order(
             council_override=council_override,
             supplement_class_id=class_id if supplement else None,
         )
+        if gift:
+            orders.append(order)
+            continue
         receivable = await receivable_svc.sync_shop_order(session, order)
         if supplement:
             await queue_individual_payment_notice(
@@ -993,6 +1002,7 @@ async def get_current_registration(
         Order.status.in_(statuses),
         Order.test_product_id == test_product_id,
         Order.supplement_class_id.is_(None),
+        Order.assistance_scope != "council_gift",
     )
     if editable_only:
         query = query.where(Order.is_paid.is_(False), Order.is_class_collected.is_(False))
@@ -1027,6 +1037,7 @@ async def get_current_registrations(
             Order.user_id == user_id,
             Order.status.in_((OrderStatus.PENDING, OrderStatus.CONFIRMED)),
             Order.supplement_class_id.is_(None),
+            Order.assistance_scope != "council_gift",
             True if include_testing else Order.test_product_id.is_(None),
         )
         .order_by(Order.created_at.desc(), Order.updated_at.desc())
@@ -1335,6 +1346,8 @@ async def update_order_item_quantity(
     if refreshed is None:
         raise ValueError("找不到此訂單")
     order = refreshed
+    if order.assistance_scope == "council_gift":
+        raise ValueError("贈送訂單不可修改品項，請取消後重新贈送")
     if order.status not in (OrderStatus.PENDING, OrderStatus.CONFIRMED):
         raise ValueError(f"訂單狀態 {order.status} 無法修改")
     if order.is_paid or order.is_class_collected:
@@ -1428,6 +1441,8 @@ async def replace_order_items(
     if refreshed is None:
         raise ValueError("找不到此商品登記")
     order = refreshed
+    if order.assistance_scope == "council_gift":
+        raise ValueError("贈送訂單不可修改品項，請取消後重新贈送")
     if any(item.delegation_link_id is not None for item in order.items):
         raise ValueError("此訂單含家人代訂品項，請學生由商品頁或訂單明細逐項修改")
     if order.status not in (OrderStatus.PENDING, OrderStatus.CONFIRMED):
@@ -1495,6 +1510,8 @@ async def replace_order_items(
 async def set_order_paid(
     session: AsyncSession, order: Order, *, is_paid: bool, actor_id: uuid.UUID
 ) -> Order:
+    if order.assistance_scope == "council_gift":
+        raise ValueError("贈送訂單免付款，無須登記收款")
     if order.supplement_class_id is not None:
         await _lock_class_orders(session, order.supplement_class_id)
         order.class_id = order.supplement_class_id if is_paid else None

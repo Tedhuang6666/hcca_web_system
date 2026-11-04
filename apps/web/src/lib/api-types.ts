@@ -12942,7 +12942,7 @@ export interface components {
              * @default class
              * @enum {string}
              */
-            collection_mode: "class" | "separate";
+            collection_mode: "class" | "separate" | "gift";
             /** Items */
             items: components["schemas"]["OrderItemCreate"][];
             /** Notes */

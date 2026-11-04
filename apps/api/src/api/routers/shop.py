@@ -1675,6 +1675,7 @@ async def create_admin_assisted_order(
         current_user,
         allow_all_classes=True,
         separate_payment=payload.collection_mode == "separate",
+        gift=payload.collection_mode == "gift",
         payment_method=payload.payment_method,
     )
 
@@ -1686,6 +1687,7 @@ async def _create_assisted_orders(
     *,
     allow_all_classes: bool = False,
     separate_payment: bool = False,
+    gift: bool = False,
     payment_method: str = "cash_on_pickup",
 ) -> list[OrderOut]:
     from api.services.user_registration import UserRegistrationError
@@ -1719,7 +1721,13 @@ async def _create_assisted_orders(
             class_id=target_class.id,
             data=ClassOrderUpsert(user_id=target.id, items=payload.items, notes=payload.notes),
             assisted_by_id=current_user.id,
-            assistance_scope=("council_separate" if separate_payment else "council_assisted")
+            assistance_scope=(
+                "council_gift"
+                if gift
+                else "council_separate"
+                if separate_payment
+                else "council_assisted"
+            )
             if allow_all_classes
             else "class_assisted",
             payment_method=payment_method if separate_payment else "school_collection",
@@ -2070,9 +2078,12 @@ async def update_class_collection(
         order.class_id is None or order.class_id not in cadre_ids
     ):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="僅該班班代可紀錄收款")
-    order = await shop_svc.set_class_collected(
-        session, order, collected=payload.is_class_collected, actor_id=current_user.id
-    )
+    try:
+        order = await shop_svc.set_class_collected(
+            session, order, collected=payload.is_class_collected, actor_id=current_user.id
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     await audit_svc.record(
         session,
         entity_type="order",
@@ -2215,9 +2226,12 @@ async def update_order_payment(
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="僅班聯會管理員可標示正式繳費"
             )
-    order = await shop_svc.set_order_paid(
-        session, order, is_paid=payload.is_paid, actor_id=current_user.id
-    )
+    try:
+        order = await shop_svc.set_order_paid(
+            session, order, is_paid=payload.is_paid, actor_id=current_user.id
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     await audit_svc.record(
         session,
         entity_type="order",

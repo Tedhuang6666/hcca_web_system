@@ -56,6 +56,31 @@ beforeEach(() => {
 });
 
 describe("優惠管理的預先指定學號", () => {
+  it("可建立指定得獎者與商品的贈票優惠，編輯時保留贈送選項", async () => {
+    api.listProducts.mockResolvedValue([{ id: "ticket", name: "校慶門票", price: 200 }]);
+    api.createPromotion.mockResolvedValue({});
+    render(<ShopPromotionPanel />);
+    await screen.findByRole("checkbox", { name: "校慶門票" });
+    fireEvent.change(screen.getByRole("textbox", { name: "優惠名稱" }), { target: { value: "抽獎贈票" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "優惠內容" }), { target: { value: "gift" } });
+    fireEvent.change(screen.getByRole("textbox", { name: /可使用帳號/ }), { target: { value: "11520\n11521" } });
+    fireEvent.click(screen.getByRole("button", { name: "建立優惠" }));
+    expect(api.createPromotion).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("checkbox", { name: "校慶門票" }));
+    api.listPromotions.mockResolvedValue([{
+      ...pendingStudentTarget, discount_value: 100,
+      target_products: [{ id: "ticket", name: "校慶門票" }],
+    }]);
+    fireEvent.click(screen.getByRole("button", { name: "建立優惠" }));
+    await waitFor(() => expect(api.createPromotion).toHaveBeenCalledWith(expect.objectContaining({
+      target_identifiers: ["11520", "11521"], target_product_ids: ["ticket"],
+      discount_type: "percentage", discount_value: 100,
+    })));
+    await screen.findByText(/贈票／免費商品（全額折抵）/);
+    fireEvent.click(screen.getByRole("button", { name: "編輯" }));
+    expect(screen.getByRole("combobox", { name: "優惠內容" })).toHaveValue("gift");
+  });
+
   it("可建立每項各一件的固定套組價", async () => {
     const products = [
       { id: "shirt", name: "衣服", price: 300 },

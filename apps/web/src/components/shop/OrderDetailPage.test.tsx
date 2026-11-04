@@ -102,6 +102,21 @@ beforeEach(() => {
 });
 
 describe("公開訂單詳情", () => {
+  it("shows a gift as free and keeps it out of the paid preorder and editing flow", async () => {
+    const gift: OrderOut = { ...firstOrder, assistance_scope: "council_gift", total_price: 0,
+      subtotal_price: 0, is_class_collected: false, notes: "抽獎中獎",
+      items: [{ ...firstOrder.items[0], unit_price: 0, subtotal: 0 }] };
+    api.getOrder.mockResolvedValue(gift);
+    api.listOrders.mockResolvedValue([gift, addedOrder]);
+    api.getCurrentRegistrations.mockResolvedValue([addedOrder]);
+    render(<OrderDetailPage />);
+    expect(await screen.findByText("贈送，免付款")).toBeVisible();
+    expect(screen.getByText("抽獎中獎")).toBeVisible();
+    expect(screen.queryByText("待收款")).not.toBeInTheDocument();
+    expect(screen.queryByText(/尚未收款，可修改/)).not.toBeInTheDocument();
+    expect(screen.queryByText("NT$100")).not.toBeInTheDocument();
+  });
+
   it("combines every preorder from the same activity into one detail view", async () => {
     const { container } = render(<OrderDetailPage />);
 

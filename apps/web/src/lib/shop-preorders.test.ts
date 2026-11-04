@@ -13,6 +13,18 @@ const order: OrderListItem = {
 };
 
 describe("依活動彙整預購", () => {
+  it("keeps gifts separate from paid items in the same activity with zero amount due", () => {
+    const groups = groupActivityPreorders([order, {
+      ...order, id: "gift", assistance_scope: "council_gift", is_class_collected: false,
+      total_price: 0, subtotal_price: 0, discount_amount: 0,
+      items: [{ ...order.items![0], unit_price: 0, subtotal: 0 }],
+    }]);
+    expect(groups).toHaveLength(2);
+    expect(groups[1]).toMatchObject({ key: "gift:gift", label: "校慶（贈送，免付款）",
+      amount: 0, received: 0, outstanding: 0 });
+    expect(groups[1].items[0].quantity).toBe(2);
+  });
+
   it("separates pending supplements and merges them after payment returns them to the class", () => {
     const supplement = { ...order, id: "extra", class_id: null, supplement_class_id: "class", is_class_collected: false };
     const groups = groupActivityPreorders([order, supplement]);

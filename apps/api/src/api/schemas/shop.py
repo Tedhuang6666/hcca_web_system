@@ -555,8 +555,14 @@ class ClassOrderCreate(BaseModel):
 
 
 class AdminAssistedOrderCreate(ClassOrderCreate):
-    collection_mode: Literal["class", "separate"] = "class"
+    collection_mode: Literal["class", "separate", "gift"] = "class"
     payment_method: Literal["cash_on_pickup", "bank_transfer"] = "cash_on_pickup"
+
+    @model_validator(mode="after")
+    def validate_gift_reason(self) -> Self:
+        if self.collection_mode == "gift" and not (self.notes and self.notes.strip()):
+            raise ValueError("請填寫贈送原因，例如抽獎中獎")
+        return self
 
 
 class OrderPromotionOut(BaseModel):

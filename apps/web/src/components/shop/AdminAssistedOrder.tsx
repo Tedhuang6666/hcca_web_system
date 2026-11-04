@@ -45,12 +45,13 @@ export default function AdminAssistedOrder({ catalog, classes, optionsError, opt
   const [quantity, setQuantity] = useState(1);
   const [items, setItems] = useState<DraftItem[]>([]);
   const [notes, setNotes] = useState("");
-  const [collectionMode, setCollectionMode] = useState<"class" | "separate">("class");
+  const [collectionMode, setCollectionMode] = useState<"class" | "separate" | "gift">("class");
   const [paymentMethod, setPaymentMethod] = useState<"cash_on_pickup" | "bank_transfer">("cash_on_pickup");
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState("");
+  const gift = collectionMode === "gift";
 
   useEffect(() => {
     if (!classId) return;
@@ -91,7 +92,7 @@ export default function AdminAssistedOrder({ catalog, classes, optionsError, opt
     && product.variant_groups.every((group) => options[group.id]);
 
   const submit = async () => {
-    if (!student || !items.length || savingRef.current) return;
+    if (!student || !items.length || savingRef.current || (gift && !notes.trim())) return;
     savingRef.current = true;
     setSaving(true);
     onBusyChange?.(true);
@@ -105,12 +106,14 @@ export default function AdminAssistedOrder({ catalog, classes, optionsError, opt
         collection_mode: collectionMode,
         payment_method: paymentMethod,
       });
-      setResult(`已為 ${classes.find((c) => c.id === classId)?.label ?? ""} ${student.display_name} 完成代訂，合計 ${money(orders.reduce((sum, order) => sum + order.total_price, 0))}。${orders.some((order) => order.supplement_class_id) ? "追加款項已列入補收款，確認收款後歸回原班級。" : "已併入班級收款。"}`);
+      const recipient = `${classes.find((c) => c.id === classId)?.label ?? ""} ${student.display_name}`;
+      setResult(gift ? `已為 ${recipient} 完成贈送，應付 NT$0。數量已納入統計，無須收款。`
+        : `已為 ${recipient} 完成代訂，合計 ${money(orders.reduce((sum, order) => sum + order.total_price, 0))}。${orders.some((order) => order.supplement_class_id) ? "追加款項已列入補收款，確認收款後歸回原班級。" : "已併入班級收款。"}`);
       setItems([]);
       setNotes("");
       onCreated();
     } catch (e) {
-      setError(apiErrorMessage(e, "代訂失敗，清單已保留，請重試。"));
+      setError(apiErrorMessage(e, gift ? "贈送失敗，清單已保留，請重試。" : "代訂失敗，清單已保留，請重試。"));
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -122,6 +125,7 @@ export default function AdminAssistedOrder({ catalog, classes, optionsError, opt
     <details open={defaultOpen} className="rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--card-bg)" }}>
       <summary className="min-h-11 cursor-pointer content-center font-semibold">幫同學代訂</summary>
       <p className="my-3 text-sm" style={{ color: "var(--text-secondary)" }}>可替全校同學代訂，包含尚未登入的名冊學生。班聯可在結單後協助代訂，仍須符合庫存及商品規格；追加款由該筆訂購同學自行付款，班代不代墊，結單後的追加一律獨立補收款。</p>
+      <p className="mb-3 text-sm" style={{ color: "var(--text-secondary)" }}>抽獎中獎、招待票或其他免費品項，可將下方收款安排選為「贈送（免付款）」，指定同學、商品與數量後直接發送。</p>
       {optionsLoading ? <p role="status">載入班級與商品中…</p>
         : optionsError ? <div role="alert">班級與商品載入失敗。<button type="button" className="btn btn-ghost" onClick={onRetry}>重新載入班級與商品</button></div>
         : !classes.length ? <p role="status">目前沒有可代訂的班級，請先建立班級名冊。</p> : null}
@@ -170,7 +174,7 @@ export default function AdminAssistedOrder({ catalog, classes, optionsError, opt
           {product?.variant_groups.map((group) => <label key={group.id} className="grid gap-1 text-sm">{group.name}（必選）
             <select className="input min-h-11 text-base" value={options[group.id] ?? ""} onChange={(event) => setOptions((previous) => ({ ...previous, [group.id]: event.target.value }))}>
               <option value="">請選擇{group.name}</option>
-              {group.options.filter((option) => option.is_active).map((option) => <option key={option.id} value={option.id}>{option.value}{option.price_delta ? `（+${money(option.price_delta)}）` : ""}</option>)}
+              {group.options.filter((option) => option.is_active).map((option) => <option key={option.id} value={option.id}>{option.value}{!gift && option.price_delta ? `（+${money(option.price_delta)}）` : ""}</option>)}
             </select>
           </label>)}
           <button type="button" className="btn btn-ghost min-h-11" disabled={!canAdd} onClick={() => {
@@ -183,22 +187,25 @@ export default function AdminAssistedOrder({ catalog, classes, optionsError, opt
             <h2 className="font-semibold">{student?.display_name}的代訂清單</h2>
             <ul className="divide-y" style={{ borderColor: "var(--border)" }}>
               {items.map((item, index) => <li key={index} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                <span className="min-w-0 break-words">{item.product_name}{item.option_label && `（${item.option_label}）`} × {item.quantity} · {money(item.quantity * item.unit_price)}</span>
+                <span className="min-w-0 break-words">{item.product_name}{item.option_label && `（${item.option_label}）`} × {item.quantity} · {money(gift ? 0 : item.quantity * item.unit_price)}</span>
                 <button type="button" className="btn btn-ghost min-h-11" aria-label={`移除${item.product_name}${item.option_label}`} onClick={() => setItems((previous) => previous.filter((_, i) => i !== index))}>移除</button>
               </li>)}
             </ul>
-            <p>商品小計 {money(items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0))}，優惠與最終金額依送出結果計算。</p>
+            <p>{gift ? "贈送合計 NT$0（含規格加價），數量照常納入統計。"
+              : `商品小計 ${money(items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0))}，優惠與最終金額依送出結果計算。`}</p>
           </section>}
           <label className="grid gap-1 text-sm">收款安排
             <select className="input min-h-11 text-base" value={collectionMode} onChange={(event) => {
-              setCollectionMode(event.target.value as "class" | "separate");
+              setCollectionMode(event.target.value as "class" | "separate" | "gift");
             }}>
               <option value="class">併入班級收款</option>
               <option value="separate">獨立補收款</option>
+              <option value="gift">贈送（免付款）</option>
             </select>
           </label>
           <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-            {collectionMode === "class" ? "尚未繳款時併入班級；班級已繳款、同學已交班代或班聯已結單時，自動另列補收款。" : "追加款由該筆訂購同學自行繳款，班代不代墊；暫不列入班級金額，班聯確認收款後可下載收據，並自動歸回原班級。"}
+            {gift ? "贈送會獨立成單，保留對象與原因、扣除庫存並納入統計；單價為零，不產生應收款。贈送後如需調整，請取消該筆贈送再重新發送。"
+              : collectionMode === "class" ? "尚未繳款時併入班級；班級已繳款、同學已交班代或班聯已結單時，自動另列補收款。" : "追加款由該筆訂購同學自行繳款，班代不代墊；暫不列入班級金額，班聯確認收款後可下載收據，並自動歸回原班級。"}
           </p>
           {collectionMode === "separate" && <div className="grid gap-3 sm:grid-cols-2">
             <label className="grid gap-1 text-sm">額外收款方式
@@ -208,10 +215,10 @@ export default function AdminAssistedOrder({ catalog, classes, optionsError, opt
               </select>
             </label>
           </div>}
-          <label className="grid gap-1 text-sm">代訂備註（選填）
-            <textarea className="input text-base" rows={2} maxLength={500} value={notes} onChange={(event) => setNotes(event.target.value)} />
+          <label className="grid gap-1 text-sm">{gift ? "贈送原因（必填）" : "代訂備註（選填）"}
+            <textarea className="input text-base" rows={2} maxLength={500} required={gift} placeholder={gift ? "例如：校慶抽獎中獎、活動招待票" : undefined} value={notes} onChange={(event) => setNotes(event.target.value)} />
           </label>
-          <button type="submit" className="btn btn-primary min-h-11" disabled={!student || !items.length || saving}>{saving ? "代訂送出中…" : "送出代訂"}</button>
+          <button type="submit" className="btn btn-primary min-h-11" disabled={!student || !items.length || saving || (gift && !notes.trim())}>{saving ? gift ? "贈送送出中…" : "代訂送出中…" : gift ? "送出贈送" : "送出代訂"}</button>
         </fieldset>
         {error && <p role="alert" className="mt-3">{error}</p>}
         <p role="status" className="mt-3">{result}</p>

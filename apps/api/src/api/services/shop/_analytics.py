@@ -244,9 +244,11 @@ def _summarize(
             (
                 "sources",
                 source,
-                {"self": "自行訂購（含家人授權）", "class_assisted": "班代代訂"}.get(
-                    source, source
-                ),
+                {
+                    "self": "自行訂購（含家人授權）",
+                    "class_assisted": "班代代訂",
+                    "council_gift": "贈送（免付款）",
+                }.get(source, source),
             ),
             ("amount_bands", str(min((amount - 1) // 500, 6)) if amount else "zero", ""),
             (
