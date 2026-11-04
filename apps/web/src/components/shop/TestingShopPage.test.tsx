@@ -69,7 +69,7 @@ it.each(["棉T", "刷毛帽T", "風衣外套"])("%s 使用後台主圖與圖集�
 
   render(<ShopPage />);
   const card = await screen.findByRole("link", { name: `查看商品：${name}` });
-  expect(within(card).getByRole("img", { name })).toHaveAttribute("src", expect.stringContaining("/front.png"));
+  expect(await within(card).findByRole("img", { name })).toHaveAttribute("src", expect.stringContaining("/front.png"));
   expect(screen.queryByRole("heading", { name: "把校園，穿進日常。" })).not.toBeInTheDocument();
 
   fireEvent.click(card);

@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import { authApi, classApi, shopApi, apiErrorMessage } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
+import { ApiError } from "@/lib/api-helpers";
+import { cacheGet, cacheSet } from "@/lib/api-cache";
 import type {
   CatalogCategoryOut,
   CatalogProductOut,
@@ -58,6 +60,7 @@ import { registrationLockMessage, registrationVariantKey } from "@/lib/shop-regi
 import { productGallery } from "@/lib/shop-product-media";
 import ProductThumbnail from "@/components/shop/ProductThumbnail";
 import ShopImage from "@/components/shop/ShopImage";
+import CatalogImage from "@/components/shop/CatalogImage";
 
 function Thumb({ url, alt, size = 64 }: { url: string | null; alt: string; size?: number }) {
   return <ProductThumbnail url={url} alt={alt} size={size} />;
@@ -958,6 +961,7 @@ function ProductCard({
   onSelectBundle,
   bundleHint,
   categoryDeadline,
+  featured = false,
 }: {
   product: CatalogProductOut;
   classClosed: boolean;
@@ -973,8 +977,8 @@ function ProductCard({
   onSelectBundle: (promotion: ShopPromotionPublicOut) => void;
   bundleHint: string | null;
   categoryDeadline: string | null;
+  featured?: boolean;
 }) {
-  const [failedImage, setFailedImage] = useState<string | null>(null);
   const testing = product.status === "testing";
   const soldOut = product.status === "sold_out" || (testing && !product.is_unlimited && product.stock_quantity === 0);
   const deadline = productDeadline(product);
@@ -1002,15 +1006,13 @@ function ProductCard({
   const content = (
     <>
       <div className="shop-public-product-media">
-        {coverUrl && failedImage !== coverUrl ? (
-          <ShopImage
+        {coverUrl ? (
+          <CatalogImage
             src={uploadUrl(coverUrl)}
             alt={product.name}
-            fill
-            sizes="auto, (max-width: 767px) 100vw, (max-width: 1199px) 50vw, 33vw"
-            loading="lazy"
-            className="h-full w-full object-cover"
-            onError={() => setFailedImage(coverUrl)}
+            sizes={featured
+              ? "(max-width: 760px) calc(100vw - 2rem), (max-width: 1199px) 55vw, 640px"
+              : "(max-width: 759px) calc((100vw - 3rem) / 2), (max-width: 1199px) calc((100vw - 5rem) / 3), 360px"}
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center" style={{ color: "var(--public-muted)" }}>
@@ -1101,6 +1103,8 @@ type ShopPageProps = {
   productSlug?: string;
 };
 
+type CatalogSnapshot = { scope: string; catalog: CatalogCategoryOut[] };
+
 export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {}) {
   const router = useRouter();
   const directProductRoute = Boolean(topicSlug || productSlug);
@@ -1124,6 +1128,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
   const refreshGeneration = useRef(0);
   const catalogRefresh = useRef<{ generation: number; key: string; promise: Promise<void> } | null>(null);
   const catalogLoaded = useRef<string | null>(null);
+  const catalogScope = useRef<string | null>(null);
   const mutationBusy = useRef(false);
   const currentRegistrationRefresh = useRef<Promise<OrderOut[]> | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -1221,14 +1226,24 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
   const loadCatalog = useCallback(() => {
     const generation = refreshGeneration.current;
     const memberId = new URLSearchParams(window.location.search).get("class_member_user_id") ?? undefined;
-    const key = JSON.stringify([directProductRoute, topicSlug, productSlug, memberId]);
+    const scope = catalogScope.current;
+    const key = JSON.stringify([scope, directProductRoute, topicSlug, productSlug, memberId]);
+    const cacheKey = `shop/catalog/${key}`;
     if (catalogRefresh.current?.generation === generation && catalogRefresh.current.key === key) {
       return catalogRefresh.current.promise;
     }
-    if (catalogLoaded.current !== key) setLoading(true);
+    if (catalogLoaded.current !== key) {
+      const snapshot = scope ? cacheGet<CatalogSnapshot>(cacheKey) : undefined;
+      if (snapshot?.scope === scope && Array.isArray(snapshot?.catalog)) {
+        setCatalog(snapshot.catalog);
+        setLoading(false);
+      } else {
+        setLoading(true);
+      }
+    }
     setLoadError(false);
     const shouldLoadClassContext = isLoggedInRef.current;
-    setClassStatusLoading(directProductRoute && shouldLoadClassContext);
+    setClassStatusLoading(shouldLoadClassContext);
     const classContextRequest = shouldLoadClassContext
       ? Promise.resolve().then(() => classApi.myClass()).then(
         (schoolClass) => ({ schoolClass, failed: false }),
@@ -1253,7 +1268,8 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
         if (generation !== refreshGeneration.current || catalogRefresh.current?.promise !== request) return;
         catalogLoaded.current = key;
         setCatalog(data);
-        if (directProductRoute) setLoading(false);
+        if (scope) cacheSet(cacheKey, { scope, catalog: data } satisfies CatalogSnapshot);
+        setLoading(false);
         try {
           const classContext = await classContextRequest;
           if (generation !== refreshGeneration.current || catalogRefresh.current?.promise !== request) return;
@@ -1375,6 +1391,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
     }
     void authApi.refresh().then(async (user) => {
       if (!active) return;
+      catalogScope.current = `user:${user.id}`;
       isLoggedInRef.current = true;
       setIsLoggedIn(true);
       setIsStudent(user.can_create_shop_delegation ?? Boolean(user.student_id));
@@ -1401,8 +1418,10 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
           }
         }
       }
-    }).catch(() => {
+    }).catch((error: unknown) => {
       if (!active) return;
+      // Never reuse a previous identity's catalog while the auth service is unavailable.
+      catalogScope.current = error instanceof ApiError && error.status === 401 ? "public" : null;
       isLoggedInRef.current = false;
       setIsLoggedIn(false);
       setRegistrations([]);
@@ -2044,6 +2063,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                       <ProductCard
                         key={product.id}
                         product={product}
+                        featured={selectedCategory.products.length === 1}
                         categoryDeadline={selectedCategory.order_closes_at ?? null}
                         bundleHint={bundleHintFor(product)}
                         promotions={categoryPromotions}
@@ -2203,7 +2223,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
           isLoggedIn={isLoggedIn}
           authLoading={authLoading}
           classStatusLoading={classStatusLoading}
-          registrationLoadError={registrationLoadError || Boolean(classMemberUserId && classMemberAccess === "error")}
+          registrationLoadError={registrationLoadError || classLoadFailed || loadError || Boolean(classMemberUserId && classMemberAccess === "error")}
           registration={productRegistration}
           registrationLocked={registrationLocked}
           authorizationRequired={classMemberUserId
