@@ -155,6 +155,9 @@ class Product(Base, TimestampMixin):
             "original_price IS NULL OR original_price >= price",
             name="ck_products_original_price",
         ),
+        CheckConstraint(
+            "unit_cost IS NULL OR unit_cost >= 0", name="ck_products_unit_cost_nonnegative"
+        ),
         Index(
             "ix_products_category_status_created",
             "category_id",
@@ -182,6 +185,8 @@ class Product(Base, TimestampMixin):
     price: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # 原價僅供價差呈現；訂單及促銷仍以 price 計算。
     original_price: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 內部單位成本；不包含於公開商品與訂單回應。None 表示尚未設定。
+    unit_cost: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # 庫存數量（-1 = 無限量）
     stock_quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_unlimited: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

@@ -561,6 +561,7 @@ export type {
   ProductCategoryOut,
   ProductCategoryUpdate,
   ProductCreate,
+  ProductCostOut,
   ProductMediaCreate,
   ProductMediaOut,
   ProductOut,

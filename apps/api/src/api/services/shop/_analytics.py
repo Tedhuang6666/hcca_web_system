@@ -16,6 +16,7 @@ from api.core.clock import TAIPEI, local_today
 from api.models.shop import Order, OrderItem, OrderStatus, Product
 from api.schemas.shop_analytics import (
     ShopSalesAnalyticsOut,
+    ShopSalesCosts,
     ShopSalesCrossRow,
     ShopSalesDay,
     ShopSalesMetrics,
@@ -120,6 +121,16 @@ async def sales_analytics(
     )
 
 
+def _add_costs(target: ShopSalesCosts, amount: int, cost: int, missing: int) -> None:
+    target.missing_cost_item_count += missing
+    if target.missing_cost_item_count:
+        target.total_cost = None
+        target.profit_amount = None
+    else:
+        target.total_cost = (target.total_cost or 0) + cost
+        target.profit_amount = (target.profit_amount or 0) + amount - cost
+
+
 def _summarize(
     orders: list[Order],
     start: date,
@@ -134,7 +145,7 @@ def _summarize(
     buyers: set[uuid.UUID] = set()
     positive_amounts: list[int] = []
     buyer_orders: dict[uuid.UUID, int] = defaultdict(int)
-    active_records: list[tuple[Order, int, int, int]] = []
+    active_records: list[tuple[Order, int, int, int, int, int]] = []
     cross_meta: dict[str, dict[str, dict]] = defaultdict(dict)
 
     def add(
@@ -145,6 +156,8 @@ def _summarize(
         quantity: int,
         amount: int,
         gross: int | None = None,
+        cost: int = 0,
+        missing: int = 0,
     ) -> None:
         row = groups[kind].setdefault(key, ShopSalesRow(key=key, label=label))
         if order.id not in seen[kind, key]:
@@ -157,6 +170,8 @@ def _summarize(
         row.paid_amount += amount if order.is_paid else 0
         row.gross_amount += amount if gross is None else gross
         row.discount_amount += 0 if gross is None else gross - amount
+        if order.status not in (OrderStatus.CANCELLED, OrderStatus.REFUNDED):
+            _add_costs(row, amount, cost, missing)
 
     # 同一選項改名後仍依識別碼合併，顯示期間內最近一筆訂單的名稱快照。
     for order in sorted(orders, key=lambda order: (order.created_at, str(order.id)), reverse=True):
@@ -177,6 +192,9 @@ def _summarize(
         quantity = sum(item.quantity for item in items)
         discount = sum(item.quantity * item.unit_price for item in items) - amount
         gross = amount + discount
+        # 採目前商品成本，補填或更正後可重算既有訂單；未知成本不可視為零。
+        cost = sum(item.quantity * (item.product.unit_cost or 0) for item in items)
+        missing = sum(item.quantity for item in items if item.product.unit_cost is None)
         status_labels = {
             "pending": "待確認",
             "confirmed": "已確認",
@@ -191,10 +209,13 @@ def _summarize(
             quantity,
             amount,
             gross,
+            cost,
+            missing,
         )
         if order.status in (OrderStatus.CANCELLED, OrderStatus.REFUNDED):
             continue
-        active_records.append((order, quantity, amount, gross))
+        active_records.append((order, quantity, amount, gross, cost, missing))
+        _add_costs(metrics, amount, cost, missing)
         buyer_orders[order.user_id] += 1
         metrics.order_count += 1
         metrics.item_count += quantity
@@ -234,10 +255,12 @@ def _summarize(
                 "",
             ),
         ]:
-            add(kind, key, label, order, quantity, amount, gross)
+            add(kind, key, label, order, quantity, amount, gross, cost, missing)
         for item in items:
             product = item.product
             item_gross = item.quantity * item.unit_price
+            item_cost = item.quantity * (product.unit_cost or 0)
+            item_missing = item.quantity if product.unit_cost is None else 0
             add(
                 "products",
                 str(product.id),
@@ -246,6 +269,8 @@ def _summarize(
                 item.quantity,
                 amounts[item.id],
                 item_gross,
+                item_cost,
+                item_missing,
             )
             for kind, dimension_key, dimension_label in [
                 (
@@ -268,6 +293,8 @@ def _summarize(
                     item.quantity,
                     amounts[item.id],
                     item_gross,
+                    item_cost,
+                    item_missing,
                 )
                 cross_meta[kind][key] = dict(
                     dimension_key=dimension_key,
@@ -291,6 +318,8 @@ def _summarize(
                 item.quantity,
                 amounts[item.id],
                 item_gross,
+                item_cost,
+                item_missing,
             )
             cross_meta["variants"].setdefault(
                 variant_key,
@@ -306,6 +335,8 @@ def _summarize(
                     item.quantity,
                     amounts[item.id],
                     item_gross,
+                    item_cost,
+                    item_missing,
                 )
                 cross_meta["variant_options"].setdefault(
                     key,
@@ -325,10 +356,10 @@ def _summarize(
     metrics.repeat_buyer_rate = (
         round(metrics.repeat_buyer_count / len(buyers) * 100, 2) if buyers else 0
     )
-    for order, quantity, amount, gross in active_records:
+    for order, quantity, amount, gross, cost, missing in active_records:
         count = buyer_orders[order.user_id]
         key = str(count) if count < 3 else "3+"
-        add("buyer_segments", key, f"{key} 筆訂單", order, quantity, amount, gross)
+        add("buyer_segments", key, f"{key} 筆訂單", order, quantity, amount, gross, cost, missing)
     metrics.unpaid_amount = metrics.total_amount - metrics.paid_amount
     metrics.average_order_amount = (
         round(sum(positive_amounts) / len(positive_amounts), 2) if positive_amounts else 0

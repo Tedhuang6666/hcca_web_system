@@ -19,6 +19,8 @@ const metrics: [
   "money" | "number" | "percent",
 ][] = [
   ["total_amount", "訂購金額", "money"],
+  ["total_cost", "商品成本", "money"],
+  ["profit_amount", "訂單毛利", "money"],
   ["paid_amount", "班聯已確認", "money"],
   ["unpaid_amount", "班聯未確認", "money"],
   ["order_count", "訂單數", "number"],
@@ -34,8 +36,8 @@ const metrics: [
   ["repeat_buyer_count", "多筆訂單人數", "number"],
   ["repeat_buyer_rate", "多筆訂單人數占比", "percent"],
 ];
-const format = (value: number, kind: "money" | "number" | "percent") =>
-  kind === "money"
+const format = (value: number | null, kind: "money" | "number" | "percent") =>
+  value == null ? "未設定" : kind === "money"
     ? money(value)
     : `${number(value)}${kind === "percent" ? "%" : ""}`;
 
@@ -51,7 +53,7 @@ function exportCsv(data: ShopSalesAnalyticsOut, scope: string) {
     ],
     ["統計範圍", scope],
     ["指標", "數值"],
-    ...metrics.map(([key, label]) => [label, data.current.metrics[key]]),
+    ...metrics.map(([key, label]) => [label, data.current.metrics[key] ?? "未設定"]),
     [
       "期間",
       "分布",
@@ -61,6 +63,9 @@ function exportCsv(data: ShopSalesAnalyticsOut, scope: string) {
       "件數",
       "訂購金額",
       "班聯已確認",
+      "商品成本",
+      "訂單毛利",
+      "未設定成本件數",
       "累積金額",
       "商品",
       "規格組",
@@ -99,6 +104,9 @@ function exportCsv(data: ShopSalesAnalyticsOut, scope: string) {
           row.item_count,
           row.total_amount,
           row.paid_amount,
+          row.total_cost ?? "未設定",
+          row.profit_amount ?? "未設定",
+          row.missing_cost_item_count,
           "cumulative_amount" in row ? Number(row.cumulative_amount) : "",
           ...("product_name" in row && "option_label" in row
             ? [row.product_name, row.group_name ?? "", row.option_label, row.item_share, row.amount_share]
@@ -346,6 +354,13 @@ export default function ShopSalesAnalytics({
               );
             })}
           </dl>
+          <p className="sales-muted">
+            毛利＝折扣後訂購金額 − 目前單位成本 × 件數，包含未付款訂單，不含運費、手續費等其他費用。
+            各規格共用商品成本；修改成本會重算歷史區間。
+          </p>
+          {current.metrics.missing_cost_item_count > 0 && <p role="status" className="sales-empty">
+            有 {number(current.metrics.missing_cost_item_count)} 件商品尚未設定成本，總成本與毛利暫不計算；請至商品管理補填。
+          </p>}
           {!!data?.insights.length && (
             <section className="sales-insights" aria-label="分析摘要">
               <h3>分析摘要</h3>

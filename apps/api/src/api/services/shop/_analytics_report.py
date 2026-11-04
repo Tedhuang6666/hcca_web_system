@@ -31,6 +31,9 @@ from api.services.shop._analytics import sales_analytics
 
 METRICS = [
     ("total_amount", "訂購金額"),
+    ("total_cost", "商品成本"),
+    ("profit_amount", "訂單毛利"),
+    ("missing_cost_item_count", "未設定成本件數"),
     ("paid_amount", "班聯已確認金額"),
     ("unpaid_amount", "班聯未確認金額"),
     ("order_count", "有效訂單數"),
@@ -71,7 +74,9 @@ NOTES = (
     "品項／主題僅統計符合的明細，整單折扣按原價比例與最大餘數法分攤；平均客單價及中位數排除零元訂單。",
     "未確認款項包含已交班代、尚未由班聯確認的款項；不是實際欠款認定。不同商品／班級的訂購人數、訂單數可能重疊，不可直接加總。",
     "多筆訂單依同一帳號在所選範圍的有效訂單數計算，追加原訂單不增加筆數；不能直接解讀為回購率。",
-    "星期時段熱區為區間總量，未校正各星期在區間出現的次數。未提供成本與瀏覽數，無法推算利潤或轉換率。",
+    "毛利為折扣後訂購金額減目前商品單位成本乘件數，包含未付款訂單，不含運費、手續費等其他費用。同商品各規格使用相同成本；修改成本會重算歷史區間。成本缺漏時顯示未設定，不視為零；零元訂單仍扣成本。",
+    "取消與退款列僅保留原訂單金額供核對，其成本與毛利為零，不計入有效訂購統計。",
+    "星期時段熱區為區間總量，未校正各星期在區間出現的次數。未提供瀏覽數，無法推算轉換率。",
 )
 
 
@@ -112,6 +117,13 @@ async def create_sales_report(
     )
     filename = f"銷售分析_{data.current.date_from}_{data.current.date_to}.{request.format}"
     return content, media_type, filename
+
+
+def _metric_values(data: ShopSalesAnalyticsOut) -> list[list]:
+    return [
+        [label, value if (value := getattr(data.current.metrics, key)) is not None else "未設定"]
+        for key, label in METRICS
+    ]
 
 
 def _value(value: int | float) -> str:
@@ -176,10 +188,25 @@ def _row_values(row: ShopSalesRow) -> list:
         row.paid_amount,
         row.total_amount - row.paid_amount,
         row.discount_amount,
+        row.total_cost if row.total_cost is not None else "未設定",
+        row.profit_amount if row.profit_amount is not None else "未設定",
+        row.missing_cost_item_count,
     ]
 
 
-ROW_HEADERS = ["項目", "訂單", "人數", "件數", "訂購金額", "已確認", "未確認", "折抵"]
+ROW_HEADERS = [
+    "項目",
+    "訂單",
+    "人數",
+    "件數",
+    "訂購金額",
+    "已確認",
+    "未確認",
+    "折抵",
+    "商品成本",
+    "訂單毛利",
+    "未設定成本件數",
+]
 
 
 def _variant_table(rows: list[ShopSalesVariantRow]) -> tuple[list[str], list[list]]:
@@ -209,9 +236,7 @@ def render_sales_pdf(data: ShopSalesAnalyticsOut, scope: str) -> bytes:
         f"<h3>{esc(item.title)}</h3><p>{esc(item.detail)}</p>" for item in data.insights
     )
     sections.append('<section class="page"><h2>關鍵指標</h2>')
-    sections.append(
-        _table(["指標", "數值"], [[label, getattr(current.metrics, key)] for key, label in METRICS])
-    )
+    sections.append(_table(["指標", "數值"], _metric_values(data)))
     sections.append(
         '</section><section class="page"><h2>每日趨勢</h2><p>橫軸為實際日期；完整日期與數值見每日明細。</p>'
     )
@@ -303,7 +328,7 @@ def render_sales_excel(data: ShopSalesAnalyticsOut, scope: str) -> bytes:
         workbook,
         "關鍵指標",
         ["指標", "數值"],
-        [[label, getattr(period.metrics, key)] for key, label in METRICS],
+        _metric_values(data),
     )
     daily = _sheet(
         workbook,

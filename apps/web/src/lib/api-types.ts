@@ -11089,6 +11089,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop/products/{product_id}/cost": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 讀取內部商品成本（限商品管理者） */
+        get: operations["get_product_cost_shop_products__product_id__cost_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shop/products/{product_id}/deactivate": {
         parameters: {
             query?: never;
@@ -25416,6 +25433,11 @@ export interface components {
             /** Sort Order */
             sort_order?: number | null;
         };
+        /** ProductCostOut */
+        ProductCostOut: {
+            /** Unit Cost */
+            unit_cost: number | null;
+        };
         /** ProductCreate */
         ProductCreate: {
             /**
@@ -25487,6 +25509,11 @@ export interface components {
              * @default 0
              */
             stock_quantity: number;
+            /**
+             * Unit Cost
+             * @description 內部單位成本（新台幣）；留空表示未設定
+             */
+            unit_cost?: number | null;
             /** Variant Groups */
             variant_groups?: components["schemas"]["ProductVariantGroupCreate"][];
         };
@@ -25773,6 +25800,11 @@ export interface components {
             series_id?: string | null;
             /** Stock Quantity */
             stock_quantity?: number | null;
+            /**
+             * Unit Cost
+             * @description 內部單位成本；未提供保留，null 清除
+             */
+            unit_cost?: number | null;
         };
         /** ProductVariantGroupCreate */
         ProductVariantGroupCreate: {
@@ -30313,6 +30345,11 @@ export interface components {
             /** Label */
             label: string;
             /**
+             * Missing Cost Item Count
+             * @default 0
+             */
+            missing_cost_item_count: number;
+            /**
              * Order Count
              * @default 0
              */
@@ -30330,10 +30367,22 @@ export interface components {
             /** Product Name */
             product_name: string;
             /**
+             * Profit Amount
+             * @description 折扣後金額減商品成本的毛利；有缺漏時為 null
+             * @default 0
+             */
+            profit_amount: number | null;
+            /**
              * Total Amount
              * @default 0
              */
             total_amount: number;
+            /**
+             * Total Cost
+             * @description 按目前商品單位成本計算；有缺漏時為 null
+             * @default 0
+             */
+            total_cost: number | null;
         };
         /** ShopSalesDay */
         ShopSalesDay: {
@@ -30367,6 +30416,11 @@ export interface components {
             /** Label */
             label: string;
             /**
+             * Missing Cost Item Count
+             * @default 0
+             */
+            missing_cost_item_count: number;
+            /**
              * Order Count
              * @default 0
              */
@@ -30377,10 +30431,22 @@ export interface components {
              */
             paid_amount: number;
             /**
+             * Profit Amount
+             * @description 折扣後金額減商品成本的毛利；有缺漏時為 null
+             * @default 0
+             */
+            profit_amount: number | null;
+            /**
              * Total Amount
              * @default 0
              */
             total_amount: number;
+            /**
+             * Total Cost
+             * @description 按目前商品單位成本計算；有缺漏時為 null
+             * @default 0
+             */
+            total_cost: number | null;
         };
         /** ShopSalesInsight */
         ShopSalesInsight: {
@@ -30432,6 +30498,11 @@ export interface components {
              */
             median_order_amount: number;
             /**
+             * Missing Cost Item Count
+             * @default 0
+             */
+            missing_cost_item_count: number;
+            /**
              * Order Count
              * @default 0
              */
@@ -30446,6 +30517,12 @@ export interface components {
              * @default 0
              */
             payment_rate: number;
+            /**
+             * Profit Amount
+             * @description 折扣後金額減商品成本的毛利；有缺漏時為 null
+             * @default 0
+             */
+            profit_amount: number | null;
             /**
              * Promotion Usage Rate
              * @default 0
@@ -30466,6 +30543,12 @@ export interface components {
              * @default 0
              */
             total_amount: number;
+            /**
+             * Total Cost
+             * @description 按目前商品單位成本計算；有缺漏時為 null
+             * @default 0
+             */
+            total_cost: number | null;
             /**
              * Unpaid Amount
              * @default 0
@@ -30570,6 +30653,11 @@ export interface components {
             /** Label */
             label: string;
             /**
+             * Missing Cost Item Count
+             * @default 0
+             */
+            missing_cost_item_count: number;
+            /**
              * Order Count
              * @default 0
              */
@@ -30580,10 +30668,22 @@ export interface components {
              */
             paid_amount: number;
             /**
+             * Profit Amount
+             * @description 折扣後金額減商品成本的毛利；有缺漏時為 null
+             * @default 0
+             */
+            profit_amount: number | null;
+            /**
              * Total Amount
              * @default 0
              */
             total_amount: number;
+            /**
+             * Total Cost
+             * @description 按目前商品單位成本計算；有缺漏時為 null
+             * @default 0
+             */
+            total_cost: number | null;
         };
         /** ShopSalesVariantRow */
         ShopSalesVariantRow: {
@@ -30625,6 +30725,11 @@ export interface components {
             key: string;
             /** Label */
             label: string;
+            /**
+             * Missing Cost Item Count
+             * @default 0
+             */
+            missing_cost_item_count: number;
             /** Option Label */
             option_label: string;
             /**
@@ -30645,10 +30750,22 @@ export interface components {
             /** Product Name */
             product_name: string;
             /**
+             * Profit Amount
+             * @description 折扣後金額減商品成本的毛利；有缺漏時為 null
+             * @default 0
+             */
+            profit_amount: number | null;
+            /**
              * Total Amount
              * @default 0
              */
             total_amount: number;
+            /**
+             * Total Cost
+             * @description 按目前商品單位成本計算；有缺漏時為 null
+             * @default 0
+             */
+            total_cost: number | null;
         };
         /** ShortLinkCreate */
         ShortLinkCreate: {
@@ -57383,6 +57500,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProductOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_product_cost_shop_products__product_id__cost_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductCostOut"];
                 };
             };
             /** @description Validation Error */

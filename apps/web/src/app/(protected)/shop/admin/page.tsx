@@ -345,6 +345,17 @@ function ProductFormModal({
   );
   const [price, setPrice] = useState(String(initial?.price ?? 0));
   const [originalPrice, setOriginalPrice] = useState(initial?.original_price == null ? "" : String(initial.original_price));
+  const [unitCost, setUnitCost] = useState("");
+  const [costState, setCostState] = useState<"loading" | "ready" | "error">(editing ? "loading" : "ready");
+  const [costAttempt, setCostAttempt] = useState(0);
+  useEffect(() => {
+    if (!initial?.id) return;
+    let active = true;
+    shopApi.getProductCost(initial.id).then((data) => {
+      if (active) { setUnitCost(data.unit_cost == null ? "" : String(data.unit_cost)); setCostState("ready"); }
+    }).catch(() => { if (active) setCostState("error"); });
+    return () => { active = false; };
+  }, [initial?.id, costAttempt]);
   const [stock, setStock] = useState(String(initial?.stock_quantity ?? 0));
   const [unlimited, setUnlimited] = useState(initial?.is_unlimited ?? false);
   const [maxQuantityPerUser, setMaxQuantityPerUser] = useState(
@@ -366,7 +377,7 @@ function ProductFormModal({
   const [seatingMode, setSeatingMode] = useState<string>(initial?.seating_mode ?? "at_purchase");
   const [busy, setBusy] = useState(false);
   const [mediaUploadsInProgress, setMediaUploadsInProgress] = useState(0);
-  type ProductField = "name" | "price" | "originalPrice" | "stock" | "limit" | "variants";
+  type ProductField = "name" | "price" | "originalPrice" | "unitCost" | "stock" | "limit" | "variants";
   const [formError, setFormError] = useState<{ field: ProductField | null; message: string } | null>(null);
   const fieldRefs = useRef<Partial<Record<ProductField, HTMLInputElement | null>>>({});
   const mediaInputRef = useRef<HTMLInputElement>(null);
@@ -422,7 +433,7 @@ function ProductFormModal({
   };
 
   const saveProduct = async (publish: boolean) => {
-    if (rulesState !== "ready") return;
+    if (rulesState !== "ready" || costState !== "ready") return;
     setFormError(null);
     if (!name.trim()) { showFieldError("name", "請填寫商品名稱。"); return; }
     const priceValue = Number(price);
@@ -432,6 +443,11 @@ function ProductFormModal({
       return;
     }
     const originalPriceValue = originalPrice.trim() ? Number(originalPrice) : null;
+    const unitCostValue = unitCost.trim() ? Number(unitCost) : null;
+    if (unitCostValue !== null && (!Number.isSafeInteger(unitCostValue) || unitCostValue < 0 || unitCostValue > 2147483647)) {
+      showFieldError("unitCost", "成本請填寫 0 至 2,147,483,647 的整數，或留空表示未設定。");
+      return;
+    }
     if (originalPriceValue !== null && (!Number.isSafeInteger(originalPriceValue) || originalPriceValue < priceValue)) {
       showFieldError("originalPrice", "原價請填寫不低於售價的整數，或留空取消原價顯示。");
       return;
@@ -468,6 +484,7 @@ function ProductFormModal({
           image_url ? [{ image_url, kind, label: label.trim() || null, sort_order }] : []),
         price: priceValue,
         original_price: originalPriceValue,
+        unit_cost: unitCostValue,
         stock_quantity: Number.isInteger(stockValue) && stockValue >= 0 ? stockValue : 0,
         is_unlimited: unlimited,
         max_quantity_per_user: maxQuantity,
@@ -513,10 +530,10 @@ function ProductFormModal({
               </>
             ) : (
               <>
-                <button type="button" disabled={busy || mediaUploadsInProgress > 0 || rulesState !== "ready"} onClick={() => void saveProduct(false)} className={`btn min-h-11 ${editing ? "btn-primary" : "btn-secondary"}`}>
+                <button type="button" disabled={busy || mediaUploadsInProgress > 0 || rulesState !== "ready" || costState !== "ready"} onClick={() => void saveProduct(false)} className={`btn min-h-11 ${editing ? "btn-primary" : "btn-secondary"}`}>
                   {busy ? "儲存中…" : editing ? "儲存商品" : "儲存草稿"}
                 </button>
-                {!editing && <button type="button" disabled={busy || mediaUploadsInProgress > 0 || rulesState !== "ready"} onClick={() => void saveProduct(true)} className="btn btn-primary min-h-11">
+                {!editing && <button type="button" disabled={busy || mediaUploadsInProgress > 0 || rulesState !== "ready" || costState !== "ready"} onClick={() => void saveProduct(true)} className="btn btn-primary min-h-11">
                   {mediaUploadsInProgress > 0 ? "照片上傳中…" : busy ? "儲存與上架中…" : "建立並上架"}
                 </button>}
               </>
@@ -576,6 +593,26 @@ function ProductFormModal({
             </Field>
             {fieldError("stock")}
           </div>
+        </div>
+        <div>
+          <Field label="內部單位成本（新台幣元，選填）">
+            <input type="number" min={0} max={2147483647} step={1} inputMode="numeric" value={unitCost}
+              disabled={costState !== "ready"} onChange={(event) => setUnitCost(event.target.value)} className="input w-full"
+              ref={(node) => { fieldRefs.current.unitCost = node; }}
+              aria-invalid={formError?.field === "unitCost" || undefined}
+              aria-describedby={`shop-product-cost-hint${formError?.field === "unitCost" ? " shop-product-unitCost-error" : ""}`} />
+          </Field>
+          {fieldError("unitCost")}
+          <p id="shop-product-cost-hint" className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>
+            僅供內部管理與銷售分析，購買者看不到。留空表示未設定；各規格共用此成本，修改後會重算歷史毛利。
+          </p>
+          {costState === "loading" && <p role="status">正在讀取商品成本…</p>}
+          {costState === "error" && <p role="alert" className="text-sm" style={{ color: "var(--danger)" }}>
+            成本讀取失敗，請重新讀取後再儲存。
+            <button type="button" className="btn btn-secondary min-h-11" onClick={() => {
+              setCostState("loading"); setCostAttempt((value) => value + 1);
+            }}>重新讀取成本</button>
+          </p>}
         </div>
         <label className="flex min-h-11 items-center gap-3 text-sm" style={{ color: "var(--text-secondary)" }}>
           <input type="checkbox" checked={unlimited} onChange={(e) => setUnlimited(e.target.checked)} />

@@ -8,6 +8,7 @@ const api = vi.hoisted(() => ({
   listSeries: vi.fn(), createProduct: vi.fn(), getProduct: vi.fn(),
   testProduct: vi.fn(), activateProduct: vi.fn(), updateProduct: vi.fn(), uploadImage: vi.fn(),
   getProductPurchaseRules: vi.fn(), purchasePermissions: vi.fn(), purchaseGroupOptions: vi.fn(),
+  getProductCost: vi.fn(),
 }));
 const navigation = vi.hoisted(() => ({ search: "" }));
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(navigation.search) }));
@@ -28,6 +29,7 @@ beforeEach(() => {
   api.listActivities.mockResolvedValue([{ id: "festival", name: "校慶" }, { id: "winter", name: "冬季活動" }]);
   api.orderSummary.mockResolvedValue(summary("初始班級"));
   api.listSeries.mockResolvedValue([]);
+  api.getProductCost.mockResolvedValue({ unit_cost: 60 });
   api.getProductPurchaseRules.mockResolvedValue({ allowed_grades: [], required_permissions: [], allowed_identifiers: [], blocked_identifiers: [], exclusive_group: null, designated_only: false });
   api.purchasePermissions.mockResolvedValue([]);
   api.purchaseGroupOptions.mockResolvedValue([]);
@@ -45,6 +47,32 @@ async function openStats() {
   await screen.findByRole("option", { name: "校慶" });
   await screen.findAllByText("初始班級");
 }
+
+it("成本讀取失敗會停用儲存，重試後可清空成本", async () => {
+  const product = { id: "cost-product", category_id: "cost-cat", name: "成本商品", price: 100,
+    stock_quantity: 20, status: "active", variant_groups: [] };
+  api.listCategories.mockResolvedValue([{ id: "cost-cat", name: "成本測試" }]);
+  api.listProducts.mockResolvedValue([product]);
+  api.getProductCost.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce({ unit_cost: 60 });
+  api.updateProduct.mockResolvedValue(product);
+  api.getProduct.mockResolvedValue(product);
+  render(<ShopAdminPage />);
+  fireEvent.click(await screen.findByRole("button", { name: /成本測試/ }));
+  fireEvent.click((await screen.findAllByRole("button", { name: "編輯" }))[0]);
+  expect(await screen.findByRole("alert")).toHaveTextContent("成本讀取失敗");
+  expect(screen.getByRole("button", { name: "儲存商品" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "重新讀取成本" }));
+  const input = screen.getByRole("spinbutton", { name: "內部單位成本（新台幣元，選填）" });
+  await waitFor(() => expect(input).toHaveValue(60));
+  fireEvent.change(input, { target: { value: "-1" } });
+  fireEvent.click(screen.getByRole("button", { name: "儲存商品" }));
+  expect(screen.getByRole("alert")).toHaveTextContent("成本請填寫");
+  expect(input).toHaveFocus();
+  expect(api.updateProduct).not.toHaveBeenCalled();
+  fireEvent.change(input, { target: { value: "" } });
+  fireEvent.click(screen.getByRole("button", { name: "儲存商品" }));
+  await waitFor(() => expect(api.updateProduct).toHaveBeenCalledWith("cost-product", expect.objectContaining({ unit_cost: null })));
+});
 
 describe("商品管理與統計", () => {
   it("檢查原價與售價後送出，儲存失敗仍保留原價", async () => {

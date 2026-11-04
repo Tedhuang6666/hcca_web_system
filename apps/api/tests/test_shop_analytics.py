@@ -12,6 +12,84 @@ from api.models.shop import Order, OrderItem, OrderStatus, Product, ProductCateg
 from api.services.shop._analytics import sales_analytics
 
 
+async def test_profit_uses_current_cost_discounted_revenue_and_filtered_items(
+    db_session, sales_data
+):
+    activity, _, shirt, bag, _, _ = sales_data
+    shirt.unit_cost, bag.unit_cost = 40, 70
+    await db_session.flush()
+    filters = dict(
+        date_from=date(2026, 10, 22), date_to=date(2026, 10, 23), activity_id=activity.id
+    )
+    result = await sales_analytics(db_session, **filters, compare=True)
+    assert result.current.metrics.total_cost == 260  # 衫 3 件、袋 2 件（含零元訂單）
+    assert result.current.metrics.profit_amount == 90
+    assert result.current.metrics.missing_cost_item_count == 0
+    assert all(
+        row.profit_amount == row.total_cost == 0
+        for row in result.current.statuses
+        if row.key in ("cancelled", "refunded")
+    )
+    assert [row.profit_amount for row in result.current.daily] == [100, -10]
+    assert result.previous.metrics.profit_amount == 60
+    assert sum(row.profit_amount for row in result.current.products) == 90
+    for dimension in ("grades", "classes", "variants", "buyer_segments", "grade_products"):
+        assert sum(row.total_cost for row in getattr(result.current, dimension)) == 260
+    selected = await sales_analytics(db_session, **filters, product_id=shirt.id)
+    assert selected.current.metrics.profit_amount == 147  # 分攤折扣後 267 - 120
+    paid = await sales_analytics(db_session, **filters, is_paid=True)
+    assert paid.current.metrics.profit_amount == 100
+    shirt.unit_cost = 140
+    await db_session.flush()
+    changed = await sales_analytics(db_session, **filters, product_id=shirt.id)
+    assert changed.current.metrics.profit_amount == -153
+
+
+async def test_missing_cost_is_unknown_and_zero_cost_and_empty_are_valid(db_session, sales_data):
+    activity, _, shirt, bag, _, _ = sales_data
+    shirt.unit_cost = 0
+    await db_session.flush()
+    filters = dict(
+        date_from=date(2026, 10, 22), date_to=date(2026, 10, 23), activity_id=activity.id
+    )
+    result = await sales_analytics(db_session, **filters)
+    assert result.current.metrics.total_cost is None
+    assert result.current.metrics.profit_amount is None
+    assert result.current.metrics.missing_cost_item_count == 2
+    rows = {row.key: row for row in result.current.products}
+    assert rows[str(shirt.id)].profit_amount == 267
+    assert rows[str(bag.id)].profit_amount is None
+    assert rows[str(bag.id)].missing_cost_item_count == 2
+    empty = await sales_analytics(db_session, date_from=date(2024, 1, 1), date_to=date(2024, 1, 1))
+    assert empty.current.metrics.total_cost == empty.current.metrics.profit_amount == 0
+    assert empty.current.daily[0].profit_amount == 0
+
+
+async def test_profit_report_preserves_numeric_and_unknown_costs(db_session, sales_data):
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    from api.services.shop._analytics_report import render_sales_excel
+
+    activity, _, shirt, bag, _, _ = sales_data
+    shirt.unit_cost, bag.unit_cost = 40, 70
+    await db_session.flush()
+    filters = dict(
+        date_from=date(2026, 10, 22), date_to=date(2026, 10, 23), activity_id=activity.id
+    )
+    for expected in (90, "未設定"):
+        data = await sales_analytics(db_session, **filters)
+        workbook = load_workbook(BytesIO(render_sales_excel(data, "成本測試")))
+        metrics = dict(workbook["關鍵指標"].values)
+        assert metrics["訂單毛利"] == expected
+        product_rows = list(workbook["商品"].values)
+        assert "商品成本" in product_rows[0]
+        assert "訂單毛利" in product_rows[0]
+        shirt.unit_cost = None
+        await db_session.flush()
+
+
 @pytest.fixture
 async def sales_data(db_session, make_user):
     buyer = await make_user()

@@ -296,6 +296,7 @@ async def create_product(
         image_url=data.image_url,
         price=data.price,
         original_price=data.original_price,
+        unit_cost=data.unit_cost,
         stock_quantity=data.stock_quantity,
         is_unlimited=data.is_unlimited,
         max_quantity_per_user=data.max_quantity_per_user,
@@ -355,6 +356,7 @@ async def update_product(
         ProductStatus.DRAFT,
         ProductStatus.TESTING,
         ProductStatus.ACTIVE,
+        ProductStatus.SOLD_OUT,
         ProductStatus.CANCELLED,
     ):
         raise ValueError(f"商品狀態 {product.status} 不允許編輯")

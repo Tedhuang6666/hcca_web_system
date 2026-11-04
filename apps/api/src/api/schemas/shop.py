@@ -249,6 +249,9 @@ class ProductCreate(BaseModel):
     image_url: str | None = None
     price: int = Field(..., ge=0, description="售價（新台幣）")
     original_price: int | None = Field(None, ge=0, description="原價；留空不顯示原價")
+    unit_cost: int | None = Field(
+        None, ge=0, le=2147483647, description="內部單位成本（新台幣）；留空表示未設定"
+    )
     stock_quantity: int = Field(0, ge=0, description="庫存（is_unlimited=True 時忽略）")
     is_unlimited: bool = False
     purchase_rules: ProductPurchaseRules = Field(default_factory=ProductPurchaseRules)
@@ -279,6 +282,9 @@ class ProductUpdate(BaseModel):
     image_url: str | None = None
     price: int | None = Field(None, ge=0)
     original_price: int | None = Field(None, ge=0)
+    unit_cost: int | None = Field(
+        None, ge=0, le=2147483647, description="內部單位成本；未提供保留，null 清除"
+    )
     stock_quantity: int | None = Field(None, ge=0)
     is_unlimited: bool | None = None
     purchase_rules: ProductPurchaseRules | None = Field(
@@ -299,6 +305,10 @@ class ProductUpdate(BaseModel):
         if value is None:
             raise ValueError("售價不可為 null")
         return value
+
+
+class ProductCostOut(BaseModel):
+    unit_cost: int | None
 
 
 class ProductOut(BaseModel):

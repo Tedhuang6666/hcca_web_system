@@ -36,6 +36,9 @@ vi.mock("@/hooks/useWS", () => ({
 }));
 
 const metrics: ShopSalesMetrics = {
+  total_cost: 180,
+  profit_amount: 70,
+  missing_cost_item_count: 0,
   order_count: 2,
   buyer_count: 1,
   item_count: 3,
@@ -54,6 +57,9 @@ const metrics: ShopSalesMetrics = {
   repeat_buyer_rate: 100,
 };
 const row = {
+  total_cost: 180,
+  profit_amount: 70,
+  missing_cost_item_count: 0,
   gross_amount: 300,
   discount_amount: 50,
   buyer_count: 1,
@@ -131,6 +137,18 @@ function fixture(): ShopSalesAnalyticsOut {
     insights: [{ title: "商品集中度", detail: "紀念衫占本期金額 100%。" }],
   };
 }
+
+it("顯示折扣後毛利，缺少成本時保留未設定提示", async () => {
+  const data = fixture();
+  data.current.metrics.total_cost = null;
+  data.current.metrics.profit_amount = null;
+  data.current.metrics.missing_cost_item_count = 2;
+  api.salesAnalytics.mockResolvedValue(data);
+  render(<ShopSalesAnalytics filters={{}} />);
+  expect(await screen.findByText(/有 2 件商品尚未設定成本/)).toBeVisible();
+  expect(screen.getByText("訂單毛利", { selector: "dt" }).nextElementSibling).toHaveTextContent("未設定");
+  expect(screen.getByText(/包含未付款訂單/)).toBeVisible();
+});
 
 it("同商品選項能依銷量與金額排行，規格組分開且切換商品不殘留", () => {
   const current = period();

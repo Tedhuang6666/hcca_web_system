@@ -6,6 +6,7 @@ const api = vi.hoisted(() => ({
   listCategories: vi.fn(), listProducts: vi.fn(), listSeries: vi.fn(), createProduct: vi.fn(),
   updateProduct: vi.fn(), getProduct: vi.fn(), uploadImage: vi.fn(), updateVariantOption: vi.fn(),
   getProductPurchaseRules: vi.fn(), purchasePermissions: vi.fn(), purchaseGroupOptions: vi.fn(),
+  getProductCost: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams() }));
 vi.mock("@/lib/api", () => ({ shopApi: api, apiErrorMessage: (_: unknown, fallback: string) => fallback }));
@@ -17,6 +18,7 @@ beforeEach(() => {
   api.listCategories.mockResolvedValue([{ id: "cat", name: "舞會" }]);
   api.listSeries.mockResolvedValue([]);
   api.listProducts.mockResolvedValue([]);
+  api.getProductCost.mockResolvedValue({ unit_cost: null });
   api.getProductPurchaseRules.mockResolvedValue({ allowed_grades: [], required_permissions: [], allowed_identifiers: [], blocked_identifiers: [], exclusive_group: null, designated_only: false });
   api.purchasePermissions.mockResolvedValue([]);
   api.purchaseGroupOptions.mockResolvedValue([]);

@@ -11,7 +11,13 @@ class SalesOut(BaseModel):
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
 
 
-class ShopSalesMetrics(SalesOut):
+class ShopSalesCosts(SalesOut):
+    total_cost: int | None = Field(0, description="按目前商品單位成本計算；有缺漏時為 null")
+    profit_amount: int | None = Field(0, description="折扣後金額減商品成本的毛利；有缺漏時為 null")
+    missing_cost_item_count: int = 0
+
+
+class ShopSalesMetrics(ShopSalesCosts):
     order_count: int = 0
     buyer_count: int = 0
     item_count: int = 0
@@ -30,7 +36,7 @@ class ShopSalesMetrics(SalesOut):
     repeat_buyer_rate: float = 0
 
 
-class ShopSalesRow(SalesOut):
+class ShopSalesRow(ShopSalesCosts):
     key: str
     label: str
     order_count: int = 0

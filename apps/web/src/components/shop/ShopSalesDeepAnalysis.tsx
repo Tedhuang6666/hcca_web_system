@@ -137,7 +137,7 @@ export default function ShopSalesDeepAnalysis({
           </label>
         </div>
         <p className="sales-muted">
-          可按金額、件數、人數或未確認款項排序。占比以目前分析項目的訂購金額合計計算；訂單與人數可能跨項重疊。取消／退款金額另列，不代表實際退款撥付額。
+          可按金額、件數、人數或未確認款項排序。占比以目前分析項目的訂購金額合計計算；訂單與人數可能跨項重疊。取消／退款金額另列，不代表實際退款撥付額，其成本與毛利為零。
         </p>
         <div className="sales-table-scroll">
           <table>
@@ -150,6 +150,8 @@ export default function ShopSalesDeepAnalysis({
                   "人數",
                   "件數",
                   "訂購金額",
+                  "商品成本",
+                  "訂單毛利",
                   "金額占比",
                   "每單金額",
                   "每人金額",
@@ -171,6 +173,8 @@ export default function ShopSalesDeepAnalysis({
                   <td>{number(row.buyer_count)}</td>
                   <td>{number(row.item_count)}</td>
                   <td>{money(row.total_amount)}</td>
+                  <td>{row.total_cost == null ? "未設定" : money(row.total_cost)}</td>
+                  <td>{row.profit_amount == null ? "未設定" : money(row.profit_amount)}</td>
                   <td>
                     {rowTotal ? number((row.total_amount / rowTotal) * 100) : 0}
                     %

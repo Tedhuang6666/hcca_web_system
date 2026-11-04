@@ -63,6 +63,7 @@ from api.schemas.shop import (
     ProductCategoryCreate,
     ProductCategoryOut,
     ProductCategoryUpdate,
+    ProductCostOut,
     ProductCreate,
     ProductOut,
     ProductPurchaseGroupOptionOut,
@@ -588,6 +589,20 @@ async def get_product(
             "purchase_restriction": restriction,
         }
     )
+
+
+@router.get(
+    "/products/{product_id}/cost",
+    response_model=ProductCostOut,
+    summary="讀取內部商品成本（限商品管理者）",
+)
+async def get_product_cost(
+    product_id: uuid.UUID, session: DbDep, current_user: CurrentUser, response: Response
+) -> ProductCostOut:
+    product = await _get_product_or_404(product_id, session, current_user)
+    await _require_shop_manager(session, current_user, _product_activity(product))
+    response.headers["Cache-Control"] = "private, no-store"
+    return ProductCostOut(unit_cost=product.unit_cost)
 
 
 @router.get(

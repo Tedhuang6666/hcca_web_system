@@ -65,6 +65,7 @@ export const shopApi = {
   },
   getProduct: (id: string, classMemberId?: string) => get<ProductOut>(`/shop/products/${id}${classMemberId ? `?class_member_id=${encodeURIComponent(classMemberId)}` : ""}`),
   getProductPurchaseRules: (id: string) => get<ProductPurchaseRules>(`/shop/products/${id}/purchase-rules`),
+  getProductCost: (id: string) => get<import("../types").ProductCostOut>(`/shop/products/${id}/cost`),
   purchaseGroupOptions: (categoryId: string) => get<ProductPurchaseGroupOptionOut[]>(`/shop/purchase-group-options?category_id=${encodeURIComponent(categoryId)}`),
   purchasePermissions: (activityId?: string | null) =>
     get<ProductPurchasePermissionOut[]>(`/shop/purchase-permissions${activityId ? `?activity_id=${encodeURIComponent(activityId)}` : ""}`),
