@@ -1,4 +1,5 @@
 "use client";
+import ProductSizeChart from "@/components/shop/ProductSizeChart";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
@@ -793,6 +794,8 @@ function ProductModal({
                     </div>
                   </div>
                 ))}
+
+                <ProductSizeChart product={product} picked={picked} />
 
                 {product.purchase_allowed === false && isLoggedIn && <p className="shop-product-purchase-hint" role="status">
                   {product.purchase_restriction ?? "您目前不符合此商品的購買資格"}

@@ -181,6 +181,7 @@ class Product(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    size_chart: Mapped[dict | None] = mapped_column(JSONDict, nullable=True)
     # 售價（新台幣，整數）；變體加價另計於 ProductVariantOption.price_delta
     price: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # 原價僅供價差呈現；訂單及促銷仍以 price 計算。

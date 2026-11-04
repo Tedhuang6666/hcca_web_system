@@ -30,6 +30,23 @@ const testingProduct = {
   sale_start: "2099-01-01T00:00:00Z", sale_end: null,
 };
 const formalProduct = { ...testingProduct, id: "formal", name: "正式商品", status: "active" as const, sale_start: null };
+
+it("商品詳情的尺寸表隨尺寸按鈕切換標示", async () => {
+  api.getProduct.mockResolvedValue({ ...formalProduct, media: [], variant_groups: [{
+    id: "size", name: "尺寸", options: ["M", "L"].map((value) => ({ id: value, value, is_active: true, price_delta: 0 })),
+  }], size_chart: { group_id: "size", columns: ["衣長（cm）"], rows: [
+    { option_id: "M", values: ["68"] }, { option_id: "L", values: ["72"] },
+  ] } });
+  render(<ShopPage />);
+  fireEvent.click(await screen.findByRole("link", { name: "查看商品：正式商品" }));
+  const dialog = await screen.findByRole("dialog");
+  fireEvent.click(await within(dialog).findByRole("button", { name: "M" }));
+  expect(within(dialog).getByRole("row", { name: "M 已選 68" })).toHaveAttribute("data-selected", "true");
+  fireEvent.click(within(dialog).getByRole("button", { name: "L" }));
+  expect(within(dialog).getByRole("row", { name: "M 68" })).toHaveAttribute("data-selected", "false");
+  expect(within(dialog).getByRole("row", { name: "L 已選 72" })).toHaveAttribute("data-selected", "true");
+});
+
 const formalOrder: OrderOut = {
   id: "formal-order", user_id: "tester", activity_id: "festival", status: "pending",
   serial_number: "FORMAL-001", created_at: "2026-10-22T00:00:00Z", updated_at: "2026-10-22T00:00:00Z",

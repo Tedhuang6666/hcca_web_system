@@ -25627,6 +25627,7 @@ export interface components {
             seating_mode?: string | null;
             /** Series Id */
             series_id: string | null;
+            size_chart?: components["schemas"]["ProductSizeChart"] | null;
             status: components["schemas"]["ProductStatus"];
             /** Stock Quantity */
             stock_quantity: number;
@@ -25763,6 +25764,31 @@ export interface components {
             /** Sort Order */
             sort_order?: number | null;
         };
+        /** ProductSizeChart */
+        ProductSizeChart: {
+            /** Columns */
+            columns: string[];
+            /**
+             * Group Id
+             * Format: uuid
+             * @description 對應本商品的尺寸規格群組
+             */
+            group_id: string;
+            /** Note */
+            note?: string | null;
+            /** Rows */
+            rows: components["schemas"]["ProductSizeChartRow"][];
+        };
+        /** ProductSizeChartRow */
+        ProductSizeChartRow: {
+            /**
+             * Option Id
+             * Format: uuid
+             */
+            option_id: string;
+            /** Values */
+            values: string[];
+        };
         /**
          * ProductStatus
          * @enum {string}
@@ -25803,6 +25829,8 @@ export interface components {
             seating_mode?: string | null;
             /** Series Id */
             series_id?: string | null;
+            /** @description 尺寸表；建立商品與尺寸規格後設定，未提供保留，null 清除 */
+            size_chart?: components["schemas"]["ProductSizeChart"] | null;
             /** Stock Quantity */
             stock_quantity?: number | null;
             /**

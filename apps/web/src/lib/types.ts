@@ -571,6 +571,8 @@ export type {
   ProductSeriesCreate,
   ProductSeriesOut,
   ProductSeriesUpdate,
+  ProductSizeChart,
+  ProductSizeChartRow,
   ProductStatus,
   ProductUpdate,
   ProductVariantGroupCreate,

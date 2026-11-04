@@ -7,6 +7,7 @@ import { AlertTriangle, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { shopApi, classApi, apiErrorMessage } from "@/lib/api";
 import ProductThumbnail from "@/components/shop/ProductThumbnail";
+import ProductSizeChartEditor from "@/components/shop/ProductSizeChartEditor";
 import { usePermissions } from "@/hooks/usePermissions";
 import Modal from "@/components/ui/Modal";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
@@ -1830,6 +1831,8 @@ export default function ShopAdminPage() {
         allProducts={allProducts}
         onChanged={() => { loadProduct(product.id); loadAllProducts(); }}
       />
+      <ProductSizeChartEditor key={product.id} product={product}
+        onChanged={() => { loadProduct(product.id); loadAllProducts(); }} />
     </div>
   ) : !series ? (
     <div className="p-5 space-y-4">

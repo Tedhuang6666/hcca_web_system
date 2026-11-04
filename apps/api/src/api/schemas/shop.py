@@ -274,6 +274,48 @@ class ProductCreate(BaseModel):
         return self
 
 
+class ProductSizeChartRow(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    option_id: uuid.UUID
+    values: list[str] = Field(min_length=1, max_length=8)
+
+    @field_validator("values")
+    @classmethod
+    def validate_values(cls, values: list[str]) -> list[str]:
+        values = [value.strip() for value in values]
+        if any(not value or len(value) > 100 for value in values):
+            raise ValueError("尺寸資料請填寫 1 至 100 字；未提供的數值可填「—」")
+        return values
+
+
+class ProductSizeChart(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    group_id: uuid.UUID = Field(description="對應本商品的尺寸規格群組")
+    columns: list[str] = Field(min_length=1, max_length=8)
+    rows: list[ProductSizeChartRow] = Field(min_length=1, max_length=100)
+    note: str | None = Field(None, max_length=1000)
+
+    @field_validator("columns")
+    @classmethod
+    def validate_columns(cls, values: list[str]) -> list[str]:
+        values = [value.strip() for value in values]
+        if any(not value or len(value) > 50 for value in values):
+            raise ValueError("尺寸表欄名請填寫 1 至 50 字")
+        if len(set(values)) != len(values):
+            raise ValueError("尺寸表欄名不可重複")
+        return values
+
+    @model_validator(mode="after")
+    def validate_rows(self) -> Self:
+        if len({row.option_id for row in self.rows}) != len(self.rows):
+            raise ValueError("尺寸表不可重複設定同一尺寸")
+        if any(len(row.values) != len(self.columns) for row in self.rows):
+            raise ValueError("每個尺寸的資料數量必須與欄位數量相同")
+        return self
+
+
 class ProductUpdate(BaseModel):
     category_id: uuid.UUID | None = None
     series_id: uuid.UUID | None = None
@@ -298,6 +340,9 @@ class ProductUpdate(BaseModel):
     requires_seating: bool | None = None
     seating_mode: str | None = None
     media: list[ProductMediaCreate] | None = Field(None, max_length=20)
+    size_chart: ProductSizeChart | None = Field(
+        None, description="尺寸表；建立商品與尺寸規格後設定，未提供保留，null 清除"
+    )
 
     @field_validator("price")
     @classmethod
@@ -340,6 +385,7 @@ class ProductOut(BaseModel):
     updated_at: datetime
     variant_groups: list[ProductVariantGroupOut] = []
     media: list[ProductMediaOut] = []
+    size_chart: ProductSizeChart | None = None
 
 
 # ── 購買頁瀏覽樹（主題 → 系列 → 商品）────────────────────────────────────────

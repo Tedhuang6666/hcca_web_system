@@ -1,0 +1,22 @@
+.chart {
+  min-width: 0;
+  color: var(--public-text, var(--text-primary));
+  font-size: 0.875rem;
+}
+
+.chart h4 { font-weight: 600; margin-bottom: 0.5rem; }
+.selection { margin-bottom: 0.75rem; line-height: 1.65; overflow-wrap: anywhere; }
+.scroll { max-width: 100%; overflow-x: auto; scrollbar-width: thin; }
+.scroll:focus-visible { outline: 2px solid var(--public-accent, var(--primary)); outline-offset: 3px; }
+.chart table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.chart th, .chart td {
+  padding: 0.7rem 0.8rem;
+  border-bottom: 1px solid var(--public-border, var(--border));
+  text-align: left;
+  white-space: nowrap;
+}
+.chart thead { background: var(--public-soft, var(--bg-elevated)); }
+.chart th { font-weight: 600; }
+.chart tr[data-selected="true"] { background: var(--public-accent-soft, var(--primary-dim)); font-weight: 600; }
+.selected { margin-left: 0.5rem; font-size: 0.75rem; text-decoration: underline; text-underline-offset: 3px; }
+.note { margin-top: 0.75rem; white-space: pre-line; overflow-wrap: anywhere; line-height: 1.65; }

@@ -225,6 +225,7 @@ async def list_products(
             Product.id,
             Product.name,
             Product.description,
+            Product.size_chart,
             Product.image_url,
             Product.price,
             Product.original_price,
@@ -361,6 +362,17 @@ async def update_product(
     ):
         raise ValueError(f"商品狀態 {product.status} 不允許編輯")
     payload = data.model_dump(exclude_unset=True)
+    if data.size_chart is not None:
+        group = next(
+            (group for group in product.variant_groups if group.id == data.size_chart.group_id),
+            None,
+        )
+        if group is None:
+            raise ValueError("尺寸表必須選擇本商品的規格類別")
+        option_ids = {option.id for option in group.options}
+        if any(row.option_id not in option_ids for row in data.size_chart.rows):
+            raise ValueError("尺寸表包含不屬於所選規格的選項")
+        payload["size_chart"] = data.size_chart.model_dump(mode="json")
     original_price = payload.get("original_price", product.original_price)
     if original_price is not None and original_price < payload.get("price", product.price):
         raise ValueError("原價不得低於售價")
