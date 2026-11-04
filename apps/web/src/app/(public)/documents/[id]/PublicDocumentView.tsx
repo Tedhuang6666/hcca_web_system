@@ -148,6 +148,12 @@ function DocumentBody({ document }: { document: DocumentOut }) {
           <div className="pl-[2em]"><OfficialText value={document.subject} /></div>
         </div>
       )}
+      {document.category === "announcement" && document.basis && (
+        <div>
+          <p>依據：</p>
+          <div className="pl-[2em]"><OfficialText value={document.basis} /></div>
+        </div>
+      )}
       {document.doc_description && (
         <div>
           <p>
@@ -352,7 +358,7 @@ export default function PublicDocumentView({
                 <dd className="mt-0.5" style={{ color: "var(--text-primary)" }}>{document.handler_unit}</dd>
               </div>
             )}
-            {document.recipients.length > 0 && (
+            {document.category !== "announcement" && document.recipients.length > 0 && (
               <div className="col-span-2 sm:col-span-1">
                 <dt style={{ color: "var(--text-muted)" }}>受文者</dt>
                 <dd className="mt-0.5 break-words" style={{ color: "var(--text-primary)" }}>

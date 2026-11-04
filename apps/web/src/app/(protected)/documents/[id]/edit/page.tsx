@@ -15,6 +15,7 @@ import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import { useOnlineAutosave } from "@/hooks/useOnlineAutosave";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import { OrganizationEmailRecipientSettings } from "@/components/documents/OrganizationEmailRecipientSettings";
+import { AttachmentNameEditor } from "@/components/documents/AttachmentNameEditor";
 
 interface Recipient {
   id: string;
@@ -715,7 +716,7 @@ export default function EditDocumentPage() {
           </div>
 
           {/* 受文者；令僅在既有特殊指定對象時保留管理入口 */}
-          {(!isDecree || recipients.length > 0) && (
+          {category !== "announcement" && (!isDecree || recipients.length > 0) && (
           <div className="card p-4 space-y-3">
             <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
               {isDecree ? "特殊指定對象（選填）" : "受文者"}
@@ -797,12 +798,25 @@ export default function EditDocumentPage() {
             {doc.attachments.length > 0 && (
               <ul className="space-y-2">
                 {doc.attachments.map(a => (
-                  <li key={a.id} className="flex items-center justify-between text-xs px-3 py-2 rounded"
+                  <li key={a.id} className="flex flex-wrap items-center gap-2 text-xs px-3 py-2 rounded"
                     style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-                    <div className="flex items-center gap-2 ">
-                      <span>📎</span><span>{a.filename}（{a.quantity ?? 1}份）</span>
+                    <div className="min-w-0 flex-1 break-words">
+                      <span>{a.display_name || a.filename}（{a.quantity ?? 1}份）</span>
                     </div>
-                    <button onClick={() => deleteAttachment(a.id)} className=" hover:text-red-400 text-xs">
+                    <AttachmentNameEditor
+                      name={a.display_name || a.filename}
+                      onSave={async (name) => {
+                        const updated = await documentsApi.renameAttachment(id, a.id, name);
+                        setDoc(current => current ? {
+                          ...current,
+                          attachments: current.attachments.map(attachment => attachment.id === a.id
+                            ? { ...attachment, display_name: updated.display_name }
+                            : attachment),
+                        } : current);
+                        toast.success("附件名稱已更新");
+                      }}
+                    />
+                    <button type="button" onClick={() => deleteAttachment(a.id)} className="min-h-11 px-2 hover:text-red-400 text-xs">
                       刪除
                     </button>
                   </li>

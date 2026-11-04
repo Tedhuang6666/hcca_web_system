@@ -25,6 +25,7 @@ type GuidedFormProps = {
   draftStatus?: string;
   finalAction?: ReactNode;
   secondarySaveAction?: { label: string; onClick: () => void };
+  footerClassName?: string;
 };
 
 type GuidedFormStepProps = {
@@ -60,6 +61,7 @@ export default function GuidedForm({
   draftStatus,
   finalAction,
   secondarySaveAction,
+  footerClassName,
 }: GuidedFormProps) {
   const [initialStep] = useState(activeStep);
   const [hasChangedStep, setHasChangedStep] = useState(false);
@@ -71,7 +73,7 @@ export default function GuidedForm({
     <GuidedFormAnimationContext.Provider value={hasChangedStep}>
     <FormShell
       className="guided-form-shell"
-      footerClassName="md:hidden"
+      footerClassName={`md:hidden ${footerClassName ?? ""}`}
       footer={(
         <div className="flex w-full items-center gap-2">
           {activeStep > 0 && (

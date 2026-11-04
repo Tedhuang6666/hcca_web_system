@@ -936,7 +936,7 @@ export default function DocumentDetailPageClient({
                 <span>{CLASS_LABEL[doc.classification] ?? doc.classification}</span>
                 <span>{URGENCY_LABEL[doc.urgency] ?? doc.urgency}</span>
                 <span>發文日期：{toROCDate(doc.completed_at ?? doc.submitted_at ?? doc.created_at)}</span>
-                {(!isDecree || primaryRecipients.length > 0) && (
+                {doc.category !== "announcement" && (!isDecree || primaryRecipients.length > 0) && (
                   <span className="min-w-0 break-words">受文者：{recipientSummary}</span>
                 )}
               </div>
@@ -1103,6 +1103,14 @@ export default function DocumentDetailPageClient({
                       <p style={{ color: "var(--text-primary)" }}>主旨：</p>
                       <div className="pl-[2em]" style={{ color: "var(--text-primary)" }}>
                         <OfficialText value={doc.subject} />
+                      </div>
+                    </div>
+                  )}
+                  {doc.category === "announcement" && doc.basis && (
+                    <div>
+                      <p style={{ color: "var(--text-primary)" }}>依據：</p>
+                      <div className="pl-[2em]" style={{ color: "var(--text-primary)" }}>
+                        <OfficialText value={doc.basis} />
                       </div>
                     </div>
                   )}
@@ -1334,7 +1342,7 @@ export default function DocumentDetailPageClient({
                   聯絡：{doc.handler_email}
                 </p>
               )}
-              {doc.recipients.length > 0 && (
+              {doc.category !== "announcement" && doc.recipients.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
                   {doc.recipients.map(r => (
                     <span key={r.id} className="text-xs px-2.5 py-1 rounded-full"

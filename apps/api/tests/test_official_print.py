@@ -671,3 +671,92 @@ async def test_public_announcement_print_keeps_chief_signature() -> None:
     assert '<span class="signature-name">黃丞廷</span>' in rendered
     assert "主席" in "".join(page.extract_text() for page in reader.pages)
     assert "黃丞廷" in "".join(page.extract_text() for page in reader.pages)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("category", ["announcement", "letter"])
+@pytest.mark.parametrize("has_recipients", [False, True])
+async def test_announcement_omits_recipient_fields_without_changing_letters(
+    category: str, has_recipients: bool
+) -> None:
+    org = SimpleNamespace(id="council", name="班級聯合自治會", parent_id=None)
+    doc = SimpleNamespace(
+        category=category,
+        issuer_full_name=None,
+        org=org,
+        org_id=org.id,
+        title="班級聯合自治會公告" if category == "announcement" else "班級聯合自治會函",
+        urgency="normal",
+        classification="normal",
+        recipients=[
+            SimpleNamespace(recipient_type=kind, name=name)
+            for kind, name in (
+                ("main", "測試受文單位"),
+                ("primary", "測試正本單位"),
+                ("copy", "測試副本單位"),
+            )
+        ]
+        if has_recipients
+        else [],
+        attachments=[
+            SimpleNamespace(filename="upload.PDF", display_name="公告附件.pdf", quantity=2)
+        ],
+        issued_at=None,
+        completed_at=None,
+        created_at=None,
+        serial_number="測字第1150000001號",
+        approvals=[],
+        handler_name="測試承辦人",
+        handler_unit="主席",
+        handler_email=None,
+        subject="公告測試事項。",
+        basis="測試依據。",
+        doc_description="一、公告測試內容。",
+        action_required=None,
+        content=None,
+    )
+
+    rendered = await render_document_print_html(_OrgSession(org), doc)
+    pdf_text = "".join(
+        page.extract_text() for page in PdfReader(BytesIO(render_print_pdf(rendered))).pages
+    )
+
+    for text in ("主旨：", "依據：", "公告附件2份", "測試承辦人"):
+        assert text in rendered
+        assert text in pdf_text
+    assert "公告附件.pdf" not in rendered
+    assert "公告附件.pdf" not in pdf_text
+    for label in ("受文者：", "正本：", "副本："):
+        assert (label in rendered) == (category == "letter")
+        assert (label in pdf_text) == (category == "letter")
+    if category == "announcement":
+        assert "公告事項：" in rendered
+        for text in ("測試受文單位", "測試正本單位", "測試副本單位", "（未填）"):
+            assert text not in rendered
+            assert text not in pdf_text
+
+
+@pytest.mark.parametrize(
+    ("filename", "display_name", "link_url", "expected"),
+    [
+        ("附件.pdf", None, None, "附件1份"),
+        ("upload.docx", "會議資料.DOCX", None, "會議資料1份"),
+        ("upload.pdf", "會議資料第1.2版", None, "會議資料第1.2版1份"),
+        ("upload.pdf", "附件<修訂>.pdf", None, "附件&lt;修訂&gt;1份"),
+        ("upload.zip", "資料.v2.zip", None, "資料.v21份"),
+        (".pdf", None, None, ".pdf1份"),
+        ("資料.v2", None, "https://example.org", "資料.v21份"),
+    ],
+)
+def test_print_attachment_names_hide_only_uploaded_file_extensions(
+    filename: str, display_name: str | None, link_url: str | None, expected: str
+) -> None:
+    doc = SimpleNamespace(
+        attachments=[
+            SimpleNamespace(
+                filename=filename, display_name=display_name, link_url=link_url, quantity=1
+            )
+        ]
+    )
+
+    assert official_print_common._attachment_summary(doc) == expected

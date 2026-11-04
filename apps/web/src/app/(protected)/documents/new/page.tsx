@@ -359,6 +359,7 @@ export default function NewDocumentPage() {
   const isInspectionNotice = category === "inspection_notice";
   const isNotice = isMeetingNotice || isInspectionNotice;
   const isDecree = category === "decree";
+  const isAnnouncement = category === "announcement";
   const isRecord = category === "record";
   const copy = CONTENT_COPY[category];
   const docType = CATEGORY_OPTIONS.find(o => o.value === category)?.label ?? "";
@@ -730,7 +731,7 @@ export default function NewDocumentPage() {
         visibility_level: visibilityLevel,
         org_id: selectedOrgId,
         petition_case_id: selectedPetition?.id ?? null,
-        recipients: recipients.map((r) => ({
+        recipients: (isAnnouncement ? [] : recipients).map((r) => ({
           recipient_type: r.recipient_type,
           name: r.name,
           email: r.email || undefined,
@@ -866,7 +867,10 @@ export default function NewDocumentPage() {
       </div>
 
       <GuidedForm
-        steps={DOCUMENT_STEPS}
+        footerClassName="max-md:bottom-[calc(76px+env(safe-area-inset-bottom))]"
+        steps={DOCUMENT_STEPS.map((step, index) => isAnnouncement && index === 2
+          ? { label: "附件", description: "加入連結或檔案。" }
+          : step)}
         activeStep={activeStep}
         onStepChange={setActiveStep}
         onBack={() => setActiveStep((step) => Math.max(step - 1, 0))}
@@ -1139,7 +1143,7 @@ export default function NewDocumentPage() {
           <FormSection title="關聯陳情">
             <PetitionLinkSelector selected={selectedPetition} onSelect={setSelectedPetition} />
           </FormSection>
-          {!isDecree && (
+          {!isDecree && !isAnnouncement && (
           <FormSection title={
             isNotice
               ? "受文者 / 出席者 / 列席者 / 副本"
@@ -1219,7 +1223,7 @@ export default function NewDocumentPage() {
           </FormSection>
           )}
 
-          {!isDecree && (
+          {!isDecree && !isAnnouncement && (
             <OrganizationEmailRecipientSettings
               recipients={recipients}
               onPositionsChange={(recipientId, positionIds) => {
@@ -1381,9 +1385,11 @@ export default function NewDocumentPage() {
               <div className="flex items-center justify-between gap-3">
                 <dt>類別</dt><dd className="font-medium">{docType}</dd>
               </div>
-              <div className="flex items-center justify-between gap-3">
-                <dt>收件人</dt><dd className="font-medium">{recipients.length} 位</dd>
-              </div>
+              {!isAnnouncement && (
+                <div className="flex items-center justify-between gap-3">
+                  <dt>收件人</dt><dd className="font-medium">{recipients.length} 位</dd>
+                </div>
+              )}
               <div className="flex items-center justify-between gap-3">
                 <dt>可見範圍</dt><dd className="font-medium">{
                   visibilityLevel === "subject_only" ? "密件" :

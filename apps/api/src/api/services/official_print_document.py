@@ -53,6 +53,7 @@ async def render_document_print_html(
     is_decree = cat == "decree"
     is_record = cat == "record"
     is_consultation = cat == "consultation"
+    is_announcement = cat == "announcement"
     # 主席令由班級聯合自治會發布，不把主席職位組織併入機關全銜。
     issuer_name = _DECREE_ISSUER_NAME if is_decree else await _full_org_name(session, doc)
     decree_authority_title = _decree_issuer_title(doc, issuer_name) if is_decree else ""
@@ -313,8 +314,10 @@ async def render_document_print_html(
             "report": "建議事項：",
             "signature": "擬辦：",
         }.get(cat, "辦法：")
-        body_html = (
-            f'<section class="recipient-line">受文者：{addressed_to}</section>'
+        body_html = ""
+        if not is_announcement:
+            body_html += f'<section class="recipient-line">受文者：{addressed_to}</section>'
+        body_html += (
             f'<section class="meta">{"".join(meta_rows)}</section>'
             f"{_subject_section(doc.subject)}"
             f"{_document_section('依據：', getattr(doc, 'basis', None))}"
@@ -322,14 +325,15 @@ async def render_document_print_html(
         )
         if not (doc.subject or doc.doc_description or doc.action_required) and doc.content:
             body_html += _document_section("說明：", doc.content)
-        closing_html = (
-            f"{_document_section(action_label, doc.action_required)}"
-            '<section class="copies">'
-            f"<div>正本：{_join_names(primary_recipients) or addressed_to}</div>"
-            f"<div>副本：{_join_names(copy_recipients)}</div>"
-            "</section>"
-            f"{signature}"
-        )
+        closing_html = _document_section(action_label, doc.action_required)
+        if not is_announcement:
+            closing_html += (
+                '<section class="copies">'
+                f"<div>正本：{_join_names(primary_recipients) or addressed_to}</div>"
+                f"<div>副本：{_join_names(copy_recipients)}</div>"
+                "</section>"
+            )
+        closing_html += signature
         body_html += f'<section class="document-closing">{closing_html}</section>'
 
     custom_title = _compact_official_name(getattr(doc, "title", ""))

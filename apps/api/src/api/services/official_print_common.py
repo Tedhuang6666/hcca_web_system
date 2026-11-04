@@ -261,7 +261,15 @@ def _attachment_summary(doc: Document, *, has_petition_appendix: bool = False) -
     for attachment in doc.attachments:
         if not getattr(attachment, "filename", None):
             continue
-        name = _esc(attachment.display_name or attachment.filename)
+        name = attachment.display_name or attachment.filename
+        suffix = Path(attachment.filename).suffix
+        if (
+            suffix
+            and not getattr(attachment, "link_url", None)
+            and name.casefold().endswith(suffix.casefold())
+        ):
+            name = name[: -len(suffix)] or name
+        name = _esc(name)
         quantity = max(1, int(getattr(attachment, "quantity", 1) or 1))
         names.append(f"{name}{quantity}份")
     if has_petition_appendix:
