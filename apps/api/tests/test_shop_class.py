@@ -455,6 +455,23 @@ async def test_build_catalog_tree_includes_active_product_with_variants(
     assert len(tree) == 1
     assert tree[0].name == "商品"
     assert tree[0].series[0].products[0].has_variants is True
+    assert tree[0].series[0].products[0].has_option_surcharge is True
+
+
+async def test_build_catalog_tree_ignores_options_without_current_surcharge(
+    db_session: AsyncSession,
+) -> None:
+    product = await _make_product(db_session)
+    for group in product.variant_groups:
+        for option in group.options:
+            option.price_delta = 0
+    product.variant_groups[1].options[1].original_price_delta = 50
+    await db_session.flush()
+
+    tree = await shop_svc.build_catalog_tree(db_session)
+    listed_product = tree[0].series[0].products[0]
+    assert listed_product.has_variants is True
+    assert listed_product.has_option_surcharge is False
 
 
 async def test_build_catalog_tree_uses_first_media_image_when_product_image_is_missing(

@@ -5,7 +5,7 @@ import { categoryOrderable, deadlineFromInput, deadlineInputValue, defaultShopCa
 const now = Date.parse("2026-10-22T12:00:00Z");
 const past = "2026-10-22T11:00:00Z";
 const future = "2026-10-23T12:00:00Z";
-const product: CatalogProductOut = { id: "p", name: "商品", price: 100, status: "active", stock_quantity: 10, purchase_allowed: true, is_unlimited: false, has_variants: false, requires_seating: false };
+const product: CatalogProductOut = { id: "p", name: "商品", price: 100, status: "active", stock_quantity: 10, purchase_allowed: true, is_unlimited: false, has_variants: false, has_option_surcharge: false, requires_seating: false };
 const category = (id: string, products: CatalogProductOut[]): CatalogCategoryOut => ({ id, name: id, products, series: [], sort_order: 0 });
 
 describe("活動結單與多活動預購", () => {

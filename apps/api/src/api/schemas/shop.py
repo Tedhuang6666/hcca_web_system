@@ -361,6 +361,7 @@ class CatalogProductOut(BaseModel):
     sale_end: datetime | None = None
     effective_sale_end: datetime | None = None
     has_variants: bool = False
+    has_option_surcharge: bool = False
     requires_seating: bool = False
     seating_mode: str | None = None
 

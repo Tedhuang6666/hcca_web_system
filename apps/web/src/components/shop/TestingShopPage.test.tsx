@@ -26,7 +26,7 @@ vi.mock("@/lib/api-cache", () => ({ cacheGet: catalogCache.get, cacheHas: catalo
 
 const testingProduct = {
   id: "testing", name: "測試限定商品", price: 100, image_url: null, status: "testing" as const,
-  is_unlimited: false, stock_quantity: 4, has_variants: false, requires_seating: false,
+  is_unlimited: false, stock_quantity: 4, has_variants: false, has_option_surcharge: false, requires_seating: false,
   sale_start: "2099-01-01T00:00:00Z", sale_end: null,
 };
 const formalProduct = { ...testingProduct, id: "formal", name: "正式商品", status: "active" as const, sale_start: null };

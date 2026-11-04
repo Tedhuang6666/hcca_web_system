@@ -6,7 +6,7 @@ import ProductCardOffers from "./ProductCardOffers";
 const product: CatalogProductOut = {
   id: "shirt", name: "衣服", price: 300, status: "active", image_url: null,
   stock_quantity: 50, purchase_allowed: true, is_unlimited: true, has_variants: true, requires_seating: false,
-  seating_mode: null, sale_start: null, sale_end: null,
+  has_option_surcharge: true, seating_mode: null, sale_start: null, sale_end: null,
 };
 const pants = { ...product, id: "pants", name: "褲子", price: 500 };
 const promotion: ShopPromotionPublicOut = {
@@ -34,6 +34,14 @@ describe("商品卡片內的優惠", () => {
     }]} products={new Map()} disabled={false} onSelectBundle={vi.fn()} />);
     expect(screen.getByLabelText("原價 NT$300，優惠價 NT$270 起")).toBeVisible();
     expect(screen.getByText("滿 NT$1,000 · 滿 2 件 · 使用優惠碼 SAVE")).toBeVisible();
+  });
+
+  it("有規格但都免加價時不顯示起價", () => {
+    render(<ProductCardOffers product={{ ...product, has_option_surcharge: false }} promotions={[{
+      ...promotion, discount_type: "percentage", discount_value: 10,
+      min_quantity: 1, min_order_price: 0, target_products: [],
+    }]} products={new Map()} disabled={false} onSelectBundle={vi.fn()} />);
+    expect(screen.getByLabelText("原價 NT$300，優惠價 NT$270")).toBeVisible();
   });
 
   it("鎖定與套組缺貨時不能從卡片啟動選購", () => {

@@ -4,7 +4,8 @@ import { bundleProductAvailable, bundleProgress } from "./shop-bundle-progress";
 
 const shirt: CatalogProductOut = {
   id: "shirt", name: "上衣", price: 300, image_url: null, status: "active",
-  purchase_allowed: true, is_unlimited: false, stock_quantity: 10, has_variants: false, requires_seating: false,
+  purchase_allowed: true, is_unlimited: false, stock_quantity: 10, has_variants: false,
+  has_option_surcharge: false, requires_seating: false,
 };
 const pants = { ...shirt, id: "pants", name: "長褲", price: 500 };
 const products = new Map([[shirt.id, shirt], [pants.id, pants]]);

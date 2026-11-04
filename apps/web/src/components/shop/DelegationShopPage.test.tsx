@@ -27,7 +27,8 @@ vi.mock("@/lib/api-cache", () => ({ cacheGet: () => null, cacheHas: () => false,
 
 const product = {
   id: "bag", name: "紀念袋", price: 100, image_url: null, status: "active" as const,
-  purchase_allowed: true, is_unlimited: true, stock_quantity: 10, has_variants: false, requires_seating: false,
+  purchase_allowed: true, is_unlimited: true, stock_quantity: 10, has_variants: false,
+  has_option_surcharge: false, requires_seating: false,
   seating_mode: null, sale_start: null, sale_end: "2099-10-12T00:00:00Z",
 };
 const order: OrderOut = {
@@ -123,7 +124,7 @@ describe("原商品頁的家人代訂模式", () => {
     const section = await screen.findByRole("region", { name: "一起買更划算" });
     expect(screen.queryByRole("navigation", { name: "選擇商品活動" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "查看商品：紀念袋" }).compareDocumentPosition(section)
-      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "查看商品：紀念袋" }));
     await screen.findByRole("heading", { name: "紀念袋", level: 3 });
     expect(screen.queryByRole("region", { name: "套組加購建議" })).not.toBeInTheDocument();

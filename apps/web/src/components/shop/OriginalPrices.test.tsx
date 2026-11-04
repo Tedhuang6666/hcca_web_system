@@ -11,7 +11,7 @@ import type { CatalogProductOut, OrderOut, ShopPromotionPublicOut } from "@/lib/
 const shirt: CatalogProductOut = {
   id: "shirt", name: "紀念衫", price: 300, original_price: 400, status: "active",
   is_unlimited: true, stock_quantity: 50,
-  has_variants: true, purchase_allowed: true, requires_seating: false,
+  has_variants: true, has_option_surcharge: true, purchase_allowed: true, requires_seating: false,
 };
 const pants = { ...shirt, id: "pants", price: 500, original_price: 600 };
 const promotion: ShopPromotionPublicOut = {

@@ -749,9 +749,6 @@ function ProductModal({
                 <div className="shop-product-dialog-heading">
                   <h3 id="product-modal-title">{product.name}</h3>
                   <ShopPrice original={originalUnitPrice} current={offerPrice} />
-                  {originalUnitPrice > offerPrice && <p className="shop-product-purchase-hint">
-                    每件省 NT${(originalUnitPrice - offerPrice).toLocaleString()}，套組與其他優惠依登記合計計算。
-                  </p>}
                   {bundleStep && <p className="shop-product-purchase-hint">正在選購「{bundleStep.name}」，每項各一件；選齊後享套組價。</p>}
                   {!bundleStep && bundleAddOn?.(loading || !canEdit)}
                   {editingDescription && <p className="shop-product-purchase-hint">{editingDescription}</p>}
@@ -1043,7 +1040,7 @@ function ProductCard({
         </div>
         <div className="shop-public-product-meta">
           <span className="shop-public-product-price">
-            <ShopPrice original={cardPrice.original} current={cardPrice.current} suffix={!cardPrice.note && product.has_variants ? " 起" : undefined} />
+            <ShopPrice original={cardPrice.original} current={cardPrice.current} suffix={!cardPrice.note && product.has_option_surcharge ? " 起" : undefined} />
           </span>
           {!product.is_unlimited && !soldOut && (
             <span className="shop-public-product-deadline">剩 {product.stock_quantity}</span>

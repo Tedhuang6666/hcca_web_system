@@ -14769,6 +14769,11 @@ export interface components {
             /** Effective Sale End */
             effective_sale_end?: string | null;
             /**
+             * Has Option Surcharge
+             * @default false
+             */
+            has_option_surcharge: boolean;
+            /**
              * Has Variants
              * @default false
              */

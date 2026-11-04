@@ -1080,6 +1080,7 @@ async def test_get_catalog_lists_active_products(
     payload = resp.json()
     assert len(payload) == 1
     assert payload[0]["series"][0]["products"][0]["status"] == "active"
+    assert payload[0]["series"][0]["products"][0]["has_option_surcharge"] is False
 
 
 async def test_list_products_includes_purchase_limit(db_session, member_user, client) -> None:

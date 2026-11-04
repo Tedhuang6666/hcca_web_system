@@ -600,6 +600,19 @@ async def build_catalog_tree(
         for series in category.series
         for product in series.products
     )
+    catalog_product_ids = {product.id for product in catalog_products}
+    products_with_option_surcharge = set(
+        await session.scalars(
+            select(ProductVariantGroup.product_id)
+            .join(ProductVariantOption, ProductVariantOption.group_id == ProductVariantGroup.id)
+            .where(
+                ProductVariantGroup.product_id.in_(catalog_product_ids),
+                ProductVariantOption.is_active.is_(True),
+                ProductVariantOption.price_delta > 0,
+            )
+            .distinct()
+        )
+    )
     restrictions = await purchase_restrictions(
         session,
         catalog_products,
@@ -656,6 +669,7 @@ async def build_catalog_tree(
                     category.activity.order_closes_at if category.activity else None,
                 ),
                 has_variants=len(product.variant_groups) > 0,
+                has_option_surcharge=product.id in products_with_option_surcharge,
                 requires_seating=product.requires_seating,
                 seating_mode=product.seating_mode,
             )
@@ -687,6 +701,7 @@ async def build_catalog_tree(
                         p.sale_end, category.activity.order_closes_at if category.activity else None
                     ),
                     has_variants=len(p.variant_groups) > 0,
+                    has_option_surcharge=p.id in products_with_option_surcharge,
                     requires_seating=p.requires_seating,
                     seating_mode=p.seating_mode,
                 )

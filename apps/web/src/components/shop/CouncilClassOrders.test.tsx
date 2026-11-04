@@ -11,7 +11,7 @@ const members: ClassMemberOut[] = [
   { id: "member-2", user_id: null, roster_entry_id: "roster-2", display_name: "名冊同學乙", student_id: "11502", seat_number: 2, email: "", is_cadre: false, source: "roster" },
 ];
 const catalog: CatalogCategoryOut[] = [{ id: "cat", name: "紀念品", sort_order: 0, series: [], products: [
-  { id: "shirt", name: "紀念衫", price: 100, status: "active", stock_quantity: 10, is_unlimited: false, has_variants: true, requires_seating: false, purchase_allowed: true },
+  { id: "shirt", name: "紀念衫", price: 100, status: "active", stock_quantity: 10, is_unlimited: false, has_variants: true, has_option_surcharge: false, requires_seating: false, purchase_allowed: true },
 ] }];
 const order = (changes: Partial<OrderListItem> = {}): OrderListItem => ({
   id: "order-1", serial_number: "ORD-001", user_id: "user-1", user_name: "測試同學甲", class_id: "class-1",
