@@ -39,6 +39,8 @@ htmlcov/
 
 # Uploads and local references
 uploads/
+!apps/web/src/app/api/uploads/
+!apps/web/src/app/api/uploads/**
 參考/
 文件範例/
 

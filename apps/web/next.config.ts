@@ -77,28 +77,33 @@ const nextConfig: NextConfig = {
     ];
   },
   async rewrites() {
-    return [
-      {
-        source: "/auth/google/:path*",
-        destination: `${apiInternalUrl}/auth/google/:path*`,
-      },
-      {
-        source: "/auth/discord/:path*",
-        destination: `${apiInternalUrl}/auth/discord/:path*`,
-      },
-      {
-        source: "/discord/:path*",
-        destination: `${apiInternalUrl}/discord/:path*`,
-      },
-      {
-        source: "/api/:path*",
-        destination: `${apiInternalUrl}/:path*`,
-      },
-      {
-        source: "/ws/:path*",
-        destination: `${apiInternalUrl}/ws/:path*`,
-      },
-    ];
+    return {
+      afterFiles: [
+        {
+          source: "/auth/google/:path*",
+          destination: `${apiInternalUrl}/auth/google/:path*`,
+        },
+        {
+          source: "/auth/discord/:path*",
+          destination: `${apiInternalUrl}/auth/discord/:path*`,
+        },
+        {
+          source: "/discord/:path*",
+          destination: `${apiInternalUrl}/discord/:path*`,
+        },
+        {
+          source: "/ws/:path*",
+          destination: `${apiInternalUrl}/ws/:path*`,
+        },
+      ],
+      // Dynamic public image handlers must resolve before the build-time API proxy.
+      fallback: [
+        {
+          source: "/api/:path*",
+          destination: `${apiInternalUrl}/:path*`,
+        },
+      ],
+    };
   },
 };
 

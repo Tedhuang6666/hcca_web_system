@@ -12,6 +12,7 @@ import {
 
 import LiveElectionCard from "@/components/site/LiveElectionCard";
 import PublicSpotlightLink from "@/components/site/PublicSpotlightLink";
+import ShopImage from "@/components/shop/ShopImage";
 import { uploadUrl } from "@/lib/config";
 import { isAnnouncementExpired } from "@/lib/announcement-expiration";
 import { publicPageHref } from "@/lib/publicNav";
@@ -256,8 +257,14 @@ export default function HomeContent({
                 <Link key={product.id} href={`/shop?product=${product.id}`} className="public-home-shop-card">
                   <span className="public-home-shop-image">
                     {imageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={imageUrl} alt="" loading="lazy" />
+                      <ShopImage
+                        src={imageUrl}
+                        alt=""
+                        width={640}
+                        height={400}
+                        sizes="(max-width: 460px) 38vw, (max-width: 767px) 50vw, 33vw"
+                        loading="lazy"
+                      />
                     ) : (
                       <ShoppingBag size={32} aria-hidden />
                     )}
