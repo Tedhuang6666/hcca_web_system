@@ -797,7 +797,8 @@
 .app-page-transition.page-sheet-transition {
   position: relative;
   isolation: isolate;
-  animation: page-sheet-arrive 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  /* forwards keeps transform active and makes fixed descendants anchor to this page. */
+  animation: page-sheet-arrive 320ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .app-page-transition.page-sheet-transition::after {
