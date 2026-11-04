@@ -241,6 +241,7 @@ function ProductModal({
   activityClosesAt,
   isLoggedIn,
   authLoading,
+  classStatusLoading,
   registrationLoadError,
   registration,
   registrationLocked,
@@ -265,6 +266,7 @@ function ProductModal({
   activityClosesAt: string | null;
   isLoggedIn: boolean;
   authLoading: boolean;
+  classStatusLoading: boolean;
   registrationLoadError: boolean;
   registration: OrderOut | null;
   registrationLocked: boolean;
@@ -482,6 +484,7 @@ function ProductModal({
   const canEdit = isLoggedIn
     && !authorizationRequired
     && !authLoading
+    && (testing || !classStatusLoading)
     && !registrationLoadError
     && !registrationLocked
     && (testing || !orderClosed)
@@ -801,6 +804,10 @@ function ProductModal({
                 ) : !isLoggedIn ? (
                   <p className="shop-product-purchase-hint" role="status">
                     {authLoading ? "正在確認登入狀態…" : "登入後即可登記商品。"}
+                  </p>
+                ) : classStatusLoading && !testing ? (
+                  <p className="shop-product-purchase-hint" role="status">
+                    正在確認活動結單狀態…
                   </p>
                 ) : authorizationRequired ? (
                   <p className="shop-product-purchase-hint" role="status">
@@ -1133,6 +1140,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
   const promotionCelebrationToken = useRef(0);
   const promotionCelebrationTimer = useRef<number | null>(null);
   const [closeStatus, setCloseStatus] = useState<Record<string, CloseStatusItem>>({});
+  const [classStatusLoading, setClassStatusLoading] = useState(false);
   const [myClass, setMyClass] = useState<MyClassContext | null>(null);
   const [classLoadFailed, setClassLoadFailed] = useState(false);
   const [orderShortcutPortalReady, setOrderShortcutPortalReady] = useState(false);
@@ -1216,6 +1224,14 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
     }
     if (catalogLoaded.current !== key) setLoading(true);
     setLoadError(false);
+    const shouldLoadClassContext = isLoggedInRef.current;
+    setClassStatusLoading(directProductRoute && shouldLoadClassContext);
+    const classContextRequest = shouldLoadClassContext
+      ? Promise.resolve().then(() => classApi.myClass()).then(
+        (schoolClass) => ({ schoolClass, failed: false }),
+        () => ({ schoolClass: null, failed: true }),
+      )
+      : Promise.resolve({ schoolClass: null, failed: false });
     const routeSegments = topicSlug && productSlug
       ? [topicSlug, productSlug]
       : productSlug
@@ -1234,9 +1250,16 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
         if (generation !== refreshGeneration.current || catalogRefresh.current?.promise !== request) return;
         catalogLoaded.current = key;
         setCatalog(data);
+        if (directProductRoute) setLoading(false);
         try {
-          const schoolClass = await classApi.myClass();
+          const classContext = await classContextRequest;
           if (generation !== refreshGeneration.current || catalogRefresh.current?.promise !== request) return;
+          if (classContext.failed) {
+            setMyClass(null);
+            setClassLoadFailed(true);
+            return;
+          }
+          const schoolClass = classContext.schoolClass;
           setMyClass(schoolClass);
           setClassLoadFailed(false);
           if (schoolClass && data.length) {
@@ -1260,7 +1283,10 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       .finally(() => {
         if (catalogRefresh.current?.promise === request) {
           catalogRefresh.current = null;
-          if (generation === refreshGeneration.current) setLoading(false);
+          if (generation === refreshGeneration.current) {
+            setLoading(false);
+            setClassStatusLoading(false);
+          }
         }
       });
     catalogRefresh.current = { generation, key, promise: request };
@@ -1409,6 +1435,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       setRegistrationLoadError(false);
       setAvailablePromotions([]);
       setCloseStatus({});
+      setClassStatusLoading(false);
       const loggedIn = isLoggedInRef.current;
       if (token) {
         setCatalog([]);
@@ -2172,6 +2199,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
           activityClosesAt={selectedCategory?.order_closes_at ?? null}
           isLoggedIn={isLoggedIn}
           authLoading={authLoading}
+          classStatusLoading={classStatusLoading}
           registrationLoadError={registrationLoadError || Boolean(classMemberUserId && classMemberAccess === "error")}
           registration={productRegistration}
           registrationLocked={registrationLocked}

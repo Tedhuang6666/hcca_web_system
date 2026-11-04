@@ -636,6 +636,37 @@ it("refreshes a closed direct link without closing the open product dialog", asy
   expect(dialog).toBeVisible();
 });
 
+it("shows direct product details while class closure loads, and holds registration until confirmed", async () => {
+  api.me.mockResolvedValue({ id: "tester", student_id: "student-1" });
+  api.myClass.mockResolvedValue({ id: "class-1", label: "一年一班" });
+  api.getCurrentRegistrations.mockResolvedValue([]);
+  api.listAvailablePromotions.mockResolvedValue([]);
+  api.getProduct.mockResolvedValue({ ...formalProduct, variant_groups: [], media: [] });
+
+  const catalog = [{ id: "goods", name: "校商", activity_id: null,
+    sort_order: 0, products: [formalProduct], series: [] }];
+  let finishCatalog!: (data: typeof catalog) => void;
+  api.catalog.mockImplementation(() => new Promise<typeof catalog>((resolve) => { finishCatalog = resolve; }));
+
+  let finishCloseStatus!: (value: { statuses: Record<string, { is_closed: boolean }> }) => void;
+  api.getCloseStatus.mockImplementation(() => new Promise((resolve) => { finishCloseStatus = resolve; }));
+
+  render(<ShopPage productSlug={encodeURIComponent(formalProduct.name)} />);
+
+  await waitFor(() => expect(api.catalog).toHaveBeenCalledTimes(1));
+  expect(api.myClass).toHaveBeenCalledTimes(1);
+  await act(async () => { finishCatalog(catalog); });
+
+  const dialog = await screen.findByRole("dialog");
+  expect(await within(dialog).findByRole("heading", { name: "正式商品" })).toBeVisible();
+  expect(api.getCloseStatus).toHaveBeenCalledWith(["goods"], "class-1");
+  expect(screen.getByText("正在確認活動結單狀態…")).toBeVisible();
+  expect(screen.getByRole("button", { name: "登記購買 · NT$100" })).toBeDisabled();
+
+  await act(async () => { finishCloseStatus({ statuses: { goods: { is_closed: false } } }); });
+  await waitFor(() => expect(screen.getByRole("button", { name: "登記購買 · NT$100" })).toBeEnabled());
+});
+
 it("keeps the same activity orderable for another class without payment confirmation", async () => {
   api.me.mockResolvedValue({ id: "tester", display_name: "測試同學", email: "student@example.test", student_id: "student-2" });
   api.myClass.mockResolvedValue({ id: "class-2", label: "一年二班" });
@@ -745,6 +776,7 @@ it("still loads the public catalog when authentication is unavailable", async ()
   render(<ShopPage />);
 
   expect(await screen.findByRole("link", { name: "查看商品：正式商品" })).toBeVisible();
+  expect(api.myClass).not.toHaveBeenCalled();
   expect(screen.queryByRole("link", { name: "查看商品：測試限定商品" })).not.toBeInTheDocument();
 });
 
