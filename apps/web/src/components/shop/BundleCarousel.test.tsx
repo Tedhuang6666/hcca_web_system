@@ -62,7 +62,7 @@ describe("套組橫向輪播", () => {
     advance(192);
     expect(viewport.scrollLeft).toBe(stoppedAt);
     expect(frames.size).toBe(0);
-    expect(screen.getByText("左右滑動瀏覽套組")).toBeVisible();
+    expect(screen.getByRole("button", { name: "繼續自動滑動" })).toBeVisible();
     const scrollTo = vi.fn();
     viewport.scrollTo = scrollTo;
     fireEvent.click(screen.getByRole("button", { name: "下一個套組" }));
@@ -87,7 +87,7 @@ describe("套組橫向輪播", () => {
     vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
     render(offers());
     expect(frames.size).toBe(0);
-    expect(screen.getByText("左右滑動瀏覽套組")).toBeVisible();
+    expect(screen.getByRole("button", { name: "下一個套組" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "暫停自動滑動" })).not.toBeInTheDocument();
   });
 

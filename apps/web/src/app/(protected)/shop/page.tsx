@@ -1982,6 +1982,19 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
             {selectedCategory.order_closes_at && <p className="shop-public-product-deadline">
               活動結單：{new Date(selectedCategory.order_closes_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}（單品另設期限時以商品標示為準）
             </p>}
+            {bundlePromotions.length > 0 && <section className="shop-bundles" aria-labelledby="shop-bundles-title">
+              <div className="shop-bundles-heading">
+                <h2 id="shop-bundles-title" tabIndex={-1}><Gift size={18} aria-hidden="true" />一起買更划算</h2>
+                <p>選購優惠套組</p>
+              </div>
+              <BundleCarousel key={selectedCategory.activity_id ?? selectedCategory.id}>
+                {bundlePromotions.map((promotion) => <BundleOffer key={promotion.id}
+                  promotion={promotion} products={catalogProducts} registration={selectedCategoryRegistration}
+                  disabled={authLoading || registrationLoadError || registrationLocked
+                    || Boolean(closeStatus[selectedCategory.id]?.is_closed)}
+                  onSelect={(productId) => selectBundleProduct(promotion, productId)} />)}
+              </BundleCarousel>
+            </section>}
             {selectedCategory.series.length > 0 && (
               <div className="shop-public-series-filter-wrap">
                 <span>商品系列</span>
@@ -2095,19 +2108,6 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                 <ShopPrice original={referenceSubtotal} current={selectedCategoryTotals.total_price} />
               </div>
             )}
-            {bundlePromotions.length > 0 && <section className="shop-bundles" aria-labelledby="shop-bundles-title">
-              <div className="shop-bundles-heading">
-                <h2 id="shop-bundles-title" tabIndex={-1}><Gift size={18} aria-hidden="true" />一起買更划算</h2>
-                <p>選購優惠套組</p>
-              </div>
-              <BundleCarousel key={selectedCategory.activity_id ?? selectedCategory.id}>
-                {bundlePromotions.map((promotion) => <BundleOffer key={promotion.id}
-                  promotion={promotion} products={catalogProducts} registration={selectedCategoryRegistration}
-                  disabled={authLoading || registrationLoadError || registrationLocked
-                    || Boolean(closeStatus[selectedCategory.id]?.is_closed)}
-                  onSelect={(productId) => selectBundleProduct(promotion, productId)} />)}
-              </BundleCarousel>
-            </section>}
           </section>
         </div>
       )}

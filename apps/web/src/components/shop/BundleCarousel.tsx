@@ -118,7 +118,6 @@ export default function BundleCarousel({ children }: { children: ReactNode }) {
       <div className="shop-bundle-carousel-track">{ordered}</div>
     </div>
     {overflow && <div className="shop-bundle-carousel-controls">
-      <p>{paused || reducedMotion ? "左右滑動瀏覽套組" : "套組緩慢自動展示，也可左右滑動"}</p>
       <div>
         {!reducedMotion && <button type="button" aria-label={paused ? "繼續自動滑動" : "暫停自動滑動"}
           onClick={() => setPaused((current) => !current)}>
