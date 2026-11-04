@@ -19,13 +19,14 @@
         GET /documents/{doc_id}/attachments/{att_id}/preview
     （這兩個端點以 FileResponse 直接 serve 檔案，不依賴本靜態掛載；前端本就使用它們。）
 
-防穿越：入口自行拒絕非標準路徑，不依賴 StaticFiles 呼叫前的正規化。
+防穿越：入口以 normpath 驗證路徑仍是標準相對路徑，且位於公開前綴內；
     檔案查找後再驗證解析符號連結的實體路徑，避免公開目錄的連結指向私有附件。
 """
 
 from __future__ import annotations
 
 import os
+import posixpath
 from pathlib import Path
 
 from starlette.responses import PlainTextResponse, Response
@@ -43,11 +44,13 @@ PUBLIC_UPLOAD_PREFIXES: tuple[str, ...] = (
 
 
 def _is_public_path(path: str) -> bool:
-    return (
-        path.startswith(PUBLIC_UPLOAD_PREFIXES)
-        and "\\" not in path
-        and all(part not in {"", ".", ".."} for part in path.split("/"))
-    )
+    # StaticFiles may normalize request paths before this check; reject noncanonical direct inputs too.
+    if "\\" in path:
+        return False
+    normalized = posixpath.normpath(path)
+    if normalized != path:
+        return False
+    return normalized.startswith(PUBLIC_UPLOAD_PREFIXES)
 
 
 class PublicUploadsStaticFiles(StaticFiles):
