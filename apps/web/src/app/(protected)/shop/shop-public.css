@@ -1327,7 +1327,7 @@
 
 .shop-product-dialog-media {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
   grid-auto-rows: auto;
   gap: 0.75rem;
   min-width: 0;
@@ -1467,7 +1467,8 @@
   white-space: nowrap;
 }
 
-.shop-product-dialog-caption > span + span {
+.shop-product-dialog-counter {
+  margin-left: auto;
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
 }

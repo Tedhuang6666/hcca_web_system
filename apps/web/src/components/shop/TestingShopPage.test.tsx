@@ -166,6 +166,38 @@ it("沒有標註的舊照片仍有可辨識的切換名稱", async () => {
   expect(screen.getByRole("img", { name: "正式商品・模特兒宣傳照 1" })).toBeVisible();
 });
 
+it.each([undefined, null, "", " \t "])("單張圖片未填描述時不顯示說明列（%s）", async (label) => {
+  api.getProduct.mockResolvedValue({ ...formalProduct, image_url: "/front.png", variant_groups: [],
+    media: [{ id: "front", image_url: "/front.png", label, kind: "product" }] });
+  render(<ShopPage />);
+  fireEvent.click(await screen.findByRole("link", { name: "查看商品：正式商品" }));
+  const image = await screen.findByRole("img", { name: "正式商品・商品照片 1" });
+  expect(image).toBeVisible();
+  expect(image.closest(".shop-product-dialog-media")?.querySelector(".shop-product-dialog-caption"))
+    .toBeNull();
+});
+
+it("多張圖片只顯示已填寫的描述，空白描述保留張數與切換名稱", async () => {
+  api.getProduct.mockResolvedValue({ ...formalProduct, image_url: "/front.png", variant_groups: [],
+    media: [
+      { id: "front", image_url: "/front.png", label: null, kind: "product" },
+      { id: "back", image_url: "/back.png", label: " 背面細節 ", kind: "product" },
+      { id: "model", image_url: "/model.png", label: " \t ", kind: "model" },
+    ] });
+  render(<ShopPage />);
+  fireEvent.click(await screen.findByRole("link", { name: "查看商品：正式商品" }));
+  const counter = await screen.findByLabelText("第 1 張，共 3 張");
+  expect(counter.parentElement).toHaveTextContent(/^1 \/ 3$/);
+  expect(screen.getByRole("button", { name: "顯示商品照片 1" })).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(screen.getByRole("button", { name: "下一張商品圖片" }));
+  expect(screen.getByLabelText("第 2 張，共 3 張").parentElement).toHaveTextContent(/^背面細節2 \/ 3$/);
+  fireEvent.click(screen.getByRole("button", { name: "顯示模特兒宣傳照 3" }));
+  expect(screen.getByLabelText("第 3 張，共 3 張").parentElement).toHaveTextContent(/^3 \/ 3$/);
+  fireEvent.keyDown(screen.getByRole("group", { name: "商品圖片" }), { key: "Home" });
+  expect(screen.getByRole("button", { name: "顯示商品照片 1" })).toHaveFocus();
+  expect(screen.getByLabelText("第 1 張，共 3 張").parentElement).toHaveTextContent(/^1 \/ 3$/);
+});
+
 beforeEach(() => {
   vi.resetAllMocks();
   window.localStorage.clear();

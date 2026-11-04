@@ -672,9 +672,9 @@ function ProductModal({
               </button>
             </>}
           </div>
-          {product && displayMedia && <div className="shop-product-dialog-caption" role="status" aria-live="polite" aria-atomic="true">
-            <span title={displayLabel}>{displayLabel}</span>
-            {media.length > 1 && <span aria-label={`第 ${displayMediaIndex + 1} 張，共 ${media.length} 張`}>
+          {product && displayMedia && (displayMedia.caption || media.length > 1) && <div className="shop-product-dialog-caption" role="status" aria-live="polite" aria-atomic="true">
+            {displayMedia.caption && <span title={displayMedia.caption}>{displayMedia.caption}</span>}
+            {media.length > 1 && <span className="shop-product-dialog-counter" aria-label={`第 ${displayMediaIndex + 1} 張，共 ${media.length} 張`}>
               {displayMediaIndex + 1} / {media.length}
             </span>}
           </div>}
