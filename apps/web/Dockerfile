@@ -12,6 +12,9 @@ COPY apps/web/ .
 COPY fonts/LXGWWenKaiTC-Regular.ttf ./fonts/LXGWWenKaiTC-Regular.ttf
 
 # 建置時注入公開環境變數；API 空值代表使用同源 /api 代理
+# Next rewrites 在建置時固化；圖片優化的內部請求也必須能連到 API 容器。
+ARG API_INTERNAL_URL=http://api:8000
+ENV API_INTERNAL_URL=$API_INTERNAL_URL
 ARG NEXT_PUBLIC_API_URL=
 ARG NEXT_PUBLIC_WS_URL=
 ARG NEXT_PUBLIC_SHOP_LOOKBOOK_BASE_URL=

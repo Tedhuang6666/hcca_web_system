@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { AlertTriangle, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { shopApi, classApi, apiErrorMessage } from "@/lib/api";
-import { uploadUrl } from "@/lib/config";
+import ProductThumbnail from "@/components/shop/ProductThumbnail";
 import { usePermissions } from "@/hooks/usePermissions";
 import Modal from "@/components/ui/Modal";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
@@ -45,18 +45,7 @@ async function listProductChoices() {
 // ── 共用小元件 ────────────────────────────────────────────────────────────────
 
 function Thumb({ url, size = 44 }: { url: string | null; size?: number }) {
-  if (!url) {
-    return (
-      <div className="rounded-lg flex-shrink-0"
-        style={{ width: size, height: size, background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
-        aria-hidden="true" />
-    );
-  }
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={uploadUrl(url)} alt="" className="rounded-lg object-cover flex-shrink-0"
-      style={{ width: size, height: size, border: "1px solid var(--border)" }} />
-  );
+  return <ProductThumbnail url={url} size={size} />;
 }
 
 function ImageField({ value, onChange, onUploadingChange, disabled = false }: {

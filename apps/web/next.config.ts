@@ -25,10 +25,10 @@ const nextConfig: NextConfig = {
       algorithm: "sha384",
     },
   },
-  // 圖片優化：自動轉 WebP/AVIF、長 CDN 快取（30 天）；
+  // WebP 降低原圖首次縮放的編碼成本，沿用 30 天快取；
   // remotePatterns 允許後端 /uploads 路徑與 Cloudflare 隧道測試環境。
   images: {
-    formats: ["image/avif", "image/webp"],
+    formats: ["image/webp"],
     minimumCacheTTL: 2592000,
     deviceSizes: [384, 640, 750, 828, 1080, 1200, 1920],
     imageSizes: [16, 32, 48, 64, 96, 128, 192, 256, 320, 384, 512],

@@ -55,33 +55,11 @@ import { shopCardPrice, type ShopCardPrice } from "@/lib/shop-card-price";
 import { categoryOrderable, defaultShopCategory, productDeadline } from "@/lib/shop-deadlines";
 import { registrationLockMessage, registrationVariantKey } from "@/lib/shop-registration";
 import { productGallery } from "@/lib/shop-product-media";
+import ProductThumbnail from "@/components/shop/ProductThumbnail";
+import ShopImage from "@/components/shop/ShopImage";
 
 function Thumb({ url, alt, size = 64 }: { url: string | null; alt: string; size?: number }) {
-  if (!url) {
-    return (
-      <div
-        className="rounded-lg flex items-center justify-center flex-shrink-0"
-        style={{ width: size, height: size, background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
-        aria-hidden="true">
-        <svg width={size * 0.4} height={size * 0.4} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          strokeWidth="1.5" style={{ color: "var(--text-disabled)" }}>
-          <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" />
-          <path d="m21 15-3.6-3.6a2 2 0 0 0-2.8 0L6 21" />
-        </svg>
-      </div>
-    );
-  }
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={uploadUrl(url)}
-      alt={alt}
-      width={size}
-      height={size}
-      className="rounded-lg object-cover flex-shrink-0"
-      style={{ width: size, height: size, border: "1px solid var(--border)" }}
-    />
-  );
+  return <ProductThumbnail url={url} alt={alt} size={size} />;
 }
 
 
@@ -640,12 +618,14 @@ function ProductModal({
                   <button type="button" className="shop-product-retry" onClick={() => setFailedMediaUrl(null)}>重新載入圖片</button>
                 </div>
               ) : (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
+                <ShopImage
                   key={displayMedia.image_url}
                   data-product-flight-source
                   src={uploadUrl(displayMedia.image_url)}
                   alt={`${product.name}・${displayLabel}`}
+                  fill
+                  sizes="(max-width: 767px) 100vw, 50vw"
+                  loading="eager"
                   draggable={false}
                   onError={() => setFailedMediaUrl(displayMedia.image_url)}
                   onPointerDown={startMediaSwipe}
@@ -703,8 +683,7 @@ function ProductModal({
                     aria-pressed={selected}
                     title={item.label}
                     className="shop-product-dialog-gallery-item">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={uploadUrl(item.thumbnail_url)} alt="" loading="lazy" />
+                    <ShopImage src={uploadUrl(item.thumbnail_url)} alt="" width={64} height={64} sizes="64px" loading="lazy" />
                   </button>
                 );
               })}
@@ -985,6 +964,7 @@ function ProductCard({
   bundleHint: string | null;
   categoryDeadline: string | null;
 }) {
+  const [failedImage, setFailedImage] = useState<string | null>(null);
   const testing = product.status === "testing";
   const soldOut = product.status === "sold_out" || (testing && !product.is_unlimited && product.stock_quantity === 0);
   const deadline = productDeadline(product);
@@ -1012,13 +992,15 @@ function ProductCard({
   const content = (
     <>
       <div className="shop-public-product-media">
-        {coverUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+        {coverUrl && failedImage !== coverUrl ? (
+          <ShopImage
             src={uploadUrl(coverUrl)}
             alt={product.name}
+            fill
+            sizes="auto, (max-width: 767px) 100vw, (max-width: 1199px) 50vw, 33vw"
             loading="lazy"
             className="h-full w-full object-cover"
+            onError={() => setFailedImage(coverUrl)}
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center" style={{ color: "var(--public-muted)" }}>
@@ -1069,6 +1051,7 @@ function ProductCard({
     {href ? (
       <Link
         href={href}
+        prefetch={false}
         onClick={(event) => {
           if (disabled) {
             event.preventDefault();

@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { uploadUrl } from "@/lib/config";
+import ShopImage from "./ShopImage";
 
-export default function ProductThumbnail({ url, size = 44 }: {
+export default function ProductThumbnail({ url, size = 44, alt = "" }: {
   url: string | null | undefined;
   size?: number;
+  alt?: string;
 }) {
   const src = uploadUrl(url);
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
@@ -40,14 +42,13 @@ export default function ProductThumbnail({ url, size = 44 }: {
   }
 
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
+    <ShopImage
       src={src}
-      alt=""
+      alt={alt}
       width={size}
       height={size}
+      sizes={`${size}px`}
       loading="lazy"
-      decoding="async"
       className="shrink-0 rounded-lg object-cover"
       style={{ width: size, height: size, border: "1px solid var(--border)" }}
       onError={() => setFailedSrc(src)}
