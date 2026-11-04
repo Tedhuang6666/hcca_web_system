@@ -53,8 +53,6 @@ import { productOfferPrice } from "@/lib/shop-promotion-price";
 import ProductCardOffers from "@/components/shop/ProductCardOffers";
 import { shopCardPrice, type ShopCardPrice } from "@/lib/shop-card-price";
 import { categoryOrderable, defaultShopCategory, productDeadline } from "@/lib/shop-deadlines";
-import ShopLookbook from "@/components/shop/ShopLookbook";
-import { hasShopLookbook, lookbookPhotoUrl, productLookbook } from "@/lib/shop-lookbook";
 import { registrationLockMessage, registrationVariantKey } from "@/lib/shop-registration";
 import { productGallery } from "@/lib/shop-product-media";
 
@@ -1013,20 +1011,16 @@ function ProductCard({
           : null;
   const className = "shop-public-product-card group";
   const style = { opacity: disabled ? 0.6 : 1 };
-  const lookbookCover = productLookbook(product.name)?.photos.find((photo) => photo.orientation === "portrait");
-  const coverUrl = lookbookCover ? lookbookPhotoUrl(lookbookCover.id) : product.image_url;
+  const coverUrl = product.image_url;
   const content = (
     <>
-      <div className="shop-public-product-media" style={lookbookCover ? { aspectRatio: "3 / 4" } : undefined}>
+      <div className="shop-public-product-media">
         {coverUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={uploadUrl(coverUrl)}
-            srcSet={lookbookCover ? `${lookbookPhotoUrl(lookbookCover.id, 480)} 480w, ${lookbookPhotoUrl(lookbookCover.id)} 1440w` : undefined}
-            sizes={lookbookCover ? "(max-width: 759px) 50vw, 33vw" : undefined}
             alt={product.name}
             loading="lazy"
-            style={lookbookCover ? { objectPosition: lookbookCover.position } : undefined}
             className="h-full w-full object-cover"
           />
         ) : (
@@ -2117,7 +2111,6 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                   onSelect={(productId) => selectBundleProduct(promotion, productId)} />)}
               </BundleCarousel>
             </section>}
-            {hasShopLookbook(selectedCategory) && <ShopLookbook key={selectedCategory.id} />}
           </section>
         </div>
       )}

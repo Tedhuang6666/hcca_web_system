@@ -41,6 +41,38 @@ const formalOrder: OrderOut = {
 
 afterEach(() => { vi.unstubAllGlobals(); });
 
+it.each(["棉T", "刷毛帽T", "風衣外套"])("%s 使用後台主圖與圖集，不自動加入模特兒照", async (name) => {
+  const product = { ...formalProduct, name, image_url: "/front.png" };
+  api.catalog.mockResolvedValue([{ id: "goods", name: "104 校慶商品", activity_id: "festival",
+    sort_order: 0, products: [product], series: [] }]);
+  api.getProduct.mockResolvedValue({ ...product, variant_groups: [], media: [
+    { id: "front", image_url: "/front.png", label: "正面", kind: "product" },
+    { id: "back", image_url: "/back.png", label: "背面", kind: "product" },
+  ] });
+
+  render(<ShopPage />);
+  const card = await screen.findByRole("link", { name: `查看商品：${name}` });
+  expect(within(card).getByRole("img", { name })).toHaveAttribute("src", expect.stringContaining("/front.png"));
+  expect(screen.queryByRole("heading", { name: "把校園，穿進日常。" })).not.toBeInTheDocument();
+
+  fireEvent.click(card);
+  expect(await screen.findByRole("img", { name: `${name}・正面` })).toBeVisible();
+  expect(screen.getByLabelText("第 1 張，共 2 張")).toBeVisible();
+  expect(screen.queryByRole("button", { name: /顯示模特兒宣傳照/ })).not.toBeInTheDocument();
+  expect(document.querySelector('img[src*="/shop/104/"], img[srcset*="/shop/104/"]')).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "下一張商品圖片" }));
+  expect(screen.getByRole("img", { name: `${name}・背面` })).toBeVisible();
+});
+
+it("未上傳照片的服飾不產生虛構圖片", async () => {
+  api.catalog.mockResolvedValue([{ id: "goods", name: "104 校慶商品", activity_id: "festival",
+    sort_order: 0, products: [{ ...formalProduct, name: "棉T" }], series: [] }]);
+  render(<ShopPage />);
+  const card = await screen.findByRole("link", { name: "查看商品：棉T" });
+  expect(within(card).queryByRole("img")).not.toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "把校園，穿進日常。" })).not.toBeInTheDocument();
+});
+
 it("商品圖集可用前後按鈕與鍵盤切換，顯示張數且不超出首尾", async () => {
   api.getProduct.mockResolvedValue({ ...formalProduct, image_url: "/front.png", variant_groups: [],
     media: [

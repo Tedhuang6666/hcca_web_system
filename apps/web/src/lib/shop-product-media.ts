@@ -1,5 +1,4 @@
 import type { ProductOut } from "@/lib/types";
-import { lookbookPhotoUrl, productLookbook } from "@/lib/shop-lookbook";
 
 export interface ProductGalleryImage {
   image_url: string;
@@ -26,7 +25,5 @@ export function productGallery(product: ProductOut): ProductGalleryImage[] {
   (product.variant_groups ?? []).forEach((group) => group.options.forEach((option) => {
     if (option.is_active && option.image_url) add(option.image_url, option.value);
   }));
-  productLookbook(product.name)?.photos.forEach((photo, index) =>
-    add(lookbookPhotoUrl(photo.id), `模特兒宣傳照 ${index + 1}`, lookbookPhotoUrl(photo.id, 480)));
   return images;
 }
