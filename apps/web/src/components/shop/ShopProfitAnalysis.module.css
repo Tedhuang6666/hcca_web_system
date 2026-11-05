@@ -1,0 +1,57 @@
+.root { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.root h2 { font-size: 1.4rem; font-weight: 650; }
+.root h3 { font-size: 1.05rem; font-weight: 650; }
+.root p { font-size: .875rem; line-height: 1.7; }
+.root button, .root select, .root summary { min-height: 44px; }
+.root input, .root textarea { min-width: 0; width: 100%; font-size: 1rem; min-height: 44px; }
+.root :is(button, input, select, textarea, summary):focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem; }
+.toolbar p, .productHeader p, .muted { color: var(--text-secondary); }
+.scope { display: grid; grid-template-columns: minmax(12rem, 1fr) 2fr; align-items: end; gap: 1.5rem; margin-bottom: .75rem; }
+.scope label, .fields label { display: grid; gap: .4rem; font-size: .875rem; }
+.scope p { max-width: 65ch; color: var(--text-secondary); }
+.overview { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; padding-block: 2rem; margin-top: 1rem; border-block: 1px solid var(--border); }
+.balance strong { display: block; font-size: clamp(1.75rem, 3vw, 2.5rem); font-weight: 650; margin-block: .5rem; overflow-wrap: anywhere; }
+.balance p { max-width: 52ch; }
+.loss { color: var(--danger); }
+.accounts { display: grid; gap: .5rem; align-content: start; font-size: .875rem; }
+.accounts div { display: flex; justify-content: space-between; gap: 1rem; }
+.accounts dd { text-align: right; }
+.total { border-top: 1px solid var(--border); padding-top: .65rem; margin-top: .25rem; font-weight: 650; }
+.quantities { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; padding-block: 1.25rem; border-bottom: 1px solid var(--border); }
+.quantities dt { font-size: .875rem; color: var(--text-secondary); }
+.quantities dd { font-size: 1.15rem; font-weight: 600; margin-top: .25rem; }
+.cash { padding-block: 1rem; color: var(--text-secondary); }
+.sectionTitle { margin-top: 1.5rem; margin-bottom: .75rem; }
+.product { border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.25rem; min-width: 0; }
+.productHeader { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.productHeader h3 { overflow-wrap: anywhere; }
+.productHeader strong { display: grid; gap: .15rem; font-size: 1.15rem; }
+.productHeader strong span { color: var(--text-secondary); font-size: .8rem; font-weight: 400; }
+.quantityBreakdown { display: flex; gap: .5rem 1.5rem; flex-wrap: wrap; margin-block: 1rem; font-size: .875rem; color: var(--text-secondary); }
+.quantityBreakdown b { color: var(--text-primary); }
+.rowAccounts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; font-size: .875rem; margin-block: 1rem; }
+.rowAccounts dt { color: var(--text-secondary); margin-bottom: .25rem; }
+.planSummary { border-top: 1px solid var(--border); padding-top: 1rem; }
+.planSummary p { color: var(--text-secondary); }
+.planSummary button { margin-top: .5rem; }
+.savedNote { white-space: pre-wrap; overflow-wrap: anywhere; }
+.editor { padding-block: 1rem; border-top: 1px solid var(--border); }
+.editor legend { font-size: .95rem; font-weight: 600; margin-bottom: .75rem; }
+.fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin-block: .75rem; }
+.note { grid-column: 1 / -1; }
+.note textarea { min-height: 5rem; }
+.actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1rem; }
+.scenario { border-top: 1px solid var(--border); padding-top: .5rem; margin-top: 1rem; }
+.scenario summary { display: list-item; align-content: center; cursor: pointer; font-size: .875rem; font-weight: 600; }
+.scenario .fields { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 38rem; }
+.scenario p { margin-block: .75rem; }
+@media (max-width: 700px) {
+  .scope, .overview { grid-template-columns: minmax(0, 1fr); gap: 1.25rem; }
+  .fields, .rowAccounts, .quantities { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .product { padding: 1rem; }
+  .scope select { width: 100%; min-width: 0; }
+}
+@media (max-width: 380px) {
+  .fields, .scenario .fields { grid-template-columns: minmax(0, 1fr); }
+}

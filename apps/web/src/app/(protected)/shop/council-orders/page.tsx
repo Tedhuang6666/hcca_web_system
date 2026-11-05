@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ProductQuantitySummary from "@/components/shop/ProductQuantitySummary";
 import ShopSalesAnalytics from "@/components/shop/ShopSalesAnalytics";
+import ShopProfitAnalysis from "@/components/shop/ShopProfitAnalysis";
 import AdminAssistedOrder from "@/components/shop/AdminAssistedOrder";
 import SupplementOrders from "@/components/shop/SupplementOrders";
 import SeparateOrderButton from "@/components/shop/SeparateOrderButton";
@@ -40,7 +41,7 @@ import type {
 } from "@/lib/types";
 
 type Tab = "summary" | "assisted" | "supplements" | "daily" | "receipts"
-  | "quantities" | "orders" | "analytics" | "closure";
+  | "quantities" | "orders" | "analytics" | "profit" | "closure";
 type LoadSummaryOptions = StatusRefreshOptions;
 
 const CLOSE_STATUS_CACHE_TTL_MS = 30_000;
@@ -112,6 +113,7 @@ export default function CouncilOrdersPage() {
     { key: "quantities", label: "商品總量", visible: true },
     { key: "orders", label: "查找訂單", visible: true },
     { key: "analytics", label: "銷售分析", visible: true },
+    { key: "profit", label: "盈利與備貨", visible: canViewAdvancedStats },
     { key: "closure", label: "結單設定", visible: canConfirmClassPayment },
   ] satisfies { key: Tab; label: string; visible: boolean }[]).filter((item) => item.visible);
   const tab = tabs.find((item) => item.key === selectedTab)?.key ?? "summary";
@@ -736,7 +738,7 @@ export default function CouncilOrdersPage() {
             else if (tab === "supplements") setSupplementRefresh((value) => value + 1);
             else if (tab === "quantities") void loadQuantities();
             else if (tab === "orders") void loadOrders();
-            else if (tab === "analytics") setAnalyticsRefresh((value) => value + 1);
+            else if (tab === "analytics" || tab === "profit") setAnalyticsRefresh((value) => value + 1);
             else setOptionsRetry((value) => value + 1);
           }}
             disabled={(hasOrderFilters && tab !== "analytics" && loading) || mutationBusy} className="btn btn-ghost" aria-label="重新整理">
@@ -918,6 +920,7 @@ export default function CouncilOrdersPage() {
       {reminderError && <p role="alert" className="text-sm" style={{ color: "var(--danger)" }}>{reminderError}</p>}
       {reminderStatus && <p role="status" className="text-sm" style={{ color: "var(--success)" }}>{reminderStatus}</p>}
 
+      {tab === "profit" && <ShopProfitAnalysis refresh={analyticsRefresh} />}
       {tab === "analytics" && analyticsCategory && <ShopSalesAnalytics key={analyticsCategory.id} refresh={analyticsRefresh} live={canViewAdvancedStats} scope={scopeLabels.join(" · ")} filters={{
         ...(grade ? { grade } : {}), ...(classId ? { class_id: classId } : {}),
         category_id: analyticsCategory.id, ...(analyticsProductId ? { product_id: analyticsProductId } : {}),

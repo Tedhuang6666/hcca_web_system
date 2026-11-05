@@ -158,6 +158,11 @@ class Product(Base, TimestampMixin):
         CheckConstraint(
             "unit_cost IS NULL OR unit_cost >= 0", name="ck_products_unit_cost_nonnegative"
         ),
+        CheckConstraint(
+            "procurement_minimum >= 0 AND procurement_stock >= 0 "
+            "AND procurement_reserve >= 0 AND procurement_extra_cost >= 0",
+            name="ck_products_procurement_nonnegative",
+        ),
         Index(
             "ix_products_category_status_created",
             "category_id",
@@ -188,6 +193,12 @@ class Product(Base, TimestampMixin):
     original_price: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # 內部單位成本；不包含於公開商品與訂單回應。None 表示尚未設定。
     unit_cost: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 內部整批採購規劃；不改變可售庫存或學生訂單。
+    procurement_minimum: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    procurement_stock: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    procurement_reserve: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    procurement_extra_cost: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    procurement_note: Mapped[str] = mapped_column(Text, default="", server_default="")
     # 庫存數量（-1 = 無限量）
     stock_quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_unlimited: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

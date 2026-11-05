@@ -104,6 +104,7 @@ from api.schemas.shop import (
     ShopPromotionUpdate,
 )
 from api.schemas.shop_analytics import ShopSalesAnalyticsOut, ShopSalesReportCreate
+from api.schemas.shop_profit import ProductProcurementUpdate, ShopProfitOut
 from api.services import activity as activity_svc
 from api.services import audit as audit_svc
 from api.services import school_class as class_svc
@@ -118,6 +119,7 @@ from api.services.shop import _supplements as supplement_svc
 from api.services.shop._analytics import sales_analytics
 from api.services.shop._analytics_report import create_sales_report
 from api.services.shop._deadlines import set_activity_order_closure, set_activity_order_deadline
+from api.services.shop._profit import profit_analysis, update_procurement
 from api.services.shop._purchase_rules import (
     product_purchase_restriction,
     purchase_restrictions,
@@ -603,6 +605,52 @@ async def get_product_cost(
     await _require_shop_manager(session, current_user, _product_activity(product))
     response.headers["Cache-Control"] = "private, no-store"
     return ProductCostOut(unit_cost=product.unit_cost)
+
+
+@router.put(
+    "/products/{product_id}/procurement",
+    response_model=ProductProcurementUpdate,
+    summary="儲存完整內部採購設定（不調整可售庫存）",
+)
+async def save_product_procurement(
+    product_id: uuid.UUID,
+    data: ProductProcurementUpdate,
+    session: DbDep,
+    current_user: CurrentUser,
+    response: Response,
+) -> ProductProcurementUpdate:
+    product = await _get_product_or_404(product_id, session, current_user)
+    await _require_shop_manager(session, current_user, _product_activity(product))
+    await update_procurement(session, product, data)
+    await audit_svc.record(
+        session,
+        entity_type="product",
+        entity_id=str(product.id),
+        action="shop.procurement_update",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={"name": product.name},
+        summary=f"更新商品「{product.name}」採購設定",
+    )
+    response.headers["Cache-Control"] = "private, no-store"
+    return data
+
+
+@router.get(
+    "/profit",
+    response_model=ShopProfitOut,
+    summary="完整主題的整批採購盈利分析（全期、不含測試訂單）",
+)
+async def read_shop_profit(
+    category_id: uuid.UUID,
+    session: DbDep,
+    current_user: CurrentUser,
+    response: Response,
+) -> ShopProfitOut:
+    category = await _get_category_or_404(category_id, session)
+    await _require_shop_manager(session, current_user, category.activity_id)
+    response.headers["Cache-Control"] = "private, no-store"
+    return await profit_analysis(session, category)
 
 
 @router.get(

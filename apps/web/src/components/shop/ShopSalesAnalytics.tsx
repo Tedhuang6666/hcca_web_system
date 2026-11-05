@@ -311,6 +311,7 @@ export default function ShopSalesAnalytics({
       {reportMessage && <p role="status">{reportMessage}</p>}
       <p className="sales-muted">
         日期與時段以台北時間計算。未指定日期時顯示近 30 天；每次最多 366 天。
+        訂單毛利僅扣除已訂購商品的成本；起訂補足、囤貨與備品的整批盈利請見「盈利與備貨」。
         {live && autoRefresh && "收到訂單更新時會立即重查，並每 30 秒同步。"}
       </p>
       {error && (

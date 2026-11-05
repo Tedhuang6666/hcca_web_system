@@ -11123,6 +11123,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop/products/{product_id}/procurement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 儲存完整內部採購設定（不調整可售庫存） */
+        put: operations["save_product_procurement_shop_products__product_id__procurement_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shop/products/{product_id}/purchase-rules": {
         parameters: {
             query?: never;
@@ -11168,6 +11185,23 @@ export interface paths {
         put?: never;
         /** 新增變體群組 */
         post: operations["add_variant_group_shop_products__product_id__variant_groups_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shop/profit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 完整主題的整批採購盈利分析（全期、不含測試訂單） */
+        get: operations["read_shop_profit_shop_profit_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -25644,6 +25678,39 @@ export interface components {
             /** Version */
             version: number;
         };
+        /**
+         * ProductProcurementUpdate
+         * @description PUT 完整替換採購設定；單位成本的 null 代表尚未設定。
+         */
+        ProductProcurementUpdate: {
+            /**
+             * Extra Cost
+             * @default 0
+             */
+            extra_cost: number;
+            /**
+             * Minimum Order Quantity
+             * @default 0
+             */
+            minimum_order_quantity: number;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /**
+             * Reserve Quantity
+             * @default 0
+             */
+            reserve_quantity: number;
+            /**
+             * Stock Extra Quantity
+             * @default 0
+             */
+            stock_extra_quantity: number;
+            /** Unit Cost */
+            unit_cost: number | null;
+        };
         /** ProductPurchaseGroupOptionOut */
         ProductPurchaseGroupOptionOut: {
             /**
@@ -30034,6 +30101,144 @@ export interface components {
         ShopOrdersClearOut: {
             /** Deleted Order Count */
             deleted_order_count: number;
+        };
+        /** ShopProfitOut */
+        ShopProfitOut: {
+            /**
+             * Category Id
+             * Format: uuid
+             */
+            category_id: string;
+            /** Category Name */
+            category_name: string;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Products */
+            products: components["schemas"]["ShopProfitProduct"][];
+            summary: components["schemas"]["ShopProfitSummary"];
+        };
+        /** ShopProfitProduct */
+        ShopProfitProduct: {
+            /** Cash Balance */
+            cash_balance: number | null;
+            /** Inventory Cost */
+            inventory_cost: number | null;
+            /** Minimum Top Up Quantity */
+            minimum_top_up_quantity: number;
+            /** Name */
+            name: string;
+            /** Order Cost */
+            order_cost: number | null;
+            /** Ordered Quantity */
+            ordered_quantity: number;
+            /** Paid Amount */
+            paid_amount: number;
+            plan: components["schemas"]["ProductProcurementUpdate"];
+            /** Price */
+            price: number;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Profit Amount */
+            profit_amount: number | null;
+            /** Purchase Quantity */
+            purchase_quantity: number;
+            /** Reserve Cost */
+            reserve_cost: number | null;
+            /** Revenue */
+            revenue: number;
+            /** Sellable Stock Quantity */
+            sellable_stock_quantity: number;
+            /** Total Cost */
+            total_cost: number | null;
+        };
+        /** ShopProfitSummary */
+        ShopProfitSummary: {
+            /**
+             * Cash Balance
+             * @default 0
+             */
+            cash_balance: number | null;
+            /**
+             * Extra Cost
+             * @default 0
+             */
+            extra_cost: number;
+            /**
+             * Inventory Cost
+             * @default 0
+             */
+            inventory_cost: number | null;
+            /**
+             * Minimum Top Up Quantity
+             * @default 0
+             */
+            minimum_top_up_quantity: number;
+            /**
+             * Missing Cost Product Count
+             * @default 0
+             */
+            missing_cost_product_count: number;
+            /**
+             * Order Cost
+             * @default 0
+             */
+            order_cost: number | null;
+            /**
+             * Ordered Quantity
+             * @default 0
+             */
+            ordered_quantity: number;
+            /**
+             * Paid Amount
+             * @default 0
+             */
+            paid_amount: number;
+            /**
+             * Profit Amount
+             * @default 0
+             */
+            profit_amount: number | null;
+            /**
+             * Purchase Quantity
+             * @default 0
+             */
+            purchase_quantity: number;
+            /**
+             * Reserve Cost
+             * @default 0
+             */
+            reserve_cost: number | null;
+            /**
+             * Reserve Quantity
+             * @default 0
+             */
+            reserve_quantity: number;
+            /**
+             * Revenue
+             * @default 0
+             */
+            revenue: number;
+            /**
+             * Sellable Stock Quantity
+             * @default 0
+             */
+            sellable_stock_quantity: number;
+            /**
+             * Total Cost
+             * @default 0
+             */
+            total_cost: number | null;
+            /**
+             * Unpaid Amount
+             * @default 0
+             */
+            unpaid_amount: number;
         };
         /** ShopPromotionCreate */
         ShopPromotionCreate: {
@@ -57608,6 +57813,41 @@ export interface operations {
             };
         };
     };
+    save_product_procurement_shop_products__product_id__procurement_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductProcurementUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductProcurementUpdate"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_product_purchase_rules_shop_products__product_id__purchase_rules_get: {
         parameters: {
             query?: never;
@@ -57692,6 +57932,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProductVariantGroupOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_shop_profit_shop_profit_get: {
+        parameters: {
+            query: {
+                category_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopProfitOut"];
                 };
             };
             /** @description Validation Error */

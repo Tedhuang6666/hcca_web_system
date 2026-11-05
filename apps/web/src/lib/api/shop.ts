@@ -5,6 +5,8 @@ import type {
   ClassMemberOut,
   ShopSalesAnalyticsOut,
   ShopSalesReportCreate,
+  ShopProfitOut,
+  ProductProcurementUpdate,
   ClassOrderCreate, ShopDelegatedOrderOut, ShopDelegationCodeOut, ShopDelegationContextOut, ShopDelegationCreate, ShopDelegationOut,
   ActivityOut, CatalogCategoryOut, ClassPaymentOut, ClassPaymentReportItemOut, CloseStatusOut, OrderListItem, OrderOut, OrderQuantityRow, OrderSummaryOut, ProductCategoryOut, ProductOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut, ShopClassRepresentativeRecipientOut, ShopClassSummaryOut, ShopOrderCloseOut, ShopOrdersClearOut, ShopPromotionCreate, ShopPromotionOut, ShopPromotionPreviewOut, ShopPromotionPublicOut, ShopPromotionUpdate,
 } from "../types";
@@ -17,6 +19,10 @@ type ReceiptScope = Pick<ClassReceiptBatchCreate, "activity_id" | "category_id">
 // ── 商店 ──────────────────────────────────────────────────────────────────────
 
 export const shopApi = {
+  profitAnalysis: (categoryId: string) =>
+    get<ShopProfitOut>(`/shop/profit?${new URLSearchParams({ category_id: categoryId })}`),
+  saveProcurement: (id: string, body: ProductProcurementUpdate) =>
+    put<ProductProcurementUpdate>(`/shop/products/${id}/procurement`, body),
   salesAnalytics: (params: Record<string, string>) =>
     get<ShopSalesAnalyticsOut>(`/shop/orders/analytics?${new URLSearchParams(params)}`),
   downloadSalesReport: async (body: ShopSalesReportCreate) => {
