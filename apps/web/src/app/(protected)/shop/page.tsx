@@ -303,6 +303,7 @@ function ProductModal({
   const mediaSwipeRef = useRef<{ pointerId: number; x: number; y: number } | null>(null);
   const galleryRef = useRef<HTMLDivElement>(null);
   const registrationUpdateInFlightRef = useRef(false);
+  const variantSelectionTouchedRef = useRef(false);
   const activeProductRef = useRef<string | null>(productId);
   const registrationItemsRef = useRef(registration?.items ?? []);
   const loadedProductId = product?.id ?? null;
@@ -324,6 +325,7 @@ function ProductModal({
   const loadProduct = useCallback(async () => {
     setProduct(null);
     setPicked({});
+    variantSelectionTouchedRef.current = false;
     setSelectedMediaIndex(null);
     setQty(1);
     setRegistrationUpdateMessage("");
@@ -364,7 +366,7 @@ function ProductModal({
   }, [registration?.items, loadedProductId, picked]);
 
   useEffect(() => {
-    if (!loadedProductId) return;
+    if (!loadedProductId || variantSelectionTouchedRef.current) return;
     const first = registrationItemsRef.current.find((item) => item.product_id === loadedProductId);
     const nextPicked = Object.fromEntries(
       (first?.selected_options ?? []).map((option) => [option.group_id, option.option_id]),
@@ -440,6 +442,7 @@ function ProductModal({
   const selectVariantOption = (groupId: string, optionId: string) => {
     const option = variantGroups.find((group) => group.id === groupId)?.options.find((item) => item.id === optionId);
     if (!option) return;
+    variantSelectionTouchedRef.current = true;
     if (option.image_url) {
       setSelectedMediaIndex(media.findIndex((item) => item.image_url === option.image_url));
     }
