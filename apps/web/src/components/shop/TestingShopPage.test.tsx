@@ -40,9 +40,9 @@ it("商品詳情的尺寸表隨尺寸按鈕切換標示", async () => {
   render(<ShopPage />);
   fireEvent.click(await screen.findByRole("link", { name: "查看商品：正式商品" }));
   const dialog = await screen.findByRole("dialog");
-  fireEvent.click(await within(dialog).findByRole("button", { name: "M" }));
+  fireEvent.click((await within(dialog).findAllByRole("button", { name: "M" }))[0]);
   expect(within(dialog).getByRole("row", { name: "M 已選 68" })).toHaveAttribute("data-selected", "true");
-  fireEvent.click(within(dialog).getByRole("button", { name: "L" }));
+  fireEvent.click(within(dialog).getAllByRole("button", { name: "L" })[1]);
   expect(within(dialog).getByRole("row", { name: "M 68" })).toHaveAttribute("data-selected", "false");
   expect(within(dialog).getByRole("row", { name: "L 已選 72" })).toHaveAttribute("data-selected", "true");
 });

@@ -4,9 +4,10 @@ import { useId } from "react";
 import type { ProductOut } from "@/lib/types";
 import styles from "./ProductSizeChart.module.css";
 
-export default function ProductSizeChart({ product, picked = {} }: {
+export default function ProductSizeChart({ product, picked = {}, onSelectOption }: {
   product: Pick<ProductOut, "size_chart" | "variant_groups">;
   picked?: Record<string, string>;
+  onSelectOption?: (groupId: string, optionId: string) => void;
 }) {
   const titleId = useId();
   const chart = product.size_chart;
@@ -35,7 +36,19 @@ export default function ProductSizeChart({ product, picked = {} }: {
           {chart.columns.map((column) => <th scope="col" key={column}>{column}</th>)}
         </tr></thead>
         <tbody>{rows.map((row) => <tr key={row.option_id} data-selected={row.option_id === selectedId}>
-          <th scope="row">{row.label}{row.option_id === selectedId && <> <span className={styles.selected}>已選</span></>}</th>
+          <th scope="row">
+            {onSelectOption ? (
+              <button
+                type="button"
+                className={styles.option}
+                aria-pressed={row.option_id === selectedId}
+                onClick={() => onSelectOption(group.id, row.option_id)}>
+                {row.label}{row.option_id === selectedId && <> <span className={styles.selected}>已選</span></>}
+              </button>
+            ) : (
+              <>{row.label}{row.option_id === selectedId && <> <span className={styles.selected}>已選</span></>}</>
+            )}
+          </th>
           {row.values.map((value, index) => <td key={index}>{value}</td>)}
         </tr>)}</tbody>
       </table>

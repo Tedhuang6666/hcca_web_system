@@ -437,6 +437,21 @@ function ProductModal({
   const offerTotal = product ? productOfferPrice(product, promotions, activityId, registration, delta, qty) : unitPrice * qty;
   const allPicked = variantGroups.every((g) => picked[g.id]);
   const registeredItems = registration?.items.filter((item) => item.product_id === product?.id) ?? [];
+  const selectVariantOption = (groupId: string, optionId: string) => {
+    const option = variantGroups.find((group) => group.id === groupId)?.options.find((item) => item.id === optionId);
+    if (!option) return;
+    if (option.image_url) {
+      setSelectedMediaIndex(media.findIndex((item) => item.image_url === option.image_url));
+    }
+    const nextPicked = { ...picked, [groupId]: optionId };
+    setPicked(nextPicked);
+    const nextKey = Object.values(nextPicked).sort().join(",");
+    const registered = registeredItems
+      .filter((item) => registrationVariantKey(item.selected_options) === nextKey)
+      .reduce((total, item) => total + item.quantity, 0);
+    setQty(registered || 1);
+    setRegistrationUpdateMessage("");
+  };
   const registeredQuantity = registeredItems.reduce((total, item) => total + item.quantity, 0);
   const selectedOptionIds = Object.values(picked).sort();
   const selectedRegistrationQuantity = registeredItems
@@ -772,19 +787,7 @@ function ProductModal({
                           return (
                             <button
                               key={o.id}
-                              onClick={() => {
-                                if (o.image_url) {
-                                  setSelectedMediaIndex(media.findIndex((item) => item.image_url === o.image_url));
-                                }
-                                const nextPicked = { ...picked, [g.id]: o.id };
-                                setPicked(nextPicked);
-                                const nextKey = Object.values(nextPicked).sort().join(",");
-                                const registered = registeredItems
-                                  .filter((item) => registrationVariantKey(item.selected_options) === nextKey)
-                                  .reduce((total, item) => total + item.quantity, 0);
-                                setQty(registered || 1);
-                                setRegistrationUpdateMessage("");
-                              }}
+                              onClick={() => selectVariantOption(g.id, o.id)}
                               disabled={authLoading || loading}
                               className="shop-product-option"
                               aria-pressed={sel}>
@@ -798,7 +801,7 @@ function ProductModal({
                   </div>
                 ))}
 
-                <ProductSizeChart product={product} picked={picked} />
+                <ProductSizeChart product={product} picked={picked} onSelectOption={selectVariantOption} />
 
                 {product.purchase_allowed === false && isLoggedIn && <p className="shop-product-purchase-hint" role="status">
                   {product.purchase_restriction ?? "您目前不符合此商品的購買資格"}

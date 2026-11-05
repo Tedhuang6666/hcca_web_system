@@ -28,6 +28,13 @@ it("同步標示所選尺寸，切換後清除上一列標記，缺少資料會�
   expect(screen.getByRole("status")).toHaveTextContent("XL 尚未提供尺寸資料");
 });
 
+it("點擊尺寸表的尺寸會觸發規格選擇", () => {
+  const onSelectOption = vi.fn();
+  render(<ProductSizeChart product={product} onSelectOption={onSelectOption} />);
+  fireEvent.click(screen.getByRole("button", { name: "L" }));
+  expect(onSelectOption).toHaveBeenCalledWith("size", "L");
+});
+
 it("隱藏沒有尺寸表、已刪規格與停用選項，沿用選項的新名稱", () => {
   const view = render(<ProductSizeChart product={{ ...product, size_chart: null }} />);
   expect(screen.queryByRole("table")).not.toBeInTheDocument();
@@ -97,7 +104,7 @@ it("開啟、取消、儲存及移除後保留鍵盤焦點並宣告結果", asyn
   fireEvent.click(screen.getByRole("button", { name: "編輯尺寸表" }));
   fireEvent.click(screen.getByRole("button", { name: "儲存尺寸表" }));
   await screen.findByText("尺寸表已儲存。");
-  expect(screen.getByRole("button", { name: "編輯尺寸表" })).toHaveFocus();
+  await waitFor(() => expect(screen.getByRole("button", { name: "編輯尺寸表" })).toHaveFocus());
   fireEvent.click(screen.getByRole("button", { name: "編輯尺寸表" }));
   fireEvent.click(screen.getByRole("button", { name: "移除尺寸表" }));
   await screen.findByText("尺寸表已移除。");

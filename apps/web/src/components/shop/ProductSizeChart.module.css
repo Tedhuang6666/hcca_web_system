@@ -17,6 +17,20 @@
 }
 .chart thead { background: var(--public-soft, var(--bg-elevated)); }
 .chart th { font-weight: 600; }
+.option {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+}
+.option:hover,
+.option:focus-visible { text-decoration-color: currentColor; }
+.option:focus-visible { outline: 2px solid var(--public-accent, var(--primary)); outline-offset: 3px; }
 .chart tr[data-selected="true"] { background: var(--public-accent-soft, var(--primary-dim)); font-weight: 600; }
 .selected { margin-left: 0.5rem; font-size: 0.75rem; text-decoration: underline; text-underline-offset: 3px; }
 .note { margin-top: 0.75rem; white-space: pre-line; overflow-wrap: anywhere; line-height: 1.65; }
