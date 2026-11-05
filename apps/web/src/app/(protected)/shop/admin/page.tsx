@@ -3,7 +3,23 @@ import { productGallery } from "@/lib/shop-product-media";
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { AlertTriangle, Pencil, Trash2 } from "lucide-react";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  rectSortingStrategy,
+  sortableKeyboardCoordinates,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { AlertTriangle, GripVertical, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { shopApi, classApi, apiErrorMessage } from "@/lib/api";
 import ProductThumbnail from "@/components/shop/ProductThumbnail";
@@ -808,15 +824,161 @@ function ProductFormModal({
 
 // ── 變體選項 編輯 Modal ───────────────────────────────────────────────────────
 
+function SortableOption({
+  option,
+  disabled,
+  onEdit,
+  onDelete,
+}: {
+  option: ProductVariantOptionOut;
+  disabled: boolean;
+  onEdit: (option: ProductVariantOptionOut) => void;
+  onDelete: (option: ProductVariantOptionOut) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setActivatorNodeRef,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: option.id, disabled });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className="inline-flex items-center gap-1.5 rounded-lg pl-2 pr-1 py-1 text-xs"
+      style={{
+        background: "var(--bg)",
+        border: "1px solid var(--border)",
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.6 : undefined,
+      }}
+    >
+      {option.image_url && <Thumb url={option.image_url} size={20} />}
+      <span style={{ color: "var(--text-primary)" }}>{option.value}</span>
+      {option.price_delta !== 0 && (
+        <span style={{ color: "var(--primary)" }}>
+          {option.price_delta > 0 ? `+${option.price_delta}` : option.price_delta}
+        </span>
+      )}
+      <button
+        ref={setActivatorNodeRef}
+        type="button"
+        {...attributes}
+        {...listeners}
+        disabled={disabled}
+        className="inline-flex min-h-11 min-w-11 touch-none cursor-grab items-center justify-center rounded-md active:cursor-grabbing focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-wait"
+        style={{ color: "var(--text-muted)", outlineColor: "var(--primary)" }}
+        aria-label={`拖曳調整${option.value}順序`}
+        title="拖曳調整順序"
+      >
+        <GripVertical size={14} aria-hidden />
+      </button>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => onEdit(option)}
+        className="inline-flex min-h-11 min-w-11 items-center justify-center"
+        style={{ color: "var(--text-muted)" }}
+        aria-label={`編輯${option.value}`}
+      >
+        <Pencil size={14} aria-hidden />
+      </button>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => onDelete(option)}
+        className="inline-flex min-h-11 min-w-11 items-center justify-center"
+        style={{ color: "var(--text-muted)" }}
+        aria-label={`刪除${option.value}`}
+      >
+        <Trash2 size={14} aria-hidden />
+      </button>
+    </div>
+  );
+}
+
+function VariantOptionList({
+  options,
+  disabled,
+  onReorder,
+  onEdit,
+  onDelete,
+  onAdd,
+}: {
+  options: ProductVariantOptionOut[];
+  disabled: boolean;
+  onReorder: (options: ProductVariantOptionOut[]) => Promise<boolean>;
+  onEdit: (option: ProductVariantOptionOut) => void;
+  onDelete: (option: ProductVariantOptionOut) => void;
+  onAdd: () => void;
+}) {
+  const [displayOptions, setDisplayOptions] = useState(options);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  useEffect(() => {
+    setDisplayOptions(options);
+  }, [options]);
+
+  const handleDragEnd = async ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id || disabled) return;
+    const fromIndex = displayOptions.findIndex((option) => option.id === active.id);
+    const toIndex = displayOptions.findIndex((option) => option.id === over.id);
+    if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return;
+
+    const reordered = arrayMove(displayOptions, fromIndex, toIndex);
+    setDisplayOptions(reordered);
+    if (!(await onReorder(reordered))) setDisplayOptions(options);
+  };
+
+  return (
+    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+      <SortableContext
+        items={displayOptions.map((option) => option.id)}
+        strategy={rectSortingStrategy}
+      >
+        <div className="flex flex-wrap gap-2">
+          {displayOptions.map((option) => (
+            <SortableOption
+              key={option.id}
+              option={option}
+              disabled={disabled}
+              onEdit={onEdit}
+              onDelete={onDelete}
+            />
+          ))}
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={onAdd}
+            className="min-h-11 rounded-lg px-2 text-xs disabled:opacity-45"
+            style={{ color: "var(--primary)", border: "1px dashed var(--border-strong)" }}
+          >
+            + 選項
+          </button>
+        </div>
+      </SortableContext>
+    </DndContext>
+  );
+}
+
 function OptionModal({
   groupId,
   initial,
+  sortOrder,
   photos,
   onClose,
   onSaved,
 }: {
   groupId: string;
   initial: ProductVariantOptionOut | null;
+  sortOrder: number;
   photos: { image_url: string; label: string }[];
   onClose: () => void;
   onSaved: () => void;
@@ -874,6 +1036,7 @@ function OptionModal({
                 price_delta: current,
                 original_price_delta: original,
                 image_url: imageUrl,
+                sort_order: sortOrder,
               };
               if (editing) await shopApi.updateVariantOption(initial!.id, body);
               else await shopApi.addVariantOption(groupId, body);
@@ -1016,6 +1179,7 @@ function SmartOptionsModal({
   const [includeImage, setIncludeImage] = useState(true);
   const [skipExisting, setSkipExisting] = useState(true);
   const [busy, setBusy] = useState(false);
+  const nextSortOrder = Math.max(-1, ...target.options.map((option) => option.sort_order)) + 1;
 
   const source = sources.find((group) => group.id === sourceGroupId);
   const copiedOptions: SmartOptionDraft[] = source?.options.map((option) => ({
@@ -1043,7 +1207,7 @@ function SmartOptionsModal({
           price_delta: option.price_delta,
           original_price_delta: option.original_price_delta,
           image_url: option.image_url,
-          sort_order: target.options.length + index,
+          sort_order: nextSortOrder + index,
         })
       ));
       toast.success(`已新增 ${finalDrafts.length} 個選項`);
@@ -1129,11 +1293,14 @@ function VariantManager({
   allProducts: ProductOut[];
   onChanged: () => void;
 }) {
-  const [optionModal, setOptionModal] = useState<
-    { groupId: string; option: ProductVariantOptionOut | null } | null
-  >(null);
+  const [optionModal, setOptionModal] = useState<{
+    groupId: string;
+    option: ProductVariantOptionOut | null;
+    sortOrder: number;
+  } | null>(null);
   const [groupModal, setGroupModal] = useState<ProductVariantGroupOut | null | "new">(null);
   const [smartTarget, setSmartTarget] = useState<ProductVariantGroupOut | null>(null);
+  const [savingOptionOrder, setSavingOptionOrder] = useState(false);
   const sourceProducts = [
     product,
     ...allProducts.filter((sourceProduct) => sourceProduct.id !== product.id),
@@ -1164,13 +1331,41 @@ function VariantManager({
     }
   };
 
+  const saveOptionOrder = async (options: ProductVariantOptionOut[]) => {
+    setSavingOptionOrder(true);
+    try {
+      const results = await Promise.allSettled(
+        options.map((option, sortOrder) =>
+          shopApi.updateVariantOption(option.id, { sort_order: sortOrder })
+        )
+      );
+      const failed = results.find((result) => result.status === "rejected");
+      if (failed?.status === "rejected") {
+        toast.error(apiErrorMessage(failed.reason, "部分選項順序未儲存，請再試一次"));
+        onChanged();
+        return false;
+      }
+      toast.success("選項順序已更新");
+      onChanged();
+      return true;
+    } finally {
+      setSavingOptionOrder(false);
+    }
+  };
+
   return (
     <div className="card p-4 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
           規格類別（{product.variant_groups.length}）
         </p>
-        <MiniBtn tone="primary" onClick={() => setGroupModal("new")}>+ 新增規格類別</MiniBtn>
+        <MiniBtn
+          tone="primary"
+          disabled={savingOptionOrder}
+          onClick={() => setGroupModal("new")}
+        >
+          + 新增規格類別
+        </MiniBtn>
       </div>
       {product.variant_groups.length === 0 ? (
         <p className="text-xs" style={{ color: "var(--text-muted)" }}>
@@ -1183,35 +1378,38 @@ function VariantManager({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{g.name}</p>
               <div className="flex flex-wrap gap-1.5">
-                <MiniBtn tone="primary" onClick={() => setSmartTarget(g)}>批次新增選項</MiniBtn>
-                <MiniBtn onClick={() => setGroupModal(g)}>編輯</MiniBtn>
-                <MiniBtn tone="danger" onClick={() => removeGroup(g)}>刪除</MiniBtn>
+                <MiniBtn tone="primary" disabled={savingOptionOrder} onClick={() => setSmartTarget(g)}>
+                  批次新增選項
+                </MiniBtn>
+                <MiniBtn disabled={savingOptionOrder} onClick={() => setGroupModal(g)}>
+                  編輯
+                </MiniBtn>
+                <MiniBtn tone="danger" disabled={savingOptionOrder} onClick={() => removeGroup(g)}>
+                  刪除
+                </MiniBtn>
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {g.options.map((o) => (
-                <span key={o.id}
-                  className="inline-flex items-center gap-1.5 rounded-lg pl-2 pr-1 py-1 text-xs"
-                  style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
-                  {o.image_url && <Thumb url={o.image_url} size={20} />}
-                  <span style={{ color: "var(--text-primary)" }}>{o.value}</span>
-                  {o.price_delta !== 0 && (
-                    <span style={{ color: "var(--primary)" }}>
-                      {o.price_delta > 0 ? `+${o.price_delta}` : o.price_delta}
-                    </span>
-                  )}
-                  <button onClick={() => setOptionModal({ groupId: g.id, option: o })}
-                    className="inline-flex min-h-11 min-w-11 items-center justify-center" style={{ color: "var(--text-muted)" }} aria-label={`編輯${o.value}`}><Pencil size={14} aria-hidden /></button>
-                  <button onClick={() => removeOption(o)}
-                    className="inline-flex min-h-11 min-w-11 items-center justify-center" style={{ color: "var(--text-muted)" }} aria-label={`刪除${o.value}`}><Trash2 size={14} aria-hidden /></button>
-                </span>
-              ))}
-              <button onClick={() => setOptionModal({ groupId: g.id, option: null })}
-                className="text-xs px-2 py-1 rounded-lg"
-                style={{ color: "var(--primary)", border: "1px dashed var(--border-strong)" }}>
-                + 選項
-              </button>
-            </div>
+            <VariantOptionList
+              options={g.options}
+              disabled={savingOptionOrder}
+              onReorder={saveOptionOrder}
+              onEdit={(option) => setOptionModal({
+                groupId: g.id,
+                option,
+                sortOrder: option.sort_order,
+              })}
+              onDelete={removeOption}
+              onAdd={() => setOptionModal({
+                groupId: g.id,
+                option: null,
+                sortOrder: Math.max(-1, ...g.options.map((option) => option.sort_order)) + 1,
+              })}
+            />
+            {savingOptionOrder && (
+              <p role="status" className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                正在儲存規格選項順序…
+              </p>
+            )}
           </div>
         ))
       )}
@@ -1219,6 +1417,7 @@ function VariantManager({
         <OptionModal
           groupId={optionModal.groupId}
           initial={optionModal.option}
+          sortOrder={optionModal.sortOrder}
           photos={productGallery(product)}
           onClose={() => setOptionModal(null)}
           onSaved={() => { setOptionModal(null); onChanged(); }}
