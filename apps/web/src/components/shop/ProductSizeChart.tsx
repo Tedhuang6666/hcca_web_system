@@ -35,14 +35,17 @@ export default function ProductSizeChart({ product, picked = {}, onSelectOption 
         <thead><tr><th scope="col">{group.name}</th>
           {chart.columns.map((column) => <th scope="col" key={column}>{column}</th>)}
         </tr></thead>
-        <tbody>{rows.map((row) => <tr key={row.option_id} data-selected={row.option_id === selectedId}>
+        <tbody>{rows.map((row) => <tr
+          key={row.option_id}
+          data-selected={row.option_id === selectedId}
+          data-selectable={onSelectOption ? "true" : undefined}
+          onClick={onSelectOption ? () => onSelectOption(group.id, row.option_id) : undefined}>
           <th scope="row">
             {onSelectOption ? (
               <button
                 type="button"
                 className={styles.option}
-                aria-pressed={row.option_id === selectedId}
-                onClick={() => onSelectOption(group.id, row.option_id)}>
+                aria-pressed={row.option_id === selectedId}>
                 {row.label}{row.option_id === selectedId && <> <span className={styles.selected}>已選</span></>}
               </button>
             ) : (

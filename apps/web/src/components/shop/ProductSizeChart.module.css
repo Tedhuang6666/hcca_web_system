@@ -31,6 +31,8 @@
 .option:hover,
 .option:focus-visible { text-decoration-color: currentColor; }
 .option:focus-visible { outline: 2px solid var(--public-accent, var(--primary)); outline-offset: 3px; }
+.chart tr[data-selectable="true"] { cursor: pointer; }
+.chart tr[data-selectable="true"]:hover .option { text-decoration-color: currentColor; }
 .chart tr[data-selected="true"] { background: var(--public-accent-soft, var(--primary-dim)); font-weight: 600; }
 .selected { margin-left: 0.5rem; font-size: 0.75rem; text-decoration: underline; text-underline-offset: 3px; }
 .note { margin-top: 0.75rem; white-space: pre-line; overflow-wrap: anywhere; line-height: 1.65; }
