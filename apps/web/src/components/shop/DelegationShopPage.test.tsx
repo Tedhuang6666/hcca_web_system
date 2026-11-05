@@ -281,7 +281,11 @@ describe("原商品頁的家人代訂模式", () => {
     expect(next).toBeDisabled();
     expect(screen.getByText("請先選擇尺寸，再繼續下一步。")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "M" }));
-    fireEvent.click(next);
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "M" })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: "儲存並選下一項：長褲" })).toBeEnabled();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "儲存並選下一項：長褲" }));
     expect(await within(screen.getByRole("dialog")).findByRole("alert")).toHaveTextContent("連線失敗");
     expect(screen.getByRole("heading", { name: "紀念袋", level: 3 })).toBeVisible();
     fireEvent.click(next);
