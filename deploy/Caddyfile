@@ -101,9 +101,8 @@
 		reverse_proxy web:3000
 	}
 
-	# Next Image 已依 width/format 產生可重用的變體；edge 快取 30 天。
+	# 沿用 Next Image 的成功回應快取標頭，避免長期快取錯誤回應。
 	handle /_next/image* {
-		header Cache-Control "public, max-age=86400, s-maxage=2592000, stale-while-revalidate=604800"
 		reverse_proxy web:3000
 	}
 

@@ -38,13 +38,33 @@ it("keeps the image area occupied without downloading an offscreen image", async
   expect(image.parentElement).toHaveAttribute("data-state", "ready");
 });
 
-it("does not download the full original when thumbnail generation fails", () => {
+it("falls back to the original once when the thumbnail fails", async () => {
   render(<CatalogImage src={src} alt="商品" sizes="50vw" />);
   act(() => intersect(true));
-  fireEvent.error(screen.getByRole("img", { name: "商品" }));
+  const image = screen.getByRole("img", { name: "商品" });
+  fireEvent.error(image);
+  expect(image).toHaveAttribute("src", src);
+  expect(image).not.toHaveAttribute("srcset");
+  expect(image.parentElement).toHaveAttribute("data-state", "loading");
+  await act(async () => { fireEvent.load(image); });
+  expect(image.parentElement).toHaveAttribute("data-state", "ready");
+});
+
+it("shows an error only after both the thumbnail and original fail, and recovers for a new source", async () => {
+  const { rerender } = render(<CatalogImage src={src} alt="商品" sizes="50vw" />);
+  act(() => intersect(true));
+  const image = screen.getByRole("img", { name: "商品" });
+  fireEvent.error(image);
+  fireEvent.error(image);
   expect(screen.getByText("圖片暫時無法載入")).toBeInTheDocument();
   expect(screen.queryByRole("img", { name: "商品" })).not.toBeInTheDocument();
-  expect(document.querySelector(`img[src="${src}"]`)).toBeNull();
+  expect(image.parentElement).toBeNull();
+  rerender(<CatalogImage src="/api/uploads/shop/back.png" alt="商品" sizes="50vw" />);
+  const nextImage = screen.getByRole("img", { name: "商品" });
+  expect(nextImage.getAttribute("src")).toContain("/_next/image?");
+  expect(nextImage.parentElement).toHaveAttribute("data-state", "loading");
+  await act(async () => { fireEvent.load(nextImage); });
+  expect(nextImage.parentElement).toHaveAttribute("data-state", "ready");
 });
 
 it("loads without IntersectionObserver and resets the placeholder when the source changes", async () => {

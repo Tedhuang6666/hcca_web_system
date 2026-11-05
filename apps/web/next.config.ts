@@ -28,6 +28,8 @@ const nextConfig: NextConfig = {
   // WebP 降低原圖首次縮放的編碼成本，沿用 30 天快取；
   // remotePatterns 允許後端 /uploads 路徑與 Cloudflare 隧道測試環境。
   images: {
+    // 舊路徑曾被 CDN 長期快取 500；換路徑讓部署後避開既有錯誤快取。
+    path: "/_next/image/v2",
     formats: ["image/webp"],
     minimumCacheTTL: 2592000,
     deviceSizes: [384, 640, 750, 828, 1080, 1200, 1920],
@@ -78,6 +80,13 @@ const nextConfig: NextConfig = {
   },
   async rewrites() {
     return {
+      // images.path 改變產生的網址，仍須轉交給 Next 內建的 optimizer 路由。
+      beforeFiles: [
+        {
+          source: "/_next/image/v2",
+          destination: "/_next/image",
+        },
+      ],
       afterFiles: [
         {
           source: "/auth/google/:path*",

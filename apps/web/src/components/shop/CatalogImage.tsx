@@ -48,7 +48,6 @@ export default function CatalogImage({ src, alt, sizes }: {
           fill
           sizes={sizes}
           loading="lazy"
-          fallbackToOriginal={false}
           className={styles.image}
           onLoad={() => setLoadedSrc(src)}
           onError={() => setFailedSrc(src)}

@@ -72,7 +72,7 @@
 	}
 
 	handle /_next/image* {
-		header Cache-Control "public, max-age=86400, s-maxage=2592000, stale-while-revalidate=604800"
+		# 沿用 Next Image 的成功回應快取標頭，避免長期快取錯誤回應。
 		reverse_proxy web-green:3000
 	}
 
