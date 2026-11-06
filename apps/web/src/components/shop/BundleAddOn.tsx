@@ -33,8 +33,7 @@ export default function BundleAddOn({ productId, promotions, products, registrat
       </div>
       {promotion.min_order_price > 0 && <p>需滿 NT$${promotion.min_order_price.toLocaleString()}。</p>}
       {promotion.min_quantity > 1 && <p>指定商品合計需滿 {promotion.min_quantity} 件。</p>}
-      <p>{promotion.code ? `使用優惠碼 ${promotion.code}。` : "符合條件自動套用。"}
-        折扣依登記合計擇優套用，規格加價另計。</p>
+      {promotion.code && <p>使用優惠碼 {promotion.code}。</p>}
     </div>)}
   </section>;
 }
