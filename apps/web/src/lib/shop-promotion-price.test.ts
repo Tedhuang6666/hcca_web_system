@@ -10,6 +10,14 @@ const promotion: ShopPromotionPublicOut = {
 };
 
 describe("商品價格的優惠顯示", () => {
+  it("贈品免基本售價，保留受贈者選擇的規格加價與數量", () => {
+    const gift = { ...promotion, discount_value: 100 };
+    expect(productOfferPrice(product, [gift], "festival", null)).toBe(0);
+    expect(productOfferPrice(product, [gift], "festival", null, 50, 2)).toBe(100);
+    expect(productOfferPrice(product, [gift], "festival", null, -20)).toBe(0);
+    expect(productOfferPrice(product, [{ ...gift, target_products: [] }], "festival", null, 50)).toBe(0);
+  });
+
   it("顯示百分比優惠，並將指定單價優惠的規格加價保留", () => {
     expect(productOfferPrice(product, [promotion], "festival", null)).toBe(270);
     expect(productOfferPrice(product, [{ ...promotion, discount_type: "price_override",

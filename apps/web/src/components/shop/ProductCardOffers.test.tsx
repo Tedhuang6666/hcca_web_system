@@ -16,6 +16,16 @@ const promotion: ShopPromotionPublicOut = {
 };
 
 describe("商品卡片內的優惠", () => {
+  it("贈品顯示免費基本售價，並說明自行選規格與加價自付", () => {
+    render(<ProductCardOffers product={product} promotions={[{
+      ...promotion, name: "抽獎贈品", discount_type: "percentage", discount_value: 100,
+      target_products: [{ id: "shirt", name: "衣服" }],
+    }]} products={new Map()} disabled={false} onSelectBundle={vi.fn()} />);
+    expect(screen.getByLabelText("原價 NT$300，優惠價 NT$0 起")).toBeVisible();
+    expect(screen.getByText("符合條件自動套用 · 規格加價另計")).toBeVisible();
+    expect(screen.getByText("請自行選擇規格；商品基本售價免費，加價選項由您支付。")).toBeVisible();
+  });
+
   it("套組只保留簡短選購入口，不重複完整價格與條件", () => {
     const select = vi.fn();
     const { container } = render(<ProductCardOffers product={product} promotions={[promotion]}

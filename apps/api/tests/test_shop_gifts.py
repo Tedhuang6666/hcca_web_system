@@ -207,6 +207,94 @@ async def test_targeted_gift_promotion_keeps_quantity_and_zero_revenue(
     assert analysis.current.metrics.discount_amount == 200
 
 
+@pytest.mark.parametrize("code", [None, "GIFT"])
+async def test_gift_recipient_selects_variants_and_pays_only_surcharges(
+    db_session, admin_user, authed_client_factory, code
+):
+    buyer = await _bare_user(db_session)
+    outsider = await _bare_user(db_session)
+    product = await _make_product(db_session, price=100, stock=10)
+    free_options = [str(group.options[0].id) for group in product.variant_groups]
+    paid_options = [str(group.options[-1].id) for group in product.variant_groups]
+    category_id = str(product.category_id)
+    ac = authed_client_factory(admin_user)
+    created = await ac.post(
+        "/shop/promotions",
+        json={
+            "name": "中獎紀念衫",
+            "code": code,
+            "target_identifiers": [buyer.email],
+            "target_product_ids": [str(product.id)],
+            "discount_type": "percentage",
+            "discount_value": 100,
+        },
+    )
+    assert created.status_code == 201, created.text
+    buyer_client = authed_client_factory(buyer)
+    path = f"/shop/registrations/current/products/{product.id}"
+    selected = await buyer_client.put(
+        path, json={"variants": [{"option_ids": paid_options, "quantity": 2}]}
+    )
+    assert selected.status_code == 200, selected.text
+    if code:
+        selected = await buyer_client.put(
+            "/shop/registrations/current/promotion",
+            json={"code": code, "category_id": category_id},
+        )
+        assert selected.status_code == 200, selected.text
+    order = selected.json()
+    assert order["subtotal_price"] == 300
+    assert order["discount_amount"] == 200
+    assert order["total_price"] == 100
+    assert {option["option_id"] for option in order["items"][0]["selected_options"]} == set(
+        paid_options
+    )
+    preview = await buyer_client.post(
+        "/shop/registrations/current/promotion/preview",
+        json={"code": code, "category_id": category_id},
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["discount_amount"] == 200
+    assert preview.json()["total_price"] == 100
+
+    # 同一位受贈者可更換規格，免加價選項與混合數量均依實際選擇計費。
+    for variants, expected in [
+        ([{"option_ids": free_options, "quantity": 2}], 0),
+        (
+            [
+                {"option_ids": free_options, "quantity": 1},
+                {"option_ids": paid_options, "quantity": 1},
+            ],
+            50,
+        ),
+    ]:
+        changed = await buyer_client.put(path, json={"variants": variants})
+        assert changed.status_code == 200, changed.text
+        assert changed.json()["id"] == order["id"]
+        assert changed.json()["discount_amount"] == 200
+        assert changed.json()["total_price"] == expected
+    receivable = await db_session.scalar(
+        select(Receivable).where(Receivable.source_id == UUID(order["id"]))
+    )
+    assert receivable is not None and receivable.amount == 50
+    await db_session.refresh(product)
+    assert product.stock_quantity == 8
+
+    outsider_client = authed_client_factory(outsider)
+    normal = await outsider_client.put(
+        path, json={"variants": [{"option_ids": paid_options, "quantity": 1}]}
+    )
+    assert normal.status_code == 200, normal.text
+    assert normal.json()["total_price"] == 150
+    if code:
+        rejected = await outsider_client.put(
+            "/shop/registrations/current/promotion",
+            json={"code": code, "category_id": category_id},
+        )
+        assert rejected.status_code == 422
+    assert (await outsider_client.get(f"/shop/orders/{order['id']}")).status_code in (403, 404)
+
+
 async def test_roster_gift_includes_all_variants_and_multiple_products(
     db_session, admin_user, authed_client_factory
 ):

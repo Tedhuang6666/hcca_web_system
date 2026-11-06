@@ -76,9 +76,14 @@ describe("優惠管理的預先指定學號", () => {
       target_identifiers: ["11520", "11521"], target_product_ids: ["ticket"],
       discount_type: "percentage", discount_value: 100,
     })));
-    await screen.findByText(/贈票／免費商品（全額折抵）/);
+    await screen.findByText(/贈票／免費商品（基本售價免費，規格加價自付）/);
     fireEvent.click(screen.getByRole("button", { name: "編輯" }));
     expect(screen.getByRole("combobox", { name: "優惠內容" })).toHaveValue("gift");
+    expect(screen.getByText(/由受贈者到商品頁自行選擇規格/)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "儲存變更" }));
+    await waitFor(() => expect(api.updatePromotion).toHaveBeenCalledWith("promotion-1",
+      expect.objectContaining({ discount_type: "percentage", discount_value: 100,
+        target_product_ids: ["ticket"], target_identifiers: ["410999"] })));
   });
 
   it("可建立每項各一件的固定套組價", async () => {

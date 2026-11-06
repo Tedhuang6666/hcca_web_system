@@ -38,6 +38,8 @@ export default function ProductCardOffers({ product, promotions, products, disab
         </button>;
       }
       const companions = targets.filter((target) => target.id !== product.id);
+      const isGift = promotion.discount_type === "percentage" && promotion.discount_value === 100
+        && targets.length > 0;
       const original = product.price;
       const override = promotion.product_price_overrides?.find((row) => row.product_id === product.id);
       const singlePrice = promotion.discount_type === "price_override" ? override?.unit_price
@@ -59,12 +61,13 @@ export default function ProductCardOffers({ product, promotions, products, disab
             : promotion.code || promotion.min_quantity > 1 || promotion.min_order_price > original
               ? "符合條件時單件價" : "單件優惠價"}</p>
           <ShopPrice original={referencePrice(product)} current={singlePrice} suffix={product.has_option_surcharge ? " 起" : undefined} />
-        </> : <p>{promotion.discount_type === "percentage"
+        </> : <p>{isGift ? "指定商品基本售價免費" : promotion.discount_type === "percentage"
           ? `指定商品合購減價 ${promotion.discount_value}%`
           : `整筆登記折抵 NT$${promotion.discount_value.toLocaleString()}`}</p>}
         {promotion.discount_type !== "price_override" && companions.length > 0
           && <p>需同時選購{companions.map((target) => target.name).join("、")}</p>}
-        <p>{conditions}{promotion.discount_type === "price_override" ? " · 規格加價另計" : ""}</p>
+        <p>{conditions}{promotion.discount_type === "price_override" || isGift ? " · 規格加價另計" : ""}</p>
+        {isGift && <p>請自行選擇規格；商品基本售價免費，加價選項由您支付。</p>}
       </div>;
     })}
   </div>;

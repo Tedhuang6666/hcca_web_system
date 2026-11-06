@@ -23,9 +23,12 @@ beforeEach(() => {
   api.createAdminAssistedOrder.mockResolvedValue([{ total_price: 0 }]);
 });
 
-it("sends selected products and variants as gifts, requires a reason and preserves the draft on failure", async () => {
+it("贈品導向優惠設定，代訂保留規格加價並在失敗後保留清單", async () => {
   const created = vi.fn();
   render(<AdminAssistedOrder catalog={catalog} classes={classes} optionsError={false} onRetry={vi.fn()} onCreated={created} defaultOpen />);
+  expect(screen.queryByRole("option", { name: "贈送（免付款）" })).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "優惠設定建立贈品優惠" }))
+    .toHaveAttribute("href", "/shop/admin?view=promotions");
   fireEvent.change(screen.getByRole("combobox", { name: "代訂班級" }), { target: { value: "class" } });
   await screen.findByRole("option", { name: "名冊同學" });
   fireEvent.change(screen.getByRole("combobox", { name: "代訂同學" }), { target: { value: "seat" } });
@@ -33,20 +36,16 @@ it("sends selected products and variants as gifts, requires a reason and preserv
   fireEvent.change(await screen.findByRole("combobox", { name: "尺寸（必選）" }), { target: { value: "large" } });
   fireEvent.change(screen.getByRole("spinbutton", { name: "數量" }), { target: { value: "2" } });
   fireEvent.click(screen.getByRole("button", { name: "加入代訂清單" }));
-  fireEvent.change(screen.getByRole("combobox", { name: "收款安排" }), { target: { value: "gift" } });
-  expect(screen.getByText(/紀念衫（L） × 2/)).toHaveTextContent("NT$0");
-  expect(screen.getByRole("button", { name: "送出贈送" })).toBeDisabled();
-  fireEvent.change(screen.getByRole("textbox", { name: "贈送原因（必填）" }), { target: { value: "  " } });
-  expect(screen.getByRole("button", { name: "送出贈送" })).toBeDisabled();
-  fireEvent.change(screen.getByRole("textbox", { name: "贈送原因（必填）" }), { target: { value: "校慶抽獎中獎" } });
+  expect(screen.getByText(/紀念衫（L） × 2/)).toHaveTextContent("NT$240");
   api.createAdminAssistedOrder.mockRejectedValueOnce(new Error("offline"));
-  fireEvent.click(screen.getByRole("button", { name: "送出贈送" }));
-  expect(await screen.findByRole("alert")).toHaveTextContent("贈送失敗，清單已保留，請重試。");
+  fireEvent.click(screen.getByRole("button", { name: "送出代訂" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("代訂失敗，清單已保留，請重試。");
   expect(screen.getByText(/紀念衫（L） × 2/)).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: "送出贈送" }));
+  api.createAdminAssistedOrder.mockResolvedValue([{ total_price: 240 }]);
+  fireEvent.click(screen.getByRole("button", { name: "送出代訂" }));
   await waitFor(() => expect(created).toHaveBeenCalledOnce());
   expect(api.createAdminAssistedOrder).toHaveBeenLastCalledWith({ roster_entry_id: "roster",
-    items: [{ product_id: "shirt", quantity: 2, option_ids: ["large"] }], notes: "校慶抽獎中獎",
-    collection_mode: "gift", payment_method: "cash_on_pickup" });
-  expect(screen.getByRole("status")).toHaveTextContent("完成贈送，應付 NT$0。數量已納入統計，無須收款。");
+    items: [{ product_id: "shirt", quantity: 2, option_ids: ["large"] }], notes: null,
+    collection_mode: "class", payment_method: "cash_on_pickup" });
+  expect(screen.getByRole("status")).toHaveTextContent("完成代訂，合計 NT$240。");
 });

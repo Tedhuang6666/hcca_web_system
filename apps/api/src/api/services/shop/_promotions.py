@@ -939,6 +939,14 @@ def _discount_amount(
         )
         return min(eligible_subtotal, savings)
     if promotion.discount_type == ShopDiscountType.PERCENTAGE:
+        if promotion.discount_value == 100 and promotion.target_products:
+            # 指定商品全額折抵是贈品；受贈者自行選規格，僅免除商品基本售價。
+            amounts = product_subtotals or {}
+            quantities = product_quantities or {}
+            return sum(
+                min(amounts.get(product.id, 0), product.price * quantities.get(product.id, 0))
+                for product in promotion.target_products
+            )
         return min(eligible_subtotal, eligible_subtotal * promotion.discount_value // 100)
     return min(eligible_subtotal, promotion.discount_value)
 

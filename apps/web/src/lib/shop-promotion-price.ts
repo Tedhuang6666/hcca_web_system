@@ -24,7 +24,9 @@ export function productOfferPrice(
       const price = promotion.product_price_overrides?.find((row) => row.product_id === product.id);
       if (price) best = Math.min(best, (price.unit_price + variantDelta) * quantity);
     } else if (targets.length <= 1 && promotion.discount_type === "percentage") {
-      best = Math.min(best, original - Math.floor(original * promotion.discount_value / 100));
+      const discount = promotion.discount_value === 100 && targets.length > 0
+        ? product.price * quantity : Math.floor(original * promotion.discount_value / 100);
+      best = Math.min(best, original - discount);
     }
   }
   return Math.max(0, best);

@@ -388,7 +388,7 @@ export default function ShopPromotionPanel() {
           </label>
           {form.discount_type === "gift" ? (
             <p className="self-center text-xs" style={{ color: "var(--text-muted)" }}>
-              指定商品含規格加價全額折抵，應付 NT$0，數量照常納入統計。可在上方限定使用帳號；需直接發送時，請到班聯訂單的「贈送（免付款）」。
+              在上方指定受贈者的學號或 Email，由受贈者到商品頁自行選擇規格。商品基本售價免費，加價選項由受贈者支付，數量照常納入統計。
             </p>
           ) : form.discount_type !== "price_override" ? (
             <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
@@ -417,7 +417,7 @@ export default function ShopPromotionPanel() {
             <legend className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>適用商品（可複選）</legend>
             <p className="mt-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
               {form.discount_type === "gift"
-                ? "請選擇要贈送的票券或商品。多選時需同時登記所有指定商品，指定商品的登記數量皆免費；其他商品仍依原價計算。"
+                ? "請選擇要贈送的票券或商品。多選時需同時登記所有指定商品；指定商品只折抵基本售價，規格加價與其他商品仍須付款。"
                 : form.discount_type === "price_override"
                 ? "使用者任選一項已設定商品即可使用；只有實際登記的指定商品會改用優惠單價。"
                 : form.discount_type === "bundle_price"
@@ -540,7 +540,8 @@ export default function ShopPromotionPanel() {
                 : promotion.discount_type === "bundle_price"
                   ? `每套 NT$${promotion.discount_value.toLocaleString()}`
                 : promotion.discount_type === "percentage"
-                  ? promotion.discount_value === 100 ? "贈票／免費商品（全額折抵）" : `減價 ${promotion.discount_value}%`
+                  ? promotion.discount_value === 100 && (promotion.target_products?.length ?? 0) > 0
+                    ? "贈票／免費商品（基本售價免費，規格加價自付）" : `減價 ${promotion.discount_value}%`
                   : `折抵 NT$${promotion.discount_value.toLocaleString()}`;
               return (
                 <div key={promotion.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
