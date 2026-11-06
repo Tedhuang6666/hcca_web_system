@@ -105,6 +105,7 @@ from api.schemas.shop import (
 )
 from api.schemas.shop_analytics import ShopSalesAnalyticsOut, ShopSalesReportCreate
 from api.schemas.shop_profit import ProductProcurementUpdate, ShopProfitOut
+from api.schemas.shop_targets import ShopTargetLookupRequest, ShopTargetOut
 from api.services import activity as activity_svc
 from api.services import audit as audit_svc
 from api.services import school_class as class_svc
@@ -124,6 +125,7 @@ from api.services.shop._purchase_rules import (
     product_purchase_restriction,
     purchase_restrictions,
 )
+from api.services.shop._targets import lookup_targets
 from api.services.shop._testing import can_test_products, start_product_testing
 from api.services.shop._visibility import has_purchase_qualifications
 from api.services.storage import get_storage
@@ -703,6 +705,22 @@ async def list_purchase_permissions(
 ) -> list[dict]:
     await _require_shop_manager(session, current_user, activity_id)
     return ALL_PERMISSION_CODES
+
+
+@router.post(
+    "/target-options",
+    response_model=list[ShopTargetOut],
+    summary="搜尋或核對商品與優惠名單（限商品管理者）",
+)
+async def lookup_shop_targets(
+    payload: ShopTargetLookupRequest,
+    session: DbDep,
+    current_user: CurrentUser,
+    response: Response,
+) -> list[ShopTargetOut]:
+    await _require_shop_manager(session, current_user, payload.activity_id)
+    response.headers["Cache-Control"] = "private, no-store"
+    return await lookup_targets(session, keyword=payload.keyword, identifiers=payload.identifiers)
 
 
 # ── 優惠管理 ──────────────────────────────────────────────────────────────────

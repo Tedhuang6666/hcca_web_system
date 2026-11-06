@@ -13,12 +13,14 @@ import type {
 import { authFetch, BASE, get, post, put, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
 import type { ProductPurchaseRules, ProductPurchasePermissionOut } from "../types";
 import type { ProductPurchaseGroupOptionOut } from "../types";
+import type { ShopTargetLookupRequest, ShopTargetOut } from "../types";
 
 type ReceiptScope = Pick<ClassReceiptBatchCreate, "activity_id" | "category_id">;
 
 // ── 商店 ──────────────────────────────────────────────────────────────────────
 
 export const shopApi = {
+  lookupTargets: (body: ShopTargetLookupRequest) => post<ShopTargetOut[]>("/shop/target-options", body),
   profitAnalysis: (categoryId: string) =>
     get<ShopProfitOut>(`/shop/profit?${new URLSearchParams({ category_id: categoryId })}`),
   saveProcurement: (id: string, body: ProductProcurementUpdate) =>

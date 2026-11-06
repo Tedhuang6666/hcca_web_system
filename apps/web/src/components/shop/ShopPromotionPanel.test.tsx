@@ -12,6 +12,7 @@ const api = vi.hoisted(() => ({
   listSeries: vi.fn(),
   updatePromotion: vi.fn(),
   createPromotion: vi.fn(),
+  lookupTargets: vi.fn(),
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -53,9 +54,30 @@ beforeEach(() => {
   api.listCategories.mockResolvedValue([]);
   api.listSeries.mockResolvedValue([]);
   api.updatePromotion.mockResolvedValue(pendingStudentTarget);
+  api.lookupTargets.mockResolvedValue([]);
 });
 
 describe("優惠管理的預先指定學號", () => {
+  it("搜尋姓名後核對班級並加入，建立優惠時送出對應學號", async () => {
+    api.lookupTargets.mockResolvedValue([{ identifier: "310001", display_name: "測試同學", student_id: "310001", class_label: "三年一班", seat_number: 1, matched: true, account_active: true }]);
+    api.createPromotion.mockResolvedValue({});
+    render(<ShopPromotionPanel />);
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "測試同學" } });
+    fireEvent.click(await screen.findByRole("button", { name: /加入 測試同學（學號 310001 · 三年一班 · 1 號）/ }));
+    fireEvent.change(screen.getByRole("textbox", { name: "優惠名稱" }), { target: { value: "測試名單優惠" } });
+    fireEvent.click(screen.getByRole("button", { name: "建立優惠" }));
+    await waitFor(() => expect(api.createPromotion).toHaveBeenCalledWith(expect.objectContaining({ target_identifiers: ["310001"] })));
+  });
+
+  it("批次欄位誤貼姓名時提示改用搜尋，避免將姓名存成學號", async () => {
+    render(<ShopPromotionPanel />);
+    fireEvent.change(screen.getByRole("textbox", { name: "優惠名稱" }), { target: { value: "測試優惠" } });
+    fireEvent.change(screen.getByLabelText("可使用帳號（選填）（批次輸入）"), { target: { value: "測試同學" } });
+    expect(screen.getByRole("alert")).toHaveTextContent("姓名請用上方搜尋後選取");
+    fireEvent.click(screen.getByRole("button", { name: "建立優惠" }));
+    expect(api.createPromotion).not.toHaveBeenCalled();
+  });
+
   it("可建立指定得獎者與商品的贈票優惠，編輯時保留贈送選項", async () => {
     api.listProducts.mockResolvedValue([{ id: "ticket", name: "校慶門票", price: 200 }]);
     api.createPromotion.mockResolvedValue({});
@@ -63,6 +85,7 @@ describe("優惠管理的預先指定學號", () => {
     await screen.findByRole("checkbox", { name: "校慶門票" });
     fireEvent.change(screen.getByRole("textbox", { name: "優惠名稱" }), { target: { value: "抽獎贈票" } });
     fireEvent.change(screen.getByRole("combobox", { name: "優惠內容" }), { target: { value: "gift" } });
+    fireEvent.click(screen.getByText("批次輸入學號或 Email"));
     fireEvent.change(screen.getByRole("textbox", { name: /可使用帳號/ }), { target: { value: "11520\n11521" } });
     fireEvent.click(screen.getByRole("button", { name: "建立優惠" }));
     expect(api.createPromotion).not.toHaveBeenCalled();
@@ -144,6 +167,7 @@ describe("優惠管理的預先指定學號", () => {
     expect(screen.getByText(/學號可先指定，對應帳號註冊後即可使用/)).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "編輯" }));
+    fireEvent.click(screen.getByText("批次輸入學號或 Email"));
     expect(screen.getByRole("textbox", { name: /可使用帳號（選填）/ })).toHaveValue("410999");
 
     fireEvent.click(screen.getByRole("button", { name: "儲存變更" }));

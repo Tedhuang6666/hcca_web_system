@@ -3,6 +3,7 @@
 import { useEffect, useId, useState } from "react";
 import { shopApi } from "@/lib/api";
 import type { ProductPurchaseGroupOptionOut, ProductPurchasePermissionOut, ProductPurchaseRules } from "@/lib/types";
+import ShopTargetPicker from "./ShopTargetPicker";
 
 export type PurchaseRulesDraft = Required<ProductPurchaseRules>;
 export const emptyPurchaseRules: PurchaseRulesDraft = {
@@ -10,10 +11,6 @@ export const emptyPurchaseRules: PurchaseRulesDraft = {
   exclusive_group: null, designated_only: false,
   exclusive_product_ids: [],
 };
-
-function identifiers(text: string): string[] {
-  return [...new Set(text.split(/[\s,，;；]+/u).map((value) => value.trim().toLowerCase()).filter(Boolean))];
-}
 
 export default function ProductPurchaseRulesEditor({ value, onChange, activityId, categoryId, productId, disabled }: {
   value: PurchaseRulesDraft;
@@ -24,8 +21,6 @@ export default function ProductPurchaseRulesEditor({ value, onChange, activityId
   disabled: boolean;
 }) {
   const id = useId();
-  const [allowedText, setAllowedText] = useState(value.allowed_identifiers.join("\n"));
-  const [blockedText, setBlockedText] = useState(value.blocked_identifiers.join("\n"));
   const [permissions, setPermissions] = useState<ProductPurchasePermissionOut[]>([]);
   const [permissionsState, setPermissionsState] = useState<"loading" | "ready" | "error">("loading");
   const [attempt, setAttempt] = useState(0);
@@ -118,24 +113,12 @@ export default function ProductPurchaseRulesEditor({ value, onChange, activityId
         </li>)}
       </ul>}
     </div>
-    <div className="space-y-2">
-      <label htmlFor={`${id}-allowed`} className="block text-sm font-medium">允許購買名單</label>
-      <textarea id={`${id}-allowed`} rows={4} className="input w-full" value={allowedText}
-        aria-describedby={`${id}-allowed-help`} placeholder="每行一個學號或 Email，也可用逗號分隔"
-        onChange={(event) => { setAllowedText(event.target.value); onChange({ ...value, allowed_identifiers: identifiers(event.target.value) }); }} />
-      <p id={`${id}-allowed-help`} className="text-xs" style={{ color: "var(--text-secondary)" }}>
-        已輸入 {value.allowed_identifiers.length} 筆，最多 2,000 筆。填寫後只有名單中的學生能購買；學號可預先輸入。指定票種的名單留空時，暫無人可購買。
-      </p>
-    </div>
-    <div className="space-y-2">
-      <label htmlFor={`${id}-blocked`} className="block text-sm font-medium">禁止購買名單</label>
-      <textarea id={`${id}-blocked`} rows={4} className="input w-full" value={blockedText}
-        aria-describedby={`${id}-blocked-help`} placeholder="例如：在一般票填入表演人員的學號或 Email"
-        onChange={(event) => { setBlockedText(event.target.value); onChange({ ...value, blocked_identifiers: identifiers(event.target.value) }); }} />
-      <p id={`${id}-blocked-help`} className="text-xs" style={{ color: "var(--text-secondary)" }}>
-        已輸入 {value.blocked_identifiers.length} 筆，最多 2,000 筆。即使符合年級、權限或允許名單，仍無法購買此商品。
-      </p>
-    </div>
+    <ShopTargetPicker label="允許購買名單" value={value.allowed_identifiers} activityId={activityId} disabled={disabled}
+      onChange={(identifiers) => onChange({ ...value, allowed_identifiers: identifiers })}
+      help="填寫後只有名單中的學生能購買；學號可預先指定。指定票種的名單留空時，暫無人可購買。" />
+    <ShopTargetPicker label="禁止購買名單" value={value.blocked_identifiers} activityId={activityId} disabled={disabled}
+      onChange={(identifiers) => onChange({ ...value, blocked_identifiers: identifiers })}
+      help="即使符合年級、權限或允許名單，仍無法購買此商品。例如：在一般票加入已指定表演票的人員。" />
     <p className="text-xs" style={{ color: "var(--text-secondary)" }}>儲存後立即限制新購與加購；已成立的訂單會保留，仍可減少數量或取消。名單僅商品管理者可查看。</p>
   </fieldset>;
 }

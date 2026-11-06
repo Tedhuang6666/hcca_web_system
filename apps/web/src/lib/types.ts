@@ -754,6 +754,8 @@ export type {
   ShopPromotionPreviewOut,
   ShopPromotionPublicOut,
   ShopPromotionUpdate,
+  ShopTargetLookupRequest,
+  ShopTargetOut,
   ShortLinkCreate,
   ShortLinkOut,
   ShortLinkResolveOut,

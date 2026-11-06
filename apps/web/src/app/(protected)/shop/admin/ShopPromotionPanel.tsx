@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { apiErrorMessage, shopApi } from "@/lib/api";
+import ShopTargetPicker, { targetIdentifiers } from "@/components/shop/ShopTargetPicker";
 import type {
   CatalogCategoryOut,
   ProductOut,
@@ -107,10 +108,11 @@ export default function ShopPromotionPanel() {
   useEffect(() => { void load(); }, [load]);
 
   const save = async () => {
-    const targetIdentifiers = form.target_identifiers
-      .split(/[\r\n,;]+/)
-      .map((identifier) => identifier.trim())
-      .filter(Boolean);
+    const targets = targetIdentifiers(form.target_identifiers);
+    if (targets.length > 500 || targets.some((identifier) => !/^(?:[0-9]{1,20}|[^\s@]+@[^\s@]+)$/u.test(identifier) || identifier.length > 255)) {
+      toast.error("請確認可使用帳號名單：最多 500 人，姓名請先搜尋並選取，批次輸入僅接受學號或 Email。");
+      return;
+    }
     if (!form.name.trim()) {
       toast.error("請輸入優惠名稱");
       return;
@@ -158,7 +160,7 @@ export default function ShopPromotionPanel() {
       const payload = {
         activity_id: form.activity_id === GENERAL_ACTIVITY_SCOPE ? null : form.activity_id,
         name: form.name.trim(),
-        target_identifiers: targetIdentifiers,
+        target_identifiers: targets,
         target_product_ids: form.target_product_ids,
         product_price_overrides: productPriceOverrides,
         code: form.code.trim().toUpperCase() || null,
@@ -348,16 +350,12 @@ export default function ShopPromotionPanel() {
             優惠名稱
             <input ref={nameInputRef} className="input mt-1 w-full" value={form.name} onChange={(e) => update("name", e.target.value)} placeholder="例如：校友回饋 9 折" />
           </label>
-          <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
-            可使用帳號（選填）
-            <textarea className="input mt-1 w-full min-h-24 resize-y" rows={3}
-              value={form.target_identifiers}
-              onChange={(e) => update("target_identifiers", e.target.value)}
-              placeholder={"每行一個 Email 或學號\nstudent@example.edu.tw\n1101234"} />
-            <span className="mt-1 block text-[11px]" style={{ color: "var(--text-muted)" }}>
-              留空代表所有帳號可用。學號可先指定，對應帳號註冊後即可使用；Email 必須是已註冊帳號。輸入名單後僅名單內帳號可用，適用自動優惠與優惠碼。
-            </span>
-          </label>
+          <div className="sm:col-span-2">
+            <ShopTargetPicker label="可使用帳號（選填）" value={targetIdentifiers(form.target_identifiers)}
+              activityId={form.activity_id === GENERAL_ACTIVITY_SCOPE ? null : form.activity_id} disabled={saving} max={500}
+              onChange={(identifiers) => update("target_identifiers", identifiers.join("\n"))}
+              help="留空代表所有帳號可用。學號可先指定，對應帳號註冊後即可使用；Email 必須是已註冊帳號。加入名單後僅名單內帳號可用，適用自動優惠與優惠碼。" />
+          </div>
           <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
             優惠碼（選填）
             <input className="input mt-1 w-full uppercase" value={form.code} onChange={(e) => update("code", e.target.value.toUpperCase())} placeholder="WELCOME10" autoCapitalize="characters" />

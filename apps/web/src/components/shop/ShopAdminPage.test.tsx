@@ -9,6 +9,7 @@ const api = vi.hoisted(() => ({
   testProduct: vi.fn(), activateProduct: vi.fn(), updateProduct: vi.fn(), uploadImage: vi.fn(),
   getProductPurchaseRules: vi.fn(), purchasePermissions: vi.fn(), purchaseGroupOptions: vi.fn(),
   getProductCost: vi.fn(),
+  lookupTargets: vi.fn(),
 }));
 const navigation = vi.hoisted(() => ({ search: "" }));
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(navigation.search) }));
@@ -33,6 +34,7 @@ beforeEach(() => {
   api.getProductPurchaseRules.mockResolvedValue({ allowed_grades: [], required_permissions: [], allowed_identifiers: [], blocked_identifiers: [], exclusive_group: null, designated_only: false });
   api.purchasePermissions.mockResolvedValue([]);
   api.purchaseGroupOptions.mockResolvedValue([]);
+  api.lookupTargets.mockResolvedValue([]);
 });
 
 async function openStats() {
@@ -392,7 +394,7 @@ it("購買資格讀取失敗時不允許儲存，重試後保留名單再送出"
   expect(api.updateProduct).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "重新讀取購買資格" }));
   expect(await screen.findByLabelText("高三")).toBeChecked();
-  expect(screen.getByLabelText("禁止購買名單")).toHaveValue("310002");
+  expect(screen.getByLabelText("禁止購買名單（批次輸入）")).toHaveValue("310002");
   fireEvent.click(screen.getByRole("button", { name: "儲存商品" }));
   await waitFor(() => expect(api.updateProduct).toHaveBeenCalledWith("rules-product", expect.objectContaining({
     purchase_rules: expect.objectContaining({ allowed_grades: [3], blocked_identifiers: ["310002"], exclusive_group: "校慶" }),

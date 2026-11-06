@@ -11450,6 +11450,23 @@ export interface paths {
         patch: operations["update_series_shop_series__series_id__patch"];
         trace?: never;
     };
+    "/shop/target-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 搜尋或核對商品與優惠名單（限商品管理者） */
+        post: operations["lookup_shop_targets_shop_target_options_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shop/variant-groups/{group_id}": {
         parameters: {
             query?: never;
@@ -31004,6 +31021,40 @@ export interface components {
              * @default 0
              */
             total_cost: number | null;
+        };
+        /** ShopTargetLookupRequest */
+        ShopTargetLookupRequest: {
+            /** Activity Id */
+            activity_id?: string | null;
+            /** Identifiers */
+            identifiers?: string[];
+            /**
+             * Keyword
+             * @default
+             */
+            keyword: string;
+        };
+        /** ShopTargetOut */
+        ShopTargetOut: {
+            /** Account Active */
+            account_active?: boolean | null;
+            /** Class Label */
+            class_label?: string | null;
+            /** Display Name */
+            display_name?: string | null;
+            /** Email */
+            email?: string | null;
+            /** Identifier */
+            identifier: string;
+            /**
+             * Matched
+             * @default false
+             */
+            matched: boolean;
+            /** Seat Number */
+            seat_number?: number | null;
+            /** Student Id */
+            student_id?: string | null;
         };
         /** ShortLinkCreate */
         ShortLinkCreate: {
@@ -58524,6 +58575,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProductSeriesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    lookup_shop_targets_shop_target_options_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShopTargetLookupRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopTargetOut"][];
                 };
             };
             /** @description Validation Error */
