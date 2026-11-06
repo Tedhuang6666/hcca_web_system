@@ -28,20 +28,21 @@ from api.services.school_class import class_display_label
 from api.services.shop._analytics_insights import build_sales_insights
 
 
-def _allocate_amounts(order: Order) -> dict[uuid.UUID, int]:
-    """按明細原價分攤實際應繳金額；最大餘數法確保各明細加總等於整單。"""
+def _allocate_amounts(order: Order, total_amount: int | None = None) -> dict[uuid.UUID, int]:
+    """按明細金額分攤整單金額；最大餘數法確保各明細加總等於整單。"""
     items = sorted(order.items, key=lambda item: str(item.id))
     gross = sum(item.quantity * item.unit_price for item in items)
     if not gross:
         return {item.id: 0 for item in items}
+    total = order.total_price if total_amount is None else total_amount
     amounts = {
-        item.id: order.total_price * item.quantity * item.unit_price // gross for item in items
+        item.id: total * item.quantity * item.unit_price // gross for item in items
     }
-    remainder = order.total_price - sum(amounts.values())
+    remainder = total - sum(amounts.values())
     ranked = sorted(
         items,
         key=lambda item: (
-            -(order.total_price * item.quantity * item.unit_price % gross),
+            -(total * item.quantity * item.unit_price % gross),
             str(item.id),
         ),
     )
@@ -188,9 +189,10 @@ def _summarize(
         if not items:
             continue
         amounts = _allocate_amounts(order)
+        discounts = _allocate_amounts(order, order.discount_amount)
         amount = sum(amounts[item.id] for item in items)
         quantity = sum(item.quantity for item in items)
-        discount = sum(item.quantity * item.unit_price for item in items) - amount
+        discount = sum(discounts[item.id] for item in items)
         gross = amount + discount
         # 採目前商品成本，補填或更正後可重算既有訂單；未知成本不可視為零。
         cost = sum(item.quantity * (item.product.unit_cost or 0) for item in items)
@@ -260,7 +262,7 @@ def _summarize(
             add(kind, key, label, order, quantity, amount, gross, cost, missing)
         for item in items:
             product = item.product
-            item_gross = item.quantity * item.unit_price
+            item_gross = amounts[item.id] + discounts[item.id]
             item_cost = item.quantity * (product.unit_cost or 0)
             item_missing = item.quantity if product.unit_cost is None else 0
             add(
