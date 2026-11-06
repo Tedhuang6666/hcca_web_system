@@ -35,9 +35,7 @@ def _allocate_amounts(order: Order, total_amount: int | None = None) -> dict[uui
     if not gross:
         return {item.id: 0 for item in items}
     total = order.total_price if total_amount is None else total_amount
-    amounts = {
-        item.id: total * item.quantity * item.unit_price // gross for item in items
-    }
+    amounts = {item.id: total * item.quantity * item.unit_price // gross for item in items}
     remainder = total - sum(amounts.values())
     ranked = sorted(
         items,

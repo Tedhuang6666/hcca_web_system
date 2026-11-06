@@ -110,11 +110,9 @@ async def test_seven_digit_code_exchanges_for_same_scoped_link(delegation_setup)
     student, parent, category, product, sc, pc, oc, link = delegation_setup
     code = link["authorization_code"]
     assert len(code) == 7 and code.isascii() and code.isdecimal()
-    expires_at = datetime.fromisoformat(link["authorization_code_expires_at"])
-    remaining = expires_at - datetime.now(UTC)
-    assert timedelta(days=6, hours=23) < remaining <= timedelta(days=7)
+    assert link["authorization_code_expires_at"] is None
     key = f"{_delegation_codes._PREFIX}value:{_delegation_codes._digest(code)}"
-    assert 0 < await redis_client.ttl(key) <= _delegation_codes.CODE_TTL_SECONDS
+    assert await redis_client.ttl(key) == -1
     listed = (await sc.get("/shop/delegation-links")).json()
     assert listed[0]["authorization_code"] is None
     assert listed[0]["token"] is None
@@ -130,6 +128,27 @@ async def test_seven_digit_code_exchanges_for_same_scoped_link(delegation_setup)
     denied = await oc.post("/shop/delegation/code", json={"code": code})
     assert denied.status_code == 403
     assert "token" not in denied.json()
+
+
+async def test_old_authorization_remains_bound_until_class_closes(delegation_setup, db_session):
+    student, parent, category, product, sc, pc, oc, link = delegation_setup
+    saved = await db_session.get(ShopDelegationLink, uuid.UUID(link["id"]))
+    saved.created_at = datetime.now(UTC) - timedelta(days=8)
+    await db_session.flush()
+    await _claim(pc, link)
+    code = {"code": link["authorization_code"]}
+    assert (await pc.post("/shop/delegation/code", json=code)).status_code == 200
+    assert (await _set(pc, product, 1, link["token"])).status_code == 200
+    assert saved.bound_user_id == parent.id
+
+    await shop_svc.close_category_for_class(
+        db_session, category_id=category.id, class_id=None, closed_by_id=student.id
+    )
+    await db_session.flush()
+    assert (await pc.post("/shop/delegation/code", json=code)).status_code == 410
+    assert (await _set(pc, product, 2, link["token"])).status_code == 410
+    assert saved.bound_user_id == parent.id
+    assert saved.revoked_at is None
 
 
 async def test_code_requires_login_and_does_not_allow_parent_to_create_authorization(

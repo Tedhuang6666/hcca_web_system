@@ -1,15 +1,14 @@
-"""七日有效的七位數代訂授權碼；換取既有連結後沿用帳號綁定與授權檢查。"""
+"""七位數代訂授權碼；有效期沿用連結的商品截止、結單與撤銷檢查。"""
 
 import asyncio
 import hashlib
 import secrets
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from redis.exceptions import RedisError
 
 from api.core.security import redis_client
 
-CODE_TTL_SECONDS = 7 * 24 * 60 * 60
 _ATTEMPT_WINDOW_SECONDS = 10 * 60
 _PREFIX = "shop:delegation-code:"
 
@@ -24,16 +23,14 @@ def _digest(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 
-async def issue_code(token: str) -> tuple[str, datetime]:
-    """NX 防止並行撞碼；Redis 故障時不回傳無法使用的授權碼。"""
+async def issue_code(token: str) -> tuple[str, None]:
+    """NX 防止並行撞碼；不設固定期限，兌換時仍須驗證原連結是否開放。"""
     try:
         async with asyncio.timeout(1):
             for _ in range(10):
                 code = f"{secrets.randbelow(10_000_000):07d}"
-                if await redis_client.set(
-                    f"{_PREFIX}value:{_digest(code)}", token, ex=CODE_TTL_SECONDS, nx=True
-                ):
-                    return code, datetime.now(UTC) + timedelta(seconds=CODE_TTL_SECONDS)
+                if await redis_client.set(f"{_PREFIX}value:{_digest(code)}", token, nx=True):
+                    return code, None
     except (RedisError, TimeoutError) as error:
         raise DelegationCodeError("授權碼服務暫時無法使用，請稍後再建立授權", 503) from error
     raise DelegationCodeError("暫時無法產生授權碼，請稍後再試", 503)

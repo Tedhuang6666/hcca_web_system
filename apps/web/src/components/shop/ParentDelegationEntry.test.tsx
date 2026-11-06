@@ -17,6 +17,11 @@ describe("家長授權入口", () => {
     render(<ParentDelegationEntry isLoggedIn={false} />);
     expect(screen.getByRole("link", { name: "登入後開始代訂" })).toHaveAttribute("href", "/login?next=%2Fshop%3Fdelegation%3Dentry");
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "還沒有驗證碼？請孩子這樣設定" })).toBeVisible();
+    expect(screen.getByText("用學生帳號登入，打開商品頁，點「家人代訂」。")).toBeVisible();
+    expect(screen.getByText(/選擇活動，填寫家長稱呼/)).toBeVisible();
+    expect(screen.getByText(/把七位數驗證碼或分享連結傳給你/)).toBeVisible();
+    expect(screen.getByText(/綁定後可持續代訂至商品截止或班級結單/)).toBeVisible();
     fireEvent.click(screen.getByText("完整操作介紹與權限說明"));
     expect(screen.getByText(/輸入學生提供的七位數驗證碼，或直接開啟學生傳來的連結/)).toBeVisible();
     expect(screen.getByText(/不需要交換帳號或密碼/)).toBeVisible();
