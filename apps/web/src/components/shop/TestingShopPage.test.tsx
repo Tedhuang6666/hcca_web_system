@@ -233,6 +233,31 @@ beforeEach(() => {
   }));
 });
 
+it.each([
+  { discount_type: "percentage" as const, discount_value: 10, price: 90 },
+  { discount_type: "fixed" as const, discount_value: 20, price: 80 },
+  { discount_type: "price_override" as const, discount_value: 0, price: 60 },
+])("已有登記時商品卡片與詳情仍顯示 $discount_type 特殊優惠價", async (sale) => {
+  const product = { ...formalProduct, original_price: 150 };
+  api.catalog.mockResolvedValue([{ id: "goods", name: "商品", activity_id: "festival",
+    sort_order: 0, products: [product], series: [] }]);
+  api.getProduct.mockResolvedValue({ ...product, variant_groups: [], media: [] });
+  api.listAvailablePromotions.mockResolvedValue([{
+    id: "sale", name: "特殊優惠", activity_id: "festival", code: null,
+    discount_type: sale.discount_type, discount_value: sale.discount_value,
+    min_quantity: 1, min_order_price: 0, target_products: [{ id: product.id, name: product.name }],
+    product_price_overrides: [{ product_id: product.id, product_name: product.name, unit_price: 60 }],
+  }]);
+  render(<ShopPage />);
+  const card = await screen.findByRole("link", { name: "查看商品：正式商品" });
+  const priceLabel = `原價 NT$150，優惠價 NT$${sale.price}`;
+  await waitFor(() => expect(within(card).getByLabelText(priceLabel)).toBeVisible());
+  expect(card.querySelector("del")).toHaveTextContent("NT$150");
+  fireEvent.click(card);
+  const dialog = await screen.findByRole("dialog");
+  expect(await within(dialog).findByLabelText(priceLabel)).toBeVisible();
+});
+
 it("only shows eligible tickets and removes empty series, themes and related bundle offers", async () => {
   const hidden = { ...formalProduct, id: "restricted", name: "工作人員票", purchase_allowed: false,
     purchase_restriction: "您不符合購買資格" };

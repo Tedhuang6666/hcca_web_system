@@ -30,14 +30,33 @@ describe("商品價格的優惠顯示", () => {
       { ...promotion, code: "SAVE" }, { ...promotion, activity_id: "other" },
       { ...promotion, min_quantity: 2 }, { ...promotion, min_order_price: 500 },
       { ...promotion, discount_type: "bundle_price" as const, discount_value: 400 },
-      { ...promotion, discount_type: "fixed" as const, discount_value: 100 },
+      { ...promotion, discount_type: "fixed" as const, discount_value: 100,
+        target_products: [...promotion.target_products!, { id: "pants", name: "褲子" }] },
     ]) expect(productOfferPrice(product, [candidate], "festival", null)).toBe(300);
   });
 
-  it("已有登記時只顯示實際套用且可歸屬單品的優惠", () => {
+  it("已有登記仍顯示較便宜的自動優惠，優惠碼則須已兌換", () => {
     const order = { promotion_id: "sale", applied_promotions: [{ promotion_id: "sale" }] } as OrderOut;
     expect(productOfferPrice(product, [{ ...promotion, code: "SAVE" }], "festival", order)).toBe(270);
-    expect(productOfferPrice(product, [{ ...promotion, id: "unused", discount_value: 50 }], "festival", order)).toBe(300);
+    expect(productOfferPrice(product, [{ ...promotion, id: "unused", discount_value: 50 }], "festival", order)).toBe(150);
+    expect(productOfferPrice(product, [{ ...promotion, id: "unused", code: "OTHER" }], "festival", order)).toBe(300);
+  });
+
+  it("固定折抵可用於單品報價，整次購買只折抵一次且不低於零", () => {
+    const fixed = { ...promotion, discount_type: "fixed" as const, discount_value: 100 };
+    expect(productOfferPrice(product, [fixed], "festival", null)).toBe(200);
+    expect(productOfferPrice(product, [fixed], "festival", null, 50, 2)).toBe(600);
+    expect(productOfferPrice(product, [{ ...fixed, discount_value: 500 }], "festival", null)).toBe(0);
+  });
+
+  it("特殊優惠與售價擇低，不將多個自動優惠重複疊加", () => {
+    const override = { ...promotion, discount_type: "price_override" as const,
+      product_price_overrides: [{ product_id: "shirt", product_name: "衣服", unit_price: 250 }] };
+    const fixed = { ...promotion, discount_type: "fixed" as const, discount_value: 100 };
+    expect(productOfferPrice(product, [promotion, override, fixed], "festival", null)).toBe(200);
+    expect(productOfferPrice(product, [{ ...override,
+      product_price_overrides: [{ product_id: "shirt", product_name: "衣服", unit_price: 400 }],
+    }], "festival", null)).toBe(300);
   });
 
   it("多件百分比優惠按合計取整數，不逐件捨去折扣", () => {
