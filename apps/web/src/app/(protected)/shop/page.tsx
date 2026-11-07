@@ -260,6 +260,7 @@ function ProductModal({
   lockedVariantQuantities,
   promotions,
   activityId,
+  categoryId,
   bundleStep,
   bundleAddOn,
 }: {
@@ -285,6 +286,7 @@ function ProductModal({
   lockedVariantQuantities: Map<string, number>;
   promotions: ShopPromotionPublicOut[];
   activityId: string | null;
+  categoryId: string | null;
   bundleStep?: { name: string; position: number; total: number; nextLabel: string; onContinue: () => void };
   bundleAddOn?: (disabled: boolean) => React.ReactNode;
 }) {
@@ -436,8 +438,8 @@ function ProductModal({
     const option = group.options.find((row) => row.id === picked[group.id]);
     return sum + (option ? referenceDelta(option) : 0);
   }, 0);
-  const offerPrice = product ? productOfferPrice(product, promotions, activityId, registration, delta) : unitPrice;
-  const offerTotal = product ? productOfferPrice(product, promotions, activityId, registration, delta, qty) : unitPrice * qty;
+  const offerPrice = product ? productOfferPrice(product, promotions, activityId, registration, delta, 1, categoryId) : unitPrice;
+  const offerTotal = product ? productOfferPrice(product, promotions, activityId, registration, delta, qty, categoryId) : unitPrice * qty;
   const allPicked = variantGroups.every((g) => picked[g.id]);
   const registeredItems = registration?.items.filter((item) => item.product_id === product?.id) ?? [];
   const selectVariantOption = (groupId: string, optionId: string) => {
@@ -1728,6 +1730,14 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
     : `category:${category.id}`;
   const selectedActivityScope = selectedCategory ? activityScopeKey(selectedCategory) : null;
   const categoryPromotions = classMemberUserId || !selectedCategory ? [] : availablePromotions.filter((promotion) => {
+    if (promotion.target_category_ids != null) {
+      if (promotion.target_category_ids.length > 0
+        && !promotion.target_category_ids.includes(selectedCategory.id)) return false;
+      const targets = promotion.target_products ?? [];
+      if (targets.length === 0) return true;
+      return targets.some((target) => catalogCategoryByProductId.get(target.id)?.id === selectedCategory.id)
+        && (promotion.discount_type === "price_override" || targets.every((target) => catalogProducts.has(target.id)));
+    }
     if (promotion.activity_id != null && promotion.activity_id !== selectedCategory.activity_id) return false;
 
     const targets = promotion.target_products ?? [];
@@ -2086,7 +2096,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                             ? Boolean(delegationContext?.can_edit)
                             : canOrderForSelf || product.status === "testing")}
                         onSelectBundle={(promotion) => selectBundleProduct(promotion, product.id)}
-                        cardPrice={shopCardPrice(product, categoryPromotions, selectedCategory.activity_id ?? null, selectedCategoryRegistration)}
+                        cardPrice={shopCardPrice(product, categoryPromotions, selectedCategory.activity_id ?? null, selectedCategoryRegistration, selectedCategory.id)}
                         classClosed={Boolean(closeStatus[selectedCategory.id]?.is_closed && !closeStatus[selectedCategory.id]?.is_global)}
                         councilClosed={Boolean(closeStatus[selectedCategory.id]?.is_global)}
                         registeredQuantity={registeredByProduct.get(product.id) ?? 0}
@@ -2127,7 +2137,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                               ? Boolean(delegationContext?.can_edit)
                               : canOrderForSelf || product.status === "testing")}
                           onSelectBundle={(promotion) => selectBundleProduct(promotion, product.id)}
-                          cardPrice={shopCardPrice(product, categoryPromotions, selectedCategory.activity_id ?? null, selectedCategoryRegistration)}
+                          cardPrice={shopCardPrice(product, categoryPromotions, selectedCategory.activity_id ?? null, selectedCategoryRegistration, selectedCategory.id)}
                           classClosed={Boolean(closeStatus[selectedCategory.id]?.is_closed && !closeStatus[selectedCategory.id]?.is_global)}
                           councilClosed={Boolean(closeStatus[selectedCategory.id]?.is_global)}
                           registeredQuantity={registeredByProduct.get(product.id) ?? 0}
@@ -2208,6 +2218,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
           productId={openProduct}
           promotions={categoryPromotions}
           activityId={selectedCategory?.activity_id ?? null}
+          categoryId={selectedCategory?.id ?? null}
           bundleAddOn={(disabled) => <BundleAddOn productId={openProduct} promotions={categoryPromotions}
             products={catalogProducts} registration={selectedCategoryRegistration}
             disabled={disabled}

@@ -2,17 +2,21 @@ import type { OrderOut, ShopPromotionPublicOut } from "@/lib/types";
 
 // 單品報價顯示符合購買條件的最低價；跨商品合購與套組折扣顯示於登記合計。
 export function productOfferPrice(
-  product: { id: string; price: number },
+  product: { id: string; price: number; category_id?: string | null },
   promotions: ShopPromotionPublicOut[],
   activityId: string | null,
   registration: OrderOut | null,
   variantDelta = 0,
   quantity = 1,
+  categoryId?: string | null,
 ): number {
   const original = (product.price + variantDelta) * quantity;
   let best = original;
   for (const promotion of promotions) {
-    if ((promotion.activity_id ?? null) !== activityId) continue;
+    if (promotion.target_category_ids == null) {
+      if ((promotion.activity_id ?? null) !== activityId) continue;
+    } else if (promotion.target_category_ids.length > 0
+      && !promotion.target_category_ids.includes(categoryId ?? product.category_id ?? "")) continue;
     // 舊登記未套用的自動優惠也可能適用本次購買；優惠碼仍須先兌換。
     if (promotion.code && !registration?.applied_promotions?.some((row) => row.promotion_id === promotion.id)
       && registration?.promotion_id !== promotion.id) continue;

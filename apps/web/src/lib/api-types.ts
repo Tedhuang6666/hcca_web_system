@@ -30306,6 +30306,11 @@ export interface components {
             /** Starts At */
             starts_at?: string | null;
             /**
+             * Target Category Ids
+             * @description 適用商品主題，可複選；空列表不限主題，滿額與件數按各主題分開計算；null 保留舊活動範圍
+             */
+            target_category_ids?: string[] | null;
+            /**
              * Target Email
              * @description 指定帳號 Email
              */
@@ -30360,6 +30365,8 @@ export interface components {
             product_price_overrides?: components["schemas"]["ShopPromotionProductPriceOut"][];
             /** Starts At */
             starts_at?: string | null;
+            /** Target Category Ids */
+            target_category_ids?: string[] | null;
             /** Target Email */
             target_email?: string | null;
             /** Target Products */
@@ -30500,6 +30507,8 @@ export interface components {
             product_price_overrides?: components["schemas"]["ShopPromotionProductPriceOut"][];
             /** Starts At */
             starts_at?: string | null;
+            /** Target Category Ids */
+            target_category_ids?: string[] | null;
             /** Target Products */
             target_products?: components["schemas"]["ShopPromotionProductTargetOut"][];
         };
@@ -30545,6 +30554,11 @@ export interface components {
             product_price_overrides?: components["schemas"]["ShopPromotionProductPriceCreate"][] | null;
             /** Starts At */
             starts_at?: string | null;
+            /**
+             * Target Category Ids
+             * @description 適用商品主題；空列表不限主題，null 保留舊活動範圍；未提供時不變更
+             */
+            target_category_ids?: string[] | null;
             /** Target Email */
             target_email?: string | null;
             /** Target Identifiers */

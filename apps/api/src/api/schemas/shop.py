@@ -817,6 +817,11 @@ class ShopClassRepresentativeRecipientOut(BaseModel):
 class ShopPromotionCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     activity_id: uuid.UUID | None = Field(None, description="適用活動；未指定時僅適用一般商品")
+    target_category_ids: list[uuid.UUID] | None = Field(
+        None,
+        max_length=100,
+        description="適用商品主題，可複選；空列表不限主題，滿額與件數按各主題分開計算；null 保留舊活動範圍",
+    )
     target_email: str | None = Field(None, max_length=255, description="指定帳號 Email")
     target_identifiers: list[str] = Field(
         default_factory=list,
@@ -850,6 +855,11 @@ class ShopPromotionCreate(BaseModel):
 class ShopPromotionUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=200)
     activity_id: uuid.UUID | None = Field(None, description="適用活動；未指定時僅適用一般商品")
+    target_category_ids: list[uuid.UUID] | None = Field(
+        None,
+        max_length=100,
+        description="適用商品主題；空列表不限主題，null 保留舊活動範圍；未提供時不變更",
+    )
     target_email: str | None = Field(None, max_length=255)
     target_identifiers: list[str] | None = Field(None, max_length=500)
     target_product_ids: list[uuid.UUID] | None = Field(None, max_length=100)
@@ -904,6 +914,7 @@ class ShopPromotionPublicOut(BaseModel):
     id: uuid.UUID
     name: str
     activity_id: uuid.UUID | None = None
+    target_category_ids: list[uuid.UUID] | None = None
     code: str | None = None
     discount_type: ShopDiscountType
     discount_value: int
@@ -920,6 +931,7 @@ class ShopPromotionOut(BaseModel):
     id: uuid.UUID
     name: str
     activity_id: uuid.UUID | None = None
+    target_category_ids: list[uuid.UUID] | None = None
     code: str | None = None
     target_user_id: uuid.UUID | None = None
     target_email: str | None = None

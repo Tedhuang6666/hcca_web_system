@@ -17,6 +17,7 @@ from api.services.shop._orders import (
     _promotion_product_subtotals,
     _sync_order_promotions,
 )
+from api.services.shop._promotion_topics import product_topic_ids
 from api.services.shop._promotions import (
     PromotionAllocation,
     _discount_amount,
@@ -26,7 +27,7 @@ from api.services.shop._promotions import (
 
 
 async def lock_promotion_orders(
-    session: AsyncSession, *, activity_ids: set[uuid.UUID | None]
+    session: AsyncSession, *, activity_ids: set[uuid.UUID | None] | None
 ) -> list[Order]:
     # 舊登記單可能尚未寫入 activity_id；載入品項後再核對實際活動。
     orders = await session.scalars(
@@ -36,12 +37,18 @@ async def lock_promotion_orders(
             Order.is_paid.is_(False),
             Order.is_class_collected.is_(False),
             Order.test_product_id.is_(None),
-            or_(Order.activity_id.in_(activity_ids - {None}), Order.activity_id.is_(None)),
+            or_(Order.activity_id.in_(activity_ids - {None}), Order.activity_id.is_(None))
+            if activity_ids is not None
+            else True,
         )
         .order_by(Order.created_at, Order.id)
         .with_for_update()
     )
-    return [order for order in orders.all() if _order_activity_id(order) in activity_ids]
+    return [
+        order
+        for order in orders.all()
+        if activity_ids is None or _order_activity_id(order) in activity_ids
+    ]
 
 
 async def _save_allocations(
@@ -58,6 +65,9 @@ async def refresh_promotion_orders(
     session: AsyncSession, *, promotion: ShopPromotion, orders: list[Order]
 ) -> None:
     # 先釋放不再符合資格的名額，再依登記順序分配，避免先處理的新對象錯失限量優惠。
+    categories = await product_topic_ids(
+        session, {item.product_id for order in orders for item in order.items}
+    )
     now = datetime.now(UTC)
     for order in orders:
         current_ids = {row.promotion_id for row in order.applied_promotions}
@@ -75,13 +85,15 @@ async def refresh_promotion_orders(
                 student_id=order.user.student_id,
                 subtotal=order.subtotal_price,
                 now=now,
+                product_category_ids=categories,
                 product_subtotals=subtotals,
                 product_quantities=quantities,
                 activity_id=_order_activity_id(order),
                 current_promotion_ids=current_ids,
             )
             is None
-            and _discount_amount(promotion, order.subtotal_price, subtotals, quantities) > 0
+            and _discount_amount(promotion, order.subtotal_price, subtotals, quantities, categories)
+            > 0
         ):
             continue
         await _save_allocations(

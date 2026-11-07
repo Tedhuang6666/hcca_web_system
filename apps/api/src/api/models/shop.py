@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     CheckConstraint,
     Column,
@@ -21,7 +22,7 @@ from sqlalchemy import (
     Text,
     text,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
@@ -743,6 +744,11 @@ class ShopPromotion(Base, TimestampMixin):
         index=True,
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
+    # null 保留舊活動範圍；空列表代表不限主題，非空列表限定商品主題。
+    target_category_ids: Mapped[list[str] | None] = mapped_column(
+        JSON(none_as_null=True).with_variant(JSONB(none_as_null=True), "postgresql"),
+        nullable=True,
+    )
     code: Mapped[str | None] = mapped_column(String(80), nullable=True, unique=True, index=True)
     target_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True

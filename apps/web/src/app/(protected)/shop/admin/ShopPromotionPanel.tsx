@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import { apiErrorMessage, shopApi } from "@/lib/api";
 import ShopTargetPicker, { targetIdentifiers } from "@/components/shop/ShopTargetPicker";
 import type {
-  CatalogCategoryOut,
   ProductOut,
   ProductCategoryOut,
   ProductSeriesOut,
@@ -14,10 +13,8 @@ import type {
   ShopPromotionOut,
 } from "@/lib/types";
 
-const GENERAL_ACTIVITY_SCOPE = "__general__";
-
 type PromotionForm = {
-  activity_id: string;
+  target_category_ids: string[];
   name: string;
   target_identifiers: string;
   target_product_ids: string[];
@@ -33,7 +30,7 @@ type PromotionForm = {
 };
 
 const emptyForm: PromotionForm = {
-  activity_id: GENERAL_ACTIVITY_SCOPE,
+  target_category_ids: [],
   name: "",
   target_identifiers: "",
   target_product_ids: [],
@@ -70,7 +67,6 @@ async function listAllProducts() {
 export default function ShopPromotionPanel() {
   const [promotions, setPromotions] = useState<ShopPromotionOut[]>([]);
   const [products, setProducts] = useState<ProductOut[]>([]);
-  const [catalog, setCatalog] = useState<CatalogCategoryOut[]>([]);
   const [categories, setCategories] = useState<ProductCategoryOut[]>([]);
   const [series, setSeries] = useState<ProductSeriesOut[]>([]);
   const [form, setForm] = useState(emptyForm);
@@ -86,16 +82,14 @@ export default function ShopPromotionPanel() {
     setLoading(true);
     setLoadError("");
     try {
-      const [promotionRows, productRows, catalogRows, categoryRows, seriesRows] = await Promise.all([
+      const [promotionRows, productRows, categoryRows, seriesRows] = await Promise.all([
         shopApi.listPromotions(),
         listAllProducts(),
-        shopApi.catalog(undefined, true),
         shopApi.listCategories(),
         shopApi.listSeries(),
       ]);
       setPromotions(promotionRows);
       setProducts(productRows);
-      setCatalog(catalogRows);
       setCategories(categoryRows);
       setSeries(seriesRows);
     } catch (error) {
@@ -158,7 +152,8 @@ export default function ShopPromotionPanel() {
     setSaving(true);
     try {
       const payload = {
-        activity_id: form.activity_id === GENERAL_ACTIVITY_SCOPE ? null : form.activity_id,
+        activity_id: null,
+        target_category_ids: form.target_category_ids,
         name: form.name.trim(),
         target_identifiers: targets,
         target_product_ids: form.target_product_ids,
@@ -193,7 +188,9 @@ export default function ShopPromotionPanel() {
   const editPromotion = (promotion: ShopPromotionOut) => {
     setEditingPromotionId(promotion.id);
     setForm({
-      activity_id: promotion.activity_id ?? GENERAL_ACTIVITY_SCOPE,
+      target_category_ids: promotion.target_category_ids ?? categories
+        .filter((category) => category.activity_id === (promotion.activity_id ?? null))
+        .map((category) => category.id),
       name: promotion.name,
       target_identifiers: (promotion.target_users ?? [])
         .map((user) => user.student_id || user.email)
@@ -266,52 +263,30 @@ export default function ShopPromotionPanel() {
     }));
   };
 
-  const categoryScopes = new Map(
-    categories.map((category) => [category.id, category.activity_id ?? GENERAL_ACTIVITY_SCOPE]),
-  );
-  const seriesScopes = new Map(
-    series.map((item) => [
-      item.id,
-      categoryScopes.get(item.category_id) ?? GENERAL_ACTIVITY_SCOPE,
-    ]),
-  );
-  const productScopes = new Map<string, string>();
-  const activityNames = new Map<string, Set<string>>();
-  for (const category of catalog) {
-    if (category.activity_id) {
-      const names = activityNames.get(category.activity_id) ?? new Set<string>();
-      names.add(category.activity_name ?? category.name);
-      activityNames.set(category.activity_id, names);
-    }
-  }
-  for (const product of products) {
-    const scope = product.category_id
-      ? categoryScopes.get(product.category_id) ?? GENERAL_ACTIVITY_SCOPE
-      : product.series_id
-        ? seriesScopes.get(product.series_id) ?? GENERAL_ACTIVITY_SCOPE
-        : GENERAL_ACTIVITY_SCOPE;
-    productScopes.set(product.id, scope);
-  }
-  const activityOptions = [
-    ...(categories.some((category) => category.activity_id == null)
-      ? [{ id: GENERAL_ACTIVITY_SCOPE, label: "一般商品" }]
-      : []),
-    ...[...new Set(categories.map((category) => category.activity_id).filter(
-      (activityId): activityId is string => activityId !== null,
-    ))].map((id) => ({
-      id,
-      label: [...(activityNames.get(id) ?? [])].join("、") || "活動商品",
-    })),
-  ];
-  if (!activityOptions.some((option) => option.id === form.activity_id)) {
-    activityOptions.unshift({ id: GENERAL_ACTIVITY_SCOPE, label: "一般商品" });
-  }
-  const scopedProducts = products.filter(
-    (product) => productScopes.get(product.id) === form.activity_id,
-  );
-  const activityLabel = (activityId: string | null | undefined) => {
-    if (!activityId) return "一般商品";
-    return activityOptions.find((option) => option.id === activityId)?.label ?? "指定活動";
+  const seriesCategories = new Map(series.map((item) => [item.id, item.category_id]));
+  const productCategory = (product: ProductOut) => product.category_id
+    ?? (product.series_id ? seriesCategories.get(product.series_id) : undefined);
+  const scopedProducts = products.filter((product) => form.target_category_ids.length === 0
+    || form.target_category_ids.includes(productCategory(product) ?? ""));
+  const toggleCategory = (categoryId: string) => {
+    setForm((current) => {
+      const ids = current.target_category_ids.includes(categoryId)
+        ? current.target_category_ids.filter((id) => id !== categoryId)
+        : [...current.target_category_ids, categoryId];
+      const productIds = current.target_product_ids.filter((id) => ids.length === 0
+        || products.some((product) => product.id === id && ids.includes(productCategory(product) ?? "")));
+      return { ...current, target_category_ids: ids, target_product_ids: productIds,
+        product_prices: Object.fromEntries(Object.entries(current.product_prices)
+          .filter(([id]) => productIds.includes(id))) };
+    });
+  };
+  const topicLabel = (promotion: ShopPromotionOut) => {
+    const ids = promotion.target_category_ids ?? categories
+      .filter((category) => category.activity_id === (promotion.activity_id ?? null))
+      .map((category) => category.id);
+    if (promotion.target_category_ids?.length === 0) return "不限商品主題";
+    return ids.map((id) => categories.find((category) => category.id === id)?.name ?? "未載入的主題")
+      .join("、") || "原有商品範圍";
   };
 
   return (
@@ -322,37 +297,42 @@ export default function ShopPromotionPanel() {
             {editingPromotionId ? "編輯優惠" : "建立優惠"}
           </h2>
           <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-            每項優惠只適用一個活動。留空優惠碼即符合條件自動套用；有優惠碼時由使用者領取並套用。
+            可選擇多個商品主題，或不限主題。留空優惠碼即符合條件自動套用；有優惠碼時由使用者領取並套用。
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="block text-xs font-medium sm:col-span-2" style={{ color: "var(--text-secondary)" }}>
-            適用活動
-            <select
-              className="input mt-1 w-full"
-              value={form.activity_id}
-              onChange={(event) => setForm((current) => ({
-                ...current,
-                activity_id: event.target.value,
-                target_product_ids: [],
-                product_prices: {},
-              }))}
-            >
-              {activityOptions.map((option) => (
-                <option key={option.id} value={option.id}>{option.label}</option>
+          <fieldset className="sm:col-span-2" aria-describedby="promotion-topic-help">
+            <legend className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+              適用商品主題（選填，可複選）
+            </legend>
+            <p id="promotion-topic-help" className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              滿額與最低件數依各主題分開計算，不跨主題累加。指定商品優惠價可跨主題逐項設定。
+            </p>
+            <label className="flex min-h-11 items-center gap-2 text-xs" style={{ color: "var(--text-secondary)" }}>
+              <input type="checkbox" checked={form.target_category_ids.length === 0} disabled={saving}
+                onChange={() => update("target_category_ids", [])} />
+              不限商品主題
+            </label>
+            <div className="grid gap-x-4 sm:grid-cols-2">
+              {categories.map((category) => (
+                <label key={category.id} className="flex min-h-11 items-center gap-2 text-xs" style={{ color: "var(--text-secondary)" }}>
+                  <input type="checkbox" checked={form.target_category_ids.includes(category.id)} disabled={saving}
+                    onChange={() => toggleCategory(category.id)} />
+                  {category.name}
+                </label>
               ))}
-            </select>
-            <span className="mt-1 block text-[11px]" style={{ color: "var(--text-muted)" }}>
-              優惠碼只會套用在這個活動的訂單。
-            </span>
-          </label>
+            </div>
+            {!loading && !loadError && categories.length === 0 && (
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>尚未建立商品主題，目前可設定不限主題的優惠。</p>
+            )}
+          </fieldset>
           <label className="block text-xs font-medium sm:col-span-2" style={{ color: "var(--text-secondary)" }}>
             優惠名稱
             <input ref={nameInputRef} className="input mt-1 w-full" value={form.name} onChange={(e) => update("name", e.target.value)} placeholder="例如：校友回饋 9 折" />
           </label>
           <div className="sm:col-span-2">
             <ShopTargetPicker label="可使用帳號（選填）" value={targetIdentifiers(form.target_identifiers)}
-              activityId={form.activity_id === GENERAL_ACTIVITY_SCOPE ? null : form.activity_id} disabled={saving} max={500}
+              activityId={null} disabled={saving} max={500}
               onChange={(identifiers) => update("target_identifiers", identifiers.join("\n"))}
               help="留空代表所有帳號可用。學號可先指定，對應帳號註冊後即可使用；Email 必須是已註冊帳號。加入名單後僅名單內帳號可用，適用自動優惠與優惠碼。" />
           </div>
@@ -401,14 +381,14 @@ export default function ShopPromotionPanel() {
             </p>
           )}
           <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
-            最低消費（選填）
+            每個主題最低消費（選填）
             <input className="input mt-1 w-full" type="number" min="0" value={form.min_order_price} onChange={(e) => update("min_order_price", e.target.value)} />
           </label>
           <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
             最低件數
             <input className="input mt-1 w-full" type="number" min="1" max="100" value={form.min_quantity} onChange={(e) => update("min_quantity", e.target.value)} />
             <span className="mt-1 block text-[11px]" style={{ color: "var(--text-muted)" }}>
-              只計下方指定商品；未指定商品時以登記總件數計算。
+              各主題分開計算，只計下方指定商品；未指定商品時以該主題的登記件數計算。
             </span>
           </label>
           <fieldset className="sm:col-span-2">
@@ -427,11 +407,15 @@ export default function ShopPromotionPanel() {
             </p>
             <div className="mt-2 grid max-h-48 gap-1 overflow-y-auto rounded-lg border p-2 sm:grid-cols-2" style={{ borderColor: "var(--border)" }}>
               {scopedProducts.length === 0 ? (
-                <p className="p-2 text-xs" style={{ color: "var(--text-muted)" }}>此活動目前沒有可選商品；仍可建立適用於該活動全部商品的優惠。</p>
+                <p className="p-2 text-xs" style={{ color: "var(--text-muted)" }}>所選主題目前沒有可選商品；未指定商品時，優惠適用於所選主題日後新增的商品。</p>
               ) : scopedProducts.map((product) => (
                 <label key={product.id} className="flex min-h-10 items-center gap-2 rounded-md px-2 text-xs" style={{ color: "var(--text-secondary)" }}>
                   <input type="checkbox" checked={form.target_product_ids.includes(product.id)} onChange={() => toggleProduct(product.id)} />
-                  <span>{product.name}</span>
+                  <span>{product.name}{productCategory(product) && (
+                    <span className="ml-2" style={{ color: "var(--text-muted)" }}>
+                      {categories.find((category) => category.id === productCategory(product))?.name}
+                    </span>
+                  )}</span>
                   <span
                     className="ml-auto whitespace-nowrap rounded px-1.5 py-0.5 text-[10px]"
                     style={{
@@ -554,7 +538,7 @@ export default function ShopPromotionPanel() {
                       </span>
                     </div>
                     <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                      {promotion.code ? `優惠碼 ${promotion.code}` : "符合條件自動套用"} · 適用：{activityLabel(promotion.activity_id)} · {targetLabel} · {benefitLabel}
+                      {promotion.code ? `優惠碼 ${promotion.code}` : "符合條件自動套用"} · 適用：{topicLabel(promotion)} · {targetLabel} · {benefitLabel}
                     </p>
                     <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
                       {promotion.min_order_price > 0 ? `滿 NT$${promotion.min_order_price.toLocaleString()} · ` : ""}

@@ -10,10 +10,11 @@ export function shopCardPrice(
   promotions: ShopPromotionPublicOut[],
   activityId: string | null,
   registration: OrderOut | null,
+  categoryId?: string | null,
 ): ShopCardPrice {
   const fallback = {
     original: referencePrice(product),
-    current: productOfferPrice(product, promotions, activityId, registration),
+    current: productOfferPrice(product, promotions, activityId, registration, 0, 1, categoryId),
   };
   if (!registration || (registration.activity_id ?? null) !== activityId
     || registration.discount_amount <= 0) return fallback;
@@ -36,7 +37,10 @@ export function shopCardPrice(
       const promotion = promotions.find((row) => row.id === allocation.promotion_id);
       // 未知條件與整套價格不能冒充某一單品的折後價格。
       if (!promotion || promotion.discount_type === "bundle_price"
-        || (promotion.activity_id ?? null) !== activityId) return fallback;
+        || (promotion.target_category_ids == null && (promotion.activity_id ?? null) !== activityId)) return fallback;
+      // 主題門檻折抵不能按整張跨主題訂單的金額比例分攤成單品價。
+      if (promotion.target_category_ids != null && (promotion.discount_type !== "price_override"
+        || promotion.min_order_price > 0 || promotion.min_quantity > 1)) return fallback;
       const targets = new Set((promotion.target_products ?? []).map((target) => target.id));
       const weights = items.map((item) => {
         if (targets.size && !targets.has(item.product_id)) return 0;
