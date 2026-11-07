@@ -21,6 +21,7 @@ describe("商品卡片內的優惠", () => {
       ...promotion, name: "抽獎贈品", discount_type: "percentage", discount_value: 100,
       target_products: [{ id: "shirt", name: "衣服" }],
     }]} products={new Map()} disabled={false} onSelectBundle={vi.fn()} />);
+    fireEvent.click(screen.getByText("查看 1 項優惠"));
     expect(screen.getByLabelText("原價 NT$300，優惠價 NT$0 起")).toBeVisible();
     expect(screen.getByText("符合條件自動套用 · 規格加價另計")).toBeVisible();
     expect(screen.getByText("請自行選擇規格；商品基本售價免費，加價選項由您支付。")).toBeVisible();
@@ -38,11 +39,13 @@ describe("商品卡片內的優惠", () => {
     expect(select).toHaveBeenCalledWith(promotion);
   });
 
-  it("條件式優惠在卡片上寫出件數、金額與優惠碼", () => {
+  it("展開條件式優惠後可查看件數、金額與優惠碼", () => {
     render(<ProductCardOffers product={product} promotions={[{
       ...promotion, discount_type: "percentage", discount_value: 10, min_quantity: 2,
       min_order_price: 1000, code: "SAVE", target_products: [],
     }]} products={new Map()} disabled={false} onSelectBundle={vi.fn()} />);
+    expect(screen.getByText("滿 NT$1,000 · 滿 2 件 · 使用優惠碼 SAVE")).not.toBeVisible();
+    fireEvent.click(screen.getByText("查看 1 項優惠"));
     expect(screen.getByLabelText("原價 NT$300，優惠價 NT$270 起")).toBeVisible();
     expect(screen.getByText("滿 NT$1,000 · 滿 2 件 · 使用優惠碼 SAVE")).toBeVisible();
   });
@@ -52,6 +55,7 @@ describe("商品卡片內的優惠", () => {
       ...promotion, discount_type: "percentage", discount_value: 10,
       min_quantity: 1, min_order_price: 0, target_products: [],
     }]} products={new Map()} disabled={false} onSelectBundle={vi.fn()} />);
+    fireEvent.click(screen.getByText("查看 1 項優惠"));
     expect(screen.getByLabelText("原價 NT$300，優惠價 NT$270")).toBeVisible();
   });
 
@@ -91,6 +95,7 @@ describe("商品卡片內的優惠", () => {
         { product_id: "pants", product_name: "褲子", unit_price: 400 },
       ],
     }]} products={new Map([[product.id, product], [pants.id, pants]])} disabled={false} onSelectBundle={vi.fn()} />);
+    fireEvent.click(screen.getByText("查看 1 項優惠"));
     expect(screen.getByLabelText("原價 NT$300，優惠價 NT$250 起")).toBeVisible();
     expect(screen.queryByText(/需同時選購/)).not.toBeInTheDocument();
   });
@@ -102,9 +107,35 @@ describe("商品卡片內的優惠", () => {
     ] };
     const view = render(<ProductCardOffers product={product} promotions={[offer]}
       products={new Map()} disabled={false} onSelectBundle={vi.fn()} />);
+    fireEvent.click(screen.getByText("查看 1 項優惠"));
     expect(screen.getByText("贈品：衣服")).toBeVisible();
     view.rerender(<ProductCardOffers product={pants} promotions={[offer]}
       products={new Map()} disabled={false} onSelectBundle={vi.fn()} />);
     expect(screen.queryByText(/贈品：/)).not.toBeInTheDocument();
+  });
+
+  it("多項優惠預設合併收起，展開與收合不影響套組入口", () => {
+    const select = vi.fn();
+    render(<ProductCardOffers product={product} promotions={[promotion, {
+      ...promotion, id: "threshold", name: "Six Seven！！！", discount_type: "fixed",
+      discount_value: 67, min_order_price: 6767, target_products: [],
+    }, {
+      ...promotion, id: "gift", name: "抽獎贈品", discount_type: "percentage",
+      discount_value: 100, target_products: [{ id: product.id, name: product.name }],
+    }]} products={new Map([[product.id, product], [pants.id, pants]])}
+      disabled={false} onSelectBundle={select} />);
+    const toggle = screen.getByText("查看 2 項優惠");
+    const conditions = screen.getByText("滿 NT$6,767 · 符合條件自動套用");
+    expect(screen.getByText("Six Seven！！！")).not.toBeVisible();
+    expect(conditions).not.toBeVisible();
+    expect(screen.getByText("贈品：衣服")).not.toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "選購套組：衣褲套組" }));
+    expect(select).toHaveBeenCalledWith(promotion);
+    fireEvent.click(toggle);
+    expect(conditions).toBeVisible();
+    expect(screen.getByText("整筆登記折抵 NT$67")).toBeVisible();
+    expect(screen.getByText("贈品：衣服")).toBeVisible();
+    fireEvent.click(toggle);
+    expect(conditions).not.toBeVisible();
   });
 });
