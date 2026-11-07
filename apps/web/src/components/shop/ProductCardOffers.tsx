@@ -1,8 +1,10 @@
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, Gift } from "lucide-react";
 import type { CatalogProductOut, ShopPromotionPublicOut } from "@/lib/types";
 import ShopPrice from "./ShopPrice";
 import { productOrderable } from "@/lib/shop-deadlines";
 import { referencePrice } from "@/lib/shop-reference-price";
+import { promotionGiftProducts } from "@/lib/shop-promotion-display";
+import styles from "./ProductDetailOffers.module.css";
 
 export default function ProductCardOffers({ product, promotions, products, disabled, onSelectBundle }: {
   product: CatalogProductOut;
@@ -38,8 +40,7 @@ export default function ProductCardOffers({ product, promotions, products, disab
         </button>;
       }
       const companions = targets.filter((target) => target.id !== product.id);
-      const isGift = promotion.discount_type === "percentage" && promotion.discount_value === 100
-        && targets.length > 0;
+      const isGift = promotionGiftProducts(promotion).some((target) => target.id === product.id);
       const original = product.price;
       const override = promotion.product_price_overrides?.find((row) => row.product_id === product.id);
       const singlePrice = promotion.discount_type === "price_override" ? override?.unit_price
@@ -56,6 +57,7 @@ export default function ProductCardOffers({ product, promotions, products, disab
       ].filter(Boolean).join(" · ");
       return <div className="shop-product-card-offer" key={promotion.id}>
         <strong>{promotion.name}</strong>
+        {isGift && <span className={styles.giftLabel}><Gift size={15} aria-hidden="true" />贈品：{product.name}</span>}
         {singlePrice != null ? <>
           <p>{promotion.discount_type === "fixed" ? "單件購買價（每筆折抵一次）"
             : promotion.code || promotion.min_quantity > 1 || promotion.min_order_price > original

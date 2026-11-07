@@ -56,6 +56,43 @@ const formalOrder: OrderOut = {
     unit_price: 100, subtotal: 200, selected_options: [] }],
 };
 
+it("商品詳情逐筆列出同筆登記已套用的自動優惠與優惠碼", async () => {
+  api.getCurrentRegistrations.mockResolvedValue([{ ...formalOrder, promotion_code: "SAVE",
+    discount_amount: 30, total_price: 170, applied_promotions: [
+      { promotion_id: "auto", name: "校慶優惠", discount_amount: 20 },
+      { promotion_id: "coupon", name: "迎新折價券", code: "SAVE", discount_amount: 10 },
+    ],
+  }]);
+  render(<ShopPage />);
+  fireEvent.click(await screen.findByRole("link", { name: "查看商品：正式商品" }));
+  const section = await screen.findByRole("region", { name: "優惠與贈品" });
+  expect(await within(section).findByRole("listitem", { name: "校慶優惠" })).toHaveTextContent("本筆登記折抵 NT$20");
+  expect(within(section).getByRole("listitem", { name: "迎新折價券" })).toHaveTextContent("本筆登記折抵 NT$10");
+});
+
+it("登記贈品後，商品詳情由尚未登記更新為已套用贈品優惠", async () => {
+  api.me.mockResolvedValue({ id: "tester", student_id: "310001", email: "tester@example.test" });
+  api.getCurrentRegistrations.mockResolvedValue([]);
+  api.listAvailablePromotions.mockResolvedValue([{
+    id: "gift", name: "抽獎贈品", activity_id: "festival", discount_type: "percentage", discount_value: 100,
+    min_order_price: 0, min_quantity: 1, target_products: [{ id: "formal", name: "正式商品" }],
+  }]);
+  api.setCurrentRegistrationProduct.mockResolvedValue({ ...formalOrder, subtotal_price: 100, total_price: 0,
+    discount_amount: 100, promotion_id: "gift", applied_promotions: [{ promotion_id: "gift", name: "抽獎贈品", discount_amount: 100 }],
+    items: [{ ...formalOrder.items[0], quantity: 1, subtotal: 100 }],
+  });
+  render(<ShopPage />);
+  fireEvent.click(await screen.findByRole("link", { name: "查看商品：正式商品" }));
+  const dialog = await screen.findByRole("dialog");
+  expect(await within(dialog).findByText("贈品：正式商品")).toBeVisible();
+  expect(within(dialog).getByText("尚未登記贈品")).toBeVisible();
+  const submit = await within(dialog).findByRole("button", { name: "登記購買 · NT$0" });
+  await waitFor(() => expect(submit).toBeEnabled());
+  fireEvent.click(submit);
+  expect(await within(dialog).findByText("已登記 1 件，已套用贈品優惠")).toBeVisible();
+  expect(api.setCurrentRegistrationProduct).toHaveBeenCalledWith("formal", { variants: [{ option_ids: [], quantity: 1 }] });
+});
+
 afterEach(() => { vi.unstubAllGlobals(); });
 
 it.each(["棉T", "刷毛帽T", "風衣外套"])("%s 使用後台主圖與圖集，不自動加入模特兒照", async (name) => {

@@ -54,6 +54,7 @@ import BundleAddOn from "@/components/shop/BundleAddOn";
 import { bundleProductAvailable, bundleProgress } from "@/lib/shop-bundle-progress";
 import { productOfferPrice } from "@/lib/shop-promotion-price";
 import ProductCardOffers from "@/components/shop/ProductCardOffers";
+import ProductDetailOffers from "@/components/shop/ProductDetailOffers";
 import { shopCardPrice, type ShopCardPrice } from "@/lib/shop-card-price";
 import { categoryOrderable, defaultShopCategory, productDeadline } from "@/lib/shop-deadlines";
 import { registrationLockMessage, registrationVariantKey } from "@/lib/shop-registration";
@@ -754,7 +755,6 @@ function ProductModal({
                   <h3 id="product-modal-title">{product.name}</h3>
                   <ShopPrice original={originalUnitPrice} current={offerPrice} />
                   {bundleStep && <p className="shop-product-purchase-hint">正在選購「{bundleStep.name}」，每項各一件；選齊後享套組價。</p>}
-                  {!bundleStep && bundleAddOn?.(loading || !canEdit)}
                   {editingDescription && <p className="shop-product-purchase-hint">{editingDescription}</p>}
                   {product.description && <details className="shop-product-description">
                     <summary>商品說明<ChevronDown size={16} aria-hidden="true" /></summary>
@@ -778,6 +778,10 @@ function ProductModal({
                     </>
                   )}
                 </div>
+
+                <ProductDetailOffers product={product} promotions={promotions} registration={registration}
+                  registrationState={authLoading || classStatusLoading ? "loading" : registrationLoadError ? "error" : "ready"} />
+                {!bundleStep && bundleAddOn?.(loading || !canEdit)}
 
                 {variantGroups.map((g) => (
                   <div key={g.id} className="shop-product-dialog-section">

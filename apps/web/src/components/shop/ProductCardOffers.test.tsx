@@ -24,6 +24,7 @@ describe("商品卡片內的優惠", () => {
     expect(screen.getByLabelText("原價 NT$300，優惠價 NT$0 起")).toBeVisible();
     expect(screen.getByText("符合條件自動套用 · 規格加價另計")).toBeVisible();
     expect(screen.getByText("請自行選擇規格；商品基本售價免費，加價選項由您支付。")).toBeVisible();
+    expect(screen.getByText("贈品：衣服")).toBeVisible();
   });
 
   it("套組只保留簡短選購入口，不重複完整價格與條件", () => {
@@ -92,5 +93,18 @@ describe("商品卡片內的優惠", () => {
     }]} products={new Map([[product.id, product], [pants.id, pants]])} disabled={false} onSelectBundle={vi.fn()} />);
     expect(screen.getByLabelText("原價 NT$300，優惠價 NT$250 起")).toBeVisible();
     expect(screen.queryByText(/需同時選購/)).not.toBeInTheDocument();
+  });
+
+  it("同組指定價只有零元商品標為贈品", () => {
+    const offer: ShopPromotionPublicOut = { ...promotion, discount_type: "price_override", product_price_overrides: [
+      { product_id: "shirt", product_name: "衣服", unit_price: 0 },
+      { product_id: "pants", product_name: "褲子", unit_price: 400 },
+    ] };
+    const view = render(<ProductCardOffers product={product} promotions={[offer]}
+      products={new Map()} disabled={false} onSelectBundle={vi.fn()} />);
+    expect(screen.getByText("贈品：衣服")).toBeVisible();
+    view.rerender(<ProductCardOffers product={pants} promotions={[offer]}
+      products={new Map()} disabled={false} onSelectBundle={vi.fn()} />);
+    expect(screen.queryByText(/贈品：/)).not.toBeInTheDocument();
   });
 });
