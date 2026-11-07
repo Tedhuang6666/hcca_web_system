@@ -52,6 +52,15 @@ async def preview_registration_promotion(
         output=ShopPromotionPreviewOut.model_validate(
             {
                 "eligible": result.eligible,
+                "applied_promotions": [
+                    {
+                        "promotion_id": row.promotion.id,
+                        "name": row.promotion.name,
+                        "code": row.promotion.code,
+                        "discount_amount": row.discount_amount,
+                    }
+                    for row in result.allocations
+                ],
                 "promotion_name": promotion.name if promotion else None,
                 "promotion_code": promotion.code if promotion else None,
                 "reason_code": result.reason_code,

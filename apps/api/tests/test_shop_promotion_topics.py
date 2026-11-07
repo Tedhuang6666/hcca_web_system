@@ -324,3 +324,121 @@ async def test_topic_scope_api_validates_ids_and_keeps_manager_permission(
         "/shop/promotions", json={**payload, "target_product_ids": [str(products[1].id)]}
     )
     assert mismatch.status_code == 422
+
+
+@pytest.mark.parametrize("with_coupon", [False, True])
+async def test_all_automatic_promotions_stack_and_match_preview(
+    db_session, topic_shop, with_coupon
+):
+    manager, buyer, activity, categories, products = topic_shop
+    promotions = []
+    for index, amount in enumerate([40, 60, 80]):
+        promotions.append(
+            await shop_svc.create_promotion(
+                db_session,
+                created_by=manager.id,
+                data=ShopPromotionCreate(
+                    name=f"優惠{index + 1}",
+                    target_category_ids=[row.id for row in categories[:2]],
+                    target_product_ids=[products[index % 2].id],
+                    discount_type="fixed",
+                    discount_value=amount,
+                ),
+            )
+        )
+    if with_coupon:
+        await _promotion(db_session, topic_shop, code="STACK50")
+    context = {
+        "user_id": buyer.id,
+        "subtotal": 600,
+        "activity_id": activity.id,
+        "code": "STACK50" if with_coupon else None,
+        "product_subtotals": {row.id: 300 for row in products[:2]},
+        "product_quantities": {row.id: 1 for row in products[:2]},
+    }
+    preview = await shop_svc.preview_promotion(db_session, **context)
+    result = await resolve_promotions(db_session, **context)
+    assert preview.discount_amount == result.discount_amount == (280 if with_coupon else 180)
+    expected = {row.id: amount for row, amount in zip(promotions, [40, 60, 80], strict=True)}
+    assert {
+        row.promotion.id: row.discount_amount
+        for row in result.allocations
+        if row.promotion.code is None
+    } == expected
+    assert preview.allocations == result.allocations
+    assert all(row.name in preview.reason for row in promotions)
+
+
+@pytest.mark.parametrize("with_coupon", [False, True])
+async def test_stacked_discounts_never_exceed_subtotal(db_session, topic_shop, with_coupon):
+    manager, buyer, activity, categories, products = topic_shop
+    for index in range(3):
+        await shop_svc.create_promotion(
+            db_session,
+            created_by=manager.id,
+            data=ShopPromotionCreate(
+                name=f"折抵{index}",
+                target_category_ids=[categories[0].id],
+                discount_type="fixed",
+                discount_value=200,
+            ),
+        )
+    if with_coupon:
+        await _promotion(db_session, topic_shop, code="CAP50")
+    context = {
+        "user_id": buyer.id,
+        "subtotal": 300,
+        "activity_id": activity.id,
+        "code": "CAP50" if with_coupon else None,
+        "product_subtotals": {products[0].id: 300},
+        "product_quantities": {products[0].id: 1},
+    }
+    preview = await shop_svc.preview_promotion(db_session, **context)
+    result = await resolve_promotions(db_session, **context)
+    assert preview.discount_amount == result.discount_amount == 300
+    assert preview.allocations == result.allocations
+    assert len(result.allocations) == (3 if with_coupon else 2)
+    assert all(row.discount_amount > 0 for row in result.allocations)
+
+
+async def test_multiple_automatic_promotions_reprice_orders_and_receivables(db_session, topic_shop):
+    manager, buyer, activity, categories, products = topic_shop
+    order = await _order(db_session, buyer, products[0])
+    promotions = []
+    for index, amount in enumerate([50, 80, 100]):
+        promotions.append(
+            await shop_svc.create_promotion(
+                db_session,
+                created_by=manager.id,
+                data=ShopPromotionCreate(
+                    name=f"追加優惠{index}",
+                    target_category_ids=[categories[0].id],
+                    discount_type="fixed",
+                    discount_value=amount,
+                    max_uses=1,
+                ),
+            )
+        )
+    assert (order.discount_amount, order.total_price) == (230, 70)
+    assert len(order.applied_promotions) == 3
+    receivable = await db_session.scalar(select(Receivable).where(Receivable.source_id == order.id))
+    assert receivable.amount == 70
+    preview = await shop_svc.preview_registration_promotion(
+        db_session, user_id=buyer.id, code=None, activity_id=activity.id
+    )
+    assert len(preview.output.applied_promotions) == 3
+    assert preview.output.discount_amount == 230
+    await shop_svc.apply_registration_promotion(
+        db_session, buyer, code=None, activity_id=activity.id
+    )
+    assert [row.used_count for row in promotions] == [1, 1, 1]
+    assert order.total_price == 70
+    await shop_svc.update_promotion(
+        db_session, promotions[1], data=ShopPromotionUpdate(is_active=False)
+    )
+    assert (order.discount_amount, order.total_price, receivable.amount) == (150, 150, 150)
+    assert [row.used_count for row in promotions] == [1, 0, 1]
+    assert {row.promotion_id for row in order.applied_promotions} == {
+        promotions[0].id,
+        promotions[2].id,
+    }

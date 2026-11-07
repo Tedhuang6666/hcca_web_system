@@ -89,6 +89,48 @@ def normalize_promotion_code(code: str | None) -> str | None:
     return normalized or None
 
 
+def _allocate_promotions(
+    results: list[PromotionResult], subtotal: int
+) -> tuple[PromotionAllocation, ...]:
+    remaining = max(0, subtotal)
+    allocations = []
+    for result in results:
+        amount = min(remaining, result.discount_amount)
+        if result.promotion is not None and amount > 0:
+            allocations.append(PromotionAllocation(result.promotion, amount))
+            remaining -= amount
+    return tuple(allocations)
+
+
+def _rank_automatic_promotions(
+    promotions: list[ShopPromotion],
+    subtotal: int,
+    product_subtotals: dict[uuid.UUID, int] | None,
+    product_quantities: dict[uuid.UUID, int] | None,
+    categories: dict[uuid.UUID, uuid.UUID | None],
+) -> list[PromotionResult]:
+    # 先保留原本折抵最高的優惠，再依建立順序累加其餘優惠，確保試算與儲存一致。
+    ranked = sorted(
+        promotions,
+        key=lambda promotion: (
+            -_discount_amount(
+                promotion, subtotal, product_subtotals, product_quantities, categories
+            ),
+            promotion.created_at,
+            str(promotion.id),
+        ),
+    )
+    return [
+        PromotionResult(
+            promotion,
+            _discount_amount(
+                promotion, subtotal, product_subtotals, product_quantities, categories
+            ),
+        )
+        for promotion in ranked
+    ]
+
+
 def _validate_discount(discount_type: ShopDiscountType, discount_value: int) -> None:
     if discount_type == ShopDiscountType.PERCENTAGE and not 1 <= discount_value <= 100:
         raise ValueError("百分比優惠必須介於 1 到 100")
@@ -505,8 +547,6 @@ async def preview_promotion(
         amount = _discount_amount(
             promotion, subtotal, product_subtotals, product_quantities, categories
         )
-        allocations = [PromotionAllocation(promotion=promotion, discount_amount=amount)]
-        remaining = max(0, subtotal - amount)
         automatic_promotions = list(
             (
                 await session.execute(
@@ -548,23 +588,15 @@ async def preview_promotion(
             )
             > 0
         ]
-        if remaining and eligible_automatic:
-            automatic = max(
-                eligible_automatic,
-                key=lambda candidate: _discount_amount(
-                    candidate, subtotal, product_subtotals, product_quantities, categories
+        allocations = _allocate_promotions(
+            [
+                PromotionResult(promotion, amount),
+                *_rank_automatic_promotions(
+                    eligible_automatic, subtotal, product_subtotals, product_quantities, categories
                 ),
-            )
-            automatic_amount = min(
-                remaining,
-                _discount_amount(
-                    automatic, subtotal, product_subtotals, product_quantities, categories
-                ),
-            )
-            if automatic_amount:
-                allocations.append(
-                    PromotionAllocation(promotion=automatic, discount_amount=automatic_amount)
-                )
+            ],
+            subtotal,
+        )
         total_discount = sum(row.discount_amount for row in allocations)
         detail = "、".join(
             f"「{row.promotion.name}」折抵 NT${row.discount_amount:,}" for row in allocations
@@ -607,22 +639,23 @@ async def preview_promotion(
         > 0
     ]
     if eligible:
-        selected = max(
-            eligible,
-            key=lambda promotion: _discount_amount(
-                promotion, subtotal, product_subtotals, product_quantities, categories
+        allocations = _allocate_promotions(
+            _rank_automatic_promotions(
+                eligible, subtotal, product_subtotals, product_quantities, categories
             ),
+            subtotal,
         )
-        amount = _discount_amount(
-            selected, subtotal, product_subtotals, product_quantities, categories
+        amount = sum(row.discount_amount for row in allocations)
+        detail = "、".join(
+            f"「{row.promotion.name}」折抵 NT${row.discount_amount:,}" for row in allocations
         )
         return PromotionPreviewResult(
-            promotion=selected,
+            promotion=allocations[0].promotion,
             eligible=True,
             discount_amount=amount,
             reason_code="applied",
-            reason=f"已自動套用「{selected.name}」，共省下 NT${amount:,}。",
-            allocations=(PromotionAllocation(promotion=selected, discount_amount=amount),),
+            reason=f"已自動套用{detail}，共省下 NT${amount:,}。",
+            allocations=allocations,
         )
 
     issue_candidates = []
@@ -1137,6 +1170,41 @@ async def resolve_promotion(
             )
         return PromotionResult(promotion=promotion, discount_amount=amount)
 
+    automatic = await _resolve_automatic_promotions(
+        session,
+        user_id=user_id,
+        subtotal=subtotal,
+        product_subtotals=product_subtotals,
+        product_quantities=product_quantities,
+        activity_id=activity_id,
+        current_ids=current_ids,
+    )
+    return automatic[0] if automatic else PromotionResult(promotion=None, discount_amount=0)
+
+
+async def _resolve_automatic_promotions(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    subtotal: int,
+    product_subtotals: dict[uuid.UUID, int] | None,
+    product_quantities: dict[uuid.UUID, int] | None,
+    activity_id: uuid.UUID | None,
+    current_ids: set[uuid.UUID],
+) -> list[PromotionResult]:
+    categories = await product_topic_ids(session, set(product_subtotals or {}))
+    now = datetime.now(UTC)
+    student_id = await session.scalar(select(User.student_id).where(User.id == user_id))
+    base_filters = (
+        ShopPromotion.is_active.is_(True),
+        or_(ShopPromotion.starts_at.is_(None), ShopPromotion.starts_at <= now),
+        or_(ShopPromotion.ends_at.is_(None), ShopPromotion.ends_at >= now),
+        or_(
+            ShopPromotion.max_uses.is_(None),
+            ShopPromotion.used_count < ShopPromotion.max_uses,
+            ShopPromotion.id.in_(current_ids),
+        ),
+    )
     promotions = (
         (
             await session.execute(
@@ -1174,26 +1242,14 @@ async def resolve_promotion(
             product_subtotals=product_subtotals,
             product_quantities=product_quantities,
             activity_id=activity_id,
-            current_promotion_id=current_promotion_id,
             current_promotion_ids=current_ids,
         )
         is None
         and _discount_amount(promotion, subtotal, product_subtotals, product_quantities, categories)
         > 0
     ]
-    if not applicable:
-        return PromotionResult(promotion=None, discount_amount=0)
-    selected = max(
-        applicable,
-        key=lambda promotion: _discount_amount(
-            promotion, subtotal, product_subtotals, product_quantities, categories
-        ),
-    )
-    return PromotionResult(
-        promotion=selected,
-        discount_amount=_discount_amount(
-            selected, subtotal, product_subtotals, product_quantities, categories
-        ),
+    return _rank_automatic_promotions(
+        applicable, subtotal, product_subtotals, product_quantities, categories
     )
 
 
@@ -1226,28 +1282,16 @@ async def resolve_promotions(
         )
         selected.append(coupon)
 
-    automatic = await resolve_promotion(
+    automatic = await _resolve_automatic_promotions(
         session,
         user_id=user_id,
         subtotal=subtotal,
         product_subtotals=product_subtotals,
         product_quantities=product_quantities,
         activity_id=activity_id,
-        current_promotion_ids=current_ids,
+        current_ids=current_ids,
     )
-    if automatic.promotion is not None:
-        selected.append(automatic)
-
-    remaining = max(0, subtotal)
-    allocations: list[PromotionAllocation] = []
-    for result in selected:
-        if result.promotion is None:
-            continue
-        amount = min(remaining, result.discount_amount)
-        if amount > 0:
-            allocations.append(PromotionAllocation(result.promotion, amount))
-            remaining -= amount
-    return PromotionBundleResult(tuple(allocations))
+    return PromotionBundleResult(_allocate_promotions([*selected, *automatic], subtotal))
 
 
 def serialize_promotion(promotion: ShopPromotion) -> ShopPromotionOut:

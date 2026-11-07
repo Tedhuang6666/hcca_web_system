@@ -30385,6 +30385,8 @@ export interface components {
         };
         /** ShopPromotionPreviewOut */
         ShopPromotionPreviewOut: {
+            /** Applied Promotions */
+            applied_promotions?: components["schemas"]["OrderPromotionOut"][];
             /** Discount Amount */
             discount_amount: number;
             discount_type?: components["schemas"]["ShopDiscountType"] | null;

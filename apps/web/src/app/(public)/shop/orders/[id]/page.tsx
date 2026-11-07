@@ -1,5 +1,6 @@
 "use client";
 import ShopPrice from "@/components/shop/ShopPrice";
+import OrderPromotionSummary from "@/components/shop/OrderPromotionSummary";
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -10,6 +11,7 @@ import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 import type { SeatBookingOut, OrderListItem, OrderOut, ProductOut, ZoneListItem } from "@/lib/types";
 import { useWS } from "@/hooks/useWS";
 import { groupActivityPreorders } from "@/lib/shop-preorders";
+import { refreshAutomaticRegistrationPromotions } from "@/lib/shop-registration-promotions";
 import OrderItemSources from "@/components/shop/OrderItemSources";
 import ProductThumbnail from "@/components/shop/ProductThumbnail";
 
@@ -101,12 +103,26 @@ export default function OrderDetailPage() {
       }
 
       const relatedOrderIds = summary?.orders.map((related) => related.id) ?? [o.id];
-      const [relatedOrders, currentRegistrations] = await Promise.all([
+      const [savedRelatedOrders, currentRegistrations] = await Promise.all([
         Promise.all(relatedOrderIds.map((relatedId) =>
           relatedId === o.id ? Promise.resolve(o) : shopApi.getOrder(relatedId),
         )),
         shopApi.getCurrentRegistrations().catch(() => []),
       ]);
+      const currentOrders = !fromClass && !fromCouncil
+        ? savedRelatedOrders.filter((related) => related.user_id === user.id
+          && currentRegistrations.some((registration) => registration.id === related.id))
+        : [];
+      const refreshed = await refreshAutomaticRegistrationPromotions(currentOrders);
+      const relatedOrders = savedRelatedOrders.map((related) =>
+        refreshed.find((updated) => updated.id === related.id) ?? related);
+      setOrder(relatedOrders.find((related) => related.id === o.id) ?? o);
+      if (summary) {
+        summary = groupActivityPreorders(summary.orders.map((related) => ({
+          ...related,
+          ...relatedOrders.find((updated) => updated.id === related.id),
+        })))[0] ?? null;
+      }
       setOrders(relatedOrders);
       setActivityPreorder(summary);
       const currentRegistration = currentRegistrations.find((registration) =>
@@ -276,9 +292,6 @@ export default function OrderDetailPage() {
   const subtotalPrice = activityPreorder
     ? detailOrders.reduce((sum, relatedOrder) => sum + relatedOrder.subtotal_price, 0)
     : order.subtotal_price || order.items.reduce((sum, item) => sum + item.subtotal, 0);
-  const discountAmount = activityPreorder
-    ? detailOrders.reduce((sum, relatedOrder) => sum + relatedOrder.discount_amount, 0)
-    : order.discount_amount;
   const receivedAmount = activityPreorder?.received
     ?? (order.is_paid || (order.class_id && order.is_class_collected) ? order.total_price : 0);
   const amountDue = activityPreorder?.outstanding
@@ -422,28 +435,7 @@ export default function OrderDetailPage() {
             <dt>商品小計</dt>
             <dd>NT${subtotalPrice.toLocaleString()}</dd>
           </div>
-          {isGrouped ? (
-            <div>
-              <dt>優惠折抵</dt>
-              <dd style={{ color: discountAmount ? "var(--success)" : "var(--text-primary)" }}>
-                − NT${discountAmount.toLocaleString()}
-              </dd>
-            </div>
-          ) : order.applied_promotions?.length ? order.applied_promotions.map((promotion) => (
-            <div key={promotion.promotion_id}>
-              <dt>優惠折抵{promotion.code ? `（${promotion.code}）` : `（${promotion.name}）`}</dt>
-              <dd style={{ color: promotion.discount_amount ? "var(--success)" : "var(--text-primary)" }}>
-                − NT${promotion.discount_amount.toLocaleString()}
-              </dd>
-            </div>
-          )) : (
-            <div>
-              <dt>優惠折抵{order.promotion_code ? `（${order.promotion_code}）` : ""}</dt>
-              <dd style={{ color: order.discount_amount ? "var(--success)" : "var(--text-primary)" }}>
-                − NT${order.discount_amount.toLocaleString()}
-              </dd>
-            </div>
-          )}
+          <OrderPromotionSummary orders={detailOrders} />
           <div className="shop-order-grand-total">
             <dt>應付總額</dt>
             <dd><ShopPrice original={subtotalPrice} current={detailTotal} /></dd>

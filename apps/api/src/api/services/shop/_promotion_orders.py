@@ -22,7 +22,7 @@ from api.services.shop._promotions import (
     PromotionAllocation,
     _discount_amount,
     _promotion_issue,
-    resolve_promotion,
+    resolve_promotions,
 )
 
 
@@ -122,7 +122,7 @@ async def refresh_promotion_orders(
             if coupon is not None:
                 coupons.append(PromotionAllocation(coupon, order.discount_amount))
 
-        automatic = await resolve_promotion(
+        automatic = await resolve_promotions(
             session,
             user_id=order.user_id,
             subtotal=order.subtotal_price,
@@ -133,10 +133,11 @@ async def refresh_promotion_orders(
         )
         allocations = list(coupons)
         remaining = max(0, order.subtotal_price - sum(row.discount_amount for row in coupons))
-        if automatic.promotion is not None and remaining > 0:
-            allocations.append(
-                PromotionAllocation(automatic.promotion, min(remaining, automatic.discount_amount))
-            )
+        for row in automatic.allocations:
+            amount = min(remaining, row.discount_amount)
+            if amount > 0:
+                allocations.append(PromotionAllocation(row.promotion, amount))
+                remaining -= amount
         selected = {row.promotion.id: row.discount_amount for row in allocations}
         if selected == previous:
             continue

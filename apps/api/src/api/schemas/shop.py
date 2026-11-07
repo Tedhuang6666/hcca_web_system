@@ -708,6 +708,7 @@ class ShopPromotionProductPriceOut(BaseModel):
 
 class ShopPromotionPreviewOut(BaseModel):
     eligible: bool
+    applied_promotions: list[OrderPromotionOut] = Field(default_factory=list)
     promotion_name: str | None = None
     promotion_code: str | None = None
     reason_code: Literal[

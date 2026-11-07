@@ -111,3 +111,40 @@ it("leaves paid, locked, testing, and manually coded orders untouched", async ()
   expect(api.previewCurrentPromotion).not.toHaveBeenCalled();
   expect(api.applyCurrentPromotion).not.toHaveBeenCalled();
 });
+
+it("does not reapply matching stacked promotions even when their order differs", async () => {
+  const applied = [
+    { promotion_id: "one", name: "服飾優惠", code: null, discount_amount: 40 },
+    { promotion_id: "two", name: "紀念品優惠", code: null, discount_amount: 20 },
+  ];
+  const current: OrderOut = {
+    ...order, promotion_id: "one", applied_promotions: applied, discount_amount: 60, total_price: 140,
+  };
+  api.previewCurrentPromotion.mockResolvedValue(preview({
+    eligible: true, reason_code: "applied", discount_amount: 60,
+    applied_promotions: [...applied].reverse(),
+  }));
+  await expect(refreshAutomaticRegistrationPromotions([current])).resolves.toEqual([current]);
+  expect(api.applyCurrentPromotion).not.toHaveBeenCalled();
+});
+
+it("refreshes changed allocations even when the total discount stays the same", async () => {
+  const current: OrderOut = {
+    ...order, promotion_id: "one", discount_amount: 60, total_price: 140,
+    applied_promotions: [
+      { promotion_id: "one", name: "服飾優惠", code: null, discount_amount: 40 },
+      { promotion_id: "two", name: "紀念品優惠", code: null, discount_amount: 20 },
+    ],
+  };
+  const updated: OrderOut = { ...current, applied_promotions: [
+    { promotion_id: "one", name: "服飾優惠", code: null, discount_amount: 30 },
+    { promotion_id: "three", name: "滿額優惠", code: null, discount_amount: 30 },
+  ] };
+  api.previewCurrentPromotion.mockResolvedValue(preview({
+    eligible: true, reason_code: "applied", discount_amount: 60,
+    applied_promotions: updated.applied_promotions,
+  }));
+  api.applyCurrentPromotion.mockResolvedValue(updated);
+  await expect(refreshAutomaticRegistrationPromotions([current])).resolves.toEqual([updated]);
+  expect(api.applyCurrentPromotion).toHaveBeenCalledOnce();
+});

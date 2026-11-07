@@ -11,6 +11,19 @@ function automaticPromotionMatches(order: OrderOut, preview: ShopPromotionPrevie
       && applied.length === 0;
   }
 
+  const expected = preview.applied_promotions ?? [];
+  if (expected.length > 0) {
+    return preview.promotion_code == null
+      && order.discount_amount === preview.discount_amount
+      && applied.reduce((sum, row) => sum + row.discount_amount, 0) === order.discount_amount
+      && applied.length === expected.length
+      && expected.every((candidate) => applied.some((row) =>
+        row.promotion_id === candidate.promotion_id
+        && row.name === candidate.name
+        && row.code == null && candidate.code == null
+        && row.discount_amount === candidate.discount_amount));
+  }
+
   return preview.promotion_code == null
     && order.discount_amount === preview.discount_amount
     && order.promotion_id != null
