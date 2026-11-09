@@ -8,7 +8,15 @@ import pytest
 from api.core.clock import TAIPEI
 from api.models.activity import Activity
 from api.models.school_class import SchoolClass
-from api.models.shop import Order, OrderItem, OrderStatus, Product, ProductCategory, ProductSeries
+from api.models.shop import (
+    Order,
+    OrderItem,
+    OrderStatus,
+    Product,
+    ProductCategory,
+    ProductSeries,
+    ShopDelegationLink,
+)
 from api.services.shop._analytics import sales_analytics
 
 
@@ -63,6 +71,11 @@ async def test_missing_cost_is_unknown_and_zero_cost_and_empty_are_valid(db_sess
     empty = await sales_analytics(db_session, date_from=date(2024, 1, 1), date_to=date(2024, 1, 1))
     assert empty.current.metrics.total_cost == empty.current.metrics.profit_amount == 0
     assert empty.current.daily[0].profit_amount == 0
+    assert {row.key for row in empty.current.sources} >= {
+        "self",
+        "family_assisted",
+        "class_assisted",
+    }
 
 
 async def test_profit_report_preserves_numeric_and_unknown_costs(db_session, sales_data):
@@ -122,6 +135,9 @@ async def sales_data(db_session, make_user):
         event=activity,
         sc=school_class,
         total=None,
+        assistance_scope="self",
+        family_item_indices=(),
+        delegation_link_id=None,
     ):
         gross = sum(quantity * price for _, quantity, price in items)
         result = Order(
@@ -136,14 +152,18 @@ async def sales_data(db_session, make_user):
             total_price=gross if total is None else total,
             discount_amount=0 if total is None else gross - total,
             is_paid=paid,
+            assistance_scope=assistance_scope,
             items=[
                 OrderItem(
                     product_id=product.id,
                     quantity=quantity,
                     unit_price=price,
+                    delegation_link_id=(
+                        delegation_link_id if index in family_item_indices else None
+                    ),
                     selected_options=[{"group_name": "尺寸", "value": "L"}],
                 )
-                for product, quantity, price in items
+                for index, (product, quantity, price) in enumerate(items)
             ],
         )
         db_session.add(result)
@@ -192,6 +212,58 @@ async def test_sales_analytics_snapshot_distributions_and_taipei_boundaries(db_s
     assert sum(row.order_count for row in current.item_bands) == 3
     assert result.previous.metrics.order_count == 1
     assert [row.order_count for row in result.previous.daily] == [0, 1]
+
+
+async def test_purchase_method_analysis_separates_self_family_and_class_rep_orders(
+    db_session, sales_data
+):
+    activity, category, shirt, bag, _, order = sales_data
+    link = ShopDelegationLink(
+        user_id=shirt.created_by,
+        category_id=category.id,
+        activity_id=activity.id,
+        name="家人",
+        token_hash=uuid.uuid4().hex * 2,
+    )
+    db_session.add(link)
+    await db_session.flush()
+    await order(
+        "2026-10-22T14:00:00",
+        [(shirt, 1, 100), (bag, 1, 100)],
+        family_item_indices=(1,),
+        delegation_link_id=link.id,
+    )
+    await order(
+        "2026-10-22T15:00:00",
+        [(shirt, 2, 100)],
+        assistance_scope="class_assisted",
+    )
+
+    result = await sales_analytics(
+        db_session,
+        date_from=date(2026, 10, 22),
+        date_to=date(2026, 10, 23),
+        activity_id=activity.id,
+    )
+    sources = {row.key: row for row in result.current.sources}
+
+    assert {key: sources[key].label for key in ("self", "family_assisted", "class_assisted")} == {
+        "self": "自行訂購",
+        "family_assisted": "家人代購",
+        "class_assisted": "班代代購",
+    }
+    assert (sources["self"].order_count, sources["self"].item_count) == (4, 6)
+    assert (sources["family_assisted"].order_count, sources["family_assisted"].item_count) == (
+        1,
+        1,
+    )
+    assert sources["family_assisted"].total_amount == 100
+    assert (sources["class_assisted"].order_count, sources["class_assisted"].item_count) == (
+        1,
+        2,
+    )
+    assert sources["class_assisted"].total_amount == 200
+    assert sum(row.total_amount for row in sources.values()) == result.current.metrics.total_amount
 
 
 async def test_sales_product_and_category_filters_only_count_matching_items(db_session, sales_data):

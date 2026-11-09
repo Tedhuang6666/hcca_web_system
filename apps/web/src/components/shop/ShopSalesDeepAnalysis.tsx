@@ -27,7 +27,7 @@ export default function ShopSalesDeepAnalysis({
 }: {
   current: ShopSalesPeriod;
 }) {
-  const [dimension, setDimension] = useState<Dimension>("products");
+  const [dimension, setDimension] = useState<Dimension>("sources");
   const [sort, setSort] = useState<Sort>("total_amount");
   const [ascending, setAscending] = useState(false);
   const [search, setSearch] = useState("");
@@ -132,13 +132,18 @@ export default function ShopSalesDeepAnalysis({
               type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="商品、規格、班級…"
+              placeholder={dimension === "sources" ? "訂購方式…" : "商品、規格、班級…"}
             />
           </label>
         </div>
         <p className="sales-muted">
           可按金額、件數、人數或未確認款項排序。占比以目前分析項目的訂購金額合計計算；訂單與人數可能跨項重疊。取消／退款金額另列，不代表實際退款撥付額，其成本與毛利為零。
         </p>
+        {dimension === "sources" && (
+          <p className="sales-muted">
+            家人代購依訂單明細辨識；同筆訂單若同時含本人與家人代購品項，會分別計入兩種方式的訂單數，件數與金額則依明細拆分。
+          </p>
+        )}
         <div className="sales-table-scroll">
           <table>
             <caption className="sr-only">分項分析與排行明細</caption>

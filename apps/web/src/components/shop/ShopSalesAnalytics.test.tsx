@@ -99,7 +99,11 @@ function period(): ShopSalesPeriod {
     variants: [{ ...row, label: "紀念衫 · 尺寸：L", product_id: "one", product_name: "紀念衫", option_label: "尺寸：L", group_key: null, group_name: null, item_share: 100, amount_share: 100 }],
     variant_options: [],
     hours: [row],
-    sources: [row],
+    sources: [
+      { ...row, key: "self", label: "自行訂購" },
+      { ...row, key: "family_assisted", label: "家人代購" },
+      { ...row, key: "class_assisted", label: "班代代購" },
+    ],
     amount_bands: [row],
     item_bands: [row],
     weekdays: [row],
@@ -186,6 +190,19 @@ afterEach(() => {
 });
 
 describe("銷售分析", () => {
+  it("預設分開顯示自行、家人與班代代購統計", async () => {
+    render(<ShopSalesAnalytics filters={{}} />);
+    expect(await screen.findByRole("combobox", { name: "分析項目" })).toHaveValue(
+      "sources",
+    );
+    expect(await screen.findByRole("row", { name: /自行訂購/ })).toBeVisible();
+    expect(screen.getByRole("row", { name: /家人代購/ })).toBeVisible();
+    expect(screen.getByRole("row", { name: /班代代購/ })).toBeVisible();
+    expect(
+      screen.getByText(/同筆訂單若同時含本人與家人代購品項/),
+    ).toBeVisible();
+  });
+
   it("passes scoped filters without comparison controls and exposes daily and variant values", async () => {
     render(
       <ShopSalesAnalytics
@@ -359,6 +376,9 @@ it("explores cross cells, changes table dimension, and sorts by unpaid values", 
   api.salesAnalytics.mockResolvedValueOnce(data);
   render(<ShopSalesAnalytics filters={{}} />);
   await screen.findByText("訂購金額", { selector: "dt" });
+  fireEvent.change(screen.getByRole("combobox", { name: "分析項目" }), {
+    target: { value: "products" },
+  });
   fireEvent.change(screen.getByRole("combobox", { name: "排序依據" }), {
     target: { value: "unpaid" },
   });

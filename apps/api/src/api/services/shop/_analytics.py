@@ -241,15 +241,6 @@ def _summarize(
             ),
             ("grades", str(sc.grade) if sc else "none", f"{sc.grade} 年級" if sc else "未分班"),
             ("classes", str(sc.id) if sc else "none", class_display_label(sc) or "未分班"),
-            (
-                "sources",
-                source,
-                {
-                    "self": "自行訂購（含家人授權）",
-                    "class_assisted": "班代代訂",
-                    "council_gift": "贈送（免付款）",
-                }.get(source, source),
-            ),
             ("amount_bands", str(min((amount - 1) // 500, 6)) if amount else "zero", ""),
             (
                 "item_bands",
@@ -258,6 +249,43 @@ def _summarize(
             ),
         ]:
             add(kind, key, label, order, quantity, amount, gross, cost, missing)
+
+        source_groups: list[tuple[str, str, list[OrderItem]]] = []
+        if source == "class_assisted":
+            source_groups.append(("class_assisted", "班代代購", items))
+        elif source == "self":
+            own_items = [item for item in items if item.delegation_link_id is None]
+            family_items = [item for item in items if item.delegation_link_id is not None]
+            if own_items:
+                source_groups.append(("self", "自行訂購", own_items))
+            if family_items:
+                source_groups.append(("family_assisted", "家人代購", family_items))
+        else:
+            label = "贈送（免付款）" if source == "council_gift" else source
+            source_groups.append((source, label, items))
+
+        for source_key, source_label, source_items in source_groups:
+            source_amount = sum(amounts[item.id] for item in source_items)
+            source_gross = sum(amounts[item.id] + discounts[item.id] for item in source_items)
+            source_quantity = sum(item.quantity for item in source_items)
+            source_cost = sum(
+                item.quantity * (item.product.unit_cost or 0) for item in source_items
+            )
+            source_missing = sum(
+                item.quantity for item in source_items if item.product.unit_cost is None
+            )
+            add(
+                "sources",
+                source_key,
+                source_label,
+                order,
+                source_quantity,
+                source_amount,
+                source_gross,
+                source_cost,
+                source_missing,
+            )
+
         for item in items:
             product = item.product
             item_gross = amounts[item.id] + discounts[item.id]
@@ -420,6 +448,13 @@ def _summarize(
         .model_copy(update={"label": f"{key} 件"})
         for key in ["1", "2", "3", "4", "5", "6–9", "10+"]
     ]
+    for key, label in (
+        ("self", "自行訂購"),
+        ("family_assisted", "家人代購"),
+        ("class_assisted", "班代代購"),
+    ):
+        groups["sources"].setdefault(key, ShopSalesRow(key=key, label=label))
+
     return ShopSalesPeriod(
         date_from=start,
         date_to=end,
