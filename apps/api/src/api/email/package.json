@@ -11,6 +11,8 @@
   },
   "overrides": {
     "browserslist": "^4.28.9",
+    "glob": "^14.0.2",
+    "minimatch@>=7": "^11.0.1",
     "postcss": "^8.5.23"
   }
 }
