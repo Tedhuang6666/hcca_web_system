@@ -403,7 +403,7 @@ function ProductModal({
       }
       if (event.key !== "Tab" || !dialogRef.current) return;
       const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
-        "button:not([disabled]), [href], input:not([disabled]), select:not([disabled])",
+        "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), summary",
       ));
       if (focusable.length === 0) return;
       const first = focusable[0];
@@ -795,10 +795,6 @@ function ProductModal({
                   )}
                 </div>
 
-                <ProductDetailOffers product={product} promotions={promotions} registration={registration}
-                  registrationState={authLoading || classStatusLoading ? "loading" : registrationLoadError ? "error" : "ready"} />
-                {!bundleStep && bundleAddOn?.(loading || !canEdit)}
-
                 {!bundleStep && registeredVariants.size > 0 && <section className="shop-registered-variants" aria-label="已登記的規格">
                   <h4>已登記的規格</h4>
                   <ul>{[...registeredVariants].map(([key, { item, quantity }]) => <li key={key}>
@@ -845,6 +841,10 @@ function ProductModal({
                 ))}
 
                 <ProductSizeChart product={product} picked={picked} onSelectOption={selectVariantOption} />
+
+                <ProductDetailOffers product={product} promotions={promotions} registration={registration}
+                  registrationState={authLoading || classStatusLoading ? "loading" : registrationLoadError ? "error" : "ready"} />
+                {!bundleStep && bundleAddOn?.(loading || !canEdit)}
 
                 {product.purchase_allowed === false && isLoggedIn && <p className="shop-product-purchase-hint" role="status">
                   {product.purchase_restriction ?? "您目前不符合此商品的購買資格"}

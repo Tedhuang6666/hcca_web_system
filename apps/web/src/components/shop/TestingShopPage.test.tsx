@@ -56,6 +56,35 @@ const formalOrder: OrderOut = {
     unit_price: 100, subtotal: 200, selected_options: [] }],
 };
 
+it("優惠很多時先選規格，優惠收合且不影響登記購買", async () => {
+  api.me.mockResolvedValue({ id: "tester", student_id: "310001" });
+  api.getCurrentRegistrations.mockResolvedValue([]);
+  api.listAvailablePromotions.mockResolvedValue(Array.from({ length: 12 }, (_, index) => ({
+    id: `sale-${index}`, name: `滿額優惠 ${index + 1}`, activity_id: "festival",
+    discount_type: "fixed", discount_value: 10, min_order_price: 1000, min_quantity: 1,
+    target_products: [{ id: "formal", name: "正式商品" }],
+  })));
+  api.getProduct.mockResolvedValue({ ...formalProduct, media: [], variant_groups: [{
+    id: "size", name: "尺寸", options: [{ id: "M", value: "M", is_active: true, price_delta: 0 }],
+  }] });
+  api.setCurrentRegistrationProduct.mockResolvedValue(formalOrder);
+  render(<ShopPage />);
+  fireEvent.click(await screen.findByRole("link", { name: "查看商品：正式商品" }));
+  const dialog = await screen.findByRole("dialog");
+  const option = await within(dialog).findByRole("button", { name: "M" });
+  const offers = await within(dialog).findByRole("region", { name: "優惠與贈品" });
+  expect(within(offers).getByText("共 12 項")).toBeVisible();
+  expect(within(offers).getByText("滿額優惠 12")).not.toBeVisible();
+  expect(option.compareDocumentPosition(offers) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  fireEvent.click(option);
+  const submit = within(dialog).getByRole("button", { name: "登記購買 · NT$100" });
+  await waitFor(() => expect(submit).toBeEnabled());
+  fireEvent.click(submit);
+  await waitFor(() => expect(api.setCurrentRegistrationProduct).toHaveBeenCalledWith("formal", {
+    variants: [{ option_ids: ["M"], quantity: 1 }],
+  }));
+});
+
 it("一般商品可直接替換指定尺寸並一次儲存數量，其他規格保留", async () => {
   const option = (id: string) => ({ group_id: "size", group_name: "尺寸", option_id: id, value: id, price_delta: 0 });
   const original: OrderOut = { ...formalOrder, items: [
@@ -101,6 +130,7 @@ it("商品詳情逐筆列出同筆登記已套用的自動優惠與優惠碼", a
   render(<ShopPage />);
   fireEvent.click(await screen.findByRole("link", { name: "查看商品：正式商品" }));
   const section = await screen.findByRole("region", { name: "優惠與贈品" });
+  fireEvent.click(within(section).getByText("優惠與贈品"));
   expect(await within(section).findByRole("listitem", { name: "校慶優惠" })).toHaveTextContent("本筆登記折抵 NT$20");
   expect(within(section).getByRole("listitem", { name: "迎新折價券" })).toHaveTextContent("本筆登記折抵 NT$10");
 });
@@ -119,6 +149,7 @@ it("登記贈品後，商品詳情由尚未登記更新為已套用贈品優惠"
   render(<ShopPage />);
   fireEvent.click(await screen.findByRole("link", { name: "查看商品：正式商品" }));
   const dialog = await screen.findByRole("dialog");
+  fireEvent.click(await within(dialog).findByText("優惠與贈品"));
   expect(await within(dialog).findByText("贈品：正式商品")).toBeVisible();
   expect(within(dialog).getByText("尚未登記贈品")).toBeVisible();
   const submit = await within(dialog).findByRole("button", { name: "登記購買 · NT$0" });

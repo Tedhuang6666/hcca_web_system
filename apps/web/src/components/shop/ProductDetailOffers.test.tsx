@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { OrderOut, ShopPromotionPublicOut } from "@/lib/types";
 import ProductDetailOffers from "./ProductDetailOffers";
@@ -23,6 +23,20 @@ const order: OrderOut = {
 };
 
 describe("商品詳情優惠與贈品", () => {
+  it("大量優惠預設只顯示摘要，可展開全部明細並再次收合", () => {
+    render(<ProductDetailOffers product={product} registration={order} promotions={
+      Array.from({ length: 20 }, (_, index) => ({ ...promotion, id: `offer-${index}`, name: `優惠 ${index + 1}` }))
+    } />);
+    const section = screen.getByRole("region", { name: "優惠與贈品" });
+    expect(within(section).getByText("共 22 項 · 已套用 2 項")).toBeVisible();
+    expect(within(section).getByText("優惠 20")).not.toBeVisible();
+    fireEvent.click(within(section).getByText("優惠與贈品"));
+    expect(within(section).getAllByRole("listitem")).toHaveLength(22);
+    expect(within(section).getByText("優惠 20")).toBeVisible();
+    fireEvent.click(within(section).getByText("優惠與贈品"));
+    expect(within(section).getByText("優惠 20")).not.toBeVisible();
+  });
+
   it("逐筆列出套用的多組優惠、各自折抵與未套用套組，不合併名稱", () => {
     render(<ProductDetailOffers product={product} registration={order} promotions={[
       promotion, { ...promotion, id: "bundle", name: "衣褲套組", discount_type: "bundle_price", discount_value: 650,
@@ -31,6 +45,7 @@ describe("商品詳情優惠與贈品", () => {
         target_products: [product, { id: "bag", name: "提袋" }] },
     ]} />);
     const section = screen.getByRole("region", { name: "優惠與贈品" });
+    fireEvent.click(within(section).getByText("優惠與贈品"));
     expect(within(section).getAllByRole("listitem")).toHaveLength(4);
     const sale = within(section).getByRole("listitem", { name: "校慶九折" });
     expect(sale).toHaveTextContent("已套用");
@@ -44,6 +59,7 @@ describe("商品詳情優惠與贈品", () => {
 
   it("贈品明列品名、基本售價免費與未登記狀態", () => {
     render(<ProductDetailOffers product={product} promotions={[gift]} registration={null} />);
+    fireEvent.click(screen.getByText("優惠與贈品"));
     expect(screen.getByText("贈品：紀念衫")).toBeVisible();
     expect(screen.getByText("尚未登記贈品")).toBeVisible();
     expect(screen.getByText(/基本售價 NT\$0；規格加價另計/)).toBeVisible();
@@ -53,18 +69,22 @@ describe("商品詳情優惠與贈品", () => {
 
   it("依後端結果更新贈品狀態，已選品項但未套用時不可宣稱贈送", () => {
     const view = render(<ProductDetailOffers product={product} promotions={[gift]} registration={order} />);
+    fireEvent.click(screen.getByText("優惠與贈品"));
     expect(screen.getByText("已登記 2 件，尚未套用贈品優惠")).toBeVisible();
     view.rerender(<ProductDetailOffers product={product} promotions={[gift]} registration={{ ...order,
       applied_promotions: [{ promotion_id: "gift", name: gift.name, discount_amount: 600 }],
     }} />);
     expect(screen.getByText("已登記 2 件，已套用贈品優惠")).toBeVisible();
     expect(screen.getByText("本筆登記折抵 NT$600")).toBeVisible();
+    fireEvent.click(screen.getByText("優惠與贈品"));
+    expect(screen.getByText("共 1 項 · 已套用 1 項")).toBeVisible();
     expect(screen.queryByText(/尚未套用贈品/)).not.toBeInTheDocument();
   });
 
   it("同組優惠已套用其他商品，未登記此贈品時仍顯示尚未登記", () => {
     render(<ProductDetailOffers product={product} promotions={[{ ...gift, target_products: [product, { id: "bag", name: "提袋" }] }]}
       registration={{ ...order, items: [], applied_promotions: [{ promotion_id: "gift", name: gift.name, discount_amount: 100 }] }} />);
+    fireEvent.click(screen.getByText("優惠與贈品"));
     expect(screen.getByText("尚未登記贈品")).toBeVisible();
     expect(screen.getByText("贈品：紀念衫、提袋")).toBeVisible();
     expect(screen.queryByText(/已登記.*已套用贈品/)).not.toBeInTheDocument();
@@ -76,6 +96,7 @@ describe("商品詳情優惠與贈品", () => {
         { product_id: product.id, product_name: product.name, unit_price: 0 },
       ],
     }]} />);
+    fireEvent.click(screen.getByText("優惠與贈品"));
     expect(screen.getByText("贈品：紀念衫")).toBeVisible();
     view.rerender(<ProductDetailOffers product={product} registration={null} promotions={[{ ...gift, target_products: [] }]} />);
     expect(screen.queryByText(/贈品：/)).not.toBeInTheDocument();
@@ -89,6 +110,7 @@ describe("商品詳情優惠與贈品", () => {
       product_price_overrides: [{ product_id: product.id, product_name: product.name, unit_price: 250 }],
     };
     render(<ProductDetailOffers product={product} registration={null} promotions={[topicPromotion]} />);
+    fireEvent.click(screen.getByText("優惠與贈品"));
     expect(screen.getByText(/單一主題滿 NT\$1,000/)).toBeVisible();
     expect(screen.getByText(/單一主題滿 2 件/)).toBeVisible();
     expect(screen.getByText(/使用優惠碼 STAFF/)).toBeVisible();
@@ -103,12 +125,14 @@ describe("商品詳情優惠與贈品", () => {
     expect(screen.getByRole("status")).toHaveTextContent(state === "loading" ? "正在確認優惠與贈品狀態" : "無法確認優惠與贈品狀態");
     expect(screen.queryByText(/已登記 2 件/)).not.toBeInTheDocument();
     expect(screen.queryByText("尚未登記贈品")).not.toBeInTheDocument();
+    expect(screen.queryByText(/已套用 \d+ 項/)).not.toBeInTheDocument();
   });
 
   it("舊版單一優惠以實際總折抵補列，零折抵不標成已贈送", () => {
     render(<ProductDetailOffers product={product} promotions={[gift]} registration={{ ...order,
       promotion_id: "gift", promotion_code: "GIFT", applied_promotions: [], discount_amount: 0,
     }} />);
+    fireEvent.click(screen.getByText("優惠與贈品"));
     expect(screen.getByText("已登記 2 件，尚未套用贈品優惠")).toBeVisible();
   });
 
@@ -123,6 +147,7 @@ describe("商品詳情優惠與贈品", () => {
       applied_promotions: [...order.applied_promotions!, { promotion_id: "sale", name: promotion.name, discount_amount: 60 },
         { promotion_id: "coupon", name: "迎新折價券", code: "WELCOME", discount_amount: 10 }],
     }} />);
+    fireEvent.click(screen.getByText("優惠與贈品"));
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
     expect(screen.getByRole("listitem", { name: promotion.name })).toHaveTextContent("本筆登記折抵 NT$90");
     expect(screen.getByRole("listitem", { name: "迎新折價券" })).toHaveTextContent("本筆登記折抵 NT$30");

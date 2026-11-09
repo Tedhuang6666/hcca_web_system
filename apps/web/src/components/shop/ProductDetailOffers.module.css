@@ -2,8 +2,49 @@
   color: var(--public-text);
 }
 
+.disclosure {
+  border-block: 1px solid var(--public-border);
+}
+
+.summary {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-block: 0.75rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.summary::-webkit-details-marker {
+  display: none;
+}
+
+.summary:focus-visible {
+  outline: 2px solid var(--public-focus);
+  outline-offset: 3px;
+}
+
+.summary > svg {
+  flex-shrink: 0;
+  color: var(--public-secondary);
+}
+
+.disclosure[open] > .summary > svg {
+  transform: rotate(180deg);
+}
+
+.overview {
+  display: block;
+  color: var(--public-secondary);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
 .offers h4 {
-  margin: 0 0 0.4rem;
+  margin: 0;
   font-size: 1rem;
   font-weight: 700;
 }
@@ -19,7 +60,7 @@
   display: grid;
   gap: 0.875rem;
   margin: 0;
-  padding: 0;
+  padding: 0 0 0.875rem;
   list-style: none;
 }
 

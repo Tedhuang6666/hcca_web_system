@@ -1,4 +1,4 @@
-import { Gift } from "lucide-react";
+import { ChevronDown, Gift } from "lucide-react";
 import type { OrderOut, ShopPromotionPublicOut } from "@/lib/types";
 import { promotionGiftProducts } from "@/lib/shop-promotion-display";
 import styles from "./ProductDetailOffers.module.css";
@@ -54,50 +54,60 @@ export default function ProductDetailOffers({ product, promotions, registration,
     : "無法確認優惠與贈品狀態，請重新載入後再確認。";
 
   return <section className={styles.offers} aria-label="優惠與贈品">
-    <h4>優惠與贈品</h4>
-    <p className={styles.note}>依整筆登記擇優套用；下列折抵金額為整筆登記的優惠。</p>
+    <details key={product.id} className={styles.disclosure}>
+      <summary className={styles.summary}>
+        <h4>優惠與贈品
+          <span className={styles.overview}>
+            共 {matching.length + otherApplied.length} 項
+            {registrationState === "ready" && applied.length > 0 && ` · 已套用 ${applied.length} 項`}
+          </span>
+        </h4>
+        <ChevronDown size={18} aria-hidden="true" />
+      </summary>
+      <p className={styles.note}>依整筆登記擇優套用；下列折抵金額為整筆登記的優惠。</p>
+      <ul className={styles.list}>
+        {matching.map((promotion) => {
+          const allocation = applied.find((row) => row.promotion_id === promotion.id);
+          const giftProducts = promotionGiftProducts(promotion);
+          const isGift = giftProducts.some((row) => row.id === product.id);
+          const companions = promotion.target_products?.filter((target) => target.id !== product.id) ?? [];
+          const topic = "target_category_ids" in promotion && promotion.target_category_ids != null ? "單一主題" : "";
+          const conditions = [
+            promotion.min_order_price > 0 ? `${topic}滿 NT$${promotion.min_order_price.toLocaleString()}` : null,
+            promotion.min_quantity > 1 ? `${topic}滿 ${promotion.min_quantity} 件` : null,
+            promotion.code ? `使用優惠碼 ${promotion.code}` : "符合條件自動擇優套用",
+          ].filter(Boolean).join(" · ");
+          return <li key={promotion.id} aria-label={promotion.name} className={styles.offer} data-gift={isGift || undefined}>
+            <div className={styles.heading}>
+              <h5>{promotion.name}</h5>
+              {isGift && <span className={styles.giftLabel}><Gift size={15} aria-hidden="true" />贈品</span>}
+            </div>
+            {registrationState === "ready" && <p className={styles.state} data-applied={Boolean(allocation)}>
+              {isGift ? quantity === 0 ? "尚未登記贈品"
+                : `已登記 ${quantity} 件，${allocation ? "已套用贈品優惠" : "尚未套用贈品優惠"}`
+                : allocation ? "已套用" : "尚未套用"}
+            </p>}
+            {allocation && <p className={styles.saving}>本筆登記折抵 NT${allocation.discount_amount.toLocaleString()}</p>}
+            {isGift ? <>
+              <p className={styles.giftName}>贈品：{giftProducts.map((row) => row.name).join("、")}</p>
+              <p>符合條件時基本售價 NT$0；規格加價另計。</p>
+              <p>請選擇規格並登記，贈品不會自動加入；完成後請確認已套用贈品優惠。</p>
+            </> : <p>{offerDescription(promotion, product.id)}</p>}
+            {promotion.discount_type === "bundle_price" && <p>{promotion.target_products?.map((row) => row.name).join(" ＋ ")}</p>}
+            {promotion.discount_type !== "price_override" && promotion.discount_type !== "bundle_price" && companions.length > 0
+              && <p>需同時選購{companions.map((row) => row.name).join("、")}</p>}
+            <p>{conditions}</p>
+            {promotion.description && <p className="whitespace-pre-line">{promotion.description}</p>}
+          </li>;
+        })}
+        {otherApplied.map((row) => <li key={row.promotion_id} aria-label={row.name} className={styles.offer}>
+          <div className={styles.heading}><h5>{row.name}</h5></div>
+          <p className={styles.state} data-applied>已套用 · 同筆登記優惠</p>
+          <p className={styles.saving}>本筆登記折抵 NT${row.discount_amount.toLocaleString()}</p>
+          {row.code && <p>使用優惠碼 {row.code}</p>}
+        </li>)}
+      </ul>
+    </details>
     {registrationState !== "ready" && <p role="status" className={styles.note}>{pendingMessage}</p>}
-    <ul className={styles.list}>
-      {matching.map((promotion) => {
-        const allocation = applied.find((row) => row.promotion_id === promotion.id);
-        const giftProducts = promotionGiftProducts(promotion);
-        const isGift = giftProducts.some((row) => row.id === product.id);
-        const companions = promotion.target_products?.filter((target) => target.id !== product.id) ?? [];
-        const topic = "target_category_ids" in promotion && promotion.target_category_ids != null ? "單一主題" : "";
-        const conditions = [
-          promotion.min_order_price > 0 ? `${topic}滿 NT$${promotion.min_order_price.toLocaleString()}` : null,
-          promotion.min_quantity > 1 ? `${topic}滿 ${promotion.min_quantity} 件` : null,
-          promotion.code ? `使用優惠碼 ${promotion.code}` : "符合條件自動擇優套用",
-        ].filter(Boolean).join(" · ");
-        return <li key={promotion.id} aria-label={promotion.name} className={styles.offer} data-gift={isGift || undefined}>
-          <div className={styles.heading}>
-            <h5>{promotion.name}</h5>
-            {isGift && <span className={styles.giftLabel}><Gift size={15} aria-hidden="true" />贈品</span>}
-          </div>
-          {registrationState === "ready" && <p className={styles.state} data-applied={Boolean(allocation)}>
-            {isGift ? quantity === 0 ? "尚未登記贈品"
-              : `已登記 ${quantity} 件，${allocation ? "已套用贈品優惠" : "尚未套用贈品優惠"}`
-              : allocation ? "已套用" : "尚未套用"}
-          </p>}
-          {allocation && <p className={styles.saving}>本筆登記折抵 NT${allocation.discount_amount.toLocaleString()}</p>}
-          {isGift ? <>
-            <p className={styles.giftName}>贈品：{giftProducts.map((row) => row.name).join("、")}</p>
-            <p>符合條件時基本售價 NT$0；規格加價另計。</p>
-            <p>請選擇規格並登記，贈品不會自動加入；完成後請確認已套用贈品優惠。</p>
-          </> : <p>{offerDescription(promotion, product.id)}</p>}
-          {promotion.discount_type === "bundle_price" && <p>{promotion.target_products?.map((row) => row.name).join(" ＋ ")}</p>}
-          {promotion.discount_type !== "price_override" && promotion.discount_type !== "bundle_price" && companions.length > 0
-            && <p>需同時選購{companions.map((row) => row.name).join("、")}</p>}
-          <p>{conditions}</p>
-          {promotion.description && <p className="whitespace-pre-line">{promotion.description}</p>}
-        </li>;
-      })}
-      {otherApplied.map((row) => <li key={row.promotion_id} aria-label={row.name} className={styles.offer}>
-        <div className={styles.heading}><h5>{row.name}</h5></div>
-        <p className={styles.state} data-applied>已套用 · 同筆登記優惠</p>
-        <p className={styles.saving}>本筆登記折抵 NT${row.discount_amount.toLocaleString()}</p>
-        {row.code && <p>使用優惠碼 {row.code}</p>}
-      </li>)}
-    </ul>
   </section>;
 }

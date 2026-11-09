@@ -1866,6 +1866,9 @@
   }
 
   .shop-product-purchase-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
     padding-top: 0.75rem;
     border-radius: 0 0 1rem 1rem;
   }
