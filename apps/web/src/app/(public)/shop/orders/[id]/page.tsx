@@ -5,7 +5,7 @@ import OrderPromotionSummary from "@/components/shop/OrderPromotionSummary";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { ArrowLeft, Pencil } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { authApi, seatingApi, shopApi, apiErrorMessage } from "@/lib/api";
 import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 import type { SeatBookingOut, OrderListItem, OrderOut, ProductOut, ZoneListItem } from "@/lib/types";
@@ -61,12 +61,14 @@ export default function OrderDetailPage() {
     setUserRoom(userId ? `user:${userId}` : null);
   }, []);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (background = false) => {
+    if (!background) setLoading(true);
     setLoadError("");
     setRequiresLogin(false);
-    setProductImages({});
-    setDelegatedEditableItemIds(new Set());
+    if (!background) {
+      setProductImages({});
+      setDelegatedEditableItemIds(new Set());
+    }
     try {
       const user = await authApi.me().catch(() => null);
       if (!user) {
@@ -126,6 +128,8 @@ export default function OrderDetailPage() {
       setOrders(relatedOrders);
       setActivityPreorder(summary);
       const currentRegistration = currentRegistrations.find((registration) =>
+        relatedOrderIds.includes(registration.id) && !registration.is_paid && !registration.is_class_collected,
+      ) ?? currentRegistrations.find((registration) =>
         relatedOrderIds.includes(registration.id),
       ) ?? delegatedOrder?.order;
       setCurrentRegistrationId(currentRegistration?.id ?? null);
@@ -412,20 +416,11 @@ export default function OrderDetailPage() {
                     canEdit: canModifyRegistration && sourceOrder.id === currentRegistrationId
                       && editableProductIds.has(item.product_id)
                       && (currentUserId === sourceOrder.user_id || delegatedEditableItemIds.has(item.id)),
-                  })))} onChange={() => void load()} />
+                  })))} onChange={() => void load(true)} />
               </div>
             </div>
             <div className="shrink-0">
               <p className="shop-order-item-total">NT${it.subtotal.toLocaleString()}</p>
-              {currentRegistration?.user_id === currentUserId
-                && canModifyRegistration && editableProductIds.has(it.product_id) && (
-                <Link
-                  href={`/shop?product=${encodeURIComponent(it.product_id)}`}
-                  className="shop-order-edit"
-                  aria-label={`修改${it.product_name ?? "商品"}登記`}>
-                  <Pencil size={13} aria-hidden="true" />修改
-                </Link>
-              )}
             </div>
           </article>
         ))}

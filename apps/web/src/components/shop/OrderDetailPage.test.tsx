@@ -102,6 +102,16 @@ beforeEach(() => {
 });
 
 describe("公開訂單詳情", () => {
+  it("allows direct editing of the pending addition when a collected order appears first", async () => {
+    api.getCurrentRegistrations.mockResolvedValue([firstOrder, addedOrder]);
+    api.catalog.mockResolvedValue([{ id: "goods", products: [{ id: "bag", status: "active" }], series: [] }]);
+    api.getCloseStatus.mockResolvedValue({ statuses: { goods: { is_closed: false } } });
+    render(<OrderDetailPage />);
+    expect(await screen.findByText("尚未收款，可修改下方仍開放的商品。")).toBeVisible();
+    expect(screen.getAllByRole("spinbutton")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "修改尺寸／規格" })).toBeEnabled();
+  });
+
   it("shows a gift as free and keeps it out of the paid preorder and editing flow", async () => {
     const gift: OrderOut = { ...firstOrder, assistance_scope: "council_gift", total_price: 0,
       subtotal_price: 0, is_class_collected: false, notes: "抽獎中獎",

@@ -2760,6 +2760,7 @@ async def update_owned_order_item(
 ) -> OrderOut | None:
     codes = await get_user_permission_codes(session, current_user.id)
     is_order_manager = current_user.is_superuser or bool(_PAYMENT_WRITE_CODES & set(codes))
+    option_ids = payload.option_ids if "option_ids" in payload.model_fields_set else None
     if is_order_manager:
         order = await _get_order_or_404(order_id, session, current_user)
         try:
@@ -2768,6 +2769,7 @@ async def update_owned_order_item(
                 order,
                 item_id,
                 quantity=payload.quantity,
+                option_ids=option_ids,
             )
         except StaleDataError as error:
             raise HTTPException(status_code=409, detail="庫存已更新，請重新載入") from error
@@ -2786,8 +2788,11 @@ async def update_owned_order_item(
                 "serial_number": updated_order.serial_number,
                 "item_id": str(item_id),
                 "quantity": payload.quantity,
+                "option_ids": [str(value) for value in option_ids]
+                if option_ids is not None
+                else None,
             },
-            summary=f"調整商品訂單「{updated_order.serial_number}」品項數量",
+            summary=f"調整商品訂單「{updated_order.serial_number}」品項規格與數量",
         )
         refreshed = await shop_svc.get_order(session, updated_order.id)
         result = refreshed or updated_order
@@ -2801,6 +2806,7 @@ async def update_owned_order_item(
             order_id,
             item_id,
             payload.quantity,
+            option_ids=option_ids,
         )
     )
     return await _delegation_order_response(session, current_user, order)

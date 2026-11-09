@@ -58,6 +58,37 @@ beforeEach(() => {
   api.applyCurrentPromotion.mockResolvedValue(order);
 });
 
+it("replaces only the chosen variant, merges its destination and preserves other sources", async () => {
+  const variant = (id: string) => [{ group_id: "size", group_name: "尺寸", option_id: id, value: id, price_delta: 0 }];
+  const original: OrderOut = { ...order, items: [
+    { ...order.items[0], selected_options: variant("M"), quantity: 2 },
+    { ...order.items[0], id: "large", selected_options: variant("L"), quantity: 1 },
+    { ...order.items[0], id: "xl", selected_options: variant("XL"), quantity: 1 },
+    order.items[1],
+  ] };
+  const { result } = setup({ registrations: [original] });
+  await act(async () => { await result.current.saveVariant("shirt", ["L"], 2, "M"); });
+  expect(api.setCurrentRegistrationProduct).toHaveBeenCalledWith("shirt", { variants: [
+    { option_ids: ["XL"], quantity: 1 }, { option_ids: ["L"], quantity: 3 },
+  ] });
+});
+
+it("keeps collected variants during a replacement and rejects replacing a locked or stale source", async () => {
+  const variant = (id: string) => [{ group_id: "size", group_name: "尺寸", option_id: id, value: id, price_delta: 0 }];
+  const paid: OrderOut = { ...order, id: "paid", is_class_collected: true,
+    items: [{ ...order.items[0], selected_options: variant("L"), quantity: 2 }] };
+  const pending: OrderOut = { ...order,
+    items: [{ ...order.items[0], selected_options: variant("M"), quantity: 1 }] };
+  const { result } = setup({ registrations: [paid, pending] });
+  await expect(result.current.saveVariant("shirt", ["M"], 2, "L")).rejects.toThrow("必須保留");
+  await expect(result.current.saveVariant("shirt", ["L"], 1, "XL")).rejects.toThrow("原規格已變更");
+  expect(api.setCurrentRegistrationProduct).not.toHaveBeenCalled();
+  await act(async () => { await result.current.saveVariant("shirt", ["L"], 1, "M"); });
+  expect(api.setCurrentRegistrationProduct).toHaveBeenCalledWith("shirt", {
+    variants: [{ option_ids: ["L"], quantity: 3 }],
+  });
+});
+
 it("owns source selection for both the editable view and the submitted variants", async () => {
   const { result, rerender } = setup();
   expect(result.current.registration?.items.map((item) => item.id)).toEqual(["own"]);

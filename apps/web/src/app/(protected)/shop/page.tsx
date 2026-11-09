@@ -295,6 +295,7 @@ function ProductModal({
   const [selectedMediaIndex, setSelectedMediaIndex] = useState<number | null>(null);
   const [failedMediaUrl, setFailedMediaUrl] = useState<string | null>(null);
   const [qty, setQty] = useState(1);
+  const [editingVariant, setEditingVariant] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [productLoading, setProductLoading] = useState(true);
   const [productLoadError, setProductLoadError] = useState(false);
@@ -331,6 +332,7 @@ function ProductModal({
     variantSelectionTouchedRef.current = false;
     setSelectedMediaIndex(null);
     setQty(1);
+    setEditingVariant(null);
     setRegistrationUpdateMessage("");
     setRegistrationUpdateError(false);
     setProductLoading(true);
@@ -359,14 +361,14 @@ function ProductModal({
   }, [registration?.items]);
 
   useEffect(() => {
-    if (registrationUpdateInFlightRef.current) return;
+    if (registrationUpdateInFlightRef.current || editingVariant !== null) return;
     const signature = Object.values(picked).sort().join(",");
     const quantity = (registration?.items ?? [])
       .filter((item) => item.product_id === loadedProductId
         && registrationVariantKey(item.selected_options) === signature)
       .reduce((total, item) => total + item.quantity, 0);
     if (quantity > 0) setQty(quantity);
-  }, [registration?.items, loadedProductId, picked]);
+  }, [registration?.items, loadedProductId, picked, editingVariant]);
 
   useEffect(() => {
     if (!loadedProductId || variantSelectionTouchedRef.current) return;
@@ -455,7 +457,7 @@ function ProductModal({
     const registered = registeredItems
       .filter((item) => registrationVariantKey(item.selected_options) === nextKey)
       .reduce((total, item) => total + item.quantity, 0);
-    setQty(registered || 1);
+    if (editingVariant === null) setQty(registered || 1);
     setRegistrationUpdateMessage("");
   };
   const registeredQuantity = registeredItems.reduce((total, item) => total + item.quantity, 0);
@@ -463,15 +465,22 @@ function ProductModal({
   const selectedRegistrationQuantity = registeredItems
     .filter((item) => registrationVariantKey(item.selected_options) === selectedOptionIds.join(","))
     .reduce((total, item) => total + item.quantity, 0);
+  const editingQuantity = registeredItems.filter((item) =>
+    registrationVariantKey(item.selected_options) === editingVariant)
+    .reduce((total, item) => total + item.quantity, 0);
+  const registeredVariants = new Map<string, { item: typeof registeredItems[number]; quantity: number }>();
+  for (const item of registeredItems) {
+    const key = registrationVariantKey(item.selected_options);
+    registeredVariants.set(key, { item, quantity: (registeredVariants.get(key)?.quantity ?? 0) + item.quantity });
+  }
   const lockedSelectedQuantity = lockedVariantQuantities.get(selectedOptionIds.join(",")) ?? 0;
   const singlePurchase = product?.max_quantity_per_user === 1
     || (product?.purchase_allowed === false && registeredQuantity === 1);
   const replacingVariant = singlePurchase && registeredQuantity === 1
     && selectedRegistrationQuantity === 0
     && ![...lockedVariantQuantities.values()].some((quantity) => quantity > 0);
-  const minimumSelectedQuantity = Math.max(
-    lockedSelectedQuantity, selectedRegistrationQuantity > 0 ? 0 : 1,
-  );
+  const minimumSelectedQuantity = editingVariant !== null ? 1
+    : Math.max(lockedSelectedQuantity, selectedRegistrationQuantity > 0 ? 0 : 1);
   const remainingForUser = product?.max_quantity_per_user == null
     ? null
     : adjustingClassMember
@@ -490,7 +499,8 @@ function ProductModal({
   const maxSelectedQuantity = Math.max(
     0,
     Math.min(singlePurchase ? 1 : 100, maxSelectableQuantity)
-      - (replacingVariant ? 0 : registeredQuantity - selectedRegistrationQuantity),
+      - (editingVariant !== null ? registeredQuantity - editingQuantity
+        : replacingVariant ? 0 : registeredQuantity - selectedRegistrationQuantity),
   );
   const deadline = product ? productDeadline(product) : null;
   const testing = product?.status === "testing";
@@ -577,16 +587,19 @@ function ProductModal({
       const key = [...optionIds].sort().join(",");
       const wasRegistered = registeredItems.some((item) =>
         registrationVariantKey(item.selected_options) === key && item.quantity > 0);
-      const saved = await saveVariant(product.id, optionIds, quantity, replacingVariant && quantity > 0);
+      const saved = await saveVariant(product.id, optionIds, quantity,
+        editingVariant ?? (replacingVariant && quantity > 0));
       if (activeProductRef.current !== product.id) return false;
       if (!saved) {
         setRegistrationUpdateError(true);
         setRegistrationUpdateMessage("尚未確認登記結果，請先重新載入頁面並查看我的預購。");
         return false;
       }
-      if (saved.added) onProductAdded();
+      if (saved.added && editingVariant === null) onProductAdded();
+      const wasEditing = editingVariant !== null;
+      setEditingVariant(null);
       if (key === selectedOptionIds.join(",")) setQty(quantity > 0 ? quantity : 1);
-      setRegistrationUpdateMessage(quantity > 0
+      setRegistrationUpdateMessage(wasEditing ? "已儲存尺寸／規格與數量，其他登記已保留。" : quantity > 0
         ? wasRegistered ? `已更新為 ${quantity} 件。` : `已登記 ${quantity} 件。`
         : "已從登記移除這個規格。");
       return true;
@@ -603,7 +616,7 @@ function ProductModal({
   };
 
   const changeSelectedQuantity = (quantity: number) => {
-    if (selectedRegistrationQuantity > 0 || lockedSelectedQuantity > 0) {
+    if (editingVariant === null && (selectedRegistrationQuantity > 0 || lockedSelectedQuantity > 0)) {
       void setVariantQuantity(selectedOptionIds, quantity);
       return;
     }
@@ -785,6 +798,26 @@ function ProductModal({
                   registrationState={authLoading || classStatusLoading ? "loading" : registrationLoadError ? "error" : "ready"} />
                 {!bundleStep && bundleAddOn?.(loading || !canEdit)}
 
+                {!bundleStep && registeredVariants.size > 0 && <section className="shop-registered-variants" aria-label="已登記的規格">
+                  <h4>已登記的規格</h4>
+                  <ul>{[...registeredVariants].map(([key, { item, quantity }]) => <li key={key}>
+                    <span>{item.selected_options.map((option) => option.value).join("／") || "一般規格"} × {quantity}</span>
+                    {(lockedVariantQuantities.get(key) ?? 0) > 0
+                      ? <span>含已收款品項，規格已鎖定</span>
+                      : <button type="button" className="shop-product-retry" disabled={!canEdit || loading}
+                        data-edit-variant={key}
+                        aria-pressed={editingVariant === key} onClick={() => {
+                          variantSelectionTouchedRef.current = true;
+                          setEditingVariant(key);
+                          setPicked(Object.fromEntries(item.selected_options.map((option) => [option.group_id, option.option_id])));
+                          setQty(quantity);
+                          setRegistrationUpdateMessage("");
+                          requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>(".shop-product-option")?.focus());
+                        }}>修改尺寸／規格與數量</button>}
+                  </li>)}</ul>
+                  {editingVariant !== null && <p role="status">正在修改這項登記；選好尺寸／規格與數量後，按「儲存修改」。</p>}
+                </section>}
+
                 {variantGroups.map((g) => (
                   <div key={g.id} className="shop-product-dialog-section">
                     <label>{g.name}</label>
@@ -885,6 +918,26 @@ function ProductModal({
                           ? "班聯已確認本班收款"
                           : "登記已截止"}
                     </button>
+                  ) : editingVariant !== null ? (
+                    <>
+                      <button type="button" className="shop-product-submit"
+                        disabled={loading || !canRegister || !allPicked || qty > maxSelectedQuantity}
+                        aria-busy={loading} onClick={() => void submit()}>
+                        {loading ? "儲存中…" : "儲存修改"}
+                      </button>
+                      <button type="button" className="shop-product-cancel" disabled={loading}
+                        onClick={() => {
+                          const original = registeredVariants.get(editingVariant);
+                          if (original) {
+                            setPicked(Object.fromEntries(original.item.selected_options.map((option) => [option.group_id, option.option_id])));
+                            setQty(original.quantity);
+                          }
+                          setEditingVariant(null);
+                          setRegistrationUpdateMessage("");
+                          requestAnimationFrame(() => Array.from(dialogRef.current?.querySelectorAll<HTMLButtonElement>("[data-edit-variant]") ?? [])
+                            .find((button) => button.dataset.editVariant === editingVariant)?.focus());
+                        }}>取消修改</button>
+                    </>
                   ) : product.purchase_allowed === false && isLoggedIn && selectedRegistrationQuantity === 0 && !replacingVariant ? (
                     <button type="button" className="shop-product-submit" disabled>不符合購買資格</button>
                   ) : bundleStep && isLoggedIn ? (
@@ -932,13 +985,13 @@ function ProductModal({
                       登入後登記商品
                     </Link>
                   )}
-                  <button
+                  {editingVariant === null && <button
                     type="button"
                     onClick={onClose}
                     disabled={loading}
                     className="shop-product-cancel">
                     {selectedRegistrationQuantity > 0 ? "完成" : "取消"}
-                  </button>
+                  </button>}
                 </div>
                 {bundleStep && !allPicked && <p className="shop-product-step-hint">
                   請先選擇{variantGroups.filter((group) => !picked[group.id]).map((group) => group.name).join("、")}，再繼續下一步。

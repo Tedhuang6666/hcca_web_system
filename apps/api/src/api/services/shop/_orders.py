@@ -1333,6 +1333,7 @@ async def update_order_item_quantity(
     item_id: uuid.UUID,
     *,
     quantity: int,
+    option_ids: list[uuid.UUID] | None = None,
 ) -> Order:
     await _lock_class_orders(session, order.class_id)
     await session.execute(select(User.id).where(User.id == order.user_id).with_for_update())
@@ -1371,6 +1372,15 @@ async def update_order_item_quantity(
     )
     if product is None:
         raise ValueError("找不到此商品")
+
+    selected = None
+    if option_ids is not None and quantity > 0:
+        if len(set(option_ids)) != len(option_ids):
+            raise ValueError("同一規格不能重複選擇選項")
+        full_product = await get_product(session, product.id)
+        if full_product is None:
+            raise ValueError("找不到此商品")
+        selected = _resolve_selected_options(full_product, option_ids)
 
     delta = quantity - item.quantity
     if delta > 0:
@@ -1415,6 +1425,9 @@ async def update_order_item_quantity(
         await session.delete(item)
     else:
         item.quantity = quantity
+        if selected is not None:
+            item.selected_options = selected
+            item.unit_price = product.price + _options_delta(selected)
 
     order.subtotal_price = sum(row.quantity * row.unit_price for row in order.items)
     await _apply_order_promotion(session, order, code=order.promotion_code)

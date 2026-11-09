@@ -575,6 +575,7 @@ class ShopDelegationPromotionUpdate(ShopDelegationAccess):
 
 class OrderItemQuantityUpdate(BaseModel):
     quantity: int = Field(ge=0, le=100)
+    option_ids: list[uuid.UUID] = Field(default_factory=list, max_length=100)
 
 
 class OrderCreate(BaseModel):

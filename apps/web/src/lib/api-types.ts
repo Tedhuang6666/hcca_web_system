@@ -22210,6 +22210,8 @@ export interface components {
         };
         /** OrderItemQuantityUpdate */
         OrderItemQuantityUpdate: {
+            /** Option Ids */
+            option_ids?: string[];
             /** Quantity */
             quantity: number;
         };

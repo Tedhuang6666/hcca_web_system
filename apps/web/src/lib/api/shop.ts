@@ -1,5 +1,6 @@
 import type {
   AdminAssistedOrderCreate,
+  OrderItemQuantityUpdate,
   ChangedOrderReceiptCreate,
   ClassReceiptBatchCreate,
   ClassMemberOut,
@@ -57,6 +58,8 @@ export const shopApi = {
     post<OrderOut>("/shop/delegation/promotion", { token, code }),
   updateOrderItemQuantity: (orderId: string, itemId: string, quantity: number) =>
     patch<OrderOut | null>(`/shop/orders/${orderId}/items/${itemId}`, { quantity }),
+  updateOrderItem: (orderId: string, itemId: string, body: OrderItemQuantityUpdate) =>
+    patch<OrderOut | null>(`/shop/orders/${orderId}/items/${itemId}`, body),
   // 瀏覽
   catalog: (activityId?: string, includeClosed = false, directPath?: string[], classMemberId?: string) => {
     const q = new URLSearchParams();

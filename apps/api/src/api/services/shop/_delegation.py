@@ -428,7 +428,13 @@ async def preview(
 
 
 async def update_owned_item(
-    session: AsyncSession, user: User, order_id: uuid.UUID, item_id: uuid.UUID, quantity: int
+    session: AsyncSession,
+    user: User,
+    order_id: uuid.UUID,
+    item_id: uuid.UUID,
+    quantity: int,
+    *,
+    option_ids: list[uuid.UUID] | None = None,
 ) -> Order | None:
     order = await _orders.get_order(session, order_id)
     if order is None:
@@ -466,9 +472,21 @@ async def update_owned_item(
         category_id=order.category_id,
         match_activity=True,
         lock=True,
+        editable_only=True,
     )
     if current is None or current.id != order.id:
         raise DelegationError("此訂單已無法修改", 409)
+    if option_ids is not None and quantity > 0:
+        await _orders._assert_buyer_eligible(session, owner)
+        product = await _catalog.get_product(session, item.product_id)
+        if product is None:
+            raise DelegationError("找不到此商品", 404)
+        await _orders._assert_product_registration_open(
+            session, product, class_id=order.class_id, allow_sold_out=True
+        )
+        return await _orders.update_order_item_quantity(
+            session, order, item.id, quantity=quantity, option_ids=option_ids
+        )
     variants = [
         RegistrationVariantCreate(
             option_ids=[uuid.UUID(str(o["option_id"])) for o in row.selected_options],

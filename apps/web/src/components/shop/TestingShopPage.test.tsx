@@ -56,6 +56,41 @@ const formalOrder: OrderOut = {
     unit_price: 100, subtotal: 200, selected_options: [] }],
 };
 
+it("一般商品可直接替換指定尺寸並一次儲存數量，其他規格保留", async () => {
+  const option = (id: string) => ({ group_id: "size", group_name: "尺寸", option_id: id, value: id, price_delta: 0 });
+  const original: OrderOut = { ...formalOrder, items: [
+    { ...formalOrder.items[0], selected_options: [option("M")] },
+    { ...formalOrder.items[0], id: "xl", quantity: 1, subtotal: 100, selected_options: [option("XL")] },
+  ] };
+  const changed: OrderOut = { ...original, items: [original.items[1],
+    { ...original.items[0], selected_options: [option("L")], quantity: 3, subtotal: 300 }] };
+  api.me.mockResolvedValue({ id: "tester", student_id: "310001" });
+  api.getCurrentRegistrations.mockResolvedValue([original]);
+  api.getProduct.mockResolvedValue({ ...formalProduct, variant_groups: [{ id: "size", name: "尺寸",
+    options: ["M", "L", "XL"].map((id) => ({ id, value: id, is_active: true, price_delta: 0 })) }], media: [] });
+  api.setCurrentRegistrationProduct.mockRejectedValueOnce(new Error("更新失敗，請重試"))
+    .mockResolvedValueOnce(changed);
+  render(<ShopPage />);
+  fireEvent.click(await screen.findByRole("link", { name: "查看商品：正式商品" }));
+  const variants = await screen.findByRole("region", { name: "已登記的規格" });
+  const row = within(variants).getByText("M × 2").closest("li")!;
+  fireEvent.click(within(row).getByRole("button", { name: "修改尺寸／規格與數量" }));
+  fireEvent.click(screen.getByRole("button", { name: "L" }));
+  fireEvent.click(screen.getByRole("button", { name: "增加數量" }));
+  expect(api.setCurrentRegistrationProduct).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "儲存修改" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("更新失敗，請重試");
+  expect(within(variants).getByText("M × 2")).toBeVisible();
+  expect(screen.getByRole("button", { name: "L" })).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(screen.getByRole("button", { name: "儲存修改" }));
+  await waitFor(() => expect(api.setCurrentRegistrationProduct).toHaveBeenLastCalledWith("formal", {
+    variants: [{ option_ids: ["XL"], quantity: 1 }, { option_ids: ["L"], quantity: 3 }],
+  }));
+  expect(await within(variants).findByText("L × 3")).toBeVisible();
+  expect(within(variants).getByText("XL × 1")).toBeVisible();
+  expect(within(variants).queryByText("M × 2")).not.toBeInTheDocument();
+});
+
 it("商品詳情逐筆列出同筆登記已套用的自動優惠與優惠碼", async () => {
   api.getCurrentRegistrations.mockResolvedValue([{ ...formalOrder, promotion_code: "SAVE",
     discount_amount: 30, total_price: 170, applied_promotions: [

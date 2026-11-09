@@ -2814,6 +2814,70 @@
 
 .shop-order-item-sources input {
   max-width: 7rem;
+  font-size: 1rem;
+}
+
+.shop-order-item-form {
+  display: grid;
+  gap: 0.75rem;
+  margin-block: 0.75rem 1.25rem;
+}
+
+.shop-order-variant-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+}
+
+.shop-order-variant-fields legend {
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.shop-order-variant-fields p {
+  grid-column: 1 / -1;
+}
+
+.shop-order-variant-fields select {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 0.35rem;
+  padding: 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 1rem;
+}
+
+.shop-registered-variants {
+  margin-block: 1rem;
+  padding-block: 1rem;
+  border-block: 1px solid var(--border);
+  font-size: 0.875rem;
+}
+
+.shop-registered-variants ul {
+  margin-block: 0.5rem;
+  padding: 0;
+  list-style: none;
+}
+
+.shop-registered-variants li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.shop-registered-variants li button {
+  min-height: 44px;
 }
 
 /* 商品頁沿用公開站色彩，以照片、名稱與價格建立閱讀順序。 */
