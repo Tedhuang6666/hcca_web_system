@@ -315,7 +315,12 @@ async def sync_source(session: AsyncSession, source_id: uuid.UUID) -> ShopSheetS
         raise LookupError("找不到此匯入來源")
     config = ShopSheetConfig.model_validate(source.config)
     try:
-        values = await read_sheet(source.spreadsheet_id, source.sheet_name, config.max_rows)
+        if config.public_sheet_id is None:
+            values = await read_sheet(source.spreadsheet_id, source.sheet_name, config.max_rows)
+        else:
+            values = await read_sheet(
+                source.spreadsheet_id, source.sheet_name, config.max_rows, config.public_sheet_id
+            )
         result = await import_rows(session, source, values)
         source.last_error = None
         source.last_synced_at = datetime.now(UTC)

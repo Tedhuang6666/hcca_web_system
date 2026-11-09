@@ -31281,6 +31281,11 @@ export interface components {
             product_columns?: {
                 [key: string]: string;
             };
+            /**
+             * Public Sheet Id
+             * @description 已開放連結讀取的分頁 gid；指定時以匿名唯讀 CSV 匯出讀取
+             */
+            public_sheet_id?: number | null;
         };
         /** ShopSheetEnabledUpdate */
         ShopSheetEnabledUpdate: {

@@ -1,6 +1,8 @@
-"""以服務帳號唯讀存取 Sheets；認證與同步 HTTP 均不阻塞 event loop。"""
+"""以公開 CSV 或服務帳號唯讀存取 Sheets，不阻塞 event loop。"""
 
 import asyncio
+import csv
+import io
 from functools import partial
 from urllib.parse import quote
 
@@ -9,6 +11,52 @@ import httpx
 
 class SheetReadError(RuntimeError):
     pass
+
+
+_MAX_PUBLIC_BYTES = 8 * 1024 * 1024
+
+
+async def _read_public_sheet_csv(
+    spreadsheet_id: str, sheet_id: int, max_rows: int
+) -> list[list[str]]:
+    """CSV 匯出保留數量與尺寸混用的文字；不透過會推斷欄位型別的圖表查詢。"""
+    url = httpx.URL(
+        f"https://docs.google.com/spreadsheets/d/{quote(spreadsheet_id, safe='')}/export",
+        params={"format": "csv", "gid": str(sheet_id)},
+    )
+    async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
+        for _attempt in range(4):
+            async with client.stream("GET", url) as response:
+                if response.is_redirect:
+                    url = response.url.join(response.headers.get("location", ""))
+                    host = url.host or ""
+                    if url.scheme != "https" or not (
+                        host == "docs.google.com" or host.endswith(".googleusercontent.com")
+                    ):
+                        raise SheetReadError("公開分頁無法唯讀匯出，請確認連結讀取權限")
+                    continue
+                response.raise_for_status()
+                if "text/csv" not in response.headers.get("content-type", "").lower():
+                    raise SheetReadError("Google 未回傳 CSV，請確認公開分頁 ID 與連結讀取權限")
+                data = bytearray()
+                async for chunk in response.aiter_bytes():
+                    data.extend(chunk)
+                    if len(data) > _MAX_PUBLIC_BYTES:
+                        raise SheetReadError("公開分頁超過 8 MiB，請分割來源")
+                rows = []
+                try:
+                    for row in csv.reader(io.StringIO(data.decode("utf-8-sig")), strict=True):
+                        while row and not row[-1].strip():
+                            row.pop()
+                        if len(row) > 100:
+                            raise SheetReadError("公開分頁超過 100 欄，請分割來源")
+                        rows.append(row)
+                        if len(rows) > max_rows:
+                            raise SheetReadError("公開分頁超過設定列數上限，請分割來源")
+                except (UnicodeError, csv.Error) as exc:
+                    raise SheetReadError("公開分頁 CSV 格式不正確，無法安全匯入") from exc
+                return rows
+    raise SheetReadError("公開分頁重新導向次數過多，請確認來源連結")
 
 
 def _access_token() -> str:
@@ -22,8 +70,12 @@ def _access_token() -> str:
     return credentials.token
 
 
-async def read_sheet(spreadsheet_id: str, sheet_name: str, max_rows: int) -> list[list[str]]:
+async def read_sheet(
+    spreadsheet_id: str, sheet_name: str, max_rows: int, public_sheet_id: int | None = None
+) -> list[list[str]]:
     try:
+        if public_sheet_id is not None:
+            return await _read_public_sheet_csv(spreadsheet_id, public_sheet_id, max_rows)
         token = await asyncio.to_thread(_access_token)
         base = f"https://sheets.googleapis.com/v4/spreadsheets/{quote(spreadsheet_id, safe='')}"
         async with httpx.AsyncClient(

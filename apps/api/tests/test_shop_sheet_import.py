@@ -333,3 +333,19 @@ async def test_external_order_uses_existing_payment_cancel_and_quantity_flows(
         await importer.import_rows(db_session, source, [HEADERS, row(size="L1", umbrellas="0")])
     ).skipped == 1
     assert (await manager.get(f"/shop/orders/{order_id}")).json()["status"] == "cancelled"
+
+
+async def test_public_sheet_gid_is_passed_to_reader_without_changing_import_flow(
+    db_session, catalog, monkeypatch
+):
+    source, _products = catalog
+    source.config = {**source.config, "public_sheet_id": 0}
+
+    async def public_read(*args):
+        assert args == (source.spreadsheet_id, source.sheet_name, 10000, 0)
+        return [HEADERS, row()]
+
+    monkeypatch.setattr(importer, "read_sheet", public_read)
+    assert (await importer.sync_source(db_session, source.id)).imported == 1
+    order = await db_session.scalar(select(Order))
+    assert order.status == OrderStatus.CONFIRMED and not order.is_paid

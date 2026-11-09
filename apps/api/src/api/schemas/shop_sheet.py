@@ -12,6 +12,9 @@ Column = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, m
 class ShopSheetConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    public_sheet_id: int | None = Field(
+        None, ge=0, description="已開放連結讀取的分頁 gid；指定時以匿名唯讀 CSV 匯出讀取"
+    )
     identity_column: Column = "時間戳記"
     name_column: Column = "姓名"
     email_column: Column = "電子郵件地址"

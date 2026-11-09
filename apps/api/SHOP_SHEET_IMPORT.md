@@ -6,6 +6,14 @@
 
 ## 啟用前的環境設定
 
+來源若原本已允許連結讀取，可在 `config.public_sheet_id` 指定已核對的分頁 `gid`，
+以匿名唯讀 CSV 匯出讀取，不需要 Google 服務帳號。此設定不會變更來源分享權限；
+分頁 ID 可從網址的 `gid` 或 Google Sheets metadata 取得，不可用工作表順序猜測。
+CSV 保留同欄數字與尺寸文字，最多 100 個資料欄、10,000 列、8 MiB；超限整次停止。
+Google 匯出重新導向只接受 Google 文件及匯出內容主機，不會帶入任何認證。
+
+未設定 `public_sheet_id` 的私人試算表沿用以下唯讀認證：
+
 1. 在核准的部署流程套用 Alembic migration `20261109220000`。
 2. 啟用 Google Sheets API，讓專用 Google 服務帳號以「檢視者」權限讀取來源試算表。
 3. API 與 default queue worker 均須具有 Application Default Credentials。
