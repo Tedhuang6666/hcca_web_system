@@ -10,6 +10,7 @@ export const emptyPurchaseRules: PurchaseRulesDraft = {
   allowed_grades: [], required_permissions: [], allowed_identifiers: [], blocked_identifiers: [],
   exclusive_group: null, designated_only: false,
   exclusive_product_ids: [],
+  identifier_notes: {},
 };
 
 export default function ProductPurchaseRulesEditor({ value, onChange, activityId, categoryId, productId, disabled }: {
@@ -113,11 +114,17 @@ export default function ProductPurchaseRulesEditor({ value, onChange, activityId
         </li>)}
       </ul>}
     </div>
-    <ShopTargetPicker label="允許購買名單" value={value.allowed_identifiers} activityId={activityId} disabled={disabled}
-      onChange={(identifiers) => onChange({ ...value, allowed_identifiers: identifiers })}
+    <ShopTargetPicker label="允許購買名單" value={value.allowed_identifiers} activityId={activityId} productId={productId} disabled={disabled}
+      notes={value.identifier_notes} onNotesChange={(identifier_notes) => onChange({ ...value, identifier_notes })}
+      onChange={(identifiers) => onChange({ ...value, allowed_identifiers: identifiers,
+        identifier_notes: Object.fromEntries(Object.entries(value.identifier_notes).filter(([key]) => identifiers.includes(key) || value.blocked_identifiers.includes(key))),
+      })}
       help="填寫後只有名單中的學生能購買；學號可預先指定。指定票種的名單留空時，暫無人可購買。" />
-    <ShopTargetPicker label="禁止購買名單" value={value.blocked_identifiers} activityId={activityId} disabled={disabled}
-      onChange={(identifiers) => onChange({ ...value, blocked_identifiers: identifiers })}
+    <ShopTargetPicker label="禁止購買名單" value={value.blocked_identifiers} activityId={activityId} productId={productId} disabled={disabled}
+      notes={value.identifier_notes} onNotesChange={(identifier_notes) => onChange({ ...value, identifier_notes })}
+      onChange={(identifiers) => onChange({ ...value, blocked_identifiers: identifiers,
+        identifier_notes: Object.fromEntries(Object.entries(value.identifier_notes).filter(([key]) => identifiers.includes(key) || value.allowed_identifiers.includes(key))),
+      })}
       help="即使符合年級、權限或允許名單，仍無法購買此商品。例如：在一般票加入已指定表演票的人員。" />
     <p className="text-xs" style={{ color: "var(--text-secondary)" }}>儲存後立即限制新購與加購；已成立的訂單會保留，仍可減少數量或取消。名單僅商品管理者可查看。</p>
   </fieldset>;

@@ -68,3 +68,70 @@ it("搜尋無結果有下一步，較舊的搜尋回應不會覆蓋新結果", a
   await act(async () => finishOld(people));
   expect(screen.queryByRole("button", { name: /加入 測試同名/ })).not.toBeInTheDocument();
 });
+
+function ProductPicker({ initialNotes = {}, identifiers = ["310001", "310002"] }: {
+  initialNotes?: Record<string, string>; identifiers?: string[];
+}) {
+  const [value, setValue] = useState(identifiers);
+  const [notes, setNotes] = useState(initialNotes);
+  return <><ShopTargetPicker label="商品允許名單" value={value} onChange={setValue} productId="product"
+    notes={notes} onNotesChange={setNotes} help="商品名單" />
+    <output data-testid="notes">{JSON.stringify(notes)}</output></>;
+}
+
+it("依此商品訂購狀態篩選，單筆與批次備註只影響勾選人員", async () => {
+  api.lookupTargets.mockResolvedValue(people.map((person, index) => ({ ...person, has_ordered: index === 0 })));
+  render(<ProductPicker initialNotes={{ "310001": "原備註" }} />);
+  expect(await screen.findByText("已訂購")).toBeVisible();
+  expect(screen.getByText("未訂購")).toBeVisible();
+  expect(api.lookupTargets).toHaveBeenCalledWith({ activity_id: null, product_id: "product", keyword: "", identifiers: ["310001", "310002"] });
+  fireEvent.change(screen.getByRole("textbox", { name: "商品允許名單：310002 的備註" }), { target: { value: "個別備註" } });
+  fireEvent.click(screen.getByText("批次編輯備註"));
+  fireEvent.click(screen.getByRole("checkbox", { name: "勾選目前篩選結果（2 人）" }));
+  fireEvent.change(screen.getByRole("combobox", { name: "訂購狀態" }), { target: { value: "ordered" } });
+  expect(screen.getByText(/已勾選 0 人/)).toBeVisible();
+  expect(screen.queryByRole("textbox", { name: "商品允許名單：310002 的備註" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("checkbox", { name: "勾選目前篩選結果（1 人）" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "批次備註（每人最多 500 字）" }), { target: { value: "已聯絡" } });
+  fireEvent.click(screen.getByRole("button", { name: "套用至勾選人員" }));
+  expect(JSON.parse(screen.getByTestId("notes").textContent!)).toEqual({ "310001": "原備註\n已聯絡", "310002": "個別備註" });
+  fireEvent.change(screen.getByRole("combobox", { name: "訂購狀態" }), { target: { value: "unordered" } });
+  fireEvent.click(screen.getByRole("checkbox", { name: "勾選目前篩選結果（1 人）" }));
+  fireEvent.change(screen.getByRole("combobox", { name: "備註套用方式" }), { target: { value: "replace" } });
+  fireEvent.change(screen.getByRole("textbox", { name: "批次備註（每人最多 500 字）" }), { target: { value: "取代備註" } });
+  fireEvent.click(screen.getByRole("button", { name: "套用至勾選人員" }));
+  expect(JSON.parse(screen.getByTestId("notes").textContent!)["310002"]).toBe("取代備註");
+  fireEvent.click(screen.getByRole("checkbox", { name: "勾選目前篩選結果（1 人）" }));
+  fireEvent.click(screen.getByRole("button", { name: "清除勾選人員備註" }));
+  expect(JSON.parse(screen.getByTestId("notes").textContent!)).toEqual({ "310001": "原備註\n已聯絡" });
+});
+
+it("核對失敗不誤標未訂購，重試後可顯示篩選空狀態", async () => {
+  api.lookupTargets.mockRejectedValueOnce(new Error("offline"));
+  render(<ProductPicker />);
+  expect(await screen.findByRole("alert")).toBeVisible();
+  expect(screen.queryByText("未訂購")).not.toBeInTheDocument();
+  expect(screen.getByRole("combobox", { name: "訂購狀態" })).toBeDisabled();
+  api.lookupTargets.mockResolvedValue(people.map((person) => ({ ...person, has_ordered: true })));
+  fireEvent.click(screen.getByRole("button", { name: "重新核對" }));
+  await waitFor(() => expect(screen.getByRole("combobox", { name: "訂購狀態" })).toBeEnabled());
+  fireEvent.change(screen.getByRole("combobox", { name: "訂購狀態" }), { target: { value: "unordered" } });
+  expect(screen.getByText(/此狀態沒有符合的人員/)).toBeVisible();
+});
+
+it("批次附加超長時保留所有原備註，超過首批 50 人也能完整套用", async () => {
+  const identifiers = Array.from({ length: 51 }, (_, index) => String(310001 + index));
+  api.lookupTargets.mockImplementation(async ({ identifiers }: { identifiers: string[] }) => identifiers.map((identifier) => ({ identifier, has_ordered: false })));
+  render(<ProductPicker identifiers={identifiers} initialNotes={{ "310001": "字".repeat(499) }} />);
+  await waitFor(() => expect(screen.getByRole("combobox", { name: "訂購狀態" })).toBeEnabled());
+  fireEvent.click(screen.getByText("批次編輯備註"));
+  fireEvent.click(screen.getByRole("checkbox", { name: "勾選目前篩選結果（51 人）" }));
+  const input = screen.getByRole("textbox", { name: "批次備註（每人最多 500 字）" });
+  fireEvent.change(input, { target: { value: "新備註" } });
+  fireEvent.click(screen.getByRole("button", { name: "套用至勾選人員" }));
+  expect(screen.getByText(/附加後有備註超過 500 字/)).toBeVisible();
+  expect(Object.keys(JSON.parse(screen.getByTestId("notes").textContent!))).toHaveLength(1);
+  fireEvent.change(screen.getByRole("combobox", { name: "備註套用方式" }), { target: { value: "replace" } });
+  fireEvent.click(screen.getByRole("button", { name: "套用至勾選人員" }));
+  expect(Object.values(JSON.parse(screen.getByTestId("notes").textContent!))).toEqual(Array(51).fill("新備註"));
+});

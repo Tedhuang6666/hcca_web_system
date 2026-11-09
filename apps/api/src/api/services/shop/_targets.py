@@ -1,17 +1,21 @@
 """以現有人員與帳號核對名單，不在查詢時建立或修改人員資料。"""
 
+from uuid import UUID
+
 from sqlalchemy import and_, func, literal, or_, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.search import like_contains
 from api.models.person import Person
 from api.models.school_class import ClassRosterEntry, SchoolClass
+from api.models.shop import Order, OrderItem, OrderStatus
 from api.models.user import User
 from api.schemas.shop_targets import ShopTargetOut
+from api.services.student_identity_rules import SCHOOL_EMAIL_DOMAIN, student_id_from_school_email
 
 
 async def lookup_targets(
-    session: AsyncSession, *, keyword: str, identifiers: list[str]
+    session: AsyncSession, *, keyword: str, identifiers: list[str], product_id: UUID | None = None
 ) -> list[ShopTargetOut]:
     identifiers = list(
         dict.fromkeys(value.strip().lower() for value in identifiers if value.strip())
@@ -101,10 +105,67 @@ async def lookup_targets(
             option.seat_number = entry.seat_number
 
     if identifiers:
-        return [
+        result = [
             options[value].model_copy(update={"identifier": value})
             if value in options
             else ShopTargetOut(identifier=value)
             for value in identifiers
         ]
-    return list({option.identifier: option for option in options.values()}.values())
+    else:
+        result = list({option.identifier: option for option in options.values()}.values())
+    if product_id is not None and result:
+        await _attach_order_status(session, result, product_id)
+    return result
+
+
+async def _attach_order_status(
+    session: AsyncSession, targets: list[ShopTargetOut], product_id: UUID
+) -> None:
+    identifiers = {
+        identifier.lower()
+        for target in targets
+        for identifier in (target.identifier, target.student_id, target.email)
+        if identifier
+    }
+    # 學校帳號尚未綁人員檔時，也能以學號找到已成立的本人／代訂訂單。
+    school_emails = {
+        f"g0{identifier}@{SCHOOL_EMAIL_DOMAIN}"
+        for identifier in identifiers
+        if "@" not in identifier
+    }
+    rows = await session.execute(
+        select(User.email, User.student_id, Person.student_id)
+        .select_from(OrderItem)
+        .join(Order, Order.id == OrderItem.order_id)
+        .join(User, User.id == Order.user_id)
+        .outerjoin(Person, Person.user_id == User.id)
+        .where(
+            OrderItem.product_id == product_id,
+            OrderItem.quantity > 0,
+            Order.status.in_([OrderStatus.PENDING, OrderStatus.CONFIRMED]),
+            Order.test_product_id.is_(None),
+            or_(
+                func.lower(User.email).in_(identifiers | school_emails),
+                User.student_id.in_(identifiers),
+                Person.student_id.in_(identifiers),
+            ),
+        )
+        .distinct()
+    )
+    ordered = {
+        identifier.lower()
+        for email, user_student_id, person_student_id in rows
+        for identifier in (
+            email,
+            user_student_id,
+            person_student_id,
+            student_id_from_school_email(email),
+        )
+        if identifier
+    }
+    for target in targets:
+        target.has_ordered = any(
+            identifier.lower() in ordered
+            for identifier in (target.identifier, target.student_id, target.email)
+            if identifier
+        )

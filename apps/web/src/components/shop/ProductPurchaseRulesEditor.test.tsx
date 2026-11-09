@@ -23,7 +23,7 @@ it("設定年級、權限、名單、限購群組與指定票種模式", async (
   fireEvent.click(screen.getByLabelText("指定票種（僅名單可買，並鎖定同組其他商品）"));
   expect(JSON.parse(screen.getByTestId("rules").textContent!)).toEqual({
     allowed_grades: [3], required_permissions: ["shop:manage"], allowed_identifiers: ["310001", "student@example.test"],
-    blocked_identifiers: ["310002", "310003"], exclusive_group: null, exclusive_product_ids: ["show", "work", "general"], designated_only: true,
+    blocked_identifiers: ["310002", "310003"], identifier_notes: {}, exclusive_group: null, exclusive_product_ids: ["show", "work", "general"], designated_only: true,
   });
   fireEvent.click(screen.getByRole("button", { name: "移除權限 shop:manage" }));
   expect(JSON.parse(screen.getByTestId("rules").textContent!).required_permissions).toEqual([]);

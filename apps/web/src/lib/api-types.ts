@@ -25837,6 +25837,13 @@ export interface components {
              * @description 同主題內合計限購一件的商品；包含本商品
              */
             exclusive_product_ids?: string[];
+            /**
+             * Identifier Notes
+             * @description 名單內人員的內部備註，僅商品管理者可查看
+             */
+            identifier_notes?: {
+                [key: string]: string;
+            };
             /** Required Permissions */
             required_permissions?: string[];
         };
@@ -31136,6 +31143,8 @@ export interface components {
              * @default
              */
             keyword: string;
+            /** Product Id */
+            product_id?: string | null;
         };
         /** ShopTargetOut */
         ShopTargetOut: {
@@ -31147,6 +31156,11 @@ export interface components {
             display_name?: string | null;
             /** Email */
             email?: string | null;
+            /**
+             * Has Ordered
+             * @description 有此商品的有效非測試訂單；未指定商品時為 null
+             */
+            has_ordered?: boolean | null;
             /** Identifier */
             identifier: string;
             /**

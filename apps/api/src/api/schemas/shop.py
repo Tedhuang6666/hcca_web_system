@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Literal, Self
+from typing import Annotated, Literal, Self
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -183,6 +183,11 @@ class ProductPurchaseRules(BaseModel):
     required_permissions: list[str] = Field(default_factory=list, max_length=100)
     allowed_identifiers: list[str] = Field(default_factory=list, max_length=2000)
     blocked_identifiers: list[str] = Field(default_factory=list, max_length=2000)
+    identifier_notes: dict[str, Annotated[str, Field(max_length=500)]] = Field(
+        default_factory=dict,
+        max_length=4000,
+        description="名單內人員的內部備註，僅商品管理者可查看",
+    )
     exclusive_group: str | None = Field(
         None, max_length=100, description="所有同名群組商品，每人合計限購一件"
     )
@@ -190,6 +195,16 @@ class ProductPurchaseRules(BaseModel):
         default_factory=list, max_length=100, description="同主題內合計限購一件的商品；包含本商品"
     )
     designated_only: bool = Field(False, description="僅指定名單可購買，並鎖定同組其他票種")
+
+    @model_validator(mode="after")
+    def normalize_identifier_notes(self) -> Self:
+        members = set(self.allowed_identifiers) | set(self.blocked_identifiers)
+        self.identifier_notes = {
+            key.strip().lower(): note.strip()
+            for key, note in self.identifier_notes.items()
+            if key.strip().lower() in members and note.strip()
+        }
+        return self
 
     @field_validator("exclusive_group")
     @classmethod

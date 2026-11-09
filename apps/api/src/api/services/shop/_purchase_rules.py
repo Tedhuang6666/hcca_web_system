@@ -51,7 +51,7 @@ async def purchase_context(
 
 
 def purchase_restriction(rules: ProductPurchaseRules, buyer: PurchaseContext | None) -> str | None:
-    if not any(rules.model_dump().values()):
+    if not any(rules.model_dump(exclude={"identifier_notes"}).values()):
         return None
     if buyer is None:
         return "此商品有購買資格限制，請登入後確認"

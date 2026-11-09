@@ -718,9 +718,18 @@ async def lookup_shop_targets(
     current_user: CurrentUser,
     response: Response,
 ) -> list[ShopTargetOut]:
-    await _require_shop_manager(session, current_user, payload.activity_id)
+    activity_id = payload.activity_id
+    if payload.product_id is not None:
+        product = await _get_product_or_404(payload.product_id, session, current_user)
+        activity_id = _product_activity(product)
+    await _require_shop_manager(session, current_user, activity_id)
     response.headers["Cache-Control"] = "private, no-store"
-    return await lookup_targets(session, keyword=payload.keyword, identifiers=payload.identifiers)
+    return await lookup_targets(
+        session,
+        keyword=payload.keyword,
+        identifiers=payload.identifiers,
+        product_id=payload.product_id,
+    )
 
 
 # ── 優惠管理 ──────────────────────────────────────────────────────────────────
