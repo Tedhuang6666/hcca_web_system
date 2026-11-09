@@ -18,8 +18,48 @@ from api.models.shop import (
     ShopOrderPromotion,
     ShopPromotion,
 )
+from api.schemas.shop import ShopPromotionUpdate
 from api.services import shop as shop_svc
 from api.services.shop import _orders, _promotion_orders, _supplements
+
+
+@pytest.mark.parametrize("order_count", [1, 24])
+async def test_refresh_gift_promotions_batches_eligibility_queries(
+    db_session, order_batch, order_count, record_property
+):
+    _, _, _, _, orders, _ = order_batch
+    promotion = await db_session.get(ShopPromotion, orders[0].applied_promotions[0].promotion_id)
+    promotion.used_count = order_count
+    await shop_svc.update_promotion(
+        db_session,
+        promotion,
+        data=ShopPromotionUpdate(
+            target_category_ids=[],
+            target_product_ids=[order.items[0].product_id for order in orders],
+            discount_type="percentage",
+            discount_value=100,
+        ),
+    )
+    loaded = await _promotion_orders.lock_promotion_orders(db_session, activity_ids=None)
+    statements = []
+
+    def count_select(conn, cursor, statement, parameters, context, executemany):
+        if statement.lstrip().upper().startswith("SELECT"):
+            statements.append(statement)
+
+    connection = (await db_session.connection()).sync_connection
+    event.listen(connection, "before_cursor_execute", count_select)
+    try:
+        await _promotion_orders.refresh_promotion_orders(
+            db_session, promotion=promotion, orders=loaded
+        )
+    finally:
+        event.remove(connection, "before_cursor_execute", count_select)
+    record_property("refresh_select_count", len(statements))
+    assert len(statements) <= 8, f"{order_count} orders used {len(statements)} SELECTs"
+    assert all(order.discount_amount == 100 and order.total_price == 0 for order in loaded)
+    assert all(order.items[0].gift_quantity == 1 for order in loaded)
+    assert promotion.used_count == order_count
 
 
 @pytest.fixture

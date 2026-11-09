@@ -352,7 +352,9 @@ def _promotion_eligible_subtotal(
     if not target_ids:
         return subtotal
     amounts = product_subtotals or {}
-    if promotion.discount_type == ShopDiscountType.PRICE_OVERRIDE:
+    if promotion.discount_type == ShopDiscountType.PRICE_OVERRIDE or (
+        promotion.discount_type == ShopDiscountType.PERCENTAGE and promotion.discount_value == 100
+    ):
         return sum(amounts.get(product_id, 0) for product_id in target_ids)
     if not target_ids.issubset(amounts):
         return 0
@@ -414,17 +416,12 @@ def _promotion_issue(
         )
     target_ids = {product.id for product in (promotion.target_products or [])}
     selected_ids = set(product_subtotals or {})
-    if (
-        promotion.discount_type == ShopDiscountType.PRICE_OVERRIDE
-        and target_ids
-        and not target_ids.intersection(selected_ids)
-    ):
+    individual_products = promotion.discount_type == ShopDiscountType.PRICE_OVERRIDE or (
+        promotion.discount_type == ShopDiscountType.PERCENTAGE and promotion.discount_value == 100
+    )
+    if individual_products and target_ids and not target_ids.intersection(selected_ids):
         return "items_not_matched", "需登記至少一項指定商品才能使用此優惠。", 0, 0
-    if (
-        promotion.discount_type != ShopDiscountType.PRICE_OVERRIDE
-        and target_ids
-        and not target_ids.issubset(selected_ids)
-    ):
+    if not individual_products and target_ids and not target_ids.issubset(selected_ids):
         missing_names = [
             product.name
             for product in (promotion.target_products or [])
@@ -1233,6 +1230,34 @@ async def _resolve_automatic_promotions(
         .scalars()
         .all()
     )
+    return _automatic_promotion_results(
+        list(promotions),
+        user_id=user_id,
+        student_id=student_id,
+        subtotal=subtotal,
+        now=now,
+        categories=categories,
+        product_subtotals=product_subtotals,
+        product_quantities=product_quantities,
+        activity_id=activity_id,
+        current_ids=current_ids,
+    )
+
+
+def _automatic_promotion_results(
+    promotions: list[ShopPromotion],
+    *,
+    user_id: uuid.UUID,
+    student_id: str | None,
+    subtotal: int,
+    now: datetime,
+    categories: dict[uuid.UUID, uuid.UUID | None],
+    product_subtotals: dict[uuid.UUID, int] | None,
+    product_quantities: dict[uuid.UUID, int] | None,
+    activity_id: uuid.UUID | None,
+    current_ids: set[uuid.UUID],
+) -> list[PromotionResult]:
+    """共用單筆與批次試算，名額依同一交易中最新的 used_count 判斷。"""
     applicable = [
         promotion
         for promotion in promotions

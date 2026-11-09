@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from typing import TYPE_CHECKING
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,7 +15,11 @@ if TYPE_CHECKING:
 
 
 async def snapshot_order_gifts(
-    session: AsyncSession, order: Order, allocations: tuple[PromotionAllocation, ...]
+    session: AsyncSession,
+    order: Order,
+    allocations: tuple[PromotionAllocation, ...],
+    *,
+    product_category_ids: dict[uuid.UUID, uuid.UUID | None] | None = None,
 ) -> None:
     for item in order.items:
         item.gift_quantity = 0
@@ -33,11 +38,13 @@ async def snapshot_order_gifts(
     for item in order.items:
         amounts[item.product_id] = amounts.get(item.product_id, 0) + item.quantity * item.unit_price
         quantities[item.product_id] = quantities.get(item.product_id, 0) + item.quantity
-    categories = (
-        await product_topic_ids(session, set(amounts))
-        if any(row.promotion.target_category_ids is not None for row in gifts)
-        else {}
-    )
+    categories = product_category_ids
+    if categories is None:
+        categories = (
+            await product_topic_ids(session, set(amounts))
+            if any(row.promotion.target_category_ids is not None for row in gifts)
+            else {}
+        )
     # UUID 順序固定跨重新載入的分配；各規格／本人與代訂品項共用每項商品的贈送額度。
     items = sorted(order.items, key=lambda item: str(item.id))
     for allocation in gifts:

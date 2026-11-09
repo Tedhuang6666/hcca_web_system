@@ -68,6 +68,59 @@ async def _claim(client, link):
     return result.json()
 
 
+@pytest.mark.parametrize("topic_scope", [False, True])
+@pytest.mark.parametrize("retroactive", [False, True])
+async def test_author_gift_applies_to_each_selected_product_for_family(
+    delegation_setup, db_session, topic_scope, retroactive
+):
+    student, parent, category, product, sc, pc, oc, link = delegation_setup
+    other_product = await shop_svc.create_product(
+        db_session,
+        data=ProductCreate(category_id=category.id, name="另一本作者贈品", price=200),
+        created_by=student.id,
+    )
+    await _claim(pc, link)
+
+    async def register():
+        response = await _set(pc, product, 2, link["token"])
+        assert response.status_code == 200
+        return response.json()
+
+    if retroactive:
+        order_id = (await register())["id"]
+    promotion = await shop_svc.create_promotion(
+        db_session,
+        created_by=student.id,
+        data=ShopPromotionCreate(
+            name="作者贈品",
+            target_category_ids=[category.id] if topic_scope else None,
+            target_identifiers=[student.student_id],
+            target_product_ids=[product.id, other_product.id],
+            discount_type="percentage",
+            discount_value=100,
+            gift_quantity=1,
+        ),
+    )
+    order = (await pc.get(f"/shop/orders/{order_id}")).json() if retroactive else await register()
+    assert order["user_id"] == str(student.id)
+    assert (order["subtotal_price"], order["discount_amount"], order["total_price"]) == (
+        200,
+        100,
+        100,
+    )
+    assert order["items"][0]["gift_quantity"] == 1
+    assert order["items"][0]["ordered_by_id"] == str(parent.id)
+
+    # 本人與家人共用同商品的贈品額度，加購不會再多送一件。
+    own = await _set(sc, product, 1)
+    assert own.status_code == 200
+    assert own.json()["discount_amount"] == 100
+    assert own.json()["total_price"] == 200
+    assert sum(item["gift_quantity"] for item in own.json()["items"]) == 1
+    assert promotion.used_count == 1
+    assert (await oc.get(f"/shop/orders/{order['id']}")).status_code == 404
+
+
 @pytest.mark.parametrize("email", ["parent@example.test", "g0210002@hchs.hc.edu.tw"])
 async def test_external_account_can_order_only_through_current_students_delegation(
     delegation_setup, db_session, email

@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import or_
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.shop import Order, OrderStatus, ShopPromotion
@@ -21,9 +21,10 @@ from api.services.shop._orders import (
 from api.services.shop._promotion_topics import product_topic_ids
 from api.services.shop._promotions import (
     PromotionAllocation,
+    _allocate_promotions,
+    _automatic_promotion_results,
     _discount_amount,
     _promotion_issue,
-    resolve_promotions,
 )
 
 
@@ -65,11 +66,30 @@ async def _save_allocations(
 async def refresh_promotion_orders(
     session: AsyncSession, *, promotion: ShopPromotion, orders: list[Order]
 ) -> None:
+    if not orders:
+        return
     # 先釋放不再符合資格的名額，再依登記順序分配，避免先處理的新對象錯失限量優惠。
     categories = await product_topic_ids(
         session, {item.product_id for order in orders for item in order.items}
     )
     now = datetime.now(UTC)
+    activity_ids = {_order_activity_id(order) for order in orders}
+    automatic_promotions = list(
+        await session.scalars(
+            select(ShopPromotion)
+            .where(
+                ShopPromotion.code.is_(None),
+                ShopPromotion.is_active.is_(True),
+                or_(
+                    ShopPromotion.activity_id.in_(activity_ids - {None}),
+                    ShopPromotion.activity_id.is_(None) if None in activity_ids else False,
+                    ShopPromotion.target_category_ids.is_not(None),
+                ),
+            )
+            .order_by(ShopPromotion.id)
+            .with_for_update()
+        )
+    )
     for order in orders:
         current_ids = {row.promotion_id for row in order.applied_promotions}
         if order.promotion_id is not None:
@@ -123,25 +143,33 @@ async def refresh_promotion_orders(
             if coupon is not None:
                 coupons.append(PromotionAllocation(coupon, order.discount_amount))
 
-        automatic = await resolve_promotions(
-            session,
-            user_id=order.user_id,
-            subtotal=order.subtotal_price,
-            product_subtotals=_promotion_product_subtotals(order.items),
-            product_quantities=_promotion_product_quantities(order.items),
-            activity_id=_order_activity_id(order),
-            current_promotion_ids=current_ids,
+        automatic = _allocate_promotions(
+            _automatic_promotion_results(
+                automatic_promotions,
+                user_id=order.user_id,
+                student_id=order.user.student_id,
+                subtotal=order.subtotal_price,
+                now=now,
+                categories=categories,
+                product_subtotals=_promotion_product_subtotals(order.items),
+                product_quantities=_promotion_product_quantities(order.items),
+                activity_id=_order_activity_id(order),
+                current_ids=current_ids,
+            ),
+            order.subtotal_price,
         )
         allocations = list(coupons)
         remaining = max(0, order.subtotal_price - sum(row.discount_amount for row in coupons))
-        for row in automatic.allocations:
+        for row in automatic:
             amount = min(remaining, row.discount_amount)
             if amount > 0:
                 allocations.append(PromotionAllocation(row.promotion, amount))
                 remaining -= amount
         selected = {row.promotion.id: row.discount_amount for row in allocations}
         if selected == previous:
-            await snapshot_order_gifts(session, order, tuple(allocations))
+            await snapshot_order_gifts(
+                session, order, tuple(allocations), product_category_ids=categories
+            )
             continue
 
         await _save_allocations(session, order, allocations)

@@ -86,8 +86,13 @@ def topic_issue(
     promotion: ShopPromotion, totals: list[TopicTotals], selected_ids: set[uuid.UUID]
 ) -> tuple[str, str, int, int] | None:
     targets = {product.id for product in promotion.target_products}
-    if promotion.discount_type != ShopDiscountType.PRICE_OVERRIDE and not targets.issubset(
-        selected_ids
+    individual_gifts = (
+        promotion.discount_type == ShopDiscountType.PERCENTAGE and promotion.discount_value == 100
+    )
+    if (
+        promotion.discount_type != ShopDiscountType.PRICE_OVERRIDE
+        and not individual_gifts
+        and not targets.issubset(selected_ids)
     ):
         return "items_not_matched", "需同時登記指定商品才能使用此優惠。", 0, 0
     if not totals:
