@@ -426,6 +426,13 @@ class Order(Base, TimestampMixin, ClassConsolidationMixin):
     """
 
     __tablename__ = "orders"
+    __table_args__ = (
+        CheckConstraint(
+            "user_id IS NOT NULL OR (assistance_scope = 'sheet_import' "
+            "AND buyer_name IS NOT NULL AND buyer_office IS NOT NULL)",
+            name="ck_orders_external_buyer",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     # 字號：ORD-YYYY-NNNNNN
@@ -437,10 +444,10 @@ class Order(Base, TimestampMixin, ClassConsolidationMixin):
         nullable=True,
         index=True,
     )
-    user_id: Mapped[uuid.UUID] = mapped_column(
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     activity_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -507,7 +514,7 @@ class Order(Base, TimestampMixin, ClassConsolidationMixin):
     buyer_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     buyer_office: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
-    user: Mapped[User] = relationship("User", foreign_keys=[user_id])
+    user: Mapped[User | None] = relationship("User", foreign_keys=[user_id])
     activity: Mapped[Activity | None] = relationship("Activity")
     category: Mapped[ProductCategory | None] = relationship("ProductCategory")
     assisted_by: Mapped[User | None] = relationship("User", foreign_keys=[assisted_by_id])

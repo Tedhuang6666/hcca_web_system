@@ -16,6 +16,9 @@ API 文件位於 `http://localhost:8000/docs`。應用程式入口固定為
 `api.main:app`；`api/__init__.py` 刻意不載入 Web app，避免 Celery worker
 匯入整套 FastAPI。
 
+教師／家長會預購的來源設定、Google 唯讀認證與尺寸解析規則，見
+[組織預購表單同步](SHOP_SHEET_IMPORT.md)。
+
 ## 常用指令
 
 從 repo 根目錄執行：

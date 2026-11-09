@@ -462,7 +462,9 @@ export default function CouncilOrdersPage() {
         }>();
         for (const order of rows) {
           if (
-            order.is_paid
+            !order.user_id
+            || order.assistance_scope === "sheet_import"
+            || order.is_paid
             || order.is_class_collected
             || order.test_product_id
             || order.total_price <= 0

@@ -280,6 +280,7 @@ export default function ClassOrdersPage() {
   const seatRows = useMemo(() => {
     const ordersByMember = new Map<string, OrderListItem[]>();
     for (const order of activityOrders) {
+      if (!order.user_id) continue;
       if (orderScopeKey(order) !== activeLedgerKey || !isCollectableOrder(order)) continue;
       const memberOrders = ordersByMember.get(order.user_id) ?? [];
       memberOrders.push(order);
@@ -584,7 +585,7 @@ export default function ClassOrdersPage() {
     try {
       const full = await shopApi.getOrder(order.id);
       setEditOrder(full);
-      setStudentId(full.user_id);
+      setStudentId(full.user_id ?? "");
       setNotes(full.notes ?? "");
       setAssistedItems(full.items.slice(1).map((item) => ({
         id: item.id,
@@ -773,8 +774,8 @@ export default function ClassOrdersPage() {
           || order.serial_number.toLowerCase().includes(needle)
           || (order.user_name ?? "").toLowerCase().includes(needle)
           || (order.class_label ?? "").toLowerCase().includes(needle)))
-      .sort((a, b) => (seatByMemberId.get(a.user_id) ?? Number.POSITIVE_INFINITY)
-        - (seatByMemberId.get(b.user_id) ?? Number.POSITIVE_INFINITY)
+      .sort((a, b) => (seatByMemberId.get(a.user_id ?? "") ?? Number.POSITIVE_INFINITY)
+        - (seatByMemberId.get(b.user_id ?? "") ?? Number.POSITIVE_INFINITY)
         || (a.user_name ?? "").localeCompare(b.user_name ?? "", "zh-Hant")
         || (a.serial_number ?? "").localeCompare(b.serial_number ?? ""));
   }, [members, orders, query]);

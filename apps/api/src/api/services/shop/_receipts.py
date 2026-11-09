@@ -473,7 +473,9 @@ async def render_individual_order_receipt(
         if order.supplement_class_id
         else None
     )
-    buyer_name = order.user.display_name if order.user else "個人訂購人"
+    buyer_name = order.buyer_name or (order.user.display_name if order.user else "個人訂購人")
+    if order.buyer_office:
+        buyer_name = f"{order.buyer_office} {buyer_name}"
     academic_year = printed_at.astimezone(TAIPEI).year - 1911
     if school_class:
         class_label = school_class.label or school_class.class_code

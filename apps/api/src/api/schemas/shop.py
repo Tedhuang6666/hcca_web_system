@@ -644,7 +644,7 @@ class OrderOut(BaseModel):
     supplement_class_id: uuid.UUID | None = None
     test_product_id: uuid.UUID | None = None
     serial_number: str
-    user_id: uuid.UUID
+    user_id: uuid.UUID | None
     activity_id: uuid.UUID | None = None
     activity_name: str | None = None
     category_id: uuid.UUID | None = None
@@ -678,7 +678,7 @@ class OrderListItem(BaseModel):
     supplement_class_id: uuid.UUID | None = None
     test_product_id: uuid.UUID | None = None
     serial_number: str
-    user_id: uuid.UUID
+    user_id: uuid.UUID | None
     user_name: str | None = None
     activity_id: uuid.UUID | None = None
     activity_name: str | None = None

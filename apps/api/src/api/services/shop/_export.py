@@ -30,7 +30,7 @@ async def _fetch_order_report_rows(
             Product.name.label("商品名稱"),
         )
         .join(OrderItem, Order.id == OrderItem.order_id)
-        .join(User, Order.user_id == User.id)
+        .outerjoin(User, Order.user_id == User.id)
         .join(Product, OrderItem.product_id == Product.id)
         .where(Order.test_product_id.is_(None))
         .order_by(Order.created_at.desc())

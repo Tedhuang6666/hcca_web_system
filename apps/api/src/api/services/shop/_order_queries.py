@@ -294,8 +294,8 @@ async def order_summary(
             key = str(sc.grade) if sc else "none"
             label = f"{sc.grade} 年級" if sc else "未分班"
         else:
-            key = str(order.user_id)
-            label = order.user.display_name if order.user else key
+            key = str(order.user_id) if order.user_id else f"external:{order.id}"
+            label = order.buyer_name or (order.user.display_name if order.user else "組織訂購人")
 
         row = groups.get(key)
         if row is None:

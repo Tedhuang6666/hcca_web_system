@@ -265,19 +265,31 @@ def _handle_shop_order_confirmed(payload: dict) -> None:
     promotion_code = html_escape(str(payload.get("promotion_code") or ""))
     discount_label = "優惠折抵" + (f"（{promotion_code}）" if promotion_code else "")
     buyer_greeting = html_escape(str(buyer_name or "同學"))
+    external = payload.get("external_preorder") is True
+    office = html_escape(str(payload.get("buyer_office") or ""))
+    delivery_notice = (
+        f"<p>您的預購訂單已成立。<strong>交貨時付款，目前尚未收款。</strong><br>"
+        f"辦公室／組織：{office}<br>交貨安排將另行通知。</p>"
+        if external
+        else ""
+    )
+    order_link = "" if external else f'<p><a href="{base}/shop/orders">查看訂單</a></p>'
     html = (
         f"<p>親愛的 {buyer_greeting}，感謝您的訂購！</p>"
+        f"{delivery_notice}"
         f"<p><strong>訂單編號</strong>：{html_escape(str(serial))}</p>"
         f"<p><strong>商品明細</strong></p>{items_html}"
         f"<p><strong>金額明細</strong><br>"
         f"商品小計：NT$ {subtotal:,}<br>"
         f"{discount_label}：− NT$ {discount:,}<br>"
         f"<strong>應付總額：NT$ {total:,}</strong></p>"
-        f'<p><a href="{base}/shop/orders">查看訂單</a></p>'
+        f"{order_link}"
     )
     try:
         enqueue_email(buyer_email, subject, html)
     except Exception as exc:
+        if external:
+            raise
         logger.warning("shop.order_confirmed email failed: %s", exc)
 
 

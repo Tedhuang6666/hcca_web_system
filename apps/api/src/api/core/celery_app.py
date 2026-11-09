@@ -137,6 +137,10 @@ celery_app.conf.include = list(celery_app.conf.include or []) + [
 ]
 
 celery_app.conf.beat_schedule = {
+    "sync-organization-preorders-every-60s": {
+        "task": "api.services.shop_tasks.sync_organization_preorders",
+        "schedule": 60.0,
+    },
     "resolve-stale-incidents-hourly": {
         "task": "api.services.incident_tasks.resolve_stale_incidents",
         "schedule": 3600.0,

@@ -330,6 +330,7 @@ from api.models.shop import (  # noqa: F401
 )
 from api.models.shop_class_payment import ShopClassPayment  # noqa: F401
 from api.models.shop_order_receipt_print import ShopOrderReceiptPrint  # noqa: F401
+from api.models.shop_sheet import ShopSheetRow, ShopSheetSource  # noqa: F401
 from api.models.shop_teacher import ShopOffice, ShopTeacherProfile  # noqa: F401
 from api.models.short_link import ShortLink  # noqa: F401
 from api.models.site import (  # noqa: F401

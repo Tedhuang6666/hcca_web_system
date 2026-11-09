@@ -12,6 +12,55 @@ logger = logging.getLogger(__name__)
 
 
 @celery_app.task(
+    name="api.services.shop_tasks.sync_organization_preorders",
+    bind=True,
+    max_retries=3,
+)
+def sync_organization_preorders(self) -> dict:  # noqa: ANN001
+    """逐來源 commit；重試時由匯入帳本與 source row lock 防止重複訂單。"""
+
+    async def _run() -> dict:
+        from sqlalchemy import select
+
+        from api.core.database import task_session
+        from api.models.shop_sheet import ShopSheetSource
+        from api.services.shop._sheet_import import sync_source
+
+        totals = {"imported": 0, "skipped": 0, "review": 0}
+        async with task_session() as session:
+            source_ids = list(
+                await session.scalars(
+                    select(ShopSheetSource.id).where(ShopSheetSource.enabled.is_(True))
+                )
+            )
+        for source_id in source_ids:
+            async with task_session() as session:
+                try:
+                    # 重新確認 enabled，避免排程取清單後管理者剛好停用。
+                    source = await session.scalar(
+                        select(ShopSheetSource)
+                        .where(ShopSheetSource.id == source_id)
+                        .with_for_update()
+                    )
+                    if source is None or not source.enabled:
+                        continue
+                    result = await sync_source(session, source_id)
+                    await session.commit()
+                    for key, count in result.model_dump().items():
+                        totals[key] += count
+                except Exception:
+                    await session.rollback()
+                    raise
+        return totals
+
+    try:
+        return asyncio.run(_run())
+    except Exception as exc:
+        logger.error("組織預購同步失敗，將重試")
+        raise self.retry(exc=exc, countdown=60) from exc
+
+
+@celery_app.task(
     name="api.services.shop_tasks.notify_class_cadres_on_deadline",
     bind=True,
     max_retries=3,

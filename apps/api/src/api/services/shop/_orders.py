@@ -60,6 +60,7 @@ from api.services.shop._promotions import PromotionAllocation, resolve_promotion
 from api.services.shop._purchase_rules import (
     assert_group_purchase_limit,
     assert_product_purchase_allowed,
+    product_purchase_restriction,
 )
 from api.services.student_identity import has_student_identity
 
@@ -138,6 +139,11 @@ async def _apply_order_promotion(
     *,
     code: str | None,
 ) -> None:
+    if order.assistance_scope == "sheet_import":
+        # 外部組織預購按表單所對應商品的售價計算，不套用學生身分優惠。
+        order.discount_amount = 0
+        order.total_price = order.subtotal_price
+        return
     product_subtotals = _promotion_product_subtotals(order.items)
     product_quantities = _promotion_product_quantities(order.items)
     current_ids = {row.promotion_id for row in (order.applied_promotions or [])}
@@ -1389,22 +1395,32 @@ async def update_order_item_quantity(
 
     delta = quantity - item.quantity
     if delta > 0:
-        buyer = await session.get(User, order.user_id)
-        if buyer is None:
-            raise ValueError("找不到訂購人")
-        await assert_product_purchase_allowed(session, product, buyer)
+        if order.assistance_scope == "sheet_import":
+            await _assert_product_registration_open(session, product, class_id=None)
+            if (
+                await product_purchase_restriction(session, product, None)
+                or product.max_quantity_per_user is not None
+                or product.requires_seating
+            ):
+                raise ValueError("此商品有限購或身分限制，需人工確認")
+        else:
+            buyer = await session.get(User, order.user_id)
+            if buyer is None:
+                raise ValueError("找不到訂購人")
+            await assert_product_purchase_allowed(session, product, buyer)
         if product.status not in (ProductStatus.ACTIVE, ProductStatus.SOLD_OUT):
             raise ValueError(f"商品「{product.name}」目前無法增加數量")
         if not product.is_unlimited and product.stock_quantity < delta:
             raise ValueError(f"商品「{product.name}」庫存不足（剩餘 {product.stock_quantity} 件）")
         product_quantity = sum(row.quantity for row in order.items if row.product_id == product.id)
-        await _assert_purchase_limit(
-            session,
-            product,
-            order.user_id,
-            product_quantity + delta,
-            excluding_order_id=order.id,
-        )
+        if order.user_id is not None:
+            await _assert_purchase_limit(
+                session,
+                product,
+                order.user_id,
+                product_quantity + delta,
+                excluding_order_id=order.id,
+            )
 
     if quantity < item.quantity:
         assigned_seats = await session.scalar(

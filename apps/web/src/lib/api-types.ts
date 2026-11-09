@@ -11485,6 +11485,92 @@ export interface paths {
         patch: operations["update_series_shop_series__series_id__patch"];
         trace?: never;
     };
+    "/shop/sheet-sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Sources */
+        get: operations["list_sources_shop_sheet_sources_get"];
+        put?: never;
+        /** Create Source */
+        post: operations["create_source_shop_sheet_sources_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shop/sheet-sources/{source_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Configure Source */
+        put: operations["configure_source_shop_sheet_sources__source_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shop/sheet-sources/{source_id}/enabled": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Enable Source */
+        patch: operations["enable_source_shop_sheet_sources__source_id__enabled_patch"];
+        trace?: never;
+    };
+    "/shop/sheet-sources/{source_id}/rows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Rows */
+        get: operations["list_rows_shop_sheet_sources__source_id__rows_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shop/sheet-sources/{source_id}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sync Orders */
+        post: operations["sync_orders_shop_sheet_sources__source_id__sync_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shop/target-options": {
         parameters: {
             query?: never;
@@ -22351,11 +22437,8 @@ export interface components {
             test_product_id?: string | null;
             /** Total Price */
             total_price: number;
-            /**
-             * User Id
-             * Format: uuid
-             */
-            user_id: string;
+            /** User Id */
+            user_id: string | null;
             /** User Name */
             user_name?: string | null;
         };
@@ -22450,11 +22533,8 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            /**
-             * User Id
-             * Format: uuid
-             */
-            user_id: string;
+            /** User Id */
+            user_id: string | null;
         };
         /** OrderPaymentUpdate */
         OrderPaymentUpdate: {
@@ -31162,6 +31242,133 @@ export interface components {
              * @default 0
              */
             total_cost: number | null;
+        };
+        /** ShopSheetConfig */
+        ShopSheetConfig: {
+            /**
+             * Email Column
+             * @default 電子郵件地址
+             */
+            email_column: string;
+            /**
+             * Identity Column
+             * @default 時間戳記
+             */
+            identity_column: string;
+            /** Ignored Columns */
+            ignored_columns?: string[];
+            /**
+             * Max Rows
+             * @default 10000
+             */
+            max_rows: number;
+            /**
+             * Name Column
+             * @default 姓名
+             */
+            name_column: string;
+            /**
+             * Office Column
+             * @default 辦公室
+             */
+            office_column: string;
+            /**
+             * Other Office Column
+             * @default 若所屬辦公室未在上列選項
+             */
+            other_office_column: string | null;
+            /** Product Columns */
+            product_columns?: {
+                [key: string]: string;
+            };
+        };
+        /** ShopSheetEnabledUpdate */
+        ShopSheetEnabledUpdate: {
+            /** Enabled */
+            enabled: boolean;
+        };
+        /** ShopSheetRowOut */
+        ShopSheetRowOut: {
+            /** Error */
+            error: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Order Ids */
+            order_ids: string[];
+            /** Row Number */
+            row_number: number;
+            /** Status */
+            status: string;
+        };
+        /** ShopSheetSourceCreate */
+        ShopSheetSourceCreate: {
+            /**
+             * Category Id
+             * Format: uuid
+             */
+            category_id: string;
+            config?: components["schemas"]["ShopSheetConfig"];
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /** Name */
+            name: string;
+            /** Sheet Name */
+            sheet_name: string;
+            /** Spreadsheet Id */
+            spreadsheet_id: string;
+        };
+        /** ShopSheetSourceOut */
+        ShopSheetSourceOut: {
+            /**
+             * Category Id
+             * Format: uuid
+             */
+            category_id: string;
+            config?: components["schemas"]["ShopSheetConfig"];
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Last Error */
+            last_error?: string | null;
+            /** Last Synced At */
+            last_synced_at?: string | null;
+            /** Name */
+            name: string;
+            /** Sheet Name */
+            sheet_name: string;
+            /** Spreadsheet Id */
+            spreadsheet_id: string;
+        };
+        /** ShopSheetSyncOut */
+        ShopSheetSyncOut: {
+            /**
+             * Imported
+             * @default 0
+             */
+            imported: number;
+            /**
+             * Review
+             * @default 0
+             */
+            review: number;
+            /**
+             * Skipped
+             * @default 0
+             */
+            skipped: number;
         };
         /** ShopTargetLookupRequest */
         ShopTargetLookupRequest: {
@@ -58832,6 +59039,194 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProductSeriesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_sources_shop_sheet_sources_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopSheetSourceOut"][];
+                };
+            };
+        };
+    };
+    create_source_shop_sheet_sources_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShopSheetSourceCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopSheetSourceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    configure_source_shop_sheet_sources__source_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShopSheetSourceCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopSheetSourceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    enable_source_shop_sheet_sources__source_id__enabled_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShopSheetEnabledUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopSheetSourceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_rows_shop_sheet_sources__source_id__rows_get: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopSheetRowOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sync_orders_shop_sheet_sources__source_id__sync_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopSheetSyncOut"];
                 };
             };
             /** @description Validation Error */

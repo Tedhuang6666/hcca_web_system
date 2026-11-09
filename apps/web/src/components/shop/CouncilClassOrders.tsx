@@ -94,6 +94,7 @@ export default function CouncilClassOrders({ target, catalog, classes, canOrder,
       studentId: member.student_id, member, orders: [],
     });
     for (const order of data.orders) {
+      if (!order.user_id) continue;
       const row = students.get(order.user_id) ?? {
         id: order.user_id, name: order.user_name ?? "未提供姓名", seat: null, studentId: null, orders: [],
       };

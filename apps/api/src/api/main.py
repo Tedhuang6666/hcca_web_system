@@ -103,6 +103,7 @@ from api.routers import (
     search,
     seating,
     shop,
+    shop_sheet,
     shop_teacher,
     short_links,
     site,
@@ -459,6 +460,7 @@ def create_app() -> FastAPI:
     app.include_router(short_links.router)
     app.include_router(shop.router)
     app.include_router(shop_teacher.router)
+    app.include_router(shop_sheet.router)
     app.include_router(merchandise_submissions.router)
     app.include_router(seating.router)
     app.include_router(school_class.router)
