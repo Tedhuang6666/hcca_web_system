@@ -91,6 +91,8 @@ async def _sync_order_promotions(
     order: Order,
     allocations: tuple[PromotionAllocation, ...],
 ) -> None:
+    from api.services.shop._gift_allocations import snapshot_order_gifts
+
     existing_rows = list(order.applied_promotions or [])
     existing_by_id = {row.promotion_id: row for row in existing_rows}
     previous_ids = set(existing_by_id)
@@ -127,6 +129,7 @@ async def _sync_order_promotions(
         primary = allocations[0].promotion
     order.promotion_id = primary.id if primary is not None else None
     order.promotion_code = primary.code if primary is not None else None
+    await snapshot_order_gifts(session, order, allocations)
 
 
 async def _apply_order_promotion(

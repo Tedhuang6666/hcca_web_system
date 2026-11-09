@@ -14,6 +14,7 @@ import { groupActivityPreorders } from "@/lib/shop-preorders";
 import { refreshAutomaticRegistrationPromotions } from "@/lib/shop-registration-promotions";
 import OrderItemSources from "@/components/shop/OrderItemSources";
 import ProductThumbnail from "@/components/shop/ProductThumbnail";
+import OrderItemGiftBreakdown from "@/components/shop/OrderItemGiftBreakdown";
 
 type SeatingItem = {
   productId: string;
@@ -404,8 +405,9 @@ export default function OrderDetailPage() {
                   </p>
                 )}
                 <p className="shop-order-item-unit">
-                  NT${it.unit_price.toLocaleString()} × {it.quantity}
+                  {(it.gift_quantity ?? 0) > 0 && "折抵前 "}NT${it.unit_price.toLocaleString()} × {it.quantity}
                 </p>
+                <OrderItemGiftBreakdown items={[it]} />
                 <OrderItemSources sources={detailOrders.flatMap((sourceOrder) => sourceOrder.items
                   .filter((source) => activityPreorder ? source.product_id === it.product_id && source.unit_price === it.unit_price
                     && source.selected_options.map((option) => option.option_id).sort().join(",")
@@ -420,7 +422,7 @@ export default function OrderDetailPage() {
               </div>
             </div>
             <div className="shrink-0">
-              <p className="shop-order-item-total">NT${it.subtotal.toLocaleString()}</p>
+              <p className="shop-order-item-total">{(it.gift_quantity ?? 0) > 0 && "折抵前 "}NT${it.subtotal.toLocaleString()}</p>
             </div>
           </article>
         ))}

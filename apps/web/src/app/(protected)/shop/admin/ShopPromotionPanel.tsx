@@ -22,6 +22,7 @@ type PromotionForm = {
   code: string;
   discount_type: ShopDiscountType | "gift";
   discount_value: string;
+  gift_quantity: string;
   min_order_price: string;
   min_quantity: string;
   max_uses: string;
@@ -38,6 +39,7 @@ const emptyForm: PromotionForm = {
   code: "",
   discount_type: "percentage",
   discount_value: "10",
+  gift_quantity: "1",
   min_order_price: "0",
   min_quantity: "1",
   max_uses: "",
@@ -116,6 +118,12 @@ export default function ShopPromotionPanel() {
       toast.error("請選擇要贈送的票券或商品");
       return;
     }
+    if (form.discount_type === "gift"
+      && (!Number.isInteger(Number(form.gift_quantity)) || Number(form.gift_quantity) < 1
+        || Number(form.gift_quantity) > 100)) {
+      toast.error("每項贈送數量請填入 1 到 100 的整數");
+      return;
+    }
     if (form.discount_type === "bundle_price") {
       const originalPrice = products.filter((row) => form.target_product_ids.includes(row.id))
         .reduce((sum, row) => sum + row.price, 0);
@@ -164,6 +172,7 @@ export default function ShopPromotionPanel() {
           : form.discount_type === "price_override" ? 0 : Number(form.discount_value),
         min_order_price: Number(form.min_order_price) || 0,
         min_quantity: Number(form.min_quantity) || 1,
+        gift_quantity: form.discount_type === "gift" ? Number(form.gift_quantity) : 1,
         max_uses: form.max_uses ? Number(form.max_uses) : null,
         description: form.description.trim() || null,
         is_public: form.is_public,
@@ -207,6 +216,7 @@ export default function ShopPromotionPanel() {
       discount_type: promotion.discount_type === "percentage" && promotion.discount_value === 100
         && (promotion.target_products?.length ?? 0) > 0 ? "gift" : promotion.discount_type,
       discount_value: String(promotion.discount_value),
+      gift_quantity: String(promotion.gift_quantity ?? 1),
       min_order_price: String(promotion.min_order_price),
       min_quantity: String(promotion.min_quantity),
       max_uses: promotion.max_uses === null ? "" : String(promotion.max_uses),
@@ -365,9 +375,12 @@ export default function ShopPromotionPanel() {
             </select>
           </label>
           {form.discount_type === "gift" ? (
-            <p className="self-center text-xs" style={{ color: "var(--text-muted)" }}>
-              在上方指定受贈者的學號或 Email，由受贈者到商品頁自行選擇規格。商品基本售價免費，加價選項由受贈者支付，數量照常納入統計。
-            </p>
+            <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+              每項贈送數量
+              <input className="input mt-1 w-full" type="number" min="1" max="100" step="1"
+                value={form.gift_quantity} onChange={(e) => update("gift_quantity", e.target.value)} />
+              <span className="mt-1 block font-normal">每個指定商品各贈送此件數；可加購多件，超出件數與規格加價照常計費。</span>
+            </label>
           ) : form.discount_type !== "price_override" ? (
             <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
               {form.discount_type === "percentage" ? "折抵百分比（%）" : form.discount_type === "bundle_price" ? "每套組合價（NT$）" : "折抵金額"}
@@ -395,7 +408,7 @@ export default function ShopPromotionPanel() {
             <legend className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>適用商品（可複選）</legend>
             <p className="mt-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
               {form.discount_type === "gift"
-                ? "請選擇要贈送的票券或商品。多選時需同時登記所有指定商品；指定商品只折抵基本售價，規格加價與其他商品仍須付款。"
+                ? "請選擇要贈送的票券或商品。多選時需同時登記所有指定商品，各項依上方件數贈送；受贈者自行選規格，贈品與加購品項會分開列出。"
                 : form.discount_type === "price_override"
                 ? "使用者任選一項已設定商品即可使用；只有實際登記的指定商品會改用優惠單價。"
                 : form.discount_type === "bundle_price"
@@ -523,7 +536,7 @@ export default function ShopPromotionPanel() {
                   ? `每套 NT$${promotion.discount_value.toLocaleString()}`
                 : promotion.discount_type === "percentage"
                   ? promotion.discount_value === 100 && (promotion.target_products?.length ?? 0) > 0
-                    ? "贈票／免費商品（基本售價免費，規格加價自付）" : `減價 ${promotion.discount_value}%`
+                    ? `每項贈送 ${promotion.gift_quantity ?? 1} 件（可加購，規格加價自付）` : `減價 ${promotion.discount_value}%`
                   : `折抵 NT$${promotion.discount_value.toLocaleString()}`;
               return (
                 <div key={promotion.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">

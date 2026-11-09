@@ -14,7 +14,7 @@ const shirt: CatalogProductOut = {
   has_variants: true, has_option_surcharge: true, purchase_allowed: true, requires_seating: false,
 };
 const pants = { ...shirt, id: "pants", price: 500, original_price: 600 };
-const promotion: ShopPromotionPublicOut = {
+const promotion: ShopPromotionPublicOut = { gift_quantity: 1,
   id: "percentage", name: "九折", discount_type: "percentage", discount_value: 10,
   target_products: [{ id: "shirt", name: "紀念衫" }], min_order_price: 0, min_quantity: 1,
 };

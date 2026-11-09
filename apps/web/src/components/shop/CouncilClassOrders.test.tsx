@@ -17,7 +17,7 @@ const order = (changes: Partial<OrderListItem> = {}): OrderListItem => ({
   id: "order-1", serial_number: "ORD-001", user_id: "user-1", user_name: "測試同學甲", class_id: "class-1",
   assistance_scope: "self", discount_amount: 0, payment_method: "cash_on_pickup", subtotal_price: 200,
   status: "pending", total_price: 200, is_paid: false, is_class_collected: false, created_at: "2026-11-02T00:00:00Z",
-  activity_name: "校慶", items: [{ id: "item-1", product_id: "shirt", product_name: "紀念衫", quantity: 2,
+  activity_name: "校慶", items: [{ gift_quantity: 0, gift_discount_amount: 0, id: "item-1", product_id: "shirt", product_name: "紀念衫", quantity: 2,
     unit_price: 100, subtotal: 200, selected_options: [{ group_id: "size", group_name: "尺寸", option_id: "large", value: "L", price_delta: 0 }] }],
   ...changes,
 });

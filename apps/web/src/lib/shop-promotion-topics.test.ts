@@ -2,7 +2,7 @@ import { expect, it } from "vitest";
 import type { ShopPromotionPublicOut } from "./types";
 import { productOfferPrice } from "./shop-promotion-price";
 
-const offer = { id: "promo", name: "幹部價", activity_id: null, target_category_ids: ["clothes", "gifts"],
+const offer = { gift_quantity: 1, id: "promo", name: "幹部價", activity_id: null, target_category_ids: ["clothes", "gifts"],
   discount_type: "price_override", discount_value: 0, min_order_price: 0, min_quantity: 1,
   target_products: [{ id: "shirt", name: "衣服" }, { id: "cup", name: "杯子" }],
   product_price_overrides: [{ product_id: "shirt", product_name: "衣服", unit_price: 100 },

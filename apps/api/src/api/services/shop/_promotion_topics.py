@@ -145,7 +145,11 @@ def topic_discount_amount(promotion: ShopPromotion, totals: list[TopicTotals]) -
         elif promotion.discount_type == ShopDiscountType.PERCENTAGE:
             if promotion.discount_value == 100 and products:
                 amount = sum(
-                    min(value, products[key].price * total.quantities.get(key, 0))
+                    min(
+                        value,
+                        products[key].price
+                        * min(total.quantities.get(key, 0), promotion.gift_quantity),
+                    )
                     for key, value in total.amounts.items()
                 )
             else:

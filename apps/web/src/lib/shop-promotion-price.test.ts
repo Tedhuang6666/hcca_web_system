@@ -3,7 +3,7 @@ import type { OrderOut, ShopPromotionPublicOut } from "./types";
 import { productOfferPrice } from "./shop-promotion-price";
 
 const product = { id: "shirt", price: 300 };
-const promotion: ShopPromotionPublicOut = {
+const promotion: ShopPromotionPublicOut = { gift_quantity: 1,
   id: "sale", name: "商品優惠", activity_id: "festival", code: null,
   discount_type: "percentage", discount_value: 10, min_quantity: 1, min_order_price: 0,
   target_products: [{ id: "shirt", name: "衣服" }], product_price_overrides: [],
@@ -13,7 +13,10 @@ describe("商品價格的優惠顯示", () => {
   it("贈品免基本售價，保留受贈者選擇的規格加價與數量", () => {
     const gift = { ...promotion, discount_value: 100 };
     expect(productOfferPrice(product, [gift], "festival", null)).toBe(0);
-    expect(productOfferPrice(product, [gift], "festival", null, 50, 2)).toBe(100);
+    expect(productOfferPrice(product, [gift], "festival", null, 50, 2)).toBe(400);
+    expect(productOfferPrice(product, [gift], "festival", null, 0, 3)).toBe(600);
+    expect(productOfferPrice(product, [{ ...gift, gift_quantity: 2 }], "festival", null, 50, 3)).toBe(450);
+    expect(productOfferPrice(product, [{ ...gift, gift_quantity: 4 }], "festival", null, 50, 3)).toBe(150);
     expect(productOfferPrice(product, [gift], "festival", null, -20)).toBe(0);
     expect(productOfferPrice(product, [{ ...gift, target_products: [] }], "festival", null, 50)).toBe(0);
   });

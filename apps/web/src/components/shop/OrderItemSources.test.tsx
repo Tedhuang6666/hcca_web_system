@@ -5,7 +5,7 @@ import type { OrderItemOut } from "@/lib/types";
 
 const api = vi.hoisted(() => ({ updateOrderItemQuantity: vi.fn(), updateOrderItem: vi.fn(), getProduct: vi.fn() }));
 vi.mock("@/lib/api", () => ({ shopApi: api, apiErrorMessage: (error: Error) => error.message }));
-const own: OrderItemOut = { id: "own", product_id: "bag", product_name: "紀念袋", quantity: 1, unit_price: 100, subtotal: 100, selected_options: [], ordered_by_name: "學生" };
+const own: OrderItemOut = { gift_quantity: 0, gift_discount_amount: 0, id: "own", product_id: "bag", product_name: "紀念袋", quantity: 1, unit_price: 100, subtotal: 100, selected_options: [], ordered_by_name: "學生" };
 const delegated: OrderItemOut = { ...own, id: "mom", quantity: 2, subtotal: 200, delegation_link_id: "link", delegation_name: "給媽媽代訂", ordered_by_name: "媽媽" };
 
 beforeEach(() => vi.resetAllMocks());

@@ -1,5 +1,5 @@
 import type { OrderItemOut, OrderListItem } from "@/lib/types";
-import { mergeDraftItems } from "./shop-order-items";
+import { mergeOrderItems } from "./shop-order-items";
 import { orderScopeKey } from "./shop-order-scope";
 
 type ActivityPreorder = {
@@ -40,8 +40,6 @@ export function groupActivityPreorders(orders: readonly OrderListItem[]): Activi
   }
   return [...groups.values()].map((group) => ({
     ...group,
-    items: mergeDraftItems(group.items.map((item) => ({
-      ...item, option_ids: item.selected_options.map((option) => option.option_id),
-    }))).map((item) => ({ ...item, subtotal: item.quantity * item.unit_price })),
+    items: mergeOrderItems(group.items),
   }));
 }

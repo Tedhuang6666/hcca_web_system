@@ -37,9 +37,9 @@ const order: OrderOut = {
   created_at: "2026-10-10T00:00:00Z", updated_at: "2026-10-10T00:00:00Z",
   subtotal_price: 500, discount_amount: 0, total_price: 500, is_paid: false, is_class_collected: false,
   promotion_code: null, applied_promotions: [], items: [
-    { id: "own", product_id: "bag", product_name: "紀念袋", quantity: 2, unit_price: 100, subtotal: 200, selected_options: [], delegation_link_id: null },
-    { id: "mom", product_id: "bag", product_name: "紀念袋", quantity: 1, unit_price: 100, subtotal: 100, selected_options: [], delegation_link_id: "link" },
-    { id: "dad", product_id: "bag", product_name: "紀念袋", quantity: 2, unit_price: 100, subtotal: 200, selected_options: [], delegation_link_id: "other-link" },
+    { gift_quantity: 0, gift_discount_amount: 0, id: "own", product_id: "bag", product_name: "紀念袋", quantity: 2, unit_price: 100, subtotal: 200, selected_options: [], delegation_link_id: null },
+    { gift_quantity: 0, gift_discount_amount: 0, id: "mom", product_id: "bag", product_name: "紀念袋", quantity: 1, unit_price: 100, subtotal: 100, selected_options: [], delegation_link_id: "link" },
+    { gift_quantity: 0, gift_discount_amount: 0, id: "dad", product_id: "bag", product_name: "紀念袋", quantity: 2, unit_price: 100, subtotal: 200, selected_options: [], delegation_link_id: "other-link" },
   ],
 };
 const context: ShopDelegationContextOut = {
@@ -109,7 +109,7 @@ describe("原商品頁的家人代訂模式", () => {
 
   it("一般單品登記後立即提示加購、折抵與商品描邊，能直接開啟缺少的品項", async () => {
     const pants = { ...product, id: "pants", name: "長褲", price: 200 };
-    const promotion = {
+    const promotion = { gift_quantity: 1,
       id: "bundle", name: "衣褲套組", activity_id: "festival", discount_type: "bundle_price" as const,
       discount_value: 250, min_order_price: 0, min_quantity: 1, target_products: [product, pants],
     };
@@ -144,7 +144,7 @@ describe("原商品頁的家人代訂模式", () => {
     const other = { ...context.catalog![0], id: "other", activity_id: "other-event", name: "其他活動",
       products: [{ ...product, id: "other-product", name: "其他商品" }] };
     api.accessDelegation.mockResolvedValue({ ...context, registration: paid ? { ...order, is_paid: true } : null,
-      catalog: [other, { ...context.catalog![0], products: [product, pants] }], promotions: [{
+      catalog: [other, { ...context.catalog![0], products: [product, pants] }], promotions: [{ gift_quantity: 1,
         id: "bundle", name: "衣褲套組", activity_id: "festival", discount_type: "bundle_price",
         discount_value: 250, min_order_price: 0, min_quantity: 1, target_products: [product, pants], code: "SET",
       }] });
@@ -193,7 +193,7 @@ describe("原商品頁的家人代訂模式", () => {
     const category = { ...context.catalog?.[0], products: inSeries ? [] : products,
       series: inSeries ? [{ id: "series", name: "紀念系列", products }] : [],
     };
-    api.accessDelegation.mockResolvedValue({ ...context, registration: null, catalog: [category], promotions: [{
+    api.accessDelegation.mockResolvedValue({ ...context, registration: null, catalog: [category], promotions: [{ gift_quantity: 1,
       id: "bundle", name: "衣褲套組", activity_id: "festival", code: null,
       discount_type: "bundle_price", discount_value: 250, min_order_price: 0, min_quantity: 1,
       target_products: products.map((row) => ({ id: row.id, name: row.name })),
@@ -222,7 +222,7 @@ describe("原商品頁的家人代訂模式", () => {
   });
   it("套組可逐項選購，選齊後顯示原價刪除線與實付合計", async () => {
     const pants = { ...product, id: "pants", name: "長褲", price: 200 };
-    const promotion = {
+    const promotion = { gift_quantity: 1,
       id: "bundle", name: "衣褲套組", activity_id: "festival", code: null,
       discount_type: "bundle_price" as const, discount_value: 250, min_order_price: 0, min_quantity: 1,
       target_products: [{ id: "bag", name: "紀念袋" }, { id: "pants", name: "長褲" }],
@@ -262,7 +262,7 @@ describe("原商品頁的家人代訂模式", () => {
   it("套組先選規格，一次儲存後前進；失敗可重試，送出中不重複登記", async () => {
     const pants = { ...product, id: "pants", name: "長褲", price: 200 };
     api.accessDelegation.mockResolvedValue({ ...context, registration: null,
-      catalog: [{ ...context.catalog![0], products: [product, pants] }], promotions: [{
+      catalog: [{ ...context.catalog![0], products: [product, pants] }], promotions: [{ gift_quantity: 1,
         id: "bundle", name: "衣褲套組", activity_id: "festival", discount_type: "bundle_price",
         discount_value: 250, min_order_price: 0, min_quantity: 1, target_products: [product, pants],
       }] });
@@ -302,7 +302,7 @@ describe("原商品頁的家人代訂模式", () => {
   });
 
   it("單品優惠價會同時顯示原價與優惠價", async () => {
-    api.accessDelegation.mockResolvedValue({ ...context, registration: null, promotions: [{
+    api.accessDelegation.mockResolvedValue({ ...context, registration: null, promotions: [{ gift_quantity: 1,
       id: "sale", name: "商品九折", activity_id: "festival", code: null,
       discount_type: "percentage", discount_value: 10, min_order_price: 0, min_quantity: 1,
       target_products: [],

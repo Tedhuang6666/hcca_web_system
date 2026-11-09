@@ -181,6 +181,7 @@ async def test_targeted_gift_promotion_keeps_quantity_and_zero_revenue(
         "/shop/promotions",
         json={
             "name": "得獎者贈票",
+            "gift_quantity": 2,
             "target_identifiers": [buyer.email],
             "target_product_ids": [str(product.id)],
             "discount_type": "percentage",
@@ -222,6 +223,7 @@ async def test_gift_recipient_selects_variants_and_pays_only_surcharges(
         "/shop/promotions",
         json={
             "name": "中獎紀念衫",
+            "gift_quantity": 2,
             "code": code,
             "target_identifiers": [buyer.email],
             "target_product_ids": [str(product.id)],
@@ -293,6 +295,166 @@ async def test_gift_recipient_selects_variants_and_pays_only_surcharges(
         )
         assert rejected.status_code == 422
     assert (await outsider_client.get(f"/shop/orders/{order['id']}")).status_code in (403, 404)
+
+
+@pytest.mark.parametrize("topic_scoped", [False, True])
+@pytest.mark.parametrize("code", [None, "LIMITED_GIFT"])
+async def test_gift_limit_allows_paid_extras_and_snapshots_actual_gifts(
+    db_session, admin_user, authed_client_factory, topic_scoped, code
+):
+    buyer = await _bare_user(db_session)
+    product = await _make_active_product(db_session, admin_user, price=100, stock=10)
+    manager = authed_client_factory(admin_user)
+    payload = {
+        "name": "限量贈品",
+        "code": code,
+        "target_identifiers": [buyer.email],
+        "target_product_ids": [str(product.id)],
+        "discount_type": "percentage",
+        "discount_value": 100,
+    }
+    if topic_scoped:
+        payload["target_category_ids"] = []
+    created = await manager.post("/shop/promotions", json=payload)
+    assert created.status_code == 201, created.text
+    assert created.json()["gift_quantity"] == 1
+    promotion_id = created.json()["id"]
+    buyer_client = authed_client_factory(buyer)
+    path = f"/shop/registrations/current/products/{product.id}"
+    selected = await buyer_client.put(path, json={"variants": [{"option_ids": [], "quantity": 3}]})
+    assert selected.status_code == 200, selected.text
+    if code:
+        selected = await buyer_client.put(
+            "/shop/registrations/current/promotion", json={"code": code}
+        )
+        assert selected.status_code == 200, selected.text
+    order = selected.json()
+    assert (order["subtotal_price"], order["discount_amount"], order["total_price"]) == (
+        300,
+        100,
+        200,
+    )
+    assert order["items"][0]["quantity"] == 3
+    assert order["items"][0]["gift_quantity"] == 1
+    assert order["items"][0]["gift_discount_amount"] == 100
+    public = await buyer_client.get("/shop/promotions/available")
+    assert public.status_code == 200, public.text
+    assert next(row for row in public.json() if row["id"] == promotion_id)["gift_quantity"] == 1
+
+    for gift_quantity, expected_gifts in [(2, 2), (4, 3)]:
+        updated = await manager.patch(
+            f"/shop/promotions/{promotion_id}", json={"gift_quantity": gift_quantity}
+        )
+        assert updated.status_code == 200, updated.text
+        assert updated.json()["gift_quantity"] == gift_quantity
+        if not code:
+            repriced = (await buyer_client.get(f"/shop/orders/{order['id']}")).json()
+            assert repriced["discount_amount"] == expected_gifts * 100
+        selected = await buyer_client.put(
+            path, json={"variants": [{"option_ids": [], "quantity": 3}]}
+        )
+        assert selected.status_code == 200, selected.text
+        order = selected.json()
+        assert order["discount_amount"] == expected_gifts * 100
+        assert order["total_price"] == (3 - expected_gifts) * 100
+        assert sum(item["gift_quantity"] for item in order["items"]) == expected_gifts
+        preview = await buyer_client.post(
+            "/shop/registrations/current/promotion/preview", json={"code": code}
+        )
+        assert preview.status_code == 200, preview.text
+        assert preview.json()["total_price"] == order["total_price"]
+    unchanged = await manager.patch(f"/shop/promotions/{promotion_id}", json={"name": "更新名稱"})
+    assert unchanged.status_code == 200
+    assert unchanged.json()["gift_quantity"] == 4
+    listed = await buyer_client.get("/shop/orders", params={"my_only": "true"})
+    assert listed.status_code == 200
+    assert listed.json()[0]["items"][0]["gift_quantity"] == 3
+    assert listed.json()[0]["items"][0]["quantity"] == 3
+    receivable = await db_session.scalar(
+        select(Receivable).where(Receivable.source_id == UUID(order["id"]))
+    )
+    assert receivable is None or receivable.amount == 0
+    await db_session.refresh(product)
+    assert product.stock_quantity == 7
+
+
+@pytest.mark.parametrize("value", [None, 0, 101, 1.5])
+async def test_gift_quantity_rejects_invalid_create_and_patch(
+    db_session, admin_user, authed_client_factory, value
+):
+    product = await _make_active_product(db_session, admin_user)
+    client = authed_client_factory(admin_user)
+    payload = {
+        "name": "贈品數量驗證",
+        "target_product_ids": [str(product.id)],
+        "discount_type": "percentage",
+        "discount_value": 100,
+    }
+    assert (
+        await client.post("/shop/promotions", json={**payload, "gift_quantity": value})
+    ).status_code == 422
+    created = await client.post("/shop/promotions", json=payload)
+    assert created.status_code == 201, created.text
+    assert (
+        await client.patch(
+            f"/shop/promotions/{created.json()['id']}", json={"gift_quantity": value}
+        )
+    ).status_code == 422
+
+
+async def test_single_gift_limit_is_shared_by_variants_and_kept_after_payment(
+    db_session, admin_user, authed_client_factory
+):
+    buyer = await _bare_user(db_session)
+    product = await _make_product(db_session, price=100, stock=10)
+    free_options = [str(group.options[0].id) for group in product.variant_groups]
+    paid_options = [str(group.options[-1].id) for group in product.variant_groups]
+    manager = authed_client_factory(admin_user)
+    created = await manager.post(
+        "/shop/promotions",
+        json={
+            "name": "只贈一件紀念衫",
+            "target_product_ids": [str(product.id)],
+            "target_identifiers": [buyer.email],
+            "discount_type": "percentage",
+            "discount_value": 100,
+        },
+    )
+    assert created.status_code == 201, created.text
+    buyer_client = authed_client_factory(buyer)
+    path = f"/shop/registrations/current/products/{product.id}"
+    selected = await buyer_client.put(
+        path,
+        json={
+            "variants": [
+                {"option_ids": paid_options, "quantity": 2},
+                {"option_ids": free_options, "quantity": 1},
+            ]
+        },
+    )
+    assert selected.status_code == 200, selected.text
+    order = selected.json()
+    assert (order["subtotal_price"], order["discount_amount"], order["total_price"]) == (
+        400,
+        100,
+        300,
+    )
+    assert sum(item["gift_quantity"] for item in order["items"]) == 1
+    assert sum(item["gift_discount_amount"] for item in order["items"]) == 100
+    assert sum(item["quantity"] for item in order["items"]) == 3
+    snapshot = {item["id"]: item["gift_quantity"] for item in order["items"]}
+    loaded = await buyer_client.get(f"/shop/orders/{order['id']}")
+    assert loaded.status_code == 200
+    assert {item["id"]: item["gift_quantity"] for item in loaded.json()["items"]} == snapshot
+    paid = await manager.patch(f"/shop/orders/{order['id']}/payment", json={"is_paid": True})
+    assert paid.status_code == 200, paid.text
+    changed = await manager.patch(
+        f"/shop/promotions/{created.json()['id']}", json={"gift_quantity": 3}
+    )
+    assert changed.status_code == 200, changed.text
+    loaded = await buyer_client.get(f"/shop/orders/{order['id']}")
+    assert loaded.json()["total_price"] == 300
+    assert {item["id"]: item["gift_quantity"] for item in loaded.json()["items"]} == snapshot
 
 
 async def test_roster_gift_includes_all_variants_and_multiple_products(

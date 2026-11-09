@@ -4,7 +4,7 @@ import type { OrderOut, ShopPromotionPublicOut } from "@/lib/types";
 import ProductDetailOffers from "./ProductDetailOffers";
 
 const product = { id: "shirt", name: "紀念衫", price: 300 };
-const promotion: ShopPromotionPublicOut = {
+const promotion: ShopPromotionPublicOut = { gift_quantity: 1,
   id: "sale", name: "校慶九折", discount_type: "percentage", discount_value: 10,
   min_order_price: 0, min_quantity: 1, target_products: [{ id: product.id, name: product.name }],
 };
@@ -14,7 +14,7 @@ const order: OrderOut = {
   created_at: "2026-11-07T00:00:00Z", updated_at: "2026-11-07T00:00:00Z",
   assistance_scope: "self", payment_method: "cash_on_pickup", is_paid: false, is_class_collected: false,
   subtotal_price: 700, total_price: 650,
-  items: [{ id: "item", product_id: product.id, quantity: 2, selected_options: [], unit_price: 350, subtotal: 700 }],
+  items: [{ gift_quantity: 0, gift_discount_amount: 0, id: "item", product_id: product.id, quantity: 2, selected_options: [], unit_price: 350, subtotal: 700 }],
   applied_promotions: [
     { promotion_id: "sale", name: "校慶九折", discount_amount: 30 },
     { promotion_id: "coupon", name: "迎新折價券", code: "WELCOME", discount_amount: 20 },
@@ -62,7 +62,7 @@ describe("商品詳情優惠與贈品", () => {
     fireEvent.click(screen.getByText("優惠與贈品"));
     expect(screen.getByText("贈品：紀念衫")).toBeVisible();
     expect(screen.getByText("尚未登記贈品")).toBeVisible();
-    expect(screen.getByText(/基本售價 NT\$0；規格加價另計/)).toBeVisible();
+    expect(screen.getByText(/每項贈送 1 件.*可加購多件，超出件數與規格加價另計/)).toBeVisible();
     expect(screen.getByText(/請選擇規格並登記/)).toBeVisible();
     expect(screen.queryByText(/^已登記.*已套用贈品優惠$/)).not.toBeInTheDocument();
   });

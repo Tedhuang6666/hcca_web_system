@@ -17,9 +17,9 @@ const order: OrderOut = {
   id: "order", user_id: "student", activity_id: "activity", status: "pending", serial_number: "ORDER",
   assistance_scope: "self", payment_method: "school_collection", created_at: "2026-10-10", updated_at: "2026-10-10",
   subtotal_price: 300, discount_amount: 0, total_price: 300, is_paid: false, is_class_collected: false,
-  items: [{ id: "own", product_id: "shirt", product_name: "衣服", quantity: 1,
+  items: [{ gift_quantity: 0, gift_discount_amount: 0, id: "own", product_id: "shirt", product_name: "衣服", quantity: 1,
     unit_price: 100, subtotal: 100, selected_options: [], delegation_link_id: null },
-  { id: "parent", product_id: "shirt", product_name: "衣服", quantity: 2,
+  { gift_quantity: 0, gift_discount_amount: 0, id: "parent", product_id: "shirt", product_name: "衣服", quantity: 2,
     unit_price: 100, subtotal: 200, selected_options: [], delegation_link_id: "parent-link" }],
 };
 const context = {

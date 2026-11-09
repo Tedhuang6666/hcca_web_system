@@ -442,3 +442,38 @@ async def test_multiple_automatic_promotions_reprice_orders_and_receivables(db_s
         promotions[0].id,
         promotions[2].id,
     }
+
+
+async def test_each_target_product_has_one_shared_gift_limit_across_quantities(
+    db_session, topic_shop
+):
+    manager, buyer, activity, categories, products = topic_shop
+    promotion = await shop_svc.create_promotion(
+        db_session,
+        created_by=manager.id,
+        data=ShopPromotionCreate(
+            name="兩項贈品各送兩件",
+            target_category_ids=[row.id for row in categories[:2]],
+            target_product_ids=[row.id for row in products[:2]],
+            discount_type="percentage",
+            discount_value=100,
+            gift_quantity=2,
+            min_order_price=500,
+        ),
+    )
+    context = {
+        "user_id": buyer.id,
+        "subtotal": 1500,
+        "activity_id": activity.id,
+        "product_subtotals": {products[0].id: 900, products[1].id: 600},
+        "product_quantities": {products[0].id: 3, products[1].id: 2},
+    }
+    preview = await shop_svc.preview_promotion(db_session, **context)
+    result = await resolve_promotions(db_session, **context)
+    assert preview.discount_amount == result.discount_amount == 1200
+    assert result.allocations[0].promotion.id == promotion.id
+    context["subtotal"] = 1200
+    context["product_subtotals"][products[1].id] = 300
+    context["product_quantities"][products[1].id] = 1
+    result = await resolve_promotions(db_session, **context)
+    assert result.discount_amount == 600  # 未達門檻的另一主題不贈送。

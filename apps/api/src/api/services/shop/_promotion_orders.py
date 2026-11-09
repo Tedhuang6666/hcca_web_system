@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.shop import Order, OrderStatus, ShopPromotion
 from api.services import receivable as receivable_svc
+from api.services.shop._gift_allocations import snapshot_order_gifts
 from api.services.shop._orders import (
     _order_activity_id,
     _order_detail_query,
@@ -140,6 +141,7 @@ async def refresh_promotion_orders(
                 remaining -= amount
         selected = {row.promotion.id: row.discount_amount for row in allocations}
         if selected == previous:
+            await snapshot_order_gifts(session, order, tuple(allocations))
             continue
 
         await _save_allocations(session, order, allocations)

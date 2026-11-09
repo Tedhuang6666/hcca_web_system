@@ -28,7 +28,8 @@ export function productOfferPrice(
       if (price) best = Math.min(best, (price.unit_price + variantDelta) * quantity);
     } else if (targets.length <= 1 && promotion.discount_type === "percentage") {
       const discount = promotion.discount_value === 100 && targets.length > 0
-        ? product.price * quantity : Math.floor(original * promotion.discount_value / 100);
+        ? product.price * Math.min(quantity, promotion.gift_quantity ?? 1)
+        : Math.floor(original * promotion.discount_value / 100);
       best = Math.min(best, original - discount);
     } else if (targets.length <= 1 && promotion.discount_type === "fixed") {
       best = Math.min(best, original - promotion.discount_value);

@@ -9,6 +9,7 @@ import { useWS } from "@/hooks/useWS";
 import { groupActivityPreorders } from "@/lib/shop-preorders";
 import ProductThumbnail from "@/components/shop/ProductThumbnail";
 import ShopPrice from "@/components/shop/ShopPrice";
+import { orderItemDisplayRows } from "@/lib/shop-order-items";
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<OrderListItem[]>([]);
@@ -144,11 +145,12 @@ export default function OrdersPage() {
                     </div>
                   </div>
                   <ul className="shop-preorder-items" aria-label={`${group.label}品項`}>
-                    {group.items.map((item) => (
-                      <li key={item.id}>
+                    {orderItemDisplayRows(group.items).map((item) => (
+                      <li key={item.display_id}>
                         <ProductThumbnail url={productImages[item.product_id]} />
                         <div className="min-w-0 flex-1">
                           <span>{item.product_name ?? "商品"}</span>
+                          {item.is_gift && <p>贈品 · NT${item.subtotal.toLocaleString("zh-TW")}{item.subtotal > 0 ? "（規格加價）" : ""}</p>}
                           {item.selected_options.length > 0 && (
                             <p>{item.selected_options.map((option) => option.value).join("／")}</p>
                           )}

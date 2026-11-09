@@ -13,7 +13,7 @@ const order: OrderOut = {
   status: "pending", serial_number: "ORDER-001", created_at: "2026-10-25T00:00:00Z",
   updated_at: "2026-10-25T00:00:00Z", subtotal_price: 200, discount_amount: 0, total_price: 200,
   promotion_id: null, promotion_code: null, applied_promotions: [], is_paid: false,
-  is_class_collected: false, assistance_scope: "self", payment_method: "cash_on_pickup", items: [{
+  is_class_collected: false, assistance_scope: "self", payment_method: "cash_on_pickup", items: [{ gift_quantity: 0, gift_discount_amount: 0,
     id: "item-1", product_id: "product-1", product_name: "商品", quantity: 2,
     unit_price: 100, subtotal: 200, selected_options: [],
   }],

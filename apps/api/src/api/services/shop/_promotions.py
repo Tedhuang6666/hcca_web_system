@@ -769,6 +769,7 @@ async def create_promotion(
         discount_value=data.discount_value,
         min_order_price=data.min_order_price,
         min_quantity=data.min_quantity,
+        gift_quantity=data.gift_quantity,
         starts_at=data.starts_at,
         ends_at=data.ends_at,
         max_uses=data.max_uses,
@@ -1057,11 +1058,14 @@ def _discount_amount(
         return min(eligible_subtotal, savings)
     if promotion.discount_type == ShopDiscountType.PERCENTAGE:
         if promotion.discount_value == 100 and promotion.target_products:
-            # 指定商品全額折抵是贈品；受贈者自行選規格，僅免除商品基本售價。
+            # 每項贈品只折抵設定件數的基本售價；其餘件數及規格加價照常計費。
             amounts = product_subtotals or {}
             quantities = product_quantities or {}
             return sum(
-                min(amounts.get(product.id, 0), product.price * quantities.get(product.id, 0))
+                min(
+                    amounts.get(product.id, 0),
+                    product.price * min(quantities.get(product.id, 0), promotion.gift_quantity),
+                )
                 for product in promotion.target_products
             )
         return min(eligible_subtotal, eligible_subtotal * promotion.discount_value // 100)
@@ -1332,6 +1336,7 @@ def serialize_promotion(promotion: ShopPromotion) -> ShopPromotionOut:
         discount_value=promotion.discount_value,
         min_order_price=promotion.min_order_price,
         min_quantity=promotion.min_quantity,
+        gift_quantity=promotion.gift_quantity,
         starts_at=promotion.starts_at,
         ends_at=promotion.ends_at,
         max_uses=promotion.max_uses,
@@ -1357,6 +1362,7 @@ def serialize_public_promotion(promotion: ShopPromotion) -> ShopPromotionPublicO
         discount_value=promotion.discount_value,
         min_order_price=promotion.min_order_price,
         min_quantity=promotion.min_quantity,
+        gift_quantity=promotion.gift_quantity,
         target_products=[
             ShopPromotionProductTargetOut(id=product.id, name=product.name)
             for product in (promotion.target_products or [])

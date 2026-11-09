@@ -67,7 +67,7 @@ const firstOrder = {
   paid_at: null,
   created_at: "2026-10-10T00:00:00Z",
   updated_at: "2026-10-10T00:00:00Z",
-  items: [{
+  items: [{ gift_quantity: 0, gift_discount_amount: 0,
     id: "bag-first",
     product_id: "bag",
     product_name: "紀念袋",

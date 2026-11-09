@@ -13,7 +13,7 @@ describe("商品明細彙整", () => {
     expect(mergeDraftItems([item, { ...item, product_id: "q" }, { ...item, option_ids: ["blue"] }, { ...item, unit_price: 120 }])).toHaveLength(4);
   });
   it("shows historical duplicates once with variant details", () => {
-    const item = { id: "i", product_id: "p", product_name: "班服", quantity: 1, unit_price: 100, subtotal: 100, selected_options: [] };
+    const item = { gift_quantity: 0, gift_discount_amount: 0, id: "i", product_id: "p", product_name: "班服", quantity: 1, unit_price: 100, subtotal: 100, selected_options: [] };
     expect(summarizeOrderItems([item, { ...item, id: "j", quantity: 2, subtotal: 200 }])).toBe("班服 × 3");
     expect(summarizeOrderItems([])).toBe("");
   });

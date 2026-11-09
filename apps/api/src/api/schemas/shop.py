@@ -506,6 +506,8 @@ class OrderItemOut(BaseModel):
     quantity: int
     unit_price: int
     subtotal: int
+    gift_quantity: int = 0
+    gift_discount_amount: int = 0
     selected_options: list[SelectedOption] = []
     ordered_by_id: uuid.UUID | None = None
     ordered_by_name: str | None = None
@@ -866,6 +868,7 @@ class ShopPromotionCreate(BaseModel):
     )
     min_order_price: int = Field(0, ge=0)
     min_quantity: int = Field(1, ge=1, le=100)
+    gift_quantity: int = Field(1, ge=1, le=100, description="每項指定贈品的免費件數")
     starts_at: datetime | None = None
     ends_at: datetime | None = None
     max_uses: int | None = Field(None, ge=1)
@@ -892,12 +895,20 @@ class ShopPromotionUpdate(BaseModel):
     discount_value: int | None = Field(None, ge=0)
     min_order_price: int | None = Field(None, ge=0)
     min_quantity: int | None = Field(None, ge=1, le=100)
+    gift_quantity: int | None = Field(None, ge=1, le=100, description="每項指定贈品的免費件數")
     starts_at: datetime | None = None
     ends_at: datetime | None = None
     max_uses: int | None = Field(None, ge=1)
     description: str | None = Field(None, max_length=500)
     is_active: bool | None = None
     is_public: bool | None = None
+
+    @field_validator("gift_quantity")
+    @classmethod
+    def reject_null_gift_quantity(cls, value: int | None) -> int:
+        if value is None:
+            raise ValueError("贈送數量不可為空")
+        return value
 
     @field_validator("is_public")
     @classmethod
@@ -941,6 +952,7 @@ class ShopPromotionPublicOut(BaseModel):
     discount_value: int
     min_order_price: int
     min_quantity: int
+    gift_quantity: int = 1
     target_products: list[ShopPromotionProductTargetOut] = Field(default_factory=list)
     product_price_overrides: list[ShopPromotionProductPriceOut] = Field(default_factory=list)
     starts_at: datetime | None = None
@@ -963,6 +975,7 @@ class ShopPromotionOut(BaseModel):
     discount_value: int
     min_order_price: int
     min_quantity: int
+    gift_quantity: int = 1
     starts_at: datetime | None = None
     ends_at: datetime | None = None
     max_uses: int | None = None

@@ -579,6 +579,12 @@ class OrderItem(Base, TimestampMixin):
     quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     # 下單時的單價快照（= 商品價 + 變體加價總和，不受日後調價影響）
     unit_price: Mapped[int] = mapped_column(Integer, nullable=False)
+    gift_quantity: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    gift_discount_amount: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     ordered_by_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
@@ -765,6 +771,9 @@ class ShopPromotion(Base, TimestampMixin):
         Integer, nullable=False, default=0, server_default="0"
     )
     min_quantity: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    gift_quantity: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default="1"
     )
     starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

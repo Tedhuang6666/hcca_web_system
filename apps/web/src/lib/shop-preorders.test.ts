@@ -8,7 +8,7 @@ const order: OrderListItem = {
   status: "pending", is_class_collected: true, is_paid: false,
   created_at: "2026-10-10T00:00:00Z", payment_method: "cash_on_pickup",
   total_price: 180, subtotal_price: 200, discount_amount: 20,
-  items: [{ id: "bag", product_id: "bag", product_name: "紀念袋", quantity: 2,
+  items: [{ gift_quantity: 0, gift_discount_amount: 0, id: "bag", product_id: "bag", product_name: "紀念袋", quantity: 2,
     unit_price: 100, subtotal: 200, selected_options: [] }],
 };
 

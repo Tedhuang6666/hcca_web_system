@@ -90,7 +90,9 @@ export default function ProductDetailOffers({ product, promotions, registration,
             {allocation && <p className={styles.saving}>本筆登記折抵 NT${allocation.discount_amount.toLocaleString()}</p>}
             {isGift ? <>
               <p className={styles.giftName}>贈品：{giftProducts.map((row) => row.name).join("、")}</p>
-              <p>符合條件時基本售價 NT$0；規格加價另計。</p>
+              <p>{promotion.discount_type === "percentage"
+                ? `每項贈送 ${promotion.gift_quantity ?? 1} 件，基本售價 NT$0；可加購多件，超出件數與規格加價另計。`
+                : "符合條件時基本售價 NT$0；規格加價另計。"}</p>
               <p>請選擇規格並登記，贈品不會自動加入；完成後請確認已套用贈品優惠。</p>
             </> : <p>{offerDescription(promotion, product.id)}</p>}
             {promotion.discount_type === "bundle_price" && <p>{promotion.target_products?.map((row) => row.name).join(" ＋ ")}</p>}

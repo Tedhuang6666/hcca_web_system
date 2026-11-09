@@ -20,7 +20,7 @@ from api.services.shop._orders import (
 )
 
 
-def serialize_order_item(item: OrderItem) -> OrderItemOut:
+def serialize_order_item(item: OrderItem, *, direct_gift: bool = False) -> OrderItemOut:
     return OrderItemOut(
         id=item.id,
         product_id=item.product_id,
@@ -28,6 +28,8 @@ def serialize_order_item(item: OrderItem) -> OrderItemOut:
         quantity=item.quantity,
         unit_price=item.unit_price,
         subtotal=item.quantity * item.unit_price,
+        gift_quantity=item.quantity if direct_gift else item.gift_quantity,
+        gift_discount_amount=item.gift_discount_amount,
         selected_options=item.selected_options or [],
         ordered_by_id=item.ordered_by_id,
         ordered_by_name=item.ordered_by_name,
@@ -84,7 +86,10 @@ def serialize_order(order: Order) -> OrderOut:
         paid_at=order.paid_at,
         created_at=order.created_at,
         updated_at=order.updated_at,
-        items=[serialize_order_item(it) for it in order.items],
+        items=[
+            serialize_order_item(it, direct_gift=order.assistance_scope == "council_gift")
+            for it in order.items
+        ],
     )
 
 
@@ -123,5 +128,8 @@ def serialize_order_list_item(order: Order) -> OrderListItem:
         is_paid=order.is_paid,
         is_class_collected=order.is_class_collected,
         created_at=order.created_at,
-        items=[serialize_order_item(item) for item in order.items],
+        items=[
+            serialize_order_item(item, direct_gift=order.assistance_scope == "council_gift")
+            for item in order.items
+        ],
     )

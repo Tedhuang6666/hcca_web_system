@@ -52,14 +52,14 @@ const formalOrder: OrderOut = {
   serial_number: "FORMAL-001", created_at: "2026-10-22T00:00:00Z", updated_at: "2026-10-22T00:00:00Z",
   assistance_scope: "self", payment_method: "cash_on_pickup",
   total_price: 200, subtotal_price: 200, discount_amount: 0, is_paid: false, is_class_collected: false,
-  items: [{ id: "formal-item", product_id: "formal", product_name: "正式商品", quantity: 2,
+  items: [{ gift_quantity: 0, gift_discount_amount: 0, id: "formal-item", product_id: "formal", product_name: "正式商品", quantity: 2,
     unit_price: 100, subtotal: 200, selected_options: [] }],
 };
 
 it("優惠很多時先選規格，優惠收合且不影響登記購買", async () => {
   api.me.mockResolvedValue({ id: "tester", student_id: "310001" });
   api.getCurrentRegistrations.mockResolvedValue([]);
-  api.listAvailablePromotions.mockResolvedValue(Array.from({ length: 12 }, (_, index) => ({
+  api.listAvailablePromotions.mockResolvedValue(Array.from({ length: 12 }, (_, index) => ({ gift_quantity: 1,
     id: `sale-${index}`, name: `滿額優惠 ${index + 1}`, activity_id: "festival",
     discount_type: "fixed", discount_value: 10, min_order_price: 1000, min_quantity: 1,
     target_products: [{ id: "formal", name: "正式商品" }],
@@ -138,7 +138,7 @@ it("商品詳情逐筆列出同筆登記已套用的自動優惠與優惠碼", a
 it("登記贈品後，商品詳情由尚未登記更新為已套用贈品優惠", async () => {
   api.me.mockResolvedValue({ id: "tester", student_id: "310001", email: "tester@example.test" });
   api.getCurrentRegistrations.mockResolvedValue([]);
-  api.listAvailablePromotions.mockResolvedValue([{
+  api.listAvailablePromotions.mockResolvedValue([{ gift_quantity: 1,
     id: "gift", name: "抽獎贈品", activity_id: "festival", discount_type: "percentage", discount_value: 100,
     min_order_price: 0, min_quantity: 1, target_products: [{ id: "formal", name: "正式商品" }],
   }]);
@@ -345,7 +345,7 @@ it.each([
   api.catalog.mockResolvedValue([{ id: "goods", name: "商品", activity_id: "festival",
     sort_order: 0, products: [product], series: [] }]);
   api.getProduct.mockResolvedValue({ ...product, variant_groups: [], media: [] });
-  api.listAvailablePromotions.mockResolvedValue([{
+  api.listAvailablePromotions.mockResolvedValue([{ gift_quantity: 1,
     id: "sale", name: "特殊優惠", activity_id: "festival", code: null,
     discount_type: sale.discount_type, discount_value: sale.discount_value,
     min_quantity: 1, min_order_price: 0, target_products: [{ id: product.id, name: product.name }],
@@ -372,7 +372,7 @@ it("only shows eligible tickets and removes empty series, themes and related bun
     ] },
     { id: "performers", name: "表演人員專屬", sort_order: 1, products: [hidden], series: [] },
   ]);
-  api.listAvailablePromotions.mockResolvedValue([{ id: "restricted-bundle", name: "限定工作套組",
+  api.listAvailablePromotions.mockResolvedValue([{ gift_quantity: 1, id: "restricted-bundle", name: "限定工作套組",
     discount_type: "bundle_price", discount_value: 100, min_order_price: 0, min_quantity: 1,
     target_products: [visible, hidden] }]);
 
@@ -547,10 +547,10 @@ it("keeps a saved activity promotion out of a product route for another activity
       sort_order: 1, products: [festivalProduct, festivalSnack], series: [] },
   ]);
   api.listAvailablePromotions.mockResolvedValue([
-    { id: "christmas-bundle", name: "聖誕傳情套組", activity_id: "christmas",
+    { gift_quantity: 1, id: "christmas-bundle", name: "聖誕傳情套組", activity_id: "christmas",
       discount_type: "bundle_price", discount_value: 150, min_order_price: 0, min_quantity: 1,
       target_products: [christmasProduct, christmasSnack] },
-    { id: "festival-bundle", name: "校慶優惠套組", activity_id: "festival",
+    { gift_quantity: 1, id: "festival-bundle", name: "校慶優惠套組", activity_id: "festival",
       discount_type: "bundle_price", discount_value: 150, min_order_price: 0, min_quantity: 1,
       target_products: [festivalProduct, festivalSnack] },
   ]);
@@ -576,10 +576,10 @@ it("keeps unscoped bundle offers with another category's products out of the sel
       products: [festivalProduct, festivalSnack], series: [] },
   ]);
   api.listAvailablePromotions.mockResolvedValue([
-    { id: "christmas-bundle", name: "聖誕傳情套組", activity_id: null,
+    { gift_quantity: 1, id: "christmas-bundle", name: "聖誕傳情套組", activity_id: null,
       discount_type: "bundle_price", discount_value: 150, min_order_price: 0, min_quantity: 1,
       target_products: [christmasProduct, christmasSnack] },
-    { id: "festival-bundle", name: "校慶優惠套組", activity_id: null,
+    { gift_quantity: 1, id: "festival-bundle", name: "校慶優惠套組", activity_id: null,
       discount_type: "bundle_price", discount_value: 150, min_order_price: 0, min_quantity: 1,
       target_products: [festivalProduct, festivalSnack] },
   ]);

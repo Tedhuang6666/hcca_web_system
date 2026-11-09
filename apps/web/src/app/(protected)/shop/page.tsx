@@ -63,6 +63,7 @@ import { productGallery } from "@/lib/shop-product-media";
 import ProductThumbnail from "@/components/shop/ProductThumbnail";
 import ShopImage from "@/components/shop/ShopImage";
 import CatalogImage from "@/components/shop/CatalogImage";
+import OrderItemGiftBreakdown from "@/components/shop/OrderItemGiftBreakdown";
 
 function Thumb({ url, alt, size = 64 }: { url: string | null; alt: string; size?: number }) {
   return <ProductThumbnail url={url} alt={alt} size={size} />;
@@ -798,7 +799,10 @@ function ProductModal({
                 {!bundleStep && registeredVariants.size > 0 && <section className="shop-registered-variants" aria-label="已登記的規格">
                   <h4>已登記的規格</h4>
                   <ul>{[...registeredVariants].map(([key, { item, quantity }]) => <li key={key}>
-                    <span>{item.selected_options.map((option) => option.value).join("／") || "一般規格"} × {quantity}</span>
+                    <div>
+                      <span>{item.selected_options.map((option) => option.value).join("／") || "一般規格"} × {quantity}</span>
+                      <OrderItemGiftBreakdown items={registeredItems.filter((row) => registrationVariantKey(row.selected_options) === key)} />
+                    </div>
                     {(lockedVariantQuantities.get(key) ?? 0) > 0
                       ? <span>含已收款品項，規格已鎖定</span>
                       : <button type="button" className="shop-product-retry" disabled={!canEdit || loading}
@@ -1889,6 +1893,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                       </span>}
                     </div>
                     <strong>× {item.quantity} · NT${item.subtotal.toLocaleString("zh-TW")}</strong>
+                    <OrderItemGiftBreakdown items={[item]} />
                   </li>
                 ))}
               </ul>

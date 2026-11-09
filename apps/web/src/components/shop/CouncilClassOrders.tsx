@@ -7,6 +7,7 @@ import { catalogScopeKey, orderScopeKey, orderScopeParams } from "@/lib/shop-ord
 import type { CatalogCategoryOut, ClassMemberOut, OrderListItem, SchoolClassListItem } from "@/lib/types";
 import Modal from "@/components/ui/Modal";
 import AdminAssistedOrder from "./AdminAssistedOrder";
+import { orderItemDisplayRows } from "@/lib/shop-order-items";
 
 async function allPages(load: (offset: number) => Promise<OrderListItem[]>) {
   const orders: OrderListItem[] = [];
@@ -28,15 +29,15 @@ type StudentRow = {
 
 function itemSummary(orders: OrderListItem[]) {
   const items = new Map<string, { label: string; quantity: number; separate: boolean }>();
-  for (const order of orders) for (const item of order.items ?? []) {
+  for (const order of orders) for (const item of orderItemDisplayRows(order.items ?? [])) {
     const options = item.selected_options.map((option) => `${option.group_name}：${option.value}`).join("／");
     const scope = order.activity_name ?? order.category_name ?? "一般商品";
     const separate = Boolean(order.supplement_class_id && !order.class_id);
     const key = JSON.stringify([order.activity_id ?? order.category_id ?? scope, item.product_id,
-      item.selected_options.map((option) => option.option_id).sort(), separate]);
+      item.selected_options.map((option) => option.option_id).sort(), separate, item.is_gift]);
     const previous = items.get(key);
     items.set(key, {
-      label: `${scope} · ${item.product_name ?? "商品"}${options ? `（${options}）` : ""}`,
+      label: `${scope} · ${item.product_name ?? "商品"}${options ? `（${options}）` : ""}${item.is_gift ? "【贈品】" : ""}`,
       quantity: (previous?.quantity ?? 0) + item.quantity,
       separate,
     });

@@ -9,7 +9,7 @@ const product: CatalogProductOut = {
   has_option_surcharge: true, seating_mode: null, sale_start: null, sale_end: null,
 };
 const pants = { ...product, id: "pants", name: "褲子", price: 500 };
-const promotion: ShopPromotionPublicOut = {
+const promotion: ShopPromotionPublicOut = { gift_quantity: 1,
   id: "bundle", name: "衣褲套組", activity_id: null, code: null,
   discount_type: "bundle_price", discount_value: 650, min_order_price: 0, min_quantity: 1,
   target_products: [{ id: "shirt", name: "衣服" }, { id: "pants", name: "褲子" }],

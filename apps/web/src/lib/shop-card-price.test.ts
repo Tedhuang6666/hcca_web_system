@@ -3,7 +3,7 @@ import type { OrderOut, ShopPromotionPublicOut } from "./types";
 import { shopCardPrice } from "./shop-card-price";
 
 const product = { id: "card", price: 40 };
-const promotion: ShopPromotionPublicOut = {
+const promotion: ShopPromotionPublicOut = { gift_quantity: 1,
   id: "staff", name: "班聯會幹部優惠", activity_id: "festival", code: null,
   discount_type: "percentage", discount_value: 20, min_quantity: 20, min_order_price: 800,
   target_products: [{ id: "card", name: "傳情卡片餅乾套組" }],
@@ -15,7 +15,7 @@ const order: OrderOut = {
   subtotal_price: 800, discount_amount: 160, total_price: 640, promotion_id: "staff",
   is_paid: false, is_class_collected: false,
   applied_promotions: [{ promotion_id: "staff", name: "班聯會幹部優惠", discount_amount: 160 }],
-  items: [{ id: "item", product_id: "card", quantity: 20, unit_price: 40, subtotal: 800, selected_options: [] }],
+  items: [{ gift_quantity: 0, gift_discount_amount: 0, id: "item", product_id: "card", quantity: 20, unit_price: 40, subtotal: 800, selected_options: [] }],
 };
 
 describe("商品名稱下方的實際折後單價", () => {

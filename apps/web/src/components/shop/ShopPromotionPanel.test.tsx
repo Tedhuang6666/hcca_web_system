@@ -85,27 +85,31 @@ describe("優惠管理的預先指定學號", () => {
     await screen.findByRole("checkbox", { name: "校慶門票" });
     fireEvent.change(screen.getByRole("textbox", { name: "優惠名稱" }), { target: { value: "抽獎贈票" } });
     fireEvent.change(screen.getByRole("combobox", { name: "優惠內容" }), { target: { value: "gift" } });
+    expect(screen.getByRole("spinbutton", { name: /每項贈送數量/ })).toHaveValue(1);
+    fireEvent.change(screen.getByRole("spinbutton", { name: /每項贈送數量/ }), { target: { value: "2" } });
     fireEvent.click(screen.getByText("批次輸入學號或 Email"));
     fireEvent.change(screen.getByRole("textbox", { name: /可使用帳號/ }), { target: { value: "11520\n11521" } });
     fireEvent.click(screen.getByRole("button", { name: "建立優惠" }));
     expect(api.createPromotion).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("checkbox", { name: "校慶門票" }));
     api.listPromotions.mockResolvedValue([{
-      ...pendingStudentTarget, discount_value: 100,
+      ...pendingStudentTarget, discount_value: 100, gift_quantity: 2,
       target_products: [{ id: "ticket", name: "校慶門票" }],
     }]);
     fireEvent.click(screen.getByRole("button", { name: "建立優惠" }));
     await waitFor(() => expect(api.createPromotion).toHaveBeenCalledWith(expect.objectContaining({
       target_identifiers: ["11520", "11521"], target_product_ids: ["ticket"],
-      discount_type: "percentage", discount_value: 100,
+      discount_type: "percentage", discount_value: 100, gift_quantity: 2,
     })));
-    await screen.findByText(/贈票／免費商品（基本售價免費，規格加價自付）/);
+    await screen.findByText(/每項贈送 2 件（可加購，規格加價自付）/);
     fireEvent.click(screen.getByRole("button", { name: "編輯" }));
     expect(screen.getByRole("combobox", { name: "優惠內容" })).toHaveValue("gift");
-    expect(screen.getByText(/由受贈者到商品頁自行選擇規格/)).toBeVisible();
+    expect(screen.getByRole("spinbutton", { name: /每項贈送數量/ })).toHaveValue(2);
+    expect(screen.getByText(/受贈者自行選規格/)).toBeVisible();
+    fireEvent.change(screen.getByRole("spinbutton", { name: /每項贈送數量/ }), { target: { value: "3" } });
     fireEvent.click(screen.getByRole("button", { name: "儲存變更" }));
     await waitFor(() => expect(api.updatePromotion).toHaveBeenCalledWith("promotion-1",
-      expect.objectContaining({ discount_type: "percentage", discount_value: 100,
+      expect.objectContaining({ discount_type: "percentage", discount_value: 100, gift_quantity: 3,
         target_product_ids: ["ticket"], target_identifiers: ["410999"] })));
   });
 

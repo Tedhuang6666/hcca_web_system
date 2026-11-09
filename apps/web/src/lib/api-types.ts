@@ -22234,6 +22234,16 @@ export interface components {
             /** Delegation Name */
             delegation_name?: string | null;
             /**
+             * Gift Discount Amount
+             * @default 0
+             */
+            gift_discount_amount: number;
+            /**
+             * Gift Quantity
+             * @default 0
+             */
+            gift_quantity: number;
+            /**
              * Id
              * Format: uuid
              */
@@ -30374,6 +30384,12 @@ export interface components {
             /** Ends At */
             ends_at?: string | null;
             /**
+             * Gift Quantity
+             * @description 每項指定贈品的免費件數
+             * @default 1
+             */
+            gift_quantity: number;
+            /**
              * Is Public
              * @default true
              */
@@ -30438,6 +30454,11 @@ export interface components {
             discount_value: number;
             /** Ends At */
             ends_at?: string | null;
+            /**
+             * Gift Quantity
+             * @default 1
+             */
+            gift_quantity: number;
             /**
              * Id
              * Format: uuid
@@ -30589,6 +30610,11 @@ export interface components {
             /** Ends At */
             ends_at?: string | null;
             /**
+             * Gift Quantity
+             * @default 1
+             */
+            gift_quantity: number;
+            /**
              * Id
              * Format: uuid
              */
@@ -30631,6 +30657,11 @@ export interface components {
             discount_value?: number | null;
             /** Ends At */
             ends_at?: string | null;
+            /**
+             * Gift Quantity
+             * @description 每項指定贈品的免費件數
+             */
+            gift_quantity?: number | null;
             /** Is Active */
             is_active?: boolean | null;
             /** Is Public */

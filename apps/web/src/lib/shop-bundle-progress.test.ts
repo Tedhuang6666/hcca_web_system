@@ -9,7 +9,7 @@ const shirt: CatalogProductOut = {
 };
 const pants = { ...shirt, id: "pants", name: "長褲", price: 500 };
 const products = new Map([[shirt.id, shirt], [pants.id, pants]]);
-const promotion: ShopPromotionPublicOut = {
+const promotion: ShopPromotionPublicOut = { gift_quantity: 1,
   id: "bundle", name: "衣褲套組", discount_type: "bundle_price", discount_value: 650,
   min_order_price: 0, min_quantity: 1, target_products: [shirt, pants],
 };
@@ -17,6 +17,7 @@ const registration = (quantities: number[]): Pick<OrderOut, "items"> => ({
   items: quantities.map((quantity, index) => ({
     id: `item-${index}`, product_id: index === 0 ? "shirt" : "pants", product_name: "商品",
     quantity, unit_price: 300, subtotal: quantity * 300, selected_options: [],
+    gift_quantity: 0, gift_discount_amount: 0,
   })),
 });
 

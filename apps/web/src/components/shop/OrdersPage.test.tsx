@@ -21,7 +21,7 @@ const order: OrderListItem = {
   status: "pending", is_class_collected: true, is_paid: false,
   created_at: "2026-10-10T00:00:00Z", payment_method: "cash_on_pickup",
   total_price: 200, subtotal_price: 200, discount_amount: 0,
-  items: [{ id: "bag", product_id: "bag", product_name: "紀念袋", quantity: 2,
+  items: [{ gift_quantity: 0, gift_discount_amount: 0, id: "bag", product_id: "bag", product_name: "紀念袋", quantity: 2,
     unit_price: 100, subtotal: 200, selected_options: [] }],
 };
 
@@ -37,6 +37,17 @@ beforeEach(() => {
 });
 
 describe("我的預購", () => {
+  it("同一品項三件中一件贈品時分成購買兩件及贈品一件", async () => {
+    api.listOrders.mockResolvedValue([{ ...order, subtotal_price: 300, total_price: 200, discount_amount: 100,
+      items: [{ ...order.items![0], quantity: 3, subtotal: 300, gift_quantity: 1, gift_discount_amount: 100 }],
+    }]);
+    render(<OrdersPage />);
+    const items = await screen.findByRole("list", { name: "校慶品項" });
+    expect(within(items).getAllByRole("listitem")).toHaveLength(2);
+    expect(within(items).getByText("× 2")).toBeVisible();
+    expect(within(items).getByText("× 1")).toBeVisible();
+    expect(within(items).getByText("贈品 · NT$0")).toBeVisible();
+  });
   it("優惠套用後在活動合計顯示刪除線原價與實付價", async () => {
     api.listOrders.mockResolvedValue([{ ...order, subtotal_price: 200, discount_amount: 50, total_price: 150 }]);
     render(<OrdersPage />);
