@@ -1379,7 +1379,7 @@ export default function CouncilOrdersPage() {
                   <table className="shop-mobile-table w-full min-w-[700px] text-sm">
                     <thead>
                       <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                        {["訂單編號", "訂購人", "班級", "狀態", "金額", "班聯收款", "建立時間"].map((h) => (
+                        {["訂單編號", "訂購人", "班級／處室", "狀態", "金額", "班聯收款", "建立時間"].map((h) => (
                           <th key={h} className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "var(--text-muted)" }}>{h}</th>
                         ))}
                         {canConfirmClassPayment && <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "var(--text-muted)" }}>操作</th>}
@@ -1393,7 +1393,7 @@ export default function CouncilOrdersPage() {
                               <Link href={`/shop/orders/${order.id}?from=council`} className="text-sm underline" style={{ color: "var(--primary-text)" }}>{order.serial_number}</Link>
                             </td>
                             <td data-label="訂購人" className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>{order.user_name ?? "-"}</td>
-                            <td data-label="班級" className="px-4 py-3 text-xs" style={{ color: "var(--text-muted)" }}>{order.class_label ?? "-"}</td>
+                            <td data-label="班級／處室" className="px-4 py-3 text-xs" style={{ color: "var(--text-muted)" }}>{order.buyer_office ?? order.class_label ?? "-"}</td>
                             <td className="px-4 py-3">
                               <OrderStatusBadge status={order.status} />
                             </td>

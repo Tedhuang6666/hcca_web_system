@@ -1,4 +1,5 @@
 import type {
+  ShopOfficeCreate, ShopOfficeUpdate, ShopOfficeOut, ShopTeacherProfileUpdate, ShopTeacherProfileOut,
   AdminAssistedOrderCreate,
   OrderItemQuantityUpdate,
   ChangedOrderReceiptCreate,
@@ -21,6 +22,11 @@ type ReceiptScope = Pick<ClassReceiptBatchCreate, "activity_id" | "category_id">
 // ── 商店 ──────────────────────────────────────────────────────────────────────
 
 export const shopApi = {
+  teacherProfile: () => get<ShopTeacherProfileOut | null>("/shop/teacher-profile"),
+  saveTeacherProfile: (body: ShopTeacherProfileUpdate) => put<ShopTeacherProfileOut>("/shop/teacher-profile", body),
+  offices: () => get<ShopOfficeOut[]>("/shop/offices"),
+  createOffice: (body: ShopOfficeCreate) => post<ShopOfficeOut>("/shop/offices", body),
+  updateOffice: (id: string, body: ShopOfficeUpdate) => patch<ShopOfficeOut>(`/shop/offices/${id}`, body),
   lookupTargets: (body: ShopTargetLookupRequest) => post<ShopTargetOut[]>("/shop/target-options", body),
   profitAnalysis: (categoryId: string) =>
     get<ShopProfitOut>(`/shop/profit?${new URLSearchParams({ category_id: categoryId })}`),

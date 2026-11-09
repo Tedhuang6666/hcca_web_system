@@ -5,10 +5,11 @@ from __future__ import annotations
 import io
 import uuid
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.shop import Order, OrderItem, Product, ProductCategory, ProductSeries
+from api.models.user import User
 
 
 async def _fetch_order_report_rows(
@@ -18,6 +19,8 @@ async def _fetch_order_report_rows(
     q = (
         select(
             Order.serial_number.label("訂單字號"),
+            func.coalesce(Order.buyer_name, User.display_name).label("訂購人"),
+            Order.buyer_office.label("辦公室／處室"),
             Order.status.label("訂單狀態"),
             Order.total_price.label("訂單總金額"),
             Order.is_paid.label("是否已繳費"),
@@ -27,6 +30,7 @@ async def _fetch_order_report_rows(
             Product.name.label("商品名稱"),
         )
         .join(OrderItem, Order.id == OrderItem.order_id)
+        .join(User, Order.user_id == User.id)
         .join(Product, OrderItem.product_id == Product.id)
         .where(Order.test_product_id.is_(None))
         .order_by(Order.created_at.desc())
@@ -46,6 +50,8 @@ async def _fetch_order_report_rows(
     return [
         {
             "訂單字號": r["訂單字號"],
+            "訂購人": r["訂購人"],
+            "辦公室／處室": r["辦公室／處室"] or "",
             "訂單狀態": r["訂單狀態"].value if hasattr(r["訂單狀態"], "value") else r["訂單狀態"],
             "是否已繳費": "是" if r["是否已繳費"] else "否",
             "商品名稱": r["商品名稱"],
@@ -68,6 +74,8 @@ async def export_orders_excel(
     rows = await _fetch_order_report_rows(session, activity_id=activity_id)
     columns = [
         "訂單字號",
+        "訂購人",
+        "辦公室／處室",
         "訂單狀態",
         "是否已繳費",
         "商品名稱",

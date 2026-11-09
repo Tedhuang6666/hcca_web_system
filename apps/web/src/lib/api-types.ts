@@ -10570,6 +10570,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop/offices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Shop Offices */
+        get: operations["read_shop_offices_shop_offices_get"];
+        put?: never;
+        /** Create Shop Office */
+        post: operations["create_shop_office_shop_offices_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shop/offices/{office_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Shop Office */
+        patch: operations["update_shop_office_shop_offices__office_id__patch"];
+        trace?: never;
+    };
     "/shop/orders": {
         parameters: {
             query?: never;
@@ -11461,6 +11496,24 @@ export interface paths {
         put?: never;
         /** 搜尋或核對商品與優惠名單（限商品管理者） */
         post: operations["lookup_shop_targets_shop_target_options_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shop/teacher-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Teacher Profile */
+        get: operations["read_teacher_profile_shop_teacher_profile_get"];
+        /** Save Teacher Profile */
+        put: operations["save_teacher_profile_shop_teacher_profile_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -22228,6 +22281,10 @@ export interface components {
             assistance_scope: string;
             /** Assisted By Id */
             assisted_by_id?: string | null;
+            /** Buyer Name */
+            buyer_name?: string | null;
+            /** Buyer Office */
+            buyer_office?: string | null;
             /** Category Id */
             category_id?: string | null;
             /** Category Name */
@@ -22307,6 +22364,10 @@ export interface components {
             assistance_scope: string;
             /** Assisted By Id */
             assisted_by_id?: string | null;
+            /** Buyer Name */
+            buyer_name?: string | null;
+            /** Buyer Office */
+            buyer_office?: string | null;
             /** Category Id */
             category_id?: string | null;
             /** Category Name */
@@ -30077,6 +30138,30 @@ export interface components {
          * @enum {string}
          */
         ShopDiscountType: "percentage" | "fixed" | "price_override" | "bundle_price";
+        /** ShopOfficeCreate */
+        ShopOfficeCreate: {
+            /** Name */
+            name: string;
+        };
+        /** ShopOfficeOut */
+        ShopOfficeOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Name */
+            name: string;
+        };
+        /** ShopOfficeUpdate */
+        ShopOfficeUpdate: {
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Name */
+            name?: string | null;
+        };
         /** ShopOrderCloseCreate */
         ShopOrderCloseCreate: {
             /** Class Id */
@@ -31073,6 +31158,27 @@ export interface components {
             seat_number?: number | null;
             /** Student Id */
             student_id?: string | null;
+        };
+        /** ShopTeacherProfileOut */
+        ShopTeacherProfileOut: {
+            /** Name */
+            name?: string | null;
+            /** Office Id */
+            office_id?: string | null;
+            /** Office Name */
+            office_name?: string | null;
+            /** Offices */
+            offices: components["schemas"]["ShopOfficeOut"][];
+        };
+        /** ShopTeacherProfileUpdate */
+        ShopTeacherProfileUpdate: {
+            /** Name */
+            name: string;
+            /**
+             * Office Id
+             * Format: uuid
+             */
+            office_id: string;
         };
         /** ShortLinkCreate */
         ShortLinkCreate: {
@@ -56609,6 +56715,94 @@ export interface operations {
             };
         };
     };
+    read_shop_offices_shop_offices_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopOfficeOut"][];
+                };
+            };
+        };
+    };
+    create_shop_office_shop_offices_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShopOfficeCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopOfficeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_shop_office_shop_offices__office_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                office_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShopOfficeUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopOfficeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_orders_shop_orders_get: {
         parameters: {
             query?: {
@@ -58626,6 +58820,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ShopTargetOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_teacher_profile_shop_teacher_profile_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopTeacherProfileOut"] | null;
+                };
+            };
+        };
+    };
+    save_teacher_profile_shop_teacher_profile_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShopTeacherProfileUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopTeacherProfileOut"];
                 };
             };
             /** @description Validation Error */

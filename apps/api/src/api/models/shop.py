@@ -503,6 +503,10 @@ class Order(Base, TimestampMixin, ClassConsolidationMixin):
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # 教師訂購快照；不隨本人資料或後台處室更名改動歷史訂單。
+    buyer_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    buyer_office: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
     user: Mapped[User] = relationship("User", foreign_keys=[user_id])
     activity: Mapped[Activity | None] = relationship("Activity")
     category: Mapped[ProductCategory | None] = relationship("ProductCategory")

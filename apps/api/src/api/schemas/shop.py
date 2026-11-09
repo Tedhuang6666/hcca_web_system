@@ -621,6 +621,8 @@ class OrderPromotionOut(BaseModel):
 
 
 class OrderOut(BaseModel):
+    buyer_name: str | None = None
+    buyer_office: str | None = None
     id: uuid.UUID
     supplement_class_id: uuid.UUID | None = None
     test_product_id: uuid.UUID | None = None
@@ -653,6 +655,8 @@ class OrderOut(BaseModel):
 
 
 class OrderListItem(BaseModel):
+    buyer_name: str | None = None
+    buyer_office: str | None = None
     id: uuid.UUID
     supplement_class_id: uuid.UUID | None = None
     test_product_id: uuid.UUID | None = None

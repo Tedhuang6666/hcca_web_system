@@ -1,5 +1,6 @@
 "use client";
 import ProductSizeChart from "@/components/shop/ProductSizeChart";
+import TeacherPurchaseProfile from "@/components/shop/TeacherPurchaseProfile";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
@@ -1941,6 +1942,8 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
         </div>
         {!delegationToken && <div className="shop-mobile-shortcut-slot" ref={setShortcutSlot} />}
       </header>
+
+      {isLoggedIn && !isStudent && !delegationToken && !classMemberUserId && <TeacherPurchaseProfile />}
 
       {classMemberUserId && (
         <section className="shop-public-context" aria-label="班代調整對象">

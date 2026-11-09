@@ -40,6 +40,8 @@ def serialize_order(order: Order) -> OrderOut:
     activity = order.__dict__.get("activity")
     category = _order_category(order)
     return OrderOut(
+        buyer_name=order.buyer_name,
+        buyer_office=order.buyer_office,
         id=order.id,
         supplement_class_id=order.supplement_class_id,
         test_product_id=order.test_product_id,
@@ -90,12 +92,14 @@ def serialize_order_list_item(order: Order) -> OrderListItem:
     activity = order.__dict__.get("activity")
     category = _order_category(order)
     return OrderListItem(
+        buyer_name=order.buyer_name,
+        buyer_office=order.buyer_office,
         id=order.id,
         supplement_class_id=order.supplement_class_id,
         test_product_id=order.test_product_id,
         serial_number=order.serial_number,
         user_id=order.user_id,
-        user_name=order.user.display_name if order.user else None,
+        user_name=order.buyer_name or (order.user.display_name if order.user else None),
         activity_id=_order_activity_id(order),
         activity_name=activity.name if activity else None,
         category_id=category.id if category else None,

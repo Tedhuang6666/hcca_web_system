@@ -46,6 +46,7 @@ from api.schemas.shop import (
 from api.services import receivable as receivable_svc
 from api.services import school_class as class_svc
 from api.services.electronic_credential import get_settings, identity_for_user
+from api.services.shop import _teacher as teacher_svc
 from api.services.shop._catalog import (
     generate_order_serial,
     get_product,
@@ -689,6 +690,7 @@ async def _create_order_from_items(
             items=[],
             payment_method=payment_method,
             notes=notes,
+            **(await teacher_svc.buyer_snapshot(session, buyer)),
         )
         session.add(order)
         await session.flush()

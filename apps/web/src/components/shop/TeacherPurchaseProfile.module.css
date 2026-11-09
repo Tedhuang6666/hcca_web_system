@@ -1,0 +1,17 @@
+.panel { margin-block: 1.5rem; padding-block: 1.25rem; border-block: 1px solid var(--public-border); }
+.panel h2 { margin: 0 0 .5rem; font-size: 1.1rem; font-weight: 700; color: var(--public-text); }
+.panel p, .status { margin-block: .5rem; color: var(--public-secondary); font-size: .875rem; line-height: 1.6; }
+.form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 1rem; margin-top: 1rem; }
+.form label { display: flex; flex: 1 1 12rem; flex-direction: column; gap: .5rem; color: var(--public-text); font-size: .875rem; min-width: 0; }
+.form input, .form select { width: 100%; min-height: 44px; padding: .625rem .75rem; border: 1px solid var(--public-border); border-radius: 4px; color: var(--public-text); background: var(--public-surface); font: inherit; }
+.button { min-height: 44px; padding: .625rem 1rem; border: 1px solid var(--public-text); border-radius: 4px; background: var(--public-text); color: var(--public-bg); font-size: .875rem; font-weight: 600; cursor: pointer; }
+.button:hover:not(:disabled) { opacity: .85; }
+.button:disabled { opacity: .5; cursor: not-allowed; }
+.panel :is(input, select, button):focus-visible { outline: 2px solid var(--public-text); outline-offset: 3px; }
+.panel .error { color: var(--danger); }
+.panel .success { color: var(--public-text); font-weight: 600; }
+@media (max-width: 540px) {
+  .form { flex-direction: column; align-items: stretch; }
+  .form label { flex: auto; }
+  .form input, .form select { font-size: 16px; }
+}

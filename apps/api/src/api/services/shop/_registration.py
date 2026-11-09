@@ -40,6 +40,7 @@ from api.services.shop._orders import (
     get_current_registrations,
 )
 from api.services.shop._purchase_rules import assert_product_purchase_allowed
+from api.services.shop._teacher import buyer_snapshot
 from api.services.shop._testing import can_test_products
 
 logger = logging.getLogger("api.services.shop._orders")
@@ -214,6 +215,7 @@ async def set_current_registration_product(
             total_price=0,
             items=[],
             applied_promotions=[],
+            **(await buyer_snapshot(session, user)),
         )
         session.add(order)
         await session.flush()
