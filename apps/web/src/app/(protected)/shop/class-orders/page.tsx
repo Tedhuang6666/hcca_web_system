@@ -1141,7 +1141,7 @@ export default function ClassOrdersPage() {
       {workspace === "order" && catalogFailed && (
         <p role="alert">無法載入可訂購商品。<button type="button" className="btn btn-ghost min-h-11" onClick={() => window.location.reload()}>重新載入</button></p>
       )}
-      {workspace === "order" && formOpen && activeLedgerKey && (
+      {workspace === "order" && (formOpen || hasCurrentComposerInput) && activeLedgerKey && (
         <section id="class-order-form" className="scroll-mt-5 rounded-lg p-4" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
           {editOrder && <div className="mb-3 flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
