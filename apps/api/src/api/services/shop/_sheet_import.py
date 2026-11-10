@@ -113,9 +113,24 @@ async def _build_order(
         if len(groups) > 1:
             raise AnswerNeedsReview(f"商品「{product.name}」有多組規格，需人工確認完整組合")
         options = [option for group in groups for option in group.options if option.is_active]
-        parsed = parse_answer(answer, [option.value for option in options])
+        default_option_id = config.quantity_only_options.get(product.id)
+        if default_option_id is not None:
+            default_option = next(
+                (option for option in options if option.id == default_option_id), None
+            )
+            if default_option is None or default_option.price_delta != 0:
+                raise AnswerNeedsReview(
+                    f"商品「{product.name}」的預設選項失效或有加價，請管理者核對"
+                )
+            parsed = parse_answer(answer, [])
+        else:
+            parsed = parse_answer(answer, [option.value for option in options])
         for variant in parsed:
-            option_ids = [option.id for option in options if option.value == variant.value]
+            option_ids = (
+                [default_option_id]
+                if default_option_id is not None
+                else [option.id for option in options if option.value == variant.value]
+            )
             selected = _resolve_selected_options(product, option_ids)
             items.append(
                 OrderItem(

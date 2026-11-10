@@ -31286,6 +31286,13 @@ export interface components {
              * @description 已開放連結讀取的分頁 gid；指定時以匿名唯讀 CSV 匯出讀取
              */
             public_sheet_id?: number | null;
+            /**
+             * Quantity Only Options
+             * @description 只填數量的商品 ID → 預設選項 ID；選項須啟用且不加價
+             */
+            quantity_only_options?: {
+                [key: string]: string;
+            };
         };
         /** ShopSheetEnabledUpdate */
         ShopSheetEnabledUpdate: {

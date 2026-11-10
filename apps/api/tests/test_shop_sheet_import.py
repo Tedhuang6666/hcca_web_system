@@ -349,3 +349,99 @@ async def test_public_sheet_gid_is_passed_to_reader_without_changing_import_flow
     assert (await importer.sync_source(db_session, source.id)).imported == 1
     order = await db_session.scalar(select(Order))
     assert order.status == OrderStatus.CONFIRMED and not order.is_paid
+
+
+@pytest.fixture
+async def quantity_only_catalog(db_session, catalog):
+    source, products = catalog
+    backpack = products[1]
+    backpack.name = "背包"
+    group = ProductVariantGroup(product_id=backpack.id, name="加購吊飾", sort_order=0)
+    no_addon = ProductVariantOption(value="不加購", price_delta=0, is_active=True, sort_order=0)
+    addon = ProductVariantOption(value="粉紅色", price_delta=25, is_active=True, sort_order=1)
+    group.options = [no_addon, addon]
+    db_session.add(group)
+    await db_session.flush()
+    header = "復刻款背包 NT.650 (尺寸S.M.L.XL)"
+    config = ShopSheetConfig(
+        product_columns={header: backpack.id},
+        quantity_only_options={backpack.id: no_addon.id},
+    )
+    source.config = config.model_dump(mode="json")
+    return source, backpack, no_addon, addon, [*HEADERS[:-1], header]
+
+
+@pytest.mark.parametrize("quantity", ["2", "２個", "兩個"])
+async def test_quantity_only_product_uses_free_default_and_system_price(
+    db_session, quantity_only_catalog, quantity
+):
+    source, backpack, no_addon, _addon, headers = quantity_only_catalog
+    values = [headers, row(size="0", umbrellas=quantity)]
+    assert (await importer.import_rows(db_session, source, values)).imported == 1
+    order = await shop_svc.get_order(db_session, await db_session.scalar(select(Order.id)))
+    assert len(order.items) == 1
+    item = order.items[0]
+    assert item.quantity == 2 and item.unit_price == backpack.price == 350
+    assert item.selected_options[0]["value"] == "不加購"
+    assert item.selected_options[0]["option_id"] == str(no_addon.id)
+    assert order.total_price == 700 and not order.is_paid
+    assert backpack.stock_quantity == 28
+    assert (await importer.import_rows(db_session, source, values)).skipped == 1
+    notice = await db_session.scalar(select(OutboxEvent))
+    assert notice.payload["total_price"] == 700
+    assert notice.payload["items"][0]["selected_options"][0]["value"] == "不加購"
+    assert await db_session.scalar(select(func.count()).select_from(OutboxEvent)) == 1
+
+
+@pytest.mark.parametrize("mode", ["inactive", "paid", "missing"])
+async def test_quantity_only_default_must_be_active_free_and_belong_to_product(
+    db_session, quantity_only_catalog, mode
+):
+    source, backpack, no_addon, addon, headers = quantity_only_catalog
+    if mode == "inactive":
+        no_addon.is_active = False
+    elif mode == "paid":
+        source.config = {
+            **source.config,
+            "quantity_only_options": {str(backpack.id): str(addon.id)},
+        }
+    else:
+        source.config = {
+            **source.config,
+            "quantity_only_options": {str(backpack.id): str(uuid.uuid4())},
+        }
+    await db_session.flush()
+    result = await importer.import_rows(
+        db_session, source, [headers, row(size="L1", umbrellas="2")]
+    )
+    assert result.imported == 0 and result.review == 1
+    assert "預設選項" in (await db_session.scalar(select(ShopSheetRow))).error
+    assert await db_session.scalar(select(func.count()).select_from(Order)) == 0
+    assert await db_session.scalar(select(func.count()).select_from(OutboxEvent)) == 0
+    assert await db_session.scalar(select(func.count()).select_from(Receivable)) == 0
+    await db_session.refresh(backpack)
+    assert backpack.stock_quantity == 30
+
+
+@pytest.mark.parametrize("answer", ["L2", "粉紅色兩個"])
+async def test_quantity_only_default_does_not_silently_discard_size_or_addon_answers(
+    db_session, quantity_only_catalog, answer
+):
+    source, _backpack, _no_addon, _addon, headers = quantity_only_catalog
+    result = await importer.import_rows(
+        db_session, source, [headers, row(size="0", umbrellas=answer)]
+    )
+    assert result.imported == 0 and result.review == 1
+    assert await db_session.scalar(select(func.count()).select_from(Order)) == 0
+
+
+async def test_other_sources_keep_explicit_addon_selection(db_session, quantity_only_catalog):
+    source, backpack, _no_addon, _addon, headers = quantity_only_catalog
+    source.config = {**source.config, "quantity_only_options": {}}
+    result = await importer.import_rows(
+        db_session, source, [headers, row(size="0", umbrellas="粉紅色兩個")]
+    )
+    assert result.imported == 1
+    order = await shop_svc.get_order(db_session, await db_session.scalar(select(Order.id)))
+    assert order.total_price == (backpack.price + 25) * 2
+    assert order.items[0].selected_options[0]["value"] == "粉紅色"

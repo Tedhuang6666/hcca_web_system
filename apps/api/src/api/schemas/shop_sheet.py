@@ -22,6 +22,11 @@ class ShopSheetConfig(BaseModel):
     other_office_column: Column | None = "若所屬辦公室未在上列選項"
     ignored_columns: list[Column] = Field(default_factory=lambda: ["職稱"], max_length=100)
     product_columns: dict[Column, uuid.UUID] = Field(default_factory=dict, max_length=100)
+    quantity_only_options: dict[uuid.UUID, uuid.UUID] = Field(
+        default_factory=dict,
+        max_length=100,
+        description="只填數量的商品 ID → 預設選項 ID；選項須啟用且不加價",
+    )
     max_rows: int = Field(10000, ge=2, le=10000)
 
     @model_validator(mode="after")
