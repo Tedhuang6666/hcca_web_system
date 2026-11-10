@@ -149,7 +149,7 @@ it("顯示折扣後毛利，缺少成本時保留未設定提示", async () => {
   data.current.metrics.missing_cost_item_count = 2;
   api.salesAnalytics.mockResolvedValue(data);
   render(<ShopSalesAnalytics filters={{}} />);
-  expect(await screen.findByText(/有 2 件商品尚未設定成本/)).toBeVisible();
+  expect(await screen.findByText(/有 2 件商品的本體或已選選項尚未設定成本/)).toBeVisible();
   expect(screen.getByText("訂單毛利", { selector: "dt" }).nextElementSibling).toHaveTextContent("未設定");
   expect(screen.getByText(/包含未付款訂單/)).toBeVisible();
 });

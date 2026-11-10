@@ -1,6 +1,7 @@
 """完整主題的整批採購與盈利分析；金額為新台幣整數。"""
 
 from datetime import datetime
+from typing import Annotated
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -19,6 +20,19 @@ class ProductProcurementUpdate(BaseModel):
     reserve_quantity: int = Field(0, ge=0, le=1000000, strict=True)
     extra_cost: int = Field(0, ge=0, le=2147483647, strict=True)
     note: str = Field("", max_length=2000)
+    option_costs: dict[
+        Annotated[str, Field(min_length=1, max_length=1000)],
+        Annotated[int, Field(ge=0, le=2147483647, strict=True)] | None,
+    ] = Field(default_factory=dict, max_length=1000, description="選項的額外單位成本；null 為未知")
+
+
+class ShopProfitOption(SalesOut):
+    key: str
+    group_name: str
+    value: str
+    unit_cost: int | None
+    ordered_quantity: int
+    total_cost: int | None
 
 
 class ShopProfitProduct(SalesOut):
@@ -26,6 +40,8 @@ class ShopProfitProduct(SalesOut):
     name: str
     price: int
     plan: ProductProcurementUpdate
+    options: list[ShopProfitOption]
+    option_cost: int | None
     ordered_quantity: int
     revenue: int
     paid_amount: int

@@ -10,6 +10,7 @@ vi.mock("@/lib/api", () => ({ shopApi: api, apiErrorMessage: (_: unknown, fallba
 function product(): ShopProfitProduct {
   return {
     product_id: "shirt", name: "紀念衫", price: 100,
+    option_cost: 0, options: [],
     plan: { unit_cost: 40, minimum_order_quantity: 10, stock_extra_quantity: 2, reserve_quantity: 1, extra_cost: 50, note: "備品不出售" },
     ordered_quantity: 3, revenue: 240, paid_amount: 240, purchase_quantity: 10,
     minimum_top_up_quantity: 4, sellable_stock_quantity: 6, order_cost: 120,
@@ -91,7 +92,7 @@ it("成本缺漏不顯示假盈利，空主題不發出分析", async () => {
   data.summary.missing_cost_product_count = 1;
   api.profitAnalysis.mockResolvedValue(data);
   const view = render(<ShopProfitAnalysis />);
-  expect(await screen.findByText("1 項採購中的商品尚未設定成本，總盈利暫不估算。")).toBeVisible();
+  expect(await screen.findByText("1 項商品的本體或已訂購選項尚未設定成本，總盈利暫不估算。")).toBeVisible();
   view.unmount();
   api.profitAnalysis.mockClear();
   api.listCategories.mockResolvedValue([]);
@@ -144,4 +145,36 @@ it("CSV 匯出包含整批規劃且防止商品或備註變成試算表公式", 
   expect(csv).toContain('"\'=HYPERLINK(""https://example.test"")"');
   expect(csv).toContain("' @SUM(1,2)\n多行");
   expect(csv).toContain('"-210"');
+});
+
+it("選項可填額外成本，保留零值與未知，失敗重試後重算盈利", async () => {
+  const data = fixture();
+  data.products[0].options = [{ key: "id:xl", group_name: "尺寸", value: "XL",
+    unit_cost: null, ordered_quantity: 3, total_cost: null }];
+  data.products[0].option_cost = data.products[0].profit_amount = null;
+  api.profitAnalysis.mockResolvedValue(data);
+  api.saveProcurement.mockRejectedValueOnce(new Error("offline"));
+  render(<ShopProfitAnalysis />);
+  fireEvent.click(await screen.findByRole("button", { name: "編輯紀念衫採購設定" }));
+  const field = screen.getByRole("spinbutton", { name: /尺寸：XL 額外單位成本/ });
+  expect(field).toHaveValue(null);
+  fireEvent.change(field, { target: { value: "0" } });
+  fireEvent.submit(screen.getByRole("form"));
+  await screen.findByRole("alert");
+  expect(field).toHaveValue(0);
+  expect(api.saveProcurement).toHaveBeenLastCalledWith("shirt", expect.objectContaining({ option_costs: { "id:xl": 0 } }));
+  fireEvent.change(field, { target: { value: "" } });
+  fireEvent.submit(screen.getByRole("form"));
+  await waitFor(() => expect(api.saveProcurement).toHaveBeenLastCalledWith("shirt", expect.objectContaining({ option_costs: { "id:xl": null } })));
+  await waitFor(() => expect(api.profitAnalysis).toHaveBeenCalledTimes(2));
+});
+
+it("CSV 同時匯出選項成本與逐選項明細", () => {
+  const row = product();
+  row.option_cost = 12;
+  row.options = [{ key: "id:xl", group_name: "尺寸", value: "=XL", unit_cost: 4,
+    ordered_quantity: 3, total_cost: 12 }];
+  const csv = profitCsv([row], "主題");
+  expect(csv).toContain('"訂單選項成本"');
+  expect(csv).toContain('"紀念衫","尺寸","\'=XL","4","3","12"');
 });

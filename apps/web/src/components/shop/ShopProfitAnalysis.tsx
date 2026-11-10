@@ -73,6 +73,7 @@ function ProductPlan({ row, onSaved, onEditing }: {
     <dl className={styles.rowAccounts}>
       <div><dt>折扣後訂單收入</dt><dd>{money(row.revenue)}</dd></div>
       <div><dt>整批採購成本</dt><dd>{money(row.total_cost)}</dd></div>
+      <div><dt>其中：訂單選項成本</dt><dd>{money(row.option_cost)}</dd></div>
       <div><dt>其中：可售庫存成本</dt><dd>{money(row.inventory_cost)}</dd></div>
       <div><dt>其中：不可售備品成本</dt><dd>{money(row.reserve_cost)}</dd></div>
     </dl>
@@ -93,6 +94,21 @@ function ProductPlan({ row, onSaved, onEditing }: {
               onChange={(e) => setDraft({ ...draft, note: e.target.value })} placeholder="例如：備品供瑕疵替換，活動後不出售" />
           </label>
         </div>
+        {row.options.length > 0 && <div className={styles.optionCosts}>
+          <h4>選項額外成本</h4>
+          <p className={styles.muted}>每件商品選用此選項時，另加在商品單位成本上。依有效訂單件數計算；加價選項留空為未知，無額外成本請填 0。囤貨與備品如另有選項成本，請填入額外費用。</p>
+          <div className={styles.fields}>
+            {row.options.map((option) => <label key={option.key}>
+              {option.group_name}：{option.value} 額外單位成本（NT$）
+              <input className="input" type="number" min="0" max="2147483647" step="1"
+                value={(draft.option_costs ?? {})[option.key] ?? ""}
+                onChange={(e) => setDraft({ ...draft, option_costs: { ...draft.option_costs,
+                  [option.key]: e.target.value === "" ? null : Number(e.target.value),
+                } })} />
+              <span className={styles.muted}>訂單選用 {option.ordered_quantity} 件</span>
+            </label>)}
+          </div>
+        </div>}
         <p className={styles.muted}>囤貨與備品是訂單以外的加購量；起訂不足的餘量歸為可售庫存。額外費用可填運費、打樣或其他一次性支出。</p>
         <div className={styles.actions}>
           <button className="btn btn-primary" type="submit">{busy ? "儲存中…" : "儲存並重算"}</button>
@@ -105,6 +121,12 @@ function ProductPlan({ row, onSaved, onEditing }: {
       {row.plan.note && <p className={styles.savedNote}>{row.plan.note}</p>}
       <button ref={editRef} className="btn btn-ghost" type="button" onClick={() => { setDraft(row.plan); setEditing(true); onEditing(true); }}>編輯{row.name}採購設定</button>
     </div>}
+    {row.options.length > 0 && <dl className={styles.optionSummary} aria-label={`${row.name}選項成本`}>
+      {row.options.map((option) => <div key={option.key}>
+        <dt>{option.group_name}：{option.value}</dt>
+        <dd>每件 {money(option.unit_cost)} · {option.ordered_quantity} 件 · 合計 {money(option.total_cost)}</dd>
+      </div>)}
+    </dl>}
     {row.sellable_stock_quantity > 0 && <details className={styles.scenario}>
       <summary>庫存售出與回本試算 · 尚有 {row.sellable_stock_quantity} 件可售</summary>
       <p className={styles.muted}>僅模擬目前餘貨，不新增採購；備用品不列入可售量，試算結果不計入上方盈利。</p>
@@ -119,7 +141,7 @@ function ProductPlan({ row, onSaved, onEditing }: {
         </label>
       </div>
       <p aria-live="polite">新增收入 {money(scenario.extraRevenue)}；售出後盈利 <b>{money(scenario.profit)}</b>。</p>
-      <p>{row.profit_amount == null ? "設定單位成本後才能計算回本。"
+      <p>{row.profit_amount == null ? "設定商品及已訂購選項的成本後才能計算回本。"
         : scenario.breakEvenUnits === 0 ? "目前訂單收入已足以支付整批採購成本。"
         : scenario.breakEvenUnits == null ? "售價為零，無法透過售出餘貨回本。"
         : scenario.breakEvenUnits > row.sellable_stock_quantity ? `需再售出 ${scenario.breakEvenUnits} 件才能回本，目前餘貨不足。`
@@ -201,14 +223,14 @@ export default function ShopProfitAnalysis({ refresh = 0 }: { refresh?: number }
         <div className={styles.balance}>
           <h3>目前訂單預估盈利</h3>
           <strong className={summary.profit_amount != null && summary.profit_amount < 0 ? styles.loss : undefined}>{money(summary.profit_amount)}</strong>
-          <p>{summary.profit_amount == null ? `${summary.missing_cost_product_count} 項採購中的商品尚未設定成本，總盈利暫不估算。`
+          <p>{summary.profit_amount == null ? `${summary.missing_cost_product_count} 項商品的本體或已訂購選項尚未設定成本，總盈利暫不估算。`
             : summary.profit_amount < 0 ? `距離整批回本還差 ${money(-summary.profit_amount)}。可展開商品查看庫存售出試算。`
             : "目前訂單收入已覆蓋整批採購成本。"}</p>
           <p className={styles.muted}>以應收收入估算，尚非已收現金；未填入的其他支出不包含在內。</p>
         </div>
         <dl className={styles.accounts}>
           <div><dt>折扣後訂單收入</dt><dd>{money(summary.revenue)}</dd></div>
-          <div><dt>訂單商品成本</dt><dd>− {money(summary.order_cost)}</dd></div>
+          <div><dt>訂單商品成本（含選項）</dt><dd>− {money(summary.order_cost)}</dd></div>
           <div><dt>可售餘貨成本</dt><dd>− {money(summary.inventory_cost)}</dd></div>
           <div><dt>不可售備用品成本</dt><dd>− {money(summary.reserve_cost)}</dd></div>
           <div><dt>額外費用</dt><dd>− {money(summary.extra_cost)}</dd></div>

@@ -30,12 +30,18 @@
 .productHeader strong span { color: var(--text-secondary); font-size: .8rem; font-weight: 400; }
 .quantityBreakdown { display: flex; gap: .5rem 1.5rem; flex-wrap: wrap; margin-block: 1rem; font-size: .875rem; color: var(--text-secondary); }
 .quantityBreakdown b { color: var(--text-primary); }
-.rowAccounts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; font-size: .875rem; margin-block: 1rem; }
+.rowAccounts { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 1rem; font-size: .875rem; margin-block: 1rem; }
 .rowAccounts dt { color: var(--text-secondary); margin-bottom: .25rem; }
 .planSummary { border-top: 1px solid var(--border); padding-top: 1rem; }
 .planSummary p { color: var(--text-secondary); }
 .planSummary button { margin-top: .5rem; }
 .savedNote { white-space: pre-wrap; overflow-wrap: anywhere; }
+.optionCosts { margin-block: 1.25rem; }
+.optionCosts h4 { font-size: .95rem; font-weight: 600; }
+.optionSummary { display: grid; gap: .65rem; margin-top: 1rem; font-size: .875rem; }
+.optionSummary div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .25rem 1rem; }
+.optionSummary dt { overflow-wrap: anywhere; }
+.optionSummary dd { color: var(--text-secondary); }
 .editor { padding-block: 1rem; border-top: 1px solid var(--border); }
 .editor legend { font-size: .95rem; font-weight: 600; margin-bottom: .75rem; }
 .fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin-block: .75rem; }

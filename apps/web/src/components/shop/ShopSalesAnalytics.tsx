@@ -356,11 +356,11 @@ export default function ShopSalesAnalytics({
             })}
           </dl>
           <p className="sales-muted">
-            毛利＝折扣後訂購金額 − 目前單位成本 × 件數，包含未付款訂單，不含運費、手續費等其他費用。
-            各規格共用商品成本；修改成本會重算歷史區間。
+            毛利＝折扣後訂購金額 −（商品單位成本＋已選選項的額外單位成本）× 件數，包含未付款訂單，不含運費、手續費等其他費用。
+            選項額外成本可至「盈利與備貨」設定；修改成本會重算歷史區間。
           </p>
           {current.metrics.missing_cost_item_count > 0 && <p role="status" className="sales-empty">
-            有 {number(current.metrics.missing_cost_item_count)} 件商品尚未設定成本，總成本與毛利暫不計算；請至商品管理補填。
+            有 {number(current.metrics.missing_cost_item_count)} 件商品的本體或已選選項尚未設定成本，總成本與毛利暫不計算；請至「盈利與備貨」補填。
           </p>}
           {!!data?.insights.length && (
             <section className="sales-insights" aria-label="分析摘要">

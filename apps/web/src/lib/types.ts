@@ -11,6 +11,7 @@ export type {
   ShopTeacherProfileUpdate,
   ShopTeacherProfileOut,
   ShopProfitOut,
+  ShopProfitOption,
   ShopProfitProduct,
   ShopProfitSummary,
   ProductProcurementUpdate,

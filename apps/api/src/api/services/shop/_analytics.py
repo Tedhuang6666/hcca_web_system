@@ -26,6 +26,7 @@ from api.schemas.shop_analytics import (
 )
 from api.services.school_class import class_display_label
 from api.services.shop._analytics_insights import build_sales_insights
+from api.services.shop._costs import item_cost as order_item_cost
 
 
 def _allocate_amounts(order: Order, total_amount: int | None = None) -> dict[uuid.UUID, int]:
@@ -193,8 +194,9 @@ def _summarize(
         discount = sum(discounts[item.id] for item in items)
         gross = amount + discount
         # 採目前商品成本，補填或更正後可重算既有訂單；未知成本不可視為零。
-        cost = sum(item.quantity * (item.product.unit_cost or 0) for item in items)
-        missing = sum(item.quantity for item in items if item.product.unit_cost is None)
+        costs = {item.id: order_item_cost(item) for item in items}
+        cost = sum(value[0] for value in costs.values())
+        missing = sum(value[1] for value in costs.values())
         status_labels = {
             "pending": "待確認",
             "confirmed": "已確認",
@@ -268,12 +270,8 @@ def _summarize(
             source_amount = sum(amounts[item.id] for item in source_items)
             source_gross = sum(amounts[item.id] + discounts[item.id] for item in source_items)
             source_quantity = sum(item.quantity for item in source_items)
-            source_cost = sum(
-                item.quantity * (item.product.unit_cost or 0) for item in source_items
-            )
-            source_missing = sum(
-                item.quantity for item in source_items if item.product.unit_cost is None
-            )
+            source_cost = sum(costs[item.id][0] for item in source_items)
+            source_missing = sum(costs[item.id][1] for item in source_items)
             add(
                 "sources",
                 source_key,
@@ -289,8 +287,7 @@ def _summarize(
         for item in items:
             product = item.product
             item_gross = amounts[item.id] + discounts[item.id]
-            item_cost = item.quantity * (product.unit_cost or 0)
-            item_missing = item.quantity if product.unit_cost is None else 0
+            item_cost, item_missing = costs[item.id]
             add(
                 "products",
                 str(product.id),

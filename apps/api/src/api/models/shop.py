@@ -200,6 +200,10 @@ class Product(Base, TimestampMixin):
     procurement_reserve: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     procurement_extra_cost: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     procurement_note: Mapped[str] = mapped_column(Text, default="", server_default="")
+    # 選項 ID（舊快照則依名稱）對應額外單位成本，保留已刪除選項的內部成本設定。
+    procurement_option_costs: Mapped[dict[str, int | None]] = mapped_column(
+        JSONDict, nullable=False, default=dict, server_default="{}"
+    )
     # 庫存數量（-1 = 無限量）
     stock_quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_unlimited: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

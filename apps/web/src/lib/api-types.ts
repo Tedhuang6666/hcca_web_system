@@ -25869,6 +25869,13 @@ export interface components {
              */
             note: string;
             /**
+             * Option Costs
+             * @description 選項的額外單位成本；null 為未知
+             */
+            option_costs?: {
+                [key: string]: number | null;
+            };
+            /**
              * Reserve Quantity
              * @default 0
              */
@@ -30303,6 +30310,21 @@ export interface components {
             /** Deleted Order Count */
             deleted_order_count: number;
         };
+        /** ShopProfitOption */
+        ShopProfitOption: {
+            /** Group Name */
+            group_name: string;
+            /** Key */
+            key: string;
+            /** Ordered Quantity */
+            ordered_quantity: number;
+            /** Total Cost */
+            total_cost: number | null;
+            /** Unit Cost */
+            unit_cost: number | null;
+            /** Value */
+            value: string;
+        };
         /** ShopProfitOut */
         ShopProfitOut: {
             /**
@@ -30331,6 +30353,10 @@ export interface components {
             minimum_top_up_quantity: number;
             /** Name */
             name: string;
+            /** Option Cost */
+            option_cost: number | null;
+            /** Options */
+            options: components["schemas"]["ShopProfitOption"][];
             /** Order Cost */
             order_cost: number | null;
             /** Ordered Quantity */
