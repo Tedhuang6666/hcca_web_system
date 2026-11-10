@@ -445,3 +445,16 @@ async def test_other_sources_keep_explicit_addon_selection(db_session, quantity_
     order = await shop_svc.get_order(db_session, await db_session.scalar(select(Order.id)))
     assert order.total_price == (backpack.price + 25) * 2
     assert order.items[0].selected_options[0]["value"] == "粉紅色"
+
+
+async def test_purchase_words_import_complete_order_at_system_prices(db_session, catalog):
+    source, _products = catalog
+    values = [HEADERS, row(size="XL買1件", umbrellas="買1件")]
+    assert (await importer.import_rows(db_session, source, values)).imported == 1
+    order = await shop_svc.get_order(db_session, await db_session.scalar(select(Order.id)))
+    assert order.total_price == 670 + 350
+    assert order.status == OrderStatus.CONFIRMED and not order.is_paid
+    assert {item.quantity for item in order.items} == {1}
+    assert order.items[0].selected_options[0]["value"] == "XL"
+    assert (await importer.import_rows(db_session, source, values)).skipped == 1
+    assert await db_session.scalar(select(func.count()).select_from(OutboxEvent)) == 1

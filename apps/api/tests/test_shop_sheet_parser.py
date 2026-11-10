@@ -81,3 +81,38 @@ def test_non_clothing_options_match_only_existing_values():
     with pytest.raises(AnswerNeedsReview):
         parse_answer("44", ["40", "42"])
     assert product_label("風衣外套 NT.650 (尺寸S.M.L.XL.2XL.3XL)") == "風衣外套"
+
+
+@pytest.mark.parametrize(
+    ("answer", "options", "expected"),
+    [
+        ("買1件", [], {None: 1}),
+        ("購買兩把", [], {None: 2}),
+        ("XL買1件", SIZES, {"XL": 1}),
+        ("買XL1件", SIZES, {"XL": 1}),
+        ("訂購 L兩件", SIZES, {"L": 2}),
+        ("XL買1件、L購買兩件", SIZES, {"XL": 1, "L": 2}),
+        ("預購XXL買兩件，共2件", SIZES, {"2XL": 2}),
+        ("買一送一2個", ["買一送一"], {"買一送一": 2}),
+    ],
+)
+def test_purchase_words_preserve_explicit_quantity_and_size(answer, options, expected):
+    assert {item.value: item.quantity for item in parse_answer(answer, options)} == expected
+
+
+@pytest.mark.parametrize(
+    ("answer", "options"),
+    [
+        ("買-1件", []),
+        ("買1.5件", []),
+        ("買101件", []),
+        ("買1件再看看", []),
+        ("不買1件", []),
+        ("XL買1件或2件", SIZES),
+        ("XL買1件，共2件", SIZES),
+        ("買5XL1件", SIZES),
+    ],
+)
+def test_purchase_words_do_not_hide_ambiguous_or_invalid_answers(answer, options):
+    with pytest.raises(AnswerNeedsReview):
+        parse_answer(answer, options)

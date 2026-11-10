@@ -29,6 +29,7 @@ _DIGITS = {char: value for value, char in enumerate("零一二三四五六七八
 _DIGITS.update({"兩": 2, "〇": 0})
 _NUMBER = r"(?:[0-9]+|[零〇一二兩三四五六七八九十百]+)"
 _UNIT = r"(?:件|個|條|把|頂|枚|組|雙|份|本|袋|入|套|張)"
+_PURCHASE = r"(?:購買|訂購|預購|買)"
 _EMPTY = {"", "0", "無", "沒有", "不要", "不需要", "不訂購", "否", "NO", "N/A", "-", "—"}
 
 
@@ -55,6 +56,11 @@ def parse_answer(answer: str, option_values: list[str]) -> list[ParsedVariant]:
         return []
     if len(text) > 2000:
         raise AnswerNeedsReview("填答過長，請簡化為規格與數量")
+    purchase = re.match(rf"{_PURCHASE}\s*", text)
+    if purchase and not any(
+        normalize(value).startswith(purchase[0].strip()) for value in option_values
+    ):
+        text = text[purchase.end() :]
     if not option_values:
         match = re.fullmatch(rf"(?:數量\s*[:：]?\s*)?({_NUMBER})\s*{_UNIT}?", text)
         if match is None:
@@ -79,7 +85,8 @@ def parse_answer(answer: str, option_values: list[str]) -> list[ParsedVariant]:
     size = rf"(?:{sizes})(?:\s*(?:號|碼))?"
     # 先比對規格+數量，避免 2XL 被切成數量 2 和 XL。
     pattern = re.compile(
-        rf"(?P<after_size>{size})\s*(?:[X×*:=]\s*)?(?P<after_n>{_NUMBER})(?![0-9A-Z])\s*{_UNIT}?"
+        rf"(?P<after_size>{size})\s*(?:(?:[X×*:=]|{_PURCHASE})\s*)?"
+        rf"(?P<after_n>{_NUMBER})(?![0-9A-Z])\s*{_UNIT}?"
         rf"|(?![0-9]+X+[LS])(?!(?:{sizes})(?![A-Z0-9]))(?P<before_n>{_NUMBER})\s*{_UNIT}?\s*"
         rf"(?:[×*]\s*|X\s+)?(?P<before_size>{size})"
         rf"|(?P<single>{size})"
