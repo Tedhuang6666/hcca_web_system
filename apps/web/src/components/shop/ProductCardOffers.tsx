@@ -15,7 +15,7 @@ export default function ProductCardOffers({ product, promotions, products, disab
 }) {
   const matching = promotions.filter((promotion) => {
     const targets = promotion.target_products ?? [];
-    return targets.length === 0 || targets.some((target) => target.id === product.id);
+    return targets.some((target) => target.id === product.id);
   });
   if (matching.length === 0) return null;
   const bundles = matching.filter((promotion) => promotion.discount_type === "bundle_price");

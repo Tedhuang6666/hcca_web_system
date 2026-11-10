@@ -42,7 +42,7 @@ describe("商品卡片內的優惠", () => {
   it("展開條件式優惠後可查看件數、金額與優惠碼", () => {
     render(<ProductCardOffers product={product} promotions={[{
       ...promotion, discount_type: "percentage", discount_value: 10, min_quantity: 2,
-      min_order_price: 1000, code: "SAVE", target_products: [],
+      min_order_price: 1000, code: "SAVE", target_products: [{ id: product.id, name: product.name }],
     }]} products={new Map()} disabled={false} onSelectBundle={vi.fn()} />);
     expect(screen.getByText("滿 NT$1,000 · 滿 2 件 · 使用優惠碼 SAVE")).not.toBeVisible();
     fireEvent.click(screen.getByText("查看 1 項優惠"));
@@ -53,7 +53,7 @@ describe("商品卡片內的優惠", () => {
   it("有規格但都免加價時不顯示起價", () => {
     render(<ProductCardOffers product={{ ...product, has_option_surcharge: false }} promotions={[{
       ...promotion, discount_type: "percentage", discount_value: 10,
-      min_quantity: 1, min_order_price: 0, target_products: [],
+      min_quantity: 1, min_order_price: 0, target_products: [{ id: product.id, name: product.name }],
     }]} products={new Map()} disabled={false} onSelectBundle={vi.fn()} />);
     fireEvent.click(screen.getByText("查看 1 項優惠"));
     expect(screen.getByLabelText("原價 NT$300，優惠價 NT$270")).toBeVisible();
@@ -114,7 +114,7 @@ describe("商品卡片內的優惠", () => {
     expect(screen.queryByText(/贈品：/)).not.toBeInTheDocument();
   });
 
-  it("多項優惠預設合併收起，展開與收合不影響套組入口", () => {
+  it("主題優惠不重複顯示，單品優惠與套組入口仍可使用", () => {
     const select = vi.fn();
     render(<ProductCardOffers product={product} promotions={[promotion, {
       ...promotion, id: "threshold", name: "Six Seven！！！", discount_type: "fixed",
@@ -124,18 +124,14 @@ describe("商品卡片內的優惠", () => {
       discount_value: 100, target_products: [{ id: product.id, name: product.name }],
     }]} products={new Map([[product.id, product], [pants.id, pants]])}
       disabled={false} onSelectBundle={select} />);
-    const toggle = screen.getByText("查看 2 項優惠");
-    const conditions = screen.getByText("滿 NT$6,767 · 符合條件自動套用");
-    expect(screen.getByText("Six Seven！！！")).not.toBeVisible();
-    expect(conditions).not.toBeVisible();
+    const toggle = screen.getByText("查看 1 項優惠");
+    expect(screen.queryByText("Six Seven！！！")).not.toBeInTheDocument();
     expect(screen.getByText("贈品：衣服")).not.toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "選購套組：衣褲套組" }));
     expect(select).toHaveBeenCalledWith(promotion);
     fireEvent.click(toggle);
-    expect(conditions).toBeVisible();
-    expect(screen.getByText("整筆登記折抵 NT$67")).toBeVisible();
     expect(screen.getByText("贈品：衣服")).toBeVisible();
     fireEvent.click(toggle);
-    expect(conditions).not.toBeVisible();
+    expect(screen.getByText("贈品：衣服")).not.toBeVisible();
   });
 });

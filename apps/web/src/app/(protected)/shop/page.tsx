@@ -52,6 +52,7 @@ import { referenceDelta, referencePrice, registrationReferenceSubtotal } from "@
 import BundleOffer from "@/components/shop/BundleOffer";
 import BundleCarousel from "@/components/shop/BundleCarousel";
 import BundleAddOn from "@/components/shop/BundleAddOn";
+import TopicOffers from "@/components/shop/TopicOffers";
 import { bundleProductAvailable, bundleProgress } from "@/lib/shop-bundle-progress";
 import { productOfferPrice } from "@/lib/shop-promotion-price";
 import ProductCardOffers from "@/components/shop/ProductCardOffers";
@@ -2096,6 +2097,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
             {selectedCategory.order_closes_at && <p className="shop-public-product-deadline">
               活動結單：{new Date(selectedCategory.order_closes_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}（單品另設期限時以商品標示為準）
             </p>}
+            <TopicOffers key={selectedCategory.id} promotions={categoryPromotions} />
             {bundlePromotions.length > 0 && <section className="shop-bundles" aria-labelledby="shop-bundles-title">
               <div className="shop-bundles-heading">
                 <h2 id="shop-bundles-title" tabIndex={-1}><Gift size={18} aria-hidden="true" />一起買更划算</h2>

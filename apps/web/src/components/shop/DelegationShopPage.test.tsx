@@ -134,7 +134,15 @@ describe("原商品頁的家人代訂模式", () => {
     const addons = await screen.findByRole("region", { name: "套組加購建議" });
     expect(addons).toHaveTextContent("再加購長褲，湊齊一套可省 NT$50");
     expect(screen.getByRole("article", { name: "長褲商品" })).toHaveAttribute("data-bundle-addon", "true");
-    fireEvent.click(within(addons).getByRole("button", { name: "加購長褲" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "關閉" }));
+    fireEvent.click(screen.getByRole("button", { name: "查看商品：長褲" }));
+    await screen.findByRole("heading", { name: "長褲", level: 3 });
+    expect(screen.queryByText("選好本商品的規格與數量，再登記即可湊組。")).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "套組加購建議" })).not.toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "關閉" }));
+    fireEvent.click(screen.getByRole("button", { name: "查看商品：紀念袋" }));
+    const suggestions = await screen.findByRole("region", { name: "套組加購建議" });
+    fireEvent.click(within(suggestions).getByRole("button", { name: "加購長褲" }));
     await screen.findByRole("heading", { name: "長褲", level: 3 });
     expect(screen.getByText("正在選購「衣褲套組」，每項各一件；選齊後享套組價。")).toBeVisible();
   });
@@ -638,4 +646,30 @@ describe("原商品頁的家人代訂模式", () => {
     expect(api.accessDelegation).toHaveBeenCalledWith("new-synthetic-token", false);
     expect(api.accessDelegation).not.toHaveBeenCalledWith("synthetic-test-token", false);
   });
+});
+
+it.each([false, true])("主題滿額優惠只集中顯示一次，切換主題時更新（系列商品：%s）", async (inSeries) => {
+  const pants = { ...product, id: "pants", name: "長褲", price: 200 };
+  const products = [product, pants];
+  api.accessDelegation.mockResolvedValue({ ...context, registration: null,
+    catalog: [{ ...context.catalog![0], products: inSeries ? [] : products,
+      series: inSeries ? [{ id: "series", name: "紀念系列", products }] : [],
+    }, { ...context.catalog![0], id: "other", name: "其他主題", products: [{ ...product, id: "other-product", name: "其他商品" }] }],
+    promotions: [{ gift_quantity: 1,
+      id: "threshold", name: "主題滿千折百", target_category_ids: ["goods"],
+      discount_type: "fixed", discount_value: 100, min_order_price: 1000, min_quantity: 2,
+      target_products: [], code: "SAVE100",
+    }],
+  });
+  render(<ShopPage />);
+  const offers = await screen.findByRole("region", { name: "主題優惠" });
+  expect(screen.getAllByText("主題滿千折百")).toHaveLength(1);
+  expect(within(offers).getByText("主題滿千折百")).not.toBeVisible();
+  fireEvent.click(within(offers).getByText("主題優惠（1 項）"));
+  expect(within(offers).getByText("滿 NT$1,000、滿 2 件，折抵 NT$100 · 優惠碼 SAVE100")).toBeVisible();
+  for (const name of ["紀念袋商品", "長褲商品"]) {
+    expect(screen.getByRole("article", { name }).querySelector(".shop-product-card-offers")).toBeNull();
+  }
+  fireEvent.click(screen.getByRole("button", { name: /其他主題/ }));
+  expect(screen.queryByRole("region", { name: "主題優惠" })).not.toBeInTheDocument();
 });
