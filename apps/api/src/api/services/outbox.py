@@ -240,7 +240,8 @@ def _handle_shop_order_confirmed(payload: dict) -> None:
     if not buyer_email or not serial:
         return
     base = settings.FRONTEND_BASE_URL.rstrip("/")
-    subject = f"【訂單確認】{serial}"
+    external = payload.get("external_preorder") is True
+    subject = f"【預購訂單成立通知】{serial}" if external else f"【訂單確認】{serial}"
     item_rows = []
     for item in payload.get("items", []):
         if not isinstance(item, dict):
@@ -261,29 +262,52 @@ def _handle_shop_order_confirmed(payload: dict) -> None:
             f"數量：{quantity}<br>"
             f"小計：NT$ {item_subtotal:,}{option_details}</p>"
         )
-    items_html = "".join(item_rows) or "<p>訂單品項詳情請至「我的訂單」查看。</p>"
+    items_html = "".join(item_rows) or (
+        "<p>如需核對商品明細，敬請依下方聯絡方式洽詢班聯會，並提供訂單編號。</p>"
+        if external
+        else "<p>訂單品項詳情請至「我的訂單」查看。</p>"
+    )
     promotion_code = html_escape(str(payload.get("promotion_code") or ""))
     discount_label = "優惠折抵" + (f"（{promotion_code}）" if promotion_code else "")
-    buyer_greeting = html_escape(str(buyer_name or "同學"))
-    external = payload.get("external_preorder") is True
+    buyer_greeting = html_escape(str(buyer_name or "").strip())
+    salutation = f"{buyer_greeting} 您好" if buyer_greeting else "您好"
     office = html_escape(str(payload.get("buyer_office") or ""))
+    thanks = (
+        "感謝您的支持，您的預購訂單已成立。您無須回覆此信確認訂單，敬請核對下列訂購資訊。"
+        if external
+        else "感謝您的訂購。"
+    )
     delivery_notice = (
-        f"<p>您的預購訂單已成立。<strong>交貨時付款，目前尚未收款。</strong><br>"
-        f"辦公室／組織：{office}<br>交貨安排將另行通知。</p>"
+        "<p><strong>付款方式：交貨時付款。</strong><br>"
+        "您目前無須預先繳費或匯款，敬請於交貨時依訂單總額付款。</p>"
+        "<p><strong>交貨安排</strong><br>"
+        "交貨時間與方式將另行通知，敬請留意後續通知。</p>"
+        + (f"<p><strong>處室／單位</strong>：{office}</p>" if office else "")
         if external
         else ""
     )
+    contact_url = html_escape(f"{base}/contact", quote=True)
+    follow_up = (
+        "<p><strong>資料更正與聯繫</strong><br>"
+        "如需更正訂購資料或詢問交貨事宜，敬請依"
+        f'<a href="{contact_url}">班聯會聯絡方式</a>'
+        "與我們聯繫，並提供本信的訂單編號。您無須重複填寫表單。</p>"
+        "<p>感謝您的支持與協助。<br>班聯會 敬上</p>"
+        if external
+        else ""
+    )
+    total_label = "交貨時應付總額" if external else "應付總額"
     order_link = "" if external else f'<p><a href="{base}/shop/orders">查看訂單</a></p>'
     html = (
-        f"<p>親愛的 {buyer_greeting}，感謝您的訂購！</p>"
+        f"<p>{salutation}：</p><p>{thanks}</p>"
         f"{delivery_notice}"
         f"<p><strong>訂單編號</strong>：{html_escape(str(serial))}</p>"
         f"<p><strong>商品明細</strong></p>{items_html}"
         f"<p><strong>金額明細</strong><br>"
         f"商品小計：NT$ {subtotal:,}<br>"
         f"{discount_label}：− NT$ {discount:,}<br>"
-        f"<strong>應付總額：NT$ {total:,}</strong></p>"
-        f"{order_link}"
+        f"<strong>{total_label}：NT$ {total:,}</strong></p>"
+        f"{order_link}{follow_up}"
     )
     try:
         enqueue_email(buyer_email, subject, html)

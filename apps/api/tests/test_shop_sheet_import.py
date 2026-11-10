@@ -295,8 +295,11 @@ def test_external_notice_states_cash_on_delivery_and_retries(monkeypatch):
         "items": [],
     }
     _handle_shop_order_confirmed(payload)
-    assert "交貨時付款，目前尚未收款" in sent[0][2]
+    assert "預購訂單成立通知" in sent[0][1]
+    assert "付款方式：交貨時付款" in sent[0][2]
+    assert "無須預先繳費或匯款" in sent[0][2]
     assert "&lt;測試&gt;" in sent[0][2] and "/shop/orders" not in sent[0][2]
+    assert "我的訂單" not in sent[0][2] and "/contact" in sent[0][2]
 
     def fail(*args):
         raise RuntimeError("queue unavailable")
