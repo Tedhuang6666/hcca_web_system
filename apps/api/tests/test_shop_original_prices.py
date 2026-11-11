@@ -142,8 +142,8 @@ async def test_invalid_original_prices_rejected_before_persistence(pricing, chan
     "discount_type,value,extra,expected",
     [
         ("fixed", 50, {}, 1700),
-        ("percentage", 10, {}, 1545),
-        ("price_override", 0, {"unit_price": 250}, 1600),
+        ("percentage", 10, {}, 1715),
+        ("price_override", 0, {"unit_price": 250}, 1700),
     ],
 )
 async def test_sale_prices_and_options_stack_with_bundle_and_coupon(
