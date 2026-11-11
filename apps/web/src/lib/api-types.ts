@@ -10588,6 +10588,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop/offices/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Reorder Shop Offices */
+        put: operations["reorder_shop_offices_shop_offices_order_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shop/offices/{office_id}": {
         parameters: {
             query?: never;
@@ -30260,6 +30277,11 @@ export interface components {
             name: string;
             /** Sort Order */
             sort_order: number;
+        };
+        /** ShopOfficeReorder */
+        ShopOfficeReorder: {
+            /** Office Ids */
+            office_ids: string[];
         };
         /** ShopOfficeUpdate */
         ShopOfficeUpdate: {
@@ -57054,6 +57076,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ShopOfficeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reorder_shop_offices_shop_offices_order_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShopOfficeReorder"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopOfficeOut"][];
                 };
             };
             /** @description Validation Error */

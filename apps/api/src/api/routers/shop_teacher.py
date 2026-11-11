@@ -17,6 +17,7 @@ from api.models.user import User
 from api.schemas.shop_teacher import (
     ShopOfficeCreate,
     ShopOfficeOut,
+    ShopOfficeReorder,
     ShopOfficeUpdate,
     ShopTeacherProfileOut,
     ShopTeacherProfileUpdate,
@@ -66,6 +67,16 @@ async def create_shop_office(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except IntegrityError as exc:
         raise HTTPException(status_code=409, detail="已有相同名稱的處室") from exc
+
+
+@router.put("/offices/order", response_model=list[ShopOfficeOut])
+async def reorder_shop_offices(
+    data: ShopOfficeReorder, session: DbDep, current_user: ManagerUser
+) -> list[ShopOffice]:
+    try:
+        return await teacher_svc.reorder_offices(session, data)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.patch("/offices/{office_id}", response_model=ShopOfficeOut)

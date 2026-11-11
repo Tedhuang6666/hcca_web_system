@@ -1,5 +1,5 @@
 import type {
-  ShopOfficeCreate, ShopOfficeUpdate, ShopOfficeOut, ShopTeacherProfileUpdate, ShopTeacherProfileOut,
+  ShopOfficeCreate, ShopOfficeUpdate, ShopOfficeOut, ShopOfficeReorder, ShopTeacherProfileUpdate, ShopTeacherProfileOut,
   AdminAssistedOrderCreate,
   OrderItemQuantityUpdate,
   ChangedOrderReceiptCreate,
@@ -25,6 +25,7 @@ export const shopApi = {
   teacherProfile: () => get<ShopTeacherProfileOut | null>("/shop/teacher-profile"),
   saveTeacherProfile: (body: ShopTeacherProfileUpdate) => put<ShopTeacherProfileOut>("/shop/teacher-profile", body),
   offices: () => get<ShopOfficeOut[]>("/shop/offices"),
+  reorderOffices: (body: ShopOfficeReorder) => put<ShopOfficeOut[]>("/shop/offices/order", body),
   createOffice: (body: ShopOfficeCreate) => post<ShopOfficeOut>("/shop/offices", body),
   updateOffice: (id: string, body: ShopOfficeUpdate) => patch<ShopOfficeOut>(`/shop/offices/${id}`, body),
   lookupTargets: (body: ShopTargetLookupRequest) => post<ShopTargetOut[]>("/shop/target-options", body),

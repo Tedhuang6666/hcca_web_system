@@ -33,6 +33,18 @@ class ShopOfficeOut(BaseModel):
     sort_order: int
 
 
+class ShopOfficeReorder(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    office_ids: list[uuid.UUID] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def reject_duplicates(self) -> "ShopOfficeReorder":
+        if len(self.office_ids) != len(set(self.office_ids)):
+            raise ValueError("處室不可重複排序")
+        return self
+
+
 class ShopTeacherProfileUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

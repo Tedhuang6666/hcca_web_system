@@ -1,22 +1,46 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import ShopOfficesPanel from "./ShopOfficesPanel";
 
-const api = vi.hoisted(() => ({ offices: vi.fn(), createOffice: vi.fn(), updateOffice: vi.fn() }));
+const api = vi.hoisted(() => ({ offices: vi.fn(), createOffice: vi.fn(), updateOffice: vi.fn(), reorderOffices: vi.fn() }));
 vi.mock("@/lib/api", () => ({ shopApi: api, apiErrorMessage: (_error: unknown, fallback: string) => fallback }));
 const office = { id: "office", name: "國文科", is_active: true, sort_order: 0 };
-beforeEach(() => { vi.resetAllMocks(); api.offices.mockResolvedValue([office]); });
+const second = { id: "second", name: "學務處", is_active: true, sort_order: 1 };
+beforeEach(() => {
+  vi.resetAllMocks(); api.offices.mockResolvedValue([office]);
+  // jsdom 沒有版面座標，提供列的位置讓真正的 keyboard sensor 可判斷上下移動。
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    const row = this.closest("li");
+    const index = row?.parentElement ? Array.from(row.parentElement.children).indexOf(row) : 0;
+    return DOMRect.fromRect({ x: 0, y: index * 100, width: 700, height: 100 });
+  });
+});
+afterEach(() => vi.restoreAllMocks());
 
-it("allows adding, renaming and disabling the office options teachers use", async () => {
-  api.createOffice.mockResolvedValue({ id: "second", name: "學務處", is_active: true, sort_order: 1 });
+async function moveFirstOffice() {
+  const user = userEvent.setup();
+  const handle = await screen.findByRole("button", { name: "拖曳排序：國文科" });
+  handle.focus();
+  await user.keyboard("[Space]");
+  await waitFor(() => expect(handle).toHaveAttribute("aria-pressed", "true"));
+  await user.keyboard("[ArrowDown]");
+  await screen.findByText("「國文科」將移至第 2 個位置。");
+  await user.keyboard("[Space]");
+}
+
+it("allows adding, renaming and disabling offices without numeric order fields", async () => {
+  api.createOffice.mockResolvedValue(second);
   api.updateOffice.mockResolvedValueOnce({ ...office, name: "國文辦公室" }).mockResolvedValueOnce({ ...office, name: "國文辦公室", is_active: false });
   render(<ShopOfficesPanel />);
   fireEvent.change(await screen.findByRole("textbox", { name: "新增處室名稱" }), { target: { value: "學務處" } });
+  expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "新增處室" }));
   await screen.findByRole("textbox", { name: "學務處的名稱" });
   fireEvent.change(screen.getByRole("textbox", { name: "國文科的名稱" }), { target: { value: "國文辦公室" } });
-  fireEvent.click(screen.getAllByRole("button", { name: "儲存設定" })[0]);
+  fireEvent.click(screen.getAllByRole("button", { name: "儲存名稱" })[0]);
   await screen.findByRole("textbox", { name: "國文辦公室的名稱" });
+  expect(api.updateOffice).toHaveBeenCalledWith("office", { name: "國文辦公室" });
   fireEvent.change(screen.getByRole("textbox", { name: "國文辦公室的名稱" }), { target: { value: "尚未儲存的名稱" } });
   fireEvent.click(screen.getByRole("button", { name: "停用國文辦公室" }));
   await waitFor(() => expect(api.updateOffice).toHaveBeenLastCalledWith("office", { is_active: false }));
@@ -24,55 +48,70 @@ it("allows adding, renaming and disabling the office options teachers use", asyn
   expect(screen.getByRole("textbox", { name: "國文辦公室的名稱" })).toHaveValue("尚未儲存的名稱");
 });
 
-it("saves the order and moves the row while preserving another row's draft", async () => {
-  const second = { id: "second", name: "學務處", is_active: true, sort_order: 1 };
+it("saves keyboard drag order in one request and preserves other drafts", async () => {
   api.offices.mockResolvedValue([office, second]);
-  let resolveUpdate!: (value: typeof office) => void;
-  api.updateOffice.mockReturnValue(new Promise((resolve) => { resolveUpdate = resolve; }));
-  render(<ShopOfficesPanel />);
+  let resolveOrder!: (value: typeof office[]) => void;
+  api.reorderOffices.mockReturnValue(new Promise((resolve) => { resolveOrder = resolve; }));
+  const { unmount } = render(<ShopOfficesPanel />);
   fireEvent.change(await screen.findByRole("textbox", { name: "學務處的名稱" }), { target: { value: "未儲存的名稱" } });
-  fireEvent.change(screen.getByRole("spinbutton", { name: "國文科的顯示順序" }), { target: { value: "5" } });
-  const save = screen.getAllByRole("button", { name: "儲存設定" })[0];
-  fireEvent.click(save);
-  expect(api.updateOffice).toHaveBeenCalledWith("office", { name: "國文科", sort_order: 5 });
-  expect(save).toBeDisabled();
-  resolveUpdate({ ...office, sort_order: 5 });
-  await screen.findByText("名稱與顯示順序已儲存。");
-  const rows = screen.getAllByRole("listitem");
-  expect(within(rows[0]).getByRole("textbox")).toHaveValue("未儲存的名稱");
-  expect(within(rows[1]).getByRole("spinbutton")).toHaveValue(5);
-});
-
-it("retains a failed order change for retry and blocks invalid order values", async () => {
-  api.updateOffice.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce({ ...office, sort_order: 3 });
+  await moveFirstOffice();
+  expect(api.reorderOffices).toHaveBeenCalledExactlyOnceWith({ office_ids: ["second", "office"] });
+  expect(api.updateOffice).not.toHaveBeenCalled();
+  expect(within(screen.getAllByRole("listitem")[0]).getByRole("textbox")).toHaveValue("未儲存的名稱");
+  expect(screen.getByRole("button", { name: "拖曳排序：國文科" })).toBeDisabled();
+  expect(screen.getByRole("textbox", { name: "新增處室名稱" })).toBeDisabled();
+  const ordered = [{ ...second, sort_order: 0 }, { ...office, sort_order: 1 }];
+  resolveOrder(ordered);
+  await screen.findByText("處室順序已儲存。");
+  await waitFor(() => expect(screen.getByRole("button", { name: "拖曳排序：國文科" })).toHaveFocus());
+  expect(screen.getByRole("textbox", { name: "學務處的名稱" })).toHaveValue("未儲存的名稱");
+  unmount();
+  api.offices.mockResolvedValue(ordered);
   render(<ShopOfficesPanel />);
-  const order = await screen.findByRole("spinbutton", { name: "國文科的顯示順序" });
-  const save = screen.getByRole("button", { name: "儲存設定" });
-  for (const value of ["", "-1", "1.5", "2147483648"]) {
-    fireEvent.change(order, { target: { value } });
-    expect(save).toBeDisabled();
-  }
-  fireEvent.change(order, { target: { value: "3" } });
-  fireEvent.click(save);
-  expect(await screen.findByRole("alert")).toHaveTextContent("處室未更新");
-  expect(order).toHaveValue(3);
-  expect(save).toBeEnabled();
-  fireEvent.click(save);
-  await screen.findByText("名稱與顯示順序已儲存。");
-  expect(save).toBeDisabled();
+  await screen.findByRole("textbox", { name: "學務處的名稱" });
+  expect(within(screen.getAllByRole("listitem")[0]).getByRole("textbox")).toHaveValue("學務處");
 });
 
-it("keeps equal order values in UUID order when a name changes", async () => {
-  api.offices.mockResolvedValue([office, { id: "second", name: "學務處", is_active: true, sort_order: 0 }]);
-  api.updateOffice.mockResolvedValue({ ...office, name: "新國文科" });
+it("restores the order after failure, retains drafts and allows a new drag", async () => {
+  api.offices.mockResolvedValue([office, second]);
+  api.reorderOffices.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce([second, office]);
   render(<ShopOfficesPanel />);
-  fireEvent.change(await screen.findByRole("textbox", { name: "國文科的名稱" }), { target: { value: "新國文科" } });
-  fireEvent.click(screen.getAllByRole("button", { name: "儲存設定" })[0]);
-  await screen.findByRole("textbox", { name: "新國文科的名稱" });
-  expect(within(screen.getAllByRole("listitem")[0]).getByRole("textbox")).toHaveValue("新國文科");
+  fireEvent.change(await screen.findByRole("textbox", { name: "學務處的名稱" }), { target: { value: "保留草稿" } });
+  await moveFirstOffice();
+  expect(await screen.findByRole("alert")).toHaveTextContent("無法儲存處室順序");
+  expect(within(screen.getAllByRole("listitem")[0]).getByRole("textbox")).toHaveValue("國文科");
+  expect(screen.getByRole("textbox", { name: "學務處的名稱" })).toHaveValue("保留草稿");
+  await moveFirstOffice();
+  await screen.findByText("處室順序已儲存。");
+  expect(api.reorderOffices).toHaveBeenCalledTimes(2);
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
 
-it("retries loading and preserves a failed new option", async () => {
+it("cancels keyboard dragging without saving and disables a lone handle", async () => {
+  api.offices.mockResolvedValue([office, second]);
+  render(<ShopOfficesPanel />);
+  const user = userEvent.setup();
+  const handle = await screen.findByRole("button", { name: "拖曳排序：國文科" });
+  handle.focus();
+  await user.keyboard("[Space]");
+  await waitFor(() => expect(handle).toHaveAttribute("aria-pressed", "true"));
+  await user.keyboard("[ArrowDown][Escape]");
+  expect(api.reorderOffices).not.toHaveBeenCalled();
+  expect(within(screen.getAllByRole("listitem")[0]).getByRole("textbox")).toHaveValue("國文科");
+});
+
+it("keeps a single office usable and reports an empty list", async () => {
+  const { unmount } = render(<ShopOfficesPanel />);
+  expect(await screen.findByRole("button", { name: "拖曳排序：國文科" })).toBeDisabled();
+  expect(screen.getByRole("textbox", { name: "國文科的名稱" })).toBeEnabled();
+  unmount();
+  api.offices.mockResolvedValue([]);
+  render(<ShopOfficesPanel />);
+  await screen.findByText("尚未設定處室，請先新增老師可選的選項。");
+  expect(screen.queryByRole("list")).not.toBeInTheDocument();
+});
+
+it("retries loading and preserves a failed new office", async () => {
   api.offices.mockRejectedValueOnce(new Error("offline"));
   api.createOffice.mockRejectedValue(new Error("duplicate"));
   render(<ShopOfficesPanel />);

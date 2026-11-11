@@ -8,6 +8,7 @@ from api.models.user import User
 from api.schemas.shop_teacher import (
     ShopOfficeCreate,
     ShopOfficeOut,
+    ShopOfficeReorder,
     ShopOfficeUpdate,
     ShopTeacherProfileOut,
     ShopTeacherProfileUpdate,
@@ -51,6 +52,20 @@ async def update_office(
         setattr(office, field, value)
     await session.flush()
     return office
+
+
+async def reorder_offices(session: AsyncSession, data: ShopOfficeReorder) -> list[ShopOffice]:
+    offices = list(
+        await session.scalars(select(ShopOffice).order_by(ShopOffice.id).with_for_update())
+    )
+    by_id = {office.id: office for office in offices}
+    if set(data.office_ids) != set(by_id):
+        raise ValueError("處室清單已變動，請重新載入後再排序。")
+    ordered = [by_id[office_id] for office_id in data.office_ids]
+    for index, office in enumerate(ordered):
+        office.sort_order = index
+    await session.flush()
+    return ordered
 
 
 async def get_profile(session: AsyncSession, user: User) -> ShopTeacherProfileOut | None:

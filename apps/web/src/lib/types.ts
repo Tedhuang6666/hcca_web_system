@@ -8,6 +8,7 @@ export type {
   ShopOfficeCreate,
   ShopOfficeUpdate,
   ShopOfficeOut,
+  ShopOfficeReorder,
   ShopTeacherProfileUpdate,
   ShopTeacherProfileOut,
   ShopProfitOut,

@@ -212,3 +212,73 @@ async def test_teacher_order_snapshots_survive_profile_and_office_changes(
     csv = await shop_svc.export_orders_csv(db_session)
     assert "王老師" in csv and "國文科" in csv
     assert "新姓名" not in csv and "新處室" not in csv
+
+
+async def test_office_drag_order_requires_management_permission(
+    client, authed_client_factory, admin_user, teacher, make_user
+):
+    manager = authed_client_factory(admin_user)
+    office = (await manager.post("/shop/offices", json={"name": "國文科"})).json()
+    payload = {"office_ids": [office["id"]]}
+    for actor, status in [
+        (client, 401),
+        (authed_client_factory(teacher), 403),
+        (authed_client_factory(await make_user()), 403),
+    ]:
+        assert (await actor.put("/shop/offices/order", json=payload)).status_code == status
+
+
+async def test_office_drag_order_saves_the_whole_list_and_teacher_options(
+    authed_client_factory, admin_user, teacher
+):
+    manager = authed_client_factory(admin_user)
+    offices = [
+        (await manager.post("/shop/offices", json={"name": name})).json()
+        for name in ["教務處", "學務處", "總務處"]
+    ]
+    await manager.patch(f"/shop/offices/{offices[1]['id']}", json={"is_active": False})
+    ids = [office["id"] for office in reversed(offices)]
+    saved = await manager.put("/shop/offices/order", json={"office_ids": ids})
+    assert saved.status_code == 200, saved.text
+    assert [row["id"] for row in saved.json()] == ids
+    assert [row["sort_order"] for row in saved.json()] == [0, 1, 2]
+    assert saved.json()[1]["is_active"] is False
+    assert [row["id"] for row in (await manager.get("/shop/offices")).json()] == ids
+    profile = await authed_client_factory(teacher).get("/shop/teacher-profile")
+    assert [row["id"] for row in profile.json()["offices"]] == [ids[0], ids[2]]
+    await manager.patch(f"/shop/offices/{ids[0]}", json={"name": "新總務處"})
+    assert [row["id"] for row in (await manager.get("/shop/offices")).json()] == ids
+    added = await manager.post("/shop/offices", json={"name": "人事室"})
+    assert added.status_code == 201, added.text
+    assert added.json()["sort_order"] == 3
+    assert (await manager.get("/shop/offices")).json()[-1]["id"] == added.json()["id"]
+
+
+async def test_office_drag_order_rejects_invalid_and_stale_lists_without_partial_updates(
+    authed_client_factory, admin_user
+):
+    manager = authed_client_factory(admin_user)
+    ids = [
+        (await manager.post("/shop/offices", json={"name": name})).json()["id"]
+        for name in ["教務處", "學務處"]
+    ]
+    for payload, status in [
+        ({"office_ids": []}, 422),
+        ({"office_ids": [ids[0], ids[0]]}, 422),
+        ({"office_ids": [ids[0]]}, 409),
+        ({"office_ids": [ids[1], str(uuid.uuid4())]}, 409),
+        ({"office_ids": list(reversed(ids)), "unexpected": True}, 422),
+    ]:
+        response = await manager.put("/shop/offices/order", json=payload)
+        assert response.status_code == status, response.text
+        unchanged = (await manager.get("/shop/offices")).json()
+        assert [row["id"] for row in unchanged] == ids
+        assert [row["sort_order"] for row in unchanged] == [0, 1]
+    added = (await manager.post("/shop/offices", json={"name": "總務處"})).json()
+    stale = await manager.put("/shop/offices/order", json={"office_ids": list(reversed(ids))})
+    assert stale.status_code == 409
+    assert "重新載入" in stale.json()["detail"]
+    refreshed_ids = [added["id"], *reversed(ids)]
+    refreshed = await manager.put("/shop/offices/order", json={"office_ids": refreshed_ids})
+    assert refreshed.status_code == 200, refreshed.text
+    assert [row["id"] for row in refreshed.json()] == refreshed_ids
