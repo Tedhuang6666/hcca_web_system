@@ -9,6 +9,11 @@ on:
 permissions:
   contents: read
 
+# Keep only the newest run for a branch or pull request.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     name: Ruff Lint & Mypy Types
@@ -53,7 +58,6 @@ jobs:
   test:
     name: PostgreSQL Pytest + Coverage
     runs-on: ubuntu-latest
-    needs: lint
 
     services:
       postgres:
@@ -126,7 +130,6 @@ jobs:
   schema:
     name: Alembic Schema Drift
     runs-on: ubuntu-latest
-    needs: lint
 
     services:
       postgres:
@@ -172,7 +175,6 @@ jobs:
   api-contract:
     name: OpenAPI Contract Drift
     runs-on: ubuntu-latest
-    needs: lint
     env:
       DATABASE_URL: postgresql+asyncpg://postgres:password@localhost:5432/campus_platform
       REDIS_URL: redis://localhost:6379/0
@@ -242,7 +244,6 @@ jobs:
   performance-smoke:
     name: k6 Public API Smoke
     runs-on: ubuntu-latest
-    needs: test
     timeout-minutes: 15
 
     services:
@@ -386,7 +387,6 @@ jobs:
   web-e2e:
     name: Web — Playwright
     runs-on: ubuntu-latest
-    needs: web
     timeout-minutes: 20
     defaults:
       run:
