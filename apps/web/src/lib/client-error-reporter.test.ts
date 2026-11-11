@@ -3,6 +3,50 @@ import { describe, expect, it, vi } from "vitest";
 import { installGlobalClientErrorReporter, reportClientError } from "./client-error-reporter";
 
 describe("client error reporter", () => {
+  it("ignores images removed while their failure is being diagnosed", async () => {
+    let finishProbe!: (response: Response) => void;
+    const fetchMock = vi.fn().mockImplementation(() => new Promise<Response>((resolve) => {
+      finishProbe = resolve;
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const uninstall = installGlobalClientErrorReporter();
+    const beforeProbe = document.createElement("img");
+    const duringProbe = document.createElement("img");
+    beforeProbe.src = "/shop/104/detached-before.webp";
+    duringProbe.src = "/shop/104/detached-during.webp";
+    document.body.append(beforeProbe, duringProbe);
+    try {
+      beforeProbe.dispatchEvent(new Event("error"));
+      beforeProbe.remove();
+      await Promise.resolve();
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      duringProbe.dispatchEvent(new Event("error"));
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+      duringProbe.remove();
+      finishProbe(new Response(null, { status: 200 }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock.mock.calls.every(([, init]) => init.method === "HEAD")).toBe(true);
+    } finally { uninstall(); beforeProbe.remove(); duringProbe.remove(); }
+  });
+
+  it("keeps undecodable connected images even when the diagnostic HEAD returns 200", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const uninstall = installGlobalClientErrorReporter();
+    const img = document.createElement("img");
+    img.src = "/shop/104/undecodable-200.webp";
+    document.body.append(img);
+    try {
+      img.dispatchEvent(new Event("error"));
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+      const payload = JSON.parse(String(fetchMock.mock.calls[1][1].body));
+      expect(payload.context.diagnostics.resource_probe_status).toBe(200);
+      expect(payload.context.diagnostics.image_natural_width).toBe(0);
+    } finally { uninstall(); img.remove(); }
+  });
+
   it("preserves cross-realm React error stacks and digests", () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
     vi.stubGlobal("fetch", fetchMock);

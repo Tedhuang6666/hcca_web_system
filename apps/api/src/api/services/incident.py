@@ -6,6 +6,7 @@ import csv
 import hashlib
 import json
 import logging
+import math
 import re
 from datetime import UTC, datetime, timedelta
 from io import StringIO
@@ -243,9 +244,30 @@ async def upsert_incident(
         incident.trace_id = trace_id
         incident.request_id = request_id
         if incident.status == IncidentStatus.RESOLVED:
-            incident.status = IncidentStatus.REGRESSION
+            last_resolution = await session.scalar(
+                select(SystemIncidentEvent.event_type)
+                .where(
+                    SystemIncidentEvent.incident_id == incident.id,
+                    SystemIncidentEvent.event_type.in_(
+                        ("auto_resolved", "status_changed", "known_fix_resolved")
+                    ),
+                )
+                .order_by(
+                    desc(SystemIncidentEvent.created_at),
+                    # PostgreSQL now() is shared by events in the same transaction.
+                    # Prefer a verified resolution when timestamps cannot order them.
+                    SystemIncidentEvent.event_type == "auto_resolved",
+                )
+                .limit(1)
+            )
+            # Silence only confirms inactivity; it is not evidence of a verified fix.
+            automatically_closed = last_resolution == "auto_resolved"
+            incident.status = (
+                IncidentStatus.OPEN if automatically_closed else IncidentStatus.REGRESSION
+            )
             incident.resolved_at = None
-            event_type = "regressed"
+            incident.resolution_note = None
+            event_type = "reopened" if automatically_closed else "regressed"
         else:
             event_type = "seen_again"
 
@@ -353,6 +375,34 @@ def _normalize_client_request_path(value: Any) -> str | None:
     return normalized[:500] if normalized else None
 
 
+def _is_background_timeout(context: dict[str, Any], diagnostics: dict[str, Any]) -> bool:
+    """Keep proven background read timeouts as observations, not service regressions."""
+    if str(diagnostics.get("request_method") or "").upper() not in {"GET", "HEAD"}:
+        return False
+    values = [
+        diagnostics.get("request_timeout_ms"),
+        diagnostics.get("request_elapsed_ms"),
+        diagnostics.get("request_hidden_ms"),
+        diagnostics.get("timeout_timer_delay_ms", 0),
+    ]
+    if any(
+        not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value)
+        for value in values
+    ):
+        return False
+    timeout_ms, elapsed_ms, hidden_ms, timer_delay_ms = values
+    if timeout_ms <= 0 or elapsed_ms < timeout_ms or not 0 <= hidden_ms <= elapsed_ms + 250:
+        return False
+    visible_ms = max(0, elapsed_ms - hidden_ms)
+    if (
+        context.get("visibility_state") == "hidden"
+        and diagnostics.get("visibility_at_start") == "hidden"
+        and visible_ms <= 250
+    ):
+        return True
+    return hidden_ms >= timeout_ms and timer_delay_ms >= timeout_ms and visible_ms < timeout_ms
+
+
 async def persist_client_error_incident(
     *,
     error_id: str,
@@ -374,6 +424,8 @@ async def persist_client_error_incident(
     if scope == "api.offline":
         return None
     if diagnostics.get("failure_kind") == "offline":
+        return None
+    if scope == "api.timeout" and _is_background_timeout(context, diagnostics):
         return None
     if scope == "securitypolicyviolation" and diagnostics.get("csp_disposition") == "report":
         return None

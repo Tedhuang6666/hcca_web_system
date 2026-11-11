@@ -416,6 +416,11 @@ async function blockedRedirect(req: NextRequest) {
 function publicAssetCacheControl(pathname: string): string | null {
   if (pathname === "/sw.js") return "public, max-age=0, must-revalidate";
   if (pathname === "/theme.v1.js") return "public, max-age=31536000, immutable";
+  // Public product images must never receive a maintenance/block HTML redirect.
+  // Keep the match within the versioned public asset directory, away from shop pages.
+  if (/^\/shop\/\d+\/[\w-]+\.(?:avif|webp|png|jpe?g)$/i.test(pathname)) {
+    return "public, max-age=86400, stale-while-revalidate=604800";
+  }
   // Social crawlers must be able to fetch OG images without depending on the
   // maintenance/access checks used by HTML pages. Cache the generated PNG at
   // the edge so repeated crawler retries do not rerun Satori and the API read.

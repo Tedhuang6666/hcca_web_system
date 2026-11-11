@@ -570,10 +570,10 @@ export function installGlobalClientErrorReporter(): () => void {
       };
       // Let the element's own error handler finish replacing a failed source.
       void Promise.resolve().then(async () => {
-        if (!active || resourceUrl(image) !== failedResource
+        if (!active || !image.isConnected || resourceUrl(image) !== failedResource
           || (image.complete && image.naturalWidth > 0)) return;
         const probe = await probeImage(failedResource);
-        if (!active || resourceUrl(image) !== failedResource
+        if (!active || !image.isConnected || resourceUrl(image) !== failedResource
           || (image.complete && image.naturalWidth > 0)) return;
         await reportClientError({
           ...input, diagnostics: { ...evidence, ...resourceEvidence(failedResource), ...probe },

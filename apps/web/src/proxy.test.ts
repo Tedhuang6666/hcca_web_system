@@ -9,6 +9,31 @@ describe("proxy search metadata routes", () => {
     vi.unstubAllGlobals();
   });
 
+  it.each(["GET", "HEAD"])("serves public shop images without page checks for %s", async (method) => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error("page checks unavailable"));
+    vi.stubGlobal("fetch", fetchMock);
+    const response = await proxy(new NextRequest(
+      "https://hcca.tw/shop/104/cotton-01-1440.webp", { method },
+    ));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(response.headers.get("Location")).toBeNull();
+    expect(response.headers.get("Cache-Control")).toContain("public, max-age=86400");
+    expect(response.headers.get("Content-Security-Policy")).toBeNull();
+    expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
+  });
+
+  it.each(["/shop", "/shop/orders", "/shop/products/example.webp"])(
+    "keeps HTML page controls on %s", async (pathname) => {
+      const response = await proxy(new NextRequest(`https://hcca.tw${pathname}`, {
+        headers: { RSC: "1" },
+      }));
+
+      expect(response.headers.get("Cache-Control")).toMatch(/^private, no-(?:cache|store)/);
+      expect(response.headers.get("Content-Security-Policy")).toContain("default-src 'self'");
+    },
+  );
+
   it.each(["/robots.txt", "/sitemap.xml"])("does not add noindex to %s", async (pathname) => {
     const request = new NextRequest(`https://hcca.tw${pathname}`, {
       headers: { RSC: "1" },
