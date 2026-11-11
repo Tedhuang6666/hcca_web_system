@@ -5,7 +5,7 @@ import uuid
 import pytest
 from sqlalchemy import select
 
-from api.models.shop_teacher import ShopTeacherProfile
+from api.models.shop_teacher import ShopOffice, ShopTeacherProfile
 from api.schemas.shop import ClassOrderUpsert, OrderItemCreate, ProductCategoryCreate, ProductCreate
 from api.services import shop as shop_svc
 
@@ -27,15 +27,27 @@ async def test_office_management_permissions_and_validation(
         assert (
             await actor.patch(f"/shop/offices/{uuid.uuid4()}", json={"name": "學務處"})
         ).status_code == code
+        assert (
+            await actor.patch(f"/shop/offices/{uuid.uuid4()}", json={"sort_order": 1})
+        ).status_code == code
     created = await manager.post("/shop/offices", json={"name": " 國文科 "})
     assert created.status_code == 201, created.text
     office = created.json()
     assert office["name"] == "國文科"
     assert office["is_active"] is True
+    assert office["sort_order"] == 0
     assert (await manager.post("/shop/offices", json={"name": "國文科"})).status_code == 409
     assert (await manager.post("/shop/offices", json={"name": "  "})).status_code == 422
     path = f"/shop/offices/{office['id']}"
-    for payload in [{"name": None}, {"is_active": None}, {"name": " "}]:
+    for payload in [
+        {"name": None},
+        {"is_active": None},
+        {"name": " "},
+        {"sort_order": None},
+        {"sort_order": -1},
+        {"sort_order": 1.5},
+        {"sort_order": 2147483648},
+    ]:
         assert (await manager.patch(path, json=payload)).status_code == 422
     updated = await manager.patch(path, json={"name": "學務處"})
     assert updated.json()["is_active"] is True  # 未提供的狀態必須保留。
@@ -43,6 +55,70 @@ async def test_office_management_permissions_and_validation(
     assert (await manager.get("/shop/offices")).json()[0]["is_active"] is False
     assert (await manager.patch(path, json={"is_active": True})).json()["is_active"] is True
     assert (await manager.patch(f"/shop/offices/{uuid.uuid4()}", json={})).status_code == 404
+
+
+async def test_office_order_persists_for_managers_and_teachers(
+    db_session, authed_client_factory, admin_user, teacher
+):
+    manager = authed_client_factory(admin_user)
+    actor = authed_client_factory(teacher)
+    first = (await manager.post("/shop/offices", json={"name": "教務處"})).json()
+    second = (await manager.post("/shop/offices", json={"name": "學務處"})).json()
+    inactive = (await manager.post("/shop/offices", json={"name": "已停用處室"})).json()
+    await manager.patch(f"/shop/offices/{inactive['id']}", json={"is_active": False})
+    updated = await manager.patch(f"/shop/offices/{first['id']}", json={"sort_order": 10})
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["sort_order"] == 10
+    assert updated.json()["name"] == first["name"]
+    assert updated.json()["is_active"] is True
+    stored = await db_session.get(ShopOffice, uuid.UUID(first["id"]))
+    assert stored is not None
+    db_session.expire(stored, ["sort_order"])
+    assert [row["id"] for row in (await manager.get("/shop/offices")).json()] == [
+        second["id"],
+        inactive["id"],
+        first["id"],
+    ]
+    expected = [second["id"], first["id"]]
+    assert [
+        row["id"] for row in (await actor.get("/shop/teacher-profile")).json()["offices"]
+    ] == expected
+    saved = await actor.put(
+        "/shop/teacher-profile", json={"name": "王老師", "office_id": first["id"]}
+    )
+    assert [row["id"] for row in saved.json()["offices"]] == expected
+    renamed = await manager.patch(f"/shop/offices/{first['id']}", json={"name": "新教務處"})
+    assert renamed.json()["sort_order"] == 10
+    added = (await manager.post("/shop/offices", json={"name": "總務處"})).json()
+    assert added["sort_order"] == 11
+    assert (await manager.get("/shop/offices")).json()[-1]["id"] == added["id"]
+
+
+async def test_office_order_ties_and_limit_are_predictable(authed_client_factory, admin_user):
+    manager = authed_client_factory(admin_user)
+    offices = [
+        (await manager.post("/shop/offices", json={"name": name})).json()
+        for name in ["教務處", "學務處"]
+    ]
+    for office in offices:
+        response = await manager.patch(
+            f"/shop/offices/{office['id']}", json={"sort_order": 2147483647}
+        )
+        assert response.status_code == 200, response.text
+    expected_ids = sorted(office["id"] for office in offices)
+    assert [row["id"] for row in (await manager.get("/shop/offices")).json()] == expected_ids
+    await manager.patch(f"/shop/offices/{offices[0]['id']}", json={"name": "新教務處"})
+    assert [row["id"] for row in (await manager.get("/shop/offices")).json()] == expected_ids
+    blocked = await manager.post("/shop/offices", json={"name": "總務處"})
+    assert blocked.status_code == 422
+    assert "請先降低" in blocked.json()["detail"]
+    assert len((await manager.get("/shop/offices")).json()) == 2
+    for index, office_id in enumerate(expected_ids):
+        await manager.patch(f"/shop/offices/{office_id}", json={"sort_order": index})
+    added = await manager.post("/shop/offices", json={"name": "總務處"})
+    assert added.status_code == 201, added.text
+    assert added.json()["sort_order"] == 2
+    assert (await manager.get("/shop/offices")).json()[-1]["id"] == added.json()["id"]
 
 
 async def test_teacher_can_only_save_own_profile(

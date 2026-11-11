@@ -62,6 +62,8 @@ async def create_shop_office(
     try:
         async with session.begin_nested():
             return await teacher_svc.create_office(session, data)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except IntegrityError as exc:
         raise HTTPException(status_code=409, detail="已有相同名稱的處室") from exc
 

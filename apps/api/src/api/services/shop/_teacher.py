@@ -1,6 +1,6 @@
 """教師訂購資料僅由本人修改；訂單保存建立當時的姓名與處室。"""
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.shop_teacher import ShopOffice, ShopTeacherProfile
@@ -28,14 +28,17 @@ async def is_teacher(session: AsyncSession, user: User) -> bool:
 async def list_offices(
     session: AsyncSession, *, include_inactive: bool = False
 ) -> list[ShopOffice]:
-    query = select(ShopOffice).order_by(ShopOffice.name, ShopOffice.id)
+    query = select(ShopOffice).order_by(ShopOffice.sort_order, ShopOffice.id)
     if not include_inactive:
         query = query.where(ShopOffice.is_active.is_(True))
     return list(await session.scalars(query))
 
 
 async def create_office(session: AsyncSession, data: ShopOfficeCreate) -> ShopOffice:
-    office = ShopOffice(name=data.name)
+    last_order = await session.scalar(select(func.max(ShopOffice.sort_order)))
+    if last_order == 2147483647:
+        raise ValueError("顯示順序已達上限，請先降低現有處室的順序再新增。")
+    office = ShopOffice(name=data.name, sort_order=last_order + 1 if last_order is not None else 0)
     session.add(office)
     await session.flush()
     return office

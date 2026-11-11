@@ -30258,6 +30258,8 @@ export interface components {
             is_active: boolean;
             /** Name */
             name: string;
+            /** Sort Order */
+            sort_order: number;
         };
         /** ShopOfficeUpdate */
         ShopOfficeUpdate: {
@@ -30265,6 +30267,8 @@ export interface components {
             is_active?: boolean | null;
             /** Name */
             name?: string | null;
+            /** Sort Order */
+            sort_order?: number | null;
         };
         /** ShopOrderCloseCreate */
         ShopOrderCloseCreate: {
