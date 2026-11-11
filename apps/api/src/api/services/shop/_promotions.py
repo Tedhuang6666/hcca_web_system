@@ -89,12 +89,77 @@ def normalize_promotion_code(code: str | None) -> str | None:
     return normalized or None
 
 
+def _bundle_pricing_results(
+    results: list[PromotionResult],
+    subtotal: int,
+    product_subtotals: dict[uuid.UUID, int] | None,
+    product_quantities: dict[uuid.UUID, int] | None,
+    categories: dict[uuid.UUID, uuid.UUID | None],
+) -> list[PromotionResult]:
+    bundles = [
+        (result.promotion, result.discount_amount)
+        for result in results
+        if result.promotion is not None
+        and result.promotion.discount_type == ShopDiscountType.BUNDLE_PRICE
+        and result.discount_amount > 0
+    ]
+    if not bundles:
+        return results
+
+    # 同一套商品優先採用折抵較高的套組價，成套件數不再參與其他優惠。
+    bundles.sort(
+        key=lambda row: (
+            -row[1],
+            row[0].created_at,
+            str(row[0].id),
+        )
+    )
+    amounts = dict(product_subtotals or {})
+    quantities = dict(product_quantities or {})
+    selected = []
+    for promotion, discount_amount in bundles:
+        amount = _discount_amount(promotion, subtotal, amounts, quantities, categories)
+        if amount <= 0:
+            continue
+        selected.append(PromotionResult(promotion, min(discount_amount, amount)))
+        products = promotion.target_products
+        count = min(quantities.get(product.id, 0) for product in products)
+        for product in products:
+            quantity = quantities[product.id]
+            leftover = quantity - count
+            if leftover:
+                # 按件數分攤規格加價，避免把已成套商品的加價再拿去折抵。
+                amounts[product.id] = amounts[product.id] * leftover // quantity
+                quantities[product.id] = leftover
+            else:
+                amounts.pop(product.id, None)
+                quantities.pop(product.id, None)
+
+    if not selected:
+        return results
+    remaining_subtotal = sum(amounts.values())
+    for result in results:
+        promotion = result.promotion
+        if promotion is None or promotion.discount_type == ShopDiscountType.BUNDLE_PRICE:
+            continue
+        amount = _discount_amount(promotion, remaining_subtotal, amounts, quantities, categories)
+        selected.append(PromotionResult(promotion, min(result.discount_amount, amount)))
+    return selected
+
+
 def _allocate_promotions(
-    results: list[PromotionResult], subtotal: int
+    results: list[PromotionResult],
+    subtotal: int,
+    *,
+    product_subtotals: dict[uuid.UUID, int] | None,
+    product_quantities: dict[uuid.UUID, int] | None,
+    product_category_ids: dict[uuid.UUID, uuid.UUID | None],
 ) -> tuple[PromotionAllocation, ...]:
     remaining = max(0, subtotal)
     allocations = []
-    for result in results:
+    for result in _bundle_pricing_results(
+        results, subtotal, product_subtotals, product_quantities, product_category_ids
+    ):
         amount = min(remaining, result.discount_amount)
         if result.promotion is not None and amount > 0:
             allocations.append(PromotionAllocation(result.promotion, amount))
@@ -593,6 +658,9 @@ async def preview_promotion(
                 ),
             ],
             subtotal,
+            product_subtotals=product_subtotals,
+            product_quantities=product_quantities,
+            product_category_ids=categories,
         )
         total_discount = sum(row.discount_amount for row in allocations)
         detail = "、".join(
@@ -641,6 +709,9 @@ async def preview_promotion(
                 eligible, subtotal, product_subtotals, product_quantities, categories
             ),
             subtotal,
+            product_subtotals=product_subtotals,
+            product_quantities=product_quantities,
+            product_category_ids=categories,
         )
         amount = sum(row.discount_amount for row in allocations)
         detail = "、".join(
@@ -1320,7 +1391,25 @@ async def resolve_promotions(
         activity_id=activity_id,
         current_ids=current_ids,
     )
-    return PromotionBundleResult(_allocate_promotions([*selected, *automatic], subtotal))
+    results = [*selected, *automatic]
+    categories = (
+        await product_topic_ids(session, set(product_subtotals or {}))
+        if any(
+            result.promotion is not None
+            and result.promotion.discount_type == ShopDiscountType.BUNDLE_PRICE
+            for result in results
+        )
+        else {}
+    )
+    return PromotionBundleResult(
+        _allocate_promotions(
+            results,
+            subtotal,
+            product_subtotals=product_subtotals,
+            product_quantities=product_quantities,
+            product_category_ids=categories,
+        )
+    )
 
 
 def serialize_promotion(promotion: ShopPromotion) -> ShopPromotionOut:

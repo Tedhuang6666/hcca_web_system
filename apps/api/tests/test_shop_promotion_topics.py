@@ -477,3 +477,109 @@ async def test_each_target_product_has_one_shared_gift_limit_across_quantities(
     context["product_quantities"][products[1].id] = 1
     result = await resolve_promotions(db_session, **context)
     assert result.discount_amount == 600  # 未達門檻的另一主題不贈送。
+
+
+@pytest.mark.parametrize("topic_scope", [False, True])
+@pytest.mark.parametrize("with_coupon", [False, True])
+async def test_bundle_pricing_matches_preview_orders_and_receivables(
+    db_session, topic_shop, topic_scope, with_coupon
+):
+    manager, buyer, activity, categories, products = topic_shop
+    badge, charm = products[:2]
+    badge.price, charm.price = 30, 50
+    await db_session.flush()
+    scope = (
+        {"target_category_ids": [row.id for row in categories[:2]]}
+        if topic_scope
+        else {"activity_id": activity.id}
+    )
+    public_bundle = await shop_svc.create_promotion(
+        db_session,
+        created_by=manager.id,
+        data=ShopPromotionCreate(
+            name="紀念徽章&吊飾套組優惠",
+            code="NEREID75" if with_coupon else None,
+            target_product_ids=[badge.id, charm.id],
+            discount_type="bundle_price",
+            discount_value=75,
+            **scope,
+        ),
+    )
+    staff_price = await shop_svc.create_promotion(
+        db_session,
+        created_by=manager.id,
+        data=ShopPromotionCreate(
+            name="班聯會幹部優惠",
+            target_identifiers=[buyer.student_id],
+            target_product_ids=[badge.id, charm.id],
+            discount_type="price_override",
+            discount_value=0,
+            product_price_overrides=[
+                {"product_id": badge.id, "unit_price": 25},
+                {"product_id": charm.id, "unit_price": 45},
+            ],
+            **scope,
+        ),
+    )
+    order = (
+        await shop_svc.create_direct_order(
+            db_session,
+            user_id=buyer.id,
+            class_id=None,
+            data=ClassOrderUpsert(
+                user_id=buyer.id,
+                items=[OrderItemCreate(product_id=row.id, quantity=1) for row in [badge, charm]],
+            ),
+        )
+    )[0]
+    if with_coupon:
+        order = await shop_svc.apply_registration_promotion(
+            db_session, buyer, code="NEREID75", activity_id=activity.id
+        )
+    assert order.total_price == 75
+    staff_bundle = await shop_svc.create_promotion(
+        db_session,
+        created_by=manager.id,
+        data=ShopPromotionCreate(
+            name="班聯會幹部套組優惠",
+            target_identifiers=[buyer.student_id],
+            target_product_ids=[badge.id, charm.id],
+            discount_type="bundle_price",
+            discount_value=65,
+            max_uses=1,
+            **scope,
+        ),
+    )
+    context = {
+        "user_id": buyer.id,
+        "subtotal": 80,
+        "activity_id": activity.id,
+        "code": "NEREID75" if with_coupon else None,
+        "product_subtotals": {badge.id: 30, charm.id: 50},
+        "product_quantities": {badge.id: 1, charm.id: 1},
+        "current_promotion_ids": {staff_bundle.id},
+    }
+    preview = await shop_svc.preview_promotion(db_session, **context)
+    resolved = await resolve_promotions(db_session, **context)
+    assert preview.allocations == resolved.allocations
+    assert preview.discount_amount == order.discount_amount == 15
+    assert order.total_price == 65
+    assert {row.promotion_id for row in order.applied_promotions} == {staff_bundle.id}
+    assert [row.used_count for row in [public_bundle, staff_price, staff_bundle]] == [0, 0, 1]
+    receivable = await db_session.scalar(select(Receivable).where(Receivable.source_id == order.id))
+    assert receivable.amount == 65
+    await shop_svc.apply_registration_promotion(
+        db_session, buyer, code=None, activity_id=activity.id
+    )
+    assert (order.total_price, receivable.amount, staff_bundle.used_count) == (65, 65, 1)
+
+    # 切回一般套組後，幹部單品價仍不與套組疊加，名額也要釋放。
+    await shop_svc.update_promotion(
+        db_session, staff_bundle, data=ShopPromotionUpdate(is_active=False)
+    )
+    if with_coupon:
+        await shop_svc.apply_registration_promotion(
+            db_session, buyer, code="NEREID75", activity_id=activity.id
+        )
+    assert (order.total_price, receivable.amount) == (75, 75)
+    assert [row.used_count for row in [public_bundle, staff_price, staff_bundle]] == [1, 0, 0]

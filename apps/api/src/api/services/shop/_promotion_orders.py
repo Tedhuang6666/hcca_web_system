@@ -21,6 +21,7 @@ from api.services.shop._orders import (
 from api.services.shop._promotion_topics import product_topic_ids
 from api.services.shop._promotions import (
     PromotionAllocation,
+    PromotionResult,
     _allocate_promotions,
     _automatic_promotion_results,
     _discount_amount,
@@ -132,7 +133,7 @@ async def refresh_promotion_orders(
         current_ids = set(previous)
         if order.promotion_id is not None:
             current_ids.add(order.promotion_id)
-        # 自動優惠異動不撤銷使用者先前已兌換的優惠碼，即使該碼現在已過期。
+        # 保留先前兌換的優惠碼（含過期碼），但與套組重複的商品仍須排除。
         coupons = [
             PromotionAllocation(row.promotion, row.discount_amount)
             for row in order.applied_promotions
@@ -143,28 +144,31 @@ async def refresh_promotion_orders(
             if coupon is not None:
                 coupons.append(PromotionAllocation(coupon, order.discount_amount))
 
-        automatic = _allocate_promotions(
-            _automatic_promotion_results(
-                automatic_promotions,
-                user_id=order.user_id,
-                student_id=order.user.student_id if order.user else None,
-                subtotal=order.subtotal_price,
-                now=now,
-                categories=categories,
-                product_subtotals=_promotion_product_subtotals(order.items),
-                product_quantities=_promotion_product_quantities(order.items),
-                activity_id=_order_activity_id(order),
-                current_ids=current_ids,
-            ),
-            order.subtotal_price,
+        subtotals = _promotion_product_subtotals(order.items)
+        quantities = _promotion_product_quantities(order.items)
+        allocations = list(
+            _allocate_promotions(
+                [
+                    *[PromotionResult(row.promotion, row.discount_amount) for row in coupons],
+                    *_automatic_promotion_results(
+                        automatic_promotions,
+                        user_id=order.user_id,
+                        student_id=order.user.student_id if order.user else None,
+                        subtotal=order.subtotal_price,
+                        now=now,
+                        categories=categories,
+                        product_subtotals=subtotals,
+                        product_quantities=quantities,
+                        activity_id=_order_activity_id(order),
+                        current_ids=current_ids,
+                    ),
+                ],
+                order.subtotal_price,
+                product_subtotals=subtotals,
+                product_quantities=quantities,
+                product_category_ids=categories,
+            )
         )
-        allocations = list(coupons)
-        remaining = max(0, order.subtotal_price - sum(row.discount_amount for row in coupons))
-        for row in automatic:
-            amount = min(remaining, row.discount_amount)
-            if amount > 0:
-                allocations.append(PromotionAllocation(row.promotion, amount))
-                remaining -= amount
         selected = {row.promotion.id: row.discount_amount for row in allocations}
         if selected == previous:
             await snapshot_order_gifts(
