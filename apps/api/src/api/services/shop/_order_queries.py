@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import and_, func, select, union
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from api.core.clock import local_today
-from api.models.activity import Activity
+from api.core.clock import TAIPEI, local_today
 from api.models.person import (
     Person,
     PersonAffiliation,
@@ -365,134 +364,86 @@ async def order_summary(
 
 
 async def class_payment_report(session: AsyncSession) -> list[ClassPaymentReportItemOut]:
-    """依年級、班級排序列出收款，獨立補收訂單排在班級收款之後。"""
+    """按商品主題與實際付款日列出收款，不以共用班級確認時間重算舊款。"""
+    from api.services.shop._receipts import _receipt_order_options, _receipt_orders_by_topic
+
+    class_id = func.coalesce(Order.supplement_class_id, Order.class_id)
+    # 僅缺逐筆時間的舊訂單回退到班級確認時間。
+    confirmed_at = func.coalesce(Order.paid_at, ShopClassPayment.confirmed_at)
     result = await session.execute(
-        select(
-            ShopClassPayment.id,
-            ShopClassPayment.class_id,
-            SchoolClass,
-            ShopClassPayment.activity_id,
-            Activity.name,
-            ShopClassPayment.confirmed_at,
-            func.coalesce(func.sum(Order.total_price), 0),
-            func.count(Order.id),
-        )
-        .join(SchoolClass, SchoolClass.id == ShopClassPayment.class_id)
-        .outerjoin(Activity, Activity.id == ShopClassPayment.activity_id)
+        select(Order, SchoolClass, confirmed_at)
+        .join(SchoolClass, SchoolClass.id == class_id)
         .outerjoin(
-            Order,
+            ShopClassPayment,
             and_(
                 Order.class_id == ShopClassPayment.class_id,
                 Order.activity_id.is_not_distinct_from(ShopClassPayment.activity_id),
-                Order.test_product_id.is_(None),
                 Order.supplement_class_id.is_(None),
-                Order.is_paid.is_(True),
-                Order.status.notin_((OrderStatus.CANCELLED, OrderStatus.REFUNDED)),
+                ShopClassPayment.is_paid.is_(True),
             ),
         )
+        .options(*_receipt_order_options())
         .where(
-            ShopClassPayment.is_paid.is_(True),
-            ShopClassPayment.confirmed_at.is_not(None),
-        )
-        .group_by(
-            ShopClassPayment.id,
-            ShopClassPayment.class_id,
-            ShopClassPayment.activity_id,
-            ShopClassPayment.confirmed_at,
-            SchoolClass.id,
-            SchoolClass.academic_year,
-            SchoolClass.class_code,
-            SchoolClass.grade,
-            SchoolClass.label,
-            Activity.id,
-            Activity.name,
-        )
-        .order_by(
-            SchoolClass.grade,
-            SchoolClass.class_code,
-            SchoolClass.id,
-            ShopClassPayment.confirmed_at.desc(),
-            ShopClassPayment.id,
-        )
-    )
-    rows = [
-        ClassPaymentReportItemOut(
-            record_id=payment_id,
-            collection_type="class",
-            class_id=class_id,
-            class_label=class_svc.class_display_label(school_class) or "未命名班級",
-            grade=school_class.grade,
-            activity_id=activity_id,
-            activity_label=activity_name or "一般商品",
-            confirmed_at=confirmed_at,
-            amount=int(amount),
-            order_count=int(order_count),
-        )
-        for (
-            payment_id,
-            class_id,
-            school_class,
-            activity_id,
-            activity_name,
-            confirmed_at,
-            amount,
-            order_count,
-        ) in result.all()
-        if confirmed_at is not None
-    ]
-
-    individual_result = await session.execute(
-        select(
-            Order.id,
-            Order.supplement_class_id,
-            SchoolClass,
-            Order.activity_id,
-            Activity.name,
-            Order.paid_at,
-            Order.total_price,
-        )
-        .join(SchoolClass, SchoolClass.id == Order.supplement_class_id)
-        .outerjoin(Activity, Activity.id == Order.activity_id)
-        .where(
-            Order.supplement_class_id.is_not(None),
             Order.test_product_id.is_(None),
+            Order.assistance_scope != "council_gift",
             Order.is_paid.is_(True),
-            Order.paid_at.is_not(None),
+            confirmed_at.is_not(None),
             Order.status.notin_((OrderStatus.CANCELLED, OrderStatus.REFUNDED)),
         )
         .order_by(
             SchoolClass.grade,
             SchoolClass.class_code,
             SchoolClass.id,
-            Order.paid_at.desc(),
+            confirmed_at.desc(),
             Order.id,
         )
     )
-    rows.extend(
-        ClassPaymentReportItemOut(
-            record_id=order_id,
-            collection_type="individual_order",
-            class_id=class_id,
-            class_label=class_svc.class_display_label(school_class) or "未命名班級",
-            grade=school_class.grade,
-            activity_id=activity_id,
-            activity_label=activity_name or "一般商品",
-            confirmed_at=paid_at,
-            amount=int(amount),
-            order_count=1,
-        )
-        for (
-            order_id,
-            class_id,
-            school_class,
-            activity_id,
-            activity_name,
-            paid_at,
-            amount,
-        ) in individual_result.all()
-        if class_id is not None and paid_at is not None
+    groups: dict[str, ClassPaymentReportItemOut] = {}
+    class_positions: dict[uuid.UUID, int] = {}
+    for order, school_class, paid_at in result.all():
+        class_positions.setdefault(school_class.id, len(class_positions))
+        paid_at = paid_at.replace(tzinfo=UTC) if paid_at.tzinfo is None else paid_at
+        paid_date = paid_at.astimezone(TAIPEI).date()
+        individual = order.supplement_class_id is not None
+        activity_label = order.activity.name if order.activity else "一般商品"
+        # 沿用收據的主題還原與折扣分攤，舊跨主題訂單亦不會重複計入全額。
+        for category_id, (category_label, topic_orders) in _receipt_orders_by_topic(
+            [order], "未分類商品"
+        ).items():
+            key = (
+                f"{school_class.id}:{order.activity_id}:{category_id}:{paid_date}:"
+                f"{order.id if individual else 'class'}"
+            )
+            row = groups.get(key)
+            if row is None:
+                row = ClassPaymentReportItemOut(
+                    record_id=order.id if individual else uuid.uuid5(uuid.NAMESPACE_URL, key),
+                    collection_type="individual_order" if individual else "class",
+                    class_id=school_class.id,
+                    class_label=class_svc.class_display_label(school_class) or "未命名班級",
+                    grade=school_class.grade,
+                    activity_id=order.activity_id,
+                    activity_label=activity_label,
+                    category_id=category_id,
+                    category_label=category_label,
+                    confirmed_at=paid_at,
+                    amount=0,
+                    order_count=0,
+                )
+                groups[key] = row
+            row.amount += sum(topic_order.total_price for topic_order in topic_orders)
+            row.order_count += 1
+            row.confirmed_at = max(row.confirmed_at, paid_at)
+    # 保留年級、班級排序；同班的補收款接在班級收款之後。
+    return sorted(
+        groups.values(),
+        key=lambda row: (
+            class_positions[row.class_id],
+            row.collection_type,
+            -row.confirmed_at.timestamp(),
+            str(row.category_id),
+        ),
     )
-    return rows
 
 
 async def order_quantities(

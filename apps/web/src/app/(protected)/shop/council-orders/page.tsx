@@ -140,7 +140,7 @@ export default function CouncilOrdersPage() {
   const [search, setSearch] = useState("");
   const [collectionDateFrom, setCollectionDateFrom] = useState(() => taipeiDate(new Date()));
   const [collectionDateTo, setCollectionDateTo] = useState(() => taipeiDate(new Date()));
-  const [collectionActivityId, setCollectionActivityId] = useState("");
+  const [collectionCategoryId, setCollectionCategoryId] = useState("");
   const [collectionGrade, setCollectionGrade] = useState("");
   const [collectionClassSearch, setCollectionClassSearch] = useState("");
 
@@ -259,6 +259,14 @@ export default function CouncilOrdersPage() {
   const collectionDateRangeInvalid = Boolean(
     collectionDateFrom && collectionDateTo && collectionDateFrom > collectionDateTo,
   );
+  const collectionTopics = useMemo(() => {
+    const topics = new Map(catalog.map((category) => [category.id, category.name]));
+    for (const payment of classPayments) {
+      const key = payment.category_id ?? "__uncategorized__";
+      if (!topics.has(key)) topics.set(key, payment.category_label ?? "未分類商品");
+    }
+    return [...topics].map(([key, label]) => ({ key, label }));
+  }, [catalog, classPayments]);
   const visibleClassPayments = useMemo(() => {
     const query = collectionClassSearch.trim().toLocaleLowerCase("zh-TW");
     if (collectionDateRangeInvalid) return [];
@@ -266,9 +274,8 @@ export default function CouncilOrdersPage() {
       const confirmedDate = taipeiDate(new Date(payment.confirmed_at));
       if (collectionDateFrom && confirmedDate < collectionDateFrom) return false;
       if (collectionDateTo && confirmedDate > collectionDateTo) return false;
-      if (collectionActivityId === "__general__" && payment.activity_id !== null) return false;
-      if (collectionActivityId && collectionActivityId !== "__general__"
-        && payment.activity_id !== collectionActivityId) return false;
+      if (collectionCategoryId
+        && (payment.category_id ?? "__uncategorized__") !== collectionCategoryId) return false;
       if (collectionGrade && String(payment.grade) !== collectionGrade) return false;
       if (query && !payment.class_label.toLocaleLowerCase("zh-TW").includes(query)) return false;
       return true;
@@ -277,7 +284,7 @@ export default function CouncilOrdersPage() {
     classPayments,
     collectionDateFrom,
     collectionDateTo,
-    collectionActivityId,
+    collectionCategoryId,
     collectionGrade,
     collectionClassSearch,
     collectionDateRangeInvalid,
@@ -965,7 +972,7 @@ export default function CouncilOrdersPage() {
                     每日收款
                   </h2>
                   <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
-                    預設顯示今天；班級依班聯確認時間計算，獨立收款的個人訂單依逐筆確認時間列入。
+                    預設顯示今天，依實際確認收款日期計算；收款活動以商品主題區分。
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -982,7 +989,7 @@ export default function CouncilOrdersPage() {
                       const today = taipeiDate(new Date());
                       setCollectionDateFrom(today);
                       setCollectionDateTo(today);
-                      setCollectionActivityId("");
+                      setCollectionCategoryId("");
                       setCollectionGrade("");
                       setCollectionClassSearch("");
                     }}>
@@ -1009,12 +1016,12 @@ export default function CouncilOrdersPage() {
                     onChange={(event) => setCollectionDateTo(event.target.value)} />
                 </label>
                 <label className="grid min-w-48 gap-1 text-sm">
-                  <span style={{ color: "var(--text-muted)" }}>收款活動</span>
-                  <select className="input min-h-11" value={collectionActivityId}
-                    onChange={(event) => setCollectionActivityId(event.target.value)}>
+                  <span style={{ color: "var(--text-muted)" }}>收款活動（商品主題）</span>
+                  <select className="input min-h-11" value={collectionCategoryId}
+                    onChange={(event) => setCollectionCategoryId(event.target.value)}>
                     <option value="">全部活動</option>
-                    {activityGroups.map((group) => (
-                      <option key={group.key} value={group.activityId ?? "__general__"}>{group.label}</option>
+                    {collectionTopics.map((topic) => (
+                      <option key={topic.key} value={topic.key}>{topic.label}</option>
                     ))}
                   </select>
                 </label>
@@ -1084,7 +1091,7 @@ export default function CouncilOrdersPage() {
                       <table className="shop-mobile-table w-full min-w-[680px] text-sm" aria-label="收款明細">
                         <thead>
                           <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                            {["收款時間", "班級", "年級", "活動／商品", "訂單數", "收款金額"].map((label) => (
+                            {["收款時間", "班級", "年級", "收款活動（商品主題）", "訂單數", "收款金額"].map((label) => (
                               <th key={label} scope="col" className="px-3 py-3 text-left text-xs font-semibold"
                                 style={{ color: "var(--text-muted)" }}>{label}</th>
                             ))}
@@ -1092,7 +1099,7 @@ export default function CouncilOrdersPage() {
                         </thead>
                         <tbody>
                           {visibleClassPayments.map((payment) => (
-                            <tr key={`${payment.collection_type}:${payment.record_id}`}
+                            <tr key={`${payment.collection_type}:${payment.record_id}:${payment.category_id ?? "__uncategorized__"}`}
                               style={{ borderBottom: "1px solid var(--border)" }}>
                               <td data-label="收款時間" className="px-3 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>
                                 {taipeiDateTime(payment.confirmed_at)}
@@ -1105,8 +1112,8 @@ export default function CouncilOrdersPage() {
                               <td data-label="年級" className="px-3 py-3" style={{ color: "var(--text-secondary)" }}>
                                 {payment.grade} 年級
                               </td>
-                              <td data-label="活動／商品" className="px-3 py-3" style={{ color: "var(--text-secondary)" }}>
-                                {payment.activity_label}
+                              <td data-label="收款活動（商品主題）" className="px-3 py-3" style={{ color: "var(--text-secondary)" }}>
+                                {payment.category_label ?? "未分類商品"}
                               </td>
                               <td data-label="訂單數" className="px-3 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>
                                 {payment.order_count}

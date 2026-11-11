@@ -15430,6 +15430,13 @@ export interface components {
             activity_label: string;
             /** Amount */
             amount: number;
+            /** Category Id */
+            category_id?: string | null;
+            /**
+             * Category Label
+             * @default 未分類商品
+             */
+            category_label: string;
             /**
              * Class Id
              * Format: uuid

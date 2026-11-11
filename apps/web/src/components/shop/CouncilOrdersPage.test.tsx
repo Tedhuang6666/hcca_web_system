@@ -130,28 +130,28 @@ describe("全校收款與訂單", () => {
       {
         record_id: "class-payment-one-festival", collection_type: "class",
         class_id: "class-one", class_label: "一年一班", grade: 1, activity_id: "festival",
-        activity_label: "校慶", confirmed_at: now.toISOString(), amount: 100, order_count: 2,
+        activity_label: "校慶", category_id: "shirts", category_label: "衣服", confirmed_at: now.toISOString(), amount: 100, order_count: 2,
       },
       {
         record_id: "class-payment-one-winter", collection_type: "class",
         class_id: "class-one", class_label: "一年一班", grade: 1, activity_id: "winter",
-        activity_label: "冬季活動", confirmed_at: now.toISOString(), amount: 50, order_count: 1,
+        activity_label: "冬季活動", category_id: "cards", category_label: "卡片", confirmed_at: now.toISOString(), amount: 50, order_count: 1,
       },
       {
         record_id: "class-payment-two-festival", collection_type: "class",
         class_id: "class-two", class_label: "二年一班", grade: 2, activity_id: "festival",
-        activity_label: "校慶", confirmed_at: now.toISOString(), amount: 300, order_count: 3,
+        activity_label: "校慶", category_id: "shirts", category_label: "衣服", confirmed_at: now.toISOString(), amount: 300, order_count: 3,
       },
       {
         record_id: "class-payment-old", collection_type: "class",
         class_id: "class-old", class_label: "三年一班", grade: 3, activity_id: "festival",
-        activity_label: "校慶", confirmed_at: new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString(),
+        activity_label: "校慶", category_id: "shirts", category_label: "衣服", confirmed_at: new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString(),
         amount: 900, order_count: 4,
       },
       {
         record_id: "individual-order-one", collection_type: "individual_order",
         class_id: "class-one", class_label: "一年一班", grade: 1, activity_id: "festival",
-        activity_label: "校慶", confirmed_at: now.toISOString(), amount: 25, order_count: 1,
+        activity_label: "校慶", category_id: "shirts", category_label: "衣服", confirmed_at: now.toISOString(), amount: 25, order_count: 1,
       },
     ]);
     await openPage();
@@ -161,8 +161,8 @@ describe("全校收款與訂單", () => {
     const statistics = await within(report).findByRole("group", { name: "收款統計" });
     expect(await within(statistics).findByText("NT$475")).toBeVisible();
     expect(within(statistics).getByText("2 班")).toBeVisible();
-    fireEvent.change(within(report).getByRole("combobox", { name: "收款活動" }), {
-      target: { value: "festival" },
+    fireEvent.change(within(report).getByRole("combobox", { name: "收款活動（商品主題）" }), {
+      target: { value: "shirts" },
     });
     fireEvent.change(within(report).getByRole("combobox", { name: "收款年級" }), {
       target: { value: "1" },
@@ -174,9 +174,43 @@ describe("全校收款與訂單", () => {
     expect(within(statistics).getByText("NT$125")).toBeVisible();
     expect(within(statistics).getByText("1 班")).toBeVisible();
     const details = within(report).getByRole("table", { name: "收款明細" });
-    expect(details).toHaveTextContent("校慶");
+    expect(details).toHaveTextContent("衣服");
     expect(within(details).getByText("一年一班（個人訂單）")).toBeVisible();
-    expect(within(details).queryByText("冬季活動")).not.toBeInTheDocument();
+    expect(within(details).queryByText("卡片")).not.toBeInTheDocument();
+  });
+
+  it("同活動的不同主題與未綁活動的主題皆分開篩選，包含已下架主題", async () => {
+    const now = new Date().toISOString();
+    api.classPaymentReport.mockResolvedValue([
+      { record_id: "dance-payment", collection_type: "class", class_id: "one", class_label: "一年一班", grade: 1,
+        activity_id: "festival", activity_label: "校慶", category_id: "shirts", category_label: "衣服",
+        confirmed_at: now, amount: 100, order_count: 1 },
+      { record_id: "bag-payment", collection_type: "class", class_id: "one", class_label: "一年一班", grade: 1,
+        activity_id: "festival", activity_label: "校慶", category_id: "bags", category_label: "袋子",
+        confirmed_at: now, amount: 900, order_count: 1 },
+      { record_id: "old-topic", collection_type: "individual_order", class_id: "one", class_label: "一年一班", grade: 1,
+        activity_id: null, activity_label: "一般商品", category_id: "dance", category_label: "舞會",
+        confirmed_at: now, amount: 300, order_count: 1 },
+      { record_id: "other-topic", collection_type: "class", class_id: "one", class_label: "一年一班", grade: 1,
+        activity_id: null, activity_label: "一般商品", category_id: "camp", category_label: "營隊",
+        confirmed_at: now, amount: 700, order_count: 1 },
+    ]);
+    await openPage();
+    switchTask("每日收款");
+    const report = screen.getByRole("region", { name: "每日收款" });
+    const statistics = await within(report).findByRole("group", { name: "收款統計" });
+    expect(await within(statistics).findByText("NT$2,000")).toBeVisible();
+    const picker = within(report).getByRole("combobox", { name: "收款活動（商品主題）" });
+    expect(within(picker).queryByRole("option", { name: "校慶" })).not.toBeInTheDocument();
+    fireEvent.change(picker, { target: { value: "shirts" } });
+    expect(within(statistics).getByText("NT$100")).toBeVisible();
+    fireEvent.change(picker, { target: { value: "dance" } });
+    expect(within(statistics).getByText("NT$300")).toBeVisible();
+    const details = within(report).getByRole("table", { name: "收款明細" });
+    expect(within(details).getByText("舞會")).toBeVisible();
+    expect(within(details).queryByText("營隊")).not.toBeInTheDocument();
+    fireEvent.click(within(report).getByRole("button", { name: "清除篩選" }));
+    expect(within(statistics).getByText("NT$2,000")).toBeVisible();
   });
 
   it("已收齊的活動不再提供確認按鈕", async () => {

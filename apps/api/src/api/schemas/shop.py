@@ -825,6 +825,8 @@ class ClassPaymentReportItemOut(BaseModel):
     grade: int
     activity_id: uuid.UUID | None = None
     activity_label: str
+    category_id: uuid.UUID | None = None
+    category_label: str = "未分類商品"
     confirmed_at: datetime
     amount: int
     order_count: int
