@@ -69,8 +69,8 @@ async def test_report_splits_discounted_legacy_supplement_by_product_topic(db_se
     series = ProductSeries(name="服飾系列", category_id=shirts.id)
     db_session.add(series)
     await db_session.flush()
-    ticket = Product(name="門票", category_id=dance.id, price=100)
-    shirt = Product(name="衣服", series_id=series.id, price=200)
+    ticket = Product(name="門票", category_id=dance.id, price=100, created_by=buyer.id)
+    shirt = Product(name="衣服", series_id=series.id, price=200, created_by=buyer.id)
     db_session.add_all([ticket, shirt])
     await db_session.flush()
     order = await _seed_order(
