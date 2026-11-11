@@ -317,24 +317,24 @@ def _promotion_targets_user(user_id: uuid.UUID):
     )
 
 
-def _promotion_can_target_user(user_id: uuid.UUID):
-    return or_(
-        and_(
-            ShopPromotion.target_user_id.is_(None),
-            ~ShopPromotion.target_users.any(),
-            ~ShopPromotion.student_id_targets.any(),
-        ),
-        _promotion_targets_user(user_id),
+def _promotion_can_target_user(user_id: uuid.UUID | None):
+    unrestricted = and_(
+        ShopPromotion.target_user_id.is_(None),
+        ~ShopPromotion.target_users.any(),
+        ~ShopPromotion.student_id_targets.any(),
     )
+    return unrestricted if user_id is None else or_(unrestricted, _promotion_targets_user(user_id))
 
 
 def _promotion_allows_user(
-    promotion: ShopPromotion, user_id: uuid.UUID, student_id: str | None
+    promotion: ShopPromotion, user_id: uuid.UUID | None, student_id: str | None
 ) -> bool:
     targets = list(promotion.target_users or [])
     target_student_ids = {target.student_id for target in (promotion.student_id_targets or [])}
     if promotion.target_user_id is None and not targets and not target_student_ids:
         return True
+    if user_id is None:
+        return False
     normalized_student_id = student_id.strip().lower() if student_id else None
     return (
         promotion.target_user_id == user_id
@@ -377,7 +377,7 @@ def _promotion_eligible_quantity(
 def _promotion_issue(
     promotion: ShopPromotion,
     *,
-    user_id: uuid.UUID,
+    user_id: uuid.UUID | None,
     student_id: str | None,
     subtotal: int,
     now: datetime,
@@ -1072,7 +1072,7 @@ def _discount_amount(
 async def resolve_promotion(
     session: AsyncSession,
     *,
-    user_id: uuid.UUID,
+    user_id: uuid.UUID | None,
     subtotal: int,
     code: str | None = None,
     product_subtotals: dict[uuid.UUID, int] | None = None,
@@ -1186,7 +1186,7 @@ async def resolve_promotion(
 async def _resolve_automatic_promotions(
     session: AsyncSession,
     *,
-    user_id: uuid.UUID,
+    user_id: uuid.UUID | None,
     subtotal: int,
     product_subtotals: dict[uuid.UUID, int] | None,
     product_quantities: dict[uuid.UUID, int] | None,
@@ -1247,7 +1247,7 @@ async def _resolve_automatic_promotions(
 def _automatic_promotion_results(
     promotions: list[ShopPromotion],
     *,
-    user_id: uuid.UUID,
+    user_id: uuid.UUID | None,
     student_id: str | None,
     subtotal: int,
     now: datetime,
@@ -1285,7 +1285,7 @@ def _automatic_promotion_results(
 async def resolve_promotions(
     session: AsyncSession,
     *,
-    user_id: uuid.UUID,
+    user_id: uuid.UUID | None,
     subtotal: int,
     code: str | None = None,
     product_subtotals: dict[uuid.UUID, int] | None = None,

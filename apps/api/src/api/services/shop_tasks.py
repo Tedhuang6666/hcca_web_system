@@ -26,7 +26,7 @@ def sync_organization_preorders(self) -> dict:  # noqa: ANN001
         from api.models.shop_sheet import ShopSheetSource
         from api.services.shop._sheet_import import sync_source
 
-        totals = {"imported": 0, "skipped": 0, "review": 0}
+        totals = {"imported": 0, "updated": 0, "skipped": 0, "review": 0}
         async with task_session() as session:
             source_ids = list(
                 await session.scalars(

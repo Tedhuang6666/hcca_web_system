@@ -31411,6 +31411,11 @@ export interface components {
              * @default 0
              */
             skipped: number;
+            /**
+             * Updated
+             * @default 0
+             */
+            updated: number;
         };
         /** ShopTargetLookupRequest */
         ShopTargetLookupRequest: {

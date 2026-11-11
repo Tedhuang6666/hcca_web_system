@@ -103,7 +103,7 @@ async def refresh_promotion_orders(
             and _promotion_issue(
                 promotion,
                 user_id=order.user_id,
-                student_id=order.user.student_id,
+                student_id=order.user.student_id if order.user else None,
                 subtotal=order.subtotal_price,
                 now=now,
                 product_category_ids=categories,
@@ -147,7 +147,7 @@ async def refresh_promotion_orders(
             _automatic_promotion_results(
                 automatic_promotions,
                 user_id=order.user_id,
-                student_id=order.user.student_id,
+                student_id=order.user.student_id if order.user else None,
                 subtotal=order.subtotal_price,
                 now=now,
                 categories=categories,

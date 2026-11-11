@@ -78,5 +78,6 @@ class ShopSheetRowOut(BaseModel):
 
 class ShopSheetSyncOut(BaseModel):
     imported: int = 0
+    updated: int = 0
     skipped: int = 0
     review: int = 0

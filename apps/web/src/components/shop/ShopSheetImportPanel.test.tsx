@@ -33,12 +33,12 @@ it("creates a disabled source and keeps the form after a failed save", async () 
 });
 
 it("syncs once, shows review reasons and enables polling separately", async () => {
-  api.sync.mockResolvedValue({ imported: 1, skipped: 2, review: 1 });
+  api.sync.mockResolvedValue({ imported: 1, updated: 3, skipped: 2, review: 1 });
   api.rows.mockResolvedValue([{ id: "row", row_number: 3, status: "review", error: "尺寸缺漏", order_ids: [] }]);
   api.enable.mockResolvedValue({ ...source, enabled: true });
   render(<ShopSheetImportPanel categories={categories} />);
   fireEvent.click(await screen.findByRole("button", { name: "同步一次：教師預購" }));
-  expect(await screen.findByText(/本次同步：新增 1 筆、略過 2 筆、待確認 1 筆/)).toBeInTheDocument();
+  expect(await screen.findByText(/本次同步：新增 1 筆、更新 3 筆、略過 2 筆、待確認 1 筆/)).toBeInTheDocument();
   expect(await screen.findByText("尺寸缺漏")).toBeInTheDocument();
   expect(api.enable).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "啟用自動同步：教師預購" }));

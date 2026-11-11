@@ -101,11 +101,11 @@ export default function ShopSheetImportPanel({ categories }: { categories: Produ
       if (action === "sync") {
         const result = await shopSheetApi.sync(source.id);
         setSelectedSource(source.id); setOffset(0);
-        setMessage(`本次同步：新增 ${result.imported ?? 0} 筆、略過 ${result.skipped ?? 0} 筆、待確認 ${result.review ?? 0} 筆。`);
+        setMessage(`本次同步：新增 ${result.imported ?? 0} 筆、更新 ${result.updated ?? 0} 筆、略過 ${result.skipped ?? 0} 筆、待確認 ${result.review ?? 0} 筆。`);
       } else {
         const updated = await shopSheetApi.enable(source.id, !source.enabled);
         if (editing?.id === updated.id) setEditing(updated);
-        setMessage(updated.enabled ? "已啟用，每分鐘同步新填答。" : "自動同步已停用。");
+        setMessage(updated.enabled ? "已啟用，每分鐘同步新填答與原回覆的修改。" : "自動同步已停用。");
       }
       setRefresh((value) => value + 1);
     } catch (cause) { setError(apiErrorMessage(cause, "操作失敗，請重試。")); }
@@ -115,6 +115,7 @@ export default function ShopSheetImportPanel({ categories }: { categories: Produ
   return <section className="max-w-5xl space-y-8" aria-label="組織預購同步管理">
     <p className="max-w-3xl text-sm leading-6" style={{ color: "var(--text-secondary)" }}>
       將教師、家長會等組織的表單填答建立為預購訂單，寄送成立通知，交貨時再收款。辦公室會顯示在訂單的班級／處室欄位。
+      原回覆修改後會更新同一筆未收款訂單、重算適用優惠並寄送更新通知。
       尺寸可填「L 2件、XL×1」「XXL一件」；不明填答會保留待確認原因。
     </p>
     {error && <p role="alert" style={{ color: "var(--danger)" }}>{error}</p>}
@@ -141,7 +142,7 @@ export default function ShopSheetImportPanel({ categories }: { categories: Produ
     </div>
     {selectedSource && <section aria-label="匯入結果" className="space-y-3">
       <h2 className="text-lg font-semibold">匯入結果</h2>
-      <p className="text-sm leading-6">待確認的填答可在原試算表修正後重新同步。已成立訂單的填答若有變更，請在訂單管理核對，系統會保留原訂單。</p>
+      <p className="text-sm leading-6">待確認的填答可修正原回覆後重新同步。已成立且未收款的訂單會自動更新；已收款、已截止或無法辨識的變更會保留原訂單，請依原因核對。</p>
       {rowLoading ? <p role="status">正在載入結果…</p> : rowError ? <div role="alert"><p>{rowError}</p>
         <button type="button" className="btn btn-secondary min-h-11" onClick={() => setRefresh((value) => value + 1)}>重新載入結果</button></div>
         : rows.length === 0 ? <p className="text-sm">目前沒有匯入紀錄。</p> : <ul className="divide-y" style={{ borderColor: "var(--border)" }}>{rows.map((row) => <li key={row.id} className="py-3 text-sm leading-6">

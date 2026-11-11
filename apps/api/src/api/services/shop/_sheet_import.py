@@ -11,6 +11,7 @@ from pydantic.networks import EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.models.outbox import OutboxEvent
 from api.models.shop import Order, OrderItem, OrderStatus, Product, ProductCategory, ProductStatus
 from api.models.shop_sheet import ShopSheetRow, ShopSheetSource
 from api.schemas.shop_sheet import ShopSheetConfig, ShopSheetSyncOut
@@ -18,8 +19,10 @@ from api.services import receivable
 from api.services.outbox import emit, request_processing_after_commit
 from api.services.shop._catalog import generate_order_serial, get_product
 from api.services.shop._orders import (
+    _apply_order_promotion,
     _assert_product_registration_open,
     _options_delta,
+    _order_detail_query,
     _product_category_filter,
     _product_order_scope,
     _resolve_selected_options,
@@ -49,7 +52,14 @@ async def _build_order(
     source: ShopSheetSource,
     config: ShopSheetConfig,
     row: dict[str, str],
+    *,
+    order: Order | None = None,
 ) -> Order:
+    updating = order is not None
+    old_quantities: Counter[uuid.UUID] = Counter()
+    if order is not None:
+        for item in order.items:
+            old_quantities[item.product_id] += item.quantity
     name = _cell(row, config.name_column)
     office = _cell(row, config.office_column)
     other_office = _cell(row, config.other_office_column) if config.other_office_column else ""
@@ -76,6 +86,7 @@ async def _build_order(
             .order_by(Product.id)
         )
     )
+    product_ids = sorted(set(product_ids) | set(old_quantities))
     # 以固定次序鎖庫存，避免不同來源互鎖。
     if product_ids:
         await session.execute(
@@ -144,49 +155,72 @@ async def _build_order(
             quantities[product.id] += variant.quantity
     if not items:
         raise AnswerNeedsReview("沒有可建立的訂購品項")
-    for product_id, quantity in quantities.items():
+    scopes = {_product_order_scope(by_id[item.product_id]) for item in items}
+    if len(scopes) != 1 or (
+        order is not None and next(iter(scopes)) != (order.activity_id, order.category_id)
+    ):
+        raise AnswerNeedsReview("同一筆訂單只能包含原活動的商品，請管理者核對來源設定")
+    for product_id in sorted(set(quantities) | set(old_quantities)):
         product = by_id[product_id]
-        await _assert_product_registration_open(session, product, class_id=None)
+        await _assert_product_registration_open(
+            session, product, class_id=None, allow_sold_out=product_id in old_quantities
+        )
         if (
             await product_purchase_restriction(session, product, None)
             or product.max_quantity_per_user is not None
             or product.requires_seating
         ):
             raise AnswerNeedsReview(f"商品「{product.name}」有限購或身分限制，需人工確認")
+        delta = quantities[product_id] - old_quantities[product_id]
         if not product.is_unlimited:
-            if product.stock_quantity < quantity:
+            if product.stock_quantity < delta:
                 raise AnswerNeedsReview(f"商品「{product.name}」庫存不足")
-            product.stock_quantity -= quantity
+            product.stock_quantity -= delta
             if product.stock_quantity == 0:
                 product.status = ProductStatus.SOLD_OUT
+            elif product.status == ProductStatus.SOLD_OUT:
+                product.status = ProductStatus.ACTIVE
     category = await session.get(ProductCategory, source.category_id)
     if category is None:
         raise AnswerNeedsReview("來源商品主題不存在")
     total = sum(item.quantity * item.unit_price for item in items)
-    scope = _product_order_scope(by_id[items[0].product_id])
-    order = Order(
-        serial_number=await generate_order_serial(session),
-        user_id=None,
-        class_id=None,
-        activity_id=scope[0],
-        category_id=scope[1],
-        status=OrderStatus.CONFIRMED,
-        assistance_scope="sheet_import",
-        payment_method="cash_on_pickup",
-        is_paid=False,
-        is_class_collected=False,
-        buyer_name=name,
-        buyer_office=office,
-        subtotal_price=total,
-        total_price=total,
-        discount_amount=0,
-        notes=f"組織表單預購：{source.name}；交貨時付款",
-        items=items,
-        applied_promotions=[],
-    )
-    session.add(order)
+    if order is None:
+        scope = next(iter(scopes))
+        order = Order(
+            serial_number=await generate_order_serial(session),
+            user_id=None,
+            class_id=None,
+            activity_id=scope[0],
+            category_id=scope[1],
+            status=OrderStatus.CONFIRMED,
+            assistance_scope="sheet_import",
+            payment_method="cash_on_pickup",
+            is_paid=False,
+            is_class_collected=False,
+            notes=f"組織表單預購：{source.name}；交貨時付款",
+            items=[],
+            applied_promotions=[],
+        )
+        session.add(order)
+    order.buyer_name = name
+    order.buyer_office = office
+    for item in items:
+        item.product = by_id[item.product_id]
+    order.items = items
+    order.subtotal_price = total
+    order.total_price = total
+    order.discount_amount = 0
     await session.flush()
+    await _apply_order_promotion(session, order, code=None)
     await receivable.sync_shop_order(session, order)
+    await queue_preorder_notice(session, order, email=email, updated=updating)
+    return order
+
+
+async def queue_preorder_notice(
+    session: AsyncSession, order: Order, *, email: str, updated: bool
+) -> None:
+    """成立／更新共用同一份訂單快照；與金額、庫存及帳本同交易提交。"""
     await emit(
         session,
         event_type="shop.order_confirmed",
@@ -194,27 +228,69 @@ async def _build_order(
             "order_id": str(order.id),
             "serial_number": order.serial_number,
             "buyer_email": email,
-            "buyer_name": name,
-            "buyer_office": office,
+            "buyer_name": order.buyer_name,
+            "buyer_office": order.buyer_office,
             "external_preorder": True,
+            "order_updated": updated,
             "payment_method": "cash_on_pickup",
-            "subtotal_price": total,
-            "discount_amount": 0,
-            "total_price": total,
+            "subtotal_price": order.subtotal_price,
+            "discount_amount": order.discount_amount,
+            "total_price": order.total_price,
+            "promotions": [
+                {"name": row.promotion.name, "discount_amount": row.discount_amount}
+                for row in order.applied_promotions
+            ],
             "items": [
                 {
-                    "product_name": by_id[item.product_id].name,
+                    "product_name": item.product.name,
                     "quantity": item.quantity,
                     "unit_price": item.unit_price,
                     "subtotal": item.quantity * item.unit_price,
                     "selected_options": item.selected_options,
                 }
-                for item in items
+                for item in order.items
             ],
         },
     )
     request_processing_after_commit(session)
+
+
+async def _last_notice(session: AsyncSession, record: ShopSheetRow) -> OutboxEvent | None:
+    if len(record.order_ids) != 1:
+        return None
+    return await session.scalar(
+        select(OutboxEvent)
+        .where(
+            OutboxEvent.event_type == "shop.order_confirmed",
+            OutboxEvent.payload["order_id"].as_string() == record.order_ids[0],
+        )
+        .order_by(OutboxEvent.created_at.desc(), OutboxEvent.id.desc())
+        .limit(1)
+    )
+
+
+async def _lock_imported_order(session: AsyncSession, record: ShopSheetRow) -> Order:
+    if len(record.order_ids) != 1:
+        raise AnswerNeedsReview("匯入帳本無法唯一對應原訂單，請管理者核對")
+    order = await session.scalar(
+        _order_detail_query()
+        .where(Order.id == uuid.UUID(record.order_ids[0]))
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if order is None:
+        raise AnswerNeedsReview("原訂單已清除；不會重新建立，請聯繫班聯會")
+    if order.assistance_scope != "sheet_import" or order.user_id is not None:
+        raise AnswerNeedsReview("原訂單不屬於此外部預購來源，請管理者核對")
     return order
+
+
+def _editable(order: Order) -> bool:
+    return (
+        order.status in (OrderStatus.PENDING, OrderStatus.CONFIRMED)
+        and not order.is_paid
+        and not order.is_class_collected
+    )
 
 
 async def import_rows(
@@ -252,6 +328,16 @@ async def import_rows(
         for record in previous_records
         if record.order_ids and record.response_key not in present_keys
     }
+    # Google 表單修改回覆時可能改寫時間戳記。只在收集 Email 能唯一對應消失的
+    # 舊回覆時延續原帳本；不依姓名猜測，也不把不同收件人套進原訂單。
+    missing_by_email: dict[str, list[ShopSheetRow]] = {}
+    for previous in missing_imported_by_row.values():
+        notice = await _last_notice(session, previous)
+        if notice is not None:
+            email = str(notice.payload.get("buyer_email", "")).strip().casefold()
+            if email:
+                missing_by_email.setdefault(email, []).append(previous)
+    email_counts = Counter(_cell(row, config.email_column).casefold() for _, row in rows)
     result = ShopSheetSyncOut()
     for number, row in rows:
         identity = _cell(row, config.identity_column)
@@ -265,11 +351,20 @@ async def import_rows(
         )
         if record is None:
             previous = missing_imported_by_row.get(number)
-            if previous is not None:
+            email = _cell(row, config.email_column).casefold()
+            matches = missing_by_email.get(email, [])
+            if identity and identities[identity] == 1 and email_counts[email] == len(matches) == 1:
+                record = matches[0]
+                record.response_key = key
+                missing_by_email.pop(email)
+                missing_imported_by_row.pop(record.row_number, None)
+            elif previous is not None or matches:
+                previous = previous or matches[0]
                 previous.status = "changed"
-                previous.error = "原列的識別碼／時間戳記已變更或被替換，請核對原訂單；未重複建單"
+                previous.error = "時間戳記已變更且無法依收集 Email 唯一對應原回覆；請核對原訂單"
                 result.review += 1
                 continue
+        if record is None:
             record = ShopSheetRow(
                 source_id=source.id,
                 response_key=key,
@@ -285,25 +380,43 @@ async def import_rows(
             record.error = "識別碼／時間戳記缺漏或重複；請提供每筆回覆唯一且固定的識別碼"
             result.review += 1
             continue
-        if record.order_ids:
-            if record.content_hash != digest:
-                record.status = "changed"
-                record.error = "已成立的訂單與表單內容不同，請管理者核對；未覆寫訂單或重寄通知"
-                result.review += 1
-            else:
-                record.status = "imported"
-                record.error = None
-                result.skipped += 1
-            continue
-        record.content_hash = digest
+        existing = bool(record.order_ids)
+        changed = existing and record.content_hash != digest
         try:
             async with session.begin_nested():
-                order = await _build_order(session, source, config, row)
-                record.order_ids = [str(order.id)]
+                if existing:
+                    order = await _lock_imported_order(session, record)
+                    if changed:
+                        if not _editable(order):
+                            raise AnswerNeedsReview(
+                                "訂單已收款、取消或退款，無法自動修改；敬請聯繫班聯會"
+                            )
+                        await _build_order(session, source, config, row, order=order)
+                    elif _editable(order):
+                        before = (order.total_price, order.discount_amount)
+                        await _apply_order_promotion(session, order, code=None)
+                        changed = before != (order.total_price, order.discount_amount)
+                        if changed:
+                            await receivable.sync_shop_order(session, order)
+                            await queue_preorder_notice(
+                                session,
+                                order,
+                                email=_cell(row, config.email_column),
+                                updated=True,
+                            )
+                else:
+                    order = await _build_order(session, source, config, row)
+                    record.order_ids = [str(order.id)]
+                record.content_hash = digest
                 record.status = "imported"
                 record.error = None
                 await session.flush()
-            result.imported += 1
+            if not existing:
+                result.imported += 1
+            elif changed:
+                result.updated += 1
+            else:
+                result.skipped += 1
         except ValueError as exc:
             # rollback 到 savepoint 後重新讀，避免 ORM expired 欄位觸發隱式 I/O。
             record = await session.scalar(
@@ -312,7 +425,7 @@ async def import_rows(
                 )
             )
             assert record is not None
-            record.status = "review"
+            record.status = "changed" if existing else "review"
             record.error = str(exc)[:500]
             result.review += 1
     await session.flush()

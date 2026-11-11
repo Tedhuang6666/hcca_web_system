@@ -241,7 +241,14 @@ def _handle_shop_order_confirmed(payload: dict) -> None:
         return
     base = settings.FRONTEND_BASE_URL.rstrip("/")
     external = payload.get("external_preorder") is True
-    subject = f"【預購訂單成立通知】{serial}" if external else f"【訂單確認】{serial}"
+    updated = external and payload.get("order_updated") is True
+    subject = (
+        f"【預購訂單更新通知】{serial}"
+        if updated
+        else f"【預購訂單成立通知】{serial}"
+        if external
+        else f"【訂單確認】{serial}"
+    )
     item_rows = []
     for item in payload.get("items", []):
         if not isinstance(item, dict):
@@ -273,7 +280,9 @@ def _handle_shop_order_confirmed(payload: dict) -> None:
     salutation = f"{buyer_greeting} 您好" if buyer_greeting else "您好"
     office = html_escape(str(payload.get("buyer_office") or ""))
     thanks = (
-        "感謝您的支持，您的預購訂單已成立。您無須回覆此信確認訂單，敬請核對下列訂購資訊。"
+        "您的預購訂單已更新，敬請以下列最新訂購資訊與應付金額為準，原訂單編號維持不變。"
+        if updated
+        else "感謝您的支持，您的預購訂單已成立。您無須回覆此信確認訂單，敬請核對下列訂購資訊。"
         if external
         else "感謝您的訂購。"
     )
@@ -289,15 +298,28 @@ def _handle_shop_order_confirmed(payload: dict) -> None:
     contact_url = html_escape(f"{base}/contact", quote=True)
     follow_up = (
         "<p><strong>資料更正與聯繫</strong><br>"
-        "如需更正訂購資料或詢問交貨事宜，敬請依"
+        "如需調整商品、尺寸、數量或訂購資料，敬請使用 Google 表單的「編輯回覆」功能，"
+        "修改原回覆後重新提交，無須另填一份新表單。系統每分鐘同步，"
+        "成功更新後將另寄訂單更新通知，敬請以最新通知為準。<br>"
+        "已收款、已取消或已截止的訂單，或未收到更新通知時，敬請依"
         f'<a href="{contact_url}">班聯會聯絡方式</a>'
-        "與我們聯繫，並提供本信的訂單編號。您無須重複填寫表單。</p>"
+        "與我們聯繫，並提供本信的訂單編號。</p>"
         "<p>感謝您的支持與協助。<br>班聯會 敬上</p>"
         if external
         else ""
     )
     total_label = "交貨時應付總額" if external else "應付總額"
     order_link = "" if external else f'<p><a href="{base}/shop/orders">查看訂單</a></p>'
+    promotions_html = (
+        "".join(
+            f"<p>已套用優惠：{html_escape(str(promotion.get('name') or '自動優惠'))}"
+            f"（折抵 NT$ {int(promotion.get('discount_amount', 0) or 0):,}）</p>"
+            for promotion in payload.get("promotions", [])
+            if isinstance(promotion, dict)
+        )
+        if external
+        else ""
+    )
     html = (
         f"<p>{salutation}：</p><p>{thanks}</p>"
         f"{delivery_notice}"
@@ -307,7 +329,7 @@ def _handle_shop_order_confirmed(payload: dict) -> None:
         f"商品小計：NT$ {subtotal:,}<br>"
         f"{discount_label}：− NT$ {discount:,}<br>"
         f"<strong>{total_label}：NT$ {total:,}</strong></p>"
-        f"{order_link}{follow_up}"
+        f"{promotions_html}{order_link}{follow_up}"
     )
     try:
         enqueue_email(buyer_email, subject, html)

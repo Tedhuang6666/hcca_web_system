@@ -139,11 +139,6 @@ async def _apply_order_promotion(
     *,
     code: str | None,
 ) -> None:
-    if order.assistance_scope == "sheet_import":
-        # 外部組織預購按表單所對應商品的售價計算，不套用學生身分優惠。
-        order.discount_amount = 0
-        order.total_price = order.subtotal_price
-        return
     product_subtotals = _promotion_product_subtotals(order.items)
     product_quantities = _promotion_product_quantities(order.items)
     current_ids = {row.promotion_id for row in (order.applied_promotions or [])}
