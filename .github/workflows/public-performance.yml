@@ -1,8 +1,6 @@
 name: public-performance
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
   schedule:
     - cron: "47 */6 * * *"
@@ -11,8 +9,8 @@ permissions:
   contents: read
 
 concurrency:
-  # Public/authenticated synthetic workflows share this gate so a push cannot
-  # run two independent browser fleets against production at once.
+  # Public/authenticated synthetic workflows share this gate so scheduled or
+  # manual scans do not run two browser fleets against production at once.
   group: production-performance
   cancel-in-progress: false
 
