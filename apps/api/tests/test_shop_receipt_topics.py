@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 from api.models.activity import Activity, ActivityStatus
 from api.models.school_class import SchoolClass
 from api.models.shop import Order, OrderItem, OrderStatus, Product, ProductCategory, ProductSeries
+from api.models.shop_class_payment import ShopClassPayment
 from api.models.shop_order_receipt_print import ShopOrderReceiptPrint
 from api.services.shop import _receipts
 
@@ -148,6 +149,68 @@ async def test_class_receipts_separate_topics_even_when_the_activity_matches(
         await db_session.refresh(order)
         assert order.is_paid is False
         assert await db_session.get(ShopOrderReceiptPrint, order.id) is not None
+
+
+@pytest.mark.parametrize("topics", [False, True], indirect=True)
+@pytest.mark.parametrize("payment_state", [None, False, True])
+@pytest.mark.parametrize("category_only", [False, True])
+async def test_unpaid_receipts_follow_orders_instead_of_class_payment_history(
+    db_session, admin_user, authed_client_factory, topics, payment_state, category_only
+):
+    school_class, activity, categories, products = topics
+    unpaid = await _order(db_session, admin_user, school_class, activity, [products[0]], total=101)
+    unpaid.is_class_collected = True  # 班代收款備忘不等於班聯確認收款。
+    paid = await _order(db_session, admin_user, school_class, activity, [products[1]], total=202)
+    paid.is_paid = True
+    paid_class = SchoolClass(
+        academic_year=115, class_code="102", label="一年二班", created_by=admin_user.id
+    )
+    db_session.add(paid_class)
+    await db_session.flush()
+    paid_without_confirmation = await _order(
+        db_session, admin_user, paid_class, activity, [products[0]], total=101
+    )
+    paid_without_confirmation.is_paid = True
+    payment = None
+    if payment_state is not None:
+        payment = ShopClassPayment(
+            class_id=school_class.id,
+            activity_id=activity.id if activity else None,
+            is_paid=payment_state,
+        )
+        db_session.add(payment)
+    await db_session.flush()
+    scope = (
+        {"category_id": str(categories[0].id)}
+        if category_only
+        else {"activity_id": str(activity.id) if activity else None}
+    )
+    client = authed_client_factory(admin_user)
+    path = "/shop/orders/classes/receipts.pdf"
+    response = await client.post(path, json={**scope, "unpaid_only": True})
+    assert response.status_code == 200, response.text
+    _assert_separate_topics(response.content, {1: 101})
+    text = "".join(page.extract_text() for page in PdfReader(BytesIO(response.content)).pages)
+    assert school_class.label in text
+    assert paid_class.label not in text
+    assert await db_session.get(ShopOrderReceiptPrint, unpaid.id) is not None
+    for order in (paid, paid_without_confirmation):
+        assert await db_session.get(ShopOrderReceiptPrint, order.id) is None
+        await db_session.refresh(order)
+        assert order.is_paid is True
+    await db_session.refresh(unpaid)
+    assert unpaid.is_paid is False
+    assert unpaid.is_class_collected is True
+    if payment is not None:
+        await db_session.refresh(payment)
+        assert payment.is_paid is payment_state
+
+    # 實際訂單全數收款後，即使缺少班級確認紀錄也不可再列印為未收款。
+    unpaid.is_paid = True
+    await db_session.flush()
+    empty = await client.post(path, json={**scope, "unpaid_only": True})
+    assert empty.status_code == 400
+    assert empty.json()["detail"] == "此活動沒有尚未確認收款的訂單"
 
 
 @pytest.mark.parametrize("topics", [False, True], indirect=True)

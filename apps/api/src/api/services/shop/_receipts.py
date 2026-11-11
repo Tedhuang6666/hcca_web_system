@@ -23,7 +23,6 @@ from api.core.clock import TAIPEI, local_today, now_local
 from api.models.activity import Activity
 from api.models.school_class import SchoolClass
 from api.models.shop import Order, OrderItem, OrderStatus, Product, ProductCategory, ProductSeries
-from api.models.shop_class_payment import ShopClassPayment
 from api.models.shop_order_receipt_print import ShopOrderReceiptPrint
 from api.services.official_print import _font_faces, render_print_pdf
 
@@ -374,12 +373,8 @@ async def export_class_receipts_pdf(
         selected_class_ids = [school_class.id for school_class in school_classes]
         statement = statement.where(Order.class_id.in_(selected_class_ids))
     if unpaid_only:
-        paid_scope = select(ShopClassPayment.id).where(
-            ShopClassPayment.class_id == SchoolClass.id,
-            ShopClassPayment.activity_id.is_not_distinct_from(scoped_activity_id),
-            ShopClassPayment.is_paid.is_(True),
-        )
-        statement = statement.where(~paid_scope.exists())
+        # 與收款清單一致，以實際訂單判斷，避免歷史班級確認漏掉後續未收款訂單。
+        statement = statement.where(Order.is_paid.is_(False))
     rows = (await session.execute(statement)).all()
     orders_by_class: dict[uuid.UUID, tuple[SchoolClass, list[Order]]] = {}
     for school_class, order in rows:
