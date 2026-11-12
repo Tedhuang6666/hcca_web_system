@@ -1,3 +1,5 @@
+import Link from "@/components/ui/IntentLink";
+
 import MarkdownBlock from "@/components/site/MarkdownBlock";
 import PublicSiteShell from "@/components/site/PublicSiteShell";
 import { fetchPublicShellData } from "@/lib/serverFetch";
@@ -36,6 +38,18 @@ export default async function SystemInfoPage() {
             系統資訊尚未設定，請稍後再回來查看。
           </section>
         )}
+
+        <section className="card mt-4 flex flex-wrap items-center justify-between gap-4 p-6">
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold">發現網站有問題？</h2>
+            <p className="mt-1 text-sm leading-6 text-[var(--text-secondary)]">
+              功能錯誤、資料異常或資安漏洞都可以直接回報，資訊部會收到網站通知與電子郵件。
+            </p>
+          </div>
+          <Link href="/security/report" className="public-cta-primary">
+            前往回報表單
+          </Link>
+        </section>
 
       </div>
     </PublicSiteShell>

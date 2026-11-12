@@ -102,6 +102,7 @@ export default async function PublicSiteShell({
             <span className="public-footer-label">網站資訊</span>
             <Link href="/legal/accessibility">無障礙聲明</Link>
             <Link href="/legal/privacy">隱私政策</Link>
+            <Link href="/security/report">漏洞與問題回報</Link>
           </nav>
         </div>
         <div className="public-footer-bottom">

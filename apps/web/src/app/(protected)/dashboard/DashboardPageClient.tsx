@@ -6,7 +6,7 @@ import {
   FileText, ListChecks, Scale, Megaphone, MessageSquare,
   CheckSquare, ChevronRight, Plus, Loader2, Clock, ArrowUpRight,
   ShoppingCart, ShieldCheck,
-  Settings, Users, Bell, Search, PenLine, Send, Wrench, AlertCircle,
+  Settings, Users, Bell, Search, PenLine, Send, Wrench, AlertCircle, Bug,
 } from "lucide-react";
 import { announcementsApi } from "@/lib/api/announcements";
 import { dashboardApi, type DashboardResponse } from "@/lib/api/dashboard";
@@ -436,6 +436,32 @@ export default function DashboardPageClient({
         </div>
       </details>
 
+      {/* 網站問題回報：固定顯示，不需展開選單或服務清單就能看到。 */}
+      <section
+        className="flex flex-wrap items-center justify-between gap-3 rounded-lg p-4"
+        style={{ background: "var(--bg-surface)", border: "1px dashed var(--border-strong)" }}
+        aria-label="網站問題回報">
+        <div className="flex min-w-0 items-start gap-3">
+          <span
+            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full"
+            style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}
+            aria-hidden="true">
+            <Bug size={16} aria-hidden={true} />
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+              發現網站有問題？
+            </p>
+            <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
+              回報功能錯誤、資料異常或資安漏洞，資訊部會收到通知。
+            </p>
+          </div>
+        </div>
+        <Link href="/security/report" className="dashboard-text-link">
+          回報網站問題 <ChevronRight size={14} aria-hidden={true} />
+        </Link>
+      </section>
+
       {adminActions.length > 0 && (
         <details className="dashboard-admin-strip">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
@@ -629,6 +655,13 @@ function getServiceActions(
   can: (code: string) => boolean,
   canAny: (...codes: string[]) => boolean,
 ): DashboardAction[] {
+  // 每個視角都保留同一個回報入口，讓一般使用者不必先找到公開站選單。
+  const reportAction: DashboardAction = {
+    href: "/security/report",
+    label: "回報網站問題",
+    detail: "功能錯誤、資料異常或資安漏洞",
+    icon: Bug,
+  };
   const commonStudent: DashboardAction[] = [
     { href: "/announcements", label: "看最新公告", detail: "校內訊息與公開事項", icon: Bell },
     { href: "/surveys", label: "填寫問卷", detail: "參與校園決策與回饋", icon: PenLine },
@@ -637,7 +670,7 @@ function getServiceActions(
     { href: "/partner-map", label: "找特約商家", detail: "優惠、地點與合作店家", icon: Search },
   ];
 
-  if (profile === "student") return commonStudent;
+  if (profile === "student") return [...commonStudent, reportAction];
   if (profile === "teacher") {
     const teacherActions: DashboardAction[] = [
       { href: "/announcements", label: "看校內公告", detail: "掌握近期校務與活動", icon: Bell },
@@ -652,7 +685,7 @@ function getServiceActions(
         icon: ListChecks,
       });
     }
-    return teacherActions;
+    return [...teacherActions, reportAction];
   }
   if (profile === "vendor") {
     return [
@@ -661,6 +694,7 @@ function getServiceActions(
       { href: "/tasks", label: "處理待辦", detail: "合作事項與通知集中處理", icon: ListChecks },
       { href: "/announcements", label: "合作公告", detail: "查看校內與合作資訊", icon: Bell },
       { href: "/settings", label: "帳號設定", detail: "通知、安全與介面偏好", icon: Settings },
+      reportAction,
     ];
   }
   const actions: DashboardAction[] = [
@@ -669,6 +703,7 @@ function getServiceActions(
     { href: "/regulations", label: "法規資料庫", detail: "查詢、修正與公布法規", icon: Scale },
     { href: "/announcements", label: "發布與公告", detail: "公告、電子郵件與通知", icon: Megaphone },
     { href: "/search", label: "全站搜尋", detail: "找公文、法規、會議與公告", icon: Search },
+    reportAction,
   ];
   return actions.slice(0, 6);
 }

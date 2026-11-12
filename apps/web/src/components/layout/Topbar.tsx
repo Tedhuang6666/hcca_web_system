@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "@/components/ui/IntentLink";
 import Image from "next/image";
-import { ArrowLeft, Search, WifiOff } from "lucide-react";
+import { ArrowLeft, Search, WifiOff, Bug } from "lucide-react";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { authFetch } from "@/lib/api/core";
@@ -566,6 +566,17 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
                       <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                     </svg>
                     安全設定
+                  </Link>
+                  <Link
+                    href="/security/report"
+                    role="menuitem"
+                    onClick={() => setShowMenu(false)}
+                    className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-2.5 transition-colors cursor-pointer"
+                    style={{ color: "var(--text-secondary)", textDecoration: "none", display: "flex" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+                    <Bug size={14} aria-hidden={true} />
+                    回報網站問題
                   </Link>
 
                   <div style={{ borderTop: "1px solid var(--border)", margin: "4px 0" }} />
