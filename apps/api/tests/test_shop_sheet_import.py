@@ -27,7 +27,7 @@ from api.services import shop as shop_svc
 from api.services.outbox import _handle_shop_order_confirmed
 from api.services.shop import _sheet_import as importer
 from api.services.shop._export import _fetch_order_report_rows
-from api.services.shop._orders import _sync_order_promotions
+from api.services.shop._orders import _sync_order_promotions, update_order_item_quantity
 from api.services.shop._sheet_reader import SheetReadError
 
 HEADERS = ["時間戳記", "電子郵件地址", "姓名", "職稱", "辦公室", "外套", "雨傘"]
@@ -694,3 +694,128 @@ async def test_promotion_changes_include_external_orders_but_keep_identity_restr
     assert result.updated == 1
     order = await shop_svc.get_order(db_session, order.id)
     assert order.discount_amount == 0 and order.total_price == 1300
+
+
+@pytest.mark.parametrize("legacy_notice", [False, True])
+@pytest.mark.parametrize(
+    "change", ["headers", "metadata_headers", "timestamp", "equivalent", "ignored", "reorder"]
+)
+async def test_presentation_changes_do_not_update_orders_or_send_notices(
+    db_session, catalog, legacy_notice, change
+):
+    source, products = catalog
+    await importer.import_rows(db_session, source, [HEADERS, row()])
+    order = await shop_svc.get_order(db_session, await db_session.scalar(select(Order.id)))
+    original_items = [(item.id, item.quantity, item.unit_price) for item in order.items]
+    original_total = order.total_price
+    notice = await db_session.scalar(select(OutboxEvent))
+    if legacy_notice:
+        notice.payload = {
+            key: value for key, value in notice.payload.items() if key != "response_hash"
+        }
+        notice.payload = {
+            **notice.payload,
+            "items": [
+                {key: value for key, value in item.items() if key != "product_id"}
+                for item in notice.payload["items"]
+            ],
+        }
+        await db_session.flush()
+    headers, answer = HEADERS.copy(), row()
+    if change == "headers":
+        headers[-2:] = ["外套 NT.999 (尺寸與數量)", "雨傘 NT.999"]
+        # 改表單標題不應重建品項，也不應順便改變原先的價格快照。
+        products[0].price = 999
+    elif change == "metadata_headers":
+        headers[1:5] = ["通知信箱", "訂購人姓名", "身分別", "處室／單位"]
+        source.config = {
+            **source.config,
+            "email_column": headers[1],
+            "name_column": headers[2],
+            "ignored_columns": [headers[3]],
+            "office_column": headers[4],
+        }
+    elif change == "timestamp":
+        answer[0] = "edited-time-only"
+    elif change == "equivalent":
+        answer[-2:] = ["大號兩件、2XL一件", "２把"]
+    elif change == "reorder":
+        headers.reverse()
+        answer.reverse()
+    else:
+        answer[3] = "家長會代表"
+    result = await importer.import_rows(db_session, source, [headers, answer])
+    assert result.skipped == 1 and result.updated == result.review == result.imported == 0
+    order = await shop_svc.get_order(db_session, order.id)
+    assert [(item.id, item.quantity, item.unit_price) for item in order.items] == original_items
+    assert order.total_price == original_total
+    assert (products[0].stock_quantity, products[1].stock_quantity) == (27, 28)
+    assert (await db_session.scalar(select(Receivable))).amount == original_total
+    assert await db_session.scalar(select(func.count()).select_from(OutboxEvent)) == 1
+    assert (await importer.import_rows(db_session, source, [headers, answer])).skipped == 1
+    # 真正改了數量，仍須更新原單且只新增一封更新通知。
+    answer[0 if change == "reorder" else -1] = "3"
+    assert (await importer.import_rows(db_session, source, [headers, answer])).updated == 1
+    assert await db_session.scalar(select(func.count()).select_from(OutboxEvent)) == 2
+
+
+@pytest.mark.parametrize("column,value", [(1, "new@example.org"), (2, "另一位代表"), (4, "家長會")])
+async def test_real_contact_change_still_sends_an_update(db_session, catalog, column, value):
+    source, _ = catalog
+    await importer.import_rows(db_session, source, [HEADERS, row()])
+    answer = row()
+    answer[column] = value
+    result = await importer.import_rows(db_session, source, [HEADERS, answer])
+    assert result.updated == 1 and result.review == 0
+    assert await db_session.scalar(select(func.count()).select_from(OutboxEvent)) == 2
+    assert (await importer.import_rows(db_session, source, [HEADERS, answer])).skipped == 1
+
+
+async def test_header_rename_preserves_manual_order_adjustments_and_promotion_baseline(
+    db_session, catalog, admin_user
+):
+    source, _ = catalog
+    await shop_svc.create_promotion(
+        db_session,
+        created_by=admin_user.id,
+        data=ShopPromotionCreate(
+            name="滿千優惠", discount_type="fixed", discount_value=100, min_order_price=1000
+        ),
+    )
+    values = [HEADERS, row(size="L1", umbrellas="0")]
+    await importer.import_rows(db_session, source, values)
+    order = await shop_svc.get_order(db_session, await db_session.scalar(select(Order.id)))
+    await update_order_item_quantity(db_session, order, order.items[0].id, quantity=2)
+    await _sync_order_promotions(db_session, order, ())
+    order.discount_amount, order.total_price = 0, order.subtotal_price
+    await db_session.flush()
+    assert (await importer.import_rows(db_session, source, values)).updated == 1
+    assert order.total_price == 1200
+    renamed = [*HEADERS[:-2], "外套 NT.650 (尺寸)", "雨傘 NT.350"]
+    assert (await importer.import_rows(db_session, source, [renamed, values[1]])).skipped == 1
+    order = await shop_svc.get_order(db_session, order.id)
+    assert order.items[0].quantity == 2 and order.total_price == 1200
+    assert await db_session.scalar(select(func.count()).select_from(OutboxEvent)) == 2
+
+
+async def test_paid_order_header_rename_is_skipped_without_review_or_email(db_session, catalog):
+    source, _ = catalog
+    await importer.import_rows(db_session, source, [HEADERS, row()])
+    order = await shop_svc.get_order(db_session, await db_session.scalar(select(Order.id)))
+    order.is_paid = True
+    await db_session.flush()
+    headers = [*HEADERS[:-2], "外套 NT.650", "雨傘 NT.350"]
+    result = await importer.import_rows(db_session, source, [headers, row()])
+    assert result.skipped == 1 and result.updated == result.review == 0
+    assert await db_session.scalar(select(func.count()).select_from(OutboxEvent)) == 1
+
+
+async def test_mapped_alias_keeps_product_identity_when_price_caption_changes(db_session, catalog):
+    source, products = catalog
+    source.config = {**source.config, "product_columns": {"帽踢 NT.650": str(products[0].id)}}
+    headers = [*HEADERS[:-2], "帽踢 NT.650", HEADERS[-1]]
+    await importer.import_rows(db_session, source, [headers, row()])
+    renamed = [*HEADERS[:-2], "帽踢 NT.750 (請填尺寸)", HEADERS[-1]]
+    result = await importer.import_rows(db_session, source, [renamed, row()])
+    assert result.skipped == 1 and result.updated == result.review == 0
+    assert await db_session.scalar(select(func.count()).select_from(OutboxEvent)) == 1

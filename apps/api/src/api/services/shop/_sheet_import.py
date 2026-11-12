@@ -4,6 +4,7 @@ import hashlib
 import json
 import uuid
 from collections import Counter
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from pydantic import TypeAdapter
@@ -47,19 +48,78 @@ def _cell(row: dict[str, str], column: str) -> str:
     return row.get(column, "").strip()
 
 
-async def _build_order(
+def _response_hash(name: str, email: str, office: str, items: list[dict]) -> str:
+    quantities: Counter[tuple[str, tuple[str, ...]]] = Counter()
+    for item in items:
+        options = tuple(sorted(str(option["option_id"]) for option in item["selected_options"]))
+        quantities[str(item["product_id"]), options] += item["quantity"]
+    return _hash(
+        {
+            "name": name.strip(),
+            "email": email.strip().casefold(),
+            "office": office.strip(),
+            "items": sorted(
+                (product, options, count) for (product, options), count in quantities.items()
+            ),
+        }
+    )
+
+
+@dataclass
+class _ParsedResponse:
+    name: str
+    email: str
+    office: str
+    products: dict[uuid.UUID, Product]
+    items: list[OrderItem]
+    quantities: Counter[uuid.UUID]
+
+    @property
+    def response_hash(self) -> str:
+        return _response_hash(
+            self.name,
+            self.email,
+            self.office,
+            [
+                {
+                    "product_id": item.product_id,
+                    "quantity": item.quantity,
+                    "selected_options": item.selected_options,
+                }
+                for item in self.items
+            ],
+        )
+
+
+def _previous_response_hash(payload: dict, products: dict[uuid.UUID, Product]) -> str:
+    if payload.get("response_hash"):
+        return str(payload["response_hash"])
+    # 舊通知未存商品 ID；以已確認的系統商品名稱精確對應，不能拿現在的訂單
+    # 當原填答，否則欄名異動會覆寫管理者另外修改的訂單。
+    items = []
+    for item in payload.get("items", []):
+        matches = [
+            product.id for product in products.values() if product.name == item["product_name"]
+        ]
+        if len(matches) != 1:
+            raise AnswerNeedsReview("原通知的商品無法唯一對應，請管理者核對原回覆")
+        items.append({**item, "product_id": matches[0]})
+    return _response_hash(
+        str(payload.get("buyer_name") or ""),
+        str(payload.get("buyer_email") or ""),
+        str(payload.get("buyer_office") or ""),
+        items,
+    )
+
+
+async def _parse_response(
     session: AsyncSession,
     source: ShopSheetSource,
     config: ShopSheetConfig,
     row: dict[str, str],
     *,
-    order: Order | None = None,
-) -> Order:
-    updating = order is not None
-    old_quantities: Counter[uuid.UUID] = Counter()
-    if order is not None:
-        for item in order.items:
-            old_quantities[item.product_id] += item.quantity
+    existing_product_ids: set[uuid.UUID],
+) -> _ParsedResponse:
     name = _cell(row, config.name_column)
     office = _cell(row, config.office_column)
     other_office = _cell(row, config.other_office_column) if config.other_office_column else ""
@@ -86,7 +146,7 @@ async def _build_order(
             .order_by(Product.id)
         )
     )
-    product_ids = sorted(set(product_ids) | set(old_quantities))
+    product_ids = sorted(set(product_ids) | existing_product_ids)
     # 以固定次序鎖庫存，避免不同來源互鎖。
     if product_ids:
         await session.execute(
@@ -105,6 +165,15 @@ async def _build_order(
         if header in metadata_columns or not answer.strip():
             continue
         explicit_id = config.product_columns.get(header)
+        if explicit_id is None:
+            mapped_ids = {
+                product_id
+                for label, product_id in config.product_columns.items()
+                if product_label(label) == product_label(header)
+            }
+            if len(mapped_ids) > 1:
+                raise AnswerNeedsReview(f"欄位「{header[:100]}」有多個商品對應，請核對設定")
+            explicit_id = next(iter(mapped_ids), None)
         candidates = (
             ([by_id[explicit_id]] if explicit_id in by_id else [])
             if explicit_id
@@ -155,6 +224,28 @@ async def _build_order(
             quantities[product.id] += variant.quantity
     if not items:
         raise AnswerNeedsReview("沒有可建立的訂購品項")
+    return _ParsedResponse(name, email, office, by_id, items, quantities)
+
+
+async def _build_order(
+    session: AsyncSession,
+    source: ShopSheetSource,
+    config: ShopSheetConfig,
+    row: dict[str, str],
+    *,
+    order: Order | None = None,
+    parsed: _ParsedResponse | None = None,
+) -> Order:
+    updating = order is not None
+    old_quantities: Counter[uuid.UUID] = Counter()
+    if order is not None:
+        for item in order.items:
+            old_quantities[item.product_id] += item.quantity
+    parsed = parsed or await _parse_response(
+        session, source, config, row, existing_product_ids=set(old_quantities)
+    )
+    name, email, office = parsed.name, parsed.email, parsed.office
+    by_id, items, quantities = parsed.products, parsed.items, parsed.quantities
     scopes = {_product_order_scope(by_id[item.product_id]) for item in items}
     if len(scopes) != 1 or (
         order is not None and next(iter(scopes)) != (order.activity_id, order.category_id)
@@ -213,12 +304,14 @@ async def _build_order(
     await session.flush()
     await _apply_order_promotion(session, order, code=None)
     await receivable.sync_shop_order(session, order)
-    await queue_preorder_notice(session, order, email=email, updated=updating)
+    await queue_preorder_notice(
+        session, order, email=email, updated=updating, response_hash=parsed.response_hash
+    )
     return order
 
 
 async def queue_preorder_notice(
-    session: AsyncSession, order: Order, *, email: str, updated: bool
+    session: AsyncSession, order: Order, *, email: str, updated: bool, response_hash: str
 ) -> None:
     """成立／更新共用同一份訂單快照；與金額、庫存及帳本同交易提交。"""
     await emit(
@@ -232,6 +325,7 @@ async def queue_preorder_notice(
             "buyer_office": order.buyer_office,
             "external_preorder": True,
             "order_updated": updated,
+            "response_hash": response_hash,
             "payment_method": "cash_on_pickup",
             "subtotal_price": order.subtotal_price,
             "discount_amount": order.discount_amount,
@@ -242,6 +336,7 @@ async def queue_preorder_notice(
             ],
             "items": [
                 {
+                    "product_id": str(item.product_id),
                     "product_name": item.product.name,
                     "quantity": item.quantity,
                     "unit_price": item.unit_price,
@@ -386,23 +481,46 @@ async def import_rows(
             async with session.begin_nested():
                 if existing:
                     order = await _lock_imported_order(session, record)
+                    parsed = None
+                    if changed:
+                        parsed = await _parse_response(
+                            session,
+                            source,
+                            config,
+                            row,
+                            existing_product_ids={item.product_id for item in order.items},
+                        )
+                        notice = await _last_notice(session, record)
+                        if notice is None:
+                            raise AnswerNeedsReview("缺少原回覆通知，請管理者核對；不自動覆寫訂單")
+                        changed = parsed.response_hash != _previous_response_hash(
+                            notice.payload, parsed.products
+                        )
                     if changed:
                         if not _editable(order):
                             raise AnswerNeedsReview(
                                 "訂單已收款、取消或退款，無法自動修改；敬請聯繫班聯會"
                             )
-                        await _build_order(session, source, config, row, order=order)
+                        await _build_order(session, source, config, row, order=order, parsed=parsed)
                     elif _editable(order):
                         before = (order.total_price, order.discount_amount)
                         await _apply_order_promotion(session, order, code=None)
                         changed = before != (order.total_price, order.discount_amount)
                         if changed:
+                            parsed = parsed or await _parse_response(
+                                session,
+                                source,
+                                config,
+                                row,
+                                existing_product_ids={item.product_id for item in order.items},
+                            )
                             await receivable.sync_shop_order(session, order)
                             await queue_preorder_notice(
                                 session,
                                 order,
                                 email=_cell(row, config.email_column),
                                 updated=True,
+                                response_hash=parsed.response_hash,
                             )
                 else:
                     order = await _build_order(session, source, config, row)
