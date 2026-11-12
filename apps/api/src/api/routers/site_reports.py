@@ -23,6 +23,7 @@ from api.schemas.site_report import (
 )
 from api.services import audit as audit_svc
 from api.services import site_report as report_svc
+from api.services import site_report_notification as report_notify_svc
 
 router = APIRouter(prefix="/site-reports", tags=["網站回報"])
 
@@ -61,7 +62,7 @@ async def create_site_report(
     user_agent: Annotated[str | None, Header()] = None,
 ) -> SiteReport:
     try:
-        return await report_svc.create_report(
+        report = await report_svc.create_report(
             db,
             body,
             viewer.id if viewer else None,
@@ -71,6 +72,12 @@ async def create_site_report(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
         ) from exc
+    await report_notify_svc.notify_new_report(
+        db,
+        report,
+        reporter_id=viewer.id if viewer else None,
+    )
+    return report
 
 
 @router.get(

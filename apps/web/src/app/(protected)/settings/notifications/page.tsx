@@ -176,6 +176,13 @@ const OPTIONS: NotificationOption[] = [
     group: "personal",
   },
   {
+    key: "site_report_received",
+    label: "網站回報",
+    desc: "有人送出網站漏洞或功能問題回報時提醒",
+    group: "personal",
+    permissions: ["site_report:manage", "site:manage"],
+  },
+  {
     key: "system",
     label: "系統通知",
     desc: "平台維運、權限或安全相關提醒",

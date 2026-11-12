@@ -11572,6 +11572,74 @@ export interface paths {
         patch: operations["update_short_link_short_links__link_id__patch"];
         trace?: never;
     };
+    "/site-reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 送出網站漏洞或功能問題回報 */
+        post: operations["create_site_report_site_reports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/site-reports/admin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出網站回報 */
+        get: operations["list_site_reports_site_reports_admin_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/site-reports/admin/{report_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 更新網站回報處理狀態 */
+        patch: operations["update_site_report_site_reports_admin__report_id__patch"];
+        trace?: never;
+    };
+    "/site-reports/portal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 取得網站回報表單設定 */
+        get: operations["get_report_portal_site_reports_portal_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/site/admin/files": {
         parameters: {
             query?: never;
@@ -22113,6 +22181,7 @@ export interface components {
             regulation_published?: components["schemas"]["ChannelPref"] | null;
             regulation_review_assigned?: components["schemas"]["ChannelPref"] | null;
             shop_order_paid?: components["schemas"]["ChannelPref"] | null;
+            site_report_received?: components["schemas"]["ChannelPref"] | null;
             survey_invitation?: components["schemas"]["ChannelPref"] | null;
             system?: components["schemas"]["ChannelPref"] | null;
             work_item_assigned?: components["schemas"]["ChannelPref"] | null;
@@ -22136,6 +22205,7 @@ export interface components {
             regulation_published: components["schemas"]["ChannelPref"];
             regulation_review_assigned: components["schemas"]["ChannelPref"];
             shop_order_paid: components["schemas"]["ChannelPref"];
+            site_report_received: components["schemas"]["ChannelPref"];
             survey_invitation: components["schemas"]["ChannelPref"];
             system: components["schemas"]["ChannelPref"];
             work_item_assigned: components["schemas"]["ChannelPref"];
@@ -31127,6 +31197,131 @@ export interface components {
             target_url?: string | null;
             /** Title */
             title?: string | null;
+        };
+        /**
+         * SiteReportCreate
+         * @description 公開表單輸入；所有長度與格式都在進 DB 前收斂。
+         */
+        SiteReportCreate: {
+            /** Affected Url */
+            affected_url?: string | null;
+            /** Contact Email */
+            contact_email?: string | null;
+            /** Description */
+            description: string;
+            /** @default bug */
+            kind: components["schemas"]["SiteReportKind"];
+            /** @default medium */
+            severity: components["schemas"]["SiteReportSeverity"];
+            /** Steps To Reproduce */
+            steps_to_reproduce?: string | null;
+            /** Title */
+            title: string;
+            /** Website */
+            website?: string | null;
+        };
+        /** SiteReportCreatedOut */
+        SiteReportCreatedOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Reference Code */
+            reference_code: string;
+        };
+        /**
+         * SiteReportKind
+         * @description 回報類型：資安漏洞或一般功能錯誤。
+         * @enum {string}
+         */
+        SiteReportKind: "vulnerability" | "bug";
+        /** SiteReportOptionOut */
+        SiteReportOptionOut: {
+            /** Description */
+            description: string;
+            /** Label */
+            label: string;
+            /** Value */
+            value: string;
+        };
+        /** SiteReportOut */
+        SiteReportOut: {
+            /** Admin Note */
+            admin_note: string | null;
+            /** Affected Url */
+            affected_url: string | null;
+            /** Contact Email */
+            contact_email: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            kind: components["schemas"]["SiteReportKind"];
+            /** Reference Code */
+            reference_code: string;
+            /** Reporter Id */
+            reporter_id: string | null;
+            /** Reviewed At */
+            reviewed_at: string | null;
+            /** Reviewed By */
+            reviewed_by: string | null;
+            severity: components["schemas"]["SiteReportSeverity"];
+            status: components["schemas"]["SiteReportStatus"];
+            /** Steps To Reproduce */
+            steps_to_reproduce: string | null;
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** User Agent */
+            user_agent: string | null;
+        };
+        /** SiteReportPortalOut */
+        SiteReportPortalOut: {
+            /** Is Open */
+            is_open: boolean;
+            /** Kinds */
+            kinds: components["schemas"]["SiteReportOptionOut"][];
+            /** Notice */
+            notice: string;
+            /** Severities */
+            severities: components["schemas"]["SiteReportOptionOut"][];
+        };
+        /**
+         * SiteReportSeverity
+         * @description 回報者自評的影響程度。
+         * @enum {string}
+         */
+        SiteReportSeverity: "low" | "medium" | "high" | "critical";
+        /**
+         * SiteReportStatus
+         * @description 處理狀態。
+         * @enum {string}
+         */
+        SiteReportStatus: "new" | "triaged" | "in_progress" | "resolved" | "wont_fix" | "duplicate";
+        /** SiteReportUpdate */
+        SiteReportUpdate: {
+            /** Admin Note */
+            admin_note?: string | null;
+            severity?: components["schemas"]["SiteReportSeverity"] | null;
+            status?: components["schemas"]["SiteReportStatus"] | null;
         };
         /** StatusOut */
         StatusOut: {
@@ -58913,6 +59108,130 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_site_report_site_reports_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "user-agent"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SiteReportCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteReportCreatedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_site_reports_site_reports_admin_get: {
+        parameters: {
+            query?: {
+                status?: string | null;
+                kind?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteReportOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_site_report_site_reports_admin__report_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SiteReportUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteReportOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_report_portal_site_reports_portal_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteReportPortalOut"];
                 };
             };
         };

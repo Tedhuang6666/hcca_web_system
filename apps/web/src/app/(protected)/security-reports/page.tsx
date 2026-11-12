@@ -102,7 +102,7 @@ function ReportCard({
   };
 
   return (
-    <article className="card p-5">
+    <article id={`report-${report.id}`} className="card scroll-mt-24 p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -266,6 +266,13 @@ export default function SiteReportsAdminPage() {
     if (!isReady || !allowed) return;
     void load();
   }, [allowed, isReady, load]);
+
+  useEffect(() => {
+    if (reports.length === 0 || !window.location.hash.startsWith("#report-")) return;
+    document
+      .getElementById(window.location.hash.slice(1))
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [reports]);
 
   const replaceReport = (updated: SiteReport) => {
     setReports((current) => current.map((report) => (report.id === updated.id ? updated : report)));

@@ -35,6 +35,7 @@ NOTIFICATION_TYPES: tuple[str, ...] = (
     "work_item_assigned",
     "work_item_due",
     # 系統
+    "site_report_received",
     "system",
 )
 
@@ -53,6 +54,7 @@ _EMAIL_DEFAULT_ON: frozenset[str] = frozenset(
         "petition_status_updated",
         "merchandise_submission_received",
         "merchandise_submission_status",
+        "site_report_received",
     }
 )
 
@@ -77,6 +79,7 @@ TYPE_LABELS: dict[str, str] = {
     "announcement": "公告通知",
     "work_item_assigned": "工作指派",
     "work_item_due": "工作期限",
+    "site_report_received": "網站回報",
     "system": "系統通知",
 }
 
@@ -170,6 +173,7 @@ TYPE_MODULE_MAP: dict[str, str] = {
     "announcement": "announcement",
     "work_item_assigned": "work",
     "work_item_due": "work",
+    "site_report_received": "system",
     "system": "system",
 }
 

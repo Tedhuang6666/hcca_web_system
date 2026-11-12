@@ -4,16 +4,39 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable
+from datetime import date
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.models.notification import Notification
+from api.models.org import Org, Position, UserPosition
+from api.models.outbox import OutboxEvent
 from api.models.site_report import SiteReport
 from api.models.user import User
 
 pytestmark = pytest.mark.asyncio
+
+
+async def _make_it_department_member(
+    db_session: AsyncSession, make_user: Callable[..., User]
+) -> User:
+    user = await make_user(
+        email=f"it-{uuid.uuid4().hex[:8]}@school.edu", display_name="資訊部幹部"
+    )
+    org = Org(name="資訊部", is_active=True)
+    db_session.add(org)
+    await db_session.flush()
+    position = Position(org_id=org.id, name="資訊", weight=10)
+    db_session.add(position)
+    await db_session.flush()
+    db_session.add(
+        UserPosition(user_id=user.id, position_id=position.id, start_date=date.today())
+    )
+    await db_session.flush()
+    return user
 
 
 async def test_portal_exposes_kind_and_severity_options(client: AsyncClient) -> None:
@@ -175,3 +198,87 @@ async def test_admin_can_list_and_update_report(
     )
     assert stored is not None
     assert stored.status == "triaged"
+
+
+async def test_new_report_notifies_it_department_members(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    make_user: Callable[..., User],
+) -> None:
+    cadre = await _make_it_department_member(db_session, make_user)
+    outsider = await make_user()
+
+    response = await client.post(
+        "/site-reports",
+        json={
+            "kind": "vulnerability",
+            "severity": "high",
+            "title": "附件下載端點可繞過權限",
+            "description": "替換附件 ID 後可以直接下載未公開的附件。",
+            "affected_url": "/documents/abc/attachments/def/download",
+            "contact_email": "reporter@example.com",
+        },
+    )
+
+    assert response.status_code == 201
+    report_id = uuid.UUID(response.json()["id"])
+
+    notifications = list(
+        (
+            await db_session.scalars(
+                select(Notification).where(Notification.type == "site_report_received")
+            )
+        ).all()
+    )
+    assert len(notifications) == 1
+    notification = notifications[0]
+    assert notification.user_id == cadre.id
+    assert notification.related_id == report_id
+    assert notification.link == f"/security-reports#report-{report_id}"
+    assert notification.title.startswith("新網站回報")
+    assert "SR-" in (notification.body or "")
+    assert "資安漏洞" in (notification.body or "")
+    assert "reporter@example.com" in (notification.body or "")
+    assert outsider.id not in {item.user_id for item in notifications}
+
+    email_events = list(
+        (
+            await db_session.scalars(
+                select(OutboxEvent).where(
+                    OutboxEvent.event_type == "notification.email_batch"
+                )
+            )
+        ).all()
+    )
+    assert any(
+        event.payload.get("notification_id") == str(notification.id)
+        for event in email_events
+    )
+
+
+async def test_reporter_is_not_notified_about_own_report(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    make_user: Callable[..., User],
+    authed_client_factory: Callable[[User], AsyncClient],
+) -> None:
+    cadre = await _make_it_department_member(db_session, make_user)
+    authed = authed_client_factory(cadre)
+
+    response = await authed.post(
+        "/site-reports",
+        json={
+            "kind": "bug",
+            "severity": "low",
+            "title": "自己回報的問題",
+            "description": "由資訊部幹部本人送出的測試回報。",
+        },
+    )
+
+    assert response.status_code == 201
+    assert (
+        await db_session.scalar(
+            select(Notification.id).where(Notification.type == "site_report_received")
+        )
+        is None
+    )

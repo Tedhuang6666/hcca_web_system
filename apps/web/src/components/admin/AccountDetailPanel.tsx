@@ -55,6 +55,7 @@ const NOTIFICATION_LABELS: Record<string, string> = {
   announcement: "公告通知",
   work_item_assigned: "工作指派",
   work_item_due: "工作期限",
+  site_report_received: "網站回報",
   system: "系統通知",
 };
 

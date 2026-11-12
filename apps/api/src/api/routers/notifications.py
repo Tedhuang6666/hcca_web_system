@@ -119,6 +119,7 @@ class NotificationPreferencesOut(BaseModel):
     announcement: ChannelPref
     work_item_assigned: ChannelPref
     work_item_due: ChannelPref
+    site_report_received: ChannelPref
     system: ChannelPref
 
 
@@ -142,6 +143,7 @@ class NotificationPreferencesIn(BaseModel):
     announcement: ChannelPref | None = None
     work_item_assigned: ChannelPref | None = None
     work_item_due: ChannelPref | None = None
+    site_report_received: ChannelPref | None = None
     system: ChannelPref | None = None
 
 
