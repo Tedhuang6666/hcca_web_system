@@ -48,7 +48,7 @@ export default function ClassOrderDeadline({ classId, categories, onSaved }: {
     <form onSubmit={(event) => { event.preventDefault(); void save(); }}>
       <fieldset disabled={busy} className="grid min-w-0 gap-3 sm:grid-cols-2">
         <legend className="sr-only">本班截止設定</legend>
-        <label className="grid gap-1 text-sm">截止主題<select className="input min-h-11 text-base" value={categoryId} onChange={(event) => setSelected(event.target.value)}>
+        <label className="grid gap-1 text-sm">截止活動<select className="input min-h-11 text-base" value={categoryId} onChange={(event) => setSelected(event.target.value)}>
           {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
         </select></label>
         <label className="grid gap-1 text-sm">本班截止時間（臺北時間）<input className="input min-h-11 min-w-0 text-base" type="datetime-local" required value={deadline} disabled={loading || Boolean(loadError)} onChange={(event) => setDeadline(event.target.value)} /></label>

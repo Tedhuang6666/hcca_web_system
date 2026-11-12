@@ -114,7 +114,7 @@ describe("商品卡片內的優惠", () => {
     expect(screen.queryByText(/贈品：/)).not.toBeInTheDocument();
   });
 
-  it("主題優惠不重複顯示，單品優惠與套組入口仍可使用", () => {
+  it("活動優惠不重複顯示，單品優惠與套組入口仍可使用", () => {
     const select = vi.fn();
     render(<ProductCardOffers product={product} promotions={[promotion, {
       ...promotion, id: "threshold", name: "Six Seven！！！", discount_type: "fixed",

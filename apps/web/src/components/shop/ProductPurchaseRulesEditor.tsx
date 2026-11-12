@@ -51,12 +51,12 @@ export default function ProductPurchaseRulesEditor({ value, onChange, activityId
     <div className="space-y-2">
       <fieldset aria-describedby={`${id}-group-help`}>
         <legend className="text-sm font-medium">同組合計限購一件</legend>
-        {groupState === "loading" ? <p role="status" className="py-2 text-sm">正在讀取主題商品…</p>
+        {groupState === "loading" ? <p role="status" className="py-2 text-sm">正在讀取活動商品…</p>
           : groupState === "error" ? <p role="alert" className="text-sm" style={{ color: "var(--danger)" }}>
             商品清單讀取失敗，原有選擇已保留。<button type="button" className="min-h-11 underline" onClick={() => {
               setGroupState("loading"); setGroupAttempt((current) => current + 1);
             }}>重新讀取商品</button>
-          </p> : products.length === 0 ? <p className="py-2 text-sm">此主題還沒有其他商品，可建立商品後再設定同組限購。</p>
+          </p> : products.length === 0 ? <p className="py-2 text-sm">此活動還沒有其他商品，可建立商品後再設定同組限購。</p>
             : <div className="max-h-64 overflow-y-auto">
               {products.map((product) => <label key={product.id} className="flex min-h-11 cursor-pointer items-center gap-2 text-sm">
                 <input type="checkbox" checked={value.exclusive_product_ids.includes(product.id)} onChange={(event) => {
@@ -70,7 +70,7 @@ export default function ProductPurchaseRulesEditor({ value, onChange, activityId
             </div>}
       </fieldset>
       <p id={`${id}-group-help`} className="text-xs" style={{ color: "var(--text-secondary)" }}>
-        可複選此主題的商品，包含系列中的商品；本商品會自動加入。儲存後所選商品合計每人限購一件，原有同組設定會依這次選擇調整。留空表示不設同組限制。
+        可複選此活動的商品，包含系列中的商品；本商品會自動加入。儲存後所選商品合計每人限購一件，原有同組設定會依這次選擇調整。留空表示不設同組限制。
       </p>
       <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-medium">
         <input type="checkbox" checked={value.designated_only}

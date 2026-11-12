@@ -2,7 +2,7 @@
 
 import { useId, useState } from "react";
 
-export default function CollectionActivityPicker({ options, selected, onChange, disabled, label = "收款活動（商品主題）" }: {
+export default function CollectionActivityPicker({ options, selected, onChange, disabled, label = "收款活動" }: {
   options: { key: string; label: string; closed?: boolean }[]; selected: string | null;
   onChange: (key: string) => void; disabled: boolean; label?: string;
 }) {

@@ -52,7 +52,7 @@ export default function ShopSheetImportPanel({ categories }: { categories: Produ
     let active = true;
     setProducts([]); setProductError(""); setMappingProduct("");
     if (categoryId) shopApi.listProducts({ category_id: categoryId }).then((items) => { if (active) setProducts(items); })
-      .catch((cause) => { if (active) setProductError(apiErrorMessage(cause, "商品選項載入失敗，請重選商品主題。")); });
+      .catch((cause) => { if (active) setProductError(apiErrorMessage(cause, "商品選項載入失敗，請重選活動。")); });
     return () => { active = false; };
   }, [categoryId]);
 
@@ -158,8 +158,8 @@ export default function ShopSheetImportPanel({ categories }: { categories: Produ
         {editing && <button type="button" className="btn btn-ghost min-h-11" disabled={busy} onClick={() => { setEditing(null); setName(""); setConfig({ ...defaultConfig }); setMessage(""); setFormError(""); setFormMessage(""); }}>改為新增來源</button>}</div>
       <fieldset disabled={busy} className="grid gap-4 sm:grid-cols-2">
         <label className="text-sm">來源名稱<input ref={nameInput} className="input mt-1 min-h-11 w-full text-base" required maxLength={100} value={name} onChange={(event) => setName(event.target.value)} /></label>
-        <label className="text-sm">商品主題<select className="input mt-1 min-h-11 w-full text-base" required value={categoryId} onChange={(event) => { setCategoryId(event.target.value); setConfig((current) => ({ ...current, product_columns: {} })); }}>
-          <option value="">請選擇對應的商品主題</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
+        <label className="text-sm">活動<select className="input mt-1 min-h-11 w-full text-base" required value={categoryId} onChange={(event) => { setCategoryId(event.target.value); setConfig((current) => ({ ...current, product_columns: {} })); }}>
+          <option value="">請選擇對應的活動</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
         <label className="text-sm sm:col-span-2">Google 試算表網址<input type="url" className="input mt-1 min-h-11 w-full text-base" required readOnly={Boolean(editing)} value={url} onChange={(event) => setUrl(event.target.value)} /></label>
         <label className="text-sm">工作表分頁名稱<input className="input mt-1 min-h-11 w-full text-base" required readOnly={Boolean(editing)} maxLength={100} value={sheetName} onChange={(event) => setSheetName(event.target.value)} /></label>
       </fieldset>

@@ -92,7 +92,7 @@ async def create_link(
         raise DelegationError("最多保留 20 個有效代訂連結，請先撤銷不再使用的連結", 409)
     category = await session.get(ProductCategory, data.category_id)
     if category is None or not category.is_active:
-        raise DelegationError("找不到此商品主題", 404)
+        raise DelegationError("找不到此活動", 404)
     token = secrets.token_urlsafe(32)
     link = ShopDelegationLink(
         user_id=user.id,
@@ -214,7 +214,7 @@ async def resolve_link(
         raise DelegationError("學生帳號無法使用代訂", 410)
     category = await session.get(ProductCategory, link.category_id)
     if category is None or not category.is_active or category.activity_id != link.activity_id:
-        raise DelegationError("此代訂連結的商品主題已變更或關閉", 410)
+        raise DelegationError("此代訂連結的活動已變更或關閉", 410)
     await assert_link_open(session, link, user)
     if actor.id == user.id:
         if claim or write:

@@ -187,7 +187,7 @@ async def _parse_response(
         if normalize(answer) in {"0", "無", "不要", "不需要", "不訂購", "-", "—"}:
             continue
         if len(candidates) != 1:
-            raise AnswerNeedsReview(f"欄位「{header[:100]}」無法唯一對應本主題商品，請設定欄位對應")
+            raise AnswerNeedsReview(f"欄位「{header[:100]}」無法唯一對應本活動商品，請設定欄位對應")
         product = candidates[0]
         groups = product.variant_groups
         if len(groups) > 1:
@@ -273,7 +273,7 @@ async def _build_order(
                 product.status = ProductStatus.ACTIVE
     category = await session.get(ProductCategory, source.category_id)
     if category is None:
-        raise AnswerNeedsReview("來源商品主題不存在")
+        raise AnswerNeedsReview("來源活動不存在")
     total = sum(item.quantity * item.unit_price for item in items)
     if order is None:
         scope = next(iter(scopes))

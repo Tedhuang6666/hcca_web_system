@@ -20,7 +20,7 @@ it("creates a disabled source and keeps the form after a failed save", async () 
   api.list.mockResolvedValue([]); api.create.mockRejectedValueOnce(new Error("offline")).mockResolvedValue(source);
   render(<ShopSheetImportPanel categories={categories} />);
   await screen.findByText(/尚未設定來源/);
-  fireEvent.change(screen.getByRole("combobox", { name: "商品主題" }), { target: { value: "category" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "category" } });
   fireEvent.click(screen.getByRole("button", { name: "新增同步來源" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("設定未儲存");
   expect(screen.getByRole("textbox", { name: "來源名稱" })).toHaveValue("教師與組織預購");

@@ -788,7 +788,7 @@ export default function CouncilOrdersPage() {
         <legend className="sr-only">篩選訂單</legend>
         <div className="flex flex-wrap items-end gap-3">
           {!(tab === "summary" && canConfirmClassPayment) && <label className="grid gap-1 text-sm">
-            <span style={{ color: "var(--text-muted)" }}>{tab === "analytics" ? "分析主題" : "活動"}</span>
+            <span style={{ color: "var(--text-muted)" }}>{tab === "analytics" ? "分析活動" : "活動"}</span>
             <select className="input" value={tab === "analytics" ? analyticsCategory?.id ?? "" : categoryId} onChange={(e) => {
               setCategoryId(e.target.value);
               setProductId("");
@@ -796,7 +796,7 @@ export default function CouncilOrdersPage() {
               setSelectedReceiptClasses(new Set());
             }}>
               {tab !== "analytics" && <option value="">全部活動</option>}
-              {tab === "analytics" && !catalog.length && <option value="">尚無可分析的主題</option>}
+              {tab === "analytics" && !catalog.length && <option value="">尚無可分析的活動</option>}
               {catalog.map((category) => (
                 <option key={category.id} value={category.id}>{category.name}</option>
               ))}
@@ -937,7 +937,7 @@ export default function CouncilOrdersPage() {
         ...(dateTo ? { date_to: dateTo } : {}),
       }} />}
       {tab === "analytics" && !analyticsCategory && <p role="status" className="p-4" style={{ color: "var(--text-secondary)" }}>
-        {optionsLoading ? "正在載入分析主題…" : optionsError ? "請先重新載入主題，再查看銷售分析。" : "尚無可分析的主題。"}
+        {optionsLoading ? "正在載入分析活動…" : optionsError ? "請先重新載入活動，再查看銷售分析。" : "尚無可分析的活動。"}
       </p>}
       {tab === "summary" && canConfirmClassPayment && <ClassPaymentWorkspace
         catalog={catalog} activities={activities} optionsLoading={optionsLoading} optionsError={optionsError}
@@ -972,7 +972,7 @@ export default function CouncilOrdersPage() {
                     每日收款
                   </h2>
                   <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
-                    預設顯示今天，依實際確認收款日期計算；收款活動以商品主題區分。
+                    預設顯示今天，依實際確認收款日期計算；各活動分開統計收款。
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -1016,7 +1016,7 @@ export default function CouncilOrdersPage() {
                     onChange={(event) => setCollectionDateTo(event.target.value)} />
                 </label>
                 <label className="grid min-w-48 gap-1 text-sm">
-                  <span style={{ color: "var(--text-muted)" }}>收款活動（商品主題）</span>
+                  <span style={{ color: "var(--text-muted)" }}>收款活動</span>
                   <select className="input min-h-11" value={collectionCategoryId}
                     onChange={(event) => setCollectionCategoryId(event.target.value)}>
                     <option value="">全部活動</option>
@@ -1091,7 +1091,7 @@ export default function CouncilOrdersPage() {
                       <table className="shop-mobile-table w-full min-w-[680px] text-sm" aria-label="收款明細">
                         <thead>
                           <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                            {["收款時間", "班級", "年級", "收款活動（商品主題）", "訂單數", "收款金額"].map((label) => (
+                            {["收款時間", "班級", "年級", "收款活動", "訂單數", "收款金額"].map((label) => (
                               <th key={label} scope="col" className="px-3 py-3 text-left text-xs font-semibold"
                                 style={{ color: "var(--text-muted)" }}>{label}</th>
                             ))}
@@ -1112,7 +1112,7 @@ export default function CouncilOrdersPage() {
                               <td data-label="年級" className="px-3 py-3" style={{ color: "var(--text-secondary)" }}>
                                 {payment.grade} 年級
                               </td>
-                              <td data-label="收款活動（商品主題）" className="px-3 py-3" style={{ color: "var(--text-secondary)" }}>
+                              <td data-label="收款活動" className="px-3 py-3" style={{ color: "var(--text-secondary)" }}>
                                 {payment.category_label ?? "未分類商品"}
                               </td>
                               <td data-label="訂單數" className="px-3 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>
@@ -1194,7 +1194,7 @@ export default function CouncilOrdersPage() {
                   收據範圍
                   <select
                     className="input min-h-11"
-                    aria-label="收據主題"
+                    aria-label="收據活動"
                     value={receiptCategoryId}
                     onChange={(event) => {
                       setReceiptCategoryId(event.target.value);
@@ -1203,7 +1203,7 @@ export default function CouncilOrdersPage() {
                       setSelectedReceiptClasses(new Set());
                     }}
                   >
-                    <option value="">請選擇商品主題</option>
+                    <option value="">請選擇活動</option>
                     {catalog.map((category) => (
                       <option key={category.id} value={category.id}>{category.name}</option>
                     ))}

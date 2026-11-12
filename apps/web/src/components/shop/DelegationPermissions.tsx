@@ -3,7 +3,7 @@ export default function DelegationPermissions() {
     <dl className="shop-delegation-permissions">
       <div>
         <dt>家長可以做什麼</dt>
-        <dd>在連結授權的活動或商品主題內選購，只能修改透過這個連結登記的品項；無法修改學生本人或其他家人的品項。</dd>
+        <dd>在連結授權的活動內選購，只能修改透過這個連結登記的品項；無法修改學生本人或其他家人的品項。</dd>
       </div>
       <div>
         <dt>訂單歸誰、由誰繳款</dt>

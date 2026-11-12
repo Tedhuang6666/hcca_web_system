@@ -78,7 +78,7 @@ function openOrderWorkspace() {
 async function openCollectWorkspace(selectFirst = true) {
   fireEvent.click(within(taskSwitch()).getByRole("button", { name: "登記收款" }));
   if (selectFirst) {
-    const picker = await screen.findByRole("group", { name: "活動（商品主題）" });
+    const picker = await screen.findByRole("group", { name: "活動" });
     const choices = await within(picker).findAllByRole("radio");
     if (!(choices[0] as HTMLInputElement).checked) fireEvent.click(choices[0]);
   }
@@ -215,7 +215,7 @@ describe("班代工作流程", () => {
     expect(screen.getByRole("button", { name: /送出示範乙的訂單/ })).toBeEnabled();
   });
 
-  it("整理與篩選活動列出同活動下各個主題，並傳送主題篩選", async () => {
+  it("整理與篩選活動列出同活動下各個活動，並傳送活動篩選", async () => {
     api.catalog.mockResolvedValue([
       { id: "shirts", name: "衣服", activity_id: "festival", activity_name: "校慶", series: [], products: [
         { id: "shirt", name: "紀念衫", status: "active", price: 200 },

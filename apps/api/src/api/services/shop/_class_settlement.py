@@ -272,9 +272,9 @@ async def set_class_paid(
     if category_id is not None:
         category = await session.get(ProductCategory, category_id)
         if category is None:
-            raise ValueError("找不到此商品主題")
+            raise ValueError("找不到此活動")
         if activity_id is not None or category.activity_id is not None:
-            raise ValueError("已綁活動的主題請依完整活動收款")
+            raise ValueError("此活動保留共用收款設定，請依完整範圍收款")
     await session.execute(
         select(SchoolClass.id).where(SchoolClass.id == class_id).with_for_update()
     )
@@ -327,8 +327,8 @@ async def set_class_paid(
             if is_paid:
                 newly_paid_orders.append(order)
     if category_id is not None:
-        # 一般商品共用舊收款紀錄；是否鎖定各主題仍由實際已繳訂單判斷。
-        # 撤銷一個主題不能清掉其他主題的收款確認。
+        # 一般商品共用舊收款紀錄；是否鎖定各活動仍由實際已繳訂單判斷。
+        # 撤銷一個活動不能清掉其他活動的收款確認。
         has_paid_orders = await session.scalar(
             select(Order.id)
             .where(

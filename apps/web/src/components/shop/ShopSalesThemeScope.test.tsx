@@ -18,8 +18,8 @@ vi.mock("@/components/shop/ShopSalesAnalytics", () => ({
 beforeEach(() => {
   vi.resetAllMocks();
   api.catalog.mockResolvedValue([
-    { id: "shirts", name: "服飾主題", series: [], products: [{ id: "shirt", name: "紀念衫" }] },
-    { id: "cards", name: "傳情主題", series: [], products: [{ id: "card", name: "傳情卡" }] },
+    { id: "shirts", name: "服飾活動", series: [], products: [{ id: "shirt", name: "紀念衫" }] },
+    { id: "cards", name: "傳情活動", series: [], products: [{ id: "card", name: "傳情卡" }] },
   ]);
   api.listActivities.mockResolvedValue([]);
   api.recipientOptions.mockResolvedValue([]);
@@ -28,11 +28,11 @@ beforeEach(() => {
   api.classPaymentReport.mockResolvedValue([]);
 });
 
-it("銷售分析預設單一主題，切換與清除篩選都不會合併主題", async () => {
+it("銷售分析預設單一活動，切換與清除篩選都不會合併活動", async () => {
   render(<CouncilOrdersPage />);
-  await screen.findByRole("option", { name: "服飾主題" });
+  await screen.findByRole("option", { name: "服飾活動" });
   fireEvent.click(screen.getByRole("button", { name: "銷售分析" }));
-  const theme = screen.getByRole("combobox", { name: "分析主題" });
+  const theme = screen.getByRole("combobox", { name: "分析活動" });
   expect(theme).toHaveValue("shirts");
   expect(screen.queryByRole("option", { name: "全部活動" })).not.toBeInTheDocument();
   expect(screen.getByLabelText("分析查詢")).toHaveTextContent('"category_id":"shirts"');
@@ -47,15 +47,15 @@ it("銷售分析預設單一主題，切換與清除篩選都不會合併主題"
   expect(screen.getByLabelText("分析查詢")).toHaveTextContent('"category_id":"shirts"');
 });
 
-it("主題載入前與沒有主題時不發出合併分析", async () => {
+it("活動載入前與沒有活動時不發出合併分析", async () => {
   let resolve!: (value: never[]) => void;
   api.catalog.mockReturnValueOnce(new Promise<never[]>((done) => { resolve = done; }));
   render(<CouncilOrdersPage />);
   fireEvent.click(screen.getByRole("button", { name: "銷售分析" }));
   expect(screen.queryByLabelText("分析查詢")).not.toBeInTheDocument();
-  expect(screen.getByText("正在載入分析主題…")).toBeVisible();
+  expect(screen.getByText("正在載入分析活動…")).toBeVisible();
   resolve([]);
-  await waitFor(() => expect(screen.queryByText("正在載入分析主題…")).not.toBeInTheDocument());
+  await waitFor(() => expect(screen.queryByText("正在載入分析活動…")).not.toBeInTheDocument());
   expect(screen.queryByLabelText("分析查詢")).not.toBeInTheDocument();
-  expect(screen.getByText("尚無可分析的主題。")).toBeVisible();
+  expect(screen.getByText("尚無可分析的活動。")).toBeVisible();
 });

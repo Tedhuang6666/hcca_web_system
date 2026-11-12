@@ -107,7 +107,7 @@ export default function DelegationLinks({ categoryId, activityId, scopeName, ini
   return (
     <section className="shop-delegation-links shop-delegation-entry" aria-label="建立與管理代訂授權">
       <p className="shop-delegation-scope"><strong>本次授權：{scopeName}</strong>
-        <span>{activityId ? "同活動商品皆可代訂" : "僅限此商品主題"}</span>
+        <span>{activityId ? "同活動商品皆可代訂" : "僅限此活動"}</span>
       </p>
       <div id="shop-delegation-create" hidden={!creating}>
         <form className="shop-delegation-form" onSubmit={(event) => {

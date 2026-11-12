@@ -6,9 +6,9 @@ export default function TopicOffers({ promotions }: { promotions: ShopPromotionP
     && (promotion.discount_type === "fixed" || promotion.discount_type === "percentage"));
   if (!offers.length) return null;
 
-  return <section className="shop-topic-offers" aria-label="主題優惠">
+  return <section className="shop-topic-offers" aria-label="活動優惠">
     <details className="shop-product-card-disclosure">
-      <summary>主題優惠（{offers.length} 項）<ChevronDown size={15} aria-hidden="true" /></summary>
+      <summary>活動優惠（{offers.length} 項）<ChevronDown size={15} aria-hidden="true" /></summary>
       <ul className="shop-topic-offer-list">
         {offers.map((promotion) => {
           const conditions = [

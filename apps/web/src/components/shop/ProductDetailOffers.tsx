@@ -71,7 +71,7 @@ export default function ProductDetailOffers({ product, promotions, registration,
           const giftProducts = promotionGiftProducts(promotion);
           const isGift = giftProducts.some((row) => row.id === product.id);
           const companions = promotion.target_products?.filter((target) => target.id !== product.id) ?? [];
-          const topic = "target_category_ids" in promotion && promotion.target_category_ids != null ? "單一主題" : "";
+          const topic = "target_category_ids" in promotion && promotion.target_category_ids != null ? "單一活動" : "";
           const conditions = [
             promotion.min_order_price > 0 ? `${topic}滿 NT$${promotion.min_order_price.toLocaleString()}` : null,
             promotion.min_quantity > 1 ? `${topic}滿 ${promotion.min_quantity} 件` : null,

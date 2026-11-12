@@ -10,6 +10,7 @@ const api = vi.hoisted(() => ({
   getProductPurchaseRules: vi.fn(), purchasePermissions: vi.fn(), purchaseGroupOptions: vi.fn(),
   getProductCost: vi.fn(),
   lookupTargets: vi.fn(),
+  createCategory: vi.fn(), updateCategory: vi.fn(),
 }));
 const navigation = vi.hoisted(() => ({ search: "" }));
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(navigation.search) }));
@@ -42,7 +43,7 @@ async function openStats() {
     { id: "shirts", name: "校慶", activity_id: "festival" },
     { id: "bags", name: "袋子", activity_id: "festival" },
     { id: "cards", name: "冬季活動", activity_id: "winter" },
-    { id: "general", name: "一般主題", activity_id: null },
+    { id: "general", name: "一般活動", activity_id: null },
   ]);
   navigation.search = "view=stats";
   render(<ShopAdminPage />);
@@ -77,6 +78,36 @@ it("成本讀取失敗會停用儲存，重試後可清空成本", async () => {
 });
 
 describe("商品管理與統計", () => {
+  it("直接新增活動，不需載入或選擇全站活動", async () => {
+    render(<ShopAdminPage />);
+    fireEvent.click(screen.getByRole("button", { name: "新增活動" }));
+    expect(screen.getByRole("dialog", { name: "新增活動" })).toBeVisible();
+    expect(screen.queryByRole("combobox", { name: "所屬活動" })).not.toBeInTheDocument();
+    expect(api.listActivities).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByRole("textbox", { name: "名稱" }), { target: { value: "校慶" } });
+    fireEvent.click(screen.getByRole("button", { name: "儲存" }));
+    await waitFor(() => expect(api.createCategory).toHaveBeenCalledWith({
+      name: "校慶", description: null, image_url: null, sort_order: 0, is_active: true,
+    }));
+  });
+
+  it("編輯活動不送出舊關聯欄位，保留既有訂單範圍", async () => {
+    api.listCategories.mockResolvedValue([
+      { id: "shirts", name: "校慶", activity_id: "festival", is_active: true },
+    ]);
+    render(<ShopAdminPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /校慶/ }));
+    fireEvent.click(screen.getByRole("button", { name: "編輯活動" }));
+    expect(screen.queryByRole("combobox", { name: "所屬活動" })).not.toBeInTheDocument();
+    expect(api.listActivities).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByRole("textbox", { name: "名稱" }), { target: { value: "校慶預購" } });
+    fireEvent.click(screen.getByRole("button", { name: "儲存" }));
+    await waitFor(() => expect(api.updateCategory).toHaveBeenCalledWith("shirts", {
+      name: "校慶預購", description: null, image_url: null, sort_order: 0, is_active: true,
+    }));
+    expect(api.updateCategory.mock.lastCall?.[1]).not.toHaveProperty("activity_id");
+  });
+
   it("檢查原價與售價後送出，儲存失敗仍保留原價", async () => {
     api.listCategories.mockResolvedValue([{ id: "category", name: "校慶商品", is_active: true }]);
     api.createProduct.mockRejectedValueOnce(new Error("offline"));
@@ -103,7 +134,7 @@ describe("商品管理與統計", () => {
   });
   it("以直接入口取代商品頁的活動期限區塊", async () => {
     render(<ShopAdminPage />);
-    await screen.findByText(/尚未建立商品主題/);
+    await screen.findByText(/尚未建立活動/);
     expect(screen.getByRole("link", { name: "活動鎖單" })).toHaveAttribute("href", "/shop/council-orders#activity-order-closure-title");
     expect(screen.queryByText("活動結單與期限")).not.toBeInTheDocument();
     expect(screen.queryByText(/目前沒有可設定的活動/)).not.toBeInTheDocument();
@@ -182,7 +213,7 @@ describe("商品管理與統計", () => {
     expect(screen.getByText(/統計範圍：冬季活動/)).toBeVisible();
   });
 
-  it("活動選單列出每個主題，並用主題 ID 篩選直屬與系列商品", async () => {
+  it("活動選單列出每個活動，並用活動 ID 篩選直屬與系列商品", async () => {
     api.listProducts.mockResolvedValue([
       { id: "shirt", name: "紀念衫", category_id: "shirts" },
       { id: "bag", name: "紀念袋", category_id: null, series_id: "bag-series" },
@@ -191,7 +222,7 @@ describe("商品管理與統計", () => {
     await openStats();
     const select = screen.getByRole("combobox", { name: "活動" });
     expect(select).toContainElement(screen.getByRole("option", { name: "袋子" }));
-    expect(select).toContainElement(screen.getByRole("option", { name: "一般主題" }));
+    expect(select).toContainElement(screen.getByRole("option", { name: "一般活動" }));
     expect(api.listActivities).not.toHaveBeenCalled();
     fireEvent.change(select, { target: { value: "shirts" } });
     await waitFor(() => expect(api.orderSummary).toHaveBeenLastCalledWith(expect.objectContaining({ category_id: "shirts" })));
@@ -220,10 +251,10 @@ describe("商品管理與統計", () => {
   it("shows a retry instead of claiming a failed catalog is empty", async () => {
     api.listCategories.mockRejectedValueOnce(new Error("offline"));
     render(<ShopAdminPage />);
-    expect(await screen.findByRole("alert")).toHaveTextContent("無法載入商品主題");
-    expect(screen.queryByText(/尚未建立商品主題/)).not.toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent("無法載入活動");
+    expect(screen.queryByText(/尚未建立活動/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "重新載入商品目錄" }));
-    expect(await screen.findByText(/尚未建立商品主題/)).toBeVisible();
+    expect(await screen.findByText(/尚未建立活動/)).toBeVisible();
   });
 
   it("rejects invalid amounts and preserves the product form after a failed save", async () => {
@@ -256,7 +287,7 @@ describe("商品管理與統計", () => {
     expect(api.createProduct).toHaveBeenCalledWith(expect.objectContaining({ price: 100, stock_quantity: 50 }));
   });
 
-  it("直接從新增入口選主題，一次儲存商品與批次規格後上架", async () => {
+  it("直接從新增入口選活動，一次儲存商品與批次規格後上架", async () => {
     api.listCategories.mockResolvedValue([{ id: "first", name: "校慶" }, { id: "second", name: "畢業季" }]);
     const draft = { id: "new", category_id: "second", name: "畢業紀念衫", price: 300, stock_quantity: 50, status: "draft", variant_groups: [] };
     api.createProduct.mockResolvedValue(draft);
@@ -265,7 +296,7 @@ describe("商品管理與統計", () => {
     render(<ShopAdminPage />);
     await waitFor(() => expect(screen.getByRole("button", { name: "新增商品" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "新增商品" }));
-    fireEvent.change(screen.getByRole("combobox", { name: "商品主題" }), { target: { value: "second" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "second" } });
     fireEvent.change(screen.getByRole("textbox", { name: "商品名稱" }), { target: { value: "畢業紀念衫" } });
     fireEvent.change(screen.getByRole("spinbutton", { name: "售價（新台幣元）" }), { target: { value: "300" } });
     fireEvent.change(screen.getByRole("spinbutton", { name: "可訂購數量（件）" }), { target: { value: "50" } });

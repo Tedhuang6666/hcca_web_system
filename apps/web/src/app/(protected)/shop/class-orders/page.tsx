@@ -326,7 +326,7 @@ export default function ClassOrdersPage() {
   const selectedActivityLabel = activityFilter === "all"
     ? ledgerActivityLabel
     : activityFilter === "none" ? "一般商品"
-      : filterActivityRows.find((row) => row.key === activityFilter)?.label ?? "所選主題";
+      : filterActivityRows.find((row) => row.key === activityFilter)?.label ?? "所選活動";
 
   const currentOptionIds = productDetail?.variant_groups
     .map((group) => optionIds[group.id])
@@ -1050,7 +1050,7 @@ export default function ClassOrdersPage() {
       </header>
 
       {activityRows.length > 0 && <section className="space-y-2" aria-label="目前處理活動">
-        <CollectionActivityPicker options={activityRows} selected={activeLedgerKey || null} label="活動（商品主題）"
+        <CollectionActivityPicker options={activityRows} selected={activeLedgerKey || null} label="活動"
           disabled={busy !== null || batchBusy || creating || loading || catalogLoading || catalogFailed || loadFailed
             || Boolean(editOrder || collectionConfirmation || cancelTarget || orderProductId)
             || assistedItems.length > 0 || assistedOrderDrafts.length > 0}

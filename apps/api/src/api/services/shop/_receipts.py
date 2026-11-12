@@ -1,4 +1,4 @@
-"""依班級與商品主題產生班聯會收款簽收單。"""
+"""依班級與活動產生班聯會收款簽收單。"""
 
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ _RECEIPT_COPY_OFFSET = 345.77
 
 @dataclass(frozen=True)
 class _ReceiptOrder:
-    """僅供列印的主題品項與金額，不變更原始訂單。"""
+    """僅供列印的活動品項與金額，不變更原始訂單。"""
 
     items: list[OrderItem]
     total_price: int
@@ -73,7 +73,7 @@ def _receipt_orders_by_topic(
                 category.name if category else fallback_label,
                 [],
             )
-        # 舊訂單可能跨主題；按成交品項金額分攤實付總額，累計取整避免尾差遺失。
+        # 舊訂單可能跨活動；按成交品項金額分攤實付總額，累計取整避免尾差遺失。
         subtotal = sum(item.unit_price * item.quantity for item in order.items)
         cumulative_subtotal = allocated_total = 0
         for topic_id in sorted(items_by_topic, key=str):
@@ -299,11 +299,11 @@ async def _resolve_receipt_scope(
     category_id: uuid.UUID | None,
 ) -> tuple[ProductCategory | None, Activity | None, uuid.UUID | None]:
     if activity_id is not None and category_id is not None:
-        raise ValueError("收據範圍只能指定活動或商品主題其中一項")
+        raise ValueError("收據範圍不可重複指定活動")
 
     category = await session.get(ProductCategory, category_id) if category_id else None
     if category_id is not None and category is None:
-        raise ValueError("找不到此商品主題")
+        raise ValueError("找不到此活動")
 
     scoped_activity_id = category.activity_id if category else activity_id
     activity = await session.get(Activity, scoped_activity_id) if scoped_activity_id else None
@@ -353,7 +353,7 @@ async def export_class_receipts_pdf(
     printed_at: datetime | None = None,
     record_prints: bool = True,
 ) -> bytes:
-    """依班級、商品主題各自開立收據；全部未收款另納入個人與獨立補收款。"""
+    """依班級、活動各自開立收據；全部未收款另納入個人與獨立補收款。"""
     category, activity, scoped_activity_id = await _resolve_receipt_scope(
         session, activity_id=activity_id, category_id=category_id
     )

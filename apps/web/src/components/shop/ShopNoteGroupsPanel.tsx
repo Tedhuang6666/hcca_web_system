@@ -141,13 +141,13 @@ export default function ShopNoteGroupsPanel() {
         setCatalogError(""); setAttempt((value) => value + 1);
       }}>重新載入商品目錄</button>
     </div> : !catalog ? <p role="status">正在載入商品目錄…</p>
-      : catalog.categories.length === 0 ? <p>尚未建立商品主題，請先到商品設定新增主題與商品。</p>
+      : catalog.categories.length === 0 ? <p>尚未建立活動，請先到商品設定新增活動與商品。</p>
         : <>
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="block text-sm font-medium" htmlFor={`${id}-category`}>商品主題
+            <label className="block text-sm font-medium" htmlFor={`${id}-category`}>活動
               <select id={`${id}-category`} className="input mt-1 min-h-11 w-full text-base" value={categoryId}
                 onChange={(event) => { setCategoryId(event.target.value); setNoteQuery(""); setOpened([]); }}>
-                <option value="">選擇商品主題</option>
+                <option value="">選擇活動</option>
                 {catalog.categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
               </select>
             </label>
@@ -156,14 +156,14 @@ export default function ShopNoteGroupsPanel() {
                 placeholder="例如：熱音" onChange={(event) => setNoteQuery(event.target.value)} />
             </label>
           </div>
-          {!categoryId ? <p className="text-sm">選擇主題後，查看各備註分組下的一般票、套票等商品名單人數。</p>
+          {!categoryId ? <p className="text-sm">選擇活動後，查看各備註分組下的一般票、套票等商品名單人數。</p>
             : !currentRules ? <p role="status">正在彙整購買名單…</p>
               : currentRules.error ? <div role="alert" className="text-sm" style={{ color: "var(--danger)" }}>
                 <p>{currentRules.error}</p><button type="button" className="btn btn-secondary min-h-11"
                   onClick={() => { setOpened([]); setRulesAttempt((value) => value + 1); }}>重新讀取購買名單</button>
               </div> : <>
                 <p role="status" className="text-sm">共 {groups.length} 組備註，顯示 {filtered.length} 組。相同完整備註視為同組，忽略前後空白；未填備註另列一組。</p>
-                {groups.length === 0 ? <p>此主題尚無允許購買名單，請先在商品的購買資格加入人員並儲存。</p>
+                {groups.length === 0 ? <p>此活動尚無允許購買名單，請先在商品的購買資格加入人員並儲存。</p>
                   : filtered.length === 0 ? <p>沒有符合的備註分組，請調整搜尋文字。</p>
                     : <div className="divide-y" style={{ borderColor: "var(--border)" }}>
                       {filtered.map(([note, entries]) => <section key={note} className="space-y-2 py-4" aria-label={`備註：${note || "未填備註"}`}>

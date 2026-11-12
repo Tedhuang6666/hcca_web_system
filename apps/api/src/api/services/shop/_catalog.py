@@ -127,12 +127,12 @@ async def delete_category(session: AsyncSession, category: ProductCategory) -> N
         select(Product.id).where(Product.category_id == category.id).limit(1)
     )
     if result.scalar_one_or_none() is not None or direct_product is not None:
-        raise ValueError("主題下仍有系列或商品，無法刪除（請先刪除或移動內容）")
+        raise ValueError("活動下仍有系列或商品，無法刪除（請先刪除或移動內容）")
     delegation_link_id = await session.scalar(
         select(ShopDelegationLink.id).where(ShopDelegationLink.category_id == category.id).limit(1)
     )
     if delegation_link_id is not None:
-        raise ValueError("主題仍有代訂授權連結，無法刪除（請先刪除或移動連結）")
+        raise ValueError("活動仍有代訂授權連結，無法刪除（請先刪除或移動連結）")
     await session.delete(category)
     await session.flush()
 
@@ -161,7 +161,7 @@ async def list_series(
 async def create_series(session: AsyncSession, *, data: ProductSeriesCreate) -> ProductSeries:
     category = await get_category(session, data.category_id)
     if category is None:
-        raise ValueError("找不到所屬主題")
+        raise ValueError("找不到所屬活動")
     series = ProductSeries(
         category_id=data.category_id,
         name=data.name,
@@ -284,12 +284,12 @@ async def create_product(
         raise ValueError("找不到所屬系列")
     category_id = data.category_id or (series.category_id if series else None)
     if category_id is None:
-        raise ValueError("請選擇所屬主題")
+        raise ValueError("請選擇所屬活動")
     category = await get_category(session, category_id)
     if category is None:
-        raise ValueError("找不到所屬主題")
+        raise ValueError("找不到所屬活動")
     if series and series.category_id != category.id:
-        raise ValueError("所選系列不屬於此主題")
+        raise ValueError("所選系列不屬於此活動")
 
     product = Product(
         name=data.name,
@@ -391,12 +391,12 @@ async def update_product(
         if target_category_id is None and target_series is not None:
             target_category_id = target_series.category_id
         if target_category_id is None:
-            raise ValueError("請選擇所屬主題")
+            raise ValueError("請選擇所屬活動")
         target_category = await get_category(session, target_category_id)
         if target_category is None:
-            raise ValueError("找不到所屬主題")
+            raise ValueError("找不到所屬活動")
         if target_series and target_series.category_id != target_category.id:
-            raise ValueError("所選系列不屬於此主題")
+            raise ValueError("所選系列不屬於此活動")
         payload["category_id"] = target_category.id
     media_data = payload.pop("media", None)
     for field, value in payload.items():
@@ -426,7 +426,7 @@ async def sync_purchase_group(
     if len(members) != len(ids):
         raise ValueError("部分限購商品已不存在，請重新讀取商品清單")
     if any(member.category_id != product.category_id for member in members):
-        raise ValueError("同組限購只能選擇同一商品主題內的商品")
+        raise ValueError("同組限購只能選擇同一活動內的商品")
     group_id = str(uuid.uuid4())
     for member in members:
         member.purchase_rules = {**(member.purchase_rules or {}), "exclusive_group": group_id}

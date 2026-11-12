@@ -1852,7 +1852,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
         {authLoading && <p role="status">確認登入帳號與代訂授權中…</p>}
         {!authLoading && isLoggedIn && <p className="shop-delegation-account">目前帳號：<strong>{currentAccount}</strong></p>}
         {delegationContext && <p className="shop-delegation-scope"><strong>授權範圍：{[...new Set((delegationContext.catalog ?? []).map((category) =>
-          category.activity_name ?? category.name))].join("、") || "此連結的商品主題"}</strong>。本頁只顯示可代訂的商品。</p>}
+          category.activity_name ?? category.name))].join("、") || "此連結的活動"}</strong>。本頁只顯示可代訂的商品。</p>}
         {delegationError && <p role="alert">{delegationError}</p>}
         {delegationContext?.can_claim && <>
           <p><strong>請先確認學生與登入帳號。</strong>確認後，這個連結只供目前帳號使用；若帳號不正確，請先登出並登入自己的帳號，再開啟原連結。</p>

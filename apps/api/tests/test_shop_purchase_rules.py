@@ -625,4 +625,4 @@ async def test_group_selection_rejects_other_themes(tickets, db_session):
         f"/shop/products/{normal.id}",
         json={"purchase_rules": {"exclusive_product_ids": [str(other.id)]}},
     )
-    assert result.status_code == 409 and "同一商品主題" in result.text
+    assert result.status_code == 409 and "同一活動" in result.text

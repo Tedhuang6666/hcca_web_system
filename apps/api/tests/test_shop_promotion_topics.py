@@ -98,7 +98,7 @@ async def test_minimum_spend_never_combines_topics_sharing_one_activity(db_sessi
     assert not preview.eligible
     assert preview.reason_code == "minimum_not_met"
     assert preview.shortfall == 200
-    with pytest.raises(ValueError, match="各商品主題分開計算"):
+    with pytest.raises(ValueError, match="各活動分開計算"):
         await shop_svc.resolve_promotion(
             db_session,
             user_id=buyer.id,

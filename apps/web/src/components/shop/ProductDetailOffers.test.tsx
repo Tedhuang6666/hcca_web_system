@@ -103,7 +103,7 @@ describe("商品詳情優惠與贈品", () => {
     expect(screen.getByText("適用商品折抵 100%")).toBeVisible();
   });
 
-  it("列出主題門檻、優惠碼及多品特價的獨立適用規則", () => {
+  it("列出活動門檻、優惠碼及多品特價的獨立適用規則", () => {
     const topicPromotion = {
       ...promotion, code: "STAFF", target_category_ids: [], min_quantity: 2, min_order_price: 1000,
       discount_type: "price_override" as const, target_products: [product, { id: "bag", name: "提袋" }],
@@ -111,8 +111,8 @@ describe("商品詳情優惠與贈品", () => {
     };
     render(<ProductDetailOffers product={product} registration={null} promotions={[topicPromotion]} />);
     fireEvent.click(screen.getByText("優惠與贈品"));
-    expect(screen.getByText(/單一主題滿 NT\$1,000/)).toBeVisible();
-    expect(screen.getByText(/單一主題滿 2 件/)).toBeVisible();
+    expect(screen.getByText(/單一活動滿 NT\$1,000/)).toBeVisible();
+    expect(screen.getByText(/單一活動滿 2 件/)).toBeVisible();
     expect(screen.getByText(/使用優惠碼 STAFF/)).toBeVisible();
     expect(screen.getByText(/本商品基本售價 NT\$250/)).toBeVisible();
     expect(screen.queryByText(/需同時選購/)).not.toBeInTheDocument();

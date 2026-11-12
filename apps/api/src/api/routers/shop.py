@@ -159,7 +159,7 @@ _PAYMENT_WRITE_CODES = {
 
 async def _get_category_or_404(category_id: uuid.UUID, session: AsyncSession) -> ProductCategory:
     obj = await shop_svc.get_category(session, category_id)
-    return or_404(obj, "找不到此主題")
+    return or_404(obj, "找不到此活動")
 
 
 async def _get_series_or_404(series_id: uuid.UUID, session: AsyncSession) -> ProductSeries:
@@ -929,13 +929,13 @@ async def create_product(
     if category_id is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="請選擇所屬主題",
+            detail="請選擇所屬活動",
         )
     category = await _get_category_or_404(category_id, session)
     if series and series.category_id != category.id:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="所選系列不屬於此主題",
+            detail="所選系列不屬於此活動",
         )
     await _require_shop_manager(session, current_user, category.activity_id)
     try:

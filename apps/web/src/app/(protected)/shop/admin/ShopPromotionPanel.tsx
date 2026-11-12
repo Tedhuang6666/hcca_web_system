@@ -294,8 +294,8 @@ export default function ShopPromotionPanel() {
     const ids = promotion.target_category_ids ?? categories
       .filter((category) => category.activity_id === (promotion.activity_id ?? null))
       .map((category) => category.id);
-    if (promotion.target_category_ids?.length === 0) return "不限商品主題";
-    return ids.map((id) => categories.find((category) => category.id === id)?.name ?? "未載入的主題")
+    if (promotion.target_category_ids?.length === 0) return "不限活動";
+    return ids.map((id) => categories.find((category) => category.id === id)?.name ?? "未載入的活動")
       .join("、") || "原有商品範圍";
   };
 
@@ -307,21 +307,21 @@ export default function ShopPromotionPanel() {
             {editingPromotionId ? "編輯優惠" : "建立優惠"}
           </h2>
           <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-            可選擇多個商品主題，或不限主題。留空優惠碼即符合條件自動套用；有優惠碼時由使用者領取並套用。
+            可選擇多個活動，或不限活動。留空優惠碼即符合條件自動套用；有優惠碼時由使用者領取並套用。
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <fieldset className="sm:col-span-2" aria-describedby="promotion-topic-help">
             <legend className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
-              適用商品主題（選填，可複選）
+              適用活動（選填，可複選）
             </legend>
             <p id="promotion-topic-help" className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-              滿額與最低件數依各主題分開計算，不跨主題累加。指定商品優惠價可跨主題逐項設定。
+              滿額與最低件數依各活動分開計算，不跨活動累加。指定商品優惠價可跨活動逐項設定。
             </p>
             <label className="flex min-h-11 items-center gap-2 text-xs" style={{ color: "var(--text-secondary)" }}>
               <input type="checkbox" checked={form.target_category_ids.length === 0} disabled={saving}
                 onChange={() => update("target_category_ids", [])} />
-              不限商品主題
+              不限活動
             </label>
             <div className="grid gap-x-4 sm:grid-cols-2">
               {categories.map((category) => (
@@ -333,7 +333,7 @@ export default function ShopPromotionPanel() {
               ))}
             </div>
             {!loading && !loadError && categories.length === 0 && (
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>尚未建立商品主題，目前可設定不限主題的優惠。</p>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>尚未建立活動，目前可設定不限活動的優惠。</p>
             )}
           </fieldset>
           <label className="block text-xs font-medium sm:col-span-2" style={{ color: "var(--text-secondary)" }}>
@@ -394,14 +394,14 @@ export default function ShopPromotionPanel() {
             </p>
           )}
           <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
-            每個主題最低消費（選填）
+            每個活動最低消費（選填）
             <input className="input mt-1 w-full" type="number" min="0" value={form.min_order_price} onChange={(e) => update("min_order_price", e.target.value)} />
           </label>
           <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
             最低件數
             <input className="input mt-1 w-full" type="number" min="1" max="100" value={form.min_quantity} onChange={(e) => update("min_quantity", e.target.value)} />
             <span className="mt-1 block text-[11px]" style={{ color: "var(--text-muted)" }}>
-              各主題分開計算，只計下方指定商品；未指定商品時以該主題的登記件數計算。
+              各活動分開計算，只計下方指定商品；未指定商品時以該活動的登記件數計算。
             </span>
           </label>
           <fieldset className="sm:col-span-2">
@@ -420,7 +420,7 @@ export default function ShopPromotionPanel() {
             </p>
             <div className="mt-2 grid max-h-48 gap-1 overflow-y-auto rounded-lg border p-2 sm:grid-cols-2" style={{ borderColor: "var(--border)" }}>
               {scopedProducts.length === 0 ? (
-                <p className="p-2 text-xs" style={{ color: "var(--text-muted)" }}>所選主題目前沒有可選商品；未指定商品時，優惠適用於所選主題日後新增的商品。</p>
+                <p className="p-2 text-xs" style={{ color: "var(--text-muted)" }}>所選活動目前沒有可選商品；未指定商品時，優惠適用於所選活動日後新增的商品。</p>
               ) : scopedProducts.map((product) => (
                 <label key={product.id} className="flex min-h-10 items-center gap-2 rounded-md px-2 text-xs" style={{ color: "var(--text-secondary)" }}>
                   <input type="checkbox" checked={form.target_product_ids.includes(product.id)} onChange={() => toggleProduct(product.id)} />

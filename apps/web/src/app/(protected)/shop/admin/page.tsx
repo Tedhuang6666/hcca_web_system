@@ -32,7 +32,6 @@ import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import ProductPurchaseRulesEditor, { emptyPurchaseRules, type PurchaseRulesDraft } from "@/components/shop/ProductPurchaseRulesEditor";
 import ShopNoteGroupsPanel from "@/components/shop/ShopNoteGroupsPanel";
 import type {
-  ActivityOut,
   SchoolClassListItem,
   ProductCategoryOut,
   ProductSeriesOut,
@@ -45,13 +44,6 @@ import ShopPromotionPanel from "./ShopPromotionPanel";
 import { deadlineFromInput, deadlineInputValue } from "@/lib/shop-deadlines";
 import { parseSmartOptionsText, uniqueSmartOptions } from "@/lib/shop-admin-options";
 import type { SmartOptionDraft, SmartSourceGroup } from "@/lib/shop-admin-options";
-
-const ACTIVITY_STATUS_LABEL: Record<string, string> = {
-  draft: "草稿",
-  active: "進行中",
-  ended: "已結束",
-  archived: "已封存",
-};
 
 async function listProductChoices() {
   const products: ProductOut[] = [];
@@ -132,7 +124,7 @@ function MiniBtn({
   );
 }
 
-// ── 主題 / 系列 編輯 Modal ────────────────────────────────────────────────────
+// ── 活動 / 系列 編輯 Modal ────────────────────────────────────────────────────
 
 function EntityModal({
   kind,
@@ -151,31 +143,9 @@ function EntityModal({
   const [imageUrl, setImageUrl] = useState<string | null>(initial?.image_url ?? null);
   const [sortOrder, setSortOrder] = useState(String(initial?.sort_order ?? 0));
   const [isActive, setIsActive] = useState(initial?.is_active ?? true);
-  const [activityId, setActivityId] = useState(
-    initial && "activity_id" in initial ? initial.activity_id ?? "" : "",
-  );
-  const [activities, setActivities] = useState<ActivityOut[]>([]);
-  const [activitiesLoading, setActivitiesLoading] = useState(kind === "category");
-  const [activitiesLoadError, setActivitiesLoadError] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const label = kind === "category" ? "主題" : "系列";
-
-  useEffect(() => {
-    if (kind !== "category") return;
-    let cancelled = false;
-    void shopApi.listActivities()
-      .then((rows) => {
-        if (!cancelled) setActivities(rows);
-      })
-      .catch(() => {
-        if (!cancelled) setActivitiesLoadError(true);
-      })
-      .finally(() => {
-        if (!cancelled) setActivitiesLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [kind]);
+  const label = kind === "category" ? "活動" : "系列";
 
   return (
     <Modal title={`${editing ? "編輯" : "新增"}${label}`} onClose={onClose} size="md">
@@ -187,34 +157,6 @@ function EntityModal({
         <Field label="描述（選填）">
           <input value={description} onChange={(e) => setDescription(e.target.value)} className="input w-full" />
         </Field>
-        {kind === "category" && (
-          <Field label="所屬活動">
-            <select
-              value={activityId}
-              onChange={(e) => setActivityId(e.target.value)}
-              className="input w-full"
-              disabled={activitiesLoading || activitiesLoadError}
-            >
-              <option value="">一般商品（不分活動）</option>
-              {activityId && !activities.some((activity) => activity.id === activityId) && (
-                <option value={activityId}>目前所屬活動</option>
-              )}
-              {activities.map((activity) => (
-                <option key={activity.id} value={activity.id}>
-                  {activity.name}（{ACTIVITY_STATUS_LABEL[activity.status] ?? activity.status}）
-                </option>
-              ))}
-            </select>
-            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-              選擇活動後，後續預購會列入該活動訂單；未指定時會列入一般商品訂單。已建立的訂單不會自動拆分。
-            </p>
-            {activitiesLoadError && (
-              <p role="alert" className="mt-1 text-xs" style={{ color: "var(--danger)" }}>
-                無法載入活動清單，請重新開啟此視窗再試一次。
-              </p>
-            )}
-          </Field>
-        )}
         <Field label="圖片">
           <ImageField value={imageUrl} onChange={setImageUrl} />
         </Field>
@@ -229,7 +171,7 @@ function EntityModal({
         </div>
         <div className="flex gap-3 pt-1">
           <button
-            disabled={busy || (kind === "category" && activitiesLoading)}
+            disabled={busy}
             onClick={async () => {
               if (!name.trim()) { toast.error("請輸入名稱"); return; }
               setBusy(true);
@@ -242,10 +184,9 @@ function EntityModal({
                   is_active: isActive,
                 };
                 if (kind === "category") {
-                  const categoryBody = { ...body, activity_id: activityId || null };
-                  if (editing) await shopApi.updateCategory(initial!.id, categoryBody);
+                  if (editing) await shopApi.updateCategory(initial!.id, body);
                   else {
-                    await shopApi.createCategory(categoryBody);
+                    await shopApi.createCategory(body);
                   }
                 } else {
                   await shopApi.updateSeries(initial!.id, body);
@@ -557,12 +498,12 @@ function ProductFormModal({
         </div>
       ) : <div className="shop-product-form space-y-5">
         {!editing && !seriesId && categories.length > 1 ? (
-          <Field label="商品主題">
+          <Field label="活動">
             <select className="input w-full" value={selectedCategoryId} onChange={(event) => setSelectedCategoryId(event.target.value)}>
               {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
             </select>
           </Field>
-        ) : <p className="text-sm" style={{ color: "var(--text-secondary)" }}>商品主題：{categories.find((category) => category.id === selectedCategoryId)?.name}{seriesId ? "／目前系列" : ""}</p>}
+        ) : <p className="text-sm" style={{ color: "var(--text-secondary)" }}>活動：{categories.find((category) => category.id === selectedCategoryId)?.name}{seriesId ? "／目前系列" : ""}</p>}
         <div>
           <Field label="商品名稱">
             <input maxLength={200} placeholder="例如：校慶紀念衫" value={name} onChange={(e) => setName(e.target.value)} className="input w-full"
@@ -1824,7 +1765,7 @@ export default function ShopAdminPage() {
     shopApi
       .listCategories()
       .then(setCategories)
-      .catch((error) => setCatalogError(apiErrorMessage(error, "無法載入商品主題，請重新載入。")))
+      .catch((error) => setCatalogError(apiErrorMessage(error, "無法載入活動，請重新載入。")))
       .finally(() => setCatalogLoading(false));
   }, []);
   const loadSeries = useCallback((categoryId: string) => {
@@ -1879,7 +1820,7 @@ export default function ShopAdminPage() {
   }
 
   const delCategory = async (c: ProductCategoryOut) => {
-    if (!confirm(`確定刪除主題「${c.name}」？主題下必須沒有系列或商品才能刪除。`)) return;
+    if (!confirm(`確定刪除活動「${c.name}」？活動下必須沒有系列或商品才能刪除。`)) return;
     try {
       await shopApi.deleteCategory(c.id);
       loadCategories();
@@ -2040,14 +1981,14 @@ export default function ShopAdminPage() {
     <div className="p-5 space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>主題詳情</p>
+          <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>活動詳情</p>
           <h2 className="text-xl font-semibold mt-1 break-words" style={{ color: "var(--text-primary)" }}>{cat.name}</h2>
           <p className="text-sm mt-2" style={{ color: "var(--text-muted)" }}>{cat.description || "無描述"}</p>
         </div>
         <Thumb url={cat.image_url} size={72} />
       </div>
       <div className="flex flex-wrap gap-2">
-        <MiniBtn tone="primary" onClick={() => setCatModal({ initial: cat })}>編輯主題</MiniBtn>
+        <MiniBtn tone="primary" onClick={() => setCatModal({ initial: cat })}>編輯活動</MiniBtn>
         <MiniBtn tone="primary" onClick={() => setProductModal({ initial: null, seriesId: null })}>新增單一商品</MiniBtn>
       </div>
     </div>
@@ -2074,7 +2015,7 @@ export default function ShopAdminPage() {
         <div>
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>{tab === "stats" ? "訂購統計" : tab === "promotions" ? "優惠設定" : tab === "offices" ? "教師處室設定" : tab === "imports" ? "組織預購同步" : tab === "note-groups" ? "購買名單備註分組" : "商品設定"}</h1>
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            {tab === "stats" ? "按活動核對訂購金額與班聯收款進度。" : tab === "promotions" ? "設定折扣條件、優惠碼與適用商品。" : tab === "offices" ? "維護老師訂購商品時可選的辦公室與處室。" : tab === "imports" ? "自動匯入表單、核對尺寸與寄送訂單成立通知。" : tab === "note-groups" ? "依可訂購人的備註，跨商品查看各組名單分配。" : "選擇商品主題，新增商品、設定規格並上架。"}
+            {tab === "stats" ? "按活動核對訂購金額與班聯收款進度。" : tab === "promotions" ? "設定折扣條件、優惠碼與適用商品。" : tab === "offices" ? "維護老師訂購商品時可選的辦公室與處室。" : tab === "imports" ? "自動匯入表單、核對尺寸與寄送訂單成立通知。" : tab === "note-groups" ? "依可訂購人的備註，跨商品查看各組名單分配。" : "選擇活動，新增商品、設定規格並上架。"}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -2115,10 +2056,10 @@ export default function ShopAdminPage() {
             <aside className="min-w-0 overflow-hidden flex flex-col" style={{ borderRight: "1px solid var(--border)" }}>
               <div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom: "1px solid var(--border)" }}>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>主題</p>
-                  <p className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>{categories.length} 個主題</p>
+                  <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>活動</p>
+                  <p className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>{categories.length} 個活動</p>
                 </div>
-                <MiniBtn tone="primary" onClick={() => setCatModal({ initial: null })}>新增主題</MiniBtn>
+                <MiniBtn tone="primary" onClick={() => setCatModal({ initial: null })}>新增活動</MiniBtn>
               </div>
               <div className="flex-1 overflow-y-auto p-2 space-y-1">
                 {categories.map((c) => (
@@ -2139,8 +2080,8 @@ export default function ShopAdminPage() {
                     <MiniBtn tone="danger" onClick={() => void delCategory(c)}>刪除</MiniBtn>
                   </div>
                 ))}
-                {catalogLoading && <p role="status" className="p-4 text-sm">正在載入商品主題…</p>}
-                {!catalogLoading && !catalogError && categories.length === 0 && <p className="p-4 text-sm" style={{ color: "var(--text-secondary)" }}>尚未建立商品主題。按「新增主題」開始，例如「校慶商品」。</p>}
+                {catalogLoading && <p role="status" className="p-4 text-sm">正在載入活動…</p>}
+                {!catalogLoading && !catalogError && categories.length === 0 && <p className="p-4 text-sm" style={{ color: "var(--text-secondary)" }}>尚未建立活動。按「新增活動」開始，例如「校慶商品」。</p>}
               </div>
             </aside>
 
@@ -2150,13 +2091,13 @@ export default function ShopAdminPage() {
                   <div className="min-w-0">
                     <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>系列與商品</p>
                     <p className="text-sm font-medium truncate mt-0.5" style={{ color: "var(--text-primary)" }}>
-                      {cat ? cat.name : "請先選擇主題"}
+                      {cat ? cat.name : "請先選擇活動"}
                     </p>
                   </div>
                   {cat && (
                     <div className="flex flex-wrap justify-end gap-1.5">
                       <button type="button" className="btn btn-ghost min-h-11 px-3 text-xs lg:hidden"
-                        onClick={() => setMobileDetailOpen(true)}>主題設定</button>
+                        onClick={() => setMobileDetailOpen(true)}>活動設定</button>
                       <MiniBtn tone="primary" onClick={() => setProductModal({ initial: null, seriesId: null })}>新增單一商品</MiniBtn>
                       <MiniBtn tone="primary" onClick={() => setSeriesModal({ initial: null })}>新增系列</MiniBtn>
                     </div>
@@ -2165,7 +2106,7 @@ export default function ShopAdminPage() {
               </div>
               <div className="flex-1 overflow-y-auto">
                 {!cat ? (
-                  <p className="p-6 text-sm text-center" style={{ color: "var(--text-muted)" }}>先選擇商品主題，即可新增或管理商品。</p>
+                  <p className="p-6 text-sm text-center" style={{ color: "var(--text-muted)" }}>先選擇活動，即可新增或管理商品。</p>
                 ) : (
                   <div className="divide-y" style={{ borderColor: "var(--border)" }}>
                     <section className="space-y-2 p-3">
@@ -2205,7 +2146,7 @@ export default function ShopAdminPage() {
                     ))}
                     {seriesList.length === 0 && (
                       <p className="p-6 text-sm text-center" style={{ color: "var(--text-muted)" }}>
-                        此主題尚無系列；可直接新增商品，或建立系列管理多件商品。
+                        此活動尚無系列；可直接新增商品，或建立系列管理多件商品。
                       </p>
                     )}
                   </div>
@@ -2260,7 +2201,7 @@ export default function ShopAdminPage() {
       {mobileDetailOpen && cat && (
         <div className="lg:hidden">
           <Modal
-            title={product ? "商品詳情" : series ? "系列詳情" : "主題詳情"}
+            title={product ? "商品詳情" : series ? "系列詳情" : "活動詳情"}
             onClose={() => setMobileDetailOpen(false)}
             size="2xl"
           >

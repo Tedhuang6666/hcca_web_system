@@ -64,7 +64,7 @@ it("依工作切換內容，切回代訂保留未送出的資料", async () => {
   expect(screen.getByRole("region", { name: "登記班級收款" })).toBeVisible();
   expect(screen.queryByRole("region", { name: "每日收款" })).not.toBeInTheDocument();
   expect(screen.queryByRole("combobox", { name: "代訂班級" })).not.toBeInTheDocument();
-  expect(screen.queryByRole("combobox", { name: "收據主題" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("combobox", { name: "收據活動" })).not.toBeInTheDocument();
 
   switchTask("幫同學代訂");
   expect(screen.getByRole("combobox", { name: "代訂班級" })).toBeVisible();
@@ -161,7 +161,7 @@ describe("全校收款與訂單", () => {
     const statistics = await within(report).findByRole("group", { name: "收款統計" });
     expect(await within(statistics).findByText("NT$475")).toBeVisible();
     expect(within(statistics).getByText("2 班")).toBeVisible();
-    fireEvent.change(within(report).getByRole("combobox", { name: "收款活動（商品主題）" }), {
+    fireEvent.change(within(report).getByRole("combobox", { name: "收款活動" }), {
       target: { value: "shirts" },
     });
     fireEvent.change(within(report).getByRole("combobox", { name: "收款年級" }), {
@@ -179,7 +179,7 @@ describe("全校收款與訂單", () => {
     expect(within(details).queryByText("卡片")).not.toBeInTheDocument();
   });
 
-  it("同活動的不同主題與未綁活動的主題皆分開篩選，包含已下架主題", async () => {
+  it("同活動的不同活動與未綁活動的活動皆分開篩選，包含已下架活動", async () => {
     const now = new Date().toISOString();
     api.classPaymentReport.mockResolvedValue([
       { record_id: "dance-payment", collection_type: "class", class_id: "one", class_label: "一年一班", grade: 1,
@@ -200,7 +200,7 @@ describe("全校收款與訂單", () => {
     const report = screen.getByRole("region", { name: "每日收款" });
     const statistics = await within(report).findByRole("group", { name: "收款統計" });
     expect(await within(statistics).findByText("NT$2,000")).toBeVisible();
-    const picker = within(report).getByRole("combobox", { name: "收款活動（商品主題）" });
+    const picker = within(report).getByRole("combobox", { name: "收款活動" });
     expect(within(picker).queryByRole("option", { name: "校慶" })).not.toBeInTheDocument();
     fireEvent.change(picker, { target: { value: "shirts" } });
     expect(within(statistics).getByText("NT$100")).toBeVisible();
@@ -315,7 +315,7 @@ describe("全校收款與訂單", () => {
     api.downloadClassReceipts.mockResolvedValue(new Blob(["%PDF-1.7"], { type: "application/pdf" }));
     await openPage();
     switchTask("收款單據");
-    const receiptTopic = screen.getByRole("combobox", { name: "收據主題" });
+    const receiptTopic = screen.getByRole("combobox", { name: "收據活動" });
     expect(receiptTopic).toHaveTextContent("衣服");
     expect(receiptTopic).toHaveTextContent("袋子");
     expect(receiptTopic).toHaveTextContent("卡片");
@@ -533,7 +533,7 @@ describe("全校收款與訂單", () => {
     expect(api.setClassPaid).toHaveBeenCalledWith("class", true, "winter", undefined);
   });
 
-  it("未綁活動的傳情與舞會分開，只收勾選主題", async () => {
+  it("未綁活動的傳情與舞會分開，只收勾選活動", async () => {
     api.catalog.mockResolvedValue([
       { id: "love", name: "傳情", activity_id: null, series: [], products: [] },
       { id: "dance", name: "舞會", activity_id: null, series: [], products: [] },
@@ -601,19 +601,19 @@ describe("全校收款與訂單", () => {
     expect(within(workspace).queryByText("過期班級")).not.toBeInTheDocument();
   });
 
-  it("活動選單逐一列出主題，切換主題會清除商品並在各分頁用主題篩選", async () => {
+  it("活動選單逐一列出活動，切換活動會清除商品並在各分頁用活動篩選", async () => {
     api.catalog.mockResolvedValue([
       ...await api.catalog(),
-      { id: "general", name: "一般主題", activity_id: null, series: [], products: [] },
+      { id: "general", name: "一般活動", activity_id: null, series: [], products: [] },
     ]);
     await openPage();
     switchTask("商品總量");
     const select = screen.getByRole("combobox", { name: "活動" });
     expect(select).toHaveTextContent("衣服");
     expect(select).toHaveTextContent("袋子");
-    expect(select).toHaveTextContent("一般主題");
+    expect(select).toHaveTextContent("一般活動");
     expect(select).not.toHaveTextContent("校慶");
-    expect(screen.queryByRole("combobox", { name: "商品主題" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("combobox", { name: "活動" })).toHaveLength(1);
     fireEvent.change(select, { target: { value: "shirts" } });
     fireEvent.change(screen.getByRole("combobox", { name: "商品" }), { target: { value: "shirt" } });
     fireEvent.change(select, { target: { value: "bags" } });
