@@ -30,6 +30,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import Modal from "@/components/ui/Modal";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import ProductPurchaseRulesEditor, { emptyPurchaseRules, type PurchaseRulesDraft } from "@/components/shop/ProductPurchaseRulesEditor";
+import ShopNoteGroupsPanel from "@/components/shop/ShopNoteGroupsPanel";
 import type {
   ActivityOut,
   SchoolClassListItem,
@@ -1756,7 +1757,7 @@ export default function ShopAdminPage() {
   const { can } = usePermissions();
   const searchParams = useSearchParams();
   const requestedView = searchParams.get("view");
-  const tab = requestedView === "stats" || requestedView === "promotions" || requestedView === "offices" || requestedView === "imports" ? requestedView : "catalog";
+  const tab = requestedView === "stats" || requestedView === "promotions" || requestedView === "offices" || requestedView === "imports" || requestedView === "note-groups" ? requestedView : "catalog";
   const [clearOrdersOpen, setClearOrdersOpen] = useState(false);
   const [clearingOrders, setClearingOrders] = useState(false);
   const [statsRefreshKey, setStatsRefreshKey] = useState(0);
@@ -2071,9 +2072,9 @@ export default function ShopAdminPage() {
     <div className="shop-admin-page w-full min-w-0 space-y-5 max-w-7xl mx-auto px-4 py-5">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>{tab === "stats" ? "訂購統計" : tab === "promotions" ? "優惠設定" : tab === "offices" ? "教師處室設定" : tab === "imports" ? "組織預購同步" : "商品設定"}</h1>
+          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>{tab === "stats" ? "訂購統計" : tab === "promotions" ? "優惠設定" : tab === "offices" ? "教師處室設定" : tab === "imports" ? "組織預購同步" : tab === "note-groups" ? "購買名單備註分組" : "商品設定"}</h1>
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            {tab === "stats" ? "按活動核對訂購金額與班聯收款進度。" : tab === "promotions" ? "設定折扣條件、優惠碼與適用商品。" : tab === "offices" ? "維護老師訂購商品時可選的辦公室與處室。" : tab === "imports" ? "自動匯入表單、核對尺寸與寄送訂單成立通知。" : "選擇商品主題，新增商品、設定規格並上架。"}
+            {tab === "stats" ? "按活動核對訂購金額與班聯收款進度。" : tab === "promotions" ? "設定折扣條件、優惠碼與適用商品。" : tab === "offices" ? "維護老師訂購商品時可選的辦公室與處室。" : tab === "imports" ? "自動匯入表單、核對尺寸與寄送訂單成立通知。" : tab === "note-groups" ? "依可訂購人的備註，跨商品查看各組名單分配。" : "選擇商品主題，新增商品、設定規格並上架。"}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -2081,6 +2082,7 @@ export default function ShopAdminPage() {
           {tab === "catalog" && <button type="button" className="btn btn-primary min-h-11" disabled={catalogLoading || !!catalogError || categories.length === 0}
             onClick={() => setProductModal({ initial: null, seriesId: null })}>新增商品</button>}
           {tab === "catalog" && <Link href="/shop/admin?view=promotions" className="btn btn-secondary min-h-11">設定優惠</Link>}
+          {tab === "catalog" && <Link href="/shop/admin?view=note-groups" className="btn btn-secondary min-h-11">依備註查看購買名單</Link>}
           {tab === "catalog" && <Link href="/shop/admin?view=offices" className="btn btn-secondary min-h-11">教師處室設定</Link>}
           {tab === "catalog" && <Link href="/shop/admin?view=imports" className="btn btn-secondary min-h-11">組織預購同步</Link>}
           {tab === "catalog" && <Link href="/shop/council-orders#activity-order-closure-title" className="btn btn-secondary min-h-11">活動鎖單</Link>}
@@ -2097,6 +2099,8 @@ export default function ShopAdminPage() {
         <ShopOfficesPanel />
       ) : tab === "imports" ? (
         <ShopSheetImportPanel categories={categories} />
+      ) : tab === "note-groups" ? (
+        <ShopNoteGroupsPanel />
       ) : (
         <div className="card overflow-hidden lg:min-h-[620px]">
           {catalogError && <div role="alert" className="p-4 text-sm" style={{ color: "var(--danger)" }}>
