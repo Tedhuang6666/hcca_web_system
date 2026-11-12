@@ -29,19 +29,24 @@ from api.services.shop._analytics_insights import build_sales_insights
 from api.services.shop._costs import item_cost as order_item_cost
 
 
-def _allocate_amounts(order: Order, total_amount: int | None = None) -> dict[uuid.UUID, int]:
-    """按明細金額分攤整單金額；最大餘數法確保各明細加總等於整單。"""
+def _allocate_amounts(order: Order) -> dict[uuid.UUID, int]:
+    """先扣明細贈品折抵，再分攤整單金額；最大餘數法確保加總等於整單。"""
     items = sorted(order.items, key=lambda item: str(item.id))
-    gross = sum(item.quantity * item.unit_price for item in items)
-    if not gross:
+    # 贈品快照已指定實際折抵品項；不可把免費商品的折扣攤到其他付費商品。
+    weights = {
+        item.id: max(0, item.quantity * item.unit_price - (item.gift_discount_amount or 0))
+        for item in items
+    }
+    base = sum(weights.values())
+    if not base:
         return {item.id: 0 for item in items}
-    total = order.total_price if total_amount is None else total_amount
-    amounts = {item.id: total * item.quantity * item.unit_price // gross for item in items}
+    total = order.total_price
+    amounts = {item.id: total * weights[item.id] // base for item in items}
     remainder = total - sum(amounts.values())
     ranked = sorted(
         items,
         key=lambda item: (
-            -(total * item.quantity * item.unit_price % gross),
+            -(total * weights[item.id] % base),
             str(item.id),
         ),
     )
@@ -188,7 +193,9 @@ def _summarize(
         if not items:
             continue
         amounts = _allocate_amounts(order)
-        discounts = _allocate_amounts(order, order.discount_amount)
+        discounts = {
+            item.id: item.quantity * item.unit_price - amounts[item.id] for item in order.items
+        }
         amount = sum(amounts[item.id] for item in items)
         quantity = sum(item.quantity for item in items)
         discount = sum(discounts[item.id] for item in items)

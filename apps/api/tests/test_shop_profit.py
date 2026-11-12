@@ -243,3 +243,41 @@ async def test_empty_category_has_zero_cost(procurement_data, db_session):
     result = await profit_analysis(db_session, empty)
     assert result.products == []
     assert result.summary.profit_amount == result.summary.total_cost == 0
+
+
+@pytest.mark.parametrize("paid", [True, False])
+async def test_gift_discount_does_not_reduce_other_category_profit(
+    procurement_data, db_session, paid
+):
+    _, activity, category, other, shirt, bag, _ = procurement_data
+    db_session.add(
+        Order(
+            serial_number=f"PROFIT-{uuid.uuid4().hex[:12]}",
+            user_id=shirt.created_by,
+            activity_id=activity.id,
+            status=OrderStatus.CONFIRMED,
+            subtotal_price=450,
+            discount_amount=100,
+            total_price=350,
+            is_paid=paid,
+            items=[
+                OrderItem(product_id=shirt.id, quantity=1, unit_price=350),
+                OrderItem(
+                    product_id=bag.id,
+                    quantity=1,
+                    unit_price=100,
+                    gift_quantity=1,
+                    gift_discount_amount=100,
+                ),
+            ],
+        )
+    )
+    await db_session.flush()
+    result = await profit_analysis(db_session, category)
+    assert result.summary.revenue == 590  # 原有收入 240 + 本筆付費商品 350
+    assert result.summary.profit_amount == 430
+    assert result.summary.paid_amount == (590 if paid else 240)
+    assert result.summary.unpaid_amount == (0 if paid else 350)
+    assert result.summary.cash_balance == (430 if paid else 80)
+    gifted_category = await profit_analysis(db_session, other)
+    assert gifted_category.summary.revenue == 320  # 贈品收入為 0，保留原有訂單收入
