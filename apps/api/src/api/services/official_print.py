@@ -7,6 +7,9 @@ import datetime as dt
 import re
 from collections.abc import Sequence
 from io import BytesIO
+from pathlib import Path
+from urllib.parse import urlparse
+from urllib.request import url2pathname
 
 from api.core.clock import TAIPEI
 from api.models.petition import PetitionCase
@@ -57,11 +60,62 @@ from api.services.official_print_document import (
 _CN_DIGITS = "零一二三四五六七八九"
 
 
+def _allowed_font_uris() -> frozenset[str]:
+    """Return the file URIs of bundled fonts that print rendering may load."""
+    uris: set[str] = set()
+    for filename in (
+        _BUNDLED_KAI_FONT,
+        _FALLBACK_KAI_FONT,
+        _BUNDLED_LISHU_FONT,
+        _BUNDLED_TITLE_FONT,
+        _BUNDLED_XINGSHU_FONT,
+    ):
+        for candidate in _bundled_font_candidates(filename):
+            if candidate.is_file():
+                uris.add(candidate.resolve().as_uri())
+    return frozenset(uris)
+
+
+class _PrintURLFetcher:
+    """Restrict WeasyPrint resource loading to inline data and bundled fonts.
+
+    Official print HTML only references ``data:`` images and bundled fonts via
+    ``file:`` URIs. Allowing arbitrary URLs lets an injected
+    ``<link rel="attachment">`` read local files (``file:///proc/self/environ``)
+    and embed them into the produced PDF.
+    """
+
+    def __init__(self) -> None:
+        from weasyprint.urls import URLFetcher
+
+        self._fetcher = URLFetcher(allowed_protocols=("data", "file"))
+        self._allowed_font_uris = _allowed_font_uris()
+        # WeasyPrint inspects this flag when a fetcher raises.
+        self._fail_on_errors = False
+
+    def __call__(self, url: str):
+        return self.fetch(url)
+
+    def fetch(self, url: str, headers: dict | None = None):
+        scheme = urlparse(url).scheme.lower()
+        if scheme == "data":
+            return self._fetcher.fetch(url, headers)
+        if scheme == "file":
+            try:
+                uri = Path(url2pathname(urlparse(url).path)).resolve().as_uri()
+            except (OSError, ValueError) as exc:
+                raise ValueError(f"blocked file URL: {url}") from exc
+            if uri not in self._allowed_font_uris:
+                raise ValueError(f"blocked file URL: {url}")
+            return self._fetcher.fetch(url, headers)
+        raise ValueError(f"blocked URL scheme: {scheme or url}")
+
+
 def render_print_pdf(html_content: str) -> bytes:
     """Render official print HTML to PDF bytes."""
     from weasyprint import HTML
 
-    return HTML(string=html_content, base_url="/").write_pdf()
+    return HTML(string=html_content, base_url=None, url_fetcher=_PrintURLFetcher()).write_pdf()
 
 
 def _br(value: str | None) -> str:
