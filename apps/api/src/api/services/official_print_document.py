@@ -100,7 +100,11 @@ async def render_document_print_html(
     attendee_recipients = _recipient_names(doc, "attendee")
     observer_recipients = _recipient_names(doc, "observer")
     copy_recipients = _recipient_names(doc, "copy")
-    recipient_text = addressed_recipient_name or _join_names(main_recipients or primary_recipients)
+    recipient_text = (
+        _esc(addressed_recipient_name)
+        if addressed_recipient_name
+        else _join_names(main_recipients or primary_recipients)
+    )
     addressed_to = recipient_text or "（未填）"
     petition_case_id = getattr(doc, "petition_case_id", None)
     petition_case = await session.get(PetitionCase, petition_case_id) if petition_case_id else None

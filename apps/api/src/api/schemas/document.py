@@ -176,6 +176,17 @@ class RecipientCreate(BaseModel):
             raise ValueError("email_position_ids 必須搭配 email 遞送方式")
         return self
 
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        """Reject HTML in recipient names before they reach the print renderer."""
+        name = value.strip()
+        if not name:
+            raise ValueError("受文者名稱不可為空白")
+        if "<" in name or ">" in name:
+            raise ValueError("受文者名稱不可包含 HTML 標籤")
+        return name
+
 
 class DocumentDispatchCreate(BaseModel):
     """已發文公文的單一指定派送對象。"""

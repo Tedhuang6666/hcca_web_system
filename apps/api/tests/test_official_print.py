@@ -671,3 +671,88 @@ async def test_public_announcement_print_keeps_chief_signature() -> None:
     assert '<span class="signature-name">黃丞廷</span>' in rendered
     assert "主席" in "".join(page.extract_text() for page in reader.pages)
     assert "黃丞廷" in "".join(page.extract_text() for page in reader.pages)
+
+
+def _pdf_attachments(pdf: bytes) -> dict:
+    return dict(PdfReader(BytesIO(pdf)).attachments)
+
+
+def test_render_print_pdf_blocks_local_file_attachment(tmp_path: Path) -> None:
+    secret = tmp_path / "secret.txt"
+    secret.write_text("CANARY-LOCAL-FILE", encoding="utf-8")
+    html = (
+        f'<html><head><link rel="attachment" href="{secret.as_uri()}"></head><body>x</body></html>'
+    )
+
+    pdf = render_print_pdf(html)
+
+    assert _pdf_attachments(pdf) == {}
+    assert b"CANARY-LOCAL-FILE" not in pdf
+
+
+def test_render_print_pdf_blocks_remote_resources() -> None:
+    html = (
+        '<html><head><link rel="attachment" href="http://127.0.0.1:9/x"></head>'
+        "<body>x</body></html>"
+    )
+
+    assert _pdf_attachments(render_print_pdf(html)) == {}
+
+
+def test_render_print_pdf_still_allows_data_uri_images() -> None:
+    pixel = (
+        "data:image/png;base64,"
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+    )
+
+    pdf = render_print_pdf(f'<html><body><img src="{pixel}"></body></html>')
+
+    assert pdf.startswith(b"%PDF")
+
+
+@pytest.mark.asyncio
+async def test_addressed_recipient_name_is_html_escaped() -> None:
+    council = SimpleNamespace(id="council", name="班級聯合自治會", parent_id=None)
+    doc = SimpleNamespace(
+        category="decree",
+        issuer_full_name=None,
+        org=council,
+        org_id="council",
+        title="主席令",
+        urgency="normal",
+        classification="normal",
+        recipients=[],
+        attachments=[],
+        issued_at=None,
+        completed_at=None,
+        created_at=None,
+        serial_number="字第1號",
+        file_number=None,
+        retention_period=None,
+        approvals=[],
+        handler_name="承辦人",
+        handler_unit=None,
+        handler_email=None,
+        subject=None,
+        content=None,
+        action_required=None,
+        doc_description="茲發布本令。",
+    )
+    payload = '<link rel="attachment" href="file:///etc/passwd">'
+
+    rendered = await render_document_print_html(
+        _OrgSession(council), doc, addressed_recipient_name=payload
+    )
+
+    assert '<link rel="attachment"' not in rendered
+    assert "&lt;link" in rendered
+
+
+def test_recipient_name_rejects_html() -> None:
+    from pydantic import ValidationError
+
+    from api.schemas.document import RecipientCreate
+
+    with pytest.raises(ValidationError):
+        RecipientCreate(recipient_type="primary", name='<link rel="attachment" href="file:///x">')
+    assert RecipientCreate(recipient_type="primary", name="  二年1班  ").name == "二年1班"

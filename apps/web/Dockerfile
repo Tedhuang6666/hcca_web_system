@@ -35,6 +35,11 @@ ENV NEXT_PUBLIC_BUILD_COMMIT=$NEXT_PUBLIC_BUILD_COMMIT
 ENV NEXT_PUBLIC_BUILD_REF=$NEXT_PUBLIC_BUILD_REF
 ENV NEXT_PUBLIC_BUILD_TIME=$NEXT_PUBLIC_BUILD_TIME
 
+# 容器內部呼叫鏈（rewrites / middleware 內建時寫死）用的 API 位址；
+# 未傳入時沿用 http://localhost:8000 fallback，維持既有本機/CI 建置行為。
+ARG API_INTERNAL_URL=
+ENV API_INTERNAL_URL=$API_INTERNAL_URL
+
 RUN npm run build
 
 # ==============================================================================
