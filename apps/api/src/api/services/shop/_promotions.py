@@ -147,6 +147,72 @@ def _bundle_pricing_results(
     return selected
 
 
+def _free_pricing_results(
+    results: list[PromotionResult],
+    subtotal: int,
+    product_subtotals: dict[uuid.UUID, int] | None,
+    product_quantities: dict[uuid.UUID, int] | None,
+    categories: dict[uuid.UUID, uuid.UUID | None],
+) -> list[PromotionResult]:
+    free = [
+        result
+        for result in results
+        if result.promotion is not None
+        and result.promotion.discount_type == ShopDiscountType.PERCENTAGE
+        and result.promotion.discount_value == 100
+        and not result.promotion.target_products
+        and result.discount_amount > 0
+    ]
+    if not free:
+        return _bundle_pricing_results(
+            results, subtotal, product_subtotals, product_quantities, categories
+        )
+
+    # 活動全免先涵蓋完整品項（含規格加價），避免套組保留應付金額，
+    # 也避免已免費的商品再次折抵其他活動的消費。
+    amounts = dict(product_subtotals or {})
+    quantities = dict(product_quantities or {})
+    remaining = subtotal
+    selected = []
+    for result in free:
+        promotion = result.promotion
+        assert promotion is not None
+        amount = min(
+            result.discount_amount,
+            _discount_amount(promotion, remaining, amounts, quantities, categories),
+        )
+        if amount <= 0:
+            continue
+        if promotion.target_category_ids is None:
+            covered_ids = set(amounts)
+        else:
+            covered_ids = {
+                product_id
+                for total in topic_totals(promotion, amounts, quantities, categories)
+                if total.subtotal >= promotion.min_order_price
+                and sum(total.quantities.values()) >= promotion.min_quantity
+                for product_id in total.amounts
+            }
+        selected.append(PromotionResult(promotion, amount))
+        remaining -= amount
+        for product_id in covered_ids:
+            amounts.pop(product_id, None)
+            quantities.pop(product_id, None)
+
+    others = [
+        PromotionResult(
+            result.promotion,
+            min(
+                result.discount_amount,
+                _discount_amount(result.promotion, remaining, amounts, quantities, categories),
+            ),
+        )
+        for result in results
+        if result.promotion is not None and result not in free
+    ]
+    return selected + _bundle_pricing_results(others, remaining, amounts, quantities, categories)
+
+
 def _allocate_promotions(
     results: list[PromotionResult],
     subtotal: int,
@@ -157,7 +223,7 @@ def _allocate_promotions(
 ) -> tuple[PromotionAllocation, ...]:
     remaining = max(0, subtotal)
     allocations = []
-    for result in _bundle_pricing_results(
+    for result in _free_pricing_results(
         results, subtotal, product_subtotals, product_quantities, product_category_ids
     ):
         amount = min(remaining, result.discount_amount)

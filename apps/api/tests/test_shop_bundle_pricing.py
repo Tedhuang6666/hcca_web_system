@@ -201,3 +201,55 @@ def test_topic_discount_only_uses_unbundled_merchandise():
         "套組": 15,
         "主題折扣": 20,
     }
+
+
+@pytest.mark.parametrize("topic_scope", [False, True])
+def test_activity_free_coupon_covers_all_quantities_and_surcharges_before_bundles(topic_scope):
+    badge, charm = _product(30), _product(50)
+    category_id = uuid4()
+    free = _promotion(
+        "活動免費券",
+        ShopDiscountType.PERCENTAGE,
+        100,
+        categories=[str(category_id)] if topic_scope else None,
+    )
+    bundle = _promotion("套組", ShopDiscountType.BUNDLE_PRICE, 65, [badge, charm])
+    coupon = _promotion("優惠碼", ShopDiscountType.FIXED, 5, code="SAVE5")
+    for ordered in permutations([free, bundle, coupon]):
+        allocations = _allocate(
+            ordered,
+            {badge.id: 80, charm.id: 150},
+            {badge.id: 2, charm.id: 3},
+            {badge.id: category_id, charm.id: category_id},
+        )
+        assert [(row.promotion.name, row.discount_amount) for row in allocations] == [
+            ("活動免費券", 230)
+        ]
+
+
+def test_free_scope_cannot_discount_another_topic_twice_or_disable_its_bundle():
+    products = [_product(price) for price in (30, 50, 100, 200)]
+    free_topic, paid_topic = uuid4(), uuid4()
+    promotions = [
+        _promotion("免費活動套組", ShopDiscountType.BUNDLE_PRICE, 65, products[:2]),
+        _promotion("付費活動套組", ShopDiscountType.BUNDLE_PRICE, 270, products[2:]),
+        _promotion(
+            "免費活動優惠碼",
+            ShopDiscountType.FIXED,
+            50,
+            code="FREE50",
+            categories=[str(free_topic)],
+        ),
+        _promotion("活動免費券", ShopDiscountType.PERCENTAGE, 100, categories=[str(free_topic)]),
+        _promotion("重複免費券", ShopDiscountType.PERCENTAGE, 100, categories=[str(free_topic)]),
+    ]
+    allocations = _allocate(
+        promotions,
+        {row.id: row.price for row in products},
+        {row.id: 1 for row in products},
+        {row.id: free_topic if index < 2 else paid_topic for index, row in enumerate(products)},
+    )
+    assert {row.promotion.name: row.discount_amount for row in allocations} == {
+        "活動免費券": 80,
+        "付費活動套組": 30,
+    }

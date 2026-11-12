@@ -20,7 +20,7 @@ type PromotionForm = {
   target_product_ids: string[];
   product_prices: Record<string, string>;
   code: string;
-  discount_type: ShopDiscountType | "gift";
+  discount_type: ShopDiscountType | "gift" | "activity_free";
   discount_value: string;
   gift_quantity: string;
   min_order_price: string;
@@ -64,6 +64,15 @@ async function listAllProducts() {
     if (page.length < 100) return products;
     offset += page.length;
   }
+}
+
+function isActivityFreePromotion(promotion: ShopPromotionOut) {
+  return promotion.discount_type === "percentage" && promotion.discount_value === 100
+    && (promotion.target_products?.length ?? 0) === 0
+    && (promotion.target_category_ids?.length ?? 0) > 0
+    && (promotion.target_users?.length ?? 0) > 0
+    && promotion.code === null && promotion.max_uses === null
+    && promotion.min_order_price === 0 && promotion.min_quantity === 1;
 }
 
 export default function ShopPromotionPanel() {
@@ -112,6 +121,16 @@ export default function ShopPromotionPanel() {
     if (!form.name.trim()) {
       toast.error("請輸入優惠名稱");
       return;
+    }
+    if (form.discount_type === "activity_free") {
+      if (form.target_category_ids.length === 0) {
+        toast.error("活動免費券請至少選擇一個適用活動");
+        return;
+      }
+      if (targets.length === 0) {
+        toast.error("活動免費券請指定可使用帳號");
+        return;
+      }
     }
     const productPriceOverrides: { product_id: string; unit_price: number }[] = [];
     if (form.discount_type === "gift" && form.target_product_ids.length === 0) {
@@ -164,18 +183,19 @@ export default function ShopPromotionPanel() {
         target_category_ids: form.target_category_ids,
         name: form.name.trim(),
         target_identifiers: targets,
-        target_product_ids: form.target_product_ids,
+        target_product_ids: form.discount_type === "activity_free" ? [] : form.target_product_ids,
         product_price_overrides: productPriceOverrides,
-        code: form.code.trim().toUpperCase() || null,
-        discount_type: form.discount_type === "gift" ? "percentage" as const : form.discount_type,
-        discount_value: form.discount_type === "gift" ? 100
+        code: form.discount_type === "activity_free" ? null : form.code.trim().toUpperCase() || null,
+        discount_type: form.discount_type === "gift" || form.discount_type === "activity_free"
+          ? "percentage" as const : form.discount_type,
+        discount_value: form.discount_type === "gift" || form.discount_type === "activity_free" ? 100
           : form.discount_type === "price_override" ? 0 : Number(form.discount_value),
-        min_order_price: Number(form.min_order_price) || 0,
-        min_quantity: Number(form.min_quantity) || 1,
+        min_order_price: form.discount_type === "activity_free" ? 0 : Number(form.min_order_price) || 0,
+        min_quantity: form.discount_type === "activity_free" ? 1 : Number(form.min_quantity) || 1,
         gift_quantity: form.discount_type === "gift" ? Number(form.gift_quantity) : 1,
-        max_uses: form.max_uses ? Number(form.max_uses) : null,
+        max_uses: form.discount_type === "activity_free" ? null : form.max_uses ? Number(form.max_uses) : null,
         description: form.description.trim() || null,
-        is_public: form.is_public,
+        is_public: form.discount_type === "activity_free" ? false : form.is_public,
       };
       if (editingPromotionId) {
         await shopApi.updatePromotion(editingPromotionId, payload);
@@ -214,7 +234,8 @@ export default function ShopPromotionPanel() {
       ),
       code: promotion.code ?? "",
       discount_type: promotion.discount_type === "percentage" && promotion.discount_value === 100
-        && (promotion.target_products?.length ?? 0) > 0 ? "gift" : promotion.discount_type,
+        && (promotion.target_products?.length ?? 0) > 0 ? "gift"
+        : isActivityFreePromotion(promotion) ? "activity_free" : promotion.discount_type,
       discount_value: String(promotion.discount_value),
       gift_quantity: String(promotion.gift_quantity ?? 1),
       min_order_price: String(promotion.min_order_price),
@@ -313,16 +334,16 @@ export default function ShopPromotionPanel() {
         <div className="grid gap-3 sm:grid-cols-2">
           <fieldset className="sm:col-span-2" aria-describedby="promotion-topic-help">
             <legend className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
-              適用活動（選填，可複選）
+              {form.discount_type === "activity_free" ? "適用活動（必填，可複選）" : "適用活動（選填，可複選）"}
             </legend>
             <p id="promotion-topic-help" className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
               滿額與最低件數依各活動分開計算，不跨活動累加。指定商品優惠價可跨活動逐項設定。
             </p>
-            <label className="flex min-h-11 items-center gap-2 text-xs" style={{ color: "var(--text-secondary)" }}>
+            {form.discount_type !== "activity_free" && <label className="flex min-h-11 items-center gap-2 text-xs" style={{ color: "var(--text-secondary)" }}>
               <input type="checkbox" checked={form.target_category_ids.length === 0} disabled={saving}
                 onChange={() => update("target_category_ids", [])} />
               不限活動
-            </label>
+            </label>}
             <div className="grid gap-x-4 sm:grid-cols-2">
               {categories.map((category) => (
                 <label key={category.id} className="flex min-h-11 items-center gap-2 text-xs" style={{ color: "var(--text-secondary)" }}>
@@ -333,7 +354,7 @@ export default function ShopPromotionPanel() {
               ))}
             </div>
             {!loading && !loadError && categories.length === 0 && (
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>尚未建立活動，目前可設定不限活動的優惠。</p>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>{form.discount_type === "activity_free" ? "請先建立活動，再設定活動免費券。" : "尚未建立活動，目前可設定不限活動的優惠。"}</p>
             )}
           </fieldset>
           <label className="block text-xs font-medium sm:col-span-2" style={{ color: "var(--text-secondary)" }}>
@@ -341,11 +362,14 @@ export default function ShopPromotionPanel() {
             <input ref={nameInputRef} className="input mt-1 w-full" value={form.name} onChange={(e) => update("name", e.target.value)} placeholder="例如：校友回饋 9 折" />
           </label>
           <div className="sm:col-span-2">
-            <ShopTargetPicker label="可使用帳號（選填）" value={targetIdentifiers(form.target_identifiers)}
+            <ShopTargetPicker label={form.discount_type === "activity_free" ? "可使用帳號（必填）" : "可使用帳號（選填）"} value={targetIdentifiers(form.target_identifiers)}
               activityId={null} disabled={saving} max={500}
               onChange={(identifiers) => update("target_identifiers", identifiers.join("\n"))}
-              help="留空代表所有帳號可用。學號可先指定，對應帳號註冊後即可使用；Email 必須是已註冊帳號。加入名單後僅名單內帳號可用，適用自動優惠與優惠碼。" />
+              help={form.discount_type === "activity_free"
+                ? "僅名單內帳號可用。可搜尋姓名或批次輸入學號、Email；學號可先指定，註冊後即可使用。"
+                : "留空代表所有帳號可用。學號可先指定，對應帳號註冊後即可使用；Email 必須是已註冊帳號。加入名單後僅名單內帳號可用，適用自動優惠與優惠碼。"} />
           </div>
+          {form.discount_type !== "activity_free" && <>
           <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
             優惠碼（選填）
             <input className="input mt-1 w-full uppercase" value={form.code} onChange={(e) => update("code", e.target.value.toUpperCase())} placeholder="WELCOME10" autoCapitalize="characters" />
@@ -364,6 +388,7 @@ export default function ShopPromotionPanel() {
               </span>
             </span>
           </label>
+          </>}
           <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
             優惠內容
             <select className="input mt-1 w-full" value={form.discount_type} onChange={(e) => update("discount_type", e.target.value as PromotionForm["discount_type"])}>
@@ -372,9 +397,14 @@ export default function ShopPromotionPanel() {
               <option value="price_override">指定商品優惠價</option>
               <option value="bundle_price">商品套組組合價</option>
               <option value="gift">贈票／免費商品</option>
+              <option value="activity_free">活動免費券（全品項、不限次數）</option>
             </select>
           </label>
-          {form.discount_type === "gift" ? (
+          {form.discount_type === "activity_free" ? (
+            <p className="self-center text-xs" style={{ color: "var(--text-secondary)" }}>
+              指定帳號在所選活動每次購買都自動全免，包含所有數量與規格加價，也適用日後新增的商品。不需輸入優惠碼，不限使用次數。
+            </p>
+          ) : form.discount_type === "gift" ? (
             <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
               每項贈送數量
               <input className="input mt-1 w-full" type="number" min="1" max="100" step="1"
@@ -393,6 +423,7 @@ export default function ShopPromotionPanel() {
               為下方選擇的商品逐項設定優惠後單價；規格加價會照常計入。
             </p>
           )}
+          {form.discount_type !== "activity_free" && <>
           <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
             每個活動最低消費（選填）
             <input className="input mt-1 w-full" type="number" min="0" value={form.min_order_price} onChange={(e) => update("min_order_price", e.target.value)} />
@@ -485,6 +516,7 @@ export default function ShopPromotionPanel() {
             使用次數上限（選填）
             <input className="input mt-1 w-full" type="number" min="1" value={form.max_uses} onChange={(e) => update("max_uses", e.target.value)} placeholder="不限次數" />
           </label>
+          </>}
           <label className="block text-xs font-medium sm:col-span-2" style={{ color: "var(--text-secondary)" }}>
             備註（選填）
             <input className="input mt-1 w-full" value={form.description} onChange={(e) => update("description", e.target.value)} />
@@ -528,7 +560,9 @@ export default function ShopPromotionPanel() {
                   return user.email ?? "指定帳號";
                 }).join("、")
                 : promotion.target_email || "所有可使用帳號";
-              const benefitLabel = promotion.discount_type === "price_override"
+              const benefitLabel = isActivityFreePromotion(promotion)
+                ? "活動免費券 · 全品項與規格加價全免 · 不限次數"
+                : promotion.discount_type === "price_override"
                 ? (promotion.product_price_overrides ?? [])
                   .map((price) => `${price.product_name} NT$${price.unit_price.toLocaleString()}`)
                   .join("、")
