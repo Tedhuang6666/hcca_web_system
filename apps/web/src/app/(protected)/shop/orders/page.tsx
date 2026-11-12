@@ -121,7 +121,7 @@ export default function OrdersPage() {
             {activityGroups.map((group) => (
               <Link
                 key={group.key}
-                href={`/shop/orders/${group.orders[0].id}`}
+                href={`/shop/orders/${group.orders[0].id}?view=activity`}
                 className="shop-order-activity-link"
                 aria-label={`查看${group.label}預購詳情`}
               >
@@ -163,7 +163,7 @@ export default function OrdersPage() {
                   <div className="shop-preorder-info">
                     <span>{group.hasClassOrders ? "向班代繳款" : "依活動通知繳款"}</span>
                     <span className="shop-order-details">
-                      查看訂單詳情 <ArrowRight size={15} aria-hidden="true" />
+                      查看活動預購詳情 <ArrowRight size={15} aria-hidden="true" />
                     </span>
                   </div>
                 </section>

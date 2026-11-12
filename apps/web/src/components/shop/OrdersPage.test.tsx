@@ -81,7 +81,7 @@ describe("我的預購", () => {
     expect(screen.queryByText(/筆訂單/)).not.toBeInTheDocument();
     expect(screen.queryByText("登記資訊")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "查看校慶預購詳情" }))
-      .toHaveAttribute("href", "/shop/orders/first");
+      .toHaveAttribute("href", "/shop/orders/first?view=activity");
     expect(api.listOrders).toHaveBeenCalledWith({ limit: "500", offset: "0", my_only: "true" });
   });
 
@@ -135,7 +135,7 @@ describe("我的預購", () => {
       .toBeVisible();
     expect(within(activity).getByText("× 2")).toBeVisible();
     expect(screen.getByRole("link", { name: "查看校慶預購詳情" }))
-      .toHaveAttribute("href", "/shop/orders/student-order");
+      .toHaveAttribute("href", "/shop/orders/student-order?view=activity");
     expect(api.listDelegatedOrders).toHaveBeenCalledWith({ limit: "500", offset: "0" });
   });
 
@@ -147,6 +147,6 @@ describe("我的預購", () => {
     expect(await screen.findByText("品項資訊請查看訂單詳情。")).toBeVisible();
     expect(screen.queryByText("登記資訊")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "查看校慶預購詳情" }))
-      .toHaveAttribute("href", "/shop/orders/first");
+      .toHaveAttribute("href", "/shop/orders/first?view=activity");
   });
 });

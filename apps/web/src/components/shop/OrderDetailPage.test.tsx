@@ -14,7 +14,10 @@ const api = vi.hoisted(() => ({
   getProduct: vi.fn(),
   orderAssignments: vi.fn(),
   listZones: vi.fn(),
+  previewCurrentPromotion: vi.fn(),
+  applyCurrentPromotion: vi.fn(),
 }));
+const navigation = vi.hoisted(() => ({ search: "" }));
 
 vi.mock("@/lib/api", () => ({
   authApi: { me: api.me },
@@ -26,6 +29,8 @@ vi.mock("@/lib/api", () => ({
     catalog: api.catalog,
     getCloseStatus: api.getCloseStatus,
     getProduct: api.getProduct,
+    previewCurrentPromotion: api.previewCurrentPromotion,
+    applyCurrentPromotion: api.applyCurrentPromotion,
   },
   seatingApi: {
     orderAssignments: api.orderAssignments,
@@ -37,7 +42,7 @@ vi.mock("@/lib/api", () => ({
 vi.mock("@/hooks/useWS", () => ({ useWS: vi.fn() }));
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "first" }),
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => new URLSearchParams(navigation.search),
 }));
 
 const firstOrder = {
@@ -91,6 +96,7 @@ const addedOrder: OrderOut = {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  navigation.search = "";
   api.me.mockResolvedValue({ id: "student" });
   api.getOrder.mockImplementation(async (id: string) => id === "added" ? addedOrder : firstOrder);
   api.listOrders.mockResolvedValue([firstOrder, addedOrder]);
@@ -102,7 +108,43 @@ beforeEach(() => {
 });
 
 describe("公開訂單詳情", () => {
+  it.each(["", "from=council", "from=class"])("keeps a single order's saved amount and discounts consistent for %s", async (search) => {
+    navigation.search = search;
+    const saved: OrderOut = {
+      ...firstOrder, serial_number: "ORD-2026-001505", is_class_collected: false,
+      subtotal_price: 2200, discount_amount: 100, total_price: 2100,
+      applied_promotions: [
+        { promotion_id: "sports", name: "運動套餐", code: null, discount_amount: 50 },
+        { promotion_id: "winter", name: "過冬套餐", code: null, discount_amount: 50 },
+      ],
+      items: [600, 300, 250, 300, 750].map((price, index) => ({
+        ...firstOrder.items[0], id: `item-${index}`, product_id: `product-${index}`,
+        quantity: 1, unit_price: price, subtotal: price,
+      })),
+    };
+    const unrelated: OrderOut = { ...addedOrder, subtotal_price: 3045, discount_amount: 113, total_price: 2932 };
+    api.getOrder.mockImplementation(async (id: string) => id === saved.id ? saved : unrelated);
+    api.listOrders.mockResolvedValue([saved, unrelated]);
+    api.getCurrentRegistrations.mockResolvedValue([saved, unrelated]);
+
+    const { container } = render(<OrderDetailPage />);
+
+    expect(await screen.findByText("訂單 ORD-2026-001505")).toBeVisible();
+    expect(screen.getByText("預購總額").parentElement).toHaveTextContent("NT$2,100");
+    expect(screen.getByText("目前尚待繳交").parentElement).toHaveTextContent("NT$2,100");
+    expect(screen.getByText("商品小計").parentElement).toHaveTextContent("NT$2,200");
+    expect(screen.getByText("應付總額").parentElement).toHaveTextContent("NT$2,100");
+    expect(screen.getByText("優惠折抵（運動套餐）").parentElement).toHaveTextContent("NT$50");
+    expect(screen.getByText("優惠折抵（過冬套餐）").parentElement).toHaveTextContent("NT$50");
+    expect(container.querySelectorAll(".shop-order-item")).toHaveLength(5);
+    expect(screen.queryByText("NT$5,032")).not.toBeInTheDocument();
+    expect(api.listOrders).not.toHaveBeenCalled();
+    expect(api.previewCurrentPromotion).not.toHaveBeenCalled();
+    expect(api.applyCurrentPromotion).not.toHaveBeenCalled();
+  });
+
   it("allows direct editing of the pending addition when a collected order appears first", async () => {
+    navigation.search = "view=activity";
     api.getCurrentRegistrations.mockResolvedValue([firstOrder, addedOrder]);
     api.catalog.mockResolvedValue([{ id: "goods", products: [{ id: "bag", status: "active" }], series: [] }]);
     api.getCloseStatus.mockResolvedValue({ statuses: { goods: { is_closed: false } } });
@@ -128,6 +170,7 @@ describe("公開訂單詳情", () => {
   });
 
   it("combines every preorder from the same activity into one detail view", async () => {
+    navigation.search = "view=activity";
     const { container } = render(<OrderDetailPage />);
 
     expect(await screen.findByRole("heading", { name: "校慶" })).toBeVisible();
@@ -139,6 +182,19 @@ describe("公開訂單詳情", () => {
     expect(screen.getByText("NT$200")).toBeVisible();
     expect(screen.queryByText(/ORDER-/)).not.toBeInTheDocument();
     expect(api.getOrder).toHaveBeenCalledWith("added");
+  });
+
+  it("reloads a single saved order when leaving the activity summary", async () => {
+    navigation.search = "view=activity";
+    const { rerender } = render(<OrderDetailPage />);
+    expect(await screen.findByText("活動預購總額")).toHaveTextContent("活動預購總額");
+
+    navigation.search = "";
+    rerender(<OrderDetailPage />);
+
+    expect(await screen.findByText("訂單 ORDER-001")).toBeVisible();
+    expect(screen.getByText("預購總額").parentElement).toHaveTextContent("NT$200");
+    expect(screen.queryByText("NT$300")).not.toBeInTheDocument();
   });
 
   it("uses the first product media image when the primary image is empty", async () => {

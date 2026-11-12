@@ -32,11 +32,14 @@ type ActivityPreorder = ReturnType<typeof groupActivityPreorders>[number];
 
 export default function OrderDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const from = useSearchParams().get("from");
+  const searchParams = useSearchParams();
+  const from = searchParams.get("from");
   const fromClass = from === "class";
   const fromCouncil = from === "council";
+  const activityView = searchParams.get("view") === "activity" && !fromClass && !fromCouncil;
   const loginNext = fromClass ? `/shop/orders/${id}?from=class`
     : fromCouncil ? `/shop/orders/${id}?from=council`
+      : activityView ? `/shop/orders/${id}?view=activity`
       : `/shop/orders/${id}`;
   const loginHref = `/login?next=${encodeURIComponent(loginNext)}`;
   const backHref = fromClass ? "/shop/class-orders"
@@ -90,7 +93,9 @@ export default function OrderDetailPage() {
       setDelegatedEditableItemIds(delegatedItemIds);
 
       let summary: ActivityPreorder | null = null;
-      if (!fromClass && !fromCouncil && user.id === o.user_id) {
+      // A single order URL always shows its saved amount, regardless of who opens it.
+      // Only the explicit activity entry combines other registrations.
+      if (activityView && user.id === o.user_id) {
         const allOrders: OrderListItem[] = [];
         for (let offset = 0; ; offset += 500) {
           const page = await shopApi.listOrders({
@@ -112,7 +117,7 @@ export default function OrderDetailPage() {
         )),
         shopApi.getCurrentRegistrations().catch(() => []),
       ]);
-      const currentOrders = !fromClass && !fromCouncil
+      const currentOrders = activityView
         ? savedRelatedOrders.filter((related) => related.user_id === user.id
           && currentRegistrations.some((registration) => registration.id === related.id))
         : [];
@@ -251,7 +256,7 @@ export default function OrderDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [fromClass, fromCouncil, id]);
+  }, [activityView, id]);
 
   useEffect(() => { load(); }, [load]);
 
