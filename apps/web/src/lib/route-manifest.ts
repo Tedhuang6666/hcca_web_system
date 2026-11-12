@@ -34,7 +34,7 @@ export const SHOP_PRODUCT_ROUTE_PATTERNS = [
 
 export const PUBLIC_ROUTE_MANIFEST = {
   prefixes: ["/about", "/articles", "/auth", "/legal", "/links", "/live", "/login", "/maintenance", "/module-status", "/news", "/officers", "/pages", "/public", "/shop/cart", "/unsubscribe"],
-  exact: ["/", "/announcements", "/documents", "/partner-map", "/petitions/public", "/profile/complete", "/regulations", "/surveys", "/raffle", "/blocked", "/contact", "/shop", "/system-info"],
+  exact: ["/", "/announcements", "/documents", "/partner-map", "/petitions/public", "/profile/complete", "/regulations", "/surveys", "/raffle", "/blocked", "/contact", "/shop", "/system-info", "/security/report"],
   patterns: [
     ...SHOP_PRODUCT_ROUTE_PATTERNS,
     /^\/shop\/orders\/[^/]+$/,

@@ -90,6 +90,7 @@ const NON_INDEXABLE_PATHS = [
   "/module-status",
   "/profile/complete",
   "/unsubscribe",
+  "/security/report",
   "/announcements/new",
   "/documents/delegations",
   "/documents/new",

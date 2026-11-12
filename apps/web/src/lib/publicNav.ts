@@ -45,6 +45,7 @@ export const PUBLIC_NAV_ITEMS: PublicNavItemDef[] = [
 
   { key: "officers", href: "/officers", label: "班聯會幹部", description: "當屆幹部與公開資料", iconKey: "officers", group: "info", guestUsable: true },
   { key: "contact", href: "/contact", label: "聯絡我們", description: "聯絡班聯會與提出問題", iconKey: "contact", group: "info", guestUsable: true },
+  { key: "security-report", href: "/security/report", label: "漏洞與問題回報", description: "回報網站資安漏洞與功能錯誤", iconKey: "shield", group: "info", guestUsable: true },
   { key: "links", href: "/links", label: "平台連結", description: "常用服務與外部連結", iconKey: "links", group: "info", guestUsable: true },
 
   { key: "public-db", href: "/public", label: "公開資料庫", description: "所有公開資料與參與入口", iconKey: "public-db", group: "data", guestUsable: true },

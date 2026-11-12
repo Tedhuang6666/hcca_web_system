@@ -43,6 +43,7 @@ export * from "./api/judicial-petitions";
 export * from "./api/documents-recipients";
 export * from "./api/announcements";
 export * from "./api/site";
+export * from "./api/site-reports";
 export * from "./api/analytics";
 export * from "./api/email";
 export * from "./api/dashboard";

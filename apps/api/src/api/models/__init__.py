@@ -338,6 +338,12 @@ from api.models.site import (  # noqa: F401
     PublicSitePage,
     PublicSiteSettings,
 )
+from api.models.site_report import (  # noqa: F401
+    SiteReport,
+    SiteReportKind,
+    SiteReportSeverity,
+    SiteReportStatus,
+)
 from api.models.survey import (  # noqa: F401
     QuestionType,
     Survey,

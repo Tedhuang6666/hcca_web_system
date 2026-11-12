@@ -51,6 +51,15 @@ describe("route manifest", () => {
     expect(requiresAuthentication("/documents/new")).toBe(true);
   });
 
+  it("keeps the public report form available without exposing it to search", () => {
+    expect(getRoutePolicy("/security/report")).toMatchObject({
+      public: true,
+      requiresAuth: false,
+      indexable: false,
+      sitemap: false,
+    });
+  });
+
   it("keeps public document and regulation pages inside the app shell", () => {
     expect(getRoutePolicy("/documents").shell).toBe("app");
     expect(getRoutePolicy("/documents/public-id").shell).toBe("app");

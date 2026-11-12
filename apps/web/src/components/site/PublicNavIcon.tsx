@@ -12,6 +12,7 @@ import {
   MessageSquareText,
   Radio,
   Scale,
+  ShieldCheck,
   ShoppingBag,
   UsersRound,
   type LucideIcon,
@@ -34,6 +35,7 @@ const ICONS: Record<string, LucideIcon> = {
   "partner-map": MapPinned,
   surveys: ListChecks,
   petitions: MessageSquareText,
+  shield: ShieldCheck,
 };
 
 export default function PublicNavIcon({ iconKey, size }: { iconKey: string; size: number }) {

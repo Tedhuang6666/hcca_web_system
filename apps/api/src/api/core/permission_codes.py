@@ -143,6 +143,7 @@ class PermissionCode(StrEnum):
     RECOMMENDED_VENDOR_MANAGE = "recommended_vendor:manage"
 
     SITE_MANAGE = "site:manage"
+    SITE_REPORT_MANAGE = "site_report:manage"
 
     QR_CODE_MANAGE = "qr_code:manage"
 
@@ -860,6 +861,12 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "code": PermissionCode.SITE_MANAGE,
         "label": "管理公開網站",
         "desc": "管理官網首頁、公開頁面、平台連結與公開幹部顯示設定",
+    },
+    {
+        "group": "公開網站",
+        "code": PermissionCode.SITE_REPORT_MANAGE,
+        "label": "處理網站回報",
+        "desc": "查看、分類與回覆公開網站收到的漏洞及功能問題回報",
     },
     {
         "group": "企業級治理",

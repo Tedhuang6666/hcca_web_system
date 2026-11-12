@@ -99,6 +99,7 @@ class SimpleRateLimitMiddleware:
             ("/documents/attachments", 15, 60),
             ("/surveys", 40, 60),
             ("/petitions", 30, 60),
+            ("/site-reports", 20, 60),
         ]
 
     async def _policy_for_path(self, path: str) -> tuple[bool, int, int]:

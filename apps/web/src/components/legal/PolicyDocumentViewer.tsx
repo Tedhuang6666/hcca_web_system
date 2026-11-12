@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -85,6 +86,14 @@ export default function PolicyDocumentViewer({
         </section>
       )}
       <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{normalizeCouncilName(doc.content_md)}</ReactMarkdown>
+      {kind === "security" ? (
+        <p className="not-prose mt-6 rounded-lg border p-4 text-sm" style={{ borderColor: "var(--border)" }}>
+          發現網站有資安漏洞或功能異常？
+          <Link href="/security/report" className="ml-1 font-semibold underline" style={{ color: "var(--primary)" }}>
+            前往漏洞與問題回報表單
+          </Link>
+        </p>
+      ) : null}
     </>
   );
 }

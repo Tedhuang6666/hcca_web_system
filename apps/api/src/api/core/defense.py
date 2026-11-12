@@ -38,6 +38,7 @@ DEFAULT_RATE_LIMIT_OVERRIDES: list[dict[str, int | str]] = [
     {"path_prefix": "/documents/attachments", "requests": 15, "window_seconds": 60},
     {"path_prefix": "/surveys", "requests": 40, "window_seconds": 60},
     {"path_prefix": "/petitions", "requests": 30, "window_seconds": 60},
+    {"path_prefix": "/site-reports", "requests": 20, "window_seconds": 60},
 ]
 
 
