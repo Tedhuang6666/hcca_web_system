@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useState, useMemo, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useState, useMemo, type CSSProperties, type ReactNode } from "react";
+import RegulationSyncPanel from "@/components/regulations/RegulationSyncPanel";
 import Link from "next/link";
 import { regulationsApi, regulationHref } from "@/lib/api/regulations";
 import { useFetch } from "@/hooks/useFetch";
@@ -121,6 +122,8 @@ export default function RegulationsClient({
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [showAll, setShowAll] = useState(false);
+  const [syncVersion, setSyncVersion] = useState(0);
+  const onSynced = useCallback(() => setSyncVersion((version) => version + 1), []);
   const { can } = usePermissions();
 
   const canManage = can("regulation:create") || can("regulation:admin");
@@ -140,7 +143,7 @@ export default function RegulationsClient({
         ? regulationsApi.search(debouncedSearch.trim(), params)
         : regulationsApi.list(params);
     },
-    [category, debouncedSearch, showAll, canManage, workflow],
+    [category, debouncedSearch, showAll, canManage, workflow, syncVersion],
     "載入失敗",
     serverRegs,
     "regulations/list",
@@ -207,6 +210,8 @@ export default function RegulationsClient({
           )}
         </div>
       </div>
+
+      {can("regulation:admin") && <RegulationSyncPanel onSynced={onSynced} />}
 
       {/* 搜尋 + 分類 */}
       <div className="card p-4 flex flex-col gap-3">

@@ -9399,6 +9399,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/regulations/sync/{org_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Sync Status */
+        get: operations["get_sync_status_regulations_sync__org_id__get"];
+        /** Configure Sync */
+        put: operations["configure_sync_regulations_sync__org_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/regulations/sync/{org_id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request Sync */
+        post: operations["request_sync_regulations_sync__org_id__run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/regulations/{reg_id}": {
         parameters: {
             query?: never;
@@ -29006,6 +29041,87 @@ export interface components {
             /** Version */
             version: number;
             workflow_status: components["schemas"]["RegulationWorkflowStatus"];
+        };
+        /** RegulationSyncItemOut */
+        RegulationSyncItemOut: {
+            /**
+             * Article Count
+             * @default 0
+             */
+            article_count: number;
+            /** Detail */
+            detail: string;
+            /** File Id */
+            file_id: string;
+            /** Filename */
+            filename: string;
+            /** Regulation Id */
+            regulation_id?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "created" | "updated" | "unchanged" | "skipped" | "error";
+            /** Title */
+            title?: string | null;
+        };
+        /** RegulationSyncReportOut */
+        RegulationSyncReportOut: {
+            /** Checked At */
+            checked_at?: string | null;
+            /** Error */
+            error?: string | null;
+            /** Items */
+            items?: components["schemas"]["RegulationSyncItemOut"][];
+        };
+        /** RegulationSyncSourceOut */
+        RegulationSyncSourceOut: {
+            /** Folder Id */
+            folder_id: string;
+            /**
+             * Frequency
+             * @enum {string}
+             */
+            frequency: "manual" | "daily" | "weekly";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            last_report: components["schemas"]["RegulationSyncReportOut"];
+            /** Last Synced At */
+            last_synced_at: string | null;
+            /** Next Sync At */
+            next_sync_at: string | null;
+            /**
+             * Org Id
+             * Format: uuid
+             */
+            org_id: string;
+            /** Requested At */
+            requested_at: string | null;
+        };
+        /** RegulationSyncSourceUpdate */
+        RegulationSyncSourceUpdate: {
+            /**
+             * Folder Id
+             * @default 1DUxeDy7MeN0c_CoeLfd0S7oRWKr6oGkw
+             */
+            folder_id: string;
+            /**
+             * Frequency
+             * @default daily
+             * @enum {string}
+             */
+            frequency: "manual" | "daily" | "weekly";
+        };
+        /** RegulationSyncStatusOut */
+        RegulationSyncStatusOut: {
+            /** Configured */
+            configured: boolean;
+            /** Drive Ready */
+            drive_ready: boolean;
+            source?: components["schemas"]["RegulationSyncSourceOut"] | null;
         };
         /** RegulationTimeMachineOut */
         RegulationTimeMachineOut: {
@@ -54305,6 +54421,103 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RegulationSearchResult"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_sync_status_regulations_sync__org_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegulationSyncStatusOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    configure_sync_regulations_sync__org_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegulationSyncSourceUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegulationSyncStatusOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    request_sync_regulations_sync__org_id__run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegulationSyncStatusOut"];
                 };
             };
             /** @description Validation Error */

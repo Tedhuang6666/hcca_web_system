@@ -26,11 +26,15 @@ _MAX_DOCUMENT_XML_BYTES = 50 * 1024 * 1024
 _WORD_NS = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
 _NUMERAL_CHARS = "零〇一二三四五六七八九十百千兩"
 _STRUCTURAL_RE = re.compile(rf"^第\s*([{_NUMERAL_CHARS}0-9０-９\-]+)\s*(編|章|節)\s*(.*)$")
-_ARTICLE_RE = re.compile(rf"^第\s*([{_NUMERAL_CHARS}0-9０-９\-]+)\s*條\s*(.*)$")
+_LEGAL_NUMERAL = rf"[{_NUMERAL_CHARS}0-9０-９]+"
+_ARTICLE_RE = re.compile(
+    rf"^第\s*(?P<number>{_LEGAL_NUMERAL}(?:\s*[之\-－]\s*{_LEGAL_NUMERAL})*)"
+    rf"\s*條(?:\s*之\s*(?P<suffix>{_LEGAL_NUMERAL}))?\s*(?P<body>.*)$"
+)
 _PARAGRAPH_RE = re.compile(rf"^第\s*([{_NUMERAL_CHARS}0-9０-９\-]+)\s*項\s*(.*)$")
 _SUBPARAGRAPH_LINE_RE = re.compile(rf"^([{_NUMERAL_CHARS}0-9０-９]+)、\s*(.*)$")
 _ITEM_LINE_RE = re.compile(rf"^(?:（([{_NUMERAL_CHARS}0-9０-９]+)）|\((\d+)\))\s*(.*)$")
-_SUBPARAGRAPH_RE = re.compile(rf"(^|[：:。；;\n])([{_NUMERAL_CHARS}0-9０-９]+)、")
+_SUBPARAGRAPH_RE = re.compile(rf"(^|[：:。；;\n])\s*([{_NUMERAL_CHARS}0-9０-９]+)、")
 _MARKDOWN_RULE_RE = re.compile(r"^\s*(?:-{3,}|\*{3,}|_{3,})\s*$")
 _MARKDOWN_NUMERIC_HEADING_RE = re.compile(rf"^([{_NUMERAL_CHARS}0-9０-９]+)[、．.]\s*(.*)$")
 _MARKDOWN_PAREN_HEADING_RE = re.compile(rf"^[（(]([{_NUMERAL_CHARS}0-9０-９]+)[）)]\s*(.*)$")
@@ -238,7 +242,10 @@ def _parse_markdown_outline(
             continue
 
         if article_match:
-            raw_number, body = article_match.groups()
+            raw_number = article_match.group("number")
+            if article_match.group("suffix"):
+                raw_number += "-" + article_match.group("suffix")
+            body = article_match.group("body")
             key = add_node(
                 article_type=ArticleType.ARTICLE,
                 parent_key=nearest_structural_key(),
@@ -422,6 +429,7 @@ def _parse_markdown_outline(
 
 def _extract_markdown_lines(value: str) -> list[_MarkdownLine]:
     lines: list[_MarkdownLine] = []
+    value = value.translate(str.maketrans("", "", "\u200b\u200c\u200d\ufeff\u00ad"))
     for raw in value.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
         if not raw.strip() or _MARKDOWN_RULE_RE.match(raw):
             continue
@@ -612,7 +620,10 @@ def _parse_regulation_paragraphs(paragraphs: list[str]) -> ImportedRegulationDra
 
         article_match = _ARTICLE_RE.match(line)
         if article_match:
-            raw_number, body = article_match.groups()
+            raw_number = article_match.group("number")
+            if article_match.group("suffix"):
+                raw_number += "-" + article_match.group("suffix")
+            body = article_match.group("body")
             parent_key = _nearest_parent_key(stack)
             key = add_article(
                 article_type=ArticleType.ARTICLE,
@@ -1061,10 +1072,10 @@ def _format_structural_label(row: ImportedRegulationArticle) -> str:
 
 
 def _normalize_legal_number(value: str) -> str:
-    normalized = value.translate(str.maketrans("０１２３４５６７８９", "0123456789")).strip()
-    if re.fullmatch(r"\d+(?:-\d+)?", normalized):
-        return normalized
-    return str(_chinese_to_int(normalized))
+    normalized = re.sub(r"\s+", "", value).translate(
+        str.maketrans("０１２３４５６７８９－之", "0123456789--")
+    )
+    return "-".join(str(_chinese_to_int(part)) for part in normalized.split("-"))
 
 
 def _chinese_to_int(value: str) -> int:
@@ -1099,6 +1110,8 @@ def _chinese_to_int(value: str) -> int:
 
 
 def _normalize_spacing(value: str) -> str:
+    # Word/PDF 常夾入零寬空白；它不能把「第五條」切成無法辨識的條號。
+    value = value.translate(str.maketrans("", "", "\u200b\u200c\u200d\ufeff\u00ad"))
     return re.sub(r"\s+", " ", value).strip()
 
 

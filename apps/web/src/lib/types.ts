@@ -5,6 +5,11 @@ import type { ClassRosterSummary, CloseStatusItem as ApiCloseStatusItem } from "
 export type CloseStatusItem = Omit<ApiCloseStatusItem, "is_global"> & { is_global?: boolean };
 
 export type {
+  RegulationSyncSourceUpdate,
+  RegulationSyncSourceOut,
+  RegulationSyncStatusOut,
+  RegulationSyncReportOut,
+  RegulationSyncItemOut,
   ShopOfficeCreate,
   ShopOfficeUpdate,
   ShopOfficeOut,

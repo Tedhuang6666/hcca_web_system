@@ -111,6 +111,10 @@ def build_public_regulations_cache_key(
 
 router = APIRouter(prefix="/regulations", tags=["法規系統"])
 
+from api.routers.regulation_sync import router as sync_router  # noqa: E402
+
+router.include_router(sync_router)
+
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
 OptionalUser = Annotated[User | None, Depends(get_optional_user)]

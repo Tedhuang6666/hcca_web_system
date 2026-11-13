@@ -41,6 +41,7 @@ _SECRET_KEYS_EXPLICIT: frozenset[str] = frozenset(
         "DATABASE_URL_SYNC",
         "REDIS_URL",
         "GOOGLE_CLIENT_SECRET",
+        "GOOGLE_DRIVE_API_KEY",
         "RESEND_API_KEY",
         "LINE_CHANNEL_SECRET",
         "LINE_CHANNEL_ACCESS_TOKEN",

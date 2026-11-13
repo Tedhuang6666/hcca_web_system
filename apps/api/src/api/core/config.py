@@ -289,6 +289,7 @@ class Settings(BaseSettings):
     # --- Google OAuth2 設定 ---
     GOOGLE_CLIENT_ID: str = Field(default="")
     GOOGLE_CLIENT_SECRET: str = Field(default="")
+    GOOGLE_DRIVE_API_KEY: str = Field(default="", description="公開法規資料夾的 Drive API 金鑰")
     GOOGLE_REDIRECT_URI: str = "http://localhost:8000/auth/google/callback"
     GOOGLE_TASKS_REDIRECT_URI: str = "http://localhost:8000/user/google-tasks/callback"
     LOGIN_ALLOWED_EMAIL_DOMAINS: list[str] = Field(

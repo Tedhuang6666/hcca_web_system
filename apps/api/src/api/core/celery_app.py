@@ -137,6 +137,10 @@ celery_app.conf.include = list(celery_app.conf.include or []) + [
 ]
 
 celery_app.conf.beat_schedule = {
+    "sync-regulation-sources-every-minute": {
+        "task": "api.services.regulation_tasks.sync_regulation_sources",
+        "schedule": 60.0,
+    },
     "sync-organization-preorders-every-60s": {
         "task": "api.services.shop_tasks.sync_organization_preorders",
         "schedule": 60.0,

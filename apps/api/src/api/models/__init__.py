@@ -275,6 +275,7 @@ from api.models.regulation import (  # noqa: F401
     RegulationCategory,
     RegulationRevision,
 )
+from api.models.regulation_sync import RegulationSyncSource  # noqa: F401
 
 # 儲存常用篩選（公開檢索/檔案系統化查詢）
 from api.models.saved_filter import SavedFilter  # noqa: F401

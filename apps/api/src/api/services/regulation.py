@@ -717,6 +717,8 @@ async def import_regulation_document(
             )
             if updated is not None:
                 return updated
+            # 同版或較舊的來源不應再建立第二筆同名現行法規。
+            return existing
 
     reg = await create_regulation_from_import(
         session,
