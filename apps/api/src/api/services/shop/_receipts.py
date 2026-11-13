@@ -77,7 +77,11 @@ def _receipt_orders_by_topic(
         # 舊訂單可能跨活動；按成交品項金額分攤實付總額，累計取整避免尾差遺失。
         subtotal = sum(item.unit_price * item.quantity for item in order.items)
         cumulative_subtotal = allocated_total = allocated_received = 0
-        received = order.total_price if order.is_paid else order.received_amount
+        received = (
+            order.total_price
+            if order.is_paid
+            else (order.received_amount if order.received_amount is not None else 0)
+        )
         for topic_id in sorted(items_by_topic, key=str):
             label, items = items_by_topic[topic_id]
             cumulative_subtotal += sum(item.unit_price * item.quantity for item in items)
@@ -212,7 +216,9 @@ def _render_class_receipt_pdf(
     if discount:
         rows.append(("優惠折抵", "", "", f"{-discount:,}", ""))
     received = sum(
-        order.total_price if isinstance(order, Order) and order.is_paid else order.received_amount
+        order.total_price
+        if isinstance(order, Order) and order.is_paid
+        else (order.received_amount if order.received_amount is not None else 0)
         for order in orders
     )
     if 0 < received < total:
