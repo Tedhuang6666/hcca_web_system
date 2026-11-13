@@ -58,6 +58,8 @@ async def export_supplement_receipt(session: AsyncSession, order: Order) -> byte
 
 
 async def separate_order(session: AsyncSession, order: Order, *, actor_id: uuid.UUID) -> Order:
+    if order.is_class_balance:
+        raise ValueError("班級尾款須以整班收款處理，無法分為個人補收款")
     original_class_id = order.supplement_class_id or order.class_id
     if original_class_id is None or order.test_product_id is not None:
         raise ValueError("此訂單無法分出班級收款")
@@ -106,6 +108,8 @@ async def rejoin_class_order(session: AsyncSession, order: Order) -> Order:
     refreshed = await get_order(session, order.id)
     if refreshed is None or refreshed.supplement_class_id is None:
         raise ValueError("此訂單已不在補收款清單")
+    if refreshed.is_class_balance:
+        raise ValueError("班級尾款已屬於原班級，請以整班收款補齊或撤銷班級收款")
     if refreshed.is_paid:
         raise ValueError("已繳費訂單已歸回原班")
     if refreshed.status in (OrderStatus.CANCELLED, OrderStatus.REFUNDED):

@@ -342,10 +342,12 @@ async def order_summary(
         row.order_count += 1
         row.item_count += item_count
         row.total_amount += amount
-        if order.is_paid:
-            row.paid_amount += amount
-        else:
-            row.unpaid_amount += amount
+        received = order.total_price if order.is_paid else order.received_amount
+        paid_amount = (
+            min(amount, round(received * amount / order.total_price)) if order.total_price else 0
+        )
+        row.paid_amount += paid_amount
+        row.unpaid_amount += amount - paid_amount
 
     if group_by == "class":
         rows = sorted(
@@ -365,6 +367,7 @@ async def order_summary(
 
 async def class_payment_report(session: AsyncSession) -> list[ClassPaymentReportItemOut]:
     """按商品主題與實際付款日列出收款，不以共用班級確認時間重算舊款。"""
+    from api.models.shop_class_collection import ShopClassCollection
     from api.services.shop._receipts import _receipt_order_options, _receipt_orders_by_topic
 
     class_id = func.coalesce(Order.supplement_class_id, Order.class_id)
@@ -384,9 +387,10 @@ async def class_payment_report(session: AsyncSession) -> list[ClassPaymentReport
         )
         .options(*_receipt_order_options())
         .where(
+            Order.is_class_balance.is_(False),
             Order.test_product_id.is_(None),
             Order.assistance_scope != "council_gift",
-            Order.is_paid.is_(True),
+            (Order.is_paid.is_(True) | (Order.received_amount > 0)),
             confirmed_at.is_not(None),
             Order.status.notin_((OrderStatus.CANCELLED, OrderStatus.REFUNDED)),
         )
@@ -398,15 +402,39 @@ async def class_payment_report(session: AsyncSession) -> list[ClassPaymentReport
             Order.id,
         )
     )
+    report_rows = [
+        (
+            order,
+            school_class,
+            paid_at,
+            order.total_price if order.is_paid else order.received_amount,
+        )
+        for order, school_class, paid_at in result.all()
+    ]
+    collections = await session.execute(
+        select(Order, SchoolClass, ShopClassCollection.collected_at, ShopClassCollection.amount)
+        .join(ShopClassCollection, ShopClassCollection.order_id == Order.id)
+        .join(SchoolClass, SchoolClass.id == Order.class_id)
+        .options(*_receipt_order_options())
+        .where(
+            Order.is_class_balance.is_(True),
+            Order.test_product_id.is_(None),
+            Order.status.notin_((OrderStatus.CANCELLED, OrderStatus.REFUNDED)),
+        )
+    )
+    report_rows.extend(tuple(row) for row in collections.all())
+    report_rows.sort(key=lambda row: (row[1].grade, row[1].class_code, str(row[1].id)))
     groups: dict[str, ClassPaymentReportItemOut] = {}
+    counted_orders: dict[str, set[uuid.UUID]] = {}
     class_positions: dict[uuid.UUID, int] = {}
-    for order, school_class, paid_at in result.all():
+    for order, school_class, paid_at, collected_amount in report_rows:
         class_positions.setdefault(school_class.id, len(class_positions))
         paid_at = paid_at.replace(tzinfo=UTC) if paid_at.tzinfo is None else paid_at
         paid_date = paid_at.astimezone(TAIPEI).date()
-        individual = order.supplement_class_id is not None
+        individual = order.supplement_class_id is not None and not order.is_class_balance
         activity_label = order.activity.name if order.activity else "一般商品"
         # 沿用收據的主題還原與折扣分攤，舊跨主題訂單亦不會重複計入全額。
+        cumulative_total = allocated_amount = 0
         for category_id, (category_label, topic_orders) in _receipt_orders_by_topic(
             [order], "未分類商品"
         ).items():
@@ -431,8 +459,14 @@ async def class_payment_report(session: AsyncSession) -> list[ClassPaymentReport
                     order_count=0,
                 )
                 groups[key] = row
-            row.amount += sum(topic_order.total_price for topic_order in topic_orders)
-            row.order_count += 1
+            cumulative_total += sum(topic_order.total_price for topic_order in topic_orders)
+            target_amount = (
+                collected_amount * cumulative_total // order.total_price if order.total_price else 0
+            )
+            row.amount += target_amount - allocated_amount
+            allocated_amount = target_amount
+            counted_orders.setdefault(key, set()).add(order.id)
+            row.order_count = len(counted_orders[key])
             row.confirmed_at = max(row.confirmed_at, paid_at)
     # 保留年級、班級排序；同班的補收款接在班級收款之後。
     return sorted(

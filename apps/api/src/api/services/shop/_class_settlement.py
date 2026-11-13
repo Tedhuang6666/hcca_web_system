@@ -6,7 +6,7 @@ import uuid
 from collections.abc import Iterable
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -21,6 +21,7 @@ from api.models.shop import (
     ProductStatus,
     ShopOrderClose,
 )
+from api.models.shop_class_collection import ShopClassCollection
 from api.models.shop_class_payment import ShopClassPayment
 from api.models.user import User
 from api.schemas.shop import CurrentRegistrationUpdate
@@ -111,7 +112,13 @@ async def set_class_member_product(
     for order, item in product_lines:
         signature = _options_signature(item.selected_options or [])
         current_options.setdefault(signature, item.selected_options or [])
-        if order.is_paid or order.is_class_collected or order.assistance_scope == "council_gift":
+        if (
+            order.is_paid
+            or order.is_class_collected
+            or order.is_class_balance
+            or order.received_amount > 0
+            or order.assistance_scope == "council_gift"
+        ):
             locked_quantities[signature] = locked_quantities.get(signature, 0) + item.quantity
         else:
             editable_lines.setdefault(signature, []).append((order, item))
@@ -190,6 +197,8 @@ async def set_class_member_product(
                         for candidate in orders
                         if not candidate.is_paid
                         and not candidate.is_class_collected
+                        and not candidate.is_class_balance
+                        and not candidate.received_amount
                         and candidate.assistance_scope != "council_gift"
                         and all(
                             item.product is not None and _product_order_scope(item.product) == scope
@@ -268,7 +277,13 @@ async def set_class_paid(
     actor_id: uuid.UUID,
     activity_id: uuid.UUID | None,
     category_id: uuid.UUID | None = None,
+    received_amount: int | None = None,
+    expected_unpaid_amount: int | None = None,
 ) -> list[Order]:
+    if not is_paid and received_amount is not None:
+        raise ValueError("撤銷收款時不可提供實收金額")
+    if received_amount is not None and expected_unpaid_amount is None:
+        raise ValueError("請重新核對班級待收金額")
     if category_id is not None:
         category = await session.get(ProductCategory, category_id)
         if category is None:
@@ -286,14 +301,6 @@ async def set_class_paid(
         )
         .execution_options(populate_existing=True)
     )
-    if payment is None:
-        payment = ShopClassPayment(class_id=class_id, activity_id=activity_id)
-        session.add(payment)
-    if category_id is None and payment.is_paid != is_paid:
-        payment.is_paid = is_paid
-        payment.confirmed_at = datetime.now(UTC) if is_paid else None
-        payment.confirmed_by_id = actor_id if is_paid else None
-    await session.flush()
     activity_filter = (
         Order.activity_id.is_(None) if activity_id is None else Order.activity_id == activity_id
     )
@@ -315,18 +322,69 @@ async def set_class_paid(
                 )
                 .order_by(Order.id)
                 .with_for_update()
+                .execution_options(populate_existing=True)
             )
         )
         .scalars()
         .all()
     )
+    unpaid = sum(
+        max(0, order.total_price - (order.total_price if order.is_paid else order.received_amount))
+        for order in orders
+    )
+    if is_paid and expected_unpaid_amount is not None and unpaid != expected_unpaid_amount:
+        raise ValueError("班級待收金額已變動，請重新載入後核對")
+    if received_amount is not None and not 0 < received_amount <= unpaid:
+        raise ValueError("本次實收金額必須大於零，且不可超過待收金額")
+    if payment is None:
+        payment = ShopClassPayment(class_id=class_id, activity_id=activity_id)
+        session.add(payment)
+    if category_id is None and payment.is_paid != is_paid:
+        payment.is_paid = is_paid
+        payment.confirmed_at = datetime.now(UTC) if is_paid else None
+        payment.confirmed_by_id = actor_id if is_paid else None
+    remaining = received_amount if received_amount is not None else unpaid
+    from api.services.shop._collection_ledger import record_class_collection
+
+    partial = is_paid and remaining < unpaid
     newly_paid_orders: list[Order] = []
     for order in orders:
-        if order.is_paid != is_paid:
-            await set_order_paid(session, order, is_paid=is_paid, actor_id=actor_id)
-            if is_paid:
+        if is_paid and not order.is_paid:
+            allocation = min(remaining, max(0, order.total_price - order.received_amount))
+            remaining -= allocation
+            if partial:
+                # 尾款仍屬於整班，不分出學生個人的追加訂單。
+                was_class_balance = order.is_class_balance
+                order.is_class_balance = True
+                order.supplement_class_id = class_id
+                if not was_class_balance and order.received_amount:
+                    record_class_collection(
+                        session,
+                        order,
+                        amount=order.received_amount,
+                        actor_id=order.paid_by_id,
+                        collected_at=order.paid_at,
+                    )
+            if order.received_amount + allocation >= order.total_price:
+                await set_order_paid(session, order, is_paid=True, actor_id=actor_id)
                 newly_paid_orders.append(order)
+            elif allocation:
+                record_class_collection(session, order, amount=allocation, actor_id=actor_id)
+                order.received_amount += allocation
+                order.paid_at = datetime.now(UTC)
+                order.paid_by_id = actor_id
+                await receivable_svc.sync_shop_order(session, order)
+        elif not is_paid:
+            if order.is_class_balance:
+                await session.execute(
+                    delete(ShopClassCollection).where(ShopClassCollection.order_id == order.id)
+                )
+                order.is_class_balance = False
+                order.supplement_class_id = None
+            if order.is_paid or order.received_amount:
+                await set_order_paid(session, order, is_paid=False, actor_id=actor_id)
     if category_id is not None:
+        await session.flush()
         # 一般商品共用舊收款紀錄；是否鎖定各活動仍由實際已繳訂單判斷。
         # 撤銷一個活動不能清掉其他活動的收款確認。
         has_paid_orders = await session.scalar(
@@ -335,20 +393,21 @@ async def set_class_paid(
                 Order.class_id == class_id,
                 Order.activity_id.is_(None),
                 Order.test_product_id.is_(None),
-                Order.is_paid.is_(True),
+                (Order.is_paid.is_(True) | (Order.received_amount > 0)),
                 Order.status.notin_([OrderStatus.CANCELLED, OrderStatus.REFUNDED]),
             )
             .limit(1)
         )
         payment.is_paid = has_paid_orders is not None
-        if is_paid and newly_paid_orders:
+        if is_paid and (newly_paid_orders or received_amount):
             payment.confirmed_at = datetime.now(UTC)
             payment.confirmed_by_id = actor_id
         elif not payment.is_paid:
             payment.confirmed_at = None
             payment.confirmed_by_id = None
         await session.flush()
-    if newly_paid_orders:
+    await session.flush()
+    if newly_paid_orders and not partial:
         from api.services.shop._class_payment_notifications import (
             queue_class_payment_confirmation,
         )

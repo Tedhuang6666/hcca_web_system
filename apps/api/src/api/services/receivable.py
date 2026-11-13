@@ -180,7 +180,7 @@ async def sync_shop_order(db: AsyncSession, order: Order) -> Receivable | None:
     item.user_id = order.user_id
     item.class_id = order.class_id
     item.amount = order.total_price
-    item.paid_amount = order.total_price if order.is_paid else 0
+    item.paid_amount = order.total_price if order.is_paid else order.received_amount
     item.paid_at = order.paid_at
     item.collected_by_id = order.paid_by_id
     item.status = (
@@ -249,10 +249,19 @@ async def _sync_source_payment(db: AsyncSession, item: Receivable, *, is_paid: b
     if item.source_type == ReceivableSource.SHOP_ORDER.value:
         order = await db.get(Order, item.source_id)
         if order:
-            if order.supplement_class_id is not None:
+            from api.services.shop._collection_ledger import record_class_collection
+
+            record_class_collection(
+                db,
+                order,
+                amount=item.paid_amount - order.received_amount,
+                actor_id=item.collected_by_id,
+            )
+            if order.supplement_class_id is not None and not order.is_class_balance:
                 order.class_id = order.supplement_class_id if is_paid else None
                 item.class_id = order.class_id
             order.is_paid = is_paid
+            order.received_amount = item.paid_amount
             order.paid_at = item.paid_at if is_paid else None
             order.paid_by_id = item.collected_by_id if is_paid else None
     elif item.source_type == ReceivableSource.MEAL_ORDER.value:

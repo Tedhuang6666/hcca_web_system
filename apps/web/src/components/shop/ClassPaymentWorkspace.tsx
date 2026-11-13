@@ -55,6 +55,7 @@ export default function ClassPaymentWorkspace({ catalog, activities, optionsLoad
   const [saveError, setSaveError] = useState("");
   const [message, setMessage] = useState("");
   const [receiptError, setReceiptError] = useState("");
+  const [receivedInput, setReceivedInput] = useState("");
 
   useEffect(() => {
     if (!selectedScopes.length || optionsLoading || optionsError) return;
@@ -84,10 +85,17 @@ export default function ClassPaymentWorkspace({ catalog, activities, optionsLoad
     const targets = entries.filter(({ row }) => (paid ? row.unpaid_amount : row.paid_amount) > 0);
     if (!targets.length) return;
     setSaveError("");
+    setReceivedInput(String(targets.reduce((sum, { row }) => sum + row.unpaid_amount, 0)));
     setConfirmation({ entries: targets, paid, classLabel: targets[0].row.label });
   };
   const submit = async () => {
     if (!confirmation || savingRef.current) return;
+    const unpaid = confirmation.entries.reduce((sum, { row }) => sum + row.unpaid_amount, 0);
+    const received = Number(receivedInput);
+    if (confirmation.paid && (!receivedInput.trim() || !Number.isSafeInteger(received) || received <= 0 || received > unpaid)) {
+      setSaveError("請輸入大於零、且不超過待收金額的整數。");
+      return;
+    }
     savingRef.current = true;
     setSaving(true);
     setSaveError("");
@@ -98,13 +106,20 @@ export default function ClassPaymentWorkspace({ catalog, activities, optionsLoad
       // 同一班級的請求依序執行，避免班級鎖互相等待；成功項目不再重送。
       for (const entry of target.entries) {
         try {
-          await shopApi.setClassPaid(entry.row.key, target.paid, entry.scope.activityId, entry.scope.categoryId);
+          if (target.paid && received < unpaid) {
+            await shopApi.setClassPaid(entry.row.key, true, entry.scope.activityId, entry.scope.categoryId,
+              { received_amount: received, expected_unpaid_amount: entry.row.unpaid_amount });
+          } else {
+            await shopApi.setClassPaid(entry.row.key, target.paid, entry.scope.activityId, entry.scope.categoryId);
+          }
         } catch {
           failed.push(entry);
         }
       }
       const completed = target.entries.filter((entry) => !failed.includes(entry));
-      if (completed.length) setMessage(`${target.classLabel}的「${completed.map((entry) => entry.scope.label).join("、")}」已${target.paid ? "確認收款" : "撤銷收款確認"}。`);
+      if (completed.length) setMessage(target.paid && received < unpaid
+        ? `${target.classLabel}已收 ${money(received)}，剩餘 ${money(unpaid - received)} 已列入補收款區的整班尾款。`
+        : `${target.classLabel}的「${completed.map((entry) => entry.scope.label).join("、")}」已${target.paid ? "確認收款" : "撤銷收款確認"}。`);
       if (failed.length) {
         setConfirmation({ ...target, entries: failed });
         setSaveError(`${completed.length} 個活動已完成，${failed.length} 個未完成。下方只保留未完成項目，可重新核對後重試。`);
@@ -191,7 +206,17 @@ export default function ClassPaymentWorkspace({ catalog, activities, optionsLoad
         <dt>{scope.label}</dt><dd className="font-semibold tabular-nums">{money(confirmation.paid ? row.unpaid_amount : row.paid_amount)}</dd>
       </div>)}</dl>
       <p className="mt-4 flex items-baseline justify-between gap-3">{confirmation.paid ? "本次合計" : "撤銷合計"}<strong className="text-lg tabular-nums">{money(confirmation.entries.reduce((sum, { row }) => sum + (confirmation.paid ? row.unpaid_amount : row.paid_amount), 0))}</strong></p>
-      <p className="mt-4 text-sm" style={{ color: "var(--text-secondary)" }}>{confirmation.paid ? "確認已實際收到這些款項。" : "撤銷後，上列活動款項會重新列為待收。"}只更新上列活動。</p>
+      {confirmation.paid && <div className="mt-4 space-y-2">
+        <label htmlFor="class-received-amount" className="block text-sm font-medium">本次實收金額（元）</label>
+        <input id="class-received-amount" type="number" inputMode="numeric" min="1" step="1"
+          max={confirmation.entries.reduce((sum, { row }) => sum + row.unpaid_amount, 0)}
+          className="input min-h-11 w-full" value={receivedInput} disabled={saving}
+          aria-describedby="class-remaining-amount" onChange={(event) => { setReceivedInput(event.target.value); setSaveError(""); }} />
+        <p id="class-remaining-amount" className="text-sm" style={{ color: "var(--text-secondary)" }}>
+          待補收 {money(Math.max(0, confirmation.entries.reduce((sum, { row }) => sum + row.unpaid_amount, 0) - (Number(receivedInput) || 0)))}。未收齊的金額會以整班尾款列入補收款區。
+        </p>
+      </div>}
+      <p className="mt-4 text-sm" style={{ color: "var(--text-secondary)" }}>{confirmation.paid ? "請核對本次實際收到的金額。" : "撤銷後，上列活動款項會重新列為待收。"}只更新上列活動。</p>
       {saveError && <p role="alert" className="mt-3 text-sm">{saveError}</p>}
       <div className="mt-5 flex flex-wrap justify-end gap-2">
         <button type="button" className="btn btn-ghost min-h-11" disabled={saving} onClick={() => setConfirmation(null)}>返回核對</button>

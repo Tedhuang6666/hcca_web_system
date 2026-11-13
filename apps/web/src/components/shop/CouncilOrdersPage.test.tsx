@@ -53,6 +53,30 @@ async function openPage() {
   fireEvent.click(screen.getByText(/更多篩選：/));
 }
 
+it("班級部分收款後立即更新補收款區，補齊後重新載入班級名單", async () => {
+  api.orderSummary.mockResolvedValue({ ...summary(), rows: [{ ...summary().rows[0], total_amount: 3000, unpaid_amount: 3000 }] });
+  api.setClassPaid.mockImplementation(async (_id, _paid, _activity, _category, collection) => {
+    const paid = collection.received_amount ?? 3000;
+    api.listSupplementOrders.mockResolvedValue([{ id: "balance", class_id: "class", supplement_class_id: "class", class_label: "一年一班",
+      activity_id: "festival", activity_name: "校慶", is_class_balance: true, is_paid: paid === 3000, total_price: 3000, received_amount: paid }]);
+    api.orderSummary.mockResolvedValue({ ...summary(), rows: [{ ...summary().rows[0], total_amount: 3000, paid_amount: paid, unpaid_amount: 3000 - paid }] });
+    return {};
+  });
+  await openPage();
+  const workspace = screen.getByRole("region", { name: "登記班級收款" });
+  fireEvent.click(within(workspace).getByRole("radio", { name: "校慶" }));
+  fireEvent.click(await within(workspace).findByRole("button", { name: "核對一年一班收款" }));
+  fireEvent.change(screen.getByRole("spinbutton", { name: "本次實收金額（元）" }), { target: { value: "2000" } });
+  fireEvent.click(screen.getByRole("button", { name: "確認收到款項" }));
+  await screen.findByText(/剩餘 NT\$1,000 已列入補收款區/);
+  switchTask("追加補收款");
+  const balances = await screen.findByRole("list", { name: "整班尾款" });
+  fireEvent.click(within(balances).getByRole("button", { name: "收齊尾款 NT$1,000" }));
+  await screen.findByText("已收齊該班的整班尾款。");
+  switchTask("班級繳款");
+  expect(await within(screen.getByRole("region", { name: "登記班級收款" })).findByText("已收齊")).toBeVisible();
+});
+
 function switchTask(name: string) {
   fireEvent.click(within(screen.getByRole("navigation", { name: "班聯統籌工作" }))
     .getByRole("button", { name }));

@@ -2253,6 +2253,8 @@ async def update_class_payment(
             actor_id=current_user.id,
             activity_id=payload.activity_id,
             category_id=payload.category_id,
+            received_amount=payload.received_amount,
+            expected_unpaid_amount=payload.expected_unpaid_amount,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -2265,11 +2267,12 @@ async def update_class_payment(
         actor_email=current_user.email,
         meta={
             "is_paid": payload.is_paid,
+            "received_amount": payload.received_amount,
             "order_count": len(orders),
             "activity_id": str(payload.activity_id) if payload.activity_id else None,
             "category_id": str(payload.category_id) if payload.category_id else None,
         },
-        summary=f"班聯會標示整班{'已繳費' if payload.is_paid else '未繳費'}（單一活動）",
+        summary=f"班聯會{'登記' if payload.is_paid else '撤銷'}班級收款（單一活動）",
     )
     for order in orders:
         await _broadcast_shop_order(order)
@@ -2278,7 +2281,7 @@ async def update_class_payment(
         activity_id=payload.activity_id,
         category_id=payload.category_id,
         updated_orders=len(orders),
-        is_paid=payload.is_paid,
+        is_paid=all(order.is_paid for order in orders) if orders else payload.is_paid,
     )
 
 

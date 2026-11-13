@@ -15512,10 +15512,20 @@ export interface components {
              */
             category_id?: string | null;
             /**
+             * Expected Unpaid Amount
+             * @description 核對時的待收金額，避免重送或覆蓋其他收款
+             */
+            expected_unpaid_amount?: number | null;
+            /**
              * Is Paid
              * @description 班聯會是否已收到款項
              */
             is_paid: boolean;
+            /**
+             * Received Amount
+             * @description 本次實收金額；未提供時收齊待收款
+             */
+            received_amount?: number | null;
         };
         /** ClassReceiptBatchCreate */
         ClassReceiptBatchCreate: {
@@ -22464,6 +22474,11 @@ export interface components {
              */
             id: string;
             /**
+             * Is Class Balance
+             * @default false
+             */
+            is_class_balance: boolean;
+            /**
              * Is Class Collected
              * @default false
              */
@@ -22482,6 +22497,11 @@ export interface components {
             payment_method: string;
             /** Promotion Code */
             promotion_code?: string | null;
+            /**
+             * Received Amount
+             * @default 0
+             */
+            received_amount: number;
             /** Serial Number */
             serial_number: string;
             status: components["schemas"]["OrderStatus"];
@@ -22546,6 +22566,11 @@ export interface components {
              */
             id: string;
             /**
+             * Is Class Balance
+             * @default false
+             */
+            is_class_balance: boolean;
+            /**
              * Is Class Collected
              * @default false
              */
@@ -22573,6 +22598,11 @@ export interface components {
             promotion_code?: string | null;
             /** Promotion Id */
             promotion_id?: string | null;
+            /**
+             * Received Amount
+             * @default 0
+             */
+            received_amount: number;
             /** Serial Number */
             serial_number: string;
             status: components["schemas"]["OrderStatus"];

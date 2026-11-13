@@ -39,6 +39,7 @@ class _ReceiptOrder:
 
     items: list[OrderItem]
     total_price: int
+    received_amount: int = 0
 
 
 def _receipt_order_options() -> tuple[Load, ...]:
@@ -75,7 +76,8 @@ def _receipt_orders_by_topic(
             )
         # 舊訂單可能跨活動；按成交品項金額分攤實付總額，累計取整避免尾差遺失。
         subtotal = sum(item.unit_price * item.quantity for item in order.items)
-        cumulative_subtotal = allocated_total = 0
+        cumulative_subtotal = allocated_total = allocated_received = 0
+        received = order.total_price if order.is_paid else order.received_amount
         for topic_id in sorted(items_by_topic, key=str):
             label, items = items_by_topic[topic_id]
             cumulative_subtotal += sum(item.unit_price * item.quantity for item in items)
@@ -85,9 +87,19 @@ def _receipt_orders_by_topic(
                 else order.total_price
             )
             topics.setdefault(topic_id, (label, []))[1].append(
-                _ReceiptOrder(items=items, total_price=target_total - allocated_total)
+                _ReceiptOrder(
+                    items=items,
+                    total_price=target_total - allocated_total,
+                    received_amount=(
+                        received * target_total // order.total_price if order.total_price else 0
+                    )
+                    - allocated_received,
+                )
             )
             allocated_total = target_total
+            allocated_received = (
+                received * target_total // order.total_price if order.total_price else 0
+            )
     return topics
 
 
@@ -199,6 +211,13 @@ def _render_class_receipt_pdf(
     discount = subtotal - total
     if discount:
         rows.append(("優惠折抵", "", "", f"{-discount:,}", ""))
+    received = sum(
+        order.total_price if isinstance(order, Order) and order.is_paid else order.received_amount
+        for order in orders
+    )
+    if 0 < received < total:
+        rows.append(("已收款", "", "", f"{received:,}", ""))
+        rows.append(("待補收款", "", "", f"{total - received:,}", ""))
     # 備註欄只有前五列；其下的合併儲存格整塊留給蓋章。
     pages: list[list[tuple[str, str, str, str, str]]] = [[]]
     for row in rows:
@@ -474,7 +493,11 @@ async def render_individual_order_receipt(
     academic_year = printed_at.astimezone(TAIPEI).year - 1911
     if school_class:
         class_label = school_class.label or school_class.class_code
-        buyer_name = f"{class_label} {buyer_name} 補收款"
+        buyer_name = (
+            f"{class_label} 班級尾款"
+            if order.is_class_balance
+            else f"{class_label} {buyer_name} 補收款"
+        )
         academic_year = school_class.academic_year
     activity_name = receipt_label or (order.activity.name if order.activity else "一般商品")
     return await _render_topic_receipts_pdf(

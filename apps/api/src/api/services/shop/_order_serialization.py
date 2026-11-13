@@ -42,6 +42,8 @@ def serialize_order(order: Order) -> OrderOut:
     activity = order.__dict__.get("activity")
     category = _order_category(order)
     return OrderOut(
+        received_amount=order.total_price if order.is_paid else order.received_amount,
+        is_class_balance=order.is_class_balance,
         buyer_name=order.buyer_name,
         buyer_office=order.buyer_office,
         id=order.id,
@@ -97,6 +99,8 @@ def serialize_order_list_item(order: Order) -> OrderListItem:
     activity = order.__dict__.get("activity")
     category = _order_category(order)
     return OrderListItem(
+        received_amount=order.total_price if order.is_paid else order.received_amount,
+        is_class_balance=order.is_class_balance,
         buyer_name=order.buyer_name,
         buyer_office=order.buyer_office,
         id=order.id,

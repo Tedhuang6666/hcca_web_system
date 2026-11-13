@@ -638,6 +638,8 @@ class OrderPromotionOut(BaseModel):
 
 
 class OrderOut(BaseModel):
+    received_amount: int = 0
+    is_class_balance: bool = False
     buyer_name: str | None = None
     buyer_office: str | None = None
     id: uuid.UUID
@@ -672,6 +674,8 @@ class OrderOut(BaseModel):
 
 
 class OrderListItem(BaseModel):
+    received_amount: int = 0
+    is_class_balance: bool = False
     buyer_name: str | None = None
     buyer_office: str | None = None
     id: uuid.UUID
@@ -770,6 +774,12 @@ class OrderPaymentUpdate(BaseModel):
 
 
 class ClassPaymentUpdate(BaseModel):
+    received_amount: int | None = Field(
+        default=None, ge=1, strict=True, description="本次實收金額；未提供時收齊待收款"
+    )
+    expected_unpaid_amount: int | None = Field(
+        default=None, ge=0, strict=True, description="核對時的待收金額，避免重送或覆蓋其他收款"
+    )
     is_paid: bool = Field(description="班聯會是否已收到款項")
     activity_id: uuid.UUID | None = Field(description="本次更新的活動；null 代表一般商品")
     category_id: uuid.UUID | None = Field(

@@ -779,7 +779,7 @@ export default function CouncilOrdersPage() {
       </div>}
       {canConfirmClassPayment && <div hidden={tab !== "supplements"}>
         <SupplementOrders canCollect canRejoin classes={classes} refreshKey={supplementRefresh}
-        onCollected={() => { void loadSummary(); void loadClassPayments(); }}
+        onCollected={() => { setSupplementRefresh((value) => value + 1); void loadSummary(); void loadClassPayments(); }}
         onRejoined={() => { setSupplementRefresh((value) => value + 1); void loadOrders(); void loadSummary(); }} />
       </div>}
 
@@ -947,7 +947,7 @@ export default function CouncilOrdersPage() {
           setCategoryId(""); setProductId(""); setSelectedReceiptClasses(new Set());
         }}
         refreshKey={supplementRefresh} disabled={mutationBusy} onBusyChange={setPaymentBusy}
-        onChanged={() => { void loadSummary({ refreshCloseStatus: true }); void loadClassPayments(); }}
+        onChanged={() => { setSupplementRefresh((value) => value + 1); void loadSummary({ refreshCloseStatus: true }); void loadClassPayments(); }}
         onViewClass={(id, label, scope) => setClassDetail({ id, label, source: "collection", scope })}
       />}
       {classDetail && <CouncilClassOrders key={classDetail.id} target={classDetail} catalog={catalog} classes={classes}

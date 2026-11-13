@@ -506,6 +506,13 @@ class Order(Base, TimestampMixin, ClassConsolidationMixin):
         Integer, nullable=False, default=0, server_default="0"
     )
     total_price: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    received_amount: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    # 班級尾款保留班級歸屬，補收款介面按班級與活動合併顯示。
+    is_class_balance: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     promotion_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("shop_promotions.id", ondelete="SET NULL"),

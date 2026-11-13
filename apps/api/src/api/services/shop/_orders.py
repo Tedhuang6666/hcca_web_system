@@ -556,7 +556,7 @@ async def _create_order_from_items(
     if assisted_by_id is not None and class_id is None and supplement_class_id is None:
         paid_orders = await get_current_registrations(session, user_id)
         if any(
-            (existing.is_paid or existing.is_class_collected)
+            (existing.is_paid or existing.is_class_collected or existing.received_amount > 0)
             and _order_activity_id(existing) == activity_id
             and (
                 activity_id is not None
@@ -578,7 +578,12 @@ async def _create_order_from_items(
             editable_only=True,
         )
     if order is not None:
-        if order.is_paid or order.is_class_collected:
+        if (
+            order.is_paid
+            or order.is_class_collected
+            or order.is_class_balance
+            or order.received_amount > 0
+        ):
             raise ValueError("班級幹部已登記收款，商品登記已鎖定")
         if order.class_id is not None and order.class_id != class_id:
             raise ValueError("目前訂單的班級歸戶已變更，請聯繫班級幹部處理")
@@ -1011,7 +1016,12 @@ async def get_current_registration(
         Order.assistance_scope != "council_gift",
     )
     if editable_only:
-        query = query.where(Order.is_paid.is_(False), Order.is_class_collected.is_(False))
+        query = query.where(
+            Order.is_paid.is_(False),
+            Order.is_class_collected.is_(False),
+            Order.is_class_balance.is_(False),
+            Order.received_amount == 0,
+        )
     if match_activity:
         query = query.where(
             Order.activity_id.is_(None) if activity_id is None else Order.activity_id == activity_id
@@ -1105,7 +1115,12 @@ async def apply_registration_promotion(
     )
     if order is None or not order.items:
         raise ValueError("請先登記商品，再套用優惠")
-    if order.is_paid or order.is_class_collected:
+    if (
+        order.is_paid
+        or order.is_class_collected
+        or order.is_class_balance
+        or order.received_amount > 0
+    ):
         raise ValueError("班級幹部已登記收款，商品登記已鎖定")
     if category_id is not None and order.category_id != category_id:
         raise ValueError("這筆舊訂單包含多個活動，請聯繫班級幹部處理")
@@ -1296,7 +1311,12 @@ async def cancel_order(
         raise PermissionError("只有訂購人可取消訂單")
     if order.status not in (OrderStatus.PENDING, OrderStatus.CONFIRMED):
         raise ValueError(f"訂單狀態 {order.status} 無法取消")
-    if order.is_paid or order.is_class_collected:
+    if (
+        order.is_paid
+        or order.is_class_collected
+        or order.is_class_balance
+        or order.received_amount > 0
+    ):
         raise ValueError("班級幹部已登記收款，商品登記已鎖定")
     if not bypass_registration_window:
         await _assert_activity_order_unlocked(session, _order_activity_id(order))
@@ -1357,7 +1377,12 @@ async def update_order_item_quantity(
         raise ValueError("贈送訂單不可修改品項，請取消後重新贈送")
     if order.status not in (OrderStatus.PENDING, OrderStatus.CONFIRMED):
         raise ValueError(f"訂單狀態 {order.status} 無法修改")
-    if order.is_paid or order.is_class_collected:
+    if (
+        order.is_paid
+        or order.is_class_collected
+        or order.is_class_balance
+        or order.received_amount > 0
+    ):
         raise ValueError("班級幹部已登記收款，商品登記已鎖定")
     if order.test_product_id is not None:
         raise ValueError("測試訂購請至商品頁調整")
@@ -1476,7 +1501,12 @@ async def replace_order_items(
         raise ValueError("此訂單含家人代訂品項，請學生由商品頁或訂單明細逐項修改")
     if order.status not in (OrderStatus.PENDING, OrderStatus.CONFIRMED):
         raise ValueError(f"訂單狀態 {order.status} 無法修改")
-    if order.is_paid or order.is_class_collected:
+    if (
+        order.is_paid
+        or order.is_class_collected
+        or order.is_class_balance
+        or order.received_amount > 0
+    ):
         raise ValueError("班級幹部已登記收款，商品登記已鎖定")
 
     activity_id = _order_activity_id(order)
@@ -1539,15 +1569,31 @@ async def replace_order_items(
 async def set_order_paid(
     session: AsyncSession, order: Order, *, is_paid: bool, actor_id: uuid.UUID
 ) -> Order:
+    await _lock_class_orders(session, order.supplement_class_id or order.class_id)
+    await session.execute(
+        select(Order)
+        .where(Order.id == order.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
     if order.assistance_scope == "council_gift":
         raise ValueError("贈送訂單免付款，無須登記收款")
-    if order.supplement_class_id is not None:
+    from api.services.shop._collection_ledger import record_class_collection
+
+    record_class_collection(
+        session,
+        order,
+        amount=(order.total_price if is_paid else 0) - order.received_amount,
+        actor_id=actor_id,
+    )
+    if order.supplement_class_id is not None and not order.is_class_balance:
         await _lock_class_orders(session, order.supplement_class_id)
         order.class_id = order.supplement_class_id if is_paid else None
         order.school_class = (
             await session.get(SchoolClass, order.supplement_class_id) if is_paid else None
         )
     order.is_paid = is_paid
+    order.received_amount = order.total_price if is_paid else 0
     if is_paid:
         order.paid_at = datetime.now(UTC)
         order.paid_by_id = actor_id

@@ -22,7 +22,7 @@ async def paid_general_category_ids(session: AsyncSession, class_id: uuid.UUID) 
             Order.class_id == class_id,
             Order.activity_id.is_(None),
             Order.test_product_id.is_(None),
-            Order.is_paid.is_(True),
+            (Order.is_paid.is_(True) | (Order.received_amount > 0)),
             Order.status.notin_((OrderStatus.CANCELLED, OrderStatus.REFUNDED)),
             category_id.is_not(None),
         )
