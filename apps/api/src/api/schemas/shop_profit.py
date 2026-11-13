@@ -18,6 +18,9 @@ class ProductProcurementUpdate(BaseModel):
     minimum_order_quantity: int = Field(0, ge=0, le=1000000, strict=True)
     stock_extra_quantity: int = Field(0, ge=0, le=1000000, strict=True)
     reserve_quantity: int = Field(0, ge=0, le=1000000, strict=True)
+    supplier_gift_quantity: int = Field(
+        0, ge=0, le=1000000, strict=True, description="廠商贈送的零本體成本數量，不計入付費起訂量"
+    )
     extra_cost: int = Field(0, ge=0, le=2147483647, strict=True)
     note: str = Field("", max_length=2000)
     option_costs: dict[
@@ -59,6 +62,7 @@ class ShopProfitProduct(SalesOut):
 class ShopProfitSummary(SalesOut):
     ordered_quantity: int = 0
     purchase_quantity: int = 0
+    supplier_gift_quantity: int = 0
     sellable_stock_quantity: int = 0
     reserve_quantity: int = 0
     minimum_top_up_quantity: int = 0

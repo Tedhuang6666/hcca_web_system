@@ -11,7 +11,7 @@ function product(): ShopProfitProduct {
   return {
     product_id: "shirt", name: "紀念衫", price: 100,
     option_cost: 0, options: [],
-    plan: { unit_cost: 40, minimum_order_quantity: 10, stock_extra_quantity: 2, reserve_quantity: 1, extra_cost: 50, note: "備品不出售" },
+    plan: { unit_cost: 40, minimum_order_quantity: 10, stock_extra_quantity: 2, reserve_quantity: 1, supplier_gift_quantity: 0, extra_cost: 50, note: "備品不出售" },
     ordered_quantity: 3, revenue: 240, paid_amount: 240, purchase_quantity: 10,
     minimum_top_up_quantity: 4, sellable_stock_quantity: 6, order_cost: 120,
     inventory_cost: 240, reserve_cost: 40, total_cost: 450, profit_amount: -210, cash_balance: -210,
@@ -22,7 +22,7 @@ function fixture(): ShopProfitOut {
     category_id: "shirts", category_name: "服飾活動", generated_at: "2026-11-05T04:00:00Z",
     products: [product()],
     summary: { ordered_quantity: 3, purchase_quantity: 10, sellable_stock_quantity: 6,
-      reserve_quantity: 1, minimum_top_up_quantity: 4, revenue: 240, paid_amount: 240,
+      reserve_quantity: 1, supplier_gift_quantity: 0, minimum_top_up_quantity: 4, revenue: 240, paid_amount: 240,
       unpaid_amount: 0, extra_cost: 50, missing_cost_product_count: 0, order_cost: 120,
       inventory_cost: 240, reserve_cost: 40, total_cost: 450, profit_amount: -210, cash_balance: -210 },
   };
@@ -32,6 +32,38 @@ beforeEach(() => {
   api.listCategories.mockResolvedValue([{ id: "shirts", name: "服飾活動" }, { id: "cards", name: "卡片活動" }]);
   api.profitAnalysis.mockResolvedValue(fixture());
   api.saveProcurement.mockResolvedValue({});
+});
+
+it("廠商贈品可編輯、失敗保留並重試，重算後呈現及匯出", async () => {
+  const data = fixture();
+  data.products[0].plan.supplier_gift_quantity = 2;
+  data.products[0].minimum_top_up_quantity = 6;
+  data.products[0].sellable_stock_quantity = 8;
+  data.products[0].order_cost = 40;
+  data.products[0].inventory_cost = 320;
+  data.summary.supplier_gift_quantity = 2;
+  data.summary.minimum_top_up_quantity = 6;
+  data.summary.sellable_stock_quantity = 8;
+  data.summary.order_cost = 40;
+  data.summary.inventory_cost = 320;
+  api.profitAnalysis.mockResolvedValueOnce(fixture()).mockResolvedValue(data);
+  api.saveProcurement.mockRejectedValueOnce(new Error("offline"));
+  render(<ShopProfitAnalysis />);
+  fireEvent.click(await screen.findByRole("button", { name: "編輯紀念衫採購設定" }));
+  const field = screen.getByRole("spinbutton", { name: /^廠商贈品數量/ });
+  expect(field).toHaveValue(0);
+  expect(field).toHaveAccessibleDescription(/免商品本體成本/);
+  fireEvent.change(field, { target: { value: "2" } });
+  fireEvent.submit(screen.getByRole("form"));
+  await screen.findByRole("alert");
+  expect(field).toHaveValue(2);
+  fireEvent.submit(screen.getByRole("form"));
+  await waitFor(() => expect(api.saveProcurement).toHaveBeenLastCalledWith("shirt",
+    expect.objectContaining({ supplier_gift_quantity: 2 })));
+  expect(await screen.findByText("訂單 3 件 · 付費採購 10 件 · 廠商贈品 2 件")).toBeVisible();
+  const csv = profitCsv(data.products, data.category_name);
+  expect(csv).toContain('"廠商贈品（零本體成本）"');
+  expect(csv).toContain('"3","2","6","10","8"');
 });
 
 it("整批盈利獨立分析單一完整活動，呈現備品與可售庫存並可試算回本", async () => {
@@ -62,7 +94,7 @@ it("儲存完整採購設定，重算資料並保留零成本與 null 的差異"
   fireEvent.change(within(form).getByRole("textbox", { name: "採購備註" }), { target: { value: "加購" } });
   fireEvent.submit(form);
   await waitFor(() => expect(api.saveProcurement).toHaveBeenCalledWith("shirt", {
-    unit_cost: null, minimum_order_quantity: 20, stock_extra_quantity: 2, reserve_quantity: 1, extra_cost: 50, note: "加購",
+    unit_cost: null, minimum_order_quantity: 20, stock_extra_quantity: 2, reserve_quantity: 1, supplier_gift_quantity: 0, extra_cost: 50, note: "加購",
   }));
   await waitFor(() => expect(api.profitAnalysis).toHaveBeenCalledTimes(2));
   expect(screen.getByRole("combobox", { name: "盈利分析活動" })).toBeEnabled();

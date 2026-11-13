@@ -30,6 +30,7 @@ PLAN_FIELDS = {
     "minimum_order_quantity": "procurement_minimum",
     "stock_extra_quantity": "procurement_stock",
     "reserve_quantity": "procurement_reserve",
+    "supplier_gift_quantity": "procurement_supplier_gift",
     "extra_cost": "procurement_extra_cost",
     "note": "procurement_note",
     "unit_cost": "unit_cost",
@@ -93,8 +94,13 @@ def _product_profit(
         **{key: getattr(product, field) for key, field in PLAN_FIELDS.items()}
     )
     required = quantity + plan.stock_extra_quantity + plan.reserve_quantity
-    purchase = max(required, plan.minimum_order_quantity)
-    stock = purchase - quantity - plan.reserve_quantity
+    paid_required = max(0, required - plan.supplier_gift_quantity)
+    purchase = max(paid_required, plan.minimum_order_quantity)
+    stock = purchase + plan.supplier_gift_quantity - quantity - plan.reserve_quantity
+    # 贈品依序供訂單、不可售備品、可售庫存；各項成本只計付費商品。
+    paid_order = max(0, quantity - plan.supplier_gift_quantity)
+    paid_reserve = max(0, plan.reserve_quantity - max(0, plan.supplier_gift_quantity - quantity))
+    paid_stock = purchase - paid_order - paid_reserve
 
     def cost(count: int) -> int | None:
         return 0 if not count else None if plan.unit_cost is None else count * plan.unit_cost
@@ -110,7 +116,7 @@ def _product_profit(
         if goods_cost is None or option_cost is None
         else goods_cost + plan.extra_cost + option_cost
     )
-    base_order_cost = cost(quantity)
+    base_order_cost = cost(paid_order)
     return ShopProfitProduct(
         product_id=product.id,
         name=product.name,
@@ -122,13 +128,13 @@ def _product_profit(
         revenue=revenue,
         paid_amount=paid,
         purchase_quantity=purchase,
-        minimum_top_up_quantity=purchase - required,
+        minimum_top_up_quantity=purchase - paid_required,
         sellable_stock_quantity=stock,
         order_cost=None
         if base_order_cost is None or option_cost is None
         else base_order_cost + option_cost,
-        inventory_cost=cost(stock),
-        reserve_cost=cost(plan.reserve_quantity),
+        inventory_cost=cost(paid_stock),
+        reserve_cost=cost(paid_reserve),
         total_cost=total_cost,
         profit_amount=None if total_cost is None else revenue - total_cost,
         cash_balance=None if total_cost is None else paid - total_cost,
@@ -187,6 +193,7 @@ async def profit_analysis(session: AsyncSession, category: ProductCategory) -> S
     ):
         setattr(summary, field, sum(getattr(row, field) for row in rows))
     summary.reserve_quantity = sum(row.plan.reserve_quantity for row in rows)
+    summary.supplier_gift_quantity = sum(row.plan.supplier_gift_quantity for row in rows)
     summary.extra_cost = sum(row.plan.extra_cost for row in rows)
     summary.unpaid_amount = summary.revenue - summary.paid_amount
     summary.missing_cost_product_count = sum(row.total_cost is None for row in rows)

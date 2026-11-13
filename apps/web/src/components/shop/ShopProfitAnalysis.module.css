@@ -9,6 +9,7 @@
 .toolbar p, .productHeader p, .muted { color: var(--text-secondary); }
 .scope { display: grid; grid-template-columns: minmax(12rem, 1fr) 2fr; align-items: end; gap: 1.5rem; margin-bottom: .75rem; }
 .scope label, .fields label { display: grid; gap: .4rem; font-size: .875rem; }
+.fields label { align-content: start; }
 .scope p { max-width: 65ch; color: var(--text-secondary); }
 .overview { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; padding-block: 2rem; margin-top: 1rem; border-block: 1px solid var(--border); }
 .balance strong { display: block; font-size: clamp(1.75rem, 3vw, 2.5rem); font-weight: 650; margin-block: .5rem; overflow-wrap: anywhere; }
@@ -18,7 +19,7 @@
 .accounts div { display: flex; justify-content: space-between; gap: 1rem; }
 .accounts dd { text-align: right; }
 .total { border-top: 1px solid var(--border); padding-top: .65rem; margin-top: .25rem; font-weight: 650; }
-.quantities { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; padding-block: 1.25rem; border-bottom: 1px solid var(--border); }
+.quantities { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1rem; padding-block: 1.25rem; border-bottom: 1px solid var(--border); }
 .quantities dt { font-size: .875rem; color: var(--text-secondary); }
 .quantities dd { font-size: 1.15rem; font-weight: 600; margin-top: .25rem; }
 .cash { padding-block: 1rem; color: var(--text-secondary); }

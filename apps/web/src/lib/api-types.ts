@@ -25909,6 +25909,12 @@ export interface components {
              * @default 0
              */
             stock_extra_quantity: number;
+            /**
+             * Supplier Gift Quantity
+             * @description 廠商贈送的零本體成本數量，不計入付費起訂量
+             * @default 0
+             */
+            supplier_gift_quantity: number;
             /** Unit Cost */
             unit_cost: number | null;
         };
@@ -30489,6 +30495,11 @@ export interface components {
              * @default 0
              */
             sellable_stock_quantity: number;
+            /**
+             * Supplier Gift Quantity
+             * @default 0
+             */
+            supplier_gift_quantity: number;
             /**
              * Total Cost
              * @default 0

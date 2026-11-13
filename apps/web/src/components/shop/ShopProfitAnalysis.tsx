@@ -36,6 +36,7 @@ function ProductPlan({ row, onSaved, onEditing }: {
     ["minimum_order_quantity", "廠商起訂量（件）"],
     ["stock_extra_quantity", "班聯加購囤貨（件）"],
     ["reserve_quantity", "不可售備用品（件）"],
+    ["supplier_gift_quantity", "廠商贈品數量（件）"],
     ["extra_cost", "額外費用（NT$）"],
   ] as const;
 
@@ -58,7 +59,7 @@ function ProductPlan({ row, onSaved, onEditing }: {
 
   return <article className={styles.product} aria-label={`${row.name}盈利分析`}>
     <header className={styles.productHeader}>
-      <div><h3>{row.name}</h3><p>訂單 {row.ordered_quantity} 件 · 建議採購 {row.purchase_quantity} 件</p></div>
+      <div><h3>{row.name}</h3><p>訂單 {row.ordered_quantity} 件 · 付費採購 {row.purchase_quantity} 件 · 廠商贈品 {row.plan.supplier_gift_quantity} 件</p></div>
       <strong className={row.profit_amount != null && row.profit_amount < 0 ? styles.loss : undefined}>
         <span>預估盈利</span>{money(row.profit_amount)}
       </strong>
@@ -68,6 +69,7 @@ function ProductPlan({ row, onSaved, onEditing }: {
       <span>班聯囤貨 <b>{row.plan.stock_extra_quantity}</b></span>
       <span>不可售備品 <b>{row.plan.reserve_quantity}</b></span>
       <span>起訂補足 <b>{row.minimum_top_up_quantity}</b></span>
+      <span>廠商贈品 <b>{row.plan.supplier_gift_quantity}</b></span>
       <span>可售餘貨 <b>{row.sellable_stock_quantity}</b></span>
     </div>
     <dl className={styles.rowAccounts}>
@@ -87,7 +89,9 @@ function ProductPlan({ row, onSaved, onEditing }: {
           </label>
           {fields.map(([key, label]) => <label key={key}>{label}
             <NumberInput className="input" min="0" max={key === "extra_cost" ? 2147483647 : 1000000} step="1" required
-              value={draft[key]} onChange={(e) => setDraft({ ...draft, [key]: e.target.valueAsNumber })} />
+              value={draft[key]} onChange={(e) => setDraft({ ...draft, [key]: e.target.valueAsNumber })}
+              aria-describedby={key === "supplier_gift_quantity" ? `supplier-gift-${row.product_id}` : undefined} />
+            {key === "supplier_gift_quantity" && <span id={`supplier-gift-${row.product_id}`} className={styles.muted}>免商品本體成本，優先供訂單、再供備品；多出的列入可售餘貨。選項與額外費用仍另計。</span>}
           </label>)}
           <label className={styles.note}>採購備註
             <textarea className="input" maxLength={2000} value={draft.note}
@@ -109,7 +113,7 @@ function ProductPlan({ row, onSaved, onEditing }: {
             </label>)}
           </div>
         </div>}
-        <p className={styles.muted}>囤貨與備品是訂單以外的加購量；起訂不足的餘量歸為可售庫存。額外費用可填運費、打樣或其他一次性支出。</p>
+        <p className={styles.muted}>囤貨與備品是訂單以外的需求量；扣除廠商贈品後，不足付費起訂量時補足，餘量歸為可售庫存。額外費用可填運費、打樣或其他一次性支出。</p>
         <div className={styles.actions}>
           <button className="btn btn-primary" type="submit">{busy ? "儲存中…" : "儲存並重算"}</button>
           <button className="btn btn-ghost" type="button" onClick={() => { setEditing(false); onEditing(false); setError(""); }}>取消編輯</button>
@@ -213,7 +217,7 @@ export default function ShopProfitAnalysis({ refresh = 0 }: { refresh?: number }
       </label>
       <p>計算此活動全期、全校有效訂單，排除取消、退款及測試訂單。未售庫存與備品收入以零計；即使沒有訂單，已設定的採購仍列成本。</p>
     </div>
-    <p className={styles.muted}>採購件數＝訂單＋班聯囤貨＋不可售備品，不足起訂量時補足。設定只用於採購分析，不會增加學生訂單或改動可售庫存；起訂量以每項商品合計，不依尺寸拆分。</p>
+    <p className={styles.muted}>付費採購件數＝訂單＋班聯囤貨＋不可售備品－廠商贈品，最低為 0，不足付費起訂量時補足。設定只用於採購分析，不會增加學生訂單或改動可售庫存；起訂量以每項商品合計，不依尺寸拆分。</p>
     {editing.size > 0 && <p role="status">正在編輯採購設定；請儲存或取消後再切換活動、匯出。離開此頁籤會捨棄未儲存內容。</p>}
     {optionsError && <p role="alert">{optionsError}<button className="btn btn-ghost" type="button" onClick={() => setOptionsRetry((v) => v + 1)}>重試活動</button></p>}
     {error && <p role="alert">{error}<button className="btn btn-ghost" type="button" onClick={() => setRevision((v) => v + 1)}>重試盈利分析</button>{current && "下方保留上次資料，尚未更新。"}</p>}
@@ -238,7 +242,8 @@ export default function ShopProfitAnalysis({ refresh = 0 }: { refresh?: number }
         </dl>
       </div>
       <dl className={styles.quantities}>
-        <div><dt>建議採購</dt><dd>{summary.purchase_quantity} 件</dd></div>
+        <div><dt>付費採購</dt><dd>{summary.purchase_quantity} 件</dd></div>
+        <div><dt>廠商贈品</dt><dd>{summary.supplier_gift_quantity} 件</dd></div>
         <div><dt>起訂補足</dt><dd>{summary.minimum_top_up_quantity} 件</dd></div>
         <div><dt>可售餘貨</dt><dd>{summary.sellable_stock_quantity} 件</dd></div>
         <div><dt>不可售備品</dt><dd>{summary.reserve_quantity} 件</dd></div>

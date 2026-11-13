@@ -164,6 +164,9 @@ class Product(Base, TimestampMixin):
             "AND procurement_reserve >= 0 AND procurement_extra_cost >= 0",
             name="ck_products_procurement_nonnegative",
         ),
+        CheckConstraint(
+            "procurement_supplier_gift >= 0", name="ck_products_supplier_gift_nonnegative"
+        ),
         Index(
             "ix_products_category_status_created",
             "category_id",
@@ -198,6 +201,7 @@ class Product(Base, TimestampMixin):
     procurement_minimum: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     procurement_stock: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     procurement_reserve: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    procurement_supplier_gift: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     procurement_extra_cost: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     procurement_note: Mapped[str] = mapped_column(Text, default="", server_default="")
     # 選項 ID（舊快照則依名稱）對應額外單位成本，保留已刪除選項的內部成本設定。
