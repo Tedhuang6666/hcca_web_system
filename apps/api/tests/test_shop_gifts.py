@@ -22,6 +22,7 @@ from tests.test_shop_router import (
     _bare_user,
     _grant_permission,
     _make_active_product,
+    _make_category,
     _make_class,
 )
 
@@ -400,6 +401,105 @@ async def test_gift_quantity_rejects_invalid_create_and_patch(
             f"/shop/promotions/{created.json()['id']}", json={"gift_quantity": value}
         )
     ).status_code == 422
+
+
+@pytest.mark.parametrize("topic_scoped", [False, True])
+@pytest.mark.parametrize("with_bundle", [False, True])
+async def test_automatic_gifts_reprice_saved_orders_before_bundles(
+    db_session, admin_user, authed_client_factory, topic_scoped, with_bundle
+):
+    buyer = await _bare_user(db_session)
+    outsider = await _bare_user(db_session)
+    category = await _make_category(db_session, admin_user)
+    products = [
+        await _make_active_product(db_session, admin_user, category=category, price=price, stock=20)
+        for price in (300, 250)
+    ]
+    scope = {"target_category_ids": [str(category.id)]} if topic_scoped else {}
+    manager = authed_client_factory(admin_user)
+    if with_bundle:
+        bundle = await manager.post(
+            "/shop/promotions",
+            json={
+                "name": "運動套餐",
+                "target_product_ids": [str(product.id) for product in products],
+                "discount_type": "bundle_price",
+                "discount_value": 500,
+                **scope,
+            },
+        )
+        assert bundle.status_code == 201, bundle.text
+
+    buyer_client = authed_client_factory(buyer)
+    outsider_client = authed_client_factory(outsider)
+    for actor in (buyer_client, outsider_client):
+        for product in products:
+            selected = await actor.put(
+                f"/shop/registrations/current/products/{product.id}",
+                json={"variants": [{"option_ids": [], "quantity": 1}]},
+            )
+            assert selected.status_code == 200, selected.text
+        assert selected.json()["total_price"] == (500 if with_bundle else 550)
+
+    gift = await manager.post(
+        "/shop/promotions",
+        json={
+            "name": "作者贈品",
+            "target_identifiers": [buyer.email],
+            "target_product_ids": [str(product.id) for product in products],
+            "discount_type": "percentage",
+            "discount_value": 100,
+            **scope,
+        },
+    )
+    assert gift.status_code == 201, gift.text
+    registered = await buyer_client.get("/shop/registrations")
+    assert registered.status_code == 200, registered.text
+    [saved] = registered.json()
+    assert (saved["discount_amount"], saved["total_price"]) == (550, 0)
+    assert [item["gift_quantity"] for item in saved["items"]] == [1, 1]
+    assert sum(item["gift_discount_amount"] for item in saved["items"]) == 550
+
+    request = {"code": None, "category_id": str(category.id)}
+    preview = await buyer_client.post("/shop/registrations/current/promotion/preview", json=request)
+    applied = await buyer_client.put("/shop/registrations/current/promotion", json=request)
+    assert preview.status_code == applied.status_code == 200
+    assert preview.json()["discount_amount"] == applied.json()["discount_amount"] == 550
+    assert preview.json()["total_price"] == applied.json()["total_price"] == 0
+
+    for product in products:
+        extra = await buyer_client.put(
+            f"/shop/registrations/current/products/{product.id}",
+            json={"variants": [{"option_ids": [], "quantity": 2}]},
+        )
+        assert extra.status_code == 200, extra.text
+    order = extra.json()
+    expected = 500 if with_bundle else 550
+    assert order["total_price"] == expected
+    assert [item["gift_quantity"] for item in order["items"]] == [1, 1]
+    receivable = await db_session.scalar(
+        select(Receivable).where(Receivable.source_id == UUID(order["id"]))
+    )
+    assert receivable is not None and receivable.amount == expected
+
+    updated = await manager.patch(
+        f"/shop/promotions/{gift.json()['id']}", json={"gift_quantity": 2}
+    )
+    assert updated.status_code == 200, updated.text
+    registered = await buyer_client.get("/shop/registrations")
+    assert registered.status_code == 200, registered.text
+    [saved] = registered.json()
+    assert (saved["discount_amount"], saved["total_price"]) == (1100, 0)
+    assert [item["gift_quantity"] for item in saved["items"]] == [2, 2]
+    assert sum(item["gift_discount_amount"] for item in saved["items"]) == 1100
+    registered = await outsider_client.get("/shop/registrations")
+    assert registered.status_code == 200, registered.text
+    [other] = registered.json()
+    assert other["total_price"] == (500 if with_bundle else 550)
+    assert all(item["gift_quantity"] == 0 for item in other["items"])
+    for product in products:
+        await db_session.refresh(product)
+        assert product.stock_quantity == 17
 
 
 async def test_single_gift_limit_is_shared_by_variants_and_kept_after_payment(

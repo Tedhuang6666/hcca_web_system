@@ -160,7 +160,6 @@ def _free_pricing_results(
         if result.promotion is not None
         and result.promotion.discount_type == ShopDiscountType.PERCENTAGE
         and result.promotion.discount_value == 100
-        and not result.promotion.target_products
         and result.discount_amount > 0
     ]
     if not free:
@@ -168,13 +167,13 @@ def _free_pricing_results(
             results, subtotal, product_subtotals, product_quantities, categories
         )
 
-    # 活動全免先涵蓋完整品項（含規格加價），避免套組保留應付金額，
-    # 也避免已免費的商品再次折抵其他活動的消費。
+    # 活動全免（含規格加價）優先，其次保留指定商品的贈品件數；
+    # 只有其餘件數參與套組與其他折扣，贈品的規格加價仍照常計費。
     amounts = dict(product_subtotals or {})
     quantities = dict(product_quantities or {})
     remaining = subtotal
     selected = []
-    for result in free:
+    for result in sorted(free, key=lambda row: bool(row.promotion.target_products)):
         promotion = result.promotion
         assert promotion is not None
         amount = min(
@@ -193,11 +192,21 @@ def _free_pricing_results(
                 and sum(total.quantities.values()) >= promotion.min_quantity
                 for product_id in total.amounts
             }
+        target_ids = {product.id for product in promotion.target_products}
+        if target_ids:
+            covered_ids &= target_ids
         selected.append(PromotionResult(promotion, amount))
-        remaining -= amount
         for product_id in covered_ids:
-            amounts.pop(product_id, None)
-            quantities.pop(product_id, None)
+            quantity = quantities.get(product_id, 0)
+            count = min(quantity, promotion.gift_quantity) if target_ids else quantity
+            leftover = quantity - count
+            if leftover:
+                amounts[product_id] = amounts[product_id] * leftover // quantity
+                quantities[product_id] = leftover
+            else:
+                amounts.pop(product_id, None)
+                quantities.pop(product_id, None)
+        remaining = sum(amounts.values())
 
     others = [
         PromotionResult(
@@ -1462,7 +1471,10 @@ async def resolve_promotions(
         await product_topic_ids(session, set(product_subtotals or {}))
         if any(
             result.promotion is not None
-            and result.promotion.discount_type == ShopDiscountType.BUNDLE_PRICE
+            and (
+                result.promotion.discount_type == ShopDiscountType.BUNDLE_PRICE
+                or result.promotion.target_category_ids is not None
+            )
             for result in results
         )
         else {}
