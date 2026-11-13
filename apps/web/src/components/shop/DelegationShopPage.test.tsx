@@ -63,6 +63,32 @@ beforeEach(() => {
 
 afterEach(() => vi.unstubAllGlobals());
 
+it("在一起買更划算區塊將已被更優惠套餐取代的套組變灰", async () => {
+  const pants = { ...product, id: "pants", name: "長褲", price: 200 };
+  const bundle = { gift_quantity: 1, id: "bundle", name: "衣褲套組", activity_id: "festival",
+    discount_type: "bundle_price" as const, discount_value: 250, min_order_price: 0,
+    min_quantity: 1, target_products: [product, pants] };
+  const better = { ...bundle, id: "better", name: "早鳥衣褲套組", discount_value: 200 };
+  api.accessDelegation.mockResolvedValue({ ...context, promotions: [bundle, better],
+    catalog: [{ ...context.catalog![0], products: [product, pants] }], registration: {
+      ...order, subtotal_price: 300, discount_amount: 100, total_price: 200,
+      items: [product, pants].map((row) => ({ ...order.items[1], id: row.id,
+        product_id: row.id, product_name: row.name, quantity: 1, unit_price: row.price, subtotal: row.price })),
+      applied_promotions: [{ promotion_id: better.id, name: better.name, discount_amount: 100 }],
+    } });
+
+  render(<ShopPage />);
+
+  const section = await screen.findByRole("region", { name: "一起買更划算" });
+  const replaced = within(section).getByRole("article", { name: bundle.name });
+  expect(replaced).toHaveAttribute("data-replaced", "true");
+  expect(within(replaced).getByRole("status")).toHaveTextContent("已套用其他更優惠的套餐");
+  expect(within(replaced).getByRole("button", { name: "未套用" })).toBeDisabled();
+  const applied = within(section).getByRole("article", { name: better.name });
+  expect(applied).not.toHaveAttribute("data-replaced");
+  expect(within(applied).getByRole("status")).toHaveTextContent("已套用優惠");
+});
+
 describe("原商品頁的家人代訂模式", () => {
   it("shows only tickets allowed for the student receiving the delegated order", async () => {
     const staff = { ...product, id: "staff", name: "學生指定工作票", purchase_allowed: true };

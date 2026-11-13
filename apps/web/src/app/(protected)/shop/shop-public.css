@@ -1055,6 +1055,22 @@
 }
 
 .shop-bundle-start:hover:not(:disabled) { background: var(--public-accent-strong); }
+
+.shop-bundle-offer[data-replaced] {
+  border-color: var(--public-border);
+  background: color-mix(in srgb, var(--public-surface) 92%, var(--public-secondary));
+}
+
+.shop-bundle-offer[data-replaced] :is(h3, .shop-price-current, .shop-bundle-price > strong) {
+  color: var(--public-secondary);
+}
+
+.shop-bundle-offer[data-replaced] .shop-bundle-start {
+  background: var(--public-border);
+  color: var(--public-secondary);
+  opacity: 1;
+}
+
 .shop-product-bundle-progress {
   display: flex;
   flex-wrap: wrap;

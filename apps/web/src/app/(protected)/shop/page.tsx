@@ -2105,7 +2105,8 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
               </div>
               <BundleCarousel key={selectedCategory.activity_id ?? selectedCategory.id}>
                 {bundlePromotions.map((promotion) => <BundleOffer key={promotion.id}
-                  promotion={promotion} products={catalogProducts} registration={selectedCategoryRegistration}
+                  promotion={promotion} promotions={bundlePromotions}
+                  products={catalogProducts} registration={selectedCategoryRegistration}
                   disabled={authLoading || registrationLoadError || registrationLocked
                     || Boolean(closeStatus[selectedCategory.id]?.is_closed)}
                   onSelect={(productId) => selectBundleProduct(promotion, productId)} />)}
