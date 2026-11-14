@@ -91,8 +91,8 @@ export default function DocumentSearch({ initialDocs = [] }: { initialDocs?: Doc
   return (
     <div className="administrative-index">
       <header className="administrative-page-heading">
-        <h1>公開公文查詢系統</h1>
-        {canManage && <button type="button" className="administrative-button" onClick={() => setWorkspace(true)}>公文管理</button>}
+        <h1 className="text-xl font-semibold">公文查詢</h1>
+        {canManage && <button type="button" className="btn btn-secondary" onClick={() => setWorkspace(true)}>公文管理</button>}
       </header>
       <form className="administrative-search administrative-document-search" role="search" onSubmit={submit}>
         <label className="administrative-keyword">主旨或關鍵字

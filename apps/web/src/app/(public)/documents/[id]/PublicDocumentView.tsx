@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { Printer } from "lucide-react";
 import { OfficialText } from "@/components/ui/OfficialText";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
@@ -146,12 +147,13 @@ function DocumentBody({ document }: { document: DocumentOut }) {
   );
 }
 
-export default function PublicDocumentView({ document, loading = false, loadError = null, onRetry, canDownloadPdf = false }: {
+export default function PublicDocumentView({ document, loading = false, loadError = null, onRetry, canDownloadPdf = false, managementAction }: {
   document: DocumentOut | null;
   loading?: boolean;
   loadError?: "not_found" | "unavailable" | null;
   onRetry?: () => void;
   canDownloadPdf?: boolean;
+  managementAction?: ReactNode;
 }) {
   const { zoom, setZoom, zoomStyle } = usePersistedZoom("hcca:zoom:public-document");
   if (!document) return (
@@ -173,6 +175,7 @@ export default function PublicDocumentView({ document, loading = false, loadErro
       <header className="administrative-document-toolbar no-print">
         <h1>公文檢視</h1>
         <div>
+          {managementAction}
           <div className="administrative-document-zoom" role="group" aria-label="公文字級">
             <button type="button" onClick={() => setZoom((value) => value - 10)} disabled={zoom <= 70} aria-label="縮小公文字級">A−</button>
             <span aria-live="polite">{zoom}%</span>

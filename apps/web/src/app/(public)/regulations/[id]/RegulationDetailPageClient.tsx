@@ -8,7 +8,6 @@ import {
   CheckCircle2,
   ClipboardList,
   FilePenLine,
-  Printer,
   ScrollText,
   Trash2,
   Undo2 } from "lucide-react";
@@ -569,162 +568,76 @@ export default function RegulationDetailPageClient({
           <Link href={`/regulations?category=${reg.category}`}>{REGULATION_CATEGORIES[reg.category]}</Link>
           <span aria-hidden="true">/</span><span>法規內容</span>
         </nav>
-        {/* ── 頂部標題列 ───────────────────────────────────────────────────── */}
-        <div className="regulation-detail-heading flex items-start gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2 mb-1">
-              <span className="administrative-law-state">{regulationPublicState(reg)}</span>
-              {reg.workflow_status !== "published" && currentUserId && <WorkflowStatusBadge status={reg.workflow_status} />}
-            </div>
-
-            <div className="flex min-w-0 flex-col gap-3">
-              <h1
-                className="w-full min-w-0 break-words text-lg font-semibold leading-snug sm:text-xl"
-                style={{
-                  color: "var(--text-primary)",
-                  overflowWrap: "anywhere",
-                  wordBreak: "break-word",
-                }}
-              >
-                {!reg.is_active && <span style={{ color: "var(--danger)" }}>(失效) </span>}
-                {reg.title}
-              </h1>
-
-              {/* 工具列 */}
-              <div className="regulation-detail-toolbar no-print">
-
-                <div className="regulation-detail-action-groups">
-                <div className="regulation-detail-tool-group" role="group" aria-label="閱讀工具">
-                {/* 縮放 */}
-                <div className="regulation-detail-zoom-control flex items-center gap-1 rounded-lg overflow-hidden"
-                  style={{ border: "1px solid var(--border)" }}>
-                  <button onClick={() => setZoom(z => Math.max(70, z - 10))}
-                    className="px-2 py-1.5 text-xs transition-colors hover:opacity-80"
-                    style={{ color: "var(--text-muted)" }} title="縮小">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                      strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
-                      <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-                      <line x1="8" y1="11" x2="14" y2="11" />
-                    </svg>
-                  </button>
-                  <span className="text-xs px-1.5 select-none" style={{ color: "var(--text-muted)" }}>{zoom}%</span>
-                  <button onClick={() => setZoom(z => Math.min(150, z + 10))}
-                    className="px-2 py-1.5 text-xs transition-colors hover:opacity-80"
-                    style={{ color: "var(--text-muted)" }} title="放大">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                      strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
-                      <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-                      <line x1="11" y1="8" x2="11" y2="14" /><line x1="8" y1="11" x2="14" y2="11" />
-                    </svg>
-                  </button>
-                </div>
-
-                {/* 分享 */}
-                <button onClick={handleShare}
-                  className="px-3 py-1.5 rounded-lg text-xs transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-80 inline-flex items-center gap-1"
-                  style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}
-                  title="分享">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                    strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                    <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
-                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
-                  </svg>
-                  分享
-                </button>
-
-                {/* 複製連結 */}
-                <button onClick={handleCopyLink}
-                  className="px-3 py-1.5 rounded-lg text-xs transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-80 inline-flex items-center gap-1"
-                  style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}
-                  title="複製連結">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                    strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-                  </svg>
-                  複製連結
-                </button>
-
-                {/* 匯出法規 PDF（帶 token 避免 401） */}
-                <AnimatedDownloadButton
-                  request={() => authFetch(apiUrl(`${currentRegHref}/print`), { credentials: "include" })}
-                  filename={`${reg.title || "法規"}.pdf`}
-                  className="regulation-detail-print-button px-3 py-1.5 rounded-lg text-xs font-medium inline-flex items-center gap-1.5 transition-colors hover:opacity-80 disabled:opacity-60 disabled:cursor-wait"
-                  style={{ color: "var(--text-secondary)", border: "1px solid var(--border)" }}
-                  aria-label="列印 PDF"
-                  label={(
-                    <span className="regulation-detail-print-label">
-                      <Printer size={14} strokeWidth={1.8} aria-hidden="true" />
-                      列印
-                    </span>
-                  )}
-                  onComplete={() => showSuccessToast("PDF 已下載")}
-                  onError={(error) => showErrorToast(`PDF 匯出失敗${error instanceof Error && error.message ? `：${error.message}` : ""}`)} />
-                </div>
-
-                <div className="regulation-detail-management-group" role="group" aria-label="法規管理">
-
-                {/* 編輯（限建立者或管理員） */}
-                {(reg.created_by === currentUserId || isAdmin) && (
-                  <Link href={`${currentRegHref}/edit`}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-90 inline-flex items-center gap-1.5"
-                    style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }}>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                    </svg>
-                    編輯
-                  </Link>
-                )}
-
-                {/* 直接發布已停用：法規需走審議流程並由主席公布 */}
-
-                {/* 起草修正案 */}
-                {can("regulation:create") && reg.is_active && reg.published_at && (
-                  <Link
-                    href={`${currentRegHref}/amendment`}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-90 inline-flex items-center gap-1.5"
-                    style={{ background: "rgba(99,102,241,0.1)", color: "#818cf8", border: "1px solid rgba(99,102,241,0.3)" }}>
-                    <FilePenLine size={12} strokeWidth={2} aria-hidden="true" />
-                    起草修正案
-                  </Link>
-                )}
-
-                {/* 凍結（admin，未凍結時顯示） */}
-                {can("regulation:admin") && reg.is_active && !reg.freeze_reason && (
-                  <button onClick={() => { setFreezeReason(""); setShowFreeze(true); }}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium"
-                    style={{ background: "rgba(251,146,60,0.1)", color: "#fb923c", border: "1px solid rgba(251,146,60,0.3)" }}>
-                    凍結
-                  </button>
-                )}
-
-                {/* 廢止 */}
-                {canRepeal && reg.is_active && !reg.is_repealed && (
-                  <button
-                    onClick={() => {
-                      setRepealReason("");
-                      setRepealReplacementId("");
-                      setShowRepeal(true);
-                    }}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium"
-                    style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}>
-                    廢止
-                  </button>
-                )}
-                </div>
-                </div>
+        <header className="regulation-detail-heading">
+          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
+            {!reg.is_active && <span style={{ color: "var(--danger)" }}>(失效) </span>}
+            {reg.title}
+          </h1>
+          <div className="regulation-reading-meta">
+            {reg.workflow_status !== "published" && currentUserId
+              ? <WorkflowStatusBadge status={reg.workflow_status} />
+              : <span>{regulationPublicState(reg)}</span>}
+            {reg.published_at && <span>公布日期：{administrativeDate(reg.published_at, true)}</span>}
+            {reg.effective_date && <span>施行日期：{administrativeDate(reg.effective_date, true)}</span>}
+          </div>
+          <div className="regulation-reading-toolbar no-print">
+            <div className="regulation-reading-tools" role="group" aria-label="閱讀工具">
+              <div className="regulation-reading-zoom" role="group" aria-label="法規字級">
+                <button type="button" onClick={() => setZoom((value) => Math.max(70, value - 10))}
+                  disabled={zoom <= 70} aria-label="縮小" title="縮小">A−</button>
+                <span aria-live="polite">{zoom}%</span>
+                <button type="button" onClick={() => setZoom((value) => Math.min(150, value + 10))}
+                  disabled={zoom >= 150} aria-label="放大" title="放大">A＋</button>
               </div>
+              <button type="button" onClick={handleShare} className="btn btn-ghost">分享</button>
+              <button type="button" onClick={handleCopyLink} className="btn btn-ghost">複製連結</button>
+              <AnimatedDownloadButton
+                request={() => authFetch(apiUrl(`${currentRegHref}/print`), { credentials: "include" })}
+                filename={`${reg.title || "法規"}.pdf`}
+                className="btn btn-secondary"
+                aria-label="下載 PDF"
+                label="下載 PDF"
+                onComplete={() => showSuccessToast("PDF 已下載")}
+                onError={(error) => showErrorToast(`PDF 匯出失敗${error instanceof Error && error.message ? `：${error.message}` : ""}`)} />
             </div>
-
-            {reg.published_at && (
-              <p className="regulation-detail-published-meta text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-                公布日期：{administrativeDate(reg.published_at, true)}
-                {reg.effective_date && <>　｜　施行日期：{administrativeDate(reg.effective_date, true)}</>}
-              </p>
+            {((reg.created_by === currentUserId || isAdmin)
+              || (can("regulation:create") && reg.is_active && reg.published_at)
+              || (can("regulation:admin") && reg.is_active && !reg.freeze_reason)
+              || (canRepeal && reg.is_active && !reg.is_repealed)) && (
+              <div className="regulation-management-actions" role="group" aria-label="法規管理">
+                {(reg.created_by === currentUserId || isAdmin) && (
+                  <Link href={`${currentRegHref}/edit`} className="btn btn-secondary">編輯</Link>
+                )}
+                {can("regulation:create") && reg.is_active && reg.published_at && (
+                  <Link href={`${currentRegHref}/amendment`} className="btn btn-secondary">
+                    <FilePenLine size={15} aria-hidden="true" />起草修正案
+                  </Link>
+                )}
+                {((can("regulation:admin") && reg.is_active && !reg.freeze_reason)
+                  || (canRepeal && reg.is_active && !reg.is_repealed)) && (
+                  <details className="regulation-management-menu">
+                    <summary className="btn btn-ghost">更多操作</summary>
+                    <div>
+                      {can("regulation:admin") && reg.is_active && !reg.freeze_reason && (
+                        <button type="button" className="btn btn-ghost" onClick={(event) => {
+                          event.currentTarget.closest("details")?.removeAttribute("open");
+                          setFreezeReason(""); setShowFreeze(true);
+                        }}>凍結法規</button>
+                      )}
+                      {canRepeal && reg.is_active && !reg.is_repealed && (
+                        <button type="button" className="btn btn-ghost" style={{ color: "var(--danger)" }}
+                          onClick={(event) => {
+                            event.currentTarget.closest("details")?.removeAttribute("open");
+                            setRepealReason(""); setRepealReplacementId(""); setShowRepeal(true);
+                          }}>廢止法規</button>
+                      )}
+                    </div>
+                  </details>
+                )}
+              </div>
             )}
           </div>
-        </div>
+        </header>
 
         {/* ── 失效橫幅 ─────────────────────────────────────────────────────── */}
         {reg.is_repealed && (

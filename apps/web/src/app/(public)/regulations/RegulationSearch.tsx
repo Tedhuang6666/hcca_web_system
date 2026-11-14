@@ -1,22 +1,30 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import dynamic from "next/dynamic";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { regulationsApi, regulationHref } from "@/lib/api/regulations";
 import { usePermissions } from "@/hooks/usePermissions";
 import { administrativeDate, REGULATION_CATEGORIES, regulationPublicState } from "@/lib/administrative";
 import type { RegulationCategory, RegulationListItem, RegulationSearchResult } from "@/lib/types";
+import RegulationSyncPanel from "@/components/regulations/RegulationSyncPanel";
 
-const RegulationWorkspace = dynamic(() => import("./client"));
 type Result = RegulationListItem | RegulationSearchResult;
+const WORKFLOW_OPTIONS = [
+  { key: "published", label: "已公布法規" },
+  { key: "all", label: "全部狀態" },
+  { key: "draft", label: "草稿" },
+  { key: "under_review", label: "送審中" },
+  { key: "scheduled", label: "排入議程" },
+  { key: "council_approved", label: "待公布" },
+  { key: "rejected", label: "已退回" },
+  { key: "archived", label: "廢止法規" },
+];
 
 export default function RegulationSearch({ initialRegs = [] }: { initialRegs?: Result[] }) {
   const params = useSearchParams();
   const router = useRouter();
-  const { canAny } = usePermissions();
-  const [workspace, setWorkspace] = useState(false);
+  const { can, canAny } = usePermissions();
   const keyword = params.get("keyword") ?? "";
   const category = params.get("category") ?? "all";
   const archived = params.get("status") === "archived";
@@ -26,8 +34,14 @@ export default function RegulationSearch({ initialRegs = [] }: { initialRegs?: R
   const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
   const [sort, setSort] = useState("category");
+  const [syncOpen, setSyncOpen] = useState(false);
   const canManage = canAny("regulation:create", "regulation:admin", "regulation:schedule",
     "regulation:council_approve", "regulation:president_publish");
+  const requestedWorkflow = params.get("workflow");
+  const workflow = canManage && WORKFLOW_OPTIONS.some((option) => option.key === requestedWorkflow)
+    ? requestedWorkflow!
+    : archived ? "archived" : "published";
+  const onSynced = useCallback(() => setRetry((value) => value + 1), []);
 
   useEffect(() => { setInput(keyword); }, [keyword]);
   useEffect(() => {
@@ -35,9 +49,9 @@ export default function RegulationSearch({ initialRegs = [] }: { initialRegs?: R
     setLoading(true);
     setError(false);
     const query: Record<string, string> = {
-      active_only: archived ? "false" : "true",
-      workflow_status: archived ? "archived" : "published",
+      active_only: workflow === "published" ? "true" : "false",
     };
+    if (workflow !== "all") query.workflow_status = workflow;
     if (category in REGULATION_CATEGORIES) query.category = category;
     const request = keyword.trim()
       ? regulationsApi.search(keyword.trim(), query)
@@ -50,7 +64,7 @@ export default function RegulationSearch({ initialRegs = [] }: { initialRegs?: R
       if (!cancelled) setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [keyword, category, archived, retry]);
+  }, [keyword, category, workflow, retry]);
 
   const sorted = useMemo(() => [...results].sort((a, b) => {
     if (sort === "title") return a.title.localeCompare(b.title, "zh-TW");
@@ -59,29 +73,31 @@ export default function RegulationSearch({ initialRegs = [] }: { initialRegs?: R
     return rank[a.category] - rank[b.category] || a.title.localeCompare(b.title, "zh-TW");
   }), [results, sort]);
 
-  function navigate(next: { keyword?: string; category?: string; archived?: boolean }) {
+  function navigate(next: { keyword?: string; category?: string; workflow?: string }) {
     const query = new URLSearchParams();
     const nextKeyword = next.keyword ?? keyword;
     const nextCategory = next.category ?? category;
     if (nextKeyword.trim()) query.set("keyword", nextKeyword.trim());
     if (nextCategory in REGULATION_CATEGORIES) query.set("category", nextCategory);
-    if (next.archived ?? archived) query.set("status", "archived");
+    const nextWorkflow = next.workflow ?? workflow;
+    if (nextWorkflow === "archived") query.set("status", "archived");
+    else if (canManage && nextWorkflow !== "published") query.set("workflow", nextWorkflow);
     router.replace(`/regulations${query.size ? `?${query}` : ""}`, { scroll: false });
   }
-
-  if (workspace && canManage) return (
-    <>
-      <button type="button" className="administrative-button administrative-mode-switch" onClick={() => setWorkspace(false)}>返回公開法規查詢</button>
-      <RegulationWorkspace />
-    </>
-  );
 
   return (
     <div className="administrative-index">
       <header className="administrative-page-heading">
-        <h1>自治法規查詢系統</h1>
-        {canManage && <button type="button" className="administrative-button" onClick={() => setWorkspace(true)}>法規管理</button>}
+        <h1 className="text-xl font-semibold">法規查詢</h1>
+        {canManage && <div className="regulation-index-actions">
+          {canAny("regulation:schedule", "regulation:council_approve", "regulation:president_publish", "regulation:admin") && <Link href="/regulations/pending" className="btn btn-secondary">待審案件</Link>}
+          {can("regulation:create") && <Link href="/regulations/new" className="btn btn-primary">新增法規</Link>}
+        </div>}
       </header>
+      {can("regulation:admin") && <details className="regulation-sync-tools" onToggle={(event) => setSyncOpen(event.currentTarget.open)}>
+        <summary>資料同步</summary>
+        {syncOpen && <RegulationSyncPanel onSynced={onSynced} />}
+      </details>}
       <form className="administrative-search" role="search" onSubmit={(event: FormEvent) => {
         event.preventDefault(); navigate({ keyword: input });
       }}>
@@ -103,8 +119,8 @@ export default function RegulationSearch({ initialRegs = [] }: { initialRegs?: R
           </div>
         </fieldset>
         <label className="administrative-status-filter">法規狀態
-          <select value={archived ? "archived" : "published"} onChange={(event) => navigate({ archived: event.target.value === "archived" })}>
-            <option value="published">已公布法規</option><option value="archived">廢止法規</option>
+          <select value={workflow} onChange={(event) => navigate({ workflow: event.target.value })}>
+            {(canManage ? WORKFLOW_OPTIONS : WORKFLOW_OPTIONS.filter((option) => ["published", "archived"].includes(option.key))).map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
           </select>
         </label>
       </form>
@@ -139,7 +155,9 @@ export default function RegulationSearch({ initialRegs = [] }: { initialRegs?: R
                 )}
               </td>
               <td className="administrative-date"><time dateTime={regulation.published_at ?? undefined}>{administrativeDate(regulation.published_at)}</time></td>
-              <td className="administrative-state">{regulationPublicState(regulation)}</td>
+              <td className="administrative-state">{canManage && regulation.workflow_status !== "published"
+                ? WORKFLOW_OPTIONS.find((option) => option.key === regulation.workflow_status)?.label ?? regulationPublicState(regulation)
+                : regulationPublicState(regulation)}</td>
             </tr>
           ))}</tbody>
         </table>

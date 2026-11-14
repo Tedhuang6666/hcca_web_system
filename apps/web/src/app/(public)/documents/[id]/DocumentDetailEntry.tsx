@@ -67,15 +67,15 @@ export default function DocumentDetailEntry({
   }
 
   return (
-    <>
-    {authenticated && canManage && <button type="button" className="administrative-button administrative-mode-switch no-print" onClick={() => setWorkflowView(true)}>公文管理</button>}
     <PublicDocumentView
       document={document}
+      managementAction={authenticated && canManage
+        ? <button type="button" className="btn btn-secondary" onClick={() => setWorkflowView(true)}>公文管理</button>
+        : undefined}
       canDownloadPdf={authenticated}
       loading={loadingPublicDocument}
       loadError={publicLoadError}
       onRetry={() => setRetryVersion((version) => version + 1)}
     />
-    </>
   );
 }
