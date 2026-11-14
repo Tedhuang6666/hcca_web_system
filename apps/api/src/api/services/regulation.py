@@ -1059,6 +1059,11 @@ async def publish_regulation(
         raise ValueError("此法規已公布")
     if reg.is_repealed or reg.workflow_status == RegulationWorkflowStatus.ARCHIVED:
         raise ValueError("已廢止或封存的法規不可公布")
+    if (
+        reg.category in {RegulationCategory.CONSTITUTION, RegulationCategory.ORDINANCE}
+        and reg.workflow_status != RegulationWorkflowStatus.COUNCIL_APPROVED
+    ):
+        raise ValueError("憲章與條例必須經議會核定")
     if not (reg.content or "").strip() and not any(
         not article.is_deleted and article.article_type == "article" for article in reg.articles
     ):

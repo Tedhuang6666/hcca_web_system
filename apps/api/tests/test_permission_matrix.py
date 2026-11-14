@@ -116,13 +116,11 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("/regulations/{reg_id}/articles", "GET"),
     ("/regulations/{reg_id}/tree", "GET"),
     ("/regulations/{reg_id}/revisions", "GET"),
-    ("/regulations/{reg_id}/amendment-comparison", "GET"),
     ("/regulations/{reg_id}/diff", "POST"),
     ("/regulations/{reg_id}/print", "GET"),
     ("/regulations/{reg_id}/reference-warnings", "GET"),
     ("/regulations/{reg_id}/time-machine", "GET"),
     ("/regulations/{reg_id}/usage-context", "GET"),
-    ("/regulations/{reg_id}/workflow_logs", "GET"),
     # 已核准且已發布預算的公開檢視，不含未核准或內部財務資料。
     ("/finance/public/budgets", "GET"),
     ("/finance/public/budgets/{budget_id}", "GET"),
