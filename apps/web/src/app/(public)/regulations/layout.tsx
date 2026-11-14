@@ -1,1 +1,1 @@
-export { default } from "@/components/site/PublicRouteShell";
+export { default } from "@/components/site/AdministrativeRouteShell";

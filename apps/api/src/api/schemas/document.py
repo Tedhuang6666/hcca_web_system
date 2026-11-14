@@ -590,6 +590,7 @@ class DocumentListItem(BaseModel):
     org_id: uuid.UUID
     activity_id: uuid.UUID | None = None
     created_by: uuid.UUID
+    issued_at: datetime | None = None
     due_date: datetime | None
     submitted_at: datetime | None
     completed_at: datetime | None

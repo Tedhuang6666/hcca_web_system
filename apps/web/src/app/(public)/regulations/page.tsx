@@ -1,4 +1,4 @@
-import RegulationsClient from "./client";
+import RegulationsClient from "./RegulationSearch";
 import { fetchPublicRegulations } from "@/lib/serverFetch";
 import { pageMetadata } from "@/lib/seo";
 

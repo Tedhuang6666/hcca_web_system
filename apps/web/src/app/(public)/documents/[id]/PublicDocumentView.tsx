@@ -1,62 +1,23 @@
+"use client";
+
 import Link from "next/link";
-
-import { DocumentStatusBadge, UrgencyBadge } from "@/components/ui/StatusBadge";
+import { Printer } from "lucide-react";
 import { OfficialText } from "@/components/ui/OfficialText";
+import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
+import { documentsApi } from "@/lib/api/documents";
+import { administrativeDate, DOCUMENT_CATEGORIES } from "@/lib/administrative";
 import type { DocumentOut } from "@/lib/types";
+import { BRANDING } from "@/lib/branding";
+import { usePersistedZoom } from "@/hooks/usePersistedZoom";
 
-const CATEGORY_LABEL: Record<string, string> = {
-  letter: "函",
-  decree: "令",
-  announcement: "公告",
-  presentation: "呈",
-  report: "報告",
-  record: "紀錄",
-  consultation: "咨",
-  meeting_notice: "開會通知單",
-  inspection_notice: "會勘通知單",
-  phone_record: "公務電話紀錄",
-  book_letter: "書函",
-  directive: "手令",
-  signature: "簽",
-  memo: "便簽",
-  appointment: "聘書",
-  certificate: "證明書",
-  license: "證書／執照",
-  contract: "契約書",
-  proposal: "提案",
-  summary: "節略",
-  briefing: "說帖",
-  form: "定型化表單",
-  other: "其他",
-};
-
+const CATEGORY_LABEL = DOCUMENT_CATEGORIES;
 const CLASSIFICATION_LABEL: Record<string, string> = {
-  normal: "普通",
-  confidential: "密",
-  secret: "機密",
-  highly_confidential: "極機密",
-  absolutely_confidential: "絕對機密",
+  normal: "普通", confidential: "密", secret: "機密",
+  highly_confidential: "極機密", absolutely_confidential: "絕對機密",
 };
-
-function formatDate(value: string | null | undefined) {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("zh-TW");
-}
-
-function formatRocDate(value: string | null | undefined) {
-  if (!value) return null;
-  const date = new Date(value);
-  return `中華民國 ${date.getFullYear() - 1911} 年 ${date.getMonth() + 1} 月 ${date.getDate()} 日`;
-}
-
-function formatSignature(document: DocumentOut) {
-  const approved = document.approvals
-    .filter((step) => step.status === "approved")
-    .sort((a, b) => b.step_order - a.step_order)[0];
-  const name = approved?.approver.name || document.issuer_full_name || document.handler_name;
-  const title = approved?.approver_title || document.handler_unit;
-  return { name, title };
-}
+const URGENCY_LABEL: Record<string, string> = { normal: "普通件", priority: "速件", express: "最速件" };
+const formatDate = (value: string | null | undefined) => administrativeDate(value);
+const formatRocDate = (value: string | null | undefined) => administrativeDate(value, true);
 
 function DocumentBody({ document }: { document: DocumentOut }) {
   const decreeBody = document.doc_description
@@ -71,6 +32,8 @@ function DocumentBody({ document }: { document: DocumentOut }) {
   if (document.category === "decree") {
     return (
       <div className="space-y-5" style={{ color: "var(--text-primary)" }}>
+        {document.subject && document.subject !== decreeBody && <div><p>主旨：</p><div className="pl-[2em]"><OfficialText value={document.subject} /></div></div>}
+        {document.basis && <div><p>依據：</p><div className="pl-[2em]"><OfficialText value={document.basis} /></div></div>}
         {decreeBody && <OfficialText value={decreeBody} className="text-sm" />}
         {attachments && (
           <div>
@@ -148,7 +111,7 @@ function DocumentBody({ document }: { document: DocumentOut }) {
           <div className="pl-[2em]"><OfficialText value={document.subject} /></div>
         </div>
       )}
-      {document.category === "announcement" && document.basis && (
+      {document.basis && (
         <div>
           <p>依據：</p>
           <div className="pl-[2em]"><OfficialText value={document.basis} /></div>
@@ -183,192 +146,81 @@ function DocumentBody({ document }: { document: DocumentOut }) {
   );
 }
 
-export default function PublicDocumentView({
-  document,
-  loading = false,
-  loadError = null,
-  onRetry,
-}: {
+export default function PublicDocumentView({ document, loading = false, loadError = null, onRetry, canDownloadPdf = false }: {
   document: DocumentOut | null;
   loading?: boolean;
   loadError?: "not_found" | "unavailable" | null;
   onRetry?: () => void;
+  canDownloadPdf?: boolean;
 }) {
-  if (!document) {
-    if (loading) {
-      return (
-        <div className="mx-auto max-w-3xl px-4 py-16 text-center sm:px-6" role="status">
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>正在載入公開公文…</p>
-        </div>
-      );
-    }
-    return (
-      <div className="mx-auto max-w-3xl px-4 py-16 text-center sm:px-6" role="alert">
-        <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-          {loadError === "not_found"
-            ? "公文不存在，或目前不對外公開。"
-            : "暫時無法載入公開公文，請稍後再試。"}
-        </p>
-        {loadError === "unavailable" && onRetry && (
-          <button type="button" className="btn btn-secondary mt-4" onClick={onRetry}>重新載入</button>
-        )}
-      </div>
-    );
-  }
-
-  const signature = formatSignature(document);
-  const issuedDate = formatRocDate(document.issued_at);
-  const isDecree = document.category === "decree";
-
+  const { zoom, setZoom, zoomStyle } = usePersistedZoom("hcca:zoom:public-document");
+  if (!document) return (
+    <div className="administrative-feedback" role={loading ? "status" : "alert"}>
+      {loading ? "正在載入公開公文…" : loadError === "not_found"
+        ? "公文不存在，或目前不對外公開。" : "暫時無法載入公開公文，請稍後再試。"}
+      {loadError === "unavailable" && onRetry && <button type="button" onClick={onRetry}>重新載入</button>}
+      {!loading && <Link href="/documents">返回公文查詢</Link>}
+    </div>
+  );
+  const category = CATEGORY_LABEL[document.category] ?? document.category;
+  const mainRecipients = document.recipients.filter((recipient) => ["main", "primary"].includes(recipient.recipient_type));
+  const copyRecipients = document.recipients.filter((recipient) => recipient.recipient_type === "copy");
   return (
-    <div className="document-detail-page app-page-width space-y-5" aria-labelledby="public-document-title">
-      <nav aria-label="目前位置" className="text-xs" style={{ color: "var(--text-muted)" }}>
-        <Link href="/documents" className="hover:underline">公文</Link>
-        <span className="mx-2" aria-hidden="true">/</span>
-        <span>{document.serial_number || document.title}</span>
+    <div className="administrative-document-reader">
+      <nav className="administrative-breadcrumb no-print" aria-label="目前位置">
+        <Link href="/documents">公開公文</Link><span aria-hidden="true">/</span><span>{document.serial_number}</span>
       </nav>
-
-      <header className="document-detail-heading flex min-w-0 flex-col gap-3">
-        <div className="flex min-w-0 items-start gap-3">
-          <Link
-            href="/documents"
-            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg"
-            style={{ border: "1px solid var(--border)" }}
-            aria-label="返回公文列表"
-          >
-            ←
-          </Link>
-          <div className="min-w-0 flex-1 space-y-1">
-            <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
-              <span className="break-all font-mono text-sm" style={{ color: "var(--primary)" }}>
-                {document.serial_number}
-              </span>
-              <div className="flex flex-wrap items-center gap-2">
-                <DocumentStatusBadge status={document.status} />
-                <UrgencyBadge urgency={document.urgency} />
-              </div>
-            </div>
-            <h1
-              id="public-document-title"
-              className="document-detail-title break-words text-lg font-semibold leading-snug sm:text-xl"
-            >
-              {document.title}
-            </h1>
-            {document.summary && (
-              <p className="mt-1 break-words text-sm" style={{ color: "var(--text-muted)" }}>
-                摘要：{document.summary}
-              </p>
-            )}
+      <header className="administrative-document-toolbar no-print">
+        <h1>公文檢視</h1>
+        <div>
+          <div className="administrative-document-zoom" role="group" aria-label="公文字級">
+            <button type="button" onClick={() => setZoom((value) => value - 10)} disabled={zoom <= 70} aria-label="縮小公文字級">A−</button>
+            <span aria-live="polite">{zoom}%</span>
+            <button type="button" onClick={() => setZoom((value) => value + 10)} disabled={zoom >= 150} aria-label="放大公文字級">A＋</button>
           </div>
+          {canDownloadPdf ? <AnimatedDownloadButton request={() => documentsApi.printPdf(document.id)}
+            filename={`${document.serial_number}.pdf`} className="administrative-button" label="下載公文 PDF" />
+            : <Link className="administrative-button" href={`/login?next=${encodeURIComponent(`/documents/${encodeURIComponent(document.serial_number)}`)}`}>登入下載 PDF</Link>}
+          <button type="button" className="administrative-button" onClick={() => window.print()}><Printer size={16} aria-hidden="true" />列印本文</button>
         </div>
       </header>
-
-      {document.regulation_id && (
-        <section className="card flex flex-wrap items-center gap-2 px-4 py-3 text-sm" aria-label="法規關聯">
-          <span style={{ color: "var(--text-muted)" }}>法規關聯：</span>
-          <Link href={"/regulations/" + document.regulation_id} className="font-medium hover:underline" style={{ color: "var(--primary)" }}>
-            查看對應法規與沿革 →
-          </Link>
-        </section>
-      )}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-        <article className="space-y-4 lg:col-span-2">
-          <section className="card overflow-hidden" aria-labelledby="public-document-content-title">
-            <div
-              className="flex flex-wrap items-center justify-between gap-2 px-5 py-3"
-              style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-elevated)" }}
-            >
-              <h2 id="public-document-content-title" className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
-                公文內容
-              </h2>
-              <span className="font-mono text-xs" style={{ color: "var(--primary)" }}>
-                {document.serial_number || "未分配字號"}
-              </span>
-            </div>
-            <div className="space-y-6 px-5 py-6 sm:px-8 sm:py-8">
-              <DocumentBody document={document} />
-              {(document.status === "approved" || document.status === "archived") && signature.name && (
-                <div className="mt-8 border-t pt-6" style={{ borderColor: "var(--border-strong)" }}>
-                  <div className={`flex flex-col ${isDecree ? "items-center text-center" : "items-end text-right"} gap-2`}>
-                    {signature.title && (
-                      <p className="text-xs" style={{ color: "var(--text-muted)" }}>{signature.title}</p>
-                    )}
-                    <p className={`${isDecree ? "text-4xl sm:text-5xl" : "text-3xl"} tracking-[0.15em]`} style={{ color: "var(--primary)" }}>
-                      {signature.name}
-                    </p>
-                    {issuedDate && <p className="text-xs" style={{ color: "var(--text-muted)" }}>{issuedDate}</p>}
-                    <span className="text-xs" style={{ color: "var(--text-muted)" }}>（蓋章處）</span>
-                  </div>
-                </div>
-              )}
-            </div>
-          </section>
-
-          {document.attachments.length > 0 && (
-            <section className="card p-4" aria-labelledby="public-document-attachments-title">
-              <h2 id="public-document-attachments-title" className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
-                附件（{document.attachments.length}）
-              </h2>
-              <ul className="mt-3 space-y-2 text-sm">
-                {document.attachments.map((attachment) => (
-                  <li key={attachment.id} className="flex min-w-0 items-center gap-2">
-                    <span aria-hidden="true" style={{ color: "var(--text-muted)" }}>↳</span>
-                    {attachment.link_url ? (
-                      <a
-                        href={attachment.link_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="truncate hover:underline"
-                        style={{ color: "var(--primary)" }}
-                      >
-                        {attachment.display_name || attachment.filename}
-                      </a>
-                    ) : (
-                      <span className="truncate" style={{ color: "var(--text-secondary)" }}>
-                        {attachment.display_name || attachment.filename}
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
+      <div className="administrative-document-stage">
+        <article className="official-paper" aria-labelledby="public-document-title" style={zoomStyle}>
+          <header className="official-paper-header">
+            <h2 id="public-document-title">{document.category === "decree" && <>{BRANDING.orgName}<br /></>}{document.issuer_full_name ? `${document.issuer_full_name}　${category}` : category}</h2>
+            <dl className="official-paper-meta">
+              <dt>發文日期：</dt><dd><time dateTime={document.issued_at ?? undefined}>{formatRocDate(document.issued_at)}</time></dd>
+              <dt>發文字號：</dt><dd>{document.serial_number}</dd>
+              <dt>速別：</dt><dd>{URGENCY_LABEL[document.urgency] ?? document.urgency}</dd>
+              <dt>密等：</dt><dd>{CLASSIFICATION_LABEL[document.classification] ?? document.classification}</dd>
+            </dl>
+          </header>
+          {mainRecipients.length > 0 && document.category !== "consultation" && <p>受文者：{mainRecipients.map((recipient) => recipient.name).join("、")}</p>}
+          <div className="official-paper-body"><DocumentBody document={document} /></div>
+          {copyRecipients.length > 0 && <dl className="official-paper-recipients"><dt>副本：</dt><dd>{copyRecipients.map((recipient) => recipient.name).join("、")}</dd></dl>}
         </article>
-
-        <aside className="card h-fit p-4" aria-labelledby="public-document-info-title">
-          <h2 id="public-document-info-title" className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
-            文件資訊
-          </h2>
-          <dl className="mt-3 grid grid-cols-2 gap-3 text-xs sm:grid-cols-1">
-            <div>
-              <dt style={{ color: "var(--text-muted)" }}>類別</dt>
-              <dd className="mt-0.5" style={{ color: "var(--text-primary)" }}>{CATEGORY_LABEL[document.category] ?? document.category}</dd>
-            </div>
-            <div>
-              <dt style={{ color: "var(--text-muted)" }}>密等</dt>
-              <dd className="mt-0.5" style={{ color: "var(--text-primary)" }}>{CLASSIFICATION_LABEL[document.classification] ?? document.classification}</dd>
-            </div>
-            <div>
-              <dt style={{ color: "var(--text-muted)" }}>發布日期</dt>
-              <dd className="mt-0.5" style={{ color: "var(--text-primary)" }}>{formatDate(document.issued_at || document.created_at)}</dd>
-            </div>
-            {document.handler_unit && (
-              <div>
-                <dt style={{ color: "var(--text-muted)" }}>發布單位</dt>
-                <dd className="mt-0.5" style={{ color: "var(--text-primary)" }}>{document.handler_unit}</dd>
-              </div>
-            )}
-            {document.category !== "announcement" && document.recipients.length > 0 && (
-              <div className="col-span-2 sm:col-span-1">
-                <dt style={{ color: "var(--text-muted)" }}>受文者</dt>
-                <dd className="mt-0.5 break-words" style={{ color: "var(--text-primary)" }}>
-                  {document.recipients.map((recipient) => recipient.name).join("、")}
-                </dd>
-              </div>
-            )}
-          </dl>
-        </aside>
       </div>
+      {document.attachments.length > 0 && <section className="administrative-document-supplement no-print" aria-labelledby="public-document-attachments-title">
+        <h2 id="public-document-attachments-title">附件（{document.attachments.length}）</h2>
+        <ul>{document.attachments.map((attachment) => <li key={attachment.id}>
+          <a href={attachment.link_url || documentsApi.attachmentDownloadUrl(document.id, attachment.id)}
+            target="_blank" rel="noreferrer">{attachment.display_name || attachment.filename}</a>
+        </li>)}</ul>
+      </section>}
+      {document.regulation_id && <section className="administrative-document-supplement no-print">
+        <Link href={`/regulations/${document.regulation_id}`}>相關法規與沿革</Link>
+      </section>}
+      <details className="administrative-document-supplement no-print">
+        <summary>文件基本資料</summary>
+        <dl>
+          <dt>標題</dt><dd>{document.title}</dd>
+          {document.summary && <><dt>摘要</dt><dd>{document.summary}</dd></>}
+          <dt>文書類別</dt><dd>{category}</dd>
+          <dt>發文日期</dt><dd>{formatDate(document.issued_at)}</dd>
+          {document.handler_unit && <><dt>承辦單位</dt><dd>{document.handler_unit}</dd></>}
+          {document.due_date && <><dt>限辦日期</dt><dd>{formatDate(document.due_date)}</dd></>}
+        </dl>
+      </details>
     </div>
   );
 }

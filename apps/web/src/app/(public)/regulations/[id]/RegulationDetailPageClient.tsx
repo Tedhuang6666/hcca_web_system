@@ -19,7 +19,6 @@ import {
   type Draft,
 } from "@/components/regulations/AmendmentDraftParts";
 import {
-  ArticleRow,
   PROSE,
   RevisionCard,
   WfNoteModal,
@@ -30,7 +29,8 @@ import {
   type Tab,
 } from "@/components/regulations/RegulationDetailSections";
 import { DetailPageLoading } from "@/components/ui/LoadingState";
-import { RegulationCategoryBadge } from "@/components/ui/StatusBadge";
+import ArticleRow from "@/components/regulations/LawReadingRow";
+import { administrativeDate, countLawArticles, REGULATION_CATEGORIES, regulationPublicState } from "@/lib/administrative";
 import { usePermissions } from "@/hooks/usePermissions";
 import { usePersistedZoom } from "@/hooks/usePersistedZoom";
 import { authFetch } from "@/lib/api/core";
@@ -124,6 +124,7 @@ export default function RegulationDetailPageClient({
   const [repealLoading, setRepealLoading] = useState(false);
   const [showDeleted, setShowDeleted] = useState(false);
   const [tocVisible, setTocVisible] = useState(true);
+  const [mobileTocExpanded, setMobileTocExpanded] = useState(false);
   const [chapterCollapsedMap, setChapterCollapsedMap] = useState<Record<string, boolean>>({});
   const [amendmentDrafts, setAmendmentDrafts] = useState<Draft[]>([]);
   const [activeAnchorId, setActiveAnchorId] = useState<string | null>(null);
@@ -563,19 +564,17 @@ export default function RegulationDetailPageClient({
   return (
     <>
       <div className="regulation-detail-page app-page-width space-y-5">
+        <nav className="administrative-breadcrumb no-print" aria-label="目前位置">
+          <Link href="/regulations">自治法規</Link><span aria-hidden="true">/</span>
+          <Link href={`/regulations?category=${reg.category}`}>{REGULATION_CATEGORIES[reg.category]}</Link>
+          <span aria-hidden="true">/</span><span>法規內容</span>
+        </nav>
         {/* ── 頂部標題列 ───────────────────────────────────────────────────── */}
         <div className="regulation-detail-heading flex items-start gap-3">
-          <Link href="/regulations"
-            className="no-print mt-1 w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center hover:opacity-80"
-            style={{ border: "1px solid var(--border)" }}>←</Link>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2 mb-1">
-              <RegulationCategoryBadge category={reg.category} />
-              <span className="text-xs px-2 py-0.5 rounded"
-                style={{ color: "var(--text-muted)", background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-                v{reg.version}
-              </span>
-              <WorkflowStatusBadge status={reg.workflow_status} />
+              <span className="administrative-law-state">{regulationPublicState(reg)}</span>
+              {reg.workflow_status !== "published" && currentUserId && <WorkflowStatusBadge status={reg.workflow_status} />}
             </div>
 
             <div className="flex min-w-0 flex-col gap-3">
@@ -720,8 +719,8 @@ export default function RegulationDetailPageClient({
 
             {reg.published_at && (
               <p className="regulation-detail-published-meta text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-                發布日期：{new Date(reg.published_at).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" })}
-                　｜　最後更新：{new Date(reg.updated_at).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" })}
+                公布日期：{administrativeDate(reg.published_at, true)}
+                {reg.effective_date && <>　｜　施行日期：{administrativeDate(reg.effective_date, true)}</>}
               </p>
             )}
           </div>
@@ -806,14 +805,14 @@ export default function RegulationDetailPageClient({
         )}
 
         {/* ── 分頁標籤 ─────────────────────────────────────────────────────── */}
-        <div className="no-print flex gap-1 p-1 rounded-lg overflow-x-auto"
+        <div className="administrative-reader-tabs no-print flex gap-1 p-1 rounded-lg overflow-x-auto"
           style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
           {([
-            { key: "content" as Tab, label: "法規內容" },
-            { key: "revisions", label: `修訂歷程${sortedRevisions.length > 0 ? ` (${sortedRevisions.length})` : ""}` },
+            { key: "content" as Tab, label: "條文內容" },
+            { key: "revisions", label: "歷史版本" },
             ...(currentUserId ? [{ key: "workflow" as Tab, label: "審議流程" }] : []),
           ] as { key: Tab; label: string }[]).map(({ key, label }) => (
-            <button key={key} onClick={() => handleTabChange(key)}
+            <button key={key} aria-pressed={tab === key} onClick={() => handleTabChange(key)}
               className="flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] whitespace-nowrap"
               style={tab === key
                 ? { background: "var(--primary-dim)", border: "1px solid var(--border-strong)", color: "var(--primary)" }
@@ -827,7 +826,7 @@ export default function RegulationDetailPageClient({
 
         {/* 法規內容 */}
         {tab === "content" && (
-          <div className="card p-4 sm:p-6 print-content">
+          <div className="administrative-law-reader print-content">
             {reg.preface && (
               <div className="mb-6 pb-5 border-b text-sm italic"
                 style={{ color: "var(--text-muted)", borderColor: "var(--border)" }}>
@@ -836,7 +835,7 @@ export default function RegulationDetailPageClient({
             )}
             {hasHistoryRows && (
               <details
-                className="reader-font-scale mb-6 rounded-xl"
+                className="administrative-law-history reader-font-scale mb-6"
                 style={{
                   background: "var(--bg-elevated)",
                   border: "1px solid var(--border)",
@@ -847,7 +846,7 @@ export default function RegulationDetailPageClient({
                   className="cursor-pointer px-4 py-2.5 text-xs font-semibold uppercase tracking-wider select-none"
                   style={{ color: "var(--text-muted)" }}
                 >
-                  法規沿革（點此展開）
+                  法規沿革
                 </summary>
                 <div
                   className="px-4 pb-4 space-y-1 text-sm"
@@ -875,7 +874,7 @@ export default function RegulationDetailPageClient({
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                   <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>條文內容</h2>
                   <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                    共 {activeArticles.filter(a => !a.is_deleted).length} 個有效條文
+                    共 {countLawArticles(allArticles)} 條未刪除條文
                   </span>
                 </div>
                 <div className="no-print flex items-center gap-2 flex-wrap">
@@ -914,12 +913,14 @@ export default function RegulationDetailPageClient({
                   )}
                 </div>
 
-                <div className="flex flex-col gap-3 lg:flex-row lg:gap-4 lg:items-start">
+                <div className="administrative-law-layout">
                   {tocVisible && (
-                    <aside className="no-print w-full max-h-52 overflow-auto rounded-xl p-3 lg:sticky lg:top-4 lg:w-64 lg:max-h-[70vh] lg:flex-shrink-0"
+                    <aside className="administrative-law-toc no-print"
                       style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
-                      <p className="text-xs font-semibold mb-2" style={{ color: "var(--text-muted)" }}>章節目錄</p>
-                      <div className="space-y-1">
+                      <p className="administrative-toc-desktop-title text-xs font-semibold mb-2" style={{ color: "var(--text-muted)" }}>章節目錄</p>
+                      <button type="button" className="administrative-toc-mobile-toggle" aria-expanded={mobileTocExpanded}
+                        aria-controls="law-toc-links" onClick={() => setMobileTocExpanded((value) => !value)}>章節目錄　{mobileTocExpanded ? "收合" : "展開"}</button>
+                      <div id="law-toc-links" className="space-y-1" data-expanded={mobileTocExpanded}>
                         {tocItems.map(item => (
                           <button
                             key={item.anchor}
@@ -947,7 +948,7 @@ export default function RegulationDetailPageClient({
                     </aside>
                   )}
                   <div
-                    className="legal-text-reader reader-font-scale w-full min-w-0 flex-1 glass overflow-hidden"
+                    className="administrative-law-text reader-font-scale w-full min-w-0 flex-1"
                     style={zoomStyle}
                   >
                     {activeArticles.length === 0

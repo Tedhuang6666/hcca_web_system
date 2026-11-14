@@ -180,6 +180,31 @@ async def test_list_documents_anonymous_sees_public_documents(
 
 
 @pytest.mark.asyncio
+async def test_public_list_uses_actual_issued_date(db_session: AsyncSession, client) -> None:
+    org = Org(name=f"發文日期組織-{uuid.uuid4().hex[:6]}")
+    creator = User(email=f"issued-{uuid.uuid4().hex[:8]}@example.com", display_name="Creator")
+    db_session.add_all([org, creator])
+    await db_session.flush()
+    issued_at = datetime(2026, 11, 8, 0, 0, tzinfo=UTC)
+    issued = _make_doc(
+        org,
+        creator,
+        visibility_level=DocumentVisibility.PUBLICLY_OPEN,
+        issued_at=issued_at,
+        submitted_at=issued_at - timedelta(days=2),
+    )
+    undated = _make_doc(org, creator, visibility_level=DocumentVisibility.PUBLICLY_OPEN)
+    db_session.add_all([issued, undated])
+    await db_session.flush()
+
+    response = await client.get("/documents")
+    assert response.status_code == 200, response.text
+    items = {item["id"]: item for item in response.json()}
+    assert datetime.fromisoformat(items[str(issued.id)]["issued_at"]) == issued_at
+    assert items[str(undated.id)]["issued_at"] is None
+
+
+@pytest.mark.asyncio
 async def test_list_documents_my_only_filters_to_creator(
     db_session: AsyncSession, authed_client_factory
 ) -> None:

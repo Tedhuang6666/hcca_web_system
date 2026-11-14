@@ -17683,6 +17683,8 @@ export interface components {
              * @default false
              */
             is_redacted: boolean;
+            /** Issued At */
+            issued_at?: string | null;
             /**
              * Org Id
              * Format: uuid

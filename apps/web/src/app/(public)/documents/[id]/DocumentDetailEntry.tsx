@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { ApiError, documentsApi, type DocumentWithArchive } from "@/lib/api";
 import type { DocumentOut } from "@/lib/types";
 import { AUTH_CACHE_EVENT } from "@/lib/auth-cache";
+import { usePermissions } from "@/hooks/usePermissions";
 
 import PublicDocumentView from "./PublicDocumentView";
 
@@ -26,6 +27,9 @@ export default function DocumentDetailEntry({
   initialDoc: DocumentOut | null;
 }) {
   const [authenticated, setAuthenticated] = useState(false);
+  const [workflowView, setWorkflowView] = useState(false);
+  const { canAny } = usePermissions();
+  const canManage = canAny("document:draft", "document:edit", "document:issue_direct", "document:approve", "document:reject", "document:admin", "document:view_all", "document:archive", "document:forward");
   const [document, setDocument] = useState(initialDoc);
   const [loadingPublicDocument, setLoadingPublicDocument] = useState(!initialDoc);
   const [publicLoadError, setPublicLoadError] = useState<"not_found" | "unavailable" | null>(null);
@@ -58,16 +62,20 @@ export default function DocumentDetailEntry({
     return () => { cancelled = true; };
   }, [authenticated, documentId, initialDoc, retryVersion]);
 
-  if (authenticated) {
+  if (authenticated && (!initialDoc || workflowView)) {
     return <AuthenticatedDocumentDetail initialDoc={withArchive(document)} />;
   }
 
   return (
+    <>
+    {authenticated && canManage && <button type="button" className="administrative-button administrative-mode-switch no-print" onClick={() => setWorkflowView(true)}>公文管理</button>}
     <PublicDocumentView
       document={document}
+      canDownloadPdf={authenticated}
       loading={loadingPublicDocument}
       loadError={publicLoadError}
       onRetry={() => setRetryVersion((version) => version + 1)}
     />
+    </>
   );
 }

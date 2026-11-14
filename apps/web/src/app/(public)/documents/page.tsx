@@ -1,4 +1,4 @@
-import DocumentListClient from "./client";
+import DocumentListClient from "./DocumentSearch";
 import { pageMetadata } from "@/lib/seo";
 import { fetchPublicDocuments } from "@/lib/serverFetch";
 
