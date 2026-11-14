@@ -6,8 +6,6 @@ import type {
   ArticleType,
   RegulationArticleOut,
   RegulationRevisionOut,
-  RegulationWorkflowLogOut,
-  RegulationWorkflowStatus,
 } from "@/lib/types";
 import {
   ARTICLE_TYPE_LABEL,
@@ -17,10 +15,10 @@ import { formatRevisionDate } from "@/lib/regulationHistory";
 
 import { LawArticleRow } from "./LawArticleRow";
 
-export type Tab = "content" | "revisions" | "workflow";
+export type Tab = "content" | "revisions";
 
 export function isTab(value: string | null): value is Tab {
-  return value === "content" || value === "revisions" || value === "workflow";
+  return value === "content" || value === "revisions";
 }
 
 type ProposalChangeCard = {
@@ -154,123 +152,6 @@ export const PROSE = `prose prose-invert prose-sm max-w-none
   prose-li: prose-hr:border-slate-700
   prose-table: prose-th: prose-th:bg-slate-800/50
   prose-td:border-slate-700 prose-th:border-slate-700`;
-
-// ── 審議流程 constants ─────────────────────────────────────────────────────────
-
-const WF_META: Record<RegulationWorkflowStatus, { label: string; color: string; bg: string; step: number }> = {
-  draft:            { label: "草稿",     color: "var(--text-muted)",   bg: "var(--bg-elevated)",           step: 0 },
-  under_review:     { label: "送審中",   color: "#0284c7",             bg: "rgba(2,132,199,0.12)",         step: 1 },
-  scheduled:        { label: "排入議程", color: "#7c3aed",             bg: "rgba(124,58,237,0.12)",        step: 2 },
-  council_approved: { label: "議會核定", color: "var(--warning)",      bg: "var(--warning-dim)",           step: 3 },
-  published:        { label: "已公布",   color: "var(--success)",      bg: "var(--success-dim)",           step: 4 },
-  rejected:         { label: "已退回",   color: "var(--danger)",       bg: "rgba(220,38,38,0.1)",          step: -1 },
-  archived:         { label: "已廢止",   color: "var(--text-disabled)","bg": "var(--bg-elevated)",         step: 5 },
-};
-
-const WF_STEPS: { key: RegulationWorkflowStatus; label: string }[] = [
-  { key: "draft",            label: "起草" },
-  { key: "under_review",     label: "送審" },
-  { key: "scheduled",        label: "排入議程" },
-  { key: "council_approved", label: "議會核定" },
-  { key: "published",        label: "主席公布" },
-];
-
-export function WorkflowStatusBadge({ status }: { status: RegulationWorkflowStatus }) {
-  const m = WF_META[status] ?? WF_META.draft;
-  return (
-    <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full"
-      style={{ color: m.color, background: m.bg, border: `1px solid ${m.color}30` }}>
-      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: m.color }} />
-      {m.label}
-    </span>
-  );
-}
-
-// ── 審議流程時間軸 ─────────────────────────────────────────────────────────────
-
-export function WorkflowTimeline({
-  logs, currentStatus,
-}: {
-  logs: RegulationWorkflowLogOut[];
-  currentStatus: RegulationWorkflowStatus;
-}) {
-  const currentMeta = WF_META[currentStatus];
-  const currentStep = currentMeta?.step ?? 0;
-  return (
-    <div className="space-y-4">
-      {/* 進度條 */}
-      {currentStatus !== "rejected" && currentStatus !== "archived" && (
-        <div className="card p-4">
-          <p className="text-xs font-semibold mb-3" style={{ color: "var(--text-muted)" }}>審議進度</p>
-          <div className="relative flex items-center">
-            {WF_STEPS.map((s, i) => {
-              const m = WF_META[s.key];
-              const done = m.step <= currentStep;
-              const active = s.key === currentStatus;
-              return (
-                <div key={s.key} className="flex-1 flex flex-col items-center relative">
-                  {i < WF_STEPS.length - 1 && (
-                    <div className="absolute top-3 left-1/2 w-full h-0.5"
-                      style={{ background: done && !active ? m.color : "var(--border)" }} />
-                  )}
-                  <div className="w-6 h-6 rounded-full border-2 flex items-center justify-center z-10 text-[10px] font-bold"
-                    style={{
-                      background: done ? m.color : "var(--bg-surface)",
-                      borderColor: done ? m.color : "var(--border)",
-                      color: done ? "white" : "var(--text-muted)",
-                    }}>
-                    {done && !active ? "✓" : i + 1}
-                  </div>
-                  <span className="text-[10px] mt-1 text-center leading-tight"
-                    style={{ color: active ? m.color : done ? "var(--text-secondary)" : "var(--text-muted)" }}>
-                    {s.label}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* 日誌 */}
-      {logs.length === 0 ? (
-        <div className="card p-4 text-center text-sm" style={{ color: "var(--text-muted)" }}>
-          尚無流程記錄
-        </div>
-      ) : (
-        <div className="card overflow-hidden">
-          <div className="px-4 py-3" style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
-            <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>流程記錄</p>
-          </div>
-          <ul>
-            {[...logs].reverse().map((log, i) => {
-              const fromM = WF_META[log.from_status as RegulationWorkflowStatus] ?? WF_META.draft;
-              const toM = WF_META[log.to_status as RegulationWorkflowStatus] ?? WF_META.draft;
-              return (
-                <li key={log.id} className="px-4 py-3 flex items-start gap-3"
-                  style={i < logs.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}>
-                  <div className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" style={{ background: toM.color }} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-medium" style={{ color: toM.color }}>{toM.label}</span>
-                      <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>← {fromM.label}</span>
-                    </div>
-                    {log.note && (
-                      <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>{log.note}</p>
-                    )}
-                    <p className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>
-                      {new Date(log.created_at).toLocaleString("zh-TW")}
-                    </p>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ── 條文列（thin wrapper，沿用 LawArticleRow 視覺）────────────────────────────
 
@@ -631,63 +512,6 @@ export function RevisionCard({
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-// ── 流程備註輸入 Modal ─────────────────────────────────────────────────────────
-
-export function WfNoteModal({
-  label, hint, placeholder, onClose, onSubmit,
-}: {
-  label: string; hint?: string; placeholder?: string;
-  onClose: () => void; onSubmit: (note: string) => Promise<void>;
-}) {
-  const [note, setNote] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const isPresidentPublish = label.includes("主席公布");
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center"
-      style={{ background: "var(--bg-overlay)" }} role="dialog" aria-modal="true">
-      <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
-      <div className="relative rounded-2xl overflow-hidden"
-        style={{ width: "min(480px,96vw)", background: "var(--bg-surface)", border: "1px solid var(--border)", boxShadow: "var(--shadow-xl)" }}>
-        <div className="flex items-center justify-between px-5 py-3.5"
-          style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
-          <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{label}</span>
-          <button onClick={onClose} className="topbar-icon-btn" aria-label="關閉">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </div>
-        <div className="p-5 space-y-3">
-          {isPresidentPublish && (
-            <div className="px-3 py-2 rounded-lg text-xs"
-              style={{ background: "rgba(217,119,6,0.08)", border: "1px solid rgba(217,119,6,0.25)", color: "#d97706" }}>
-              公布後將自動生成套用「主令」字號的公文，並附上修正條文對照表。
-            </div>
-          )}
-          <div>
-            <label className="block text-xs mb-1.5" style={{ color: "var(--text-secondary)" }}>
-              {hint ?? "備註 / 原因（選填）"}
-            </label>
-            <textarea value={note} onChange={e => setNote(e.target.value)} rows={3}
-              className="w-full text-sm px-3 py-2 rounded-lg outline-none resize-none"
-              style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
-              placeholder={placeholder ?? "請說明備註或原因..."} />
-          </div>
-        </div>
-        <div className="flex justify-end gap-3 px-5 pb-4">
-          <button onClick={onClose} className="btn btn-ghost text-xs px-4 py-1.5">取消</button>
-          <button
-            disabled={submitting}
-            onClick={async () => { setSubmitting(true); await onSubmit(note); }}
-            className="btn btn-primary text-xs px-4 py-1.5">
-            {submitting ? "處理中…" : "確認"}
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

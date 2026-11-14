@@ -1054,30 +1054,23 @@ async def publish_regulation(
     data: RegulationPublishRequest,
     published_by: uuid.UUID,
 ) -> Regulation:
-    """
-    直接制定辦法（設定 published_at）。
+    """公布既有來源資料，保留版本快照，不啟動起草或審議流程。"""
+    if reg.workflow_status == RegulationWorkflowStatus.PUBLISHED:
+        raise ValueError("此法規已公布")
+    if reg.is_repealed or reg.workflow_status == RegulationWorkflowStatus.ARCHIVED:
+        raise ValueError("已廢止或封存的法規不可公布")
+    if not (reg.content or "").strip() and not any(
+        not article.is_deleted and article.article_type == "article" for article in reg.articles
+    ):
+        raise ValueError("法規尚無可公布的內容")
 
-    憲章與條例必須走議會審議流程；只有辦法可由具備發布權限的組織
-    直接制定。直接制定同樣寫入流程日誌與修訂歷程，避免繞過稽核軌跡。
-    """
-    if reg.category != RegulationCategory.PROCEDURE:
-        raise ValueError("憲章與條例必須經議會核定後才能公布")
-    if reg.workflow_status not in {
-        RegulationWorkflowStatus.DRAFT,
-        RegulationWorkflowStatus.REJECTED,
-    }:
-        raise ValueError("辦法僅可從草稿或退回狀態直接制定")
-
-    change_brief = data.change_brief.strip() or "直接制定辦法"
+    change_brief = data.change_brief.strip() or "公布法規"
     now = datetime.now(UTC)
-    await transition_workflow(
-        session,
-        reg,
-        to_status=RegulationWorkflowStatus.PUBLISHED,
-        actor_id=published_by,
-        note=change_brief,
-    )
+    reg.workflow_status = RegulationWorkflowStatus.PUBLISHED
+    reg.workflow_note = None
+    reg.is_active = True
     reg.published_at = now
+    reg.version = max([reg.version, *(revision.version + 1 for revision in reg.revisions)])
     reg.revisions.append(
         RegulationRevision(
             regulation_id=reg.id,
@@ -1093,7 +1086,7 @@ async def publish_regulation(
         )
     )
     await session.flush()
-    logger.info("辦法直接制定 id=%s title=%s", reg.id, reg.title)
+    logger.info("法規公布 id=%s title=%s", reg.id, reg.title)
     loaded = await get_regulation(session, reg.id)
     await invalidate_dashboard_cache()
     return loaded or reg

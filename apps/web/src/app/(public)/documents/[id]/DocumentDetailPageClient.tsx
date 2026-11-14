@@ -9,10 +9,10 @@ import { authFetch, documentsApi, usersApi, ApiError, apiErrorMessage } from "@/
 import type { DocumentWithArchive, UserSummary } from "@/lib/api";
 import type { DocumentDispatchCreate, DocumentVisibility, RecipientDownloadVariant } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
-import { DocumentStatusBadge, UrgencyBadge } from "@/components/ui/StatusBadge";
+import { DocumentStatusBadge } from "@/components/ui/StatusBadge";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { DetailPageLoading } from "@/components/ui/LoadingState";
-import { OfficialText } from "@/components/ui/OfficialText";
+import { OfficialDocumentPaper } from "./PublicDocumentView";
 import { usePersistedZoom } from "@/hooks/usePersistedZoom";
 import { useWS } from "@/hooks/useWS";
 import { apiUrl } from "@/lib/config";
@@ -558,17 +558,6 @@ export default function DocumentDetailPageClient({
         : "—",
     ],
   ];
-  const primaryRecipients = doc.recipients
-    .filter(r => r.recipient_type === "main" || r.recipient_type === "primary");
-  const recipientSummary = primaryRecipients.length > 0
-    ? primaryRecipients.map(r => r.name).join("、")
-    : "—";
-  const isDecree = doc.category === "decree";
-  const decreeBody = doc.doc_description || doc.content || doc.action_required || doc.subject;
-  const attachmentNames = doc.attachments
-    .map(a => a.display_name || a.filename)
-    .filter(Boolean)
-    .join("、");
 
   return (
     <>
@@ -581,31 +570,24 @@ export default function DocumentDetailPageClient({
       {/* 頂部 */}
         <div className="document-detail-heading flex min-w-0 flex-col gap-3">
         <div className="flex min-w-0 flex-1 items-start gap-3">
-          <Link href="/documents"
-            className="w-8 h-8 rounded-lg flex flex-shrink-0 items-center justify-center  hover:"
-            style={{ border: "1px solid var(--border)" }}>←</Link>
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
-              <span className="text-sm font-mono break-all" style={{ color: "var(--primary)" }}>
+              <span className="text-sm break-all" style={{ color: "var(--primary)" }}>
                 {doc.serial_number}
               </span>
               <div className="flex flex-wrap items-center gap-2">
                 <DocumentStatusBadge status={doc.status} />
-                <UrgencyBadge urgency={doc.urgency} />
               </div>
             </div>
             <h1 className="document-detail-title text-lg font-semibold leading-snug break-words sm:text-xl">{doc.title}</h1>
-            {doc.summary && (
-              <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>摘要：{doc.summary}</p>
-            )}
           </div>
         </div>
 
-        <div className="document-detail-actions">
-          <div className="document-detail-action-buttons">
-          <div className="document-detail-reading-tools" role="group" aria-label="閱讀工具">
+        <div className="document-workspace-actions">
+          <div className="document-workspace-action-buttons">
+          <div className="document-workspace-reading-tools" role="group" aria-label="閱讀工具">
           {/* 縮放控制 */}
-          <div className="document-detail-zoom-control rounded-lg overflow-hidden"
+          <div className="document-workspace-zoom-control rounded-lg overflow-hidden"
             style={{ border: "1px solid var(--border)" }}>
             <button onClick={() => setZoom(z => Math.max(70, z - 10))}
               className="px-2 py-1.5 text-xs transition-colors hover:opacity-80"
@@ -919,317 +901,11 @@ export default function DocumentDetailPageClient({
         </div>
       )}
 
-      <div className={`grid grid-cols-1 gap-5 ${doc.status === "archived" ? "" : "lg:grid-cols-3"}`}>
+      <div className="document-workspace-body">
         {/* 左：公文內容 */}
-        <div className={doc.status === "archived" ? "space-y-4" : "lg:col-span-2 space-y-4"}>
-          {/* 公文本文（官式橫書格式） */}
-          <div className="reader-font-scale card overflow-hidden" style={zoomStyle}>
-            <div className="px-5 py-3 space-y-2" style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>公文內容</span>
-                <span className="text-xs font-mono" style={{ color: "var(--primary)" }}>
-                  {doc.serial_number || "未分配字號"}
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs" style={{ color: "var(--text-secondary)" }}>
-                <span>{catLabel}</span>
-                <span>{CLASS_LABEL[doc.classification] ?? doc.classification}</span>
-                <span>{URGENCY_LABEL[doc.urgency] ?? doc.urgency}</span>
-                <span>發文日期：{toROCDate(doc.completed_at ?? doc.submitted_at ?? doc.created_at)}</span>
-                {doc.category !== "announcement" && (!isDecree || primaryRecipients.length > 0) && (
-                  <span className="min-w-0 break-words">受文者：{recipientSummary}</span>
-                )}
-              </div>
-            </div>
-
-            {/* 官式公文標頭區塊 */}
-            <div className="px-6 pt-5 pb-3" style={{
-              borderBottom: "1px solid var(--border)",
-            }}>
-              {isDecree && (
-                <div className="mb-4 text-center text-2xl tracking-[0.35em]" style={{ color: "var(--text-primary)" }}>
-                  <span className="tracking-normal">{doc.issuer_full_name?.trim() || "主席"} </span>
-                  令
-                </div>
-              )}
-              {/* 公文字號 + 發文日期 */}
-              <div className="flex flex-col gap-1 text-sm sm:flex-row sm:items-center sm:justify-between">
-                <span className="min-w-0 break-words" style={{ color: "var(--text-secondary)" }}>
-                  {isDecree ? "發文字號：" : "公文字號："}
-                  <span className="font-mono font-semibold" style={{ color: "var(--primary)" }}>
-                    {doc.serial_number || "（未分配）"}
-                  </span>
-                </span>
-                <span className="sm:flex-shrink-0" style={{ color: "var(--text-secondary)" }}>
-                  發文日期：{toROCDate(doc.completed_at ?? doc.submitted_at ?? doc.created_at)}
-                </span>
-              </div>
-              {/* 密等 / 速別（非普通時顯示） */}
-              {(doc.classification !== "normal" || doc.urgency !== "normal") && (
-                <div className="flex items-center gap-6 mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
-                  {doc.classification !== "normal" && (
-                    <span>密等：{CLASS_LABEL[doc.classification] ?? doc.classification}</span>
-                  )}
-                  {doc.urgency !== "normal" && (
-                    <span>速別：{URGENCY_LABEL[doc.urgency] ?? doc.urgency}</span>
-                  )}
-                </div>
-              )}
-              {/* 受文者（函/令） */}
-              {doc.category !== "announcement" && primaryRecipients.length > 0 && (
-                <div className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
-                  受文者：{primaryRecipients.map(r => r.name).join("、")}
-                </div>
-              )}
-            </div>
-
-            <div
-              className="p-6 space-y-5"
-              style={{
-                lineHeight: "2",
-                fontSize: "0.9375rem",
-                overflowWrap: "anywhere",
-                wordBreak: "break-word",
-              }}>
-
-              {/* 開會通知單：顯示結構化議程 */}
-              {doc.category === "meeting_notice" ? (
-                <div className="space-y-3 text-sm" style={{ color: "var(--text-primary)" }}>
-                  {doc.meeting_purpose && (
-                    <div className="grid grid-cols-[5.5em_minmax(0,1fr)] gap-2">
-                      <span className="flex-shrink-0">開會事由：</span>
-                      <span className="min-w-0 break-words">{doc.meeting_purpose}</span>
-                    </div>
-                  )}
-                  {doc.meeting_time && (
-                    <div className="grid grid-cols-[5.5em_minmax(0,1fr)] gap-2">
-                      <span className="flex-shrink-0">開會時間：</span>
-                      <span className="min-w-0 break-words">{(() => {
-                        const d = new Date(doc.meeting_time);
-                        const y = d.getFullYear() - 1911;
-                        const m = d.getMonth() + 1;
-                        const day = d.getDate();
-                        const h = d.getHours().toString().padStart(2, "0");
-                        const min = d.getMinutes().toString().padStart(2, "0");
-                        const week = ["日","一","二","三","四","五","六"][d.getDay()];
-                        return `中華民國${y}年${m}月${day}日（星期${week}）${h}時${min}分`;
-                      })()}</span>
-                    </div>
-                  )}
-                  {doc.meeting_location && (
-                    <div className="grid grid-cols-[5.5em_minmax(0,1fr)] gap-2">
-                      <span className="flex-shrink-0">開會地點：</span>
-                      <span className="min-w-0 break-words">{doc.meeting_location}</span>
-                    </div>
-                  )}
-                  {doc.meeting_chairperson && (
-                    <div className="grid grid-cols-[5.5em_minmax(0,1fr)] gap-2">
-                      <span className="flex-shrink-0">主持人：</span>
-                      <span className="min-w-0 break-words">{doc.meeting_chairperson}</span>
-                    </div>
-                  )}
-                  {doc.doc_description && (
-                    <div>
-                      <p className="mb-1">議事日程：</p>
-                      <div style={{ paddingLeft: "2em" }}>
-                        <OfficialText value={doc.doc_description} />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : doc.category === "record" ? (
-                <div className="space-y-3 text-sm" style={{ color: "var(--text-primary)" }}>
-                  {doc.meeting_time && (
-                    <div className="grid grid-cols-[5.5em_minmax(0,1fr)] gap-2">
-                      <span>時間：</span><span>{toROCDate(doc.meeting_time)}</span>
-                    </div>
-                  )}
-                  {doc.meeting_location && (
-                    <div className="grid grid-cols-[5.5em_minmax(0,1fr)] gap-2">
-                      <span>地點：</span><span>{doc.meeting_location}</span>
-                    </div>
-                  )}
-                  {doc.meeting_chairperson && (
-                    <div className="grid grid-cols-[5.5em_minmax(0,1fr)] gap-2">
-                      <span>主席：</span><span>{doc.meeting_chairperson}</span>
-                    </div>
-                  )}
-                  {doc.handler_name && (
-                    <div className="grid grid-cols-[5.5em_minmax(0,1fr)] gap-2">
-                      <span>記錄者：</span><span>{doc.handler_name}</span>
-                    </div>
-                  )}
-                  {doc.doc_description && (
-                    <div>
-                      <p className="mb-1">討論事項：</p>
-                      <div className="pl-[2em]"><OfficialText value={doc.doc_description} /></div>
-                    </div>
-                  )}
-                  {doc.action_required && (
-                    <div>
-                      <p className="mb-1">決議：</p>
-                      <div className="pl-[2em]"><OfficialText value={doc.action_required} /></div>
-                    </div>
-                  )}
-                </div>
-              ) : isDecree ? (
-                <div className="space-y-5" style={{ color: "var(--text-primary)" }}>
-                  {decreeBody && <OfficialText value={decreeBody} className="text-sm" />}
-                  {attachmentNames && (
-                    <div>
-                      <p>附件：</p>
-                      <div className="pl-[2em]">
-                        <OfficialText value={attachmentNames} />
-                      </div>
-                    </div>
-                  )}
-                  {!decreeBody && !attachmentNames && (
-                    <p className="text-sm" style={{ color: "var(--text-muted)" }}>（尚無令文內容）</p>
-                  )}
-                </div>
-              ) : doc.category === "consultation" ? (
-                <div className="space-y-5 text-sm leading-8" style={{ color: "var(--text-primary)" }}>
-                  <p>{primaryRecipients.length > 0 ? primaryRecipients.map((r) => r.name).join("、") : "（未填受文者）"}</p>
-                  {doc.subject && <OfficialText value={doc.subject} />}
-                  {doc.doc_description && <OfficialText value={doc.doc_description} />}
-                  {doc.action_required && <OfficialText value={doc.action_required} />}
-                  <p className="pt-2">此咨</p>
-                  <p>{primaryRecipients.length > 0 ? primaryRecipients.map((r) => r.name).join("、") : "（未填受文者）"}</p>
-                </div>
-              ) : (
-                <>
-                  {doc.subject && (
-                    <div>
-                      <p style={{ color: "var(--text-primary)" }}>主旨：</p>
-                      <div className="pl-[2em]" style={{ color: "var(--text-primary)" }}>
-                        <OfficialText value={doc.subject} />
-                      </div>
-                    </div>
-                  )}
-                  {doc.category === "announcement" && doc.basis && (
-                    <div>
-                      <p style={{ color: "var(--text-primary)" }}>依據：</p>
-                      <div className="pl-[2em]" style={{ color: "var(--text-primary)" }}>
-                        <OfficialText value={doc.basis} />
-                      </div>
-                    </div>
-                  )}
-                  {doc.doc_description && (
-                    <div>
-                      <p style={{ color: "var(--text-primary)" }}>
-                        {doc.category === "announcement" ? "公告事項：" : doc.category === "report" ? "說明／分析：" : "說明："}
-                      </p>
-                      <div className="pl-[2em]" style={{ color: "var(--text-primary)" }}>
-                        <OfficialText value={doc.doc_description} />
-                      </div>
-                    </div>
-                  )}
-                  {doc.action_required && (
-                    <div>
-                      <p style={{ color: "var(--text-primary)" }}>
-                        {doc.category === "report" ? "建議事項：" : "辦法："}
-                      </p>
-                      <div className="pl-[2em]" style={{ color: "var(--text-primary)" }}>
-                        <OfficialText value={doc.action_required} />
-                      </div>
-                    </div>
-                  )}
-                  {!doc.subject && !doc.doc_description && !doc.action_required && doc.content && (
-                    <OfficialText value={doc.content} className="text-sm" />
-                  )}
-                </>
-              )}
-
-              {/* 簽署區（核准後顯示） — DECREE 使用大型置中署名，仿正式公文視覺 */}
-              {(doc.status === "approved" || doc.status === "archived") && (() => {
-                const isDecree = doc.category === "decree";
-                const approved = doc.approvals
-                  .filter(a => a.status === "approved")
-                  .sort((a, b) => b.step_order - a.step_order);
-                const step = approved[0];
-                const signature = formatActingSignature(step);
-                const sigTitle = signature?.title ?? doc.handler_unit ?? "";
-                const sigName = signature?.name ?? doc.handler_name ?? "";
-                const issuedDate = doc.issued_at
-                  ? (() => {
-                      const d = new Date(doc.issued_at);
-                      return `中華民國 ${d.getFullYear() - 1911} 年 ${d.getMonth() + 1} 月 ${d.getDate()} 日`;
-                    })()
-                  : "";
-
-                if (isDecree && sigName) {
-                  return (
-                    <div
-                      className="mt-12 pt-8"
-                      style={{ borderTop: "2px double var(--border-strong)" }}
-                    >
-                      <div className="flex flex-col items-center text-center space-y-4">
-                        {sigTitle && (
-                          <p
-                            className="text-base sm:text-lg font-semibold tracking-[0.4em]"
-                            style={{ color: "var(--text-secondary)" }}
-                          >
-                            {sigTitle}
-                          </p>
-                        )}
-                        <p
-                          className="font-bold tracking-[0.3em]"
-                          style={{
-                            color: "var(--primary)",
-                            fontSize: "clamp(3rem, 8vw, 5.5rem)",
-                            lineHeight: 1.05,
-                          }}
-                        >
-                          {sigName}
-                        </p>
-                        <div
-                          className="inline-flex items-center justify-center w-24 h-24 sm:w-28 sm:h-28 rounded-full text-sm font-medium"
-                          style={{
-                            border: "3px solid var(--primary)",
-                            color: "var(--primary)",
-                            opacity: 0.55,
-                            letterSpacing: "0.2em",
-                          }}
-                        >
-                          蓋章處
-                        </div>
-                        {issuedDate && (
-                          <p
-                            className="text-sm font-medium mt-2"
-                            style={{ color: "var(--text-secondary)", letterSpacing: "0.15em" }}
-                          >
-                            {issuedDate}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  );
-                }
-
-                // 一般公文：右下角小型署名
-                return (
-                  <div className="mt-8 pt-5" style={{ borderTop: "1px solid var(--border)" }}>
-                    <div className="flex justify-end">
-                      <div className="text-right space-y-2">
-                        {sigName ? (
-                          <>
-                            {sigTitle && (
-                              <p className="text-xs" style={{ color: "var(--text-muted)" }}>{sigTitle}</p>
-                            )}
-                            <p className="text-3xl tracking-[0.15em]" style={{ color: "var(--primary)" }}>
-                              {sigName}
-                            </p>
-                            <p className="text-xs" style={{ color: "var(--text-muted)" }}>（蓋章處）</p>
-                          </>
-                        ) : (
-                          <p className="text-xs" style={{ color: "var(--text-muted)" }}>（蓋章處）</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
+        <div className="space-y-4">
+          <div className="administrative-document-stage">
+            <OfficialDocumentPaper document={doc} style={zoomStyle} />
           </div>
 
           <div className="document-detail-section-tabs no-print">
@@ -1580,32 +1256,22 @@ export default function DocumentDetailPageClient({
           {showVersions && <VersionHistory revisions={doc.revisions} />}
         </div>
 
-        {/* 右：審核面板 */}
-        <div className="space-y-4">
-          {doc.status !== "archived" && (doc.approvals.length > 0
-            ? <ApprovalPanel
-                steps={doc.approvals}
-                canApprove={canApprove}
-                currentUserId={currentUserId}
-                allUsers={allUsers}
-                onLoadUsers={loadAllUsers}
-                onApprove={handleApprove}
-                onReject={handleReject}
-                onSetDelegate={handleSetDelegate}
-              />
-            : (
-              <div className="card p-4 text-xs text-center space-y-2">
-                <p style={{ color: "var(--text-muted)" }}>尚未設定審核人</p>
-                {isDraft && (
-                  <button onClick={() => setSubmitMode(true)}
-                    className="text-xs px-3 py-1.5 rounded"
-                    style={{ color: "var(--primary)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }}>
-                    設定並送審
-                  </button>
-                )}
-              </div>
-            ))}
-        </div>
+        {doc.status !== "archived" && (doc.approvals.length > 0 || isDraft) && (
+          <details className="administrative-document-supplement document-workspace-approvals no-print"
+            open={doc.status === "pending" || isDraft || canApprove}>
+            <summary>公文簽核</summary>
+            {doc.approvals.length > 0 ? <ApprovalPanel
+              steps={doc.approvals}
+              canApprove={canApprove}
+              currentUserId={currentUserId}
+              allUsers={allUsers}
+              onLoadUsers={loadAllUsers}
+              onApprove={handleApprove}
+              onReject={handleReject}
+              onSetDelegate={handleSetDelegate}
+            /> : <button type="button" onClick={() => setSubmitMode(true)} className="btn btn-secondary">設定並送審</button>}
+          </details>
+        )}
       </div>
     </div>
     </>

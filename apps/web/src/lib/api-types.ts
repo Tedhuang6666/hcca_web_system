@@ -9328,51 +9328,7 @@ export interface paths {
         /** 列出法規（輕量版，支援全文關鍵字過濾） */
         get: operations["list_regulations_regulations_get"];
         put?: never;
-        /**
-         * 新增法規草稿（需 regulation:create 權限）
-         * @description 建立法規草稿，需在目標組織下擁有 regulation:create 權限（org-scoped）。
-         */
-        post: operations["create_regulation_regulations_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/regulations/import-documents": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * 批次從 Word/PDF 法規文檔匯入法規（需 regulation:create 權限）
-         * @description 一次上傳多份法規文件；單一檔案解析失敗不會中止整批。
-         */
-        post: operations["import_regulation_documents_regulations_import_documents_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/regulations/import-docx": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * 從 Word/PDF 法規文檔匯入法規（需 regulation:create 權限）
-         * @description 上傳 Word/PDF 法規文件，解析章節條文與歷史沿革後建立法規。
-         */
-        post: operations["import_regulation_docx_regulations_import_docx_post"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -9445,59 +9401,6 @@ export interface paths {
         get: operations["get_regulation_regulations__reg_id__get"];
         put?: never;
         post?: never;
-        /** 刪除草稿法規（僅未發布草稿） */
-        delete: operations["delete_regulation_regulations__reg_id__delete"];
-        options?: never;
-        head?: never;
-        /** 更新法規內容（自動遞增版本，可附修訂摘要） */
-        patch: operations["update_regulation_regulations__reg_id__patch"];
-        trace?: never;
-    };
-    "/regulations/{reg_id}/amendment-comparison": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 修正對照模式（三欄：修正條文、現行條文、說明） */
-        get: operations["amendment_comparison_regulations__reg_id__amendment_comparison_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/regulations/{reg_id}/amendment-comparison/export.pdf": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 匯出修正條文對照表 PDF */
-        post: operations["export_amendment_comparison_pdf_regulations__reg_id__amendment_comparison_export_pdf_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/regulations/{reg_id}/archive": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 停用法規（需 regulation:archive 或 regulation:admin 權限） */
-        post: operations["archive_regulation_regulations__reg_id__archive_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -9514,94 +9417,7 @@ export interface paths {
         /** 取得法規條文清單（依 sort_index 排序，排除已刪除） */
         get: operations["list_articles_regulations__reg_id__articles_get"];
         put?: never;
-        /** 新增條文至法規 */
-        post: operations["add_article_regulations__reg_id__articles_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/regulations/{reg_id}/articles/auto-renumber": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 自動重編條號（支援保留特殊條號） */
-        post: operations["auto_renumber_articles_regulations__reg_id__articles_auto_renumber_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/regulations/{reg_id}/articles/reorder": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** 批次更新條文排序（拖曳排序後送出） */
-        put: operations["reorder_articles_regulations__reg_id__articles_reorder_put"];
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/regulations/{reg_id}/articles/{article_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** 刪除條文（預設軟刪除，可選硬刪除） */
-        delete: operations["delete_article_regulations__reg_id__articles__article_id__delete"];
-        options?: never;
-        head?: never;
-        /** 更新條文內容 */
-        patch: operations["update_article_regulations__reg_id__articles__article_id__patch"];
-        trace?: never;
-    };
-    "/regulations/{reg_id}/articles/{article_id}/move": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 移動節點到新父層級並更新同層排序（子樹保持相對位置） */
-        post: operations["move_article_regulations__reg_id__articles__article_id__move_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/regulations/{reg_id}/council_approve": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 議會核定法案（需 regulation:council_approve 權限） */
-        post: operations["workflow_council_approved_regulations__reg_id__council_approve_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -9622,85 +9438,6 @@ export interface paths {
          * @description 回傳兩個修訂版本之間的 unified diff（Markdown 全文快照比對）。
          */
         post: operations["regulation_diff_regulations__reg_id__diff_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/regulations/{reg_id}/fork_draft": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 由既有法規分支出新草案（需 regulation:create 權限） */
-        post: operations["fork_draft_from_regulation_regulations__reg_id__fork_draft_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/regulations/{reg_id}/freeze": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * 凍結整部法規（需 regulation:archive 或 regulation:admin）
-         * @description 凍結整部法規（不同於停用：凍結後仍顯示但帶警告橫幅，法律效力暫停）。
-         *     需 regulation:archive 或 regulation:admin 權限。
-         */
-        post: operations["freeze_regulation_regulations__reg_id__freeze_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/regulations/{reg_id}/metadata": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /**
-         * 修正既有法規沿革與生效日期（需 regulation:edit 權限）
-         * @description 允許已公布的歷史法規補登沿革與生效日期，不開放正文內容變更。
-         */
-        patch: operations["update_regulation_metadata_regulations__reg_id__metadata_patch"];
-        trace?: never;
-    };
-    "/regulations/{reg_id}/president_publish": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * 主席公布法規（需 regulation:president_publish 權限，自動建立修訂歷程）
-         * @description 主席正式公布法規（council_approved → published）。
-         *     同時建立修訂歷程快照，並設定 published_at。
-         */
-        post: operations["president_publish_regulations__reg_id__president_publish_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -9737,8 +9474,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 直接制定辦法（需 regulation:publish 權限）
-         * @description 直接制定辦法；憲章與條例必須改走議會審議及主席公布流程。
+         * 公布法規（需組織內公布或管理權限）
+         * @description 公布法規並保留快照；不建立審議流程或自動公文。
          */
         post: operations["publish_regulation_regulations__reg_id__publish_post"];
         delete?: never;
@@ -9764,69 +9501,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/regulations/{reg_id}/reject": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * 退回法規（需任一審議權限）
-         * @description 退回法規至草稿或上一階段。
-         *     需擁有任一審議相關權限（schedule、council_approve、president_publish 或 admin）。
-         *     退回原因必填（payload.note）。
-         */
-        post: operations["reject_regulation_regulations__reg_id__reject_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/regulations/{reg_id}/repeal": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * 廢止法規（需 regulation:publish 或 regulation:admin 權限）
-         * @description 廢止法規，並可選設定替代法規
-         */
-        post: operations["repeal_regulation_regulations__reg_id__repeal_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/regulations/{reg_id}/revise": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * 再修正（需 regulation:revise 權限，將法規退回草稿重新編輯）
-         * @description 將法規從「送審中」或「議會核定」退回草稿，進行再修正。
-         *     需擁有 regulation:revise 或 regulation:admin 權限。
-         */
-        post: operations["revise_regulation_regulations__reg_id__revise_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/regulations/{reg_id}/revisions": {
         parameters: {
             query?: never;
@@ -9838,77 +9512,6 @@ export interface paths {
         get: operations["get_revisions_regulations__reg_id__revisions_get"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/regulations/{reg_id}/revisions/{revision_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** 修正法規沿革日期或連結公布公文（需 regulation:edit 權限） */
-        patch: operations["update_regulation_revision_regulations__reg_id__revisions__revision_id__patch"];
-        trace?: never;
-    };
-    "/regulations/{reg_id}/schedule": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 排入議程（需 regulation:schedule 權限） */
-        post: operations["workflow_scheduled_regulations__reg_id__schedule_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/regulations/{reg_id}/structure-content": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 將法規全文解析為結構化條文 */
-        post: operations["structure_regulation_content_regulations__reg_id__structure_content_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/regulations/{reg_id}/submit": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * 送交議會審議（需 regulation:submit 權限）
-         * @description 草案直接送審（DRAFT → UNDER_REVIEW），不自動建立公文。
-         */
-        post: operations["submit_regulation_regulations__reg_id__submit_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -9949,23 +9552,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/regulations/{reg_id}/unfreeze": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 解凍整部法規（需 regulation:archive 或 regulation:admin） */
-        post: operations["unfreeze_regulation_regulations__reg_id__unfreeze_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/regulations/{reg_id}/usage-context": {
         parameters: {
             query?: never;
@@ -9975,23 +9561,6 @@ export interface paths {
         };
         /** 取得法規使用脈絡 */
         get: operations["regulation_usage_context_regulations__reg_id__usage_context_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/regulations/{reg_id}/workflow_logs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 取得法規審議流程日誌 */
-        get: operations["get_workflow_logs_regulations__reg_id__workflow_logs_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -13207,54 +12776,6 @@ export interface components {
             /** Position Count */
             position_count: number;
         };
-        /** AmendmentComparisonExportRequest */
-        AmendmentComparisonExportRequest: {
-            /** Proposal Title */
-            proposal_title: string;
-            /** Rationale */
-            rationale?: string | null;
-            /** Rows */
-            rows: components["schemas"]["AmendmentComparisonExportRowIn"][];
-        };
-        /** AmendmentComparisonExportRowIn */
-        AmendmentComparisonExportRowIn: {
-            /** Article Key */
-            article_key: string;
-            /**
-             * Current Text
-             * @default
-             */
-            current_text: string;
-            /**
-             * Note
-             * @default
-             */
-            note: string;
-            /**
-             * Revised Text
-             * @default
-             */
-            revised_text: string;
-            /** Status */
-            status: string;
-        };
-        /** AmendmentComparisonRowOut */
-        AmendmentComparisonRowOut: {
-            /** Article Key */
-            article_key: string;
-            /** Current Text */
-            current_text: string;
-            /** Note */
-            note: string;
-            /** Revised Text */
-            revised_text: string;
-            /**
-             * Status
-             * @description 異動類型：新增/修正/條次調整/刪除
-             * @default 修正
-             */
-            status: string;
-        };
         /** AnalyticsInsightsOut */
         AnalyticsInsightsOut: {
             /** Items */
@@ -13792,34 +13313,6 @@ export interface components {
             /** Views */
             views: number;
         };
-        /** ArticleMoveRequest */
-        ArticleMoveRequest: {
-            /**
-             * Order Index
-             * @description 目標同層排序位置
-             */
-            order_index: number;
-            /**
-             * Parent Id
-             * @description 目標父節點
-             */
-            parent_id?: string | null;
-        };
-        /** ArticleReorderItem */
-        ArticleReorderItem: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Sort Index */
-            sort_index: number;
-        };
-        /** ArticleReorderRequest */
-        ArticleReorderRequest: {
-            /** Items */
-            items: components["schemas"]["ArticleReorderItem"][];
-        };
         /**
          * ArticleType
          * @description 條文結構層級。
@@ -13984,15 +13477,6 @@ export interface components {
             release: string;
             /** Runs */
             runs: components["schemas"]["AuthenticatedRunIn"][];
-        };
-        /** AutoRenumberRequest */
-        AutoRenumberRequest: {
-            /**
-             * Include Special Number
-             * @description 是否重編特殊條號（如 5-1）
-             * @default false
-             */
-            include_special_number: boolean;
         };
         /** BallotBoxCreate */
         BallotBoxCreate: {
@@ -14227,68 +13711,6 @@ export interface components {
              * @default 2026-08-01
              */
             term_start: string;
-        };
-        /** Body_import_regulation_documents_regulations_import_documents_post */
-        Body_import_regulation_documents_regulations_import_documents_post: {
-            /**
-             * @description 法規分類
-             * @default procedure
-             */
-            category: components["schemas"]["RegulationCategory"];
-            /**
-             * Change Brief
-             * @description 匯入後建立初始修訂快照的摘要
-             * @default 匯入既有現行法規
-             */
-            change_brief: string;
-            /**
-             * Files
-             * @description 多個 Word .docx 或 PDF 法規文檔
-             */
-            files?: string[];
-            /**
-             * Org Id
-             * Format: uuid
-             * @description 所屬組織 ID
-             */
-            org_id: string;
-            /**
-             * Publish Immediately
-             * @description 匯入後直接標記為現行公開法規
-             * @default false
-             */
-            publish_immediately: boolean;
-        };
-        /** Body_import_regulation_docx_regulations_import_docx_post */
-        Body_import_regulation_docx_regulations_import_docx_post: {
-            /**
-             * @description 法規分類
-             * @default procedure
-             */
-            category: components["schemas"]["RegulationCategory"];
-            /**
-             * Change Brief
-             * @description 匯入後建立初始修訂快照的摘要
-             * @default 匯入既有現行法規
-             */
-            change_brief: string;
-            /**
-             * File
-             * @description Word .docx 或 PDF 法規文檔
-             */
-            file?: string;
-            /**
-             * Org Id
-             * Format: uuid
-             * @description 所屬組織 ID
-             */
-            org_id: string;
-            /**
-             * Publish Immediately
-             * @description 匯入後直接標記為現行公開法規
-             * @default false
-             */
-            publish_immediately: boolean;
         };
         /** Body_import_roster_file_classes_roster_import_post */
         Body_import_roster_file_classes_roster_import_post: {
@@ -20440,19 +19862,6 @@ export interface components {
             settled_total: number;
             /** Unsettled Claim Count */
             unsettled_claim_count: number;
-        };
-        /** FreezeRequest */
-        FreezeRequest: {
-            /**
-             * Freeze Document Id
-             * @description 凍結依據公文 ID（選填）
-             */
-            freeze_document_id?: string | null;
-            /**
-             * Reason
-             * @description 凍結依據說明
-             */
-            reason: string;
         };
         /** FundAccountCreate */
         FundAccountCreate: {
@@ -28542,52 +27951,6 @@ export interface components {
          */
         RegulationAmendmentType: "enact" | "amend" | "abolish";
         /**
-         * RegulationArticleCreate
-         * @description 新增條文
-         */
-        RegulationArticleCreate: {
-            /** @description 條文層級類型 */
-            article_type: components["schemas"]["ArticleType"];
-            /**
-             * Content
-             * @description 條文內容（Chapter 類型可不填）
-             */
-            content?: string | null;
-            /**
-             * Legal Number
-             * @description 法律條號（如 5-1）
-             */
-            legal_number?: string | null;
-            /**
-             * Order Index
-             * @description 同層級排序
-             * @default 0
-             */
-            order_index: number;
-            /**
-             * Parent Id
-             * @description 父節點 ID
-             */
-            parent_id?: string | null;
-            /**
-             * Sort Index
-             * @description 排序索引（同法規內唯一）
-             */
-            sort_index: number;
-            /**
-             * Subtitle
-             * @description 條文副標題
-             * @default
-             */
-            subtitle: string;
-            /**
-             * Title
-             * @description 條文標題（如：第一章 總則）
-             * @default
-             */
-            title: string;
-        };
-        /**
          * RegulationArticleOut
          * @description 條文輸出
          */
@@ -28638,112 +28001,11 @@ export interface components {
             updated_at: string;
         };
         /**
-         * RegulationArticleUpdate
-         * @description 更新條文
-         */
-        RegulationArticleUpdate: {
-            article_type?: components["schemas"]["ArticleType"] | null;
-            /** Content */
-            content?: string | null;
-            /** Frozen By */
-            frozen_by?: string | null;
-            /** Is Deleted */
-            is_deleted?: boolean | null;
-            /** Legal Number */
-            legal_number?: string | null;
-            /** Order Index */
-            order_index?: number | null;
-            /** Parent Id */
-            parent_id?: string | null;
-            /** Sort Index */
-            sort_index?: number | null;
-            /** Subtitle */
-            subtitle?: string | null;
-            /** Title */
-            title?: string | null;
-        };
-        /**
          * RegulationCategory
          * @description 法規分類。
          * @enum {string}
          */
         RegulationCategory: "constitution" | "ordinance" | "procedure";
-        /** RegulationCreate */
-        RegulationCreate: {
-            /**
-             * Amended Articles
-             * @description 修正條號清單
-             */
-            amended_articles?: string | null;
-            /**
-             * @description 制定/修正/廢止
-             * @default enact
-             */
-            amendment_type: components["schemas"]["RegulationAmendmentType"];
-            /** @description 法規分類 */
-            category: components["schemas"]["RegulationCategory"];
-            /**
-             * Content
-             * @description Markdown 全文內容（與結構化條文可並用）
-             * @default
-             */
-            content: string;
-            /**
-             * Effective Date
-             * @description 生效日期
-             */
-            effective_date?: string | null;
-            /**
-             * Legal Basis
-             * @description 法源依據
-             */
-            legal_basis?: string | null;
-            /**
-             * Legislative History
-             * @description 沿革
-             */
-            legislative_history?: string | null;
-            /**
-             * Org Id
-             * Format: uuid
-             * @description 所屬組織 ID
-             */
-            org_id: string;
-            /**
-             * Preface
-             * @description 法規前言/序言（選填）
-             */
-            preface?: string | null;
-            /**
-             * Proposal Metadata
-             * @description 提案/決議資訊
-             */
-            proposal_metadata?: string | null;
-            /**
-             * Title
-             * @description 法規標題
-             */
-            title: string;
-        };
-        /** RegulationImportItemOut */
-        RegulationImportItemOut: {
-            /**
-             * Article Count
-             * @default 0
-             */
-            article_count: number;
-            /** Detail */
-            detail?: string | null;
-            /** Filename */
-            filename?: string | null;
-            /** Legislative History */
-            legislative_history?: string | null;
-            /** Ok */
-            ok: boolean;
-            regulation?: components["schemas"]["RegulationOut"] | null;
-            /** Warnings */
-            warnings?: string[];
-        };
         /**
          * RegulationListItem
          * @description 法規列表輕量版（不含 Markdown 內容與條文，加快載入）
@@ -28790,22 +28052,6 @@ export interface components {
             /** Version */
             version: number;
             workflow_status: components["schemas"]["RegulationWorkflowStatus"];
-        };
-        /**
-         * RegulationMetadataUpdate
-         * @description 既有法規可修正的公開識別資料，不會改動法規正文版本。
-         */
-        RegulationMetadataUpdate: {
-            /**
-             * Effective Date
-             * @description 生效日期
-             */
-            effective_date?: string | null;
-            /**
-             * Legislative History
-             * @description 沿革
-             */
-            legislative_history?: string | null;
         };
         /**
          * RegulationOut
@@ -28987,42 +28233,6 @@ export interface components {
             version: number;
         };
         /**
-         * RegulationRevisionUpdate
-         * @description 補登既有法規的沿革日期、摘要與公布公文。
-         */
-        RegulationRevisionUpdate: {
-            /**
-             * Amended At
-             * @description 完整日期（YYYY-MM-DD）
-             */
-            amended_at?: string | null;
-            /**
-             * Amended At Precision
-             * @description 日期精度
-             */
-            amended_at_precision?: ("date" | "month" | "year" | "unknown") | null;
-            /**
-             * Amended Year
-             * @description 僅有年份時填寫，可為民國年
-             */
-            amended_year?: number | null;
-            /**
-             * Change Brief
-             * @description 修訂摘要
-             */
-            change_brief?: string | null;
-            /**
-             * Document Id
-             * @description 此沿革對應的公布法律公文
-             */
-            document_id?: string | null;
-            /**
-             * Resolution Link
-             * @description 相關決議連結（多個以換行分隔）
-             */
-            resolution_link?: string | null;
-        };
-        /**
          * RegulationSearchResult
          * @description 全文搜尋結果（RegulationListItem 的超集，額外帶命中條文）
          */
@@ -29198,41 +28408,6 @@ export interface components {
             title: string;
             type: components["schemas"]["ArticleType"];
         };
-        /** RegulationUpdate */
-        RegulationUpdate: {
-            /** Amended Articles */
-            amended_articles?: string | null;
-            amendment_type?: components["schemas"]["RegulationAmendmentType"] | null;
-            /**
-             * Autosave
-             * @description 線上自動儲存；不遞增版本、不建立修訂歷程
-             * @default false
-             */
-            autosave: boolean;
-            category?: components["schemas"]["RegulationCategory"] | null;
-            /**
-             * Change Brief
-             * @description 修改摘要（更新時自動建立歷程）
-             */
-            change_brief?: string | null;
-            /**
-             * Content
-             * @description Markdown 全文內容（空字串代表清除）
-             */
-            content?: string | null;
-            /** Effective Date */
-            effective_date?: string | null;
-            /** Legal Basis */
-            legal_basis?: string | null;
-            /** Legislative History */
-            legislative_history?: string | null;
-            /** Preface */
-            preface?: string | null;
-            /** Proposal Metadata */
-            proposal_metadata?: string | null;
-            /** Title */
-            title?: string | null;
-        };
         /** RegulationUsageContextOut */
         RegulationUsageContextOut: {
             /** Pending Reviews */
@@ -29307,22 +28482,6 @@ export interface components {
              * @default to_creator
              */
             mode: components["schemas"]["RejectMode"];
-        };
-        /**
-         * RepealRegulationRequest
-         * @description 廢止法規
-         */
-        RepealRegulationRequest: {
-            /**
-             * Reason
-             * @description 廢止理由
-             */
-            reason: string;
-            /**
-             * Replacement Id
-             * @description 替代法規 ID（若有）
-             */
-            replacement_id?: string | null;
         };
         /** ReportResult */
         ReportResult: {
@@ -31740,20 +30899,6 @@ export interface components {
             /** User Id */
             user_id: string;
         };
-        /** StructureContentRequest */
-        StructureContentRequest: {
-            /**
-             * Content
-             * @description 要解析的法規全文；未提供時使用目前儲存在法規上的 content
-             */
-            content?: string | null;
-            /**
-             * Replace Existing
-             * @description 已有結構化條文時是否以解析結果覆蓋（舊條文會軟刪除）
-             * @default false
-             */
-            replace_existing: boolean;
-        };
         /** SubmissionCustomField */
         SubmissionCustomField: {
             /**
@@ -33349,27 +32494,6 @@ export interface components {
             status?: components["schemas"]["WorkItemStatus"] | null;
             /** Title */
             title?: string | null;
-        };
-        /**
-         * WorkflowActionRequest
-         * @description 審議流程動作請求（送審/排程/核定/退回）
-         */
-        WorkflowActionRequest: {
-            /**
-             * Manual Serial Number
-             * @description 主席公布產生公文時指定手動字號
-             */
-            manual_serial_number?: string | null;
-            /**
-             * Note
-             * @description 備註或退回原因
-             */
-            note?: string | null;
-            /**
-             * Serial Template Id
-             * @description 主席公布產生公文時指定使用的字號模板
-             */
-            serial_template_id?: string | null;
         };
         /** WorkflowEventOut */
         WorkflowEventOut: {
@@ -54318,117 +53442,6 @@ export interface operations {
             };
         };
     };
-    create_regulation_regulations_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RegulationCreate"];
-            };
-        };
-        responses: {
-            /** @description 法規草稿建立成功 */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RegulationOut"];
-                };
-            };
-            /** @description 需要 regulation:create 權限 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    import_regulation_documents_regulations_import_documents_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "multipart/form-data": components["schemas"]["Body_import_regulation_documents_regulations_import_documents_post"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RegulationImportItemOut"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    import_regulation_docx_regulations_import_docx_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "multipart/form-data": components["schemas"]["Body_import_regulation_docx_regulations_import_docx_post"];
-            };
-        };
-        responses: {
-            /** @description 已從 DOCX/PDF 建立法規與結構化條文 */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RegulationOut"];
-                };
-            };
-            /** @description 需要 regulation:create 權限 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 文件格式無法解析 */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
     search_regulations_regulations_search_get: {
         parameters: {
             query: {
@@ -54601,202 +53614,6 @@ export interface operations {
             };
         };
     };
-    delete_regulation_regulations__reg_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                reg_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 刪除成功 */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 非建立者 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 已發布法規不可直接刪除 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_regulation_regulations__reg_id__patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                reg_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RegulationUpdate"];
-            };
-        };
-        responses: {
-            /** @description 更新成功，版本號遞增 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RegulationOut"];
-                };
-            };
-            /** @description 非建立者 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 狀態衝突 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    amendment_comparison_regulations__reg_id__amendment_comparison_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                reg_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AmendmentComparisonRowOut"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    export_amendment_comparison_pdf_regulations__reg_id__amendment_comparison_export_pdf_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                reg_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AmendmentComparisonExportRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    archive_regulation_regulations__reg_id__archive_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                reg_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 法規停用成功 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RegulationOut"];
-                };
-            };
-            /** @description 需要 regulation:archive 或 regulation:admin 權限 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     list_articles_regulations__reg_id__articles_get: {
         parameters: {
             query?: {
@@ -54818,286 +53635,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RegulationArticleOut"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    add_article_regulations__reg_id__articles_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                reg_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RegulationArticleCreate"];
-            };
-        };
-        responses: {
-            /** @description 條文新增成功 */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RegulationArticleOut"];
-                };
-            };
-            /** @description 非建立者 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    auto_renumber_articles_regulations__reg_id__articles_auto_renumber_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                reg_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AutoRenumberRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RegulationArticleOut"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    reorder_articles_regulations__reg_id__articles_reorder_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                reg_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ArticleReorderRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RegulationArticleOut"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_article_regulations__reg_id__articles__article_id__delete: {
-        parameters: {
-            query?: {
-                /** @description 硬刪除（物理移除，無法復原） */
-                hard?: boolean;
-            };
-            header?: never;
-            path: {
-                reg_id: string;
-                article_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 刪除成功 */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 非建立者 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 條文不存在 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_article_regulations__reg_id__articles__article_id__patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                reg_id: string;
-                article_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RegulationArticleUpdate"];
-            };
-        };
-        responses: {
-            /** @description 更新成功 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RegulationArticleOut"];
-                };
-            };
-            /** @description 非建立者 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 條文不存在 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    move_article_regulations__reg_id__articles__article_id__move_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                reg_id: string;
-                article_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ArticleMoveRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RegulationArticleOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    workflow_council_approved_regulations__reg_id__council_approve_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                reg_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkflowActionRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RegulationOut"];
                 };
             };
             /** @description Validation Error */
@@ -55134,149 +53671,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["_RegDiffOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    fork_draft_from_regulation_regulations__reg_id__fork_draft_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                reg_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 草案建立成功 */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RegulationOut"];
-                };
-            };
-            /** @description 需要 regulation:create 權限 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    freeze_regulation_regulations__reg_id__freeze_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                reg_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["FreezeRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RegulationOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_regulation_metadata_regulations__reg_id__metadata_patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                reg_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RegulationMetadataUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RegulationOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    president_publish_regulations__reg_id__president_publish_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                reg_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkflowActionRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RegulationOut"];
                 };
             };
             /** @description Validation Error */
@@ -55334,7 +53728,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 辦法直接制定成功，修訂歷程已記錄 */
+            /** @description 公布成功，版本快照已記錄 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -55350,7 +53744,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description 憲章與條例必須經議會核定，或法規目前不可直接制定 */
+            /** @description 法規已公布、已廢止、已封存或尚無內容 */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -55399,125 +53793,6 @@ export interface operations {
             };
         };
     };
-    reject_regulation_regulations__reg_id__reject_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                reg_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkflowActionRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RegulationOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    repeal_regulation_regulations__reg_id__repeal_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                reg_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RepealRegulationRequest"];
-            };
-        };
-        responses: {
-            /** @description 法規廢止成功 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RegulationOut"];
-                };
-            };
-            /** @description 需要 regulation:publish 或 regulation:admin 權限 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 法規已廢止或已停用 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    revise_regulation_regulations__reg_id__revise_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                reg_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkflowActionRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RegulationOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_revisions_regulations__reg_id__revisions_get: {
         parameters: {
             query?: never;
@@ -55536,159 +53811,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RegulationRevisionOut"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_regulation_revision_regulations__reg_id__revisions__revision_id__patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                reg_id: string;
-                revision_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RegulationRevisionUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RegulationRevisionOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    workflow_scheduled_regulations__reg_id__schedule_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                reg_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkflowActionRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RegulationOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    structure_regulation_content_regulations__reg_id__structure_content_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                reg_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["StructureContentRequest"];
-            };
-        };
-        responses: {
-            /** @description 解析並建立結構化條文成功 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RegulationOut"];
-                };
-            };
-            /** @description 非建立者 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 狀態衝突或已有條文 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description 全文格式無法解析 */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    submit_regulation_regulations__reg_id__submit_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                reg_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkflowActionRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RegulationOut"];
                 };
             };
             /** @description Validation Error */
@@ -55767,37 +53889,6 @@ export interface operations {
             };
         };
     };
-    unfreeze_regulation_regulations__reg_id__unfreeze_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                reg_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RegulationOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     regulation_usage_context_regulations__reg_id__usage_context_get: {
         parameters: {
             query?: never;
@@ -55816,37 +53907,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RegulationUsageContextOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_workflow_logs_regulations__reg_id__workflow_logs_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                reg_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RegulationWorkflowLogOut"][];
                 };
             };
             /** @description Validation Error */

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { Printer } from "lucide-react";
 import { OfficialText } from "@/components/ui/OfficialText";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
@@ -147,6 +147,28 @@ function DocumentBody({ document }: { document: DocumentOut }) {
   );
 }
 
+export function OfficialDocumentPaper({ document, style }: { document: DocumentOut; style?: CSSProperties }) {
+  const category = CATEGORY_LABEL[document.category] ?? document.category;
+  const mainRecipients = document.recipients.filter((recipient) => ["main", "primary"].includes(recipient.recipient_type));
+  const copyRecipients = document.recipients.filter((recipient) => recipient.recipient_type === "copy");
+  return (
+        <article className="official-paper" aria-labelledby="official-document-title" style={style}>
+          <header className="official-paper-header">
+            <h2 id="official-document-title">{document.category === "decree" && <>{BRANDING.orgName}<br /></>}{document.issuer_full_name ? `${document.issuer_full_name}　${category}` : category}</h2>
+            <dl className="official-paper-meta">
+              <dt>發文日期：</dt><dd><time dateTime={document.issued_at ?? undefined}>{formatRocDate(document.issued_at)}</time></dd>
+              <dt>發文字號：</dt><dd>{document.serial_number}</dd>
+              <dt>速別：</dt><dd>{URGENCY_LABEL[document.urgency] ?? document.urgency}</dd>
+              <dt>密等：</dt><dd>{CLASSIFICATION_LABEL[document.classification] ?? document.classification}</dd>
+            </dl>
+          </header>
+          {mainRecipients.length > 0 && document.category !== "consultation" && <p>受文者：{mainRecipients.map((recipient) => recipient.name).join("、")}</p>}
+          <div className="official-paper-body"><DocumentBody document={document} /></div>
+          {copyRecipients.length > 0 && <dl className="official-paper-recipients"><dt>副本：</dt><dd>{copyRecipients.map((recipient) => recipient.name).join("、")}</dd></dl>}
+        </article>
+  );
+}
+
 export default function PublicDocumentView({ document, loading = false, loadError = null, onRetry, canDownloadPdf = false, managementAction }: {
   document: DocumentOut | null;
   loading?: boolean;
@@ -165,8 +187,6 @@ export default function PublicDocumentView({ document, loading = false, loadErro
     </div>
   );
   const category = CATEGORY_LABEL[document.category] ?? document.category;
-  const mainRecipients = document.recipients.filter((recipient) => ["main", "primary"].includes(recipient.recipient_type));
-  const copyRecipients = document.recipients.filter((recipient) => recipient.recipient_type === "copy");
   return (
     <div className="administrative-document-reader">
       <nav className="administrative-breadcrumb no-print" aria-label="目前位置">
@@ -188,20 +208,7 @@ export default function PublicDocumentView({ document, loading = false, loadErro
         </div>
       </header>
       <div className="administrative-document-stage">
-        <article className="official-paper" aria-labelledby="public-document-title" style={zoomStyle}>
-          <header className="official-paper-header">
-            <h2 id="public-document-title">{document.category === "decree" && <>{BRANDING.orgName}<br /></>}{document.issuer_full_name ? `${document.issuer_full_name}　${category}` : category}</h2>
-            <dl className="official-paper-meta">
-              <dt>發文日期：</dt><dd><time dateTime={document.issued_at ?? undefined}>{formatRocDate(document.issued_at)}</time></dd>
-              <dt>發文字號：</dt><dd>{document.serial_number}</dd>
-              <dt>速別：</dt><dd>{URGENCY_LABEL[document.urgency] ?? document.urgency}</dd>
-              <dt>密等：</dt><dd>{CLASSIFICATION_LABEL[document.classification] ?? document.classification}</dd>
-            </dl>
-          </header>
-          {mainRecipients.length > 0 && document.category !== "consultation" && <p>受文者：{mainRecipients.map((recipient) => recipient.name).join("、")}</p>}
-          <div className="official-paper-body"><DocumentBody document={document} /></div>
-          {copyRecipients.length > 0 && <dl className="official-paper-recipients"><dt>副本：</dt><dd>{copyRecipients.map((recipient) => recipient.name).join("、")}</dd></dl>}
-        </article>
+        <OfficialDocumentPaper document={document} style={zoomStyle} />
       </div>
       {document.attachments.length > 0 && <section className="administrative-document-supplement no-print" aria-labelledby="public-document-attachments-title">
         <h2 id="public-document-attachments-title">附件（{document.attachments.length}）</h2>

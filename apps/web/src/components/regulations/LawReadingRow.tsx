@@ -5,7 +5,7 @@ import { Link2, X } from "lucide-react";
 import { SmartLinkedText } from "@/components/ui/OfficialText";
 import type { ArticleRow } from "./RegulationDetailSections";
 
-/** 唯讀法典版型；編輯器與修正案繼續使用 LawArticleRow。 */
+/** 法規閱讀與條文引用。 */
 export default function LawReadingRow({ article, displayLabel, hidden, shareUrl, chapterCollapsed, onToggleChapter,
   onCopyLink, highlighted, onClearHighlight }: ComponentProps<typeof ArticleRow>) {
   if (hidden) return null;
@@ -37,7 +37,7 @@ export default function LawReadingRow({ article, displayLabel, hidden, shareUrl,
       {article.is_deleted && <p className="law-reading-notice">（刪除）</p>}
       {article.frozen_by && <p className="law-reading-notice">凍結：{article.frozen_by}</p>}
       <div className="law-reading-actions no-print">
-        {shareUrl && onCopyLink && <button type="button" onClick={() => onCopyLink(shareUrl)} aria-label={`複製${displayLabel}連結`} title={`複製${displayLabel}連結`}><Link2 size={15} aria-hidden="true" /></button>}
+        {(structural || article.article_type === "article") && shareUrl && onCopyLink && <button type="button" onClick={() => onCopyLink(shareUrl)} aria-label={`複製${displayLabel}連結`} title={`複製${displayLabel}連結`}><Link2 size={15} aria-hidden="true" /></button>}
         {highlighted && onClearHighlight && <button type="button" onClick={onClearHighlight} aria-label="關閉高亮"><X size={15} aria-hidden="true" /></button>}
       </div>
     </section>

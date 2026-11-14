@@ -4,25 +4,8 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import {
-  Archive,
-  CheckCircle2,
-  ClipboardList,
-  FilePenLine,
-  ScrollText,
-  Trash2,
-  Undo2 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-import {
-  loadDrafts,
-  saveDrafts,
-  type Draft,
-} from "@/components/regulations/AmendmentDraftParts";
-import {
   PROSE,
   RevisionCard,
-  WfNoteModal,
-  WorkflowStatusBadge,
-  WorkflowTimeline,
   buildArticleDisplayRows,
   isTab,
   type Tab,
@@ -53,7 +36,6 @@ import {
 import type {
   DocumentOut,
   RegulationArticleOut,
-  RegulationListItem,
   RegulationOut,
   RegulationRevisionOut,
 } from "@/lib/types";
@@ -108,29 +90,16 @@ export default function RegulationDetailPageClient({
   const { zoom, setZoom, zoomStyle } = usePersistedZoom("hcca.viewer.zoom");
   const [diffPair, setDiffPair] = useState<[RegulationRevisionOut, RegulationRevisionOut | null] | null>(null);
 
-  const [wfActionLoading, setWfActionLoading] = useState(false);
-  const [showFreeze, setShowFreeze] = useState(false);
-  const [freezeReason, setFreezeReason] = useState("");
-  const [freezeLoading, setFreezeLoading] = useState(false);
-  const [wfNoteModal, setWfNoteModal] = useState<null | {
-    action: string; label: string; fn: (note: string) => Promise<void>;
-    hint?: string; placeholder?: string;
-  }>(null);
-  const [showRepeal, setShowRepeal] = useState(false);
-  const [repealReason, setRepealReason] = useState("");
-  const [repealReplacementId, setRepealReplacementId] = useState("");
-  const [repealOptions, setRepealOptions] = useState<RegulationListItem[]>([]);
-  const [repealLoading, setRepealLoading] = useState(false);
   const [showDeleted, setShowDeleted] = useState(false);
   const [tocVisible, setTocVisible] = useState(true);
   const [mobileTocExpanded, setMobileTocExpanded] = useState(false);
   const [chapterCollapsedMap, setChapterCollapsedMap] = useState<Record<string, boolean>>({});
-  const [amendmentDrafts, setAmendmentDrafts] = useState<Draft[]>([]);
   const [activeAnchorId, setActiveAnchorId] = useState<string | null>(null);
   const [highlightedArticleId, setHighlightedArticleId] = useState<string | null>(null);
   const [showBackToTop, setShowBackToTop] = useState(false);
   const [publishedDoc, setPublishedDoc] = useState<DocumentOut | null>(null);
-  const { can, isAdmin } = usePermissions();
+  const { can } = usePermissions();
+  const [publishing, setPublishing] = useState(false);
   const [currentUserId, setCurrentUserId] = useState("");
   const isAnonymous = !currentUserId;
   const currentRegHref = reg ? regulationHref(reg) : `/regulations/${encodeURIComponent(id)}`;
@@ -177,17 +146,6 @@ export default function RegulationDetailPageClient({
   }, [reg?.published_document_id, reg?.workflow_status, isAnonymous]);
 
   useEffect(() => {
-    if (!showRepeal || !reg) return;
-    regulationsApi.list({ active_only: "true", limit: "100" })
-      .then((items) => setRepealOptions(items.filter((item) => item.id !== reg.id)))
-      .catch(() => setRepealOptions([]));
-  }, [reg, showRepeal]);
-
-  useEffect(() => {
-    setAmendmentDrafts(loadDrafts(id));
-  }, [id]);
-
-  useEffect(() => {
     const syncTabFromUrl = () => {
       const nextTab = new URLSearchParams(window.location.search).get("tab");
       if (isTab(nextTab)) setTab(nextTab);
@@ -208,20 +166,6 @@ export default function RegulationDetailPageClient({
     const hash = typeof window !== "undefined" ? window.location.hash : "";
     router.replace(`${currentRegHref}?tab=${nextTab}${hash}`, { scroll: false });
   }, [currentRegHref, router]);
-
-  const runWfAction = useCallback(async (
-    label: string, fn: (note: string) => Promise<void>, needNote = false,
-    hint?: string, placeholder?: string,
-  ) => {
-    if (needNote) {
-      setWfNoteModal({ action: label, label, fn, hint, placeholder });
-    } else {
-      setWfActionLoading(true);
-      try { await fn(""); reload(); showSuccessToast(`${label} 成功`); }
-      catch (e) { showErrorToast(apiErrorMessage(e, "操作失敗")); }
-      finally { setWfActionLoading(false); }
-    }
-  }, [reload]);
 
   // 分享（navigator.share + clipboard fallback）
   const handleShare = useCallback(async () => {
@@ -247,21 +191,6 @@ export default function RegulationDetailPageClient({
       .then(() => showSuccessToast("條文連結已複製"))
       .catch(() => showErrorToast("複製失敗"));
   }, []);
-
-  const handleDeleteAmendmentDraft = useCallback(async (draftId: string) => {
-    const draft = amendmentDrafts.find((item) => item.id === draftId);
-    if (!draft) return;
-    if (!(await confirm({
-      title: `刪除「${draft.name}」？`,
-      description: "此操作只會刪除本機草稿，且無法復原。",
-      confirmLabel: "刪除草稿",
-      danger: true,
-    }))) return;
-    const next = amendmentDrafts.filter((item) => item.id !== draftId);
-    saveDrafts(id, next);
-    setAmendmentDrafts(next);
-    showSuccessToast("修正案草稿已刪除");
-  }, [amendmentDrafts, confirm, id]);
 
   // 必須 memo 化：否則每次 render 都是新陣列，會讓 articleDisplayRows 與
   // 下方 deep-link effect 無限重跑（重複點亮高亮、不斷 scrollIntoView 卡住頁面）。
@@ -553,12 +482,6 @@ export default function RegulationDetailPageClient({
   const hasHistoryRows = legislativeHistoryRows.length > 0 || generatedHistoryRows.length > 0;
   const latestRevision = sortedRevisions[sortedRevisions.length - 1] ?? null;
   const deletedCount = allArticles.filter(a => a.is_deleted).length;
-  const amendmentDraftCount = amendmentDrafts.length;
-  const councilApprovedLog = [...(reg.workflow_logs ?? [])]
-    .reverse()
-    .find((log) => log.to_status === "council_approved");
-  const proposerName = reg.created_by_name ?? "不詳";
-  const canRepeal = can("regulation:publish") || can("regulation:admin") || isAdmin;
 
   return (
     <>
@@ -574,9 +497,7 @@ export default function RegulationDetailPageClient({
             {reg.title}
           </h1>
           <div className="regulation-reading-meta">
-            {reg.workflow_status !== "published" && currentUserId
-              ? <WorkflowStatusBadge status={reg.workflow_status} />
-              : <span>{regulationPublicState(reg)}</span>}
+            <span>{regulationPublicState(reg)}</span>
             {reg.published_at && <span>公布日期：{administrativeDate(reg.published_at, true)}</span>}
             {reg.effective_date && <span>施行日期：{administrativeDate(reg.effective_date, true)}</span>}
           </div>
@@ -600,41 +521,18 @@ export default function RegulationDetailPageClient({
                 onComplete={() => showSuccessToast("PDF 已下載")}
                 onError={(error) => showErrorToast(`PDF 匯出失敗${error instanceof Error && error.message ? `：${error.message}` : ""}`)} />
             </div>
-            {((reg.created_by === currentUserId || isAdmin)
-              || (can("regulation:create") && reg.is_active && reg.published_at)
-              || (can("regulation:admin") && reg.is_active && !reg.freeze_reason)
-              || (canRepeal && reg.is_active && !reg.is_repealed)) && (
-              <div className="regulation-management-actions" role="group" aria-label="法規管理">
-                {(reg.created_by === currentUserId || isAdmin) && (
-                  <Link href={`${currentRegHref}/edit`} className="btn btn-secondary">編輯</Link>
-                )}
-                {can("regulation:create") && reg.is_active && reg.published_at && (
-                  <Link href={`${currentRegHref}/amendment`} className="btn btn-secondary">
-                    <FilePenLine size={15} aria-hidden="true" />起草修正案
-                  </Link>
-                )}
-                {((can("regulation:admin") && reg.is_active && !reg.freeze_reason)
-                  || (canRepeal && reg.is_active && !reg.is_repealed)) && (
-                  <details className="regulation-management-menu">
-                    <summary className="btn btn-ghost">更多操作</summary>
-                    <div>
-                      {can("regulation:admin") && reg.is_active && !reg.freeze_reason && (
-                        <button type="button" className="btn btn-ghost" onClick={(event) => {
-                          event.currentTarget.closest("details")?.removeAttribute("open");
-                          setFreezeReason(""); setShowFreeze(true);
-                        }}>凍結法規</button>
-                      )}
-                      {canRepeal && reg.is_active && !reg.is_repealed && (
-                        <button type="button" className="btn btn-ghost" style={{ color: "var(--danger)" }}
-                          onClick={(event) => {
-                            event.currentTarget.closest("details")?.removeAttribute("open");
-                            setRepealReason(""); setRepealReplacementId(""); setShowRepeal(true);
-                          }}>廢止法規</button>
-                      )}
-                    </div>
-                  </details>
-                )}
-              </div>
+            {!reg.published_at && !reg.is_repealed && reg.workflow_status !== "archived"
+              && (can("regulation:publish") || can("regulation:president_publish") || can("regulation:admin")) && (
+              <button type="button" className="btn btn-secondary" disabled={publishing} onClick={async () => {
+                if (!await confirm({ title: "公布此法規？", confirmLabel: "公布" })) return;
+                setPublishing(true);
+                try {
+                  await regulationsApi.publish(id, { change_brief: "公布法規" });
+                  reload();
+                  showSuccessToast("法規已公布");
+                } catch (error) { showErrorToast(apiErrorMessage(error, "公布失敗")); }
+                finally { setPublishing(false); }
+              }}>{publishing ? "公布中…" : "公布"}</button>
             )}
           </div>
         </header>
@@ -698,20 +596,6 @@ export default function RegulationDetailPageClient({
                     凍結時間：{new Date(reg.freeze_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" }).replace(/\s+/gu, " ")}
                   </p>
                 )}
-                {can("regulation:admin") && (
-                  <button
-                    onClick={async () => {
-                      try {
-                        const updated = await regulationsApi.unfreeze(id);
-                        setReg(updated);
-                        showSuccessToast("法規已解凍");
-                      } catch (e) { showErrorToast(apiErrorMessage(e, "解凍失敗")); }
-                    }}
-                    className="mt-2 text-xs px-3 py-1 rounded-lg"
-                    style={{ color: "#fb923c", background: "rgba(251,146,60,0.1)", border: "1px solid rgba(251,146,60,0.3)" }}>
-                    解凍法規
-                  </button>
-                )}
               </div>
             </div>
           </div>
@@ -723,7 +607,6 @@ export default function RegulationDetailPageClient({
           {([
             { key: "content" as Tab, label: "條文內容" },
             { key: "revisions", label: "歷史版本" },
-            ...(currentUserId ? [{ key: "workflow" as Tab, label: "審議流程" }] : []),
           ] as { key: Tab; label: string }[]).map(({ key, label }) => (
             <button key={key} aria-pressed={tab === key} onClick={() => handleTabChange(key)}
               className="flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] whitespace-nowrap"
@@ -895,48 +778,7 @@ export default function RegulationDetailPageClient({
         {/* 修訂歷程 */}
         {tab === "revisions" && (
           <div className="space-y-3">
-            <div className="card p-4">
-              <h3 className="text-sm font-semibold mb-3" style={{ color: "var(--text-primary)" }}>版本摘要</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-                <div>
-                  <p style={{ color: "var(--text-muted)" }}>提案人</p>
-                  <p className="mt-1 font-medium" style={{ color: "var(--text-primary)" }}>{proposerName}</p>
-                </div>
-                <div>
-                  <p style={{ color: "var(--text-muted)" }}>提案時間</p>
-                  <p className="mt-1 font-medium" style={{ color: "var(--text-primary)" }}>
-                    {new Date(reg.created_at).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" })}
-                  </p>
-                </div>
-                <div>
-                  <p style={{ color: "var(--text-muted)" }}>議會通過時間</p>
-                  <p className="mt-1 font-medium" style={{ color: "var(--text-primary)" }}>
-                    {councilApprovedLog ? new Date(councilApprovedLog.created_at).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" }) : "尚未記錄"}
-                  </p>
-                </div>
-                <div>
-                  <p style={{ color: "var(--text-muted)" }}>主席公布字號</p>
-                  {publishedDoc ? (
-                    <div className="mt-1 flex flex-col items-start gap-0.5">
-                      <Link
-                        href={`/documents/${publishedDoc.id}`}
-                        className="inline-flex font-medium hover:opacity-80"
-                        style={{ color: "var(--primary)" }}
-                      >
-                        {publishedDoc.serial_number}
-                      </Link>
-                      {publishedDoc.summary?.trim() && (
-                        <span className="whitespace-pre-wrap" style={{ color: "var(--text-muted)" }}>
-                          摘要：{publishedDoc.summary}
-                        </span>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="mt-1 font-medium" style={{ color: "var(--text-primary)" }}>尚未公布</p>
-                  )}
-                </div>
-              </div>
-            </div>
+            {publishedDoc && <Link className="administrative-source-link" href={`/documents/${publishedDoc.id}`}>公布公文：{publishedDoc.serial_number}</Link>}
             {sortedRevisions.length === 0
               ? <div className="card p-6 text-center" style={{ color: "var(--text-muted)" }}>尚無修訂歷程</div>
               : [...sortedRevisions].reverse().map((rev, i) => {
@@ -955,195 +797,13 @@ export default function RegulationDetailPageClient({
           </div>
         )}
 
-        {/* ── 審議流程（僅登入使用者可見）─────────────────────────────────── */}
-        {tab === "workflow" && currentUserId && (
-          <div className="space-y-4">
-            {/* 下一步視覺引導卡 */}
-            {(() => {
-              const NEXT: Record<string, { Icon: LucideIcon; color: string; bg: string; border: string; title: string; desc: string }> = {
-                draft:            { Icon: FilePenLine, color: "#818cf8", bg: "rgba(99,102,241,0.07)", border: "rgba(99,102,241,0.25)", title: "下一步：送交議會審議或直接制定", desc: "憲章、條例須送交議會審議；辦法則可由具發布權限的議會秘書處或班聯會直接制定。" },
-                under_review:     { Icon: ClipboardList, color: "#0284c7", bg: "rgba(2,132,199,0.07)", border: "rgba(2,132,199,0.25)", title: "下一步：排入議程", desc: "書記官審閱後，點擊「排入議程」將法規列入下次議會討論。" },
-                scheduled:        { Icon: ClipboardList, color: "#7c3aed", bg: "rgba(124,58,237,0.07)", border: "rgba(124,58,237,0.25)", title: "下一步：議會核定", desc: "議案審查後，議長點擊「議會核定通過」完成議會程序。" },
-                council_approved: { Icon: ScrollText, color: "#d97706", bg: "rgba(217,119,6,0.07)", border: "rgba(217,119,6,0.25)", title: "下一步：主席公布", desc: "主席審核後點擊「主席公布法規」，法規正式生效並記錄修訂歷程。" },
-                published:        { Icon: CheckCircle2, color: "var(--success)", bg: "var(--success-dim)", border: "rgba(34,197,94,0.3)", title: "法規已公布生效", desc: "此法規目前為現行有效版本。如需修訂，請從法規詳情頁起草修正案。" },
-                rejected:         { Icon: Undo2, color: "var(--danger)", bg: "rgba(220,38,38,0.07)", border: "rgba(220,38,38,0.25)", title: "已退回草稿", desc: "憲章、條例修正後重新送審；辦法可由具發布權限的議會秘書處或班聯會直接制定。" },
-                archived:         { Icon: Archive, color: "var(--text-muted)", bg: "var(--bg-elevated)", border: "var(--border)", title: "法規已廢止", desc: "此法規已停用，僅供歷史查閱。" },
-              };
-              const info = NEXT[reg.workflow_status];
-              if (!info) return null;
-              const Icon = info.Icon;
-              return (
-                <div className="rounded-xl px-4 py-3 flex items-start gap-3"
-                  style={{ background: info.bg, border: `1px solid ${info.border}` }}>
-                  <span className="flex-shrink-0 mt-0.5" style={{ color: info.color }}>
-                    <Icon size={18} strokeWidth={2.2} aria-hidden="true" />
-                  </span>
-                  <div>
-                    <p className="text-sm font-semibold" style={{ color: info.color }}>{info.title}</p>
-                    <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{info.desc}</p>
-                  </div>
-                </div>
-              );
-            })()}
-            {/* 審議操作按鈕 */}
-            <div className="card p-4 space-y-3">
-              <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>可用操作</p>
-              <div className="flex flex-wrap gap-2">
-                {/* 送審 */}
-                {reg.workflow_status === "draft" && can("regulation:submit") && (
-                  <button disabled={wfActionLoading} onClick={() => runWfAction("送審", (note) => regulationsApi.submitReview(id, note || undefined).then(setReg))}
-                    className="btn btn-primary text-xs px-3 py-1.5">送交議會審議</button>
-                )}
-                {/* 辦法直接制定 */}
-                {reg.category === "procedure"
-                  && ["draft", "rejected"].includes(reg.workflow_status)
-                  && can("regulation:publish") && (
-                  <button disabled={wfActionLoading}
-                    onClick={() => runWfAction(
-                      "直接制定辦法",
-                      (note) => regulationsApi.publish(id, {
-                        change_brief: note || "直接制定辦法",
-                      }).then(setReg),
-                      true,
-                      "制定說明（選填）",
-                      "例：議會秘書處制定本辦法",
-                    )}
-                    className="btn btn-primary text-xs px-3 py-1.5">直接制定辦法</button>
-                )}
-                {/* 排入議程 */}
-                {reg.workflow_status === "under_review" && can("regulation:schedule") && (
-                  <button disabled={wfActionLoading} onClick={() => runWfAction("排入議程", (note) => regulationsApi.scheduleAgenda(id, note || undefined).then(setReg))}
-                    className="btn btn-primary text-xs px-3 py-1.5">排入議程</button>
-                )}
-                {/* 議會核定 */}
-                {reg.workflow_status === "scheduled" && can("regulation:council_approve") && (
-                  <button disabled={wfActionLoading} onClick={() => runWfAction("議會核定", (note) => regulationsApi.councilApprove(id, note || undefined).then(setReg))}
-                    className="btn btn-primary text-xs px-3 py-1.5">議會核定通過</button>
-                )}
-                {/* 主席公布（需填寫修正內容描述，生成主令公文） */}
-                {reg.workflow_status === "council_approved" && can("regulation:president_publish") && (
-                  <button disabled={wfActionLoading}
-                    onClick={() => runWfAction(
-                      "主席公布法規",
-                      (note) => regulationsApi.presidentPublish(id, note || undefined).then(setReg),
-                      true,
-                      "修正條文描述（選填，將寫入主令公文）",
-                      "例：修正第七條；或 修正第一條、第二條",
-                    )}
-                    className="btn btn-primary text-xs px-3 py-1.5">主席公布法規</button>
-                )}
-                {/* 退回（schedule 以上）*/}
-                {["under_review", "scheduled", "council_approved"].includes(reg.workflow_status) && can("regulation:schedule") && (
-                  <button disabled={wfActionLoading} onClick={() => runWfAction("退回草稿", (note) => regulationsApi.rejectRegulation(id, note || "審議退回").then(setReg), true)}
-                    className="text-xs px-3 py-1.5 rounded-lg"
-                    style={{ color: "var(--danger)", background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.3)" }}>
-                    退回草稿
-                  </button>
-                )}
-                {/* 重新提交（rejected → under_review） */}
-                {reg.workflow_status === "rejected" && (reg.created_by === currentUserId || isAdmin) && (
-                  <button disabled={wfActionLoading} onClick={() => runWfAction("重新提交", (note) => regulationsApi.submitReview(id, note || undefined).then(setReg))}
-                    className="btn btn-primary text-xs px-3 py-1.5">重新送審</button>
-                )}
-                {/* 廢止法規 */}
-                {reg.workflow_status === "published" && canRepeal && !reg.is_repealed && (
-                  <button
-                    disabled={wfActionLoading}
-                    onClick={() => {
-                      setRepealReason("");
-                      setRepealReplacementId("");
-                      setShowRepeal(true);
-                    }}
-                    className="text-xs px-3 py-1.5 rounded-lg"
-                    style={{ color: "var(--danger)", background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.3)" }}>
-                    廢止法規
-                  </button>
-                )}
-                {(reg.workflow_status === "draft" || reg.workflow_status === "rejected")
-                  && !can("regulation:submit")
-                  && !(reg.category === "procedure" && can("regulation:publish")) && (
-                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                    草稿由建立者送交議會後，再由書記官排入議程，議長核定，最終由主席公布。
-                  </p>
-                )}
-              </div>
-              {reg.workflow_note && (
-                <div className="px-3 py-2 rounded-lg text-xs"
-                  style={{ background: "rgba(220,38,38,0.06)", border: "1px solid rgba(220,38,38,0.2)", color: "var(--danger)" }}>
-                  最新備註：{reg.workflow_note}
-                </div>
-              )}
-            </div>
-            {/* 時間軸 */}
-            <WorkflowTimeline logs={reg.workflow_logs ?? []} currentStatus={reg.workflow_status} />
-
-            {/* 修正案草稿 */}
-            <div className="card p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>本機修正案草稿</p>
-                {amendmentDraftCount > 0 && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full font-medium"
-                    style={{ background: "rgba(201,168,76,0.15)", color: "var(--primary)", border: "1px solid rgba(201,168,76,0.3)" }}>
-                    {amendmentDraftCount} 份草稿
-                  </span>
-                )}
-              </div>
-              {amendmentDraftCount === 0 ? (
-                <p className="text-xs" style={{ color: "var(--text-muted)" }}>目前無本機修正案草稿。</p>
-              ) : (
-                <div className="space-y-2">
-                  <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                    您有 {amendmentDraftCount} 份尚未提交的修正案草稿，儲存於本機。
-                  </p>
-                  <div className="divide-y overflow-hidden rounded-lg"
-                    style={{ border: "1px solid var(--border)", borderColor: "var(--border)" }}>
-                    {amendmentDrafts.map((draft) => (
-                      <div key={draft.id} className="flex items-center gap-3 px-3 py-2">
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-xs font-medium" style={{ color: "var(--text-primary)" }}>
-                            {draft.name}
-                          </p>
-                          <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-muted)" }}>
-                            {draft.amendmentType === "partial" ? "部分修正" : "全文修正"} ·
-                            最後修改 {new Date(draft.updatedAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" }).replace(/\s+/gu, " ")}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => { void handleDeleteAmendmentDraft(draft.id); }}
-                          className="inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg hover:opacity-80"
-                          style={{ color: "var(--danger)", border: "1px solid rgba(220,38,38,0.25)", background: "rgba(220,38,38,0.06)" }}
-                          aria-label={`刪除草稿 ${draft.name}`}
-                          title="刪除草稿"
-                        >
-                          <Trash2 size={13} strokeWidth={2.2} aria-hidden="true" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <Link href={`${currentRegHref}/amendment`}
-                className="btn btn-primary text-xs px-3 py-1.5 inline-flex items-center gap-1.5"
-                style={{ textDecoration: "none" }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                  strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                </svg>
-                {amendmentDraftCount > 0 ? "繼續修正案草稿" : "起草修正案"}
-              </Link>
-            </div>
-          </div>
-        )}
-
         {/* ── 元資訊頁尾 ───────────────────────────────────────────────────── */}
         <div className="card p-4">
           <dl className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
             {([
               ["最後更新", new Date(reg.updated_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" }).replace(/\s+/gu, " ")],
               ["建立日期", new Date(reg.created_at).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" })],
-              ["狀態", reg.is_active ? "生效中" : "已停用"],
+              ["狀態", regulationPublicState(reg)],
             ] as [string, string][]).map(([k, v]) => (
               <div key={k}>
                 <dt style={{ color: "var(--text-muted)" }}>{k}</dt>
@@ -1180,155 +840,6 @@ export default function RegulationDetailPageClient({
           revA={diffPair[0]}
           revB={diffPair[1]}
           onClose={() => setDiffPair(null)}
-        />
-      )}
-
-      {/* ── 凍結 Modal ──────────────────────────────────────────────────────── */}
-      {showFreeze && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center"
-          style={{ background: "var(--bg-overlay)" }} role="dialog" aria-modal="true">
-          <div className="absolute inset-0" onClick={() => setShowFreeze(false)} aria-hidden="true" />
-          <div className="relative rounded-2xl p-5 space-y-4 shadow-2xl w-full max-w-sm"
-            style={{ background: "var(--bg-surface)", border: "1px solid rgba(251,146,60,0.4)" }}>
-            <h2 className="text-base font-semibold" style={{ color: "#fb923c" }}>凍結整部法規</h2>
-            <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-              凍結後本法規效力暫停，頁面將顯示警告橫幅。凍結不同於廢止，仍可解凍恢復效力。
-            </p>
-            <div>
-              <label className="text-xs font-medium block mb-1" style={{ color: "var(--text-secondary)" }}>
-                凍結依據說明（必填）
-              </label>
-              <textarea value={freezeReason} onChange={e => setFreezeReason(e.target.value)}
-                rows={3} placeholder="例：依第三屆第四次臨時會決議暫停施行..."
-                className="w-full text-sm px-3 py-2 rounded-lg outline-none resize-none"
-                style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
-            </div>
-            <div className="flex justify-end gap-3">
-              <button onClick={() => setShowFreeze(false)} className="btn btn-ghost text-xs px-4 py-1.5">取消</button>
-              <button
-                disabled={freezeLoading || !freezeReason.trim()}
-                onClick={async () => {
-                  setFreezeLoading(true);
-                  try {
-                    const updated = await regulationsApi.freeze(id, freezeReason.trim());
-                    setReg(updated);
-                    setShowFreeze(false);
-                    showSuccessToast("法規已凍結");
-                  } catch (e) { showErrorToast(apiErrorMessage(e, "凍結失敗")); }
-                  finally { setFreezeLoading(false); }
-                }}
-                className="text-xs px-4 py-1.5 rounded-lg font-medium disabled:opacity-50"
-                style={{ background: "#fb923c", color: "white" }}>
-                {freezeLoading ? "處理中…" : "確認凍結"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── 廢止 Modal ──────────────────────────────────────────────────────── */}
-      {showRepeal && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center"
-          style={{ background: "var(--bg-overlay)" }} role="dialog" aria-modal="true">
-          <div className="absolute inset-0" onClick={() => setShowRepeal(false)} aria-hidden="true" />
-          <div className="relative my-auto max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl p-5 shadow-2xl"
-            style={{ background: "var(--bg-surface)", border: "1px solid var(--danger-border)" }}>
-            <div>
-              <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--danger)" }}>
-                REPEAL REGULATION
-              </p>
-              <h2 className="mt-1 text-base font-semibold" style={{ color: "var(--text-primary)" }}>
-                廢止法規
-              </h2>
-              <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
-                廢止後法規會標記為失效並保留歷史紀錄。此操作會記錄廢止理由與替代法規。
-              </p>
-            </div>
-
-            <div className="mt-4 space-y-3">
-              <label className="block space-y-1.5">
-                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
-                  廢止理由（必填）
-                </span>
-                <textarea
-                  value={repealReason}
-                  onChange={(e) => setRepealReason(e.target.value)}
-                  rows={4}
-                  placeholder="例：依第四屆第一次會員代表大會決議，原法規已由新版自治章程取代。"
-                  className="input resize-none"
-                />
-              </label>
-
-              <label className="block space-y-1.5">
-                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
-                  替代法規（選填）
-                </span>
-                <select
-                  className="input"
-                  value={repealReplacementId}
-                  onChange={(e) => setRepealReplacementId(e.target.value)}>
-                  <option value="">不指定替代法規</option>
-                  {repealOptions.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.title} v{item.version}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            <div className="mt-5 flex justify-end gap-3">
-              <button
-                onClick={() => setShowRepeal(false)}
-                className="btn btn-ghost text-xs px-4 py-1.5"
-                disabled={repealLoading}>
-                取消
-              </button>
-              <button
-                disabled={repealLoading || !repealReason.trim()}
-                onClick={async () => {
-                  setRepealLoading(true);
-                  try {
-                    const updated = await regulationsApi.repeal(id, {
-                      reason: repealReason.trim(),
-                      replacement_id: repealReplacementId || null,
-                    });
-                    setReg(updated);
-                    setShowRepeal(false);
-                    showSuccessToast("法規已廢止");
-                  } catch (e) {
-                    showErrorToast(apiErrorMessage(e, "廢止失敗"));
-                  } finally {
-                    setRepealLoading(false);
-                  }
-                }}
-                className="text-xs px-4 py-1.5 rounded-lg font-medium disabled:opacity-50"
-                style={{ background: "var(--danger)", color: "white" }}>
-                {repealLoading ? "處理中…" : "確認廢止"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── 流程備註輸入 Modal ──────────────────────────────────────────────── */}
-      {wfNoteModal && (
-        <WfNoteModal
-          label={wfNoteModal.label}
-          hint={wfNoteModal.hint}
-          placeholder={wfNoteModal.placeholder}
-          onClose={() => setWfNoteModal(null)}
-          onSubmit={async (note) => {
-            setWfNoteModal(null);
-            setWfActionLoading(true);
-            try {
-              await wfNoteModal.fn(note);
-              reload();
-              showSuccessToast(`${wfNoteModal.label} 成功`);
-            } catch (e) {
-              showErrorToast(apiErrorMessage(e, "操作失敗"));
-            } finally { setWfActionLoading(false); }
-          }}
         />
       )}
 

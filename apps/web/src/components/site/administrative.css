@@ -77,23 +77,27 @@
 .administrative-law-toc button { min-height: 44px; border-radius: var(--administrative-radius); font-size: 0.875rem; }
 .administrative-toc-mobile-toggle { display: none; }
 .administrative-law-text { max-width: 48rem; }
-.law-reading-row { position: relative; display: grid; grid-template-columns: 6em minmax(0, 1fr); column-gap: 1em; padding: 0.25em 2.75rem 0.25em 0; scroll-margin-top: 2rem; line-height: 1.65; font-size: 1em; }
-.law-reading-heading { display: block; padding: 1em 2.75rem 0.25em 0; }
-.law-reading-heading :is(h2, h3) { font-size: 1.125em; font-weight: 600; }
-.law-reading-heading-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; }
-.law-reading-chapter-toggle { min-height: 44px; color: var(--public-muted); font-size: 0.8125em; text-decoration: underline; text-underline-offset: 0.25em; cursor: pointer; }
-.law-reading-heading:first-child { padding-top: 0.5em; }
+.law-reading-row { position: relative; display: grid; grid-template-columns: 5.5em minmax(0, 1fr); column-gap: 0.75em; padding: 0 2.25rem 0 0; scroll-margin-top: 2rem; line-height: 1.5; font-size: 1em; }
+.law-reading-row[data-kind="article"] { margin-top: 0.875em; min-height: 2em; }
+.law-reading-heading { display: block; margin-top: 1.5em; margin-bottom: 0.375em; min-height: 2em; }
+.law-reading-heading :is(h2, h3) { font-size: 1.0625em; font-weight: 600; }
+.law-reading-heading-line { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.25rem; }
+.law-reading-chapter-toggle { min-height: 32px; color: var(--public-muted); font-size: 0.8125em; text-decoration: underline; text-underline-offset: 0.25em; cursor: pointer; }
+.law-reading-heading:first-child { margin-top: 0; }
 .law-reading-number { font-weight: 600; color: var(--public-text); }
-.law-reading-number a { display: block; min-height: 44px; color: inherit; }
+.law-reading-number a { display: inline-block; color: inherit; }
+.law-reading-number a:hover { color: var(--public-accent-text); text-decoration: underline; text-underline-offset: 0.2em; }
 .law-reading-number > span { display: block; font-size: 0.8125em; font-weight: 400; color: var(--public-muted); }
 .law-reading-text { white-space: pre-wrap; overflow-wrap: anywhere; }
-.law-reading-row[data-kind="paragraph"] { padding-top: 0.25em; padding-left: 1em; }
-.law-reading-row[data-kind="subparagraph"] { padding-top: 0.25em; padding-left: 2em; }
-.law-reading-row[data-kind="item"] { padding-top: 0.25em; padding-left: 3em; }
-.law-reading-row:is([data-kind="paragraph"], [data-kind="subparagraph"], [data-kind="item"]) { grid-template-columns: 5em minmax(0, 1fr); font-weight: 400; }
+.law-reading-row[data-kind="paragraph"] { margin-top: 0.375em; padding-left: 1em; }
+.law-reading-row[data-kind="subparagraph"] { margin-top: 0.1875em; padding-left: 2em; }
+.law-reading-row[data-kind="item"] { margin-top: 0.125em; padding-left: 3em; }
+.law-reading-row:is([data-kind="paragraph"], [data-kind="subparagraph"], [data-kind="item"]) { grid-template-columns: 4.5em minmax(0, 1fr); }
+.law-reading-row:is([data-kind="paragraph"], [data-kind="subparagraph"], [data-kind="item"]) .law-reading-number { font-weight: 400; }
+.law-reading-highlight { min-height: 2em; }
 .law-reading-notice { grid-column: 1 / -1; color: var(--public-muted); font-size: 0.875em; }
-.law-reading-actions { position: absolute; top: 0.25em; right: 0; display: flex; flex-direction: column; }
-.law-reading-actions button { display: grid; place-items: center; width: 44px; height: 44px; color: var(--public-muted); cursor: pointer; }
+.law-reading-actions { position: absolute; top: 0; right: 0; display: flex; flex-direction: column; }
+.law-reading-actions button { display: grid; place-items: center; width: 32px; height: 32px; color: var(--public-muted); cursor: pointer; }
 .law-reading-actions button:hover { color: var(--public-accent-text); background: var(--public-soft); }
 .law-reading-highlight { background: var(--public-accent-soft); }
 .law-reading-deleted .law-reading-text { text-decoration: line-through; color: var(--public-muted); }
@@ -117,6 +121,16 @@
 .administrative-document-supplement dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.5rem 1.5rem; margin-top: 1rem; font-size: 0.875rem; }
 .administrative-document-supplement dt { color: var(--public-muted); }
 .administrative-document-supplement li a { display: inline-flex; min-height: 44px; align-items: center; color: var(--public-accent-text); overflow-wrap: anywhere; }
+/* 登入後沿用同一份文書；工作操作集中於本文上方，簽核另行展開。 */
+.administrative-content .document-detail-page { max-width: none; }
+.document-workspace-actions, .document-workspace-action-buttons, .document-workspace-reading-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; min-width: 0; }
+.document-workspace-actions { padding-block: 0.75rem; border-block: 1px solid var(--public-border); }
+.document-workspace-zoom-control { display: inline-flex; align-items: center; flex: 0 0 auto; }
+.document-workspace-zoom-control button { min-width: 44px; min-height: 44px; display: grid; place-items: center; }
+.document-workspace-body { display: flex; flex-direction: column; gap: 1.5rem; }
+.document-workspace-approvals { width: 100%; }
+.document-workspace-approvals > .card { margin-top: 0.75rem; border: 0; box-shadow: none; padding-inline: 0; }
+.administrative-source-link { display: inline-flex; min-height: 44px; align-items: center; color: var(--public-accent-text); }
 @media (max-width: 900px) {
   .administrative-search { padding: 1rem; gap: 1rem; }
   .administrative-law-layout { flex-direction: column; gap: 1.5rem; }
@@ -149,16 +163,14 @@
   .administrative-documents .administrative-serial { color: var(--public-muted); }
   .law-reading-row { grid-template-columns: minmax(0, 1fr); padding-right: 2rem; }
   .law-reading-text { margin-top: 0; }
-  .law-reading-number a { min-height: 28px; }
-  .law-reading-row { min-height: 44px; }
   .regulation-management-actions { width: 100%; }
   .regulation-reading-tools { gap: 0.25rem; }
   .regulation-reading-tools .btn { padding-inline: 0.5rem; font-size: 0.8125rem; white-space: nowrap; }
-  .law-reading-row:is([data-kind="paragraph"], [data-kind="subparagraph"], [data-kind="item"]) { grid-template-columns: minmax(0, 1fr); }
+  .law-reading-row:is([data-kind="paragraph"], [data-kind="subparagraph"], [data-kind="item"]) { grid-template-columns: 3.5em minmax(0, 1fr); column-gap: 0.375em; }
   .law-reading-row[data-kind="paragraph"] { padding-left: 0.5em; }
   .law-reading-row[data-kind="subparagraph"] { padding-left: 1em; }
   .law-reading-row[data-kind="item"] { padding-left: 1.5em; }
-  .law-reading-actions { top: 0.25em; right: -0.5rem; }
+  .law-reading-actions { top: 0; right: -0.25rem; }
   .administrative-document-stage { padding: 0; border: 0; background: transparent; }
   .official-paper { padding: 1.5rem 1rem; }
   .official-paper-header h2 { font-size: 1.25rem; }

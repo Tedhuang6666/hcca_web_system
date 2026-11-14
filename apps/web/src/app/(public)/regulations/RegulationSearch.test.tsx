@@ -28,38 +28,43 @@ beforeEach(() => {
   state.list.mockReset().mockResolvedValue([regulation]);
 });
 
-describe("法規主頁整合管理操作", () => {
-  it("管理者直接在同一列表新增、查看待審案件與篩選草稿", async () => {
-    state.permissions = ["regulation:create", "regulation:schedule"];
+describe("雲端法規查詢", () => {
+  it("管理者在主頁管理同步與待公布資料，不提供起草或審議入口", async () => {
+    state.permissions = ["regulation:admin"];
     const view = render(<RegulationSearch />);
     await screen.findByRole("link", { name: "測試自治條例" });
-    expect(screen.getByRole("link", { name: "新增法規" })).toHaveAttribute("href", "/regulations/new");
-    expect(screen.getByRole("link", { name: "待審案件" })).toHaveAttribute("href", "/regulations/pending");
-    expect(screen.queryByRole("button", { name: "法規管理" })).not.toBeInTheDocument();
-    fireEvent.change(screen.getByRole("combobox", { name: "法規狀態" }), { target: { value: "draft" } });
-    expect(state.replace).toHaveBeenCalledWith("/regulations?workflow=draft", { scroll: false });
-    state.params = new URLSearchParams("workflow=draft");
-    state.list.mockResolvedValueOnce([{ ...regulation, is_active: false, workflow_status: "draft" }]);
+    expect(screen.queryByRole("link", { name: "新增法規" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "待審案件" })).not.toBeInTheDocument();
+    expect(screen.getByText("資料同步")).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "草稿" })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole("combobox", { name: "法規狀態" }), { target: { value: "unpublished" } });
+    expect(state.replace).toHaveBeenCalledWith("/regulations?status=unpublished", { scroll: false });
+    state.params = new URLSearchParams("status=unpublished");
+    state.list.mockResolvedValueOnce([
+      regulation,
+      { ...regulation, id: "pending-1", title: "待公布自治條例", published_at: null, workflow_status: "draft" },
+    ]);
     view.rerender(<RegulationSearch />);
-    await waitFor(() => expect(state.list).toHaveBeenLastCalledWith({ active_only: "false", workflow_status: "draft" }));
-    await screen.findByRole("cell", { name: "草稿" });
-    expect(screen.getByRole("heading", { name: "法規查詢" })).toBeInTheDocument();
+    await screen.findByRole("link", { name: "待公布自治條例" });
+    expect(screen.queryByRole("link", { name: "測試自治條例" })).not.toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "待公布" })).toBeInTheDocument();
   });
 
-  it("公開訪客的網址參數不會開啟草稿或管理工具", async () => {
-    state.params = new URLSearchParams("workflow=draft");
+  it("訪客的舊流程參數與待公布參數不會開啟內部資料或管理工具", async () => {
+    state.params = new URLSearchParams("workflow=draft&status=unpublished");
     render(<RegulationSearch />);
     await waitFor(() => expect(state.list).toHaveBeenCalledWith({ active_only: "true", workflow_status: "published" }));
-    expect(screen.queryByRole("link", { name: "新增法規" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: "草稿" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "待公布" })).not.toBeInTheDocument();
     expect(screen.queryByText("資料同步")).not.toBeInTheDocument();
   });
 
-  it("管理者可在原查詢表格列出全部狀態，保留分類與搜尋條件", async () => {
-    state.permissions = ["regulation:create"];
+  it("保留分類與搜尋條件，且舊審議參數不再啟用流程", async () => {
+    state.permissions = ["regulation:admin"];
     state.params = new URLSearchParams("workflow=all&category=ordinance&keyword=自治");
     render(<RegulationSearch />);
-    await waitFor(() => expect(state.list).toHaveBeenCalledWith("自治", { active_only: "false", category: "ordinance" }));
+    await waitFor(() => expect(state.list).toHaveBeenCalledWith("自治", {
+      active_only: "true", workflow_status: "published", category: "ordinance",
+    }));
     expect(screen.getByRole("searchbox")).toHaveValue("自治");
   });
 });
