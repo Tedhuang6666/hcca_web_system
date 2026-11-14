@@ -62,6 +62,19 @@ describe("activity products", () => {
     render(<HomeContent {...props} catalog={[category]} />);
     expect(screen.getAllByRole("link", { name: /活動紀念袋/ })).toHaveLength(1);
   });
+  it("provides four distinct products for the mobile grid", () => {
+    const products = Array.from({ length: 5 }, (_, index) => ({
+      ...product, id: `product-${index}`, name: `商品 ${index + 1}`,
+    }));
+    render(<HomeContent {...props} catalog={[{
+      ...category, products,
+      series: [{ ...category.series[0], products: [products[0], products[1]] }],
+    }]} />);
+    const destinations = screen.getAllByRole("link")
+      .map((link) => link.getAttribute("href"))
+      .filter((href) => href?.startsWith("/shop?product="));
+    expect(destinations).toEqual(products.slice(0, 4).map((item) => `/shop?product=${item.id}`));
+  });
   it("hides the product section when the shop is unavailable", () => {
     render(<HomeContent {...props} catalog={[category]} shopUnavailable />);
     expect(screen.queryByRole("heading", { name: "活動商品" })).not.toBeInTheDocument();
@@ -79,6 +92,17 @@ it("honors hidden and renamed common services from the site configuration", () =
     },
   };
   render(<HomeEntrySection bundle={bundle} />);
-  expect(screen.queryByRole("link", { name: "公開陳情" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "陳情中心" })).not.toBeInTheDocument();
   expect(screen.getByRole("link", { name: "自治資料" })).toHaveAttribute("href", "/public");
+});
+
+it("shows the requested common services in order with the petition center destination", () => {
+  render(<HomeEntrySection bundle={null} />);
+  expect(screen.getAllByRole("link").map((link) => [link.textContent, link.getAttribute("href")]))
+    .toEqual([
+      ["連結整理", "/links"],
+      ["陳情中心", "/petitions"],
+      ["公開資料", "/public"],
+      ["聯絡我們", "/contact"],
+    ]);
 });

@@ -6,7 +6,7 @@ import { groupPublicLinks } from "@/lib/public-link-groups";
 import { pageMetadata } from "@/lib/seo";
 
 export const metadata = pageMetadata({
-  title: "平台連結",
+  title: "連結整理",
   description: "班聯會各平台、表單、社群與公開資料入口。",
   path: "/links",
   type: "website",
@@ -30,7 +30,7 @@ export default async function LinksPage() {
     >
       <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
         <header className="mb-8">
-          <h1 className="text-3xl font-bold">平台連結</h1>
+          <h1 className="text-3xl font-bold">連結整理</h1>
         </header>
         <div className="space-y-6">
           {groupEntries.map((group) => (

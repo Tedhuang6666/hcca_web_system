@@ -24,10 +24,17 @@ function formatDate(value: string): string {
 }
 
 export function HomeEntrySection({ bundle }: { bundle: PublicSiteBundleOut | null }) {
-  const serviceKeys = new Set(["public-db", "petitions", "officers", "contact"]);
-  const services = resolvePublicNav(bundle?.settings?.theme_config)
-    .filter((item) => serviceKeys.has(item.key) && !item.hidden)
-    .sort((a, b) => a.order - b.order);
+  const navItems = resolvePublicNav(bundle?.settings?.theme_config);
+  const services = ["links", "petitions", "public-db", "contact"].flatMap((key) => {
+    const item = navItems.find((entry) => entry.key === key);
+    if (!item || item.hidden) return [];
+    return [{
+      ...item,
+      href: key === "petitions" ? "/petitions" : item.href,
+      label: key === "petitions" ? "陳情中心"
+        : key === "public-db" && item.label === "公開資料庫" ? "公開資料" : item.label,
+    }];
+  });
 
   if (services.length === 0) return null;
 
@@ -83,7 +90,7 @@ export default function HomeContent({
       ...category.series.flatMap((series) => series.products),
     ].map((product) => ({ ...product, categoryName: category.name })))
     .filter((product) => product.status === "active")
-    .map((product) => [product.id, product])).values()).slice(0, 3);
+    .map((product) => [product.id, product])).values()).slice(0, 4);
 
   return (
     <div className="campus-content">

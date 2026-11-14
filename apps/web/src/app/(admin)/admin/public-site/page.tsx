@@ -168,7 +168,7 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "special", label: "特約資訊", icon: <Handshake size={16} aria-hidden /> },
   { id: "nav", label: "導覽列", icon: <Compass size={16} aria-hidden /> },
   { id: "pages", label: "頁面內容", icon: <FileText size={16} aria-hidden /> },
-  { id: "links", label: "平台連結", icon: <LinkIcon size={16} aria-hidden /> },
+  { id: "links", label: "連結整理", icon: <LinkIcon size={16} aria-hidden /> },
   { id: "officers", label: "幹部顯示", icon: <Users size={16} aria-hidden /> },
   { id: "advanced", label: "進階樣式", icon: <Eye size={16} aria-hidden /> },
 ];

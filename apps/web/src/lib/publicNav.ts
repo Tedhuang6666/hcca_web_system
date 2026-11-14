@@ -45,7 +45,7 @@ export const PUBLIC_NAV_ITEMS: PublicNavItemDef[] = [
 
   { key: "officers", href: "/officers", label: "班聯會幹部", description: "當屆幹部與公開資料", iconKey: "officers", group: "info", guestUsable: true },
   { key: "contact", href: "/contact", label: "聯絡我們", description: "聯絡班聯會與提出問題", iconKey: "contact", group: "info", guestUsable: true },
-  { key: "links", href: "/links", label: "平台連結", description: "常用服務與外部連結", iconKey: "links", group: "info", guestUsable: true },
+  { key: "links", href: "/links", label: "連結整理", description: "常用服務與外部連結", iconKey: "links", group: "info", guestUsable: true },
 
   { key: "public-db", href: "/public", label: "公開資料庫", description: "所有公開資料與參與入口", iconKey: "public-db", group: "data", guestUsable: true },
   { key: "regulations", href: "/regulations", label: "法規查詢", description: "現行條文、沿革與版本", iconKey: "regulations", group: "data", guestUsable: true, moduleId: "regulations" },
