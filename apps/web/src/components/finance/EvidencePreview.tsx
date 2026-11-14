@@ -65,7 +65,7 @@ export function PdfEvidenceViewer({
           "pdfjs-dist/build/pdf.worker.min.mjs",
           import.meta.url,
         ).toString();
-        loadingTask = pdfjs.getDocument({ url });
+        loadingTask = pdfjs.getDocument({ url, withCredentials: true });
         const loadedPdf = await loadingTask.promise;
         if (cancelled) {
           void loadingTask.destroy();
@@ -125,6 +125,7 @@ export function PdfEvidenceViewer({
         renderTask = page.render({
           canvas,
           viewport,
+          background: "#ffffff",
           transform: outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0],
         });
         await renderTask.promise;
@@ -211,7 +212,6 @@ export function PdfEvidenceViewer({
         )}
         <div className="finance-evidence-preview__pdf-canvas">
           <canvas
-            key={`${pageNumber}-${zoom}-${Math.round(viewerWidth)}`}
             ref={canvasRef}
             className="finance-evidence-preview__canvas"
             role="img"

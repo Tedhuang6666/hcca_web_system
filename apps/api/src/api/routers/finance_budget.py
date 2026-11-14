@@ -59,6 +59,9 @@ from api.schemas.finance import (
     BudgetImportOut,
     BudgetIncomeItemOut,
     BudgetIncomeItemUpdate,
+    BudgetIncomeRecordCreate,
+    BudgetIncomeRecordOut,
+    BudgetIncomeRecordUpdate,
     BudgetNodeCreate,
     BudgetNodeOut,
     BudgetOut,
@@ -74,11 +77,64 @@ from api.schemas.finance import (
 )
 from api.services import audit as audit_svc
 from api.services import finance as service
-from api.services import finance_documents
+from api.services import finance_documents, finance_income
 from api.services.file_delivery import deliver_stored_file
 from api.services.storage import get_storage
 
 router = APIRouter()
+
+
+@router.post(
+    "/budgets/{budget_id}/income-records",
+    response_model=BudgetIncomeRecordOut,
+    status_code=201,
+    dependencies=[Depends(require_budget_permission(PermissionCode.FINANCE_RECORD))],
+)
+async def create_budget_income_record(
+    budget_id: uuid.UUID, body: BudgetIncomeRecordCreate, db: DbDep, user: CurrentUser
+) -> BudgetIncomeRecordOut:
+    record = await finance_income.save_income_record(db, budget_id, body, user.id)
+    await audit_svc.record(
+        db,
+        entity_type="finance_budget_income_record",
+        entity_id=str(record.id),
+        action="finance.income_create",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        summary=f"登記實際收入 {record.amount} 元",
+    )
+    rows = await finance_income.income_records(db, budget_id)
+    result = next(item for item in rows if item["id"] == record.id)
+    await db.commit()
+    return BudgetIncomeRecordOut.model_validate(result)
+
+
+@router.patch(
+    "/budgets/{budget_id}/income-records/{record_id}",
+    response_model=BudgetIncomeRecordOut,
+    dependencies=[Depends(require_budget_permission(PermissionCode.FINANCE_RECORD))],
+)
+async def update_budget_income_record(
+    budget_id: uuid.UUID,
+    record_id: uuid.UUID,
+    body: BudgetIncomeRecordUpdate,
+    db: DbDep,
+    user: CurrentUser,
+) -> BudgetIncomeRecordOut:
+    record = await finance_income.save_income_record(db, budget_id, body, user.id, record_id)
+    await audit_svc.record(
+        db,
+        entity_type="finance_budget_income_record",
+        entity_id=str(record.id),
+        action="finance.income_update",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        summary=f"更新實際收入為 {record.amount} 元",
+    )
+    rows = await finance_income.income_records(db, budget_id)
+    result = next(item for item in rows if item["id"] == record.id)
+    await db.commit()
+    return BudgetIncomeRecordOut.model_validate(result)
 
 
 @router.get(
@@ -115,7 +171,7 @@ async def import_budget(
     db: DbDep,
     user: CurrentUser,
     period_id: uuid.UUID = Form(...),
-    council_approved_on: date = Form(...),
+    council_approved_on: date | None = Form(None),
     name: str = Form(..., min_length=1, max_length=160),
     title: str | None = Form(None, max_length=160),
     proposing_org_id: uuid.UUID | None = Form(None),

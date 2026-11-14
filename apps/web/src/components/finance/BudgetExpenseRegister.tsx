@@ -161,7 +161,7 @@ export default function BudgetExpenseRegister({
       ? expenses.find((expense) => expense.id === editingExpenseId)?.evidence.length || 0
       : 0;
     if (files.length + existingEvidenceCount + nextFiles.length > 20) {
-      toast.error("一筆核銷最多附上 20 份憑證");
+      toast.error("一筆支出最多附上 20 份憑證");
       return;
     }
     if (nextFiles.some((file) => file.size > 20 * 1024 * 1024)) {
@@ -283,7 +283,6 @@ export default function BudgetExpenseRegister({
       <header>
         <div>
           <h3 id="budget-expenses-heading">{editingExpenseId ? "編輯已登記支出" : "登記支出"}</h3>
-          <p>同筆預算可分次核銷，一次採購可登錄多項品目。</p>
         </div>
         {canRecord && approvedAllocations.length > 0 && (
           <button className="btn btn-primary" type="button" onClick={() => editingExpenseId ? cancelExpenseEdit() : setIsOpen((value) => !value)}>

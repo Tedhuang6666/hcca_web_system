@@ -111,6 +111,7 @@ from api.models.finance import (  # noqa: F401
     FinanceBudgetExpenseEvidence,
     FinanceBudgetExpenseItem,
     FinanceBudgetIncomeItem,
+    FinanceBudgetIncomeRecord,
     FinanceBudgetNode,
     FinanceBudgetSubmission,
     FinanceLedger,

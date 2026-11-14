@@ -6,6 +6,7 @@ import { ArrowLeft, Check, CircleAlert, FileText, Paperclip, ReceiptText, Shield
 import { fetchPublicBudget } from "@/lib/publicSeoFetch";
 import { pageMetadata } from "@/lib/seo";
 import EvidencePreview from "@/components/finance/EvidencePreview";
+import PublicBudgetIncomeTable from "@/components/finance/PublicBudgetIncomeTable";
 import { orderBudgetNodes } from "@/components/finance/publicBudgetExecution";
 
 type PageProps = {
@@ -162,6 +163,8 @@ export default async function PublicBudgetDetailPage({ params, searchParams }: P
           ))}
         </div> : <p className="public-budget-detail__expenses-empty">目前尚未登錄支出。</p>}
       </section>}
+
+      <PublicBudgetIncomeTable items={budget.income_items || []} records={budget.income_records || []} />
 
       {budget.submissions.length > 0 && <section className="public-budget-detail__approvals" aria-labelledby="public-budget-approvals-heading">
         <header><h2 id="public-budget-approvals-heading">{isCouncilReview ? "既有核准紀錄" : "核准紀錄"}</h2><p>初始預算與每一次追加案都會依審核時間保留。</p></header>

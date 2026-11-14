@@ -26,9 +26,11 @@ from api.models.finance import (
 from api.routers.finance_common import _inline_evidence_headers as _inline_evidence_headers
 from api.schemas.finance import (
     BudgetNodeOut,
+    BudgetPlanRowOut,
     PublicBudgetAllocationOut,
     PublicBudgetDetailOut,
     PublicBudgetExpenseOut,
+    PublicBudgetIncomeRecordOut,
     PublicBudgetListItem,
     PublicBudgetSubmissionOut,
     PublicExpenseClaimDetailOut,
@@ -137,6 +139,29 @@ async def get_public_budget_detail(
             for item in approved_submissions
         ],
         nodes=[BudgetNodeOut.model_validate(item) for item in detail["nodes"]],
+        income_items=[row for row in detail["current_plan"].rows if row.income]
+        if review_submission is None
+        else [
+            BudgetPlanRowOut(
+                id=item.id,
+                category=item.category,
+                name=item.name,
+                income=True,
+                amount=item.amount,
+                quantity=item.quantity,
+                unit=item.unit,
+                unit_price=item.unit_price,
+                note=item.note,
+                is_new=item.is_new,
+            )
+            for item in detail["income_items"]
+            if item.submission_id in visible_submission_ids
+        ],
+        income_records=[
+            PublicBudgetIncomeRecordOut.model_validate(item) for item in detail["income_records"]
+        ]
+        if review_submission is None
+        else [],
         allocations=[
             PublicBudgetAllocationOut.model_validate(item)
             for item in detail["allocations"]

@@ -570,7 +570,8 @@ async def test_budget_import_is_approved_without_review_permission(
     missing_date = await authed_client_factory(member_user).post(
         endpoint, data={"period_id": str(period.id), "name": "115 學年度預算"}, files=upload
     )
-    assert missing_date.status_code == 422
+    assert missing_date.status_code == 201
+    assert missing_date.json()["submission"]["council_approved_on"] is None
 
     approved = await authed_client_factory(member_user).post(endpoint, data=form, files=upload)
     assert approved.status_code == 201
@@ -1828,3 +1829,210 @@ async def test_unapproved_full_snapshot_does_not_replace_current_plan(
     assert after["current_plan"] == detail["current_plan"]
     assert len(after["submissions"]) == 2
     assert len(after["allocations"]) == 2
+
+
+def test_signed_budget_workbook_uses_signs_and_the_updated_total_sheet() -> None:
+    workbook = Workbook()
+    workbook.active.title = "說明"
+    workbook.active.append(["這頁不是預算資料"])
+    sheet = workbook.create_sheet("更新後總預算")
+    sheet.append([None, "項目", "細項", "數量", "單價", "總額(含稅)", "項目總額", "備註"])
+    sheet.append([None, "活動", "校商收入", "1式", 21630, 21630, None, ""])
+    sheet.append([None, "行政", "名片", "2.5盒", -245, -612.5, None, "依原檔總額"])
+    sheet.append([None, None, "貼紙", "10張", -28.4, -280, None, ""])
+    sheet.merge_cells("B3:B4")
+    # A legacy fill must not turn a negative amount into income in a signed workbook.
+    sheet["F3"].fill = PatternFill("solid", fgColor="D9EAD3")
+    output = BytesIO()
+    workbook.save(output)
+    expenses, incomes, skipped = _parse_budget_workbook(output.getvalue())
+    assert [row["amount"] for row in expenses] == [613, 280]
+    assert [row["category"] for row in expenses] == ["行政", "行政"]
+    assert expenses[0]["quantity"] == 2.5
+    assert expenses[1]["unit_price"] is None
+    assert [row["amount"] for row in incomes] == [21630]
+    assert skipped == []
+
+
+async def test_direct_budget_income_survives_upload_and_is_public_without_internal_notes(
+    db_session, member_user, authed_client_factory
+) -> None:
+    org = await _grant_many(
+        db_session, [member_user], ["finance:view", "finance:budget", "finance:record"]
+    )
+    ledger, period, _, _ = await _make_ledger(db_session, org)
+    actor = authed_client_factory(member_user)
+    endpoint = f"/finance/ledgers/{ledger.id}/budgets/import"
+    form = {"period_id": str(period.id), "name": "學期預算"}
+    uploaded = await actor.post(
+        endpoint, data=form, files={"file": ("預算.xlsx", _colored_budget_workbook())}
+    )
+    assert uploaded.status_code == 201
+    budget_id = uploaded.json()["budget"]["id"]
+    detail = (await actor.get(f"/finance/budgets/{budget_id}")).json()
+    income_id = detail["income_items"][0]["id"]
+    record_path = f"/finance/budgets/{budget_id}/income-records"
+    recorded = await actor.post(
+        record_path,
+        json={
+            "income_item_id": income_id,
+            "amount": 200,
+            "entry_date": "2026-08-20",
+            "note": "內部收款備註",
+        },
+    )
+    assert recorded.status_code == 201
+    record_id = recorded.json()["id"]
+    public = (await actor.get(f"/finance/public/budgets/{budget_id}")).json()
+    assert public["income_items"][0]["amount"] == 500
+    assert public["income_records"][0]["amount"] == 200
+    assert "note" not in public["income_records"][0]
+    assert "income_item_id" not in public["income_records"][0]
+    assert "recorded_by_id" not in public["income_records"][0]
+    assert (await actor.get(f"/finance/public/budgets/{budget_id}/totals")).json()[
+        "income_total"
+    ] == 200
+
+    # The server finds the existing period's budget without a client-supplied budget_id.
+    updated = await actor.post(
+        endpoint, data=form, files={"file": ("新版.xlsx", _colored_budget_workbook())}
+    )
+    assert updated.status_code == 201
+    assert updated.json()["budget"]["id"] == budget_id
+    detail = (await actor.get(f"/finance/budgets/{budget_id}")).json()
+    assert detail["income_records"][0]["income_item_id"] == income_id
+    assert len(detail["current_plan"]["rows"]) == 2
+    correction = await actor.patch(
+        f"{record_path}/{record_id}", json={"amount": 250, "entry_date": "2026-08-21", "note": None}
+    )
+    assert correction.status_code == 200
+    assert correction.json()["note"] is None
+    assert (await actor.get(f"/finance/public/budgets/{budget_id}/totals")).json()[
+        "income_total"
+    ] == 250
+
+    period.is_closed = True
+    await db_session.flush()
+    assert (
+        await actor.post(
+            endpoint, data=form, files={"file": ("新版.xlsx", _colored_budget_workbook())}
+        )
+    ).status_code == 400
+    assert (
+        await actor.patch(
+            f"{record_path}/{record_id}", json={"amount": 300, "entry_date": "2026-08-21"}
+        )
+    ).status_code == 400
+
+
+async def test_direct_budget_income_enforces_permissions_dates_and_budget_scope(
+    db_session, member_user, make_user, client, authed_client_factory
+) -> None:
+    org = await _grant_many(
+        db_session, [member_user], ["finance:view", "finance:budget", "finance:record"]
+    )
+    ledger, period, _, _ = await _make_ledger(db_session, org)
+    actor = authed_client_factory(member_user)
+    imported = await actor.post(
+        f"/finance/ledgers/{ledger.id}/budgets/import",
+        data={"period_id": str(period.id), "name": "預算"},
+        files={"file": ("預算.xlsx", _colored_budget_workbook())},
+    )
+    budget_id = imported.json()["budget"]["id"]
+    detail = (await actor.get(f"/finance/budgets/{budget_id}")).json()
+    path = f"/finance/budgets/{budget_id}/income-records"
+    body = {
+        "income_item_id": detail["income_items"][0]["id"],
+        "amount": 100,
+        "entry_date": "2026-08-20",
+    }
+    assert (await client.post(path, json=body)).status_code == 401
+    outsider = await make_user(email="income-outsider@school.edu")
+    other_org = await _grant_many(
+        db_session, [outsider], ["finance:record", "finance:view", "finance:budget"]
+    )
+    stranger = authed_client_factory(outsider)
+    assert (await stranger.post(path, json=body)).status_code == 403
+    other_ledger, other_period, _, _ = await _make_ledger(db_session, other_org)
+    other_import = await stranger.post(
+        f"/finance/ledgers/{other_ledger.id}/budgets/import",
+        data={"period_id": str(other_period.id), "name": "另一組織預算"},
+        files={"file": ("預算.xlsx", _colored_budget_workbook())},
+    )
+    other_budget_id = other_import.json()["budget"]["id"]
+    other_detail = (await stranger.get(f"/finance/budgets/{other_budget_id}")).json()
+    assert (
+        await actor.post(
+            path, json={**body, "income_item_id": other_detail["income_items"][0]["id"]}
+        )
+    ).status_code == 404
+    viewer = await make_user(email="income-viewer@school.edu")
+    await _grant_on_org(db_session, viewer, org, ["finance:view"])
+    assert (await authed_client_factory(viewer).post(path, json=body)).status_code == 403
+    assert (
+        await actor.post(path, json={**body, "income_item_id": str(uuid.uuid4())})
+    ).status_code == 404
+    assert (await actor.post(path, json={**body, "entry_date": "2027-01-01"})).status_code == 400
+    assert (await actor.post(path, json={**body, "amount": 0})).status_code == 422
+    saved = await actor.post(path, json=body)
+    assert saved.status_code == 201
+    record_id = saved.json()["id"]
+    assert (
+        await stranger.patch(
+            f"{path}/{record_id}", json={"amount": 100, "entry_date": "2026-08-20"}
+        )
+    ).status_code == 403
+    assert (
+        await actor.patch(
+            f"{path}/{uuid.uuid4()}", json={"amount": 100, "entry_date": "2026-08-20"}
+        )
+    ).status_code == 404
+
+
+async def test_existing_budget_income_journals_remain_visible_without_double_counting(
+    db_session, member_user, authed_client_factory
+) -> None:
+    from api.models.finance import JournalEntry, JournalLine, JournalStatus
+
+    org = await _grant_many(db_session, [member_user], ["finance:view", "finance:budget"])
+    ledger, period, asset, _ = await _make_ledger(db_session, org)
+    actor = authed_client_factory(member_user)
+    imported = await actor.post(
+        f"/finance/ledgers/{ledger.id}/budgets/import",
+        data={"period_id": str(period.id), "name": "預算"},
+        files={"file": ("預算.xlsx", _colored_budget_workbook())},
+    )
+    budget_id = imported.json()["budget"]["id"]
+    revenue = await db_session.scalar(
+        select(ChartAccount).where(ChartAccount.ledger_id == ledger.id, ChartAccount.code == "4101")
+    )
+    entry = JournalEntry(
+        ledger_id=ledger.id,
+        period_id=period.id,
+        entry_date=date(2026, 8, 20),
+        description="收入｜活動｜報名費",
+        status=JournalStatus.POSTED,
+        source_type="manual_entry",
+        source_event="income",
+        created_by_id=member_user.id,
+        note="不應公開的備註",
+    )
+    db_session.add(entry)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            JournalLine(entry_id=entry.id, account_id=asset.id, debit=200, credit=0),
+            JournalLine(entry_id=entry.id, account_id=revenue.id, debit=0, credit=200),
+        ]
+    )
+    await db_session.flush()
+    detail = (await actor.get(f"/finance/budgets/{budget_id}")).json()
+    assert detail["income_records"][0]["is_legacy"] is True
+    assert detail["income_records"][0]["amount"] == 200
+    public = (await actor.get(f"/finance/public/budgets/{budget_id}")).json()
+    assert public["income_records"][0]["amount"] == 200
+    assert "note" not in public["income_records"][0]
+    assert "is_legacy" not in public["income_records"][0]
+    assert (await actor.get(f"/finance/public/budgets/{budget_id}/totals")).json()[
+        "income_total"
+    ] == 200

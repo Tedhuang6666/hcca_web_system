@@ -5322,6 +5322,40 @@ export interface paths {
         patch: operations["update_budget_income_item_finance_budgets__budget_id__income_items__income_id__patch"];
         trace?: never;
     };
+    "/finance/budgets/{budget_id}/income-records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Budget Income Record */
+        post: operations["create_budget_income_record_finance_budgets__budget_id__income_records_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finance/budgets/{budget_id}/income-records/{record_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Budget Income Record */
+        patch: operations["update_budget_income_record_finance_budgets__budget_id__income_records__record_id__patch"];
+        trace?: never;
+    };
     "/finance/budgets/{budget_id}/publication": {
         parameters: {
             query?: never;
@@ -13662,11 +13696,8 @@ export interface components {
         Body_import_budget_finance_ledgers__ledger_id__budgets_import_post: {
             /** Budget Id */
             budget_id?: string | null;
-            /**
-             * Council Approved On
-             * Format: date
-             */
-            council_approved_on: string;
+            /** Council Approved On */
+            council_approved_on?: string | null;
             /** File */
             file: string;
             /**
@@ -13954,6 +13985,8 @@ export interface components {
             id: string;
             /** Income Items */
             income_items?: components["schemas"]["BudgetIncomeItemOut"][];
+            /** Income Records */
+            income_records?: components["schemas"]["BudgetIncomeRecordOut"][];
             /** Is Public */
             is_public: boolean;
             /**
@@ -14024,6 +14057,66 @@ export interface components {
         BudgetIncomeItemUpdate: {
             /** Amount */
             amount: number;
+            /** Note */
+            note?: string | null;
+        };
+        /** BudgetIncomeRecordCreate */
+        BudgetIncomeRecordCreate: {
+            /** Amount */
+            amount: number;
+            /**
+             * Entry Date
+             * Format: date
+             */
+            entry_date: string;
+            /**
+             * Income Item Id
+             * Format: uuid
+             */
+            income_item_id: string;
+            /** Note */
+            note?: string | null;
+        };
+        /** BudgetIncomeRecordOut */
+        BudgetIncomeRecordOut: {
+            /** Amount */
+            amount: number;
+            /** Category */
+            category: string;
+            /**
+             * Entry Date
+             * Format: date
+             */
+            entry_date: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Income Item Id
+             * Format: uuid
+             */
+            income_item_id: string;
+            /**
+             * Is Legacy
+             * @default false
+             */
+            is_legacy: boolean;
+            /** Name */
+            name: string;
+            /** Note */
+            note: string | null;
+        };
+        /** BudgetIncomeRecordUpdate */
+        BudgetIncomeRecordUpdate: {
+            /** Amount */
+            amount: number;
+            /**
+             * Entry Date
+             * Format: date
+             */
+            entry_date: string;
             /** Note */
             note?: string | null;
         };
@@ -25772,6 +25865,10 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Income Items */
+            income_items?: components["schemas"]["BudgetPlanRowOut"][];
+            /** Income Records */
+            income_records?: components["schemas"]["PublicBudgetIncomeRecordOut"][];
             /** Name */
             name: string;
             /** Nodes */
@@ -25853,6 +25950,25 @@ export interface components {
             purpose: string;
             /** Total Amount */
             total_amount: number;
+        };
+        /** PublicBudgetIncomeRecordOut */
+        PublicBudgetIncomeRecordOut: {
+            /** Amount */
+            amount: number;
+            /** Category */
+            category: string;
+            /**
+             * Entry Date
+             * Format: date
+             */
+            entry_date: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
         };
         /** PublicBudgetListItem */
         PublicBudgetListItem: {
@@ -44709,6 +44825,77 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BudgetIncomeItemOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_budget_income_record_finance_budgets__budget_id__income_records_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetIncomeRecordCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetIncomeRecordOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_budget_income_record_finance_budgets__budget_id__income_records__record_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                budget_id: string;
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetIncomeRecordUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetIncomeRecordOut"];
                 };
             };
             /** @description Validation Error */

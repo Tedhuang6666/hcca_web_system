@@ -96,7 +96,7 @@ export const NAV_ITEMS: NavItem[] = [
     label: "班級／校商收款",
     perm: "finance:view",
   },
-  { id: "finance", href: "/finance", iconKey: "analytics", label: "財務總帳", perm: "finance:view" },
+  { id: "finance", href: "/finance", iconKey: "analytics", label: "預算與收支", perm: "finance:view" },
   {
     id: "publications",
     href: "/publications",

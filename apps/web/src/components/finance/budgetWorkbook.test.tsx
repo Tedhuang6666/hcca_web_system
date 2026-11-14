@@ -45,25 +45,23 @@ describe("integrated budget workbook", () => {
   });
 
   it("renders server version changes without replaying submission history", () => {
-    render(<BudgetConsolidatedTable detail={{ ...detail, submissions: [] }} canManage={false} canRecordExpense={false} canRecordIncome={false} onRegisterIncome={vi.fn()} onRegisterExpense={vi.fn()} onSaved={vi.fn()} />);
-    expect(screen.getByText("與上一版相比，2 項金額變更")).toBeInTheDocument();
+    render(<BudgetConsolidatedTable detail={{ ...detail, submissions: [] }} canRecordExpense={false} canRecordIncome={false} onRegisterIncome={vi.fn()} onRegisterExpense={vi.fn()} />);
+    expect(screen.getByText("查看版本差異（2 項）")).toBeInTheDocument();
     expect(screen.getByText("行政／影印紙（支出）")).toBeInTheDocument();
   });
 
-  it("filters new rows and directly saves income with an explicit null note", async () => {
-    const saved = vi.fn().mockResolvedValue(undefined);
-    render(<BudgetConsolidatedTable detail={detail} canManage canRecordExpense canRecordIncome onRegisterIncome={vi.fn()} onRegisterExpense={vi.fn()} onSaved={saved} />);
-    const region = screen.getByRole("region", { name: "整合預算總表，可左右捲動" });
+  it("filters rows and starts an actual income record without editing the budget", () => {
+    const register = vi.fn();
+    render(<BudgetConsolidatedTable detail={detail} canRecordExpense canRecordIncome onRegisterIncome={register} onRegisterExpense={vi.fn()} />);
+    const region = screen.getByRole("region", { name: "收支總表，可左右捲動" });
     expect(within(region).getByText("報名費")).toBeInTheDocument();
     fireEvent.change(screen.getByRole("combobox", { name: "篩選預算" }), { target: { value: "new" } });
     expect(within(region).queryByText("報名費")).not.toBeInTheDocument();
     expect(within(region).getByText("影印紙")).toBeInTheDocument();
     fireEvent.change(screen.getByRole("combobox", { name: "篩選預算" }), { target: { value: "income" } });
-    fireEvent.click(within(region).getByRole("button", { name: "編輯" }));
-    fireEvent.change(screen.getByLabelText("總額（含稅）"), { target: { value: "1200" } });
-    fireEvent.click(screen.getByRole("button", { name: "儲存修改" }));
-    await vi.waitFor(() => expect(financeApi.updateBudgetIncomeItem).toHaveBeenCalledWith("budget", "income", { amount: 1200, note: null }));
-    expect(saved).toHaveBeenCalledOnce();
+    fireEvent.click(within(region).getByRole("button", { name: "登記收入：報名費" }));
+    expect(register).toHaveBeenCalledWith(detail.income_items[0]);
+    expect(financeApi.updateBudgetIncomeItem).not.toHaveBeenCalled();
   });
 
   it("generates a receipt for selected actual advances only", async () => {

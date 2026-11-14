@@ -62,6 +62,7 @@ describe("EvidencePreview", () => {
     expect(await screen.findByRole("img", { name: "receipt.pdf 第 1 頁" })).toBeVisible();
     expect(getDocument).toHaveBeenCalledWith({
       url: "https://hcca.tw/finance/evidence/receipt.pdf",
+      withCredentials: true,
     });
 
     fireEvent.click(screen.getByRole("button", { name: "下一頁" }));

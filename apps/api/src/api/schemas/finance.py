@@ -553,11 +553,39 @@ class BudgetPlanOut(BaseModel):
     changes: list[BudgetVersionChangeOut]
 
 
+class BudgetIncomeRecordCreate(BaseModel):
+    income_item_id: uuid.UUID
+    amount: int = Field(gt=0, le=2_000_000_000)
+    entry_date: date
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class BudgetIncomeRecordUpdate(BaseModel):
+    amount: int = Field(gt=0, le=2_000_000_000)
+    entry_date: date
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class PublicBudgetIncomeRecordOut(BaseModel):
+    id: uuid.UUID
+    category: str
+    name: str
+    amount: int
+    entry_date: date
+
+
+class BudgetIncomeRecordOut(PublicBudgetIncomeRecordOut):
+    income_item_id: uuid.UUID
+    note: str | None
+    is_legacy: bool = False
+
+
 class BudgetDetailOut(BudgetOut):
     submissions: list[BudgetSubmissionOut]
     nodes: list[BudgetNodeOut]
     allocations: list[BudgetAllocationOut]
     income_items: list[BudgetIncomeItemOut] = Field(default_factory=list)
+    income_records: list[BudgetIncomeRecordOut] = Field(default_factory=list)
     expenses: list[FinanceBudgetExpenseOut] = Field(default_factory=list)
     current_plan: BudgetPlanOut
 
@@ -692,6 +720,8 @@ class PublicBudgetDetailOut(BaseModel):
     nodes: list[BudgetNodeOut]
     allocations: list[PublicBudgetAllocationOut]
     expenses: list[PublicBudgetExpenseOut] = Field(default_factory=list)
+    income_items: list[BudgetPlanRowOut] = Field(default_factory=list)
+    income_records: list[PublicBudgetIncomeRecordOut] = Field(default_factory=list)
 
 
 class FinanceSettlementLineOut(BaseModel):

@@ -30,6 +30,7 @@ from api.models.finance import (
     FinanceBudgetExpenseEvidence,
     FinanceBudgetExpenseItem,
     FinanceBudgetIncomeItem,
+    FinanceBudgetIncomeRecord,
     FinanceBudgetNode,
     FinanceBudgetSubmission,
     FiscalPeriod,
@@ -60,6 +61,7 @@ from api.services.finance_core import (
     get_ledger,
     validate_evidence_key,
 )
+from api.services.finance_income import income_records
 
 
 def _import_text(value: object) -> str:
@@ -112,8 +114,10 @@ def _parse_budget_workbook(
 
     loaded_theme = workbook.loaded_theme
     try:
-        sheet_name = "預算總表" if full_snapshot else "本次新增"
-        sheet = workbook[sheet_name] if sheet_name in workbook.sheetnames else workbook.active
+        sheet_names = ("更新後總預算", "預算總表", "總預算") if full_snapshot else ("本次新增",)
+        sheet = next(
+            (workbook[name] for name in sheet_names if name in workbook.sheetnames), workbook.active
+        )
         rows = list(sheet.iter_rows(values_only=False))
     finally:
         workbook.close()
@@ -195,6 +199,13 @@ def _parse_budget_workbook(
     imported_income: list[dict] = []
     skipped: list[str] = []
     current_category = ""
+    # Signed workbooks use positive income and negative expenses. Older templates
+    # store all amounts as positive and distinguish income with the amount's fill.
+    signed_amounts = any(
+        isinstance(row[amount_column].value, (int, float)) and row[amount_column].value < 0
+        for row in rows[header_index + 1 :]
+        if amount_column < len(row)
+    )
     for row_number, row in enumerate(rows[header_index + 1 :], header_index + 2):
         category_cell = row[category_column] if category_column < len(row) else None
         detail_cell = row[detail_column] if detail_column < len(row) else None
@@ -208,17 +219,28 @@ def _parse_budget_workbook(
         quantity, unit = _import_quantity(
             row[quantity_column].value if quantity_column < len(row) else None
         )
+        raw_price = row[unit_price_column].value if unit_price_column < len(row) else None
         unit_price = _import_amount(
-            row[unit_price_column].value if unit_price_column < len(row) else None
+            abs(raw_price) if isinstance(raw_price, (int, float)) else raw_price
         )
         amount_cell = row[amount_column] if amount_column < len(row) else None
-        amount = _import_amount(amount_cell.value if amount_cell else None)
+        raw_amount = amount_cell.value if amount_cell else None
+        amount = _import_amount(
+            abs(raw_amount) if isinstance(raw_amount, (int, float)) else raw_amount
+        )
         if amount is None and unit_price is not None:
             amount = int((quantity * unit_price).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
         if amount is None:
             skipped.append(f"第 {row_number} 列「{detail}」沒有可用總額")
             continue
         note = _import_text(row[note_column].value if note_column < len(row) else None)
+        if isinstance(raw_amount, (int, float)) and abs(raw_amount) != amount:
+            note = "；".join(
+                filter(None, [note, f"原檔總額 {abs(raw_amount)} 元，按整數元四捨五入"])
+            )
+        if isinstance(raw_price, (int, float)) and abs(raw_price) != unit_price:
+            note = "；".join(filter(None, [note, f"原檔單價 {abs(raw_price)} 元"]))
+            unit_price = None
         # Orange marks newly added details; the amount's green/red fill is a separate dimension.
         is_new = any(
             cell is not None
@@ -228,7 +250,12 @@ def _parse_budget_workbook(
             and cell.fill.fgColor.rgb[-6:].upper() in {"FCE5CD", "F9CB9C", "F4B183"}
             for cell in (category_cell, detail_cell)
         )
-        is_income = is_green_fill(amount_cell)
+        sign_value = raw_amount if isinstance(raw_amount, (int, float)) else raw_price
+        is_income = (
+            sign_value > 0
+            if signed_amounts and isinstance(sign_value, (int, float))
+            else is_green_fill(amount_cell)
+        )
         if is_income:
             imported_income.append(
                 {
@@ -285,12 +312,23 @@ async def import_budget_from_xlsx(
         _parse_budget_workbook, file_bytes, full_snapshot=full_snapshot
     )
     ledger = await get_ledger(db, ledger_id)
+    period = await db.get(FiscalPeriod, period_id)
+    if not period or period.ledger_id != ledger.id:
+        raise HTTPException(400, "會計期間不屬於此帳本")
+    if period.is_closed:
+        raise HTTPException(400, "會計期間已關閉，無法更新預算")
     org_id = proposing_org_id or ledger.org_id
     if not await db.get(Org, org_id):
         raise HTTPException(400, "提出部門不存在")
 
     if replace_submission_id and not budget_id:
         raise HTTPException(400, "重新匯入時必須指定共同預算")
+    if not budget_id:
+        budget_id = await db.scalar(
+            select(FinanceBudget.id).where(
+                FinanceBudget.ledger_id == ledger_id, FinanceBudget.period_id == period_id
+            )
+        )
     if budget_id:
         budget = await get_budget(db, budget_id)
         if budget.ledger_id != ledger_id or budget.period_id != period_id:
@@ -1176,6 +1214,7 @@ async def budget_detail(db: AsyncSession, budget: FinanceBudget) -> dict:
             for allocation in allocations
         ],
         "income_items": income_items,
+        "income_records": await income_records(db, budget.id),
         "expenses": expenses,
         "current_plan": plan.project(allocations, nodes, income_items, expenses),
         "nodes": [
@@ -1630,7 +1669,15 @@ async def public_budget_period_totals(db: AsyncSession, budget_id: uuid.UUID) ->
         )
     )
     return {
-        "income_total": int(income),
+        "income_total": int(income)
+        + int(
+            await db.scalar(
+                select(func.coalesce(func.sum(FinanceBudgetIncomeRecord.amount), 0)).where(
+                    FinanceBudgetIncomeRecord.budget_id == budget.id
+                )
+            )
+            or 0
+        ),
         "expense_total": int(expenses) + int(direct_expenses or 0),
     }
 

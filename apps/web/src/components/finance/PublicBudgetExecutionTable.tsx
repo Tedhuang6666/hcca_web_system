@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import Image from "next/image";
-import { ExternalLink, FileText, Paperclip, ReceiptText } from "lucide-react";
+import { ExternalLink, Paperclip, ReceiptText } from "lucide-react";
 
 import Modal from "@/components/ui/Modal";
 import { apiUrl } from "@/lib/config";
@@ -46,7 +46,6 @@ export default function PublicBudgetExecutionTable({
   lines: PublicBudgetExecutionLine[];
 }) {
   const [selectedLine, setSelectedLine] = useState<PublicBudgetExecutionLine | null>(null);
-  const [activePdfEvidenceId, setActivePdfEvidenceId] = useState<string | null>(null);
   const closeDetails = useCallback(() => setSelectedLine(null), []);
 
   return (
@@ -85,7 +84,6 @@ export default function PublicBudgetExecutionTable({
                         aria-haspopup="dialog"
                         aria-label={`查看「${line.name}」的支出紀錄與憑證`}
                         onClick={() => {
-                          setActivePdfEvidenceId(null);
                           setSelectedLine(line);
                         }}
                       >
@@ -205,31 +203,11 @@ export default function PublicBudgetExecutionTable({
                                       />
                                     </div>
                                   ) : isPdf ? (
-                                    <>
-                                      <button
-                                        type="button"
-                                        className="public-budget-execution-modal__pdf-trigger"
-                                        aria-expanded={activePdfEvidenceId === evidence.id}
-                                        aria-controls={`public-budget-pdf-${evidence.id}`}
-                                        onClick={() => setActivePdfEvidenceId((current) => (
-                                          current === evidence.id ? null : evidence.id
-                                        ))}
-                                      >
-                                        <FileText size={17} aria-hidden="true" />
-                                        {activePdfEvidenceId === evidence.id
-                                          ? "收合 PDF 預覽"
-                                          : "預覽 PDF"}
-                                      </button>
-                                      {activePdfEvidenceId === evidence.id && (
-                                        <div id={`public-budget-pdf-${evidence.id}`}>
-                                          <PdfEvidenceViewer
-                                            url={previewUrl}
-                                            filename={evidence.filename}
-                                            compact
-                                          />
-                                        </div>
-                                      )}
-                                    </>
+                                    <PdfEvidenceViewer
+                                      url={previewUrl}
+                                      filename={evidence.filename}
+                                      compact
+                                    />
                                   ) : (
                                     <small>無法預覽此憑證。</small>
                                   )

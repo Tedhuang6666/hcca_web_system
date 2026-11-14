@@ -992,9 +992,15 @@ export type FinanceBudgetIncomeItem = {
   is_new?: boolean
   quantity?: number | null; unit?: string | null; unit_price?: number | null
 }
+export type FinanceBudgetIncomeRecord = {
+  id: string; income_item_id: string; category: string; name: string
+  amount: number; entry_date: string; note: string | null
+  is_legacy?: boolean
+}
 export type FinanceBudgetDetail = FinanceBudget & {
   submissions: FinanceBudgetSubmission[]; nodes: FinanceBudgetNode[]; allocations: FinanceBudgetAllocation[]
   income_items: FinanceBudgetIncomeItem[]
+  income_records?: FinanceBudgetIncomeRecord[]
   expenses: FinanceBudgetExpenseOut[]
   current_plan: FinanceBudgetCurrentPlan
 }
@@ -1043,6 +1049,8 @@ export type PublicBudgetDetail = {
   review_submission?: PublicBudgetSubmission | null; submissions: PublicBudgetSubmission[]
   nodes: FinanceBudgetNode[]; allocations: PublicBudgetAllocation[]
   expenses: PublicBudgetExpenseOut[]
+  income_items?: FinanceBudgetPlanRow[]
+  income_records?: Omit<FinanceBudgetIncomeRecord, "income_item_id" | "note" | "is_legacy">[]
 }
 
 

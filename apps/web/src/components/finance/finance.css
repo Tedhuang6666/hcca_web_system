@@ -1519,8 +1519,8 @@
 .finance-evidence-preview__pdf-pages,
 .finance-evidence-preview__pdf-zoom { display: flex; align-items: center; gap: 0.45rem; }
 .finance-evidence-preview__pdf-toolbar button { min-width: 44px; min-height: 44px; padding: 0.35rem; }
-.finance-evidence-preview__viewer--pdf { display: flex; flex-direction: column; overflow: auto; background: #3b3d42; }
-.finance-evidence-preview__viewer--pdf.is-compact { height: clamp(12rem, 32vh, 18rem); min-height: 12rem; }
+.finance-evidence-preview__viewer--pdf { display: flex; flex-direction: column; overflow: auto; background: #f1f0ec; }
+.finance-evidence-preview__viewer--pdf.is-compact { height: auto; min-height: 12rem; max-height: 65vh; }
 .finance-evidence-preview__pdf-canvas { display: flex; min-width: 0; min-height: 0; flex: 1; justify-content: center; overflow: auto; padding: 0.75rem; }
 .finance-evidence-preview__canvas { display: block; max-width: none; background: white; box-shadow: 0 2px 14px rgb(0 0 0 / 24%); }
 .finance-evidence-preview__error { position: relative; z-index: 1; align-self: center; margin: auto; padding: 1rem; color: var(--text-secondary); font-size: 0.88rem; text-align: center; }
@@ -2165,11 +2165,9 @@
 .public-budget-execution-modal__evidence { display: grid; gap: 0.5rem; margin-top: 0.8rem; }
 .public-budget-execution-modal__evidence h4 { display: flex; align-items: center; gap: 0.3rem; margin: 0; color: var(--text-muted); font-size: 0.66rem; font-weight: 650; }
 .public-budget-execution-modal__previews { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr)); gap: 0.6rem; }
-.public-budget-execution-modal__previews figure { overflow: hidden; min-width: 0; margin: 0; border: 1px solid var(--public-border); border-radius: var(--radius-md); background: #111319; }
-.public-budget-execution-modal__previews figcaption { overflow: hidden; padding: 0.4rem 0.6rem; color: var(--text-muted); font-size: 0.62rem; text-overflow: ellipsis; white-space: nowrap; }
-.public-budget-execution-modal__image-preview { display: block; width: 100%; height: clamp(12rem, 32vh, 18rem); border: 0; background: #111319; }
-.public-budget-execution-modal__pdf-trigger { display: flex; width: 100%; min-height: 44px; align-items: center; justify-content: center; gap: 0.45rem; border: 1px solid var(--public-border); padding: 0.55rem; background: var(--public-soft); color: var(--public-accent-text); font-size: 0.75rem; font-weight: 700; cursor: pointer; }
-.public-budget-execution-modal__pdf-trigger:hover { background: color-mix(in srgb, var(--public-soft) 75%, var(--public-accent) 25%); }
+.public-budget-execution-modal__previews figure { overflow: hidden; min-width: 0; margin: 0; border: 1px solid var(--public-border); border-radius: var(--radius-md); background: #fff; }
+.public-budget-execution-modal__previews figcaption { overflow-wrap: anywhere; padding: 0.65rem; color: #4c5057; font-size: 0.8rem; }
+.public-budget-execution-modal__image-preview { display: block; position: relative; width: 100%; height: clamp(16rem, 45vh, 28rem); border: 0; background: #f1f0ec; }
 .public-budget-execution-modal__pdf-trigger:focus-visible { outline: 3px solid color-mix(in srgb, var(--primary) 35%, transparent); outline-offset: 2px; }
 .public-budget-execution-modal__open-evidence { display: inline-flex; min-height: 2.5rem; align-items: center; gap: 0.35rem; margin: 0.25rem 0.6rem 0.5rem; color: var(--public-accent-text); font-size: 0.68rem; font-weight: 700; text-decoration: none; }
 .public-budget-execution-modal__open-evidence:hover { text-decoration: underline; text-underline-offset: 0.18em; }
@@ -2230,3 +2228,46 @@
 @media (prefers-reduced-motion: reduce) {
   .public-budget-index__row { transition: none; }
 }
+
+.finance-simple { display: grid; gap: 1.5rem; max-width: 84rem; margin-inline: auto; padding: 1.5rem; min-width: 0; }
+.finance-simple__heading, .finance-simple__context, .finance-simple__publication { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; }
+.finance-simple__heading h1 { margin: 0; font-size: clamp(1.6rem, 3vw, 2.2rem); font-weight: 700; }
+.finance-simple__context label, .finance-simple__setup label, .finance-simple__upload label { display: grid; min-width: 0; gap: .4rem; color: var(--text-secondary); font-size: .9rem; }
+.finance-simple__setup, .finance-simple__upload { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 1rem; padding: 1.25rem; background: var(--bg-surface); border-block: 1px solid var(--border); }
+.finance-simple__setup h2, .finance-simple__upload h2, .finance-simple__setup p, .finance-simple__upload p { grid-column: 1 / -1; margin: 0; }
+.finance-simple__setup h2, .finance-simple__upload h2, .budget-workbook header h2, .finance-income header h2 { margin: 0; font-size: 1.15rem; font-weight: 700; }
+.finance-simple__upload p { color: var(--text-secondary); font-size: .85rem; }
+.finance-simple__error { padding: 1rem; background: var(--danger-dim); color: var(--danger); }
+.finance-simple__error p { margin: 0 0 .75rem; }
+.finance-simple__import-result { padding: 1rem; background: var(--success-dim); color: var(--text-primary); }
+.finance-simple__import-result p { margin: 0; }
+.finance-simple__empty { margin: 0; padding: 1.25rem; color: var(--text-secondary); }
+.finance-simple .input { min-height: 44px; max-width: 100%; }
+.finance-simple input[type="file"] { padding: .55rem; }
+.finance-simple input[type="file"]::file-selector-button { border: 0; margin-inline-end: .75rem; color: var(--text-primary); background: var(--bg-elevated); cursor: pointer; }
+.finance-simple :focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.finance-income__records { list-style: none; margin: 0; padding: 0 1.25rem; }
+.finance-income__records li { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; padding-block: 1rem; border-bottom: 1px solid var(--border); }
+.finance-income__records li > span { flex: 1; min-width: 12rem; overflow-wrap: anywhere; }
+.finance-income__records small { display: block; margin-top: .3rem; color: var(--text-secondary); }
+.finance-income__records b { font-variant-numeric: tabular-nums; }
+.public-budget-income { margin-block: 1.5rem; }
+.public-budget-income h2 { margin: 0 0 1rem; font-size: 1.25rem; }
+.public-budget-income table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.public-budget-income th, .public-budget-income td { padding: .85rem; text-align: start; border-bottom: 1px solid var(--public-border, var(--border)); }
+.public-budget-income td { font-variant-numeric: tabular-nums; }
+.public-budget-income th small { display: block; color: var(--text-secondary); font-weight: 400; }
+@media (max-width: 767px) {
+  .finance-simple { padding: 1rem; }
+  .finance-simple__setup, .finance-simple__upload { grid-template-columns: minmax(0, 1fr); padding: 1rem; }
+  .finance-income__records li > span { flex-basis: 100%; }
+  .public-budget-income table, .public-budget-income tbody { display: block; }
+  .public-budget-income thead { display: none; }
+  .public-budget-income tr { display: grid; grid-template-columns: 1fr 1fr; padding-block: .5rem; border-bottom: 1px solid var(--public-border, var(--border)); }
+  .public-budget-income th { grid-column: 1 / -1; }
+  .public-budget-income th, .public-budget-income td { border: 0; padding: .5rem; }
+  .public-budget-income td::before { display: block; color: var(--text-secondary); font-size: .75rem; content: attr(data-label); }
+}
+.finance-evidence-preview__pdf-toolbar { color: #42464e; }
+.finance-evidence-preview__viewer--pdf .finance-evidence-preview__loading { background: #f6f5f1; color: #42464e; }
+.finance-evidence-preview__viewer--pdf .finance-evidence-preview__error { color: #42464e; }

@@ -346,6 +346,27 @@ class FinanceBudgetIncomeItem(Base, TimestampMixin):
     source_row_number: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
+class FinanceBudgetIncomeRecord(Base, TimestampMixin):
+    """實際收款獨立於預算版本，更新總表後仍保留原始紀錄。"""
+
+    __tablename__ = "finance_budget_income_records"
+    __table_args__ = (Index("ix_finance_budget_income_record_budget", "budget_id", "entry_date"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    budget_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("finance_budgets.id", ondelete="CASCADE"), nullable=False
+    )
+    income_item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("finance_budget_income_items.id"), nullable=False
+    )
+    amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    entry_date: Mapped[date] = mapped_column(Date, nullable=False)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    recorded_by_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+
+
 class FinanceBudgetNode(Base, TimestampMixin):
     __tablename__ = "finance_budget_nodes"
     __table_args__ = (

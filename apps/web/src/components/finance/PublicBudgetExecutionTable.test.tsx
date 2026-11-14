@@ -1,5 +1,9 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("./EvidencePreview", () => ({
+  PdfEvidenceViewer: ({ filename }: { filename: string }) => <div role="img" aria-label={`${filename} 第 1 頁`} />,
+}));
 
 import PublicBudgetExecutionTable, {
   type PublicBudgetExecutionLine,
@@ -63,8 +67,8 @@ describe("PublicBudgetExecutionTable", () => {
     expect(screen.getByText("登錄時間")).toBeVisible();
     expect(screen.getByText("操作人")).toBeVisible();
     expect(screen.getByText("王小明")).toBeVisible();
-    expect(screen.getByRole("button", { name: "預覽 PDF" }))
-      .toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("img", { name: "網域續約收據.pdf 第 1 頁" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "預覽 PDF" })).not.toBeInTheDocument();
     expect(screen.getByRole("img", { name: "網域續約收據.jpg 預覽" })).toBeVisible();
     expect(screen.getByRole("link", { name: "在新分頁檢視：網域續約收據.pdf" }))
       .toHaveAttribute("target", "_blank");

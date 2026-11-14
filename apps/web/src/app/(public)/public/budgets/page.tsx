@@ -1,6 +1,7 @@
 import { Landmark } from "lucide-react";
 
 import PublicBudgetExecutionTable from "@/components/finance/PublicBudgetExecutionTable";
+import PublicBudgetIncomeTable from "@/components/finance/PublicBudgetIncomeTable";
 import { budgetExecutionLines } from "@/components/finance/publicBudgetExecution";
 import {
   fetchPublicBudget,
@@ -46,12 +47,13 @@ export default async function PublicBudgetsPage() {
   const remainingTotal = budgetTotal - spentTotal;
   const incomeTotal = budgetTotals.reduce((total, row) => total + (row?.income_total ?? 0), 0);
   const expenseTotal = budgetTotals.reduce((total, row) => total + (row?.expense_total ?? 0), 0);
+  const executionLoadFailed = budgetDetails.some((detail) => detail === null)
+    || budgetTotals.some((totals) => totals === null);
 
   return (
     <div className="public-budget-index public-finance">
       <header className="public-budget-index__header">
         <div>
-          <span className="public-finance__eyebrow">學生會財務公開</span>
           <h1>財務總覽</h1>
         </div>
         {!budgetLoadFailed && <span>
@@ -67,6 +69,11 @@ export default async function PublicBudgetsPage() {
             <h2>目前無法讀取公開預算資料</h2>
             <p>請稍後重新整理；目前無法確認是否有已公開預算。</p>
           </div>
+        </section>
+      ) : executionLoadFailed ? (
+        <section className="public-budget-index__empty" role="alert">
+          <h2>目前無法讀取收支明細</h2>
+          <form action="/public/budgets" method="get"><button className="btn btn-secondary">重新載入</button></form>
         </section>
       ) : currentPeriod ? (
         <section className="public-finance__overview" aria-labelledby="public-finance-overview-heading">
@@ -97,9 +104,7 @@ export default async function PublicBudgetsPage() {
             <p className="is-expense">支出<strong>{formatAmount(expenseTotal)}</strong></p>
           </div>
           <PublicBudgetExecutionTable lines={executionLines} />
-          <p className="public-finance__calculation-note">
-            核准預算的支出登錄後即計入執行額與決算；舊制報帳仍依原紀錄狀態列帳。
-          </p>
+          {budgetDetails.map((detail) => detail && <PublicBudgetIncomeTable key={detail.id} items={detail.income_items || []} records={detail.income_records || []} />)}
         </section>
       ) : (
         <section className="public-budget-index__empty">

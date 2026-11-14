@@ -65,3 +65,21 @@
   .budget-workbook__legend { flex-basis: 100%; }
   .budget-workbook__totals dd { font-size: 1rem; }
 }
+
+.budget-workbook table { min-width: 860px; font-size: .9rem; }
+.budget-workbook th[scope="row"] { min-width: 13rem; max-width: 24rem; }
+.budget-workbook th[scope="row"] > small { display: block; color: var(--text-secondary); font-size: .8rem; font-weight: 400; margin-block: .25rem; }
+.budget-workbook th[scope="row"] > strong { font-size: 1rem; }
+.budget-workbook th[scope="row"] details { font-weight: 400; font-size: .85rem; }
+.budget-workbook th[scope="row"] summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
+.budget-workbook th[scope="row"] p { margin: 0; white-space: normal; }
+.budget-workbook td { min-width: 7rem; }
+.budget-workbook__income, .budget-workbook__expense { background: transparent; font-weight: 600; }
+.budget-workbook__status { white-space: nowrap; }
+@media (max-width: 767px) {
+  .budget-workbook table { min-width: 0; }
+  .budget-workbook tbody { padding: 0; border: 0; }
+  .budget-workbook tr { padding: 1rem .5rem; border-bottom: 1px solid var(--border); }
+  .budget-workbook td, .budget-workbook th[scope="row"] { min-width: 0; max-width: none; }
+  .budget-workbook td:nth-child(6) { grid-column: 1 / -1; }
+}

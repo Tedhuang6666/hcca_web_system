@@ -68,10 +68,9 @@ export async function fetchPublicExpenses(
 export async function fetchPublicBudgetTotals(
   budgetId: string,
 ): Promise<PublicFinanceTotalsOut | null> {
-  return fetchCachedPublicJson<PublicFinanceTotalsOut>(
+  return (await fetchPublicJsonResult<PublicFinanceTotalsOut>(
     `/finance/public/budgets/${encodeURIComponent(budgetId)}/totals`,
-    { revalidate: 15 },
-  );
+  )).data;
 }
 
 export async function fetchPublicBudget(
@@ -81,8 +80,7 @@ export async function fetchPublicBudget(
   const query = reviewSubmissionId
     ? `?review_submission_id=${encodeURIComponent(reviewSubmissionId)}`
     : "";
-  return fetchCachedPublicJson<PublicBudgetDetail>(
+  return (await fetchPublicJsonResult<PublicBudgetDetail>(
     `/finance/public/budgets/${encodeURIComponent(id)}${query}`,
-    { revalidate: 15 },
-  );
+  )).data;
 }
