@@ -841,7 +841,6 @@ export default function CouncilOrdersPage() {
           </label>}
           {hasFilters && <button type="button" className="btn btn-ghost" onClick={resetFilters}>清除篩選</button>}
         </div>
-        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>目前範圍：{scopeLabels.join(" · ")}</p>
         {optionsError && <div role="alert" className="text-sm" style={{ color: "var(--danger)" }}>活動與班級選項載入失敗。<button type="button" className="btn btn-ghost" onClick={() => setOptionsRetry((value) => value + 1)}>重新載入選項</button></div>}
       {/* 篩選列 */}
       <details>
@@ -968,9 +967,6 @@ export default function CouncilOrdersPage() {
                   <h2 id="daily-class-payments-heading" className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
                     每日收款
                   </h2>
-                  <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
-                    依確認收款日期統計，各活動分開計算。
-                  </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button type="button" className="btn btn-ghost min-h-11 px-3 text-sm"
@@ -1153,9 +1149,6 @@ export default function CouncilOrdersPage() {
               style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
               <div>
                 <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>班代繳款提醒</h2>
-                <p className="mt-1 max-w-2xl text-sm" style={{ color: "var(--text-secondary)" }}>
-                  草稿依目前篩選建立，寄出前可核對班級與金額。
-                </p>
               </div>
               <button
                 type="button"
@@ -1176,9 +1169,6 @@ export default function CouncilOrdersPage() {
               style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
               <div>
                 <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>收款單據</p>
-                <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>
-                  增量列印會重印有變更的整班收據；個人訂單各印一張。
-                </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <label className="grid gap-1 text-xs" style={{ color: "var(--text-secondary)" }}>
@@ -1323,7 +1313,6 @@ export default function CouncilOrdersPage() {
       {tab === "quantities" && (
         <section>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>Excel 匯出不套用目前篩選。</p>
             <AnimatedDownloadButton
               href="/api/shop/reports/orders.xlsx"
               className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs"
@@ -1353,9 +1342,6 @@ export default function CouncilOrdersPage() {
               style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
               <div>
                 <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>訂購人繳款提醒</h2>
-                <p className="mt-1 max-w-2xl text-sm" style={{ color: "var(--text-secondary)" }}>
-                  每位未繳款、未交班代的同學合併為一封草稿。
-                </p>
               </div>
               <button
                 type="button"
@@ -1485,9 +1471,6 @@ export default function CouncilOrdersPage() {
                                       </div>
                                     );
                                   })}
-                                  <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                                    沿用原單價；數量 0 表示移除。已收款須先撤銷收款。
-                                  </p>
                                   {quantityError && <p role="alert" className="text-sm" style={{ color: "var(--danger)" }}>{quantityError}</p>}
                                 </fieldset>
                               </td>

@@ -89,9 +89,7 @@ function ProductPlan({ row, onSaved, onEditing }: {
           </label>
           {fields.map(([key, label]) => <label key={key}>{label}
             <NumberInput className="input" min="0" max={key === "extra_cost" ? 2147483647 : 1000000} step="1" required
-              value={draft[key]} onChange={(e) => setDraft({ ...draft, [key]: e.target.valueAsNumber })}
-              aria-describedby={key === "supplier_gift_quantity" ? `supplier-gift-${row.product_id}` : undefined} />
-            {key === "supplier_gift_quantity" && <span id={`supplier-gift-${row.product_id}`} className={styles.muted}>免商品本體成本，優先供訂單、再供備品；多出的列入可售餘貨。選項與額外費用仍另計。</span>}
+              value={draft[key]} onChange={(e) => setDraft({ ...draft, [key]: e.target.valueAsNumber })} />
           </label>)}
           <label className={styles.note}>採購備註
             <textarea className="input" maxLength={2000} value={draft.note}
@@ -100,7 +98,6 @@ function ProductPlan({ row, onSaved, onEditing }: {
         </div>
         {row.options.length > 0 && <div className={styles.optionCosts}>
           <h4>選項額外成本</h4>
-          <p className={styles.muted}>每件商品選用此選項時，另加在商品單位成本上。依有效訂單件數計算；加價選項留空為未知，無額外成本請填 0。囤貨與備品如另有選項成本，請填入額外費用。</p>
           <div className={styles.fields}>
             {row.options.map((option) => <label key={option.key}>
               {option.group_name}：{option.value} 額外單位成本（NT$）
@@ -113,7 +110,6 @@ function ProductPlan({ row, onSaved, onEditing }: {
             </label>)}
           </div>
         </div>}
-        <p className={styles.muted}>囤貨與備品是訂單以外的需求量；扣除廠商贈品後，不足付費起訂量時補足，餘量歸為可售庫存。額外費用可填運費、打樣或其他一次性支出。</p>
         <div className={styles.actions}>
           <button className="btn btn-primary" type="submit">{busy ? "儲存中…" : "儲存並重算"}</button>
           <button className="btn btn-ghost" type="button" onClick={() => { setEditing(false); onEditing(false); setError(""); }}>取消編輯</button>
@@ -133,7 +129,6 @@ function ProductPlan({ row, onSaved, onEditing }: {
     </dl>}
     {row.sellable_stock_quantity > 0 && <details className={styles.scenario}>
       <summary>庫存售出與回本試算 · 尚有 {row.sellable_stock_quantity} 件可售</summary>
-      <p className={styles.muted}>僅模擬目前餘貨，不新增採購；備用品不列入可售量，試算結果不計入上方盈利。</p>
       <div className={styles.fields}>
         <label>模擬售出件數
           <input className="input" type="number" min="0" max={row.sellable_stock_quantity} step="1" value={quantity}
@@ -205,7 +200,7 @@ export default function ShopProfitAnalysis({ refresh = 0 }: { refresh?: number }
   }
   return <section className={styles.root} aria-label="盈利與備貨">
     <header className={styles.toolbar}>
-      <div><h2>盈利與備貨</h2><p>把整批採購算進來，先看目前訂單能否回本。</p></div>
+      <div><h2>盈利與備貨</h2></div>
       <button className="btn btn-ghost" type="button" disabled={!current || busy || Boolean(error) || editing.size > 0} onClick={download}><Download size={16} />匯出採購分析 CSV</button>
     </header>
     <div className={styles.scope}>
@@ -215,9 +210,7 @@ export default function ShopProfitAnalysis({ refresh = 0 }: { refresh?: number }
           {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
         </select>
       </label>
-      <p>計算此活動全期、全校有效訂單，排除取消、退款及測試訂單。未售庫存與備品收入以零計；即使沒有訂單，已設定的採購仍列成本。</p>
     </div>
-    <p className={styles.muted}>付費採購件數＝訂單＋班聯囤貨＋不可售備品－廠商贈品，最低為 0，不足付費起訂量時補足。設定只用於採購分析，不會增加學生訂單或改動可售庫存；起訂量以每項商品合計，不依尺寸拆分。</p>
     {editing.size > 0 && <p role="status">正在編輯採購設定；請儲存或取消後再切換活動、匯出。離開此頁籤會捨棄未儲存內容。</p>}
     {optionsError && <p role="alert">{optionsError}<button className="btn btn-ghost" type="button" onClick={() => setOptionsRetry((v) => v + 1)}>重試活動</button></p>}
     {error && <p role="alert">{error}<button className="btn btn-ghost" type="button" onClick={() => setRevision((v) => v + 1)}>重試盈利分析</button>{current && "下方保留上次資料，尚未更新。"}</p>}
@@ -230,7 +223,6 @@ export default function ShopProfitAnalysis({ refresh = 0 }: { refresh?: number }
           <p>{summary.profit_amount == null ? `${summary.missing_cost_product_count} 項商品的本體或已訂購選項尚未設定成本，總盈利暫不估算。`
             : summary.profit_amount < 0 ? `距離整批回本還差 ${money(-summary.profit_amount)}。可展開商品查看庫存售出試算。`
             : "目前訂單收入已覆蓋整批採購成本。"}</p>
-          <p className={styles.muted}>以應收收入估算，尚非已收現金；未填入的其他支出不包含在內。</p>
         </div>
         <dl className={styles.accounts}>
           <div><dt>折扣後訂單收入</dt><dd>{money(summary.revenue)}</dd></div>

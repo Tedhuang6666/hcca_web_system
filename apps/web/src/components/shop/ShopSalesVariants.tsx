@@ -76,10 +76,6 @@ export default function ShopSalesVariants({ current }: { current: ShopSalesPerio
           </table>
         </div>
       </> : <p className="sales-empty" role="status">此範圍沒有可比較的選項。</p>}
-      <p className="sales-muted">
-        占比以所選商品的總件數／折扣後訂購金額計算。不同規格組會重複涵蓋同一商品，請勿跨組加總。
-        僅列有有效訂單的選項；已停用或刪除的選項保留訂單快照，未售出選項不列入。
-      </p>
     </section>
   );
 }

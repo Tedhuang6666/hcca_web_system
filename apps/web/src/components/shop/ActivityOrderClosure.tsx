@@ -68,9 +68,6 @@ export default function ActivityOrderClosure({ categories, disabled = false, onS
         style={{ color: "var(--text-primary)" }}>
         <Lock size={18} aria-hidden="true" /> 班聯結單與公開入口
       </h2>
-      <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
-        結單後商品隱藏，學生與班代停止加購，僅班聯可代訂。追加款由同學另繳，既有訂單仍可收款。
-      </p>
       {loadError && <div role="alert" className="mt-2 text-sm" style={{ color: "var(--danger)" }}>
         <p>{loadError}</p>
         <button type="button" className="btn btn-ghost min-h-11" onClick={() => setAttempt((value) => value + 1)}>重新載入鎖單狀態</button>

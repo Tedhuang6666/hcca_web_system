@@ -635,7 +635,6 @@ export default function PartnerMapClient({
           <div className="space-y-4 p-4">
             <div>
               <div className="flex items-center justify-between gap-2"><h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>店家地圖</h1>{myBusinesses.length > 0 && <Link href="/partner-map/my-businesses" className="text-xs font-medium hover:underline" style={{ color: "var(--primary-text)" }}>我的店家</Link>}</div>
-              <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>以新竹高中周邊為中心，搜尋特約店家與推薦商家</p>
             </div>
             <label className="flex items-center gap-2 rounded-lg border px-3 py-2" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
               <Search size={16} aria-hidden="true" />

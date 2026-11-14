@@ -199,9 +199,6 @@ export default function AdminAssistedOrder({ catalog, classes, optionsError, opt
               <option value="separate">獨立補收款</option>
             </select>
           </label>
-          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-            {collectionMode === "class" ? "尚未繳款時併入班級；已交班代、班級已繳款或結單時另列補收款。" : "同學自行補繳，確認收款後歸回原班級。"}
-          </p>
           {collectionMode === "separate" && <div className="grid gap-3 sm:grid-cols-2">
             <label className="grid gap-1 text-sm">額外收款方式
               <select className="input min-h-11 text-base" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as "cash_on_pickup" | "bank_transfer")}>

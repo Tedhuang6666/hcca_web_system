@@ -44,12 +44,6 @@ import { classTitle, roleHolderSummary } from "@/lib/classes-admin";
 
 type TabKey = "roles" | "members" | "roster" | "ranges";
 
-const roleHelp: Record<string, string> = {
-  class_representative: "同步成為議員，可參與議事、法規與公文流程。",
-  class_leader: "檢視本班成員，處理班級日常事務。",
-  vice_leader: "協助班長處理班級事務，檢視本班成員。",
-};
-
 
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -82,9 +76,6 @@ function RepresentativeOverview({
           <div className="mt-4 flex items-end justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>班代任命進度</h2>
-              <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-                名單會依目前有效任命即時整理。
-              </p>
             </div>
             <div className="shrink-0 text-right">
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>尚未任命</p>
@@ -110,9 +101,6 @@ function RepresentativeOverview({
         <div className="min-w-0 p-5 md:p-6">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h3 className="font-semibold" style={{ color: "var(--text-primary)" }}>待任命班級</h3>
-            {!loading && !loadError && missing.length > 0 && (
-              <span className="text-xs" style={{ color: "var(--text-muted)" }}>選擇班級即可前往任命</span>
-            )}
           </div>
 
           {loading ? (
@@ -378,9 +366,6 @@ function CreateClassPanel({ onCreated }: { onCreated: () => void }) {
           <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
             建立班級
           </h2>
-          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-            建立後會同步產生班級 Org 與預設職位。
-          </p>
         </div>
         <div className="flex rounded-md p-1" style={{ border: "1px solid var(--border)" }}>
           {(["bulk", "single"] as const).map((key) => (
@@ -670,7 +655,6 @@ function RoleBoard({
                 {roleHolderSummary(role) || "尚未任命"}
               </span>
             </div>
-            <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>{roleHelp[role.role_key]}</p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
               <select
                 className="input min-h-11 min-w-0 flex-1"
@@ -694,7 +678,6 @@ function RoleBoard({
             </div>
             <details className="mt-3">
               <summary className="min-h-11 cursor-pointer py-2 text-sm" style={{ color: "var(--text-secondary)" }}>找不到人？搜尋其他帳號</summary>
-              <p className="mb-2 text-xs" style={{ color: "var(--text-muted)" }}>選取帳號後加入本班並任命；未註冊同學可先由名冊任命。</p>
               {busyRole === null && <UserPicker placeholder={`搜尋帳號並任命${label}`} onPick={(user) => void assign(role.role_key, user)} />}
             </details>
           </section>
@@ -825,14 +808,7 @@ function MemberDetailDialog({
         <section>
           <div className="mb-3">
             <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>班級職位</h3>
-            <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>可直接從成員資料任命，不必切換分頁。</p>
           </div>
-          {!member.user && (
-            <p className="mb-3 rounded-md p-3 text-sm" role="status"
-              style={{ background: "var(--warning-dim)", color: "var(--text-secondary)" }}>
-              可以先登記任命；職位權限會在同學註冊並連結帳號後生效。
-            </p>
-          )}
           {!member.user && !member.personId && (
             <label className="mb-3 block space-y-1 text-sm">
               <span style={{ color: "var(--text-secondary)" }}>成員姓名（建立人員資料）</span>
@@ -860,7 +836,6 @@ function MemberDetailDialog({
                   <div key={role.role_key} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
                       <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{label}</p>
-                      <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{roleHelp[role.role_key] ?? "可擔任本班職位。"}</p>
                       <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>
                         目前任職：{roleHolderSummary(role) || "尚未任命"}
                       </p>
@@ -1012,10 +987,8 @@ function MembershipPanel({
       </div>
       <details>
         <summary className="min-h-11 cursor-pointer py-2 text-sm font-medium" style={{ color: "var(--primary)" }}>新增班級成員</summary>
-        <p className="mb-2 text-sm" style={{ color: "var(--text-muted)" }}>搜尋已登入的帳號加入本班。尚未登入的同學，可先到「匯入與座號」建立名冊。</p>
         <UserPicker placeholder="搜尋姓名、Email 或學號加入本班" onPick={onAdd} />
       </details>
-      {unlinked > 0 && <p className="text-sm" style={{ color: "var(--text-secondary)" }}>待連結的同學使用對應學號的校內帳號登入後，系統會自動配對。</p>}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <input className="input min-h-11 min-w-0 flex-1" aria-label="搜尋班級成員" placeholder="搜尋座號、姓名、學號" value={query} onChange={(event) => setQuery(event.target.value)} />
         <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm" style={{ color: "var(--text-secondary)" }}>
@@ -1168,9 +1141,6 @@ function RosterPanel({
           <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
             手動維護座號名冊
           </h3>
-          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-            學號已有帳號時自動連結；未註冊也可建檔。
-          </p>
         </div>
         <div className="mt-3 grid grid-cols-[96px_1fr_auto] gap-2">
           <input
@@ -1660,9 +1630,6 @@ function RosterFileImportPanel({ onImported }: { onImported: () => void }) {
           <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
             匯入編班名單檔案
           </h2>
-          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-            支援 PDF 或 UTF-8 CSV；會自動建立缺少的班級、人員主檔與座號名冊。
-          </p>
         </div>
       </div>
       <div className="mt-3 grid gap-2 md:grid-cols-[96px_1fr]">

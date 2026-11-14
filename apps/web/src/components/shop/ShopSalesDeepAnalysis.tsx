@@ -136,14 +136,6 @@ export default function ShopSalesDeepAnalysis({
             />
           </label>
         </div>
-        <p className="sales-muted">
-          可按金額、件數、人數或未確認款項排序。占比以目前分析項目的訂購金額合計計算；訂單與人數可能跨項重疊。取消／退款金額另列，不代表實際退款撥付額，其成本與毛利為零。
-        </p>
-        {dimension === "sources" && (
-          <p className="sales-muted">
-            家人代購依訂單明細辨識；同筆訂單若同時含本人與家人代購品項，會分別計入兩種方式的訂單數，件數與金額則依明細拆分。
-          </p>
-        )}
         <div className="sales-table-scroll">
           <table>
             <caption className="sr-only">分項分析與排行明細</caption>
@@ -245,9 +237,6 @@ export default function ShopSalesDeepAnalysis({
             </select>
           </label>
         </div>
-        <p className="sales-muted">
-          選取格子查看明細；顏色深淺代表本期指標相對值。
-        </p>
         {allCross.length ? (
           <div className="sales-table-scroll">
             <table className="sales-cross-table">
@@ -333,9 +322,6 @@ export default function ShopSalesDeepAnalysis({
               <option value="total_amount">訂購金額</option>
             </select>
           </label>
-          <p className="sales-muted">
-            統計所選區間的總量；尚未校正各星期出現的次數，不直接代表每個營業日的平均表現。
-          </p>
         </div>
         <div className="sales-table-scroll">
           <table className="sales-heatmap">

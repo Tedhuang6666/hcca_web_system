@@ -108,9 +108,6 @@ export default function ShopSalesTrend({
           </button>
         ))}
       </div>
-      <p className="sales-muted">
-        滑鼠、觸控或左右方向鍵可查看日期與數值。
-      </p>
       <div
         className="sales-chart-scroll"
         ref={scrollContainer}
@@ -265,9 +262,6 @@ export default function ShopSalesTrend({
           )}
         </div>
       </div>
-      <p className="sales-chart-legend">
-        <span>所選區間的有效訂購資料</span>
-      </p>
       <details>
         <summary>每日明細</summary>
         <div className="sales-table-scroll">

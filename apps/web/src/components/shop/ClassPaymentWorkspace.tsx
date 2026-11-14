@@ -146,7 +146,7 @@ export default function ClassPaymentWorkspace({ catalog, activities, optionsLoad
       }} />
     {optionsLoading ? <p role="status">正在載入收款活動…</p>
       : optionsError ? <p role="alert">無法載入收款活動，請使用頁面上方的重新載入。</p>
-        : !selectedScopes.length ? <p role="status" className="text-sm" style={{ color: "var(--text-secondary)" }}>請先選擇本次要收款的活動。</p>
+        : !selectedScopes.length ? null
           : <>
             <div className="space-y-1" aria-label="本次收款範圍">
               <p className="font-semibold">本次收款：{selectedScopes.map((scope) => scope.label).join("、")}</p>

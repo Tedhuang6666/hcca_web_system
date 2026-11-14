@@ -151,7 +151,8 @@ it("顯示折扣後毛利，缺少成本時保留未設定提示", async () => {
   render(<ShopSalesAnalytics filters={{}} />);
   expect(await screen.findByText(/有 2 件商品的本體或已選選項尚未設定成本/)).toBeVisible();
   expect(screen.getByText("訂單毛利", { selector: "dt" }).nextElementSibling).toHaveTextContent("未設定");
-  expect(screen.getByText(/包含未付款訂單/)).toBeVisible();
+  expect(screen.queryByText(/毛利＝/)).not.toBeInTheDocument();
+  expect(screen.queryByText("統計口徑與資料限制")).not.toBeInTheDocument();
 });
 
 it("同商品選項能依銷量與金額排行，規格組分開且切換商品不殘留", () => {
@@ -199,8 +200,8 @@ describe("銷售分析", () => {
     expect(screen.getByRole("row", { name: /家人代購/ })).toBeVisible();
     expect(screen.getByRole("row", { name: /班代代購/ })).toBeVisible();
     expect(
-      screen.getByText(/同筆訂單若同時含本人與家人代購品項/),
-    ).toBeVisible();
+      screen.queryByText(/同筆訂單若同時含本人與家人代購品項/),
+    ).not.toBeInTheDocument();
   });
 
   it("passes scoped filters without comparison controls and exposes daily and variant values", async () => {

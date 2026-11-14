@@ -151,8 +151,8 @@ describe("班級管理工作台", () => {
     fireEvent.click(await screen.findByRole("button", { name: "檢視8 號 待註冊同學的資料與職位" }));
 
     expect(await screen.findByRole("dialog", { name: "待註冊同學" })).toBeVisible();
-    expect(screen.getByText("可以先登記任命；職位權限會在同學註冊並連結帳號後生效。"))
-      .toBeInTheDocument();
+    expect(screen.queryByText("可以先登記任命；職位權限會在同學註冊並連結帳號後生效。"))
+      .not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "登記任命班長" }));
 
     await waitFor(() => expect(api.assignPersonRole).toHaveBeenCalledWith(

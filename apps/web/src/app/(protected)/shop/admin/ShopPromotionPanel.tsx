@@ -585,7 +585,7 @@ export default function ShopPromotionPanel() {
                       </span>
                     </div>
                     <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                      {promotion.code ? `優惠碼 ${promotion.code}` : "符合條件自動套用"} · 適用：{topicLabel(promotion)} · {targetLabel} · {benefitLabel}
+                      {promotion.code ? `優惠碼 ${promotion.code} · ` : ""}適用：{topicLabel(promotion)} · {targetLabel} · {benefitLabel}
                     </p>
                     <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
                       {promotion.min_order_price > 0 ? `滿 NT$${promotion.min_order_price.toLocaleString()} · ` : ""}

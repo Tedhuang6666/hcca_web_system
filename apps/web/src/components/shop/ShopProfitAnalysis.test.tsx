@@ -52,7 +52,7 @@ it("廠商贈品可編輯、失敗保留並重試，重算後呈現及匯出", a
   fireEvent.click(await screen.findByRole("button", { name: "編輯紀念衫採購設定" }));
   const field = screen.getByRole("spinbutton", { name: /^廠商贈品數量/ });
   expect(field).toHaveValue(0);
-  expect(field).toHaveAccessibleDescription(/免商品本體成本/);
+  expect(field).not.toHaveAttribute("aria-describedby");
   fireEvent.change(field, { target: { value: "2" } });
   fireEvent.submit(screen.getByRole("form"));
   await screen.findByRole("alert");

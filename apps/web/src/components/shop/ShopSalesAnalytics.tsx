@@ -273,9 +273,6 @@ export default function ShopSalesAnalytics({
       <div className="sales-report-tools" aria-label="下載分析報告">
         <div>
           <strong>產生分析報告</strong>
-          <p className="sales-muted">
-            依目前篩選匯出；Excel 含可編輯圖表。
-          </p>
         </div>
         <label>
           報告格式
@@ -308,11 +305,6 @@ export default function ShopSalesAnalytics({
         </p>
       )}
       {reportMessage && <p role="status">{reportMessage}</p>}
-      <p className="sales-muted">
-        日期與時段以台北時間計算。未指定日期時顯示近 30 天；每次最多 366 天。
-        訂單毛利僅扣除已訂購商品的成本；起訂補足、囤貨與備品的整批盈利請見「盈利與備貨」。
-        {live && autoRefresh && "收到訂單更新時會立即重查，並每 30 秒同步。"}
-      </p>
       {error && (
         <div role="alert" className="sales-error">
           {error}
@@ -354,10 +346,6 @@ export default function ShopSalesAnalytics({
               );
             })}
           </dl>
-          <p className="sales-muted">
-            毛利＝折扣後訂購金額 −（商品單位成本＋已選選項的額外單位成本）× 件數，包含未付款訂單，不含運費、手續費等其他費用。
-            選項額外成本可至「盈利與備貨」設定；修改成本會重算歷史區間。
-          </p>
           {current.metrics.missing_cost_item_count > 0 && <p role="status" className="sales-empty">
             有 {number(current.metrics.missing_cost_item_count)} 件商品的本體或已選選項尚未設定成本，總成本與毛利暫不計算；請至「盈利與備貨」補填。
           </p>}
@@ -377,24 +365,6 @@ export default function ShopSalesAnalytics({
           <ShopSalesTrend current={current} />
           <ShopSalesVariants current={current} />
           <ShopSalesDeepAnalysis current={current} />
-          <details className="sales-detail">
-            <summary>統計口徑與資料限制</summary>
-            <div className="sales-notes">
-              <p>
-                排除測試、取消與退款訂單。訂購金額是折扣後應繳額；班聯已確認依班聯收款標記計算，班代代收尚未確認的款項仍列未確認。
-              </p>
-              <p>
-                每日與時段依訂單建立時間歸類，件數與金額反映目前保留品項。追加、減購或取消會回算原訂單日期，這份分析不是每日異動流水帳。
-              </p>
-              <p>
-                品項／活動篩選只統計符合的明細。訂單折扣依各明細原價比例分攤，整數餘額分配後保持整單金額一致。商品或規格的訂單數可能重疊，不能相加當總訂單數。
-              </p>
-              <p>
-                平均客單價排除 NT$0
-                訂單；優惠使用率為選取範圍內有折抵的訂單占比。年級依訂單保存的班級及該班目前年級，無班級資料列為未分班。中位數排除零元訂單；多筆訂單是同帳號於所選範圍的多張訂單，追加原單不增加筆數，不能直接解讀為回購率。
-              </p>
-            </div>
-          </details>
         </>
       )}
     </section>
