@@ -55,7 +55,7 @@ function PublicSiteHeaderContent({
   const publicEmblemUrl = settings?.site_logo_url?.trim() || BRANDING.publicEmblemUrl;
   const menuRef = useRef<HTMLDetailsElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
-  const mobileNavRef = useRef<HTMLElement>(null);
+  const mobileNavRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLElement>(null);
   const moduleStatusReady = Object.keys(statuses).length > 0;
   const closedModuleIds = new Set(
@@ -102,7 +102,7 @@ function PublicSiteHeaderContent({
 
       const focusable = [...(mobileNavRef.current?.querySelectorAll<HTMLElement>(
         "a[href], button:not([disabled]), input:not([disabled]), summary",
-      ) ?? [])];
+      ) ?? [])].filter((element) => element.getClientRects().length > 0);
       if (focusable.length === 0) return;
       const first = focusable[0];
       const last = focusable.at(-1);
@@ -118,12 +118,18 @@ function PublicSiteHeaderContent({
 
     document.body.style.overflow = "hidden";
     document.body.style.overscrollBehavior = "contain";
+    const desktopMedia = window.matchMedia("(min-width: 768px)");
+    const closeOnDesktop = () => {
+      if (desktopMedia.matches) setOpen(false);
+    };
+    desktopMedia.addEventListener("change", closeOnDesktop);
     const frame = window.requestAnimationFrame(focusFirstMenuControl);
     document.addEventListener("keydown", handleKeyDown);
     return () => {
       window.cancelAnimationFrame(frame);
       document.body.style.overflow = previousOverflow;
       document.body.style.overscrollBehavior = previousOverscrollBehavior;
+      desktopMedia.removeEventListener("change", closeOnDesktop);
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [open]);
@@ -178,8 +184,6 @@ function PublicSiteHeaderContent({
     .map((group) => ({ ...group, items: group.items.filter(matchesServiceQuery) }))
     .filter((group) => group.items.length > 0);
   const filteredTaskNav = taskNav.filter(matchesServiceQuery);
-  const featuredArticle = filteredTaskNav.find((item) => item.key === "articles");
-  const otherTaskNav = filteredTaskNav.filter((item) => item.key !== "articles");
   const filteredNavPages = navPages.filter((page) => matchesServiceQuery({
     label: page.nav_label || page.title,
     description: page.title,
@@ -189,6 +193,16 @@ function PublicSiteHeaderContent({
   const serviceResultCount = filteredTaskNav.length
     + filteredMenuGroups.reduce((count, group) => count + group.items.length, 0)
     + filteredNavPages.length;
+  const mobileResults = [
+    ...filteredTaskNav,
+    ...filteredMenuGroups.flatMap((group) => group.items),
+    ...filteredNavPages.map((page) => ({
+      key: `page:${page.id}`,
+      href: publicPageHref(page),
+      label: page.nav_label || page.title,
+      iconKey: page.page_kind === "article" ? "articles" : "links",
+    })),
+  ];
   const systemHref = isLoggedIn ? "/dashboard" : "/login?next=%2Fdashboard";
   const systemLabel = isLoggedIn ? "前往平台" : "登入平台";
 
@@ -400,6 +414,7 @@ function PublicSiteHeaderContent({
             className={`public-menu-button ${open ? "is-open" : ""}`}
             onClick={() => {
               if (menuRef.current) menuRef.current.open = false;
+              setServiceQuery("");
               setOpen((value) => !value);
             }}
             aria-expanded={open}
@@ -416,128 +431,75 @@ function PublicSiteHeaderContent({
             type="button"
             className="public-mobile-backdrop"
             aria-label="關閉導覽"
-            onClick={() => setOpen(false)}
+            onClick={() => {
+              setOpen(false);
+              menuButtonRef.current?.focus();
+            }}
           />
-          <nav
+          <div
             id="public-mobile-nav"
             ref={mobileNavRef}
-            className="public-mobile-nav public-mobile-nav-index"
-            aria-label="公開網站行動導覽"
+            className="public-mobile-menu"
+            role="dialog"
+            aria-modal="true"
+            aria-label="公開網站導覽"
           >
-            <p className="public-mobile-nav-heading">你想先做什麼？</p>
-            <div className="grid gap-2">
-              {featuredArticle && (
-                <Link
-                  href={featuredArticle.href}
-                  onClick={() => setOpen(false)}
-                  className="public-mobile-link public-mobile-index-link"
-                  aria-current={isCurrentPath(pathname, featuredArticle.href) ? "page" : undefined}
-                >
-                  {featuredArticle.label}
-                </Link>
-              )}
-              {otherTaskNav.map((item) => (
-                <Link
-                  key={item.key}
-                  href={item.href}
-                  onClick={() => setOpen(false)}
-                  className="public-mobile-link public-mobile-index-link"
-                  aria-current={isCurrentPath(pathname, item.href) ? "page" : undefined}
-                >
-                  {item.label}
-                </Link>
-              ))}
+            <div className="public-mobile-menu-header">
+              <button
+                type="button"
+                className="public-icon-button public-mobile-menu-close"
+                aria-label="關閉導覽"
+                onClick={() => {
+                  setOpen(false);
+                  menuButtonRef.current?.focus();
+                }}
+              >
+                <X size={20} aria-hidden />
+              </button>
+              <label className="public-mobile-service-search">
+                <Search size={18} aria-hidden />
+                <span className="sr-only">搜尋所有公開服務</span>
+                <input
+                  type="search"
+                  value={serviceQuery}
+                  onChange={(event) => setServiceQuery(event.target.value)}
+                  placeholder="搜尋頁面"
+                />
+              </label>
             </div>
-            <label className="public-mobile-service-search">
-              <Search size={16} aria-hidden />
-              <span className="sr-only">搜尋所有公開服務</span>
-              <input
-                type="search"
-                value={serviceQuery}
-                onChange={(event) => setServiceQuery(event.target.value)}
-                placeholder="搜尋所有公開服務"
-              />
-            </label>
-            <div className="mt-4 grid gap-3">
-              {filteredMenuGroups.map((group) => (
-                <details key={group.id} className="public-mobile-service-group" open={Boolean(normalizedQuery)}>
-                  <summary className="public-mobile-group-label">
-                    <span>{group.meta.label}</span>
-                    <ChevronDown size={16} aria-hidden />
-                  </summary>
-                  <div className="grid gap-2 pt-2 sm:grid-cols-2">
-                    {group.items.map((item) => (
-                      <Link
-                        key={item.key}
-                        href={item.href}
-                        onClick={() => setOpen(false)}
-                        className="public-mobile-service-link"
-                        aria-current={isCurrentPath(pathname, item.href) ? "page" : undefined}
-                      >
-                        <span className="public-nav-dropdown-icon" aria-hidden="true">
-                          <PublicNavIcon iconKey={item.iconKey} size={18} />
-                        </span>
-                        <span className="min-w-0">
-                          <span className="flex items-center gap-1.5">
-                            <span className="truncate text-sm font-semibold">{item.label}</span>
-                          </span>
-                        </span>
-                      </Link>
-                    ))}
-                  </div>
-                </details>
-              ))}
-              {filteredArticlePages.length > 0 && (
-                <details className="public-mobile-service-group" open={Boolean(normalizedQuery)}>
-                  <summary className="public-mobile-group-label">
-                    <span>文章專欄</span>
-                    <ChevronDown size={16} aria-hidden />
-                  </summary>
-                  <div className="grid gap-2 pt-2 sm:grid-cols-2">
-                    {filteredArticlePages.map((page) => (
-                      <Link
-                        key={page.id}
-                        href={publicPageHref(page)}
-                        onClick={() => setOpen(false)}
-                        className="public-mobile-service-link"
-                        aria-current={isCurrentPath(pathname, publicPageHref(page)) ? "page" : undefined}
-                      >
-                        <span className="min-w-0 text-sm font-semibold">{page.nav_label || page.title}</span>
-                      </Link>
-                    ))}
-                  </div>
-                </details>
+            <nav className="public-mobile-menu-content" aria-label="公開網站行動導覽">
+              {normalizedQuery && (
+                <p className="public-mobile-menu-result-count" role="status">
+                  {serviceResultCount} 項結果
+                </p>
               )}
-              {filteredOtherPages.length > 0 && (
-                <details className="public-mobile-service-group" open={Boolean(normalizedQuery)}>
-                  <summary className="public-mobile-group-label">
-                    <span>其他公開頁面</span>
-                    <ChevronDown size={16} aria-hidden />
-                  </summary>
-                  <div className="grid gap-2 pt-2 sm:grid-cols-2">
-                    {filteredOtherPages.map((page) => (
-                      <Link
-                        key={page.id}
-                        href={publicPageHref(page)}
-                        onClick={() => setOpen(false)}
-                        className="public-mobile-service-link"
-                        aria-current={isCurrentPath(pathname, publicPageHref(page)) ? "page" : undefined}
-                      >
-                        <span className="min-w-0 text-sm font-semibold">{page.nav_label || page.title}</span>
-                      </Link>
-                    ))}
-                  </div>
-                </details>
-              )}
+              <div className="public-mobile-menu-links">
+                {mobileResults.map((item) => (
+                  <Link
+                    key={item.key}
+                    href={item.href}
+                    onClick={() => setOpen(false)}
+                    className="public-mobile-service-link"
+                    aria-current={isCurrentPath(pathname, item.href) ? "page" : undefined}
+                  >
+                    <span className="public-nav-dropdown-icon" aria-hidden="true">
+                      <PublicNavIcon iconKey={item.iconKey} size={16} />
+                    </span>
+                    <span>{item.label}</span>
+                  </Link>
+                ))}
+              </div>
               {normalizedQuery && serviceResultCount === 0 && (
-                <p className="public-nav-empty" aria-live="polite">找不到相符服務；請改用其他關鍵字。</p>
+                <p className="public-nav-empty">找不到相符服務；請改用其他關鍵字。</p>
               )}
-              <Link href={systemHref} className="public-system-button">
+            </nav>
+            <div className="public-mobile-menu-footer">
+              <Link href={systemHref} className="public-system-button" onClick={() => setOpen(false)}>
                 <LogIn size={15} aria-hidden />
                 {systemLabel}
               </Link>
             </div>
-          </nav>
+          </div>
         </>
       )}
     </header>

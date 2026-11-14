@@ -603,67 +603,116 @@
   }
 }
 
-/* Public navigation: an index-card stack, not a generic dropdown. */
+/* Mobile navigation keeps search and account access visible while links scroll. */
 .public-site .public-mobile-backdrop {
   animation: public-index-backdrop-in 220ms ease-out both;
 }
 
-.public-site .public-mobile-nav-index {
-  /* Keep the index-card reveal clipped horizontally without disabling the
-     menu's own vertical scroll container on touch devices. */
-  overflow-x: hidden;
+.public-site .public-mobile-menu {
+  position: fixed;
+  inset: 0 0 0 auto;
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 28rem);
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--public-surface);
+  color: var(--public-text);
+  box-shadow: -12px 0 40px color-mix(in srgb, var(--text-primary) 16%, transparent);
+}
+
+.public-mobile-menu-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  padding: max(0.75rem, env(safe-area-inset-top)) 1rem 0.75rem;
+  border-bottom: 1px solid var(--public-border);
+}
+
+.public-mobile-menu-close {
+  order: 1;
+  flex-shrink: 0;
+}
+
+.public-mobile-menu-header .public-mobile-service-search {
+  flex: 1;
+  min-width: 0;
+  margin-top: 0;
+  min-height: 48px;
+  font-size: 1rem;
+}
+
+.public-mobile-menu-header input {
+  min-height: 44px;
+}
+
+.public-mobile-menu-header input:focus-visible {
+  outline: 0;
+  box-shadow: none;
+}
+
+.public-mobile-menu-content {
+  flex: 1;
+  min-height: 0;
+  padding: 0.5rem 1rem;
   overflow-y: auto;
   overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
-  transform-origin: top center;
-  animation: none;
-  box-shadow: 0 22px 48px color-mix(in srgb, var(--text-primary) 20%, transparent);
+  scrollbar-color: var(--public-border) transparent;
 }
 
-.public-site .public-mobile-nav-index::before {
-  position: absolute;
-  top: 0;
-  right: 1.25rem;
-  left: 1.25rem;
-  height: 2px;
-  background: var(--public-accent);
-  content: "";
-  transform-origin: left;
-  animation: none;
+.public-mobile-menu-result-count {
+  margin: 0 0 0.5rem;
+  color: var(--public-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
 }
 
-.public-site .public-mobile-index-link {
-  position: relative;
-  overflow: hidden;
-  animation: none;
+.public-mobile-menu-links {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.25rem 0.5rem;
 }
 
-
-.public-site .public-mobile-index-link::after {
-  position: absolute;
-  right: 0.75rem;
-  bottom: 0.45rem;
-  left: 0.75rem;
-  height: 1px;
-  background: currentColor;
-  content: "";
-  opacity: 0;
-  transform: scaleX(0.2);
-  transform-origin: left;
-  transition: opacity 180ms ease, transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
+.public-mobile-menu .public-mobile-service-link {
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0.5rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
-.public-site .public-mobile-index-link[aria-current="page"]::after,
-.public-site .public-mobile-index-link:focus-visible::after {
-  opacity: 1;
-  transform: scaleX(1);
+.public-mobile-menu .public-nav-dropdown-icon {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  border-radius: 0;
+  background: transparent;
 }
 
-.public-site .public-menu-button.is-open {
+.public-mobile-menu .public-mobile-service-link:is(:hover, :focus-visible, [aria-current="page"]) {
+  background: var(--public-accent-soft);
   color: var(--public-accent-text);
-  border-color: color-mix(in srgb, var(--public-accent) 58%, var(--public-border));
-  transform: rotate(90deg);
+}
+
+.public-mobile-menu-footer {
+  flex-shrink: 0;
+  padding: 0.5rem 1rem max(0.5rem, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--public-border);
+}
+
+.public-mobile-menu-footer .public-system-button {
+  width: 100%;
+  min-height: 44px;
+  justify-content: center;
+  font-size: 0.875rem;
 }
 
 @keyframes public-index-backdrop-in {
@@ -671,26 +720,14 @@
   to { opacity: 1; }
 }
 
-@keyframes public-index-sheet-open {
-  from { opacity: 0; transform: translateY(-18px) scaleY(0.9); clip-path: inset(0 0 100% 0); }
-  to { opacity: 1; transform: translateY(0) scaleY(1); clip-path: inset(0 0 0 0); }
-}
-
-@keyframes public-index-rule-draw {
-  from { transform: scaleX(0); }
-  to { transform: scaleX(1); }
-}
-
-@keyframes public-index-item-arrive {
-  from { opacity: 0; transform: translateX(-14px); }
-  to { opacity: 1; transform: translateX(0); }
+@media (min-width: 768px) {
+  .public-site .public-mobile-menu {
+    display: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .public-site .public-mobile-backdrop,
-  .public-site .public-mobile-nav-index,
-  .public-site .public-mobile-nav-index::before,
-  .public-site .public-mobile-index-link {
+  .public-site .public-mobile-backdrop {
     animation: none !important;
     transition-duration: 0.01ms !important;
   }
