@@ -3,6 +3,7 @@ import type {
   PublicBudgetDetail,
   PublicBudgetExpenseOut,
   PublicBudgetListItem,
+  PublicBudgetAllocation,
 } from "@/lib/types";
 
 export type PublicBudgetExecutionLine = {
@@ -16,6 +17,7 @@ export type PublicBudgetExecutionLine = {
   isGroup: boolean;
   isBudgetStart: boolean;
   expenses: PublicBudgetExpenseOut[];
+  allocations?: PublicBudgetAllocation[];
 };
 
 export function orderBudgetNodes(
@@ -96,5 +98,6 @@ export function budgetExecutionLines(
       isGroup: parentIds.has(node.id),
       isBudgetStart: index === 0,
       expenses: expensesByNode.get(node.id) ?? [],
+      allocations: budget.allocations.filter((allocation) => allocation.node_id === node.id),
     }));
 }

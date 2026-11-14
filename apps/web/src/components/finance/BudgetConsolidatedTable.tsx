@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { Download, Search } from "lucide-react";
 import { toast } from "sonner";
 import { financeApi } from "@/lib/api";
@@ -12,15 +12,18 @@ type Props = {
   detail: FinanceBudgetDetail;
   canRecordIncome: boolean;
   canRecordExpense: boolean;
-  onRegisterIncome: (item: FinanceBudgetIncomeItem) => void;
-  onRegisterExpense: (nodeId: string) => void;
+  onRegisterIncome?: (item: FinanceBudgetIncomeItem) => void;
+  onRegisterExpense?: (nodeId: string) => void;
+  renderItem?: (row: ReturnType<typeof consolidatedBudgetRows>[number]) => ReactNode;
+  disabled?: boolean;
 };
 const money = (amount: number) => `NT$${amount.toLocaleString("zh-TW")}`;
 
-export default function BudgetConsolidatedTable({ detail, canRecordIncome, canRecordExpense, onRegisterIncome, onRegisterExpense }: Props) {
+export default function BudgetConsolidatedTable({ detail, canRecordIncome, canRecordExpense, onRegisterIncome, onRegisterExpense, renderItem, disabled }: Props) {
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const rows = useMemo(() => consolidatedBudgetRows(detail), [detail]);
   const visible = rows.filter((row) => (
     (filter === "all" || (filter === "income" && row.income) || (filter === "expense" && !row.income) || (filter === "new" && row.isNew))
@@ -53,17 +56,22 @@ export default function BudgetConsolidatedTable({ detail, canRecordIncome, canRe
           const actual = actualFor(row);
           const complete = actual >= row.amount;
           const status = actual === 0 ? (row.income ? "未收款" : "未支出") : complete ? (row.income ? "已收足" : actual > row.amount ? "超出預算" : "已支出") : (row.income ? "部分收款" : "部分支出");
-          return <tr key={row.id} className={row.isNew ? "budget-workbook__new-row" : ""}>
-            <th scope="row" data-label="項目／細項"><small>{row.category} · {row.income ? "收入" : "支出"}</small><strong>{row.name}</strong>{row.isNew && <span className="budget-workbook__new-label">新增</span>}<small>{row.quantity == null ? "" : `${row.quantity}${row.unit || ""}`}{row.unitPrice ? ` × ${money(row.unitPrice)}` : ""}</small>{row.note && <details><summary>備註</summary><p>{row.note}</p></details>}</th>
+          const selected = selectedId === row.id;
+          const panelId = `budget-item-${row.id}`;
+          const select = () => setSelectedId(selected ? null : row.id);
+          return <Fragment key={row.id}><tr className={`${row.isNew ? "budget-workbook__new-row" : ""} ${selected ? "budget-workbook__selected" : ""}`}>
+            <th scope="row" data-label="項目／細項"><small>{row.category} · {row.income ? "收入" : "支出"}</small>{renderItem ? <button className="budget-workbook__item-trigger" type="button" disabled={disabled} aria-expanded={selected} aria-controls={panelId} onClick={select}>{row.name}</button> : <strong>{row.name}</strong>}{row.isNew && <span className="budget-workbook__new-label">新增</span>}<small>{row.quantity == null ? "" : `${row.quantity}${row.unit || ""}`}{row.unitPrice ? ` × ${money(row.unitPrice)}` : ""}</small>{row.note && <details><summary>備註</summary><p>{row.note}</p></details>}</th>
             <td data-label="預算金額">{money(row.amount)}</td>
             <td data-label={row.income ? "實收" : "已支出"} className={row.income ? "budget-workbook__income" : "budget-workbook__expense"}>{money(actual)}</td>
             <td data-label={row.income ? "尚未收款" : "可用餘額"}>{money(row.amount - actual)}</td>
             <td data-label="狀況"><span className="budget-workbook__status">{status}</span></td>
             <td data-label="操作"><div className="budget-workbook__actions">
-              {row.incomeItem && canRecordIncome && <button className="btn btn-secondary" type="button" aria-label={`登記收入：${row.name}`} onClick={() => onRegisterIncome(row.incomeItem!)}>登記收入</button>}
-              {row.allocation && canRecordExpense && <button className="btn btn-secondary" type="button" aria-label={`登記支出：${row.name}`} onClick={() => onRegisterExpense(row.allocation!.node_id)}>登記支出</button>}
+              {renderItem ? <button className="btn btn-secondary" type="button" disabled={disabled} aria-label={`${selected ? "收起" : "管理"}：${row.name}`} aria-expanded={selected} aria-controls={panelId} onClick={select}>{selected ? "收起" : "收支與收據"}</button> : <>
+                {row.incomeItem && canRecordIncome && <button className="btn btn-secondary" type="button" aria-label={`登記收入：${row.name}`} onClick={() => onRegisterIncome?.(row.incomeItem!)}>登記收入</button>}
+                {row.allocation && canRecordExpense && <button className="btn btn-secondary" type="button" aria-label={`登記支出：${row.name}`} onClick={() => onRegisterExpense?.(row.allocation!.node_id)}>登記支出</button>}
+              </>}
             </div></td>
-          </tr>;
+          </tr>{selected && renderItem && <tr className="budget-workbook__editor-row"><td colSpan={6}><div id={panelId} className="budget-workbook__item-panel" role="region" aria-label={`${row.name}收支紀錄`}>{renderItem(row)}</div></td></tr>}</Fragment>;
         })}
       </tbody></table>
       {visible.length === 0 && <p className="budget-workbook__empty" role="status">{rows.length ? "沒有符合條件的預算明細。" : "目前沒有預算明細。"}</p>}

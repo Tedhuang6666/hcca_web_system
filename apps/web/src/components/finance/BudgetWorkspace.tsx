@@ -7,7 +7,7 @@ import BudgetExpenseRegister from "./BudgetExpenseRegister";
 import BudgetConsolidatedTable from "./BudgetConsolidatedTable";
 import BudgetIncomeRegister from "./BudgetIncomeRegister";
 import { financeApi } from "@/lib/api";
-import type { FinanceBudget, FinanceBudgetDetail, FinanceBudgetIncomeItem, OrgRead, PeriodOut } from "@/lib/types";
+import type { FinanceBudget, FinanceBudgetDetail, OrgRead, PeriodOut } from "@/lib/types";
 
 type Props = {
   ledgerId: string;
@@ -31,8 +31,8 @@ export default function BudgetWorkspace({ ledgerId, periods, orgs, canManage, ca
   const [importing, setImporting] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [importResult, setImportResult] = useState<{ expenses: number; incomes: number; skipped: string[] } | null>(null);
-  const [quickExpenseNodeId, setQuickExpenseNodeId] = useState<string | null>(null);
-  const [quickIncome, setQuickIncome] = useState<FinanceBudgetIncomeItem | null>(null);
+  const [showRecords, setShowRecords] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const uploadFormRef = useRef<HTMLFormElement>(null);
   const requestId = useRef(0);
@@ -104,29 +104,39 @@ export default function BudgetWorkspace({ ledgerId, periods, orgs, canManage, ca
     catch (cause) { setError(cause instanceof Error ? cause.message : "公開設定失敗"); }
     finally { setPublishing(false); }
   };
-  const handleQuickExpense = useCallback(() => setQuickExpenseNodeId(null), []);
-  const handleQuickIncome = useCallback(() => setQuickIncome(null), []);
+  const handleQuickRegistration = useCallback(() => undefined, []);
+  const period = periods.find((period) => period.id === detail?.period_id);
+  const canWrite = !loading && !importing && !period?.is_closed;
 
   return <section className="finance-budget" aria-label="預算管理" aria-busy={loading || importing}>
     <div className="finance-budget__toolbar">
-      {budgets.length > 0 && <label>目前預算<select className="input" disabled={loading || importing} value={detail?.id || ""} onChange={(event) => { setQuickExpenseNodeId(null); setQuickIncome(null); setImportResult(null); void load(event.target.value).catch(() => undefined); }}>{budgets.map((budget) => <option key={budget.id} value={budget.id}>{budget.name}</option>)}</select></label>}
+      {budgets.length > 0 && <label>目前預算<select className="input" disabled={loading || importing} value={detail?.id || ""} onChange={(event) => { setShowRecords(false); setImportResult(null); void load(event.target.value).catch(() => undefined); }}>{budgets.map((budget) => <option key={budget.id} value={budget.id}>{budget.name}</option>)}</select></label>}
       {detail && <div className="finance-simple__publication"><span>{detail.is_public ? "已公開" : "未公開"}</span>{detail.is_public && <a className="btn btn-secondary" href={`/public/budgets/${detail.id}`} target="_blank" rel="noreferrer">查看公開頁</a>}{canPublish && <button className="btn btn-secondary" disabled={publishing || importing || loading} onClick={() => void togglePublication()}>{detail.is_public ? "停止公開" : "公開資料"}</button>}</div>}
     </div>
-    {canManage && periods.some((period) => !period.is_closed) && <form ref={uploadFormRef} className="finance-simple__upload" onSubmit={(event) => void upload(event)}>
-      <h2>上傳更新預算</h2>
+    {canManage && periods.some((period) => !period.is_closed) && <details className="budget-workbook__import" open={uploadOpen || (!loading && !detail)} onToggle={(event) => setUploadOpen(event.currentTarget.open)}><summary>上傳更新預算 Excel</summary><form ref={uploadFormRef} className="finance-simple__upload" onSubmit={(event) => void upload(event)}>
       <label>會計期間<select className="input" required disabled={importing} value={periodId} onChange={(event) => setPeriodId(event.target.value)}><option value="">選擇期間</option>{periods.filter((period) => !period.is_closed).map((period) => <option key={period.id} value={period.id}>{period.name}</option>)}</select></label>
       <label>Excel 預算檔<input ref={fileRef} className="input" type="file" required disabled={importing} accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { setFile(event.target.files?.[0] || null); setImportResult(null); }} /></label>
       <label>更新方式<select className="input" disabled={importing} value={fullSnapshot ? "full" : "additions"} onChange={(event) => setFullSnapshot(event.target.value === "full")}><option value="full">完整總表：取代目前預算</option><option value="additions">僅新增項目：累加預算</option></select></label>
       <button className="btn btn-primary" disabled={loading || importing || !file || !periodId}>{importing ? "解析與更新中…" : "上傳並公開"}</button>
       {target && <p>更新「{target.name}」；已登記收支與收據會保留。</p>}
       {!fullSnapshot && <p>僅含新增項目的檔案才使用累加；重複上傳會再次計入。</p>}
-    </form>}
+    </form></details>}
     {error && <div className="finance-simple__error" role="alert"><p>{error}</p><button className="btn btn-secondary" onClick={() => void load(detail?.id).catch(() => undefined)}>重新載入</button></div>}
     {importResult && <div className="finance-simple__import-result" role="status"><p>已更新 {importResult.expenses} 筆支出預算、{importResult.incomes} 筆收入預算。</p>{importResult.skipped.length > 0 && <details><summary>有 {importResult.skipped.length} 列未匯入</summary><ul>{importResult.skipped.map((row) => <li key={row}>{row}</li>)}</ul></details>}</div>}
     {loading && !detail ? <p role="status">正在載入預算…</p> : detail ? <div aria-busy={loading}>
-      <BudgetConsolidatedTable detail={detail} canRecordIncome={canRecordIncome} canRecordExpense={canRecordExpense} onRegisterIncome={setQuickIncome} onRegisterExpense={setQuickExpenseNodeId} />
-      <BudgetIncomeRegister key={`income-${detail.id}`} detail={detail} period={periods.find((period) => period.id === detail.period_id)} canRecord={canRecordIncome} quickIncome={quickIncome} onQuickRegistrationHandled={handleQuickIncome} onRecorded={refreshDetail} />
-      <BudgetExpenseRegister key={`expense-${detail.id}`} budgetId={detail.id} ledgerId={ledgerId} allocations={detail.allocations} currentPlan={detail.current_plan} nodes={detail.nodes} expenses={detail.expenses} orgs={orgs} canRecord={canRecordExpense} quickNodeId={quickExpenseNodeId} onQuickRegistrationHandled={handleQuickExpense} isPublic={detail.is_public} onRecorded={refreshDetail} />
+      {period?.is_closed && <p role="status">此會計期間已關閉。</p>}
+      <BudgetConsolidatedTable key={detail.id} detail={detail} canRecordIncome={canRecordIncome && canWrite} canRecordExpense={canRecordExpense && canWrite} disabled={loading || importing} renderItem={(row) => row.incomeItem ? (
+        <BudgetIncomeRegister key={row.id} detail={detail} item={row.incomeItem} period={period} canRecord={canRecordIncome && canWrite} quickIncome={null} onQuickRegistrationHandled={handleQuickRegistration} onRecorded={refreshDetail} />
+      ) : row.allocation ? (
+        <BudgetExpenseRegister key={row.id} budgetId={detail.id} ledgerId={ledgerId} allocations={detail.allocations} currentPlan={detail.current_plan} nodes={detail.nodes} expenses={detail.expenses} selectedAllocation={row.allocation} period={period} orgs={orgs} canRecord={canRecordExpense && canWrite} quickNodeId={null} onQuickRegistrationHandled={handleQuickRegistration} isPublic={detail.is_public} onRecorded={refreshDetail} />
+      ) : null} />
+      <details className="budget-workbook__all-records" onToggle={(event) => setShowRecords(event.currentTarget.open)}>
+        <summary>全部收支紀錄（{(detail.income_records?.length || 0) + detail.expenses.length} 筆）</summary>
+        {showRecords && <>
+          <BudgetIncomeRegister key={`income-${detail.id}`} detail={detail} period={period} canRecord={canRecordIncome && canWrite} quickIncome={null} onQuickRegistrationHandled={handleQuickRegistration} onRecorded={refreshDetail} />
+          <BudgetExpenseRegister key={`expense-${detail.id}`} budgetId={detail.id} ledgerId={ledgerId} allocations={detail.allocations} currentPlan={detail.current_plan} nodes={detail.nodes} expenses={detail.expenses} orgs={orgs} period={period} canRecord={canRecordExpense && canWrite} quickNodeId={null} onQuickRegistrationHandled={handleQuickRegistration} isPublic={detail.is_public} onRecorded={refreshDetail} />
+        </>}
+      </details>
     </div> : !error && <p className="finance-simple__empty" role="status">{periods.length ? "尚未上傳預算。" : "建立會計期間後即可上傳預算。"}</p>}
   </section>;
 }

@@ -54,11 +54,14 @@ export default function PublicBudgetExecutionTable({
         <table>
           <thead>
             <tr>
-              <th scope="col">預算條目</th>
-              <th scope="col">編列</th>
-              <th scope="col">已用</th>
-              <th scope="col">剩餘</th>
-              <th scope="col">執行率</th>
+              <th scope="col">項目／細項</th>
+              <th scope="col">數量</th>
+              <th scope="col">單價</th>
+              <th scope="col">預算金額</th>
+              <th scope="col">已支出</th>
+              <th scope="col">可用餘額</th>
+              <th scope="col">備註</th>
+              <th scope="col">收據</th>
             </tr>
           </thead>
           <tbody>
@@ -66,7 +69,6 @@ export default function PublicBudgetExecutionTable({
               const ratio = line.allocated > 0
                 ? Math.round((line.spent / line.allocated) * 100)
                 : 0;
-              const barWidth = Math.min(Math.max(ratio, 0), 100);
               const hasOwnActivity = line.allocated > 0
                 || line.spent > 0
                 || line.expenses.length > 0;
@@ -95,29 +97,19 @@ export default function PublicBudgetExecutionTable({
                     )}
                     {line.isBudgetStart && <small>{line.budgetName}</small>}
                   </th>
+                  <td>{line.allocations?.map((allocation) => allocation.quantity == null ? "—" : `${allocation.quantity}${allocation.unit || ""}`).join("、") || "—"}</td>
+                  <td>{line.allocations?.map((allocation) => allocation.unit_price == null ? "—" : formatAmount(allocation.unit_price)).join("、") || "—"}</td>
                   <td>{showDetails ? formatAmount(line.allocated) : "—"}</td>
                   <td className="is-expense">{showDetails ? formatAmount(line.spent) : "—"}</td>
                   <td>{showDetails ? formatAmount(line.remaining) : "—"}</td>
-                  <td>
-                    {!showDetails ? "—" : (
-                      <span className="public-finance__execution-rate">
-                        <span
-                          className="public-finance__progress"
-                          role="img"
-                          aria-label={`${line.name} 執行率 ${ratio}%`}
-                        >
-                          <i style={{ width: `${barWidth}%` }} />
-                        </span>
-                        <b>{ratio}%</b>
-                      </span>
-                    )}
-                  </td>
+                  <td className="public-finance__workbook-note">{line.allocations?.map((allocation) => allocation.note).filter(Boolean).join("；") || "—"}</td>
+                  <td>{line.expenses.length > 0 ? <button className="public-finance__line-trigger" type="button" aria-haspopup="dialog" aria-label={`查看收據：${line.name}`} onClick={() => setSelectedLine(line)}>{line.expenses.reduce((sum, expense) => sum + expense.evidence.length, 0)} 份</button> : "—"}</td>
                 </tr>
               );
             })}
             {lines.length === 0 && (
               <tr>
-                <td className="public-finance__empty-line" colSpan={5}>
+                <td className="public-finance__empty-line" colSpan={8}>
                   這個期間尚未公開預算明細。
                 </td>
               </tr>

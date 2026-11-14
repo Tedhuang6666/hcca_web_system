@@ -27,6 +27,7 @@ describe("simple budget workspace", () => {
     await screen.findByText("收支總表");
     expect(screen.queryByText("建立追加草案")).not.toBeInTheDocument();
     expect(screen.queryByText("預算版本與草案編輯")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByText("上傳更新預算 Excel"));
     const file = new File(["xlsx"], "115年度上學期第二次追加預算.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     await userEvent.upload(screen.getByLabelText("Excel 預算檔"), file);
     expect((screen.getByLabelText("Excel 預算檔") as HTMLInputElement).files?.[0]).toBe(file);
@@ -41,6 +42,7 @@ describe("simple budget workspace", () => {
     vi.mocked(financeApi.importBudget).mockRejectedValueOnce(new Error("找不到預算表欄位"));
     render(<BudgetWorkspace {...props} />);
     await screen.findByText("收支總表");
+    await userEvent.click(screen.getByText("上傳更新預算 Excel"));
     const file = new File(["xlsx"], "預算.xlsx");
     await userEvent.upload(screen.getByLabelText("Excel 預算檔"), file);
     fireEvent.submit(screen.getByRole("button", { name: "上傳並公開" }).closest("form")!);

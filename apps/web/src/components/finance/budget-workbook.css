@@ -83,3 +83,21 @@
   .budget-workbook td, .budget-workbook th[scope="row"] { min-width: 0; max-width: none; }
   .budget-workbook td:nth-child(6) { grid-column: 1 / -1; }
 }
+
+.budget-workbook__item-trigger { min-height: 44px; padding: .25rem 0; border: 0; background: transparent; color: var(--primary-text); font: inherit; font-size: 1rem; font-weight: 700; text-align: start; text-decoration: underline; text-underline-offset: .2em; cursor: pointer; }
+.budget-workbook__item-trigger:disabled { cursor: wait; opacity: .6; }
+.budget-workbook__selected > * { background: var(--primary-dim); }
+.budget-workbook .budget-workbook__editor-row > td { padding: 0; white-space: normal; }
+.budget-workbook__item-panel { padding: 1rem; border-bottom: 1px solid var(--border-strong); background: var(--bg-surface); }
+.budget-workbook__item-panel .finance-budget__section { border: 0; border-radius: 0; box-shadow: none; }
+.budget-workbook__item-panel .finance-budget__section > header { padding-inline: 0; }
+.budget-workbook__form-fields { min-width: 0; margin: 0; padding: 0; border: 0; display: grid; gap: 1rem; }
+.budget-workbook__all-records { margin-block: 1rem; }
+.budget-workbook__all-records > summary { min-height: 44px; padding-block: .75rem; cursor: pointer; }
+@media (max-width: 767px) {
+  .budget-workbook .budget-workbook__editor-row { padding: 0; }
+  .budget-workbook__item-panel { padding: .75rem; }
+  .budget-workbook__item-panel .finance-budget-expenses__form, .budget-workbook__item-panel .finance-simple__setup { padding-inline: 0; }
+}
+.budget-workbook__import > summary { min-height: 44px; padding-block: .75rem; cursor: pointer; }
+.finance-budget-expenses__attachments label:focus-within { outline: 2px solid var(--primary); outline-offset: 3px; }

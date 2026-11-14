@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { financeApi } from "@/lib/api";
 import type { FinanceBudgetDetail, FinanceBudgetIncomeItem, FinanceBudgetIncomeRecord, PeriodOut } from "@/lib/types";
 
@@ -12,21 +12,28 @@ type Props = {
   quickIncome: FinanceBudgetIncomeItem | null;
   onQuickRegistrationHandled: () => void;
   onRecorded: () => Promise<void>;
+  item?: FinanceBudgetIncomeItem;
 };
 
-export default function BudgetIncomeRegister({ detail, period, canRecord, quickIncome, onQuickRegistrationHandled, onRecorded }: Props) {
-  const [open, setOpen] = useState(false);
+export default function BudgetIncomeRegister({ detail, period, canRecord, quickIncome, onQuickRegistrationHandled, onRecorded, item }: Props) {
+  const headingId = useId();
+  const records = (detail.income_records || []).filter((record) => !item || (record.category === item.category && record.name === item.name));
+  const remaining = item ? Math.max(item.amount - records.reduce((sum, record) => sum + record.amount, 0), 0) : 0;
+  const initialDate = () => {
+    const day = today();
+    return period && day < period.starts_on ? period.starts_on : period && day > period.ends_on ? period.ends_on : day;
+  };
+  const [open, setOpen] = useState(Boolean(item && !records.length));
   const [editing, setEditing] = useState<string | null>(null);
-  const [incomeId, setIncomeId] = useState("");
-  const [amount, setAmount] = useState("");
-  const [entryDate, setEntryDate] = useState(today);
+  const [incomeId, setIncomeId] = useState(item?.id || "");
+  const [amount, setAmount] = useState(item && remaining > 0 ? String(remaining) : "");
+  const [entryDate, setEntryDate] = useState(initialDate);
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
   const currentIds = new Set(detail.current_plan.submission_ids);
   const incomeItems = detail.income_items.filter((item) => currentIds.has(item.submission_id));
-  const records = detail.income_records || [];
 
   useEffect(() => {
     if (!quickIncome) return;
@@ -55,7 +62,7 @@ export default function BudgetIncomeRegister({ detail, period, canRecord, quickI
   };
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (saving) return;
+    if (saving || !canRecord) return;
     setSaving(true);
     setError("");
     try {
@@ -70,10 +77,10 @@ export default function BudgetIncomeRegister({ detail, period, canRecord, quickI
     finally { setSaving(false); }
   };
 
-  return <section className="finance-budget__section finance-income" aria-labelledby="income-record-heading">
-    <header><h2 id="income-record-heading">收款紀錄</h2><span>實收 NT${records.reduce((sum, record) => sum + record.amount, 0).toLocaleString("zh-TW")}</span></header>
+  return <section className="finance-budget__section finance-income" aria-labelledby={headingId}>
+    <header><h2 id={headingId}>收款紀錄</h2><span>實收 NT${records.reduce((sum, record) => sum + record.amount, 0).toLocaleString("zh-TW")}</span>{item && canRecord && <button className="btn btn-secondary" type="button" disabled={saving} onClick={() => { setEditing(null); setIncomeId(item.id); setAmount(remaining > 0 ? String(remaining) : ""); setEntryDate(initialDate()); setNote(""); setError(""); setOpen(true); }}>新增收入</button>}</header>
     {open && canRecord && <form ref={formRef} className="finance-simple__setup" onSubmit={(event) => void save(event)} aria-label={editing ? "編輯收款" : "登記收入"}>
-      <label>收入項目<select className="input" required disabled={Boolean(editing) || saving} value={incomeId} onChange={(event) => setIncomeId(event.target.value)}><option value="">選擇收入項目</option>{incomeItems.map((item) => <option key={item.id} value={item.id}>{item.category}／{item.name}</option>)}{editing && !incomeItems.some((item) => item.id === incomeId) && <option value={incomeId}>{records.find((record) => record.id === editing)?.name}（歷史版本）</option>}</select></label>
+      {(!item || editing) && <label>收入項目<select className="input" required disabled={Boolean(editing) || saving} value={incomeId} onChange={(event) => setIncomeId(event.target.value)}><option value="">選擇收入項目</option>{incomeItems.map((item) => <option key={item.id} value={item.id}>{item.category}／{item.name}</option>)}{editing && !incomeItems.some((item) => item.id === incomeId) && <option value={incomeId}>{records.find((record) => record.id === editing)?.name}（歷史版本）</option>}</select></label>}
       <label>實收金額<input className="input" required type="number" min="1" max="2000000000" step="1" value={amount} onChange={(event) => setAmount(event.target.value)} /></label>
       <label>收款日期<input className="input" required type="date" min={period?.starts_on} max={period?.ends_on} value={entryDate} onChange={(event) => setEntryDate(event.target.value)} /></label>
       <label>內部備註<input className="input" maxLength={2000} value={note} onChange={(event) => setNote(event.target.value)} /></label>
