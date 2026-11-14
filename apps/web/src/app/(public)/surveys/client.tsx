@@ -80,7 +80,6 @@ export default function SurveysClient({
       <div className="workspace-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>問卷</h1>
-          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>查看可填問卷與截止時間。</p>
         </div>
         {canManage && (
           <Link href="/surveys/new" className="btn btn-primary self-start sm:self-auto">
@@ -144,7 +143,7 @@ export default function SurveysClient({
           <p className="text-sm" style={{ color: "var(--text-muted)" }}>
             {serviceError === "closed"
               ? "系統暫時不能提供問卷資料，請稍後再試。"
-              : "連線恢復後即可重新載入，不會把服務異常誤顯示為沒有問卷。"}
+              : "連線恢復後請重新載入。"}
           </p>
           <div>
             <button

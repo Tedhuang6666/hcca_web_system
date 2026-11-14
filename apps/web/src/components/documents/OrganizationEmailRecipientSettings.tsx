@@ -78,7 +78,7 @@ export function OrganizationEmailRecipientSettings({
           機關 Email 通知
         </h3>
         <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>
-          選擇機關中的職位；公文核准或直接發文時，會通知當時在任且有信箱的人。
+          核准或直接發文時，通知所選職位的現任人員。
         </p>
       </div>
 

@@ -283,7 +283,7 @@ export default function BudgetExpenseRegister({
       <header>
         <div>
           <h3 id="budget-expenses-heading">{editingExpenseId ? "編輯已登記支出" : "登記支出"}</h3>
-          <p>從執行表選定預算後，填寫日期、用途與金額；一次採購可登錄多項品目，同筆預算也能分次核銷。</p>
+          <p>同筆預算可分次核銷，一次採購可登錄多項品目。</p>
         </div>
         {canRecord && approvedAllocations.length > 0 && (
           <button className="btn btn-primary" type="button" onClick={() => editingExpenseId ? cancelExpenseEdit() : setIsOpen((value) => !value)}>

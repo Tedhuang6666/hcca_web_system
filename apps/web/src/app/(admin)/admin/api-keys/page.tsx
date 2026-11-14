@@ -124,8 +124,7 @@ export default function ApiKeysPage() {
           </div>
           <h1 className="text-2xl font-bold text-[var(--text-primary)]">API Keys</h1>
           <p className="mt-1 max-w-3xl text-xs text-[var(--text-muted)]">
-            用於外部腳本或第三方服務呼叫平台 API。**明文 key 只在建立時顯示一次**，
-            遺失需重新建立。撤銷後該 key 立即失效。
+            密鑰僅顯示一次，遺失須重建；撤銷後立即失效。
           </p>
         </div>
         <div className="flex gap-2">

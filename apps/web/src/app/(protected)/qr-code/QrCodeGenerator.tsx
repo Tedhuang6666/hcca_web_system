@@ -341,7 +341,6 @@ export default function QrCodeGenerator({ initialContent }: { initialContent?: s
               <span className="qr-tool-title-icon" aria-hidden="true"><QrCode size={22} /></span>
               <h1>做一張值得被分享的 QR Code</h1>
             </div>
-            <p className="qr-tool-lede">把網址或文字調整成適合公告、海報與現場投影的版本，所有設定會即時反映在右側預覽。</p>
           </div>
           <div className="qr-privacy-note"><ShieldCheck size={17} aria-hidden="true" /><span>內容只在本機產生，不會上傳</span></div>
         </header>
@@ -503,7 +502,6 @@ export default function QrCodeGenerator({ initialContent }: { initialContent?: s
               {settings.showBadge && settings.errorCorrection !== "H" && <p className="qr-warning"><CircleHelp size={14} aria-hidden="true" />中央標記會遮住少量資料，建議切換至 H 容錯。</p>}
             </div>
 
-            <p className="qr-settings-footnote"><ShieldCheck size={14} aria-hidden="true" />調整後會立即更新預覽；沒有任何內容會離開你的瀏覽器。</p>
           </section>
         </div>
 

@@ -17,9 +17,6 @@ export default function PublicSiteWorkspaceHeader({ loading, onRefresh }: {
             <h1 className="mt-3 text-2xl font-semibold text-[var(--text-primary)]">
               公開網站工作台
             </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--text-secondary)]">
-              管理首頁內容、公開頁面、常用連結與幹部資料。發布前可先開啟官網確認實際呈現。
-            </p>
           </div>
           <div className="flex w-full flex-wrap gap-2 sm:w-auto">
             <button

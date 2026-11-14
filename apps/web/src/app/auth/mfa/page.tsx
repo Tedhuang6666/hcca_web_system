@@ -117,7 +117,7 @@ export default function MFALoginPage() {
             完成安全驗證
           </h1>
           <p className="mt-2 text-sm leading-6" style={{ color: "var(--text-muted)" }}>
-            開啟驗證器 App，輸入目前顯示的 6 位數代碼以繼續登入。
+            輸入驗證器 App 的 6 位數代碼。
           </p>
         </div>
 

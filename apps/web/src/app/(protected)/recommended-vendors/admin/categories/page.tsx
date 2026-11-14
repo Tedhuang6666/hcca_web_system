@@ -47,7 +47,6 @@ export default function RecommendedVendorCategoriesPage() {
       <header>
         <p className="flex items-center gap-2 text-sm font-medium" style={{ color: "var(--primary)" }}><Tags size={16} aria-hidden="true" />統一管理選項</p>
         <h1 className="mt-1 text-xl font-semibold" style={{ color: "var(--text-primary)" }}>商家分類</h1>
-        <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>先在這裡建立分類，商家資料只需從下拉選單選擇。</p>
       </header>
       <section className="rounded-lg border p-5" style={{ borderColor: "var(--border)" }}>
         <div className="mb-4 flex items-center justify-between gap-3"><h2 className="font-semibold" style={{ color: "var(--text-primary)" }}>{editingId ? "編輯分類" : "新增分類"}</h2>{editingId && <button type="button" className="btn btn-secondary" onClick={() => { setEditingId(null); setForm(emptyForm); }}><X size={15} aria-hidden="true" />取消編輯</button>}</div>

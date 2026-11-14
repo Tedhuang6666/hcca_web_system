@@ -69,8 +69,7 @@ export default function ReportsPage() {
           </div>
           <h1 className="text-2xl font-bold text-[var(--text-primary)]">常用報表</h1>
           <p className="mt-1 max-w-3xl text-xs text-[var(--text-muted)]">
-            平台預設的 10 個 read-only 查詢；點報表執行後可下載 CSV（含 UTF-8 BOM，Excel
-            直接開啟中文不亂碼）。
+            選取報表執行，可下載 Excel 相容的 CSV。
           </p>
         </div>
         <button type="button" className="btn btn-ghost" onClick={loadList}>

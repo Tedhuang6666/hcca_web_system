@@ -105,9 +105,6 @@ export default function WorkItemsPage() {
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
             我的工作
           </h1>
-          <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>
-            個人工作項目管理，可與 Google Tasks 同步
-          </p>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">

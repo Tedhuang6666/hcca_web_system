@@ -23,7 +23,6 @@ export default function ShopSalesVariants({ current }: { current: ShopSalesPerio
   return (
     <section className="sales-analysis-section sales-variants" aria-label="同商品選項比較">
       <h3>同商品選項比較</h3>
-      <p className="sales-muted">先選商品，再比較完整規格組合，或單獨查看尺寸、顏色等選項的合計。</p>
       <div className="sales-analysis-controls">
         <label>
           比較商品

@@ -57,7 +57,7 @@ export default function ProductCardOffers({ product, promotions, products, disab
           const conditions = [
             promotion.min_order_price > 0 ? `${promotion.target_category_ids != null ? "單一活動" : ""}滿 NT$${promotion.min_order_price.toLocaleString()}` : null,
             promotion.min_quantity > 1 ? `${promotion.target_category_ids != null ? "單一活動" : ""}滿 ${promotion.min_quantity} 件` : null,
-            promotion.code ? `使用優惠碼 ${promotion.code}` : "符合條件自動套用",
+            promotion.code ? `優惠碼 ${promotion.code}` : null,
           ].filter(Boolean).join(" · ");
           return <div className="shop-product-card-offer" key={promotion.id}>
             <strong>{promotion.name}</strong>
@@ -72,8 +72,10 @@ export default function ProductCardOffers({ product, promotions, products, disab
               : `整筆登記折抵 NT$${promotion.discount_value.toLocaleString()}`}</p>}
             {promotion.discount_type !== "price_override" && companions.length > 0
               && <p>需同時選購{companions.map((target) => target.name).join("、")}</p>}
-            <p>{conditions}{promotion.discount_type === "price_override" || isGift ? " · 規格加價另計" : ""}</p>
-            {isGift && <p>請自行選擇規格；商品基本售價免費，加價選項由您支付。</p>}
+            {(conditions || promotion.discount_type === "price_override" || isGift) && <p>{[
+              conditions,
+              promotion.discount_type === "price_override" || isGift ? "規格加價另計" : null,
+            ].filter(Boolean).join(" · ")}</p>}
           </div>;
         })}
       </div>

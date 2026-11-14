@@ -278,9 +278,6 @@ export default function DocumentTemplatesPage() {
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold">公文範本庫</h1>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            維護常用公文內容，起稿時可一鍵帶入主旨、說明、辦法與受文者。
-          </p>
         </div>
         <Link href="/documents/new" className="btn btn-primary">
           新增公文
@@ -294,7 +291,7 @@ export default function DocumentTemplatesPage() {
               <div>
                 <h2 className="text-sm font-semibold">快速套用預設範本</h2>
                 <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                  先帶入正式句式與段落骨架，再依組織、受文者和實際內容修改並儲存。
+                  套用後可修改並另存。
                 </p>
               </div>
               <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>共 {DOCUMENT_TEMPLATE_PRESETS.length} 組</span>

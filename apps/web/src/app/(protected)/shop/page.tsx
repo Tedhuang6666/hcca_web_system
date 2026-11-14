@@ -817,7 +817,7 @@ function ProductModal({
                           requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>(".shop-product-option")?.focus());
                         }}>修改尺寸／規格與數量</button>}
                   </li>)}</ul>
-                  {editingVariant !== null && <p role="status">正在修改這項登記；選好尺寸／規格與數量後，按「儲存修改」。</p>}
+                  {editingVariant !== null && <p role="status">正在修改規格與數量</p>}
                 </section>}
 
                 {variantGroups.map((g) => (
@@ -1855,7 +1855,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
           category.activity_name ?? category.name))].join("、") || "此連結的活動"}</strong>。本頁只顯示可代訂的商品。</p>}
         {delegationError && <p role="alert">{delegationError}</p>}
         {delegationContext?.can_claim && <>
-          <p><strong>請先確認學生與登入帳號。</strong>確認後，這個連結只供目前帳號使用；若帳號不正確，請先登出並登入自己的帳號，再開啟原連結。</p>
+          <p><strong>請先確認學生與登入帳號。</strong>綁定後僅限目前帳號使用；帳號有誤請先重新登入。</p>
         </>}
         {delegationContext?.can_edit && (
           <p role="status" className="shop-delegation-ready">
@@ -1870,8 +1870,8 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
           </Link>
         )}
         {(!delegationContext || delegationContext.can_claim || delegationContext.can_edit) && <>
-          <p>送出即加入學生預購，不需學生再次確認，由學生繳款與領取。你只能修改此連結登記的品項，無法修改學生本人或其他家人的品項。</p>
-          <p>確認綁定前，只能查看商品與學生姓名；確認後可查看此授權範圍的合計與品項。</p>
+          <p>送出即加入學生預購，由學生繳款與領取。</p>
+          <p>確認後可查看授權範圍的合計與品項。</p>
         </>}
         {delegationContext && !delegationContext.can_claim && (
           <section
@@ -1879,7 +1879,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
             aria-labelledby="shop-delegation-registration-title"
           >
             <h3 id="shop-delegation-registration-title">學生在此活動的預購</h3>
-            <p>學生本人和家人已登記的品項只供查看；你只能修改自己透過此連結加入的品項。</p>
+            <p>僅可修改此連結登記的品項。</p>
             {delegatedRegistration?.items.length ? (
               <ul aria-label="學生本活動已登記品項">
                 {delegatedRegistration.items.map((item) => (
@@ -1940,11 +1940,9 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       <header className="shop-public-hero">
         <div>
           <h1>商品預購</h1>
-          <p className="shop-public-hero-copy">{classMemberUserId
-            ? `班代調整${classMemberName || "指定同學"}的商品總量。`
-            : delegationToken
-              ? "使用學生授權的連結，替學生選購本次活動商品。"
-              : "挑選商品、規格與數量，即可完成預購。"}</p>
+          {classMemberUserId && <p className="shop-public-hero-copy">
+            班代調整{classMemberName || "指定同學"}的商品總量。
+          </p>}
         </div>
         {!delegationToken && <div className="shop-mobile-shortcut-slot" ref={setShortcutSlot} />}
       </header>

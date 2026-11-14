@@ -274,8 +274,7 @@ export default function ShopSalesAnalytics({
         <div>
           <strong>產生分析報告</strong>
           <p className="sales-muted">
-            依目前篩選重新產生完整圖表、分析摘要、交叉分析與明細。PDF
-            適合閱讀，Excel 含各分析工作表與可編輯圖表。
+            依目前篩選匯出；Excel 含可編輯圖表。
           </p>
         </div>
         <label>

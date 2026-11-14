@@ -120,7 +120,7 @@ function WaveEditor({ zone, onSaved }: { zone: ZoneOut; onSaved: (z: ZoneOut) =>
   return (
     <div className="space-y-3">
       <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-        依序設定各批次的開放時間與對象，先開放的批次先選位。未設任何批次＝開放後所有人皆可立即劃位。
+        先開放的批次先選位；未設批次時，所有人皆可於開放後劃位。
       </p>
       {waves.map((w, i) => (
         <div key={w.id ?? `new-${i}`} className="rounded-lg p-3 space-y-2"

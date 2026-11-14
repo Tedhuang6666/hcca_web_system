@@ -134,7 +134,7 @@ export default function ShopNoteGroupsPanel() {
   const category = catalog?.categories.find((item) => item.id === categoryId);
   return <section className="card min-w-0 space-y-5 p-4 sm:p-6" aria-label="依備註分組查看購買名單">
     <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-      依已儲存的允許購買名單彙總各商品人數，禁止名單不計。這是名單分配人數，非實際訂購張數；年級與權限等購買條件仍會在下單時檢查。
+      依允許購買名單統計，非實際訂購張數；不計禁止名單。
     </p>
     {catalogError ? <div role="alert" className="text-sm" style={{ color: "var(--danger)" }}>
       <p>{catalogError}</p><button type="button" className="btn btn-secondary min-h-11" onClick={() => {
@@ -156,7 +156,7 @@ export default function ShopNoteGroupsPanel() {
                 placeholder="例如：熱音" onChange={(event) => setNoteQuery(event.target.value)} />
             </label>
           </div>
-          {!categoryId ? <p className="text-sm">選擇活動後，查看各備註分組下的一般票、套票等商品名單人數。</p>
+          {!categoryId ? <p className="text-sm">請選擇活動</p>
             : !currentRules ? <p role="status">正在彙整購買名單…</p>
               : currentRules.error ? <div role="alert" className="text-sm" style={{ color: "var(--danger)" }}>
                 <p>{currentRules.error}</p><button type="button" className="btn btn-secondary min-h-11"

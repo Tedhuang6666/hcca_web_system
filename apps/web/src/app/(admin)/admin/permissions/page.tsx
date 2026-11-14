@@ -846,7 +846,6 @@ function OrgPanel({
         <div className="flex items-center justify-between px-4 py-3" style={{ background: "var(--bg-elevated)", borderBottom: "1px solid var(--border)" }}>
           <div>
             <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>職位清單</h3>
-            <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>點選職位查看權限與成員任期</p>
           </div>
           <span className="text-xs" style={{ color: "var(--text-muted)" }}>{orgPositions.length} 個</span>
         </div>
@@ -909,7 +908,7 @@ function OrgPanel({
           <div>
             <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>組織預設權限</h3>
             <p className="text-xs mt-1 max-w-2xl" style={{ color: "var(--text-muted)" }}>
-              套用到這個組織所有現任成員；職位仍可在此基礎上增加個別權限。變更只會影響權限，不會中斷你目前的登入。
+              套用至組織所有現任成員；職位可另加權限。
             </p>
           </div>
           <SmallButton onClick={saveDefaults} tone="primary" disabled={!defaultPermissionDirty || saving !== null}>
@@ -935,7 +934,6 @@ function OrgPanel({
       <section className="rounded-xl p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" style={{ border: "1px solid var(--border)", background: "var(--primary-dim)" }}>
         <div>
           <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>建立這個組織的職位</h3>
-          <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>從組織預設開始，清楚調整分類、權重與職位專屬權限。</p>
         </div>
         <Link
           href={`/admin/permissions/positions/new?org_id=${org.id}`}
@@ -1247,7 +1245,7 @@ function UserPanel({
             連結其他登入 Email
           </h3>
           <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-            可連結私人或其他校務信箱；使用任一已連結 Google 帳號登入都會進入同一帳戶。
+            已連結的 Google 帳號皆可登入同一帳戶。
           </p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">

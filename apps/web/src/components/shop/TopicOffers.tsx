@@ -20,7 +20,7 @@ export default function TopicOffers({ promotions }: { promotions: ShopPromotionP
           return <li key={promotion.id}>
             <strong>{promotion.name}</strong>
             <p>{conditions && `${conditions}，`}{discount}
-              {promotion.code ? ` · 優惠碼 ${promotion.code}` : " · 自動套用"}</p>
+              {promotion.code && ` · 優惠碼 ${promotion.code}`}</p>
             {promotion.description && <p className="whitespace-pre-line">{promotion.description}</p>}
           </li>;
         })}

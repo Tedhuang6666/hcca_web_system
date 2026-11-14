@@ -41,7 +41,7 @@ it("切換活動免費券會清除送出的商品、門檻、次數與優惠碼�
   expect(screen.queryByRole("checkbox", { name: "不限活動" })).not.toBeInTheDocument();
   expect(screen.queryByRole("group", { name: "適用商品（可複選）" })).not.toBeInTheDocument();
   expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
-  expect(screen.getByText(/包含所有數量與規格加價/)).toBeVisible();
+  expect(screen.getByText(/含所有數量、規格加價/)).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "建立優惠" }));
   await waitFor(() => expect(api.createPromotion).toHaveBeenCalledWith(expect.objectContaining({
     target_category_ids: ["festival"], target_identifiers: ["410001", "410002"],

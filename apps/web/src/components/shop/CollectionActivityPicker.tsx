@@ -25,6 +25,5 @@ export default function CollectionActivityPicker({ options, selected, onChange, 
       aria-expanded={showClosed} onClick={() => setShowClosed((value) => !value)}>
       {showClosed ? "收起已結單活動" : `查看已結單活動（${closedOptions.length}）`}
     </button>}
-    <p className="mt-2 text-sm" style={{ color: "var(--text-secondary)" }}>一次處理一個活動，各活動的名單與金額分開計算。</p>
   </fieldset>;
 }

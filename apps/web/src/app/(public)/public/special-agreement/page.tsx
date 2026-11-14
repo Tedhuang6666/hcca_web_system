@@ -46,9 +46,6 @@ export default async function SpecialAgreementPage() {
           <h2 id="special-agreement-process" className="mt-2 text-2xl font-semibold">
             特約流程
           </h2>
-          <p className="mt-2 max-w-2xl text-sm leading-7 text-[var(--public-secondary)]">
-            先從合作需求開始，逐步確認內容與責任，讓公開資訊在發布後仍然清楚、可使用。
-          </p>
         </div>
         {content.process.length > 0 ? (
           <ol className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -81,7 +78,7 @@ export default async function SpecialAgreementPage() {
           <MessageSquareText size={22} className="text-[var(--public-accent)]" aria-hidden />
           <h2 className="mt-4 text-lg font-semibold">準備開始洽談？</h2>
           <p className="mt-2 text-sm leading-6 text-[var(--public-secondary)]">
-            先整理合作想法與可提供的方案，再從公開聯絡方式找到班聯會窗口。
+            合作提案請聯絡班聯會。
           </p>
           <Link
             href="/contact"

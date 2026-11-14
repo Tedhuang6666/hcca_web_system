@@ -33,9 +33,6 @@ export default function ElectionsAdminPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">即時開票</h1>
-          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            建立選舉、控制票匭與查看完整操作紀錄
-          </p>
         </div>
         <Link className="btn btn-primary" href="/admin/elections/new">
           建立選舉

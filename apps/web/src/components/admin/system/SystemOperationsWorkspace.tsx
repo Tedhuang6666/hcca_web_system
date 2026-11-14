@@ -151,11 +151,6 @@ export default function SystemOperationsWorkspace({
         <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
           {isPerformanceOnly ? "績效管理" : "系統營運中心"}
         </h1>
-        <p className="mt-1 max-w-3xl text-sm text-[var(--text-secondary)]">
-          {isPerformanceOnly
-            ? "掌握治理成效、公文效率與參與度。"
-            : "在同一個工作區掌握平台防護、服務健康、效能訊號、模組狀態與治理成效。"}
-        </p>
         <nav className="mt-4 flex gap-1 overflow-x-auto" aria-label="系統營運分頁">
           {visibleTabs.map((tab) => {
             const Icon = tab.icon;

@@ -1741,9 +1741,6 @@ export default function MerchandiseSubmissionsAdminPage() {
         >
           <div>
             <h2 className="font-semibold">投稿審核</h2>
-            <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-              依品項、投稿者與目前狀態篩選，快速處理需要審核的投稿。
-            </p>
           </div>
           {canReviewSubmissions && (
             <div
@@ -1752,8 +1749,7 @@ export default function MerchandiseSubmissionsAdminPage() {
             >
               <p className="font-semibold">建立全校票選問卷</p>
               <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
-                將所有「審核完成」的品項彙整成同一份問卷，每個品項一題，讓同學選擇一個或多個喜歡的圖案。
-                建立後請先確認題目與圖稿，再到問卷頁發布。
+                將審核完成的品項建立為票選問卷，每品項一題。發布前請核對題目與圖稿。
               </p>
               <div className="mt-3 flex flex-wrap items-end gap-3">
                 <label className="min-w-60 flex-1">

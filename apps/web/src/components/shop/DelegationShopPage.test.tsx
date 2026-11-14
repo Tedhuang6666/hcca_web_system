@@ -402,7 +402,7 @@ describe("原商品頁的家人代訂模式", () => {
     render(<ShopPage />);
     expect(await screen.findByRole("heading", { name: "給媽媽代訂 · 為 學生 代訂" })).toBeVisible();
     const existingOrder = screen.getByRole("region", { name: "學生在此活動的預購" });
-    expect(within(existingOrder).getByText("學生本人和家人已登記的品項只供查看；你只能修改自己透過此連結加入的品項。"))
+    expect(within(existingOrder).getByText("僅可修改此連結登記的品項。"))
       .toBeVisible();
     expect(within(existingOrder).getAllByRole("listitem")).toHaveLength(3);
     expect(within(existingOrder).getByRole("link", { name: "查看訂單明細" }))
@@ -481,10 +481,10 @@ describe("原商品頁的家人代訂模式", () => {
     render(<ShopPage />);
     await screen.findByRole("button", { name: "確認授權並開始代訂" });
     expect(screen.getByText("媽媽（parent@synthetic.test）")).toBeVisible();
-    expect(screen.getByText(/確認後，這個連結只供目前帳號使用/)).toBeVisible();
-    expect(screen.getByText(/^送出即加入學生預購，不需學生再次確認/)).toBeVisible();
+    expect(screen.getByText(/綁定後僅限目前帳號使用/)).toBeVisible();
+    expect(screen.getByText("送出即加入學生預購，由學生繳款與領取。")).toBeVisible();
     fireEvent.click(screen.getByText("完整操作介紹與權限說明"));
-    expect(screen.getByText(/代訂送出後立即加入學生的預購，不需學生再次確認/)).toBeVisible();
+    expect(screen.getByText(/送出即加入學生預購，由學生繳款與領取；優惠合併計算/)).toBeVisible();
     fireEvent.click(within(screen.getByRole("dialog", { name: "確認代訂授權" })).getByRole("button", { name: "關閉" }));
     fireEvent.click(screen.getByRole("button", { name: "查看商品：紀念袋" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();

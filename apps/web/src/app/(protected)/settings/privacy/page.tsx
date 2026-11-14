@@ -112,9 +112,6 @@ export default function PrivacySettingsPage() {
             PRIVACY
           </p>
           <h1 className="mt-1 text-xl font-semibold">隱私與資料請求</h1>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            查閱政策同意紀錄，並依個資權利送出資料請求。
-          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href="/legal/privacy" className="btn btn-ghost">

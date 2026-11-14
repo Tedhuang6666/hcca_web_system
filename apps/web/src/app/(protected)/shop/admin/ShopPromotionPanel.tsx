@@ -328,7 +328,7 @@ export default function ShopPromotionPanel() {
             {editingPromotionId ? "編輯優惠" : "建立優惠"}
           </h2>
           <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-            可選擇多個活動，或不限活動。留空優惠碼即符合條件自動套用；有優惠碼時由使用者領取並套用。
+            優惠碼留空時自動套用；填寫時須領取使用。
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -366,8 +366,8 @@ export default function ShopPromotionPanel() {
               activityId={null} disabled={saving} max={500}
               onChange={(identifiers) => update("target_identifiers", identifiers.join("\n"))}
               help={form.discount_type === "activity_free"
-                ? "僅名單內帳號可用。可搜尋姓名或批次輸入學號、Email；學號可先指定，註冊後即可使用。"
-                : "留空代表所有帳號可用。學號可先指定，對應帳號註冊後即可使用；Email 必須是已註冊帳號。加入名單後僅名單內帳號可用，適用自動優惠與優惠碼。"} />
+                ? "限名單帳號使用；支援姓名搜尋、學號與 Email 批次輸入。"
+                : "留空表示不限帳號。學號可預先指定；Email 須已註冊。"} />
           </div>
           {form.discount_type !== "activity_free" && <>
           <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
@@ -402,7 +402,7 @@ export default function ShopPromotionPanel() {
           </label>
           {form.discount_type === "activity_free" ? (
             <p className="self-center text-xs" style={{ color: "var(--text-secondary)" }}>
-              指定帳號在所選活動每次購買都自動全免，包含所有數量與規格加價，也適用日後新增的商品。不需輸入優惠碼，不限使用次數。
+              指定帳號在所選活動不限次數全免，含所有數量、規格加價與日後新增商品。
             </p>
           ) : form.discount_type === "gift" ? (
             <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
@@ -439,15 +439,15 @@ export default function ShopPromotionPanel() {
             <legend className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>適用商品（可複選）</legend>
             <p className="mt-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
               {form.discount_type === "gift"
-                ? "請選擇要贈送的票券或商品。多選時需同時登記所有指定商品，各項依上方件數贈送；受贈者自行選規格，贈品與加購品項會分開列出。"
+                ? "多選時須同時登記，各贈指定件數；受贈者自行選規格。"
                 : form.discount_type === "price_override"
-                ? "使用者任選一項已設定商品即可使用；只有實際登記的指定商品會改用優惠單價。"
+                ? "任選已設定的商品，按優惠單價計費。"
                 : form.discount_type === "bundle_price"
-                  ? "選擇至少兩項商品，例如衣服 + 褲子。每項各一件為一套，學生可分別選擇尺寸、顏色。"
+                  ? "至少兩項商品，各一件為一套。"
                 : "折扣只計指定品項，最低消費門檻看整筆登記金額。多選時每項都需登記，最低件數為指定商品合計；只選一項可設定單品買滿件數優惠。"}
             </p>
             <p className="mt-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
-              草稿與已下架商品也會列出，方便預先設定；商品上架且符合優惠條件後，使用者才可使用。
+              含草稿與下架商品；上架後才可使用優惠。
             </p>
             <div className="mt-2 grid max-h-48 gap-1 overflow-y-auto rounded-lg border p-2 sm:grid-cols-2" style={{ borderColor: "var(--border)" }}>
               {scopedProducts.length === 0 ? (

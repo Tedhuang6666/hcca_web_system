@@ -82,7 +82,7 @@ export default function BudgetConsolidatedTable({ detail, canManage, canRecordIn
 
   return <section className="finance-budget__section budget-workbook" aria-labelledby="consolidated-budget-heading">
     <header>
-      <div><h3 id="consolidated-budget-heading">整合預算總表</h3><p>直接查看與修正全部核定預算，或從明細登記收支。</p></div>
+      <div><h3 id="consolidated-budget-heading">整合預算總表</h3></div>
       <button className="btn btn-secondary" type="button" disabled={exporting || rows.length === 0} onClick={() => void exportWorkbook()}><Download size={16} aria-hidden="true" />{exporting ? "正在匯出…" : "匯出 Excel"}</button>
     </header>
     <dl className="budget-workbook__totals"><div><dt>預算收入</dt><dd>{money(income)}</dd></div><div><dt>預算支出</dt><dd>{money(expense)}</dd></div><div><dt>預計結餘</dt><dd>{money(income - expense)}</dd></div></dl>

@@ -1050,11 +1050,11 @@ export default function EditRegulationPage() {
                   readOnly={!canEditContent}
                   rows={5}
                   onPaste={handleContentPaste}
-                  placeholder="貼上含 Markdown 標題與清單的完整法規文字，系統會自動解析匯入條文。"
+                  placeholder="支援 Markdown 標題與清單，自動解析為條文。"
                   style={inputStyle}
                 />
                 <p className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>
-                  貼上完整法規大綱會自動建立條文結構；也支援本機自動保存。內容中出現公文字號或「法規名稱」會在閱讀頁自動轉成查詢連結。
+                  支援本機自動保存；公文字號與法規名稱會自動轉為查詢連結。
                 </p>
               </div>
               <div>

@@ -258,9 +258,9 @@ describe("班代工作流程", () => {
     expect(screen.getByText("查詢／修改訂單")).not.toBeVisible();
     expect(await screen.findByText("本班截止時間")).toBeVisible();
     fireEvent.click(screen.getByText("訂單查詢與其他工具"));
-    expect(screen.getByText(/班級繳款後、班聯結單前仍可協助加購/)).not.toBeVisible();
+    expect(screen.getByText(/班聯結單或統一截止後停止代購/)).not.toBeVisible();
     fireEvent.click(screen.getByText("加購與繳款說明"));
-    expect(screen.getByText(/班級繳款後、班聯結單前仍可協助加購/)).toBeVisible();
+    expect(screen.getByText(/班聯結單或統一截止後停止代購/)).toBeVisible();
     fireEvent.click(screen.getByText("追加訂單與補收款"));
     expect(await screen.findByRole("heading", { name: "追加訂單補收款" })).toBeVisible();
   });

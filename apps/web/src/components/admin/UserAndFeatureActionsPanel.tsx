@@ -298,9 +298,6 @@ export default function UserAndFeatureActionsPanel() {
     <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
       <header className="border-b pb-4" style={{ borderColor: "var(--border)" }}>
         <h1 className="text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>使用者與功能處置</h1>
-        <p className="mt-1 max-w-3xl text-sm" style={{ color: "var(--text-secondary)" }}>
-          管理使用者封鎖、登入工作階段、功能旗標與持續生效的防禦規則。
-        </p>
       </header>
 
       {loadError && (
@@ -410,7 +407,7 @@ export default function UserAndFeatureActionsPanel() {
             <h2 id="defense-rules-title" className="flex items-center gap-2 text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
               <LockKeyhole size={18} aria-hidden /> 長期防禦規則
             </h2>
-            <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>規則會保留在清單中；可修改目標、原因、到期時間與端點限流參數。</p>
+            <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>規則儲存後持續生效，可修改目標、原因、到期與限流參數。</p>
           </div>
           <button type="button" onClick={() => void refresh()} disabled={loading} className="btn btn-ghost">
             <RefreshCcw size={15} aria-hidden /> 重新整理

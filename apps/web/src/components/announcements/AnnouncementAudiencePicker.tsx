@@ -69,9 +69,6 @@ export default function AnnouncementAudiencePicker({
         <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
           公告對象
         </p>
-        <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
-          對象決定誰看得到這則公告。
-        </p>
       </div>
 
       <ModeTabs modes={MODES} value={type} onChange={setType} disabled={disabled} />

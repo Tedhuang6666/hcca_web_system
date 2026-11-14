@@ -137,7 +137,6 @@ export default function ClassPaymentWorkspace({ catalog, activities, optionsLoad
     style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
     <div>
       <h2 id="class-collection-heading" className="text-lg font-semibold">登記班級收款</h2>
-      <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>先選一個活動，再找到班級核對該活動的款項。</p>
     </div>
     <CollectionActivityPicker options={scopes} selected={selectedKey} disabled={disabled || saving || Boolean(confirmation) || optionsLoading || optionsError}
       onChange={(key) => {

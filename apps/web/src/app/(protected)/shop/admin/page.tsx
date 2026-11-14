@@ -572,7 +572,7 @@ function ProductFormModal({
           <div>
             <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>商品照片</h3>
             <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-              可標註正面、背面或徽章，讓購買者快速切換；首張會自動設為主圖。最多 20 張。
+              首張為主圖，最多 20 張。
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
@@ -1313,7 +1313,7 @@ function VariantManager({
       </div>
       {product.variant_groups.length === 0 ? (
         <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-          尚未設定規格。例如新增「尺寸」，再加入 S、M、L；訂購時每種規格都需選一項。
+          尚未設定規格
         </p>
       ) : (
         product.variant_groups.map((g) => (
@@ -2146,7 +2146,7 @@ export default function ShopAdminPage() {
                     ))}
                     {seriesList.length === 0 && (
                       <p className="p-6 text-sm text-center" style={{ color: "var(--text-muted)" }}>
-                        此活動尚無系列；可直接新增商品，或建立系列管理多件商品。
+                        尚無系列
                       </p>
                     )}
                   </div>

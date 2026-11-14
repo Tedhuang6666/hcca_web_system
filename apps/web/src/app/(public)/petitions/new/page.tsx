@@ -147,14 +147,11 @@ export default function NewPetitionPage() {
         <div>
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>我要陳情</h1>
           <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            陳情以登入帳號具名送出，登入後即可填寫並安全保留未送出的草稿。
+            登入後以具名方式送出。
           </p>
         </div>
         <section className="card space-y-4 p-6" aria-labelledby="petition-login-heading">
           <h2 id="petition-login-heading" className="text-base font-semibold">請先登入再開始填寫</h2>
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-            系統會使用你的帳號作為案件聯絡資料，避免完成長篇內容後才發現無法送件。
-          </p>
           <Link className="btn btn-primary" href="/login?next=%2Fpetitions%2Fnew">登入後開始陳情</Link>
         </section>
       </div>
@@ -165,7 +162,7 @@ export default function NewPetitionPage() {
     <div className="max-w-3xl mx-auto space-y-5">
       <div>
         <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>我要陳情</h1>
-        <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>登入帳號後以具名方式送出，系統會依類型自動分派給負責機關。</p>
+        <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>依陳情類型自動分派負責機關。</p>
         <DraftStatus lastSavedAt={lastSavedAt} className="mt-2" />
       </div>
       <form onSubmit={submit} className="petition-submission-form card p-5 space-y-4">

@@ -139,9 +139,6 @@ export default function NavigationProfilesPage() {
             角色視角 / 可編輯導覽設定
           </div>
           <h1 className="text-2xl font-bold">視角管理</h1>
-          <p className="mt-1 max-w-2xl text-sm text-[var(--text-muted)]">
-            為不同職位或權限設定登入後的側邊欄與手機底部欄，並即時預覽套用後的入口。
-          </p>
         </div>
         <button type="button" className="btn btn-primary" onClick={() => selectProfile(null)}>
           <Plus size={16} aria-hidden />
@@ -364,7 +361,7 @@ function MobileOrderEditor({ value, onChange }: { value: string[]; onChange: (va
   return (
     <div className="space-y-3 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
       <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-        固定四格手機入口；點擊方格更換功能，拖曳可交換排序，其餘項目會收進「更多」。
+        固定四格，其餘收進「更多」；拖曳可排序。
       </p>
       <MobileNavConfigurator
         items={NAV_ITEMS}

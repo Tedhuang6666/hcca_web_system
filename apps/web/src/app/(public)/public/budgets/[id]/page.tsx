@@ -117,7 +117,7 @@ export default async function PublicBudgetDetailPage({ params, searchParams }: P
         <p><strong>議員審理草案，尚未核定。</strong>{budget.review_submission.title}目前為「{budget.review_submission.status === "submitted" ? "待內部審核" : budget.review_submission.status === "returned" ? "退回補正" : "草案"}」；請以後續核准版本為準。</p>
       </aside>}
 
-      <aside className="public-budget-detail__privacy"><ShieldCheck size={18} aria-hidden="true" /><p><strong>核銷明細與已上傳憑證會公開。</strong>用途、品項、數量與單價可供查閱；登錄人、銀行帳戶與核銷備註不會出現在這個頁面。</p></aside>
+      <aside className="public-budget-detail__privacy"><ShieldCheck size={18} aria-hidden="true" /><p><strong>核銷明細與已上傳憑證會公開。</strong>公開用途與品項明細；登錄人、銀行帳戶及核銷備註不公開。</p></aside>
 
       <section className="public-budget-detail__section" aria-labelledby="public-budget-lines-heading">
         <header><div><FileText size={18} aria-hidden="true" /><div><h2 id="public-budget-lines-heading">{isCouncilReview ? "本次送審明細" : "核准編列明細"}</h2><p>{isCouncilReview ? "金額只對應本次開放審理的草案。" : "金額依核准預算案的末層條目彙整。"}</p></div></div><span>{budget.allocations.length} 筆</span></header>

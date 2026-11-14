@@ -27,7 +27,7 @@ it("贈品導向優惠設定，代訂保留規格加價並在失敗後保留清�
   const created = vi.fn();
   render(<AdminAssistedOrder catalog={catalog} classes={classes} optionsError={false} onRetry={vi.fn()} onCreated={created} defaultOpen />);
   expect(screen.queryByRole("option", { name: "贈送（免付款）" })).not.toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "優惠設定建立贈品優惠" }))
+  expect(screen.getByRole("link", { name: "設定贈品優惠" }))
     .toHaveAttribute("href", "/shop/admin?view=promotions");
   fireEvent.change(screen.getByRole("combobox", { name: "代訂班級" }), { target: { value: "class" } });
   await screen.findByRole("option", { name: "名冊同學" });

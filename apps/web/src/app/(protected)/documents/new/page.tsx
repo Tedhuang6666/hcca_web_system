@@ -860,9 +860,6 @@ export default function NewDocumentPage() {
         </Link>
         <div>
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>新增公文</h1>
-          <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>
-            建立草稿後可隨時修改，確認後再送審
-          </p>
         </div>
       </div>
 
@@ -1371,9 +1368,6 @@ export default function NewDocumentPage() {
               <option value="public">登入（登入後可見）</option>
               <option value="publicly_open">公開（未登入可見）</option>
             </select>
-            <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>
-              控制哪些人可以查閱此公文
-            </p>
           </FormSection>
 
           <div className="card p-4 space-y-2" aria-label="儲存前檢查">

@@ -157,7 +157,7 @@ export default function DocumentDelegationsPage() {
         <div>
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>公文簽核代理設定</h1>
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            設定請假期間的代行職權。送審中的公文與之後新送審的步驟都會自動套用。
+            代理適用於送審中及代理期間新送審的公文。
           </p>
         </div>
         <div className="flex items-center gap-2">

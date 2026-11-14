@@ -286,7 +286,7 @@ export default function SystemObservabilityPanel() {
 
   return <div className="space-y-6">
     <header className="flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-end sm:justify-between" style={{ borderColor: "var(--border)" }}>
-      <div><h2 className="text-2xl font-semibold sm:text-3xl">系統可觀測性</h2><p className="mt-2 max-w-2xl text-sm" style={{ color: "var(--text-secondary)" }}>追蹤 sitemap 全部公開頁面、登入後真實使用者體驗，以及部署端的錯誤與慢查詢。</p></div>
+      <div><h2 className="text-2xl font-semibold sm:text-3xl">系統可觀測性</h2></div>
       <div className="flex flex-col items-stretch gap-2 sm:items-end">
         <div className="flex flex-wrap gap-2">
           <button type="button" className="inline-flex min-h-11 items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors hover:bg-[var(--bg-hover)] disabled:cursor-wait disabled:opacity-60" style={{ borderColor: "var(--border-strong)", color: "var(--text-primary)" }} onClick={() => { setRefreshing(true); setRefreshKey((value) => value + 1); }} disabled={loading || refreshing}><RefreshCw size={16} aria-hidden="true" className={refreshing ? "animate-spin" : undefined} />{loading || refreshing ? "讀取中…" : "重新整理"}</button>
@@ -391,7 +391,7 @@ function ErrorsPanel({ data }: { data: ErrorsData }) {
           completeLabel="已下載"
           errorLabel="重試下載" />
       </div>
-      {incidents.length === 0 ? <EmptyState title="目前沒有可追蹤事故" detail="新的 API、背景工作與瀏覽器錯誤會在這裡建立可結案的議題。" /> : (
+      {incidents.length === 0 ? <EmptyState title="目前沒有可追蹤事故" /> : (
         <div className="divide-y rounded-md border" style={{ borderColor: "var(--border)" }}>
           {incidents.map((incident) => <article key={incident.id} className="grid gap-3 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
             <div className="min-w-0">
@@ -464,7 +464,7 @@ function RealUsersPanel({ data, windowHours, onWindowHoursChange }: { data: Real
           <h2 className="text-base font-semibold">所有已造訪路由</h2>
           <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>公開、登入與未來新增頁面會在首次造訪後自動出現；不收集訪客身份。</p>
         </div>
-        {routes.length === 0 ? <EmptyState title="尚無第一方 RUM 樣本" detail="開啟任一頁面後，等待約一秒讓批次 telemetry 送出。" /> : (
+        {routes.length === 0 ? <EmptyState title="尚無第一方 RUM 樣本" /> : (
           <div className="overflow-x-auto rounded-md border" style={{ borderColor: "var(--border)" }}>
             <table className="w-full min-w-[1380px] text-left text-sm">
               <thead><tr className="border-b" style={{ borderColor: "var(--border)" }}>
@@ -530,8 +530,8 @@ function LoadingState() {
   return <div className="space-y-4" aria-label="載入中"><div className="h-24 animate-pulse rounded-md" style={{ background: "var(--bg-surface)" }} /><div className="h-48 animate-pulse rounded-md" style={{ background: "var(--bg-surface)" }} /></div>;
 }
 
-function EmptyState({ title, detail }: { title: string; detail: string }) {
-  return <div className="rounded-md border p-8 text-center" style={{ borderColor: "var(--border)" }}><h2 className="font-medium">{title}</h2><p className="mx-auto mt-2 max-w-xl text-sm" style={{ color: "var(--text-muted)" }}>{detail}</p></div>;
+function EmptyState({ title, detail }: { title: string; detail?: string }) {
+  return <div className="rounded-md border p-8 text-center" style={{ borderColor: "var(--border)" }}><h2 className="font-medium">{title}</h2>{detail && <p className="mx-auto mt-2 max-w-xl text-sm" style={{ color: "var(--text-muted)" }}>{detail}</p>}</div>;
 }
 
 function InlineError({ message }: { message: string }) {

@@ -115,8 +115,7 @@ export default function PasskeySetupPrompt() {
       )}
     >
       <p className="text-sm leading-6" style={{ color: "var(--text-secondary)" }}>
-        這台手機支援生物辨識。啟用後，之後可在登入頁使用指紋或臉部辨識快速登入；
-        一般登入仍可使用 Google 或 Discord。
+        啟用後可用指紋或臉部辨識登入；仍可使用 Google 或 Discord。
       </p>
     </Modal>
   );

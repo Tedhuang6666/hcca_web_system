@@ -179,9 +179,7 @@ export default function DataLifecyclePage() {
           </div>
           <h1 className="text-2xl font-bold text-[var(--text-primary)]">資料生命週期</h1>
           <p className="mt-1 max-w-3xl text-xs text-[var(--text-muted)]">
-            把過舊的「已讀通知 / 已處理事件 / 過期 Email / 過期稽核」批次歸檔成 .jsonl.gz
-            檔，再從資料庫清除以節省空間。「安全」規則每週一 04:00 自動執行，其餘需手動觸發。
-            執行前永遠先「預覽」確認筆數。
+            舊資料歸檔為 .jsonl.gz 後清除。「安全」規則每週一 04:00 自動執行，其餘手動執行；請先預覽筆數。
           </p>
         </div>
         <button type="button" onClick={reload} className="btn btn-ghost">

@@ -339,7 +339,7 @@ export default function EmailLogsPage() {
             className="btn btn-secondary btn-sm"
             disabled={batchResending || busyId !== null}
             onClick={() => void resendRecent()}
-            title="尋找近 72 小時內你可重新寄送的未送達郵件，超級管理員包含系統通知"
+            title="近 72 小時內未送達的郵件；超管另含系統通知。"
           >
             {batchResending ? "批次處理中…" : "批次重新寄送近三天"}
           </button>
@@ -392,7 +392,7 @@ export default function EmailLogsPage() {
             reason={tab ? "filtered" : "none"}
             subject="寄信紀錄"
             onClearFilters={() => setTab("")}
-            message={tab ? undefined : "尚未發送任何 Email，前往「Email」頁面開始寄信"}
+            message={tab ? undefined : "尚未寄送郵件"}
           />
         ) : (
           <ul>
@@ -539,7 +539,7 @@ export default function EmailLogsPage() {
               >
                 <p className="font-semibold">系統自動通知</p>
                 <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>
-                  收件人由此案件的通知規則與每位使用者的 Email 偏好共同決定；下方名單是這次實際寄送的快照。若要增刪收件人，請建立可編輯副本後再送出。
+                  以下為實際寄送名單，依通知規則與個人偏好決定。增刪收件人請建立可編輯副本。
                 </p>
               </div>
             )}

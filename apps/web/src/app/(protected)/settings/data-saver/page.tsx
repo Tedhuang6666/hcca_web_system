@@ -64,9 +64,6 @@ export default function DataSaverSettingsPage() {
             DATA SAVER
           </p>
           <h1 className="mt-1 text-xl font-semibold">省流模式</h1>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            降低非必要背景連線，適合行動網路、熱點或流量有限的使用者。
-          </p>
         </div>
         <button type="button" className="btn btn-ghost" onClick={reset}>
           <RotateCcw size={15} aria-hidden={true} />

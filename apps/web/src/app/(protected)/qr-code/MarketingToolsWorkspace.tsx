@@ -22,7 +22,6 @@ export default function MarketingToolsWorkspace() {
       <header className="marketing-tools-header">
         <div>
           <h1>經營工具</h1>
-          <p>建立好分享的班聯網址，或將它製作成 QR Code。</p>
         </div>
         <div className="marketing-tools-tabs" role="group" aria-label="選擇經營工具">
           <button

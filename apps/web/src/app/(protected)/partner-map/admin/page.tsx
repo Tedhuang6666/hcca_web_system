@@ -517,7 +517,6 @@ export default function PartnerMapAdminPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>特約管理</h1>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>維護店家、標籤、地圖點位與優惠內容</p>
         </div>
         <div className="flex gap-2">
           <button className="btn btn-ghost" onClick={load}><RefreshCw size={15} aria-hidden="true" />重新整理</button>
@@ -682,7 +681,7 @@ export default function PartnerMapAdminPage() {
               </section>
 
               <section className="border-t pt-6" style={{ borderColor: "var(--border)" }}>
-                <div className="mb-3"><h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>顯示素材與分類</h3><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>選填，讓學生更容易辨識合作夥伴。</p></div>
+                <div className="mb-3"><h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>顯示素材與分類</h3></div>
                 <div className="grid gap-3 md:grid-cols-2"><label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>社群連結</span><input className="input" type="url" value={businessForm.social_url} onChange={(e) => setBusinessForm((f) => ({ ...f, social_url: e.target.value }))} /></label><label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>營業時間說明</span><input className="input" value={businessForm.business_hours_text} onChange={(e) => setBusinessForm((f) => ({ ...f, business_hours_text: e.target.value }))} placeholder="例如：週一至週五 09:00–18:00" /></label><label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Logo URL</span><input className="input" value={businessForm.logo_url} onChange={(e) => setBusinessForm((f) => ({ ...f, logo_url: e.target.value }))} /></label><label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>封面圖片 URL</span><input className="input" value={businessForm.cover_image_url} onChange={(e) => setBusinessForm((f) => ({ ...f, cover_image_url: e.target.value }))} /></label></div>
                 <BusinessHoursEditor value={businessForm.business_hours} onChange={(business_hours) => setBusinessForm((form) => ({ ...form, business_hours }))} />
                 <div className="mt-4 flex flex-wrap gap-2">{tags.map((tag) => { const active = businessForm.tag_ids.includes(tag.id); return <button type="button" key={tag.id} onClick={() => toggleTag(tag.id)} className="rounded-full border px-3 py-1.5 text-xs" style={{ borderColor: active ? "var(--primary)" : "var(--border)", color: active ? "var(--primary)" : "var(--text-secondary)", background: active ? "var(--primary-dim)" : "transparent" }}>{tag.name}</button>; })}</div>
@@ -729,7 +728,7 @@ export default function PartnerMapAdminPage() {
                   <div>
                     <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>實體店家位置（可選）</h3>
                     <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                      先貼 Google Maps 連結自動帶入資料，再手動修改或補充；之後仍可新增多個分店。
+                      貼上 Google Maps 連結可帶入資料，仍可手動修改。
                     </p>
                   </div>
                   <MapPin size={18} style={{ color: "var(--primary)" }} aria-hidden="true" />
@@ -748,7 +747,7 @@ export default function PartnerMapAdminPage() {
                       {parsingMap ? "解析中…" : "自動擷取"}
                     </button>
                   </div>
-                  <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>可自動帶入店家名稱與座標；地址依連結內容提供，欄位都可以再修改。</p>
+                  <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>自動帶入名稱與座標；地址依連結內容提供。</p>
                 </div>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   <label className="space-y-1"><span className="text-xs" style={{ color: "var(--text-secondary)" }}>分店名稱</span><input className="input" placeholder="例如：竹北店" value={locationForm.name} onChange={(e) => setLocationForm((f) => ({ ...f, name: e.target.value }))} /></label>
@@ -880,7 +879,6 @@ export default function PartnerMapAdminPage() {
             </span>
             <div>
               <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>標籤管理</h2>
-              <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>設定店家分類的名稱、顏色與圖示，讓地圖上的店家更容易辨識。</p>
             </div>
           </div>
           <div className="grid gap-4 rounded-lg border p-4 md:grid-cols-[minmax(0,1fr)_96px_auto]" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
@@ -899,9 +897,6 @@ export default function PartnerMapAdminPage() {
               <PartnerIconPicker value={tagIconKey} onChange={setTagIconKey} />
             </div>
           </div>
-          <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
-            每個標籤可以設定自己的顏色與圖示，店家套用標籤後會同步顯示在地圖點位上。
-          </p>
           <div className="mt-4 space-y-3">
             {tags.map((tag) => {
               const draft = tagDrafts[tag.id];

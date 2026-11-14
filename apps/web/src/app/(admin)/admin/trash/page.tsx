@@ -62,8 +62,7 @@ export default function TrashPage() {
           </div>
           <h1 className="text-2xl font-bold text-[var(--text-primary)]">誤刪救援</h1>
           <p className="mt-1 max-w-3xl text-xs text-[var(--text-muted)]">
-            列出最近 N 天稽核軌跡中的刪除類事件。要還原必須由工程師依事件內容處理，
-            因每種資源（公文 / 法規 / 組織 / 訂單）的恢復流程不同。
+            最近的刪除紀錄；還原請聯絡工程師。
           </p>
         </div>
         <button type="button" onClick={load} className="btn btn-ghost" disabled={loading}>
@@ -112,9 +111,7 @@ export default function TrashPage() {
         }}>
         <Info size={14} aria-hidden className="mt-0.5 flex-shrink-0" />
         <span>
-          顯示 action 包含 delete / remove / purge / discard / withdraw / archive / soft_delete
-          關鍵字的稽核紀錄。**還原**需要工程師：把 entity_type + entity_id +
-          meta 提供給工程師，由其依資源狀態手動重建。
+          依刪除類操作篩選稽核紀錄。
         </span>
       </div>
 
@@ -217,8 +214,7 @@ export default function TrashPage() {
               }}>
               <AlertTriangle size={12} aria-hidden className="mt-0.5 flex-shrink-0" />
               <span>
-                還原請複製此事件的 entity_type / entity_id / meta 給工程師。本頁不提供 1-click
-                還原以避免外鍵衝突與狀態機破壞。
+                還原請提供 entity_type、entity_id、meta 給工程師。
               </span>
             </div>
             <div className="mt-3 flex justify-end gap-2">

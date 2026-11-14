@@ -93,9 +93,6 @@ export default function PetitionsPageClient({
       <div className="workspace-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>陳情中心</h1>
-          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            提出校園問題、建議或申訴，並追蹤案件辦理進度。
-          </p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
           <Link href="/petitions/new" className="btn btn-primary min-h-11 w-full gap-2 px-4 sm:w-auto">
@@ -185,9 +182,6 @@ export default function PetitionsPageClient({
         <div className="flex items-end justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>公開陳情</h2>
-            <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-              經陳情人同意公開的案件，分享校園中正在被處理的問題與回覆。
-            </p>
           </div>
           <Link href="/petitions/public" className="btn btn-ghost shrink-0">查看全部</Link>
         </div>

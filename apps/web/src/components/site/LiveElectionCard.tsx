@@ -81,11 +81,7 @@ export default function LiveElectionCard({ standalone = false }: { standalone?: 
             ))}
           </div>
         </>
-      ) : (
-        <p className="mt-3 max-w-xl text-sm leading-7 text-[#cdd8e0]">
-          查看候選人得票、整體開票率與各票匭進度，頁面會自動同步現場紀錄。
-        </p>
-      )}
+      ) : null}
       <span className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-[#e8c970]">
         前往即時開票看完整票數
         <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" aria-hidden />

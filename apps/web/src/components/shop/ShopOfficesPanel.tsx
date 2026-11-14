@@ -152,7 +152,7 @@ export default function ShopOfficesPanel() {
   return <section className="max-w-3xl" aria-label="教師處室選項管理">
     <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>教師處室選項</h2>
     <p className="mt-2 text-sm leading-6" style={{ color: "var(--text-secondary)" }}>老師可在商品頁選擇這些辦公室／處室。停用後不再提供選取，既有訂單保留原名稱。</p>
-    <p id="office-sort-help" className="mt-2 text-sm leading-6" style={{ color: "var(--text-secondary)" }}>拖曳左側把手調整順序，放開後自動儲存。也可聚焦把手，按空白鍵拿起、上下鍵移動，再按空白鍵放下。</p>
+    <p id="office-sort-help" className="mt-2 text-sm leading-6" style={{ color: "var(--text-secondary)" }}>拖曳把手排序，自動儲存；鍵盤可用空白鍵拿起／放下、上下鍵移動。</p>
     {loading ? <p className="mt-4" role="status">正在載入處室…</p> : loadError ? <div className="mt-4" role="alert">
       <p>{loadError}</p><button type="button" className="btn btn-secondary min-h-11 mt-2" onClick={() => void load()}>重新載入處室</button>
     </div> : <>

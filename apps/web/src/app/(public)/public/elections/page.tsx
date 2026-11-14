@@ -51,9 +51,6 @@ export default async function PublicElectionsPage() {
     <div className="elections-page space-y-8 pb-8">
       <header className="elections-page-head max-w-3xl">
         <h1 className="font-serif text-3xl font-semibold tracking-[-0.025em] sm:text-4xl">即時開票</h1>
-        <p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--public-secondary)] sm:text-base">
-          查看進行中、暫停或已完成的公開選舉，票數會隨現場開票紀錄更新。
-        </p>
       </header>
 
       {elections.length === 0 ? (

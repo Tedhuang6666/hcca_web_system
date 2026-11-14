@@ -168,7 +168,7 @@ describe("優惠管理的預先指定學號", () => {
     render(<ShopPromotionPanel />);
 
     expect(await screen.findByText(/學號 410999/)).toBeVisible();
-    expect(screen.getByText(/學號可先指定，對應帳號註冊後即可使用/)).toBeVisible();
+    expect(screen.getByText(/學號可預先指定；Email 須已註冊/)).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "編輯" }));
     fireEvent.click(screen.getByText("批次輸入學號或 Email"));

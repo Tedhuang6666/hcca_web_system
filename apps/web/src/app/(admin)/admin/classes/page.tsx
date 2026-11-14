@@ -269,7 +269,7 @@ function UserPicker({
             <div className="px-3 py-3 text-xs" role="status" style={{ color: "var(--text-muted)" }}>
               {keyword.length < 2
                 ? seatRoster.length
-                  ? "輸入座號，或輸入至少 2 個字搜尋學號、Email 或姓名。"
+                  ? "以座號搜尋，或輸入至少 2 字查找學號、Email、姓名。"
                   : "請輸入至少 2 個字搜尋學號、Email 或姓名。"
                 : "找不到符合的帳號。"}
             </div>
@@ -694,7 +694,7 @@ function RoleBoard({
             </div>
             <details className="mt-3">
               <summary className="min-h-11 cursor-pointer py-2 text-sm" style={{ color: "var(--text-secondary)" }}>找不到人？搜尋其他帳號</summary>
-              <p className="mb-2 text-xs" style={{ color: "var(--text-muted)" }}>選取帳號後會加入本班並任命；尚未註冊的同學可從班級成員資料先登記任命。</p>
+              <p className="mb-2 text-xs" style={{ color: "var(--text-muted)" }}>選取帳號後加入本班並任命；未註冊同學可先由名冊任命。</p>
               {busyRole === null && <UserPicker placeholder={`搜尋帳號並任命${label}`} onPick={(user) => void assign(role.role_key, user)} />}
             </details>
           </section>
@@ -1169,7 +1169,7 @@ function RosterPanel({
             手動維護座號名冊
           </h3>
           <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-            每筆資料會保存座號與學號；若學號已有帳號，系統會自動連結，尚未註冊也可以先建立。
+            學號已有帳號時自動連結；未註冊也可建檔。
           </p>
         </div>
         <div className="mt-3 grid grid-cols-[96px_1fr_auto] gap-2">
@@ -1810,9 +1810,6 @@ function ClassManagementPanel() {
             <h1 className="text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
               班級、名冊與班代設定
             </h1>
-            <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-              查看班代任命進度、班級名冊與班級幹部設定。
-            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Link href="/shop" className="btn btn-ghost min-h-11">返回商品目錄</Link>

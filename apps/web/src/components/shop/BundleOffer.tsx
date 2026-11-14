@@ -42,11 +42,11 @@ export default function BundleOffer({ promotion, promotions, products, registrat
     </p>}
     <details className="shop-bundle-conditions">
       <summary>優惠條件<ChevronDown size={14} aria-hidden="true" /></summary>
-      <p>每項各一件，自由選規格。
-        {promotion.code ? ` 使用優惠碼 ${promotion.code}。` : " 符合條件自動套用。"}
+      <p>每項各 1 件為一套。
+        {promotion.code && ` 優惠碼 ${promotion.code}。`}
         {promotion.min_order_price > 0 && ` 需滿 NT$${promotion.min_order_price.toLocaleString()}。`}
         {promotion.min_quantity > 1 && ` 指定商品合計需滿 ${promotion.min_quantity} 件。`}
-        {" "}折扣依登記合計擇優套用，規格加價與未成套商品另計。</p>
+        {" "}規格加價與未成套商品另計。</p>
     </details>
   </article>;
 }

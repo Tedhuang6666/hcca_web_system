@@ -409,7 +409,7 @@ export default function ArticleMarkdownEditor({
           <div>
             <h3 className="text-sm font-semibold text-[var(--text-primary)]">建立文章圖片集</h3>
             <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">
-              可一次選取多張照片，也能分批追加。上傳順序就是輪播順序；每張照片都能加上簡短描述。
+              可分批追加照片；依上傳順序輪播。
             </p>
           </div>
           <input

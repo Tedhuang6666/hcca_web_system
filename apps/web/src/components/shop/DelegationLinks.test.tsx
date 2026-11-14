@@ -20,7 +20,7 @@ describe("學生代訂連結管理", () => {
     fireEvent.click(create);
     expect(screen.getByRole("textbox", { name: "邀請誰來代訂" })).toHaveFocus();
     fireEvent.click(screen.getByText("完整操作介紹與權限說明"));
-    expect(screen.getByText(/撤銷只停止後續代訂，已登記的品項仍保留/)).toBeVisible();
+    expect(screen.getByText(/撤銷授權後，已登記品項仍保留/)).toBeVisible();
     await screen.findByText("這個活動尚未建立代訂連結。");
   });
 
@@ -44,7 +44,7 @@ describe("學生代訂連結管理", () => {
     fireEvent.click(screen.getByRole("button", { name: "建立代訂驗證碼" }));
     await waitFor(() => expect(api.createDelegationLink).toHaveBeenCalledWith({ name: "給媽媽代訂", category_id: "goods" }));
     await screen.findByRole("textbox", { name: "七位數代訂驗證碼" });
-    expect(screen.getByText(/驗證碼與綁定持續有效至商品截止或班級結單，無須定期重設或另行終止。家人登入後/)).toBeVisible();
+    expect(screen.getByText(/授權有效至商品截止或班級結單。家人登入後/)).toBeVisible();
     expect(await screen.findByRole("textbox", { name: "分享連結（請在離開頁面前保存）" })).toHaveValue(`${window.location.origin}/shop#delegate=synthetic-test-token`);
     expect(screen.getByRole("textbox", { name: "七位數代訂驗證碼" })).toHaveFocus();
     expect(screen.queryByRole("textbox", { name: "邀請誰來代訂" })).not.toBeInTheDocument();

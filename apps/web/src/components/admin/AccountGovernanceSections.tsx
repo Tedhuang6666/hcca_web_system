@@ -410,7 +410,7 @@ export function AccountTenureSection({
   };
 
   return (
-    <Section title="幹部任期" description="管理此帳號的職位任期與日期；帳號凍結、歸檔或解凍請使用上方的學籍區塊。">
+    <Section title="幹部任期">
       <div className="grid gap-3 rounded-lg p-3 sm:grid-cols-[minmax(0,1fr)_1fr_1fr_auto] sm:items-end" style={{ background: "var(--bg-elevated)" }}>
         <label className="block min-w-0 text-xs" style={{ color: "var(--text-muted)" }}>
           新增職位

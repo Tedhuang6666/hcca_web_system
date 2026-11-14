@@ -757,9 +757,6 @@ export default function MerchandiseSubmissionsPageClient({
               />
               <div>
                 <h2 className="font-semibold">準備好開始投稿了嗎？</h2>
-                <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
-                  先選擇一個商品，下一步會顯示它專屬的規格、範本與投稿欄位。
-                </p>
                 <button
                   type="button"
                   data-performance-action="校商投稿／下一步選擇商品"
@@ -797,12 +794,6 @@ export default function MerchandiseSubmissionsPageClient({
                         第 2 步，共 3 步
                       </span>
                     </div>
-                    <p
-                      className="mt-1 text-sm"
-                      style={{ color: "var(--text-secondary)" }}
-                    >
-                      請選擇要設計的商品；下一步會顯示該品項的規格與投稿欄位。
-                    </p>
                   </div>
                 </div>
                 <div
@@ -1121,12 +1112,6 @@ export default function MerchandiseSubmissionsPageClient({
                 style={{ color: "var(--text-muted)" }}
               />
               <h2 className="mt-4 font-semibold">目前尚未建立投稿品項</h2>
-              <p
-                className="mx-auto mt-2 max-w-lg text-sm"
-                style={{ color: "var(--text-secondary)" }}
-              >
-                管理員需要先建立投稿品項並設定開放時間，這裡才會出現可投稿的商品。
-              </p>
               {canManageSubmissions && (
                 <Link
                   href="/merchandise-submissions/admin"

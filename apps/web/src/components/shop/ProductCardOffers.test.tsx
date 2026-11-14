@@ -16,15 +16,15 @@ const promotion: ShopPromotionPublicOut = { gift_quantity: 1,
 };
 
 describe("商品卡片內的優惠", () => {
-  it("贈品顯示免費基本售價，並說明自行選規格與加價自付", () => {
+  it("贈品顯示零元優惠價與規格加價", () => {
     render(<ProductCardOffers product={product} promotions={[{
       ...promotion, name: "抽獎贈品", discount_type: "percentage", discount_value: 100,
       target_products: [{ id: "shirt", name: "衣服" }],
     }]} products={new Map()} disabled={false} onSelectBundle={vi.fn()} />);
     fireEvent.click(screen.getByText("查看 1 項優惠"));
     expect(screen.getByLabelText("原價 NT$300，優惠價 NT$0 起")).toBeVisible();
-    expect(screen.getByText("符合條件自動套用 · 規格加價另計")).toBeVisible();
-    expect(screen.getByText("請自行選擇規格；商品基本售價免費，加價選項由您支付。")).toBeVisible();
+    expect(screen.getByText("規格加價另計")).toBeVisible();
+    expect(screen.getByText("單件優惠價")).toBeVisible();
     expect(screen.getByText("贈品：衣服")).toBeVisible();
   });
 
@@ -44,10 +44,10 @@ describe("商品卡片內的優惠", () => {
       ...promotion, discount_type: "percentage", discount_value: 10, min_quantity: 2,
       min_order_price: 1000, code: "SAVE", target_products: [{ id: product.id, name: product.name }],
     }]} products={new Map()} disabled={false} onSelectBundle={vi.fn()} />);
-    expect(screen.getByText("滿 NT$1,000 · 滿 2 件 · 使用優惠碼 SAVE")).not.toBeVisible();
+    expect(screen.getByText("滿 NT$1,000 · 滿 2 件 · 優惠碼 SAVE")).not.toBeVisible();
     fireEvent.click(screen.getByText("查看 1 項優惠"));
     expect(screen.getByLabelText("原價 NT$300，優惠價 NT$270 起")).toBeVisible();
-    expect(screen.getByText("滿 NT$1,000 · 滿 2 件 · 使用優惠碼 SAVE")).toBeVisible();
+    expect(screen.getByText("滿 NT$1,000 · 滿 2 件 · 優惠碼 SAVE")).toBeVisible();
   });
 
   it("有規格但都免加價時不顯示起價", () => {

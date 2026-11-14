@@ -146,9 +146,6 @@ export default function IntegrationsPage() {
         <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
           外部整合
         </h2>
-        <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-          連結第三方服務，將個人通知與工作流程同步到您慣用的工具。
-        </p>
       </div>
 
       <div
@@ -298,8 +295,7 @@ export default function IntegrationsPage() {
         </div>
 
         <p className="text-xs" style={{ color: "var(--text-disabled)" }}>
-          連結後，您指派給自己的工作項目將自動同步到 Google Tasks 的「HCCA 工作」清單。
-          在 Google Tasks 中建立的任務也可手動匯入。
+          自動同步自己負責的工作；Google Tasks 新增的任務需手動匯入。
         </p>
       </div>
 

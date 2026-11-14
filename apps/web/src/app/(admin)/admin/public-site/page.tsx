@@ -343,7 +343,7 @@ function ImageField({
     siteApi.uploadImage(file, reportProgress);
   return (
     <div className="grid gap-4 md:grid-cols-[1fr_12rem] md:items-end">
-      <Field label={label} hint={hint ?? "可貼上圖片網址，或點右側「上傳」直接從電腦選圖（JPEG/PNG/GIF/WebP，上限 20MB）。"}>
+      <Field label={label} hint={hint ?? "支援圖片網址或上傳 JPEG、PNG、GIF、WebP，上限 20 MB。"}>
         <div className="grid gap-2">
           <TextInput value={value} onChange={(e) => onChange(e.target.value)} placeholder="https://… 或拖曳圖片上傳" />
           <AnimatedFileUpload
@@ -1568,7 +1568,6 @@ export default function PublicSiteAdminPage() {
             className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"
           />
         </div>
-        <p className="mt-2 text-xs text-[var(--text-muted)]">選擇要編輯的公開網站內容。</p>
       </div>
 
       <nav className="public-site-admin-tabs module-tabs-scroll hidden max-w-full overflow-x-auto sm:block" aria-label="公開網站設定分頁">
@@ -1594,7 +1593,7 @@ export default function PublicSiteAdminPage() {
             <Field label="網站描述"><TextArea value={settings.site_description ?? ""} onChange={(e) => setSettings({ ...settings, site_description: e.target.value })} /></Field>
             <ImageField
               label="班聯會會徽"
-              hint="會顯示在導覽列與首頁。可貼上圖片網址，或點「上傳」直接選圖（JPEG/PNG/GIF/WebP，上限 20MB）。"
+              hint="顯示於導覽列與首頁。JPEG、PNG、GIF、WebP，上限 20 MB。"
               value={settings.site_logo_url ?? ""}
               alt={settings.site_logo_alt ?? undefined}
               onChange={(url) => setSettings({ ...settings, site_logo_url: url })}
@@ -1608,7 +1607,7 @@ export default function PublicSiteAdminPage() {
             <Field label="CTA 連結"><TextInput value={settings.cta_href} onChange={(e) => setSettings({ ...settings, cta_href: e.target.value })} /></Field>
             <ImageField
               label="首頁封面圖"
-              hint="顯示於首頁主視覺。可貼上圖片網址，或點「上傳」直接選圖。"
+              hint="顯示於首頁主視覺。"
               value={settings.hero_image_url ?? ""}
               alt={settings.hero_image_alt ?? undefined}
               onChange={(url) => setSettings({ ...settings, hero_image_url: url })}
@@ -1634,9 +1633,6 @@ export default function PublicSiteAdminPage() {
               </span>
               <div>
                 <h2 className="font-semibold text-[var(--text-primary)]">系統資訊</h2>
-                <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--text-secondary)]">
-                  這裡只管理「關於本系統」公開頁的內容，不會混入首頁主視覺或特約洽談資料。
-                </p>
               </div>
             </div>
           </div>
@@ -1661,7 +1657,7 @@ export default function PublicSiteAdminPage() {
               <div>
                 <h2 className="font-semibold text-[var(--text-primary)]">聯絡我們</h2>
                 <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--text-secondary)]">
-                  編輯公開站台的聯絡方式；內容會同步顯示在聯絡專頁，以及關於班聯會與幹部名單頁面的最下方。
+                  同步顯示於聯絡、關於班聯會與幹部名單頁。
                 </p>
               </div>
             </div>
@@ -1688,9 +1684,6 @@ export default function PublicSiteAdminPage() {
                 <div>
                   <p className="text-xs font-semibold tracking-[0.16em] text-[#e8c970]">PUBLIC PARTNERSHIP</p>
                   <h2 className="mt-2 text-xl font-semibold">特約資訊</h2>
-                  <p className="mt-1 max-w-2xl text-sm leading-6 text-[#d5e0e6]">
-                    管理前台特約洽談頁的介紹、Markdown 內容與流程順序。儲存後會同步顯示在公開頁。
-                  </p>
                 </div>
               </div>
               <div className="shrink-0 rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-center">
@@ -1705,7 +1698,7 @@ export default function PublicSiteAdminPage() {
               <div>
                 <h2 className="font-semibold">頁面內容</h2>
                 <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">
-                  介紹文字與特約說明都支援 Markdown；流程則用下方的步驟編輯器管理。
+                  介紹與特約說明支援 Markdown。
                 </p>
               </div>
               <Field label="頁首介紹 Markdown">
@@ -1745,9 +1738,6 @@ export default function PublicSiteAdminPage() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <h2 className="font-semibold">公開申請表單</h2>
-                  <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">
-                    這裡直接管理特約洽談頁的申請標題、說明與輸入欄位；儲存後公開頁會立即套用。
-                  </p>
                 </div>
                 <label className="flex min-h-11 items-center gap-2 text-sm text-[var(--text-secondary)]">
                   <input
@@ -1829,7 +1819,7 @@ export default function PublicSiteAdminPage() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h2 className="font-semibold">參考附件</h2>
-                <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">管理前台「參考文件」區塊，可貼上網址或直接上傳 PDF、圖片與 Office 文件。</p>
+                <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">支援網址、PDF、圖片與 Office 文件。</p>
               </div>
               <button type="button" onClick={addSpecialFile} className="btn btn-secondary min-h-11 shrink-0">
                 <Plus size={16} aria-hidden /> 新增附件
@@ -1908,7 +1898,6 @@ export default function PublicSiteAdminPage() {
               </ol>
             )}
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-4">
-              <p className="text-xs text-[var(--text-muted)]">儲存前會檢查每個流程是否都有名稱與說明。</p>
               <button type="button" onClick={saveSpecialAgreement} className="btn btn-primary min-h-11">
                 <Save size={16} aria-hidden /> 儲存特約資訊
               </button>
@@ -1924,7 +1913,7 @@ export default function PublicSiteAdminPage() {
               <div>
                 <h2 className="font-semibold">公開站導覽列</h2>
                 <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--text-muted)]">
-                  調整公開網站頂部導覽：開關顯示、上下排序、改寫顯示名稱。「主要導覽」會直接出現在頂列，其餘群組收進「所有公開服務」選單；標記「免登入」的服務未登入者也能直接使用。
+                  主要導覽顯示於頂列，其餘收進「所有公開服務」。
                 </p>
               </div>
               <div className="flex shrink-0 gap-2">
@@ -2028,9 +2017,6 @@ export default function PublicSiteAdminPage() {
                     ? pageDraft.page_kind === "article" ? "編輯文章" : "編輯公開頁面"
                     : pageDraft.page_kind === "article" ? "新增文章" : "新增公開頁面"}
                 </h2>
-                <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">
-                  文章與一般頁面共用同一份編輯器；匯入 Markdown 後可直接調整內容與發布設定。
-                </p>
                 <DraftStatus lastSavedAt={pageDraftLastSavedAt} className="mt-1" />
               </div>
               {editingPageId && <button type="button" className="btn btn-sm btn-ghost" onClick={resetPageDraft}>取消編輯</button>}
@@ -2077,7 +2063,7 @@ export default function PublicSiteAdminPage() {
                 </div>
               </div>
               <ArticleMarkdownEditor value={pageDraft.body_md} onChange={(value) => setPageDraft({ ...pageDraft, body_md: value })} rows={18} />
-              <p className="mt-1 text-xs text-[var(--text-muted)]">用 ## 建立可跳轉的主要段落；按「加入照片」即可上傳並插入圖片。</p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">以 ## 建立頁內標題。</p>
             </div>
             {pageDraft.page_kind === "article" && (
               <Field
@@ -2097,7 +2083,7 @@ export default function PublicSiteAdminPage() {
             )}
             <ImageField
               label="封面照片"
-              hint="選填。會顯示在文章專欄首圖與文章頁首；可貼網址或直接上傳。"
+              hint="選填，顯示於文章專欄與頁首。"
               value={pageDraft.cover_image_url}
               alt={pageDraft.cover_image_alt}
               onChange={(url) => setPageDraft({ ...pageDraft, cover_image_url: url })}
@@ -2221,7 +2207,7 @@ export default function PublicSiteAdminPage() {
               <div>
                 <h2 id="public-link-tree-title" className="font-semibold">連結分類樹</h2>
                 <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">
-                  拖曳把手可排序分類或連結；把連結拖進分類即可加入。拖到分類空白處會放在末端，拖到連結上會插入該位置。鍵盤可在把手按 Space，再用方向鍵移動並按 Space 放置。
+                  拖曳排序或移入分類。鍵盤：Space 拿起／放下，方向鍵移動。
                 </p>
               </div>
               {savingLinkTree && <span className="text-sm text-[var(--text-muted)]" role="status">儲存分類與排序中…</span>}
@@ -2277,7 +2263,7 @@ export default function PublicSiteAdminPage() {
                   </span>
                 </div>
                 <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--text-muted)]">
-                  每行一個職位，姓名之間用空白、頓號或逗號分隔。這份名單會直接作為公開頁內容，不需要先建立使用者任期或逐一選人。
+                  每行一個職位，姓名以空白、頓號或逗號分隔；名單直接公開。
                 </p>
               </div>
               <ClipboardPaste size={20} className="text-[var(--primary)]" aria-hidden />
@@ -2360,7 +2346,7 @@ export default function PublicSiteAdminPage() {
                 <div className="flex flex-wrap items-baseline justify-between gap-2 border-b px-4 py-3" style={{ borderColor: "var(--border)" }}>
                   <div>
                     <h3 className="text-sm font-semibold">解析預覽</h3>
-                    <p className="mt-1 text-xs text-[var(--text-muted)]">標示是設定在個人身上，不是整個職位；例如秘書兩人中可只標記一位為「秘書長」。</p>
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">標示套用於個人，可在同職位中單獨指定。</p>
                   </div>
                   <span className="text-xs text-[var(--text-muted)]">{rosterSummary.validLines.length} 個職位</span>
                 </div>
@@ -2422,10 +2408,10 @@ export default function PublicSiteAdminPage() {
             </Field>
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="公開姓名覆寫"><TextInput value={officerDraft.display_name_override} onChange={(e) => setOfficerDraft({ ...officerDraft, display_name_override: e.target.value })} /></Field>
-              <Field label="公開稱謂覆寫" hint="輸入以「長」或「主席」結尾的職稱（例如資訊長），公開頁會以長級樣式顯示；一般幹部可填資訊幹部。"><TextInput value={officerDraft.title_override} onChange={(e) => setOfficerDraft({ ...officerDraft, title_override: e.target.value })} /></Field>
+              <Field label="公開稱謂覆寫" hint="以「長」或「主席」結尾的職稱會以長級樣式顯示。"><TextInput value={officerDraft.title_override} onChange={(e) => setOfficerDraft({ ...officerDraft, title_override: e.target.value })} /></Field>
             </div>
             <Field label="公開簡介"><TextArea value={officerDraft.bio} onChange={(e) => setOfficerDraft({ ...officerDraft, bio: e.target.value })} /></Field>
-            <Field label="公開 Email" hint="後端仍會檢查使用者 show_email，未允許時不會對外顯示。">
+            <Field label="公開 Email" hint="僅公開已允許顯示 Email 的帳號。">
               <TextInput value={officerDraft.public_email} onChange={(e) => setOfficerDraft({ ...officerDraft, public_email: e.target.value })} />
             </Field>
             <div className="flex flex-wrap gap-4">
@@ -2475,7 +2461,7 @@ export default function PublicSiteAdminPage() {
             </Field>
           </div>
           <div className="card space-y-4 p-5">
-            <Field label="自訂 CSS" hint="管理員可微調公開站視覺；請避免影響可讀性與 focus ring。">
+            <Field label="自訂 CSS">
               <TextArea rows={18} value={settings.custom_css ?? ""} onChange={(e) => setSettings({ ...settings, custom_css: e.target.value })} />
             </Field>
             <div className="grid gap-4 md:grid-cols-2">

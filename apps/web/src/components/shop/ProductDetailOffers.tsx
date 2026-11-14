@@ -64,7 +64,6 @@ export default function ProductDetailOffers({ product, promotions, registration,
         </h4>
         <ChevronDown size={18} aria-hidden="true" />
       </summary>
-      <p className={styles.note}>依整筆登記擇優套用；下列折抵金額為整筆登記的優惠。</p>
       <ul className={styles.list}>
         {matching.map((promotion) => {
           const allocation = applied.find((row) => row.promotion_id === promotion.id);
@@ -75,7 +74,7 @@ export default function ProductDetailOffers({ product, promotions, registration,
           const conditions = [
             promotion.min_order_price > 0 ? `${topic}滿 NT$${promotion.min_order_price.toLocaleString()}` : null,
             promotion.min_quantity > 1 ? `${topic}滿 ${promotion.min_quantity} 件` : null,
-            promotion.code ? `使用優惠碼 ${promotion.code}` : "符合條件自動擇優套用",
+            promotion.code ? `優惠碼 ${promotion.code}` : null,
           ].filter(Boolean).join(" · ");
           return <li key={promotion.id} aria-label={promotion.name} className={styles.offer} data-gift={isGift || undefined}>
             <div className={styles.heading}>
@@ -93,12 +92,12 @@ export default function ProductDetailOffers({ product, promotions, registration,
               <p>{promotion.discount_type === "percentage"
                 ? `每項贈送 ${promotion.gift_quantity ?? 1} 件，基本售價 NT$0；可加購多件，超出件數與規格加價另計。`
                 : "符合條件時基本售價 NT$0；規格加價另計。"}</p>
-              <p>請選擇規格並登記，贈品不會自動加入；完成後請確認已套用贈品優惠。</p>
+              <p>贈品須自行選規格並登記。</p>
             </> : <p>{offerDescription(promotion, product.id)}</p>}
             {promotion.discount_type === "bundle_price" && <p>{promotion.target_products?.map((row) => row.name).join(" ＋ ")}</p>}
             {promotion.discount_type !== "price_override" && promotion.discount_type !== "bundle_price" && companions.length > 0
               && <p>需同時選購{companions.map((row) => row.name).join("、")}</p>}
-            <p>{conditions}</p>
+            {conditions && <p>{conditions}</p>}
             {promotion.description && <p className="whitespace-pre-line">{promotion.description}</p>}
           </li>;
         })}

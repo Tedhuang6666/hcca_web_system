@@ -205,9 +205,6 @@ export default function NewPositionPage() {
               </span>
               <div>
                 <h1 className="text-xl font-semibold text-balance" style={{ color: "var(--text-primary)" }}>建立職位</h1>
-                <p className="mt-1 max-w-2xl text-sm leading-6" style={{ color: "var(--text-secondary)" }}>
-                  先選組織，再從組織預設權限開始調整。職位建立後，持有人會取得下方顯示的最終權限。
-                </p>
                 <DraftStatus lastSavedAt={lastSavedAt} className="mt-2" />
               </div>
             </div>
@@ -229,7 +226,6 @@ export default function NewPositionPage() {
               <section className="rounded-xl p-4 sm:p-5" style={{ border: "1px solid var(--border)", background: "var(--bg-surface)" }}>
                 <div className="mb-4">
                   <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>職位基本資料</h2>
-                  <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>這些欄位會影響職位在組織架構與任期管理中的呈現。</p>
                 </div>
                 <div className="space-y-4">
                   <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
@@ -292,7 +288,7 @@ export default function NewPositionPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>權限覆寫摘要</h2>
-                    <p className="mt-1 text-xs leading-5" style={{ color: "var(--text-muted)" }}>組織預設會先套用到職位；下方權限清單的勾選結果就是這個職位最後會取得的權限。</p>
+                    <p className="mt-1 text-xs leading-5" style={{ color: "var(--text-muted)" }}>預設繼承組織權限，可逐項調整。</p>
                   </div>
                   <button type="button" onClick={() => setCodes(defaultCodes)} className="min-h-11 flex-shrink-0 rounded-lg px-3 text-xs font-medium" style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>重設預設</button>
                 </div>
@@ -314,7 +310,6 @@ export default function NewPositionPage() {
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div>
                   <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>職位權限</h2>
-                  <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>勾選或取消勾選即可覆寫組織預設，不需要手動記住權限代碼。</p>
                 </div>
                 <span className="rounded-full px-2.5 py-1 text-xs font-semibold" style={{ color: "var(--primary)", background: "var(--primary-dim)" }}>{codes.length} 個</span>
               </div>

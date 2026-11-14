@@ -265,7 +265,6 @@ export default function ShortLinksManager({
             <div className="short-links-empty">
               <Link2 size={24} aria-hidden="true" />
               <strong>還沒有短網址</strong>
-              <span>先建立一個專屬路徑，之後就能直接從清單製作 QR Code。</span>
             </div>
           ) : (
             <ul className="short-links-list">

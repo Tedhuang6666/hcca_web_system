@@ -474,7 +474,7 @@ function AccountDetail({
 
       <div className="min-w-0 space-y-3">
         <div className="space-y-4">
-          <Section defaultOpen title="基本資料與帳號設定" description="可調整管理資料與登入偏好；主要登入 Email 僅供識別，請透過連結登入身分處理帳號歸戶。">
+          <Section defaultOpen title="基本資料與帳號設定" description="主要登入 Email 僅供識別，帳號歸戶請使用「連結登入身分」。">
             <div className={styles.twoColumns}>
               <label className="text-xs" style={{ color: "var(--text-muted)" }}>顯示姓名<TextInput className="mt-1" value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></label>
               <label className="text-xs" style={{ color: "var(--text-muted)" }}>學號<TextInput className="mt-1" value={studentId} onChange={(event) => setStudentId(event.target.value)} placeholder="留白可清除" /></label>

@@ -106,7 +106,6 @@ export default async function PublicBudgetsPage() {
           <Landmark size={24} aria-hidden="true" />
           <div>
             <h2>目前沒有公開中的核准預算</h2>
-            <p>預算核准並公開後，總額、執行狀況與支出紀錄會顯示在這裡。</p>
           </div>
         </section>
       )}

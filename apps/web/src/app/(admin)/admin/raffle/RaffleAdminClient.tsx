@@ -195,7 +195,7 @@ export default function RaffleAdminClient() {
             </form>
           </section>
 
-          {!selected ? <section className={styles.emptyState}><Gauge size={24} /><h2>尚未開放本輪抽獎</h2><p>輸入驗證碼與獎池設定後，系統會建立本輪抽獎。</p></section> : (
+          {!selected ? <section className={styles.emptyState}><Gauge size={24} /><h2>尚未開放本輪抽獎</h2></section> : (
             <>
               <div className={styles.controlHead}><div><span className={`${styles.statusBadge} ${styles[`badge_${selected.status}`]}`}>{statusLabel[selected.status]}</span><h2>目前抽獎台</h2><p>{selected.description}</p></div><div className={styles.headActions}>
                 {selected.status === "draft" && <button className={styles.primarySmall} type="button" disabled={busy} onClick={() => void changeStatus("open")}><Play size={14} /> 開放</button>}
@@ -209,7 +209,7 @@ export default function RaffleAdminClient() {
 
               <div className={styles.gridTwo}>
                 <section className={styles.panel}><div className={styles.panelTitle}><div><span>自動機率獎池</span><small>依階段與剩餘數量即時計算</small></div>{!selected.reserve_released && selected.status !== "closed" && <button className={styles.outlineButton} type="button" onClick={() => void changeStatus(selected.status, true)}><Send size={14} /> 開啟尾聲獎</button>}</div><div className={styles.prizeList}>{selected.prizes.map((prize) => <div className={styles.prizeRow} key={prize.id}><span className={`${styles.tier} ${styles[`tier_${prize.tier}`]}`}>{prize.tier}</span><strong>{prize.name}</strong><span className={styles.stock}>{prize.current_probability.toFixed(1)}% · {prize.remaining_quantity === null ? "∞" : `${prize.remaining_quantity} / ${prize.total_quantity}`}</span></div>)}</div><p className={styles.panelHint}><ShieldCheck size={14} /> 高等級會自動保留部分到尾聲；庫存由後端鎖定，不會超發。</p></section>
-                <section className={styles.panel}><div className={styles.panelTitle}><div><span>參加者入口</span><small>現場平板開啟此網址</small></div><ExternalLink size={16} color="var(--text-muted)" /></div><div className={styles.shareBox}><div><small>抽獎網址</small><strong>/raffle</strong></div><button type="button" onClick={() => void copy(`${window.location.origin}/raffle`, "抽獎網址已複製")}><Copy size={14} /></button></div><p className={styles.panelHint}><Lock size={14} /> 驗證成功後會固定在每台平板；上一位抽完可直接交給下一位。</p></section>
+                <section className={styles.panel}><div className={styles.panelTitle}><div><span>參加者入口</span><small>現場平板開啟此網址</small></div><ExternalLink size={16} color="var(--text-muted)" /></div><div className={styles.shareBox}><div><small>抽獎網址</small><strong>/raffle</strong></div><button type="button" onClick={() => void copy(`${window.location.origin}/raffle`, "抽獎網址已複製")}><Copy size={14} /></button></div><p className={styles.panelHint}><Lock size={14} /> 每台平板驗證一次，可供多人輪流抽獎。</p></section>
               </div>
 
               <section className={styles.panel}><div className={styles.panelTitle}><div><span>調整目前獎池</span><small>{selected.draw_count > 0 ? "已開始抽獎，本輪設定已鎖定" : "修改後會立即重算各獎品目前機率"}</small></div><button className={styles.outlineButton} type="button" disabled={busy || selected.draw_count > 0} onClick={() => void savePrizes()}><Save size={14} /> 儲存獎池</button></div><PrizeEditor drafts={prizeDrafts} setDrafts={setPrizeDrafts} /><p className={styles.panelHint}>數量留白代表不限量參加獎；最高等級預設保留部分獎數，尾聲可由管理員開放。</p></section>

@@ -213,7 +213,7 @@ export function StepEditTree({
   return (
     <div className="space-y-3">
       <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-        使用與新增法規相同的階層編輯器。拖曳會整塊移動子樹，折疊不影響資料。
+        拖曳會連同子條文一起移動。
       </p>
       <div className="flex gap-2 flex-wrap">
         <button onClick={() => addNode("chapter", editingId ?? undefined)} className="text-xs px-3 py-1.5 rounded" style={{ border: "1px solid var(--border)" }}>+ 章</button>

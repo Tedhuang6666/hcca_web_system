@@ -76,9 +76,6 @@ export default function PendingRegulationsDashboard() {
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
             待審議案件集中頁
           </h1>
-          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            集中查看所有送審中、已排入議程與議會核定後待公布的法規案件
-          </p>
         </div>
         <span
           className="self-start sm:self-auto inline-flex items-center gap-2"

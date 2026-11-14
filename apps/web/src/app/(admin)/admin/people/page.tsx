@@ -343,9 +343,6 @@ function PersonDirectoryPanel() {
           <h1 className="text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
             人員與身分
           </h1>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            查找人員、調整班級與身分，或切換至平台帳號管理登入與安全設定。
-          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <IconButton onClick={refreshAll}>

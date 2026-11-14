@@ -114,9 +114,7 @@ export default function ShopSheetImportPanel({ categories }: { categories: Produ
 
   return <section className="max-w-5xl space-y-8" aria-label="組織預購同步管理">
     <p className="max-w-3xl text-sm leading-6" style={{ color: "var(--text-secondary)" }}>
-      將教師、家長會等組織的表單填答建立為預購訂單，寄送成立通知，交貨時再收款。辦公室會顯示在訂單的班級／處室欄位。
-      原回覆修改後會更新同一筆未收款訂單、重算適用優惠並寄送更新通知。
-      尺寸可填「L 2件、XL×1」「XXL一件」；不明填答會保留待確認原因。
+      將表單填答同步為預購，寄送通知並於交貨收款；未收款訂單隨原回覆更新。無法辨識的填答列為待確認。
     </p>
     {error && <p role="alert" style={{ color: "var(--danger)" }}>{error}</p>}
     {message && <p role="status" className="text-sm leading-6">{message}</p>}
@@ -124,7 +122,7 @@ export default function ShopSheetImportPanel({ categories }: { categories: Produ
       <h2 className="text-lg font-semibold">同步來源</h2>
       {loading ? <p role="status" className="mt-4">正在載入來源…</p> : loadError ? <div role="alert" className="mt-4">
         <p>{loadError}</p><button type="button" className="btn btn-secondary min-h-11 mt-2" onClick={() => setRefresh((value) => value + 1)}>重新載入來源</button>
-      </div> : sources.length === 0 ? <p className="mt-3 text-sm">尚未設定來源。新增後先同步一次，即可查看哪些填答需要確認。</p> : <ul className="divide-y" style={{ borderColor: "var(--border)" }}>
+      </div> : sources.length === 0 ? <p className="mt-3 text-sm">尚未設定來源</p> : <ul className="divide-y" style={{ borderColor: "var(--border)" }}>
         {sources.map((source) => <li key={source.id} className="py-4 space-y-3">
           <div className="flex flex-wrap items-baseline justify-between gap-2"><h3 className="font-semibold">{source.name}</h3>
             <span className="text-sm">{source.enabled ? "每分鐘自動同步" : "自動同步已停用"}</span></div>
@@ -165,7 +163,7 @@ export default function ShopSheetImportPanel({ categories }: { categories: Produ
       </fieldset>
       <details>
         <summary className="cursor-pointer min-h-11 py-3 text-sm font-medium">欄位名稱與商品對應</summary>
-        <p className="text-sm leading-6 mb-4">商品欄位會依名稱自動對應；名稱不同或重複時，可在這裡指定。來源欄位順序可以調整。</p>
+        <p className="text-sm leading-6 mb-4">欄位名稱自動對應；不同名或重複時須手動指定。</p>
         <fieldset disabled={busy} className="grid gap-4 sm:grid-cols-2">
           {([ ["name_column", "姓名欄名"], ["email_column", "Email 欄名"], ["office_column", "辦公室欄名"], ["identity_column", "唯一識別欄名"] ] as const).map(([key, label]) => <label key={key} className="text-sm">{label}<input className="input mt-1 w-full min-h-11 text-base" required readOnly={key === "identity_column" && Boolean(editing)} value={config[key] ?? ""} onChange={(event) => setConfig((current) => ({ ...current, [key]: event.target.value }))} /></label>)}
           <label className="text-sm">補填辦公室欄名<input className="input mt-1 w-full min-h-11 text-base" value={config.other_office_column ?? ""} onChange={(event) => setConfig((current) => ({ ...current, other_office_column: event.target.value || null }))} /></label>

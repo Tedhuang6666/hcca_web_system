@@ -512,7 +512,7 @@ export default function ProfilePage() {
               公文承辦人資訊顯示設定
             </p>
             <p className="text-xs mb-3" style={{ color: "var(--text-muted)" }}>
-              建立公文時，電子郵件可自動帶入承辦人欄位，並選擇是否顯示於公文上。
+              建立公文時可帶入承辦人 Email。
             </p>
             <div className="space-y-2">
               {[

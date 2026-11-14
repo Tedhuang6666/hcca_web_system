@@ -75,10 +75,6 @@ export default function PoliciesPage() {
           政策版本管理
         </div>
         <h1 className="text-2xl font-bold text-[var(--text-primary)]">政策與個資請求</h1>
-        <p className="mt-1 max-w-3xl text-xs text-[var(--text-muted)]">
-          管理隱私權 / ToS / Cookie 等政策版本（新增 → 啟用 → 舊版自動 deactivate），
-          以及處理當事人個資權利請求（GDPR / 個資法）。
-        </p>
       </header>
 
       <nav className="mb-4 flex gap-1 border-b border-[var(--border)]">
@@ -516,7 +512,7 @@ function CreateModal({
           </button>
         </div>
         <p className="mt-2 text-[10px] text-[var(--text-muted)]">
-          建立後預設為「草稿」。確認無誤再到列表按「啟用此版本」，會自動 deactivate 同類別其他版本。
+          建立後為草稿；啟用時自動停用同類別舊版本。
         </p>
       </div>
     </div>

@@ -973,7 +973,6 @@ export default function FinancePage() {
             <Landmark size={24} aria-hidden="true" />
             <div>
               <h2>先開啟一套組織帳本</h2>
-              <p>帳本會保存會計期間、資金位置、收支科目與每一筆報帳的完整處理紀錄。</p>
             </div>
           </div>
           <div className="finance-onboarding__form">
@@ -981,7 +980,6 @@ export default function FinancePage() {
               <section className="finance-onboarding__ledgers" aria-labelledby="finance-ledger-list-heading">
                 <div>
                   <h3 id="finance-ledger-list-heading">可開啟的既有帳本</h3>
-                  <p>已依你的財務權限找出帳本，選取後會直接開啟。</p>
                 </div>
                 {availableLedgers.map((item) => {
                   const org = orgs.find((candidate) => candidate.id === item.org_id);
@@ -1143,7 +1141,7 @@ export default function FinancePage() {
               <header className="finance-entry__header">
                 <div>
                   <h2>{editingEntryId ? "修改報帳" : editingManualEntryId ? "修改期初餘額" : entryTypes[entryType].label}</h2>
-                  <p>{editingBudgetedClaim ? "可調整已列入核准預算、尚未付款案件的核銷金額；儲存後保留原核准狀態。" : editingManualEntryId ? "待覆核資料會直接更新；已過帳資料會新增調整傳票，原紀錄不會被覆蓋。" : entryTypes[entryType].help}</p>
+                  <p>{editingBudgetedClaim ? "調整未付款的核准預算案件，保留核准狀態。" : editingManualEntryId ? "待覆核資料會直接更新；已過帳資料會新增調整傳票，原紀錄不會被覆蓋。" : entryTypes[entryType].help}</p>
                 </div>
                 <div className="finance-entry__type-switch" role="group" aria-label="登錄類型">
                   {entryTypeOptions.map((type) => (
@@ -1166,7 +1164,7 @@ export default function FinancePage() {
                   <section className="finance-entry__section" aria-labelledby="finance-entry-basics">
                     <div className="finance-entry__section-heading">
                       <span>1</span>
-                      <div><h3 id="finance-entry-basics">基本資料</h3><p>先說明這筆款項屬於哪個期間、科目與部門。</p></div>
+                      <div><h3 id="finance-entry-basics">基本資料</h3></div>
                     </div>
                     <div className="finance-entry__fields">
                       <label>日期<input className="input" type="date" value={entryDate} onChange={(event) => setEntryDate(event.target.value)} disabled={editingBudgetedClaim} /></label>
@@ -1181,7 +1179,7 @@ export default function FinancePage() {
                   {entryType === "expense" && <section className="finance-entry__section" aria-labelledby="finance-entry-items">
                     <div className="finance-entry__section-heading">
                       <span>2</span>
-                      <div><h3 id="finance-entry-items">購買品項</h3><p>同一張收據可分列登錄多項用品，例如清潔劑、垃圾袋與抹布。</p></div>
+                      <div><h3 id="finance-entry-items">購買品項</h3><p>同張收據可分列多項用品。</p></div>
                     </div>
                     <div className="finance-entry-items__table">
                       <table>
@@ -1260,9 +1258,6 @@ export default function FinancePage() {
               <div className="flex flex-wrap items-baseline justify-between gap-3">
                 <div>
                   <h2 className="font-semibold">收支科目</h2>
-                  <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-                    收入與支出分開管理；登錄收入及報帳時會依類型顯示可用科目。
-                  </p>
                 </div>
                 <div className="flex gap-2" role="group" aria-label="科目類型">
                   {(Object.keys(managedAccountLabels) as ManagedAccountType[]).map((type) => (
@@ -1323,7 +1318,7 @@ export default function FinancePage() {
 
           {activeTab === "review" && <section className="finance-case-list">
             <div className="finance-case-list__heading">
-              <div><h2>待確認</h2><p>確認支出資料後，可在同一筆紀錄接續付款、請購與預算列管。</p></div>
+              <div><h2>待確認</h2></div>
               <span className="finance-workspace__count">{pendingReviewClaims.length} 件</span>
             </div>
             {canReview ? pendingReviewClaims.length > 0 ? <div className="finance-case-list__items">{pendingReviewClaims.map((item) => {
@@ -1337,7 +1332,7 @@ export default function FinancePage() {
 
           {activeTab === "claims" && <section className="finance-case-list">
             <div className="finance-case-list__heading">
-              <div><h2>收支紀錄</h2><p>支出案件、收入與其他收支都集中在這裡查看。</p></div>
+              <div><h2>收支紀錄</h2></div>
               <span className="finance-workspace__count">{expenseClaims.length + nonClaimEntries.length} 筆</span>
             </div>
             {nonClaimEntries.length > 0 && <section className="finance-case-list__items" aria-label="收入與其他收支紀錄">{nonClaimEntries.map((item) => (

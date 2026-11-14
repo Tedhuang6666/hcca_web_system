@@ -167,8 +167,7 @@ export default function WebhooksPage() {
           </div>
           <h1 className="text-2xl font-bold text-[var(--text-primary)]">Webhooks</h1>
           <p className="mt-1 max-w-3xl text-xs text-[var(--text-muted)]">
-            訂閱平台事件並 HTTP POST 到外部 URL。**HMAC signing secret 只在建立時顯示一次**。
-            投遞失敗會自動重試（指數退避）。
+            以 HTTP POST 投遞事件，失敗自動重試。HMAC 密鑰僅顯示一次。
           </p>
         </div>
         <div className="flex gap-2">

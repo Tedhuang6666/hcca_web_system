@@ -136,7 +136,7 @@ export default function SupplementOrders({ canCollect = false, canRejoin = false
   const visibleBalances = [...balances].filter(([, rows]) => showPaid || rows.some((order) => !order.is_paid));
   return <section className="rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--card-bg)" }} aria-labelledby="supplement-orders-title">
     <h2 id="supplement-orders-title" className="font-semibold">追加訂單補收款</h2>
-    <p className="mt-2 text-sm" style={{ color: "var(--text-secondary)" }}>班級部分繳款的差額列為整班尾款，可在此補齊。個人追加款由訂購同學自行繳款，確認後歸回原班級。下載收據不會登記繳費。</p>
+    <p className="mt-2 text-sm" style={{ color: "var(--text-secondary)" }}>個人追加款由同學補繳，確認收款後歸回原班級。</p>
     {loading ? <p role="status" className="mt-3">載入補收款中…</p> : loadError ? <div role="alert" className="mt-3">
       <p>{loadError}</p><button type="button" className="btn btn-ghost min-h-11" onClick={() => setRetry((value) => value + 1)}>重新載入補收款</button>
     </div> : <>

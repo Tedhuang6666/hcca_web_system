@@ -367,9 +367,6 @@ export default function DiscordAdminPage() {
           DISCORD BOT
         </p>
         <h1 className="mt-1 text-xl font-semibold">Discord 平台機器人設定</h1>
-        <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-          設定辦公頻道、資安警報頻道，以及平台組織/職位到 Discord 身分組的同步規則。
-        </p>
       </header>
 
       <section className="card p-5">

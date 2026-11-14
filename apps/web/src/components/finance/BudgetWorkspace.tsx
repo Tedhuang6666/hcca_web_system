@@ -584,7 +584,6 @@ export default function BudgetWorkspace({
       <header className="finance-budget__header">
         <div>
           <h2 id="budget-heading">預算與支出</h2>
-          <p>整合所有預算、直接修正總表，再登記收支與產生代墊簽收單。</p>
         </div>
         {detail && (
           <div className={`finance-budget__publication-status ${detail.is_public ? "is-public" : ""}`}>
@@ -713,7 +712,7 @@ export default function BudgetWorkspace({
           >
             <summary><ListTree size={16} aria-hidden="true" />預算版本與草案編輯{activeSubmission && <span>{activeSubmission.status === "approved" ? `目前：已核准${activeSubmission.council_approved_on ? `（議會 ${activeSubmission.council_approved_on} 通過）` : ""}` : `目前：${statusLabel[activeSubmission.status]}`}</span>}</summary>
             <section className="finance-budget__section" aria-labelledby="budget-review-heading">
-            <header><div><h3 id="budget-review-heading">預算版本與草案</h3><p>這裡管理預算本身；核准後的支出直接登錄，不再送支出審核。</p></div>{(canManage || canPropose) && <div className="finance-budget__new-submission"><label><span className="sr-only">預算案名稱</span><input className="input" value={submissionTitle} onChange={(event) => setSubmissionTitle(event.target.value)} placeholder="預算案名稱" /></label><button className="btn btn-secondary" onClick={() => void createSubmission(detail.submissions.length === 0 ? "initial" : "supplemental")}><Plus size={15} aria-hidden="true" />{detail.submissions.length === 0 ? "建立初始草案" : "建立追加草案"}</button></div>}</header>
+            <header><div><h3 id="budget-review-heading">預算版本與草案</h3><p>核准預算的支出直接登錄，無須再送審。</p></div>{(canManage || canPropose) && <div className="finance-budget__new-submission"><label><span className="sr-only">預算案名稱</span><input className="input" value={submissionTitle} onChange={(event) => setSubmissionTitle(event.target.value)} placeholder="預算案名稱" /></label><button className="btn btn-secondary" onClick={() => void createSubmission(detail.submissions.length === 0 ? "initial" : "supplemental")}><Plus size={15} aria-hidden="true" />{detail.submissions.length === 0 ? "建立初始草案" : "建立追加草案"}</button></div>}</header>
 
             {detail.submissions.length > 0 ? <div className="finance-budget__submissions" role="group" aria-label="預算案版本">{detail.submissions.map((submission) => <button key={submission.id} type="button" aria-pressed={activeSubmission?.id === submission.id} className={activeSubmission?.id === submission.id ? "is-active" : ""} onClick={() => setSelectedSubmissionId(submission.id)}><span>{submission.kind === "initial" ? "初始預算" : "追加預算"}</span><strong>{submission.title}</strong><small className={`is-${submission.status}`}>{statusLabel[submission.status]}</small></button>)}</div> : <div className="finance-budget__inline-empty"><CircleAlert size={17} aria-hidden="true" />先建立初始預算草案，再開始編列。</div>}
 
@@ -784,7 +783,7 @@ export default function BudgetWorkspace({
           {activeSubmission && canPublish && canOpenCouncilReview && (
             <section className={`finance-budget__council-review ${activeSubmission.is_council_review_public ? "is-public" : ""}`}>
               <div className="finance-budget__publication-icon">{activeSubmission.is_council_review_public ? <Eye size={21} aria-hidden="true" /> : <Megaphone size={21} aria-hidden="true" />}</div>
-              <div><h3>{activeSubmission.is_council_review_public ? "這份草案已開放議員審理" : "提供議員審理草案"}</h3><p>{activeSubmission.is_council_review_public ? "公開頁會清楚標示尚未核定，僅呈現這次草案的明細與備註；憑證和提出人資訊不會公開。" : "草案不必等到核准才可提供議員審理。開放後，任何取得網址的人都能檢視本次送審內容。"}</p></div>
+              <div><h3>{activeSubmission.is_council_review_public ? "這份草案已開放議員審理" : "提供議員審理草案"}</h3><p>{activeSubmission.is_council_review_public ? "公開頁會清楚標示尚未核定，僅呈現這次草案的明細與備註；憑證和提出人資訊不會公開。" : "未核准草案也可開放審理；持有網址者皆可查看。"}</p></div>
               <div>{activeSubmission.is_council_review_public && <a className="btn btn-secondary" href={councilReviewHref} target="_blank" rel="noreferrer"><Eye size={16} aria-hidden="true" />預覽審理頁</a>}<button className="btn btn-primary" disabled={pendingAction === "council_review"} onClick={() => void toggleCouncilReviewPublication()}>{activeSubmission.is_council_review_public ? <EyeOff size={16} aria-hidden="true" /> : <Megaphone size={16} aria-hidden="true" />}{pendingAction === "council_review" ? "正在更新…" : activeSubmission.is_council_review_public ? "停止審理頁" : "開放議員審理"}</button></div>
             </section>
           )}

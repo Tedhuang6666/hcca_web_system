@@ -63,7 +63,7 @@ describe("商品詳情優惠與贈品", () => {
     expect(screen.getByText("贈品：紀念衫")).toBeVisible();
     expect(screen.getByText("尚未登記贈品")).toBeVisible();
     expect(screen.getByText(/每項贈送 1 件.*可加購多件，超出件數與規格加價另計/)).toBeVisible();
-    expect(screen.getByText(/請選擇規格並登記/)).toBeVisible();
+    expect(screen.getByText(/贈品須自行選規格並登記/)).toBeVisible();
     expect(screen.queryByText(/^已登記.*已套用贈品優惠$/)).not.toBeInTheDocument();
   });
 
@@ -113,7 +113,7 @@ describe("商品詳情優惠與贈品", () => {
     fireEvent.click(screen.getByText("優惠與贈品"));
     expect(screen.getByText(/單一活動滿 NT\$1,000/)).toBeVisible();
     expect(screen.getByText(/單一活動滿 2 件/)).toBeVisible();
-    expect(screen.getByText(/使用優惠碼 STAFF/)).toBeVisible();
+    expect(screen.getByText(/優惠碼 STAFF/)).toBeVisible();
     expect(screen.getByText(/本商品基本售價 NT\$250/)).toBeVisible();
     expect(screen.queryByText(/需同時選購/)).not.toBeInTheDocument();
   });

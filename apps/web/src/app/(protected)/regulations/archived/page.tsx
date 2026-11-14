@@ -55,9 +55,6 @@ export default function ArchivedRegulationsPage() {
               廢止法規
             </h1>
           </div>
-          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            歷史上已廢止的法規，可查詢替代法規與廢止原因
-          </p>
         </div>
       </div>
 

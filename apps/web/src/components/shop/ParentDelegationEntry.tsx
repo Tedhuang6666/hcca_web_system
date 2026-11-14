@@ -18,8 +18,8 @@ export default function ParentDelegationEntry({ isLoggedIn }: { isLoggedIn: bool
         <h3>還沒有驗證碼？請孩子這樣設定</h3>
         <ol>
           <li>用學生帳號登入，打開商品頁，點「家人代訂」。</li>
-          <li>選擇活動，填寫家長稱呼（例如：媽媽），點「建立代訂驗證碼」。</li>
-          <li>把七位數驗證碼或分享連結傳給你，你就能用自己的帳號開始代訂。</li>
+          <li>選擇活動與家長稱呼，建立代訂驗證碼。</li>
+          <li>將驗證碼或分享連結傳給家長。</li>
         </ol>
       </div>
       {isLoggedIn ? <form className="shop-delegation-form shop-delegation-code-form" onSubmit={async (event) => {
@@ -52,9 +52,9 @@ export default function ParentDelegationEntry({ isLoggedIn }: { isLoggedIn: bool
         <p>請先登入自己的帳號，登入後會回到這裡輸入驗證碼。</p>
         <Link href="/login?next=%2Fshop%3Fdelegation%3Dentry" className="shop-delegation-primary">登入後開始代訂</Link>
       </>}
-      <p id="shop-delegation-code-hint" className="shop-delegation-note">已有分享連結？直接點開即可。綁定後可持續代訂至商品截止或班級結單，無須定期重設或另行終止。</p>
+      <p id="shop-delegation-code-hint" className="shop-delegation-note">授權有效至商品截止或班級結單。</p>
       {error && <p id="shop-delegation-code-error" role="alert">{error}</p>}
-      <p className="shop-delegation-note">下一步會先核對學生與帳號，確認後才開始代訂。品項由學生繳款與領取。</p>
+      <p className="shop-delegation-note">確認學生與帳號後開始代訂，由學生繳款與領取。</p>
       {!isLoggedIn && <p>如果你是學生，登入學生帳號後即可看到建立授權的入口。</p>}
       <div className="shop-delegation-support"><DelegationInstructions /></div>
     </section>

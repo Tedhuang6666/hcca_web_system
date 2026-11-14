@@ -44,7 +44,7 @@ export default function ClassOrderDeadline({ classId, categories, onSaved }: {
   if (!categoryId) return null;
   return <details className="rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--card-bg)" }}>
     <summary className="min-h-11 cursor-pointer content-center font-semibold">本班截止時間</summary>
-    <p className="my-3 text-sm" style={{ color: "var(--text-secondary)" }}>截止後，同學與家人停止自行訂購，班代與班聯仍可代購。班聯結單後班代停止代購，班聯追加一律獨立補收款。</p>
+    <p className="my-3 text-sm" style={{ color: "var(--text-secondary)" }}>截止後僅班代與班聯可代購；班聯結單後僅班聯可追加，另列補收款。</p>
     <form onSubmit={(event) => { event.preventDefault(); void save(); }}>
       <fieldset disabled={busy} className="grid min-w-0 gap-3 sm:grid-cols-2">
         <legend className="sr-only">本班截止設定</legend>

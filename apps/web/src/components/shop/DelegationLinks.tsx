@@ -139,7 +139,7 @@ export default function DelegationLinks({ categoryId, activityId, scopeName, ini
           </div>
           <p className="shop-delegation-note">{codeExpiresAt
             ? `此驗證碼有效至 ${new Date(codeExpiresAt).toLocaleString("zh-TW")}。`
-            : "驗證碼與綁定持續有效至商品截止或班級結單，無須定期重設或另行終止。"}
+            : "授權有效至商品截止或班級結單。"}
             家人登入後，在商品頁點「家人代訂」輸入。</p>
         </>}
         <div className="shop-delegation-form">
@@ -151,7 +151,7 @@ export default function DelegationLinks({ categoryId, activityId, scopeName, ini
             catch { shareInput.current?.focus(); shareInput.current?.select(); setMessage("請選取分享連結後手動複製。"); }
           }}>複製連結</button>
         </div>
-        <p className="shop-delegation-note">請先保存驗證碼或連結。切換活動、關閉或重整頁面後無法再次查看，未保存時可重新產生。</p>
+        <p className="shop-delegation-note">請先保存；關閉、重整或切換活動後須重新產生。</p>
       </div>}
       {!creating && <button type="button" className={shareUrl ? "shop-delegation-secondary" : "shop-delegation-primary"}
         aria-expanded={creating} aria-controls="shop-delegation-create" disabled={busy}

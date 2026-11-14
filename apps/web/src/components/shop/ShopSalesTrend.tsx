@@ -109,7 +109,7 @@ export default function ShopSalesTrend({
         ))}
       </div>
       <p className="sales-muted">
-        橫軸為本期實際日期。滑鼠移到圖上、點選或使用左右方向鍵，可查看完整日期與數值；手機可左右滑動圖表。
+        滑鼠、觸控或左右方向鍵可查看日期與數值。
       </p>
       <div
         className="sales-chart-scroll"

@@ -383,9 +383,6 @@ export default function SerialTemplatesPage() {
       ) : templates.length === 0 ? (
         <div className="card py-16 text-center">
           <p className=" text-sm">尚無字號模板</p>
-          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-            點擊「新增模板」建立第一個字號格式，需要 serial:create 權限
-          </p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -411,7 +408,7 @@ export default function SerialTemplatesPage() {
           </div>
           <div className="flex gap-2">
             <dt className="font-semibold  w-24 flex-shrink-0">流水號</dt>
-            <dd>7 位數字，每年可重置（依設定），並發保證唯一（SELECT FOR UPDATE）</dd>
+            <dd>7 位數字，可設定每年重置。</dd>
           </div>
           <div className="flex gap-2">
             <dt className="font-semibold  w-24 flex-shrink-0">權限要求</dt>

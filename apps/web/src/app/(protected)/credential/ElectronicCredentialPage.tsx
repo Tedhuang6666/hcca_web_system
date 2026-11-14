@@ -36,7 +36,7 @@ function CredentialPageIntro({ denied = false }: { denied?: boolean }) {
         <h1>電子證件</h1>
         <p>
           {denied
-            ? "電子證件提供符合目前屆別學號規則的校內學生、校內師長與特別授權帳號使用。"
+            ? "限符合屆別資格的學生、校內師長及特別授權帳號使用。"
             : "前往特約店家兌換時，出示這張證件即可完成身分核驗。"}
         </p>
       </div>

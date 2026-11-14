@@ -61,7 +61,7 @@ export default function TeacherPurchaseProfile() {
 
   return <section className={styles.panel} aria-labelledby={`${id}-title`}>
     <h2 id={`${id}-title`}>教師訂購資料</h2>
-    <p id={`${id}-help`}>設定商品發放時使用的姓名與辦公室／處室。儲存後套用至新訂單，既有訂單保留原資料。</p>
+    <p id={`${id}-help`}>姓名與處室僅套用至新訂單。</p>
     <form className={styles.form} onSubmit={submit} aria-describedby={`${id}-help`}>
       <label htmlFor={`${id}-name`}>姓名
         <input id={`${id}-name`} autoComplete="name" required maxLength={100} value={name} disabled={saving}

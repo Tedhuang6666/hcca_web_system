@@ -491,9 +491,6 @@ function EmptyState() {
       <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
         目前沒有待辦事項
       </p>
-      <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-        所有需要您動作的項目都會集中在這裡
-      </p>
     </div>
   );
 }

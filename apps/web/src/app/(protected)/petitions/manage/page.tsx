@@ -452,7 +452,7 @@ export default function PetitionManagePage() {
               代收外部陳情
             </h2>
             <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-              建立後會套用同一套收件、分案與處理流程；案件更新通知會寄到登記的聯絡信箱。
+              案件更新通知會寄至登記的聯絡信箱。
             </p>
           </div>
           <div className="grid md:grid-cols-2 gap-3">
@@ -589,7 +589,7 @@ export default function PetitionManagePage() {
         <section className="card min-w-0 p-5 space-y-5">
           {!selected ? (
             <div className="text-sm" style={{ color: "var(--text-muted)" }}>
-              請從左側選擇案件。建議先處理「待分案」與「我承辦」，再看跨機關轉派或補件中的案件。
+              請選擇案件
             </div>
           ) : selected.confidential_blocked ? (
             <>

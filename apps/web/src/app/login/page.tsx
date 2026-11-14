@@ -138,9 +138,6 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
               >
                 登入竹嶺班聯數位整合平台
               </h1>
-              <p className="mt-3 text-sm leading-6" style={{ color: "var(--text-muted)" }}>
-                登入後即可使用更完整的系統功能
-              </p>
             </div>
 
             {error && (

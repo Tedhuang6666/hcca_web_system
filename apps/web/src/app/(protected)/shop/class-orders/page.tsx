@@ -1120,7 +1120,7 @@ export default function ClassOrdersPage() {
           <details>
             <summary className="min-h-11 cursor-pointer py-3 text-sm">加購與繳款說明</summary>
             <p className="max-w-prose text-sm" style={{ color: "var(--text-secondary)" }}>
-              班級繳款後、班聯結單前仍可協助加購；追加款由該筆訂購同學自行付款，班代不代墊。班聯確認收款後提供收據並歸回原班級。到達班聯統一截止時間或班聯結單後，班代停止代購。
+              班聯結單或統一截止後停止代購；繳款後追加由同學自行補繳。
             </p>
           </details>
         </div>
@@ -1775,7 +1775,7 @@ export default function ClassOrdersPage() {
           {activityRows.length === 0 ? (
             <p className="rounded-lg px-4 py-6 text-sm" role={loadFailed ? "alert" : "status"}
               style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
-              {loading ? "正在載入活動與座號收款資料…" : loadFailed ? "無法載入活動與座號收款資料，請重新整理後再試。" : "目前沒有可收款的活動；活動開放或有同學完成預購後，收款資料會顯示在這裡。"}
+              {loading ? "正在載入活動與座號收款資料…" : loadFailed ? "無法載入活動與座號收款資料，請重新整理後再試。" : "目前沒有可收款的活動"}
             </p>
           ) : !ledgerActivities.length ? (
             <p role="status" className="py-4 text-sm" style={{ color: "var(--text-secondary)" }}>請在頁面上方選擇本次要收款的活動。</p>
@@ -1914,7 +1914,7 @@ export default function ClassOrdersPage() {
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <div>
               <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>班級訂單 · {selectedActivityLabel}</h2>
-              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>確認收款只記錄班代收到同學款項，不會變更班聯會的整班繳款狀態。</p>
+              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>此操作僅記錄班代收款，班聯仍須確認。</p>
             </div>
             <span className="text-sm tabular-nums" style={{ color: "var(--text-muted)" }}>{visibleOrders.length} 筆</span>
           </div>

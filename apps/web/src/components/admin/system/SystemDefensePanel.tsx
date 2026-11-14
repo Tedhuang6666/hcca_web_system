@@ -737,9 +737,6 @@ export default function SystemDefensePanel() {
 function ModulesLinkCard() {
   return (
     <Panel title="模組維護" icon={<Boxes size={18} aria-hidden />}>
-      <p className="mb-4 text-xs text-[var(--text-muted)]">
-        可將個別功能模組設為維護或關閉，並監控各模組的錯誤率與斷路器狀態。
-      </p>
       <Link
         href="/admin/system?tab=modules"
         className="btn btn-secondary inline-flex items-center gap-2 text-sm"

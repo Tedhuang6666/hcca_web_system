@@ -246,7 +246,7 @@ export default function ShopSalesDeepAnalysis({
           </label>
         </div>
         <p className="sales-muted">
-          點選格子查看該年級／班級的品項完整明細；顏色深淺以本期指標相對值呈現。手機可左右捲動。
+          選取格子查看明細；顏色深淺代表本期指標相對值。
         </p>
         {allCross.length ? (
           <div className="sales-table-scroll">

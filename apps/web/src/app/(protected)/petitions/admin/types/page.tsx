@@ -200,7 +200,6 @@ export default function PetitionTypesAdminPage() {
     <div className="max-w-5xl mx-auto space-y-5">
       <div>
         <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>陳情類型管理</h1>
-        <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>設定前台可選類型與預設負責機關</p>
         <DraftStatus lastSavedAt={lastSavedAt} className="mt-2" />
       </div>
 

@@ -103,12 +103,11 @@ export default function DiscordRolePolicyPanel({ guildId, orgs, positions, roles
     <section className="card p-5">
       <h2 className="text-sm font-semibold">職位、身分組與暱稱政策</h2>
       <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-        先選組織與職位，再選 Discord 身分組。暱稱最多取兩個標籤，依優先級組成
-        「新聞長&amp;活動｜原暱稱」。
+        暱稱最多取兩個標籤，依優先級組成「新聞長&amp;活動｜原暱稱」。
       </p>
       {roles.length === 0 ? (
         <p className="mt-4 rounded border p-3 text-sm" style={{ borderColor: "var(--border)", color: "var(--danger)" }}>
-          Discord Bot 尚未回報身分組，請確認連線後重試；資源載入後即可由選單設定。
+          Bot 尚未回報身分組，請確認連線後重試。
         </p>
       ) : (
         <div className="mt-4 grid gap-3 md:grid-cols-5">

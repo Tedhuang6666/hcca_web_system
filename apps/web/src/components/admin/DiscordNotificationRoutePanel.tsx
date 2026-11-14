@@ -129,7 +129,7 @@ export default function DiscordNotificationRoutePanel({
         <div>
           <h2 className="text-sm font-semibold">模組通知路由</h2>
           <p className="mt-1 max-w-2xl text-xs" style={{ color: "var(--text-muted)" }}>
-            依事件、陳情分類或負責機關，把通知送到指定頻道；可選擇標註設計部等 Discord 身分組。
+            依事件、陳情分類或機關指定通知頻道與標註身分組。
           </p>
         </div>
         <span className="rounded-full px-2.5 py-1 text-xs" style={{ background: "var(--surface-hover)", color: "var(--text-muted)" }}>
@@ -197,7 +197,7 @@ export default function DiscordNotificationRoutePanel({
       <div className="mt-5 overflow-hidden rounded border" style={{ borderColor: "var(--border)" }}>
         {routes.length === 0 ? (
           <p className="px-4 py-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>
-            尚未設定模組通知。先建立一條路由，Bot 才會依條件送出通知。
+            尚未設定模組通知
           </p>
         ) : (
           <ul>

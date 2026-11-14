@@ -442,7 +442,7 @@ function QuestionRow({
             />
           </div>
           <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-            留空代表不限制；設定後填答者會看到「最多可選 N 項」提示。
+            留空表示不限
           </p>
         </div>
       )}
@@ -942,7 +942,7 @@ export default function EditSurveyPage() {
               公告設定（選填）
             </p>
             <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-              儲存後會同步到公告模組，按鈕會直接帶使用者前往這份問卷。
+              儲存後同步至公告。
             </p>
           </div>
           <div>
@@ -998,7 +998,7 @@ export default function EditSurveyPage() {
             <p id="survey-access-description" className="text-xs mt-1.5"
               style={{ color: "var(--text-muted)" }}>
               {accessMode === "link"
-                ? "問卷不會出現在公開列表；持有填答連結的人可直接開啟並填答。"
+                ? "不列於公開列表，持有連結者仍可填答。"
                 : accessMode === "public"
                   ? "所有人都能在公開問卷列表找到並填答。"
                   : "需要登入後填答；可指定使用者、組織或校務信箱網域。"}
@@ -1007,7 +1007,7 @@ export default function EditSurveyPage() {
           {accessMode === "members" && (
             <>
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                年級條件會額外限制填答資格；其他使用者、組織或信箱條件符合任一項即可。未設定其他條件時，所選年級的本校帳號皆可填答。
+                須符合所選年級；其餘資格條件符合任一項即可。
               </p>
               <SurveyGradeSelector value={allowedGrades} onChange={setAllowedGrades} />
               <div>

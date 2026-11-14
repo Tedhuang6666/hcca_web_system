@@ -468,9 +468,6 @@ export default function NotificationSettingsPage() {
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold">通知偏好設定</h1>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            只顯示您目前角色可能收到的通知，並可選擇要用哪些方式接收
-          </p>
         </div>
         <Link href="/notifications" className="btn btn-ghost">
           回通知中心
@@ -484,8 +481,7 @@ export default function NotificationSettingsPage() {
         >
           <h2 className="text-sm font-semibold">Email 摘要</h2>
           <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-            把未讀通知聚合成單封
-            Email，避免每則通知都收到一封信。即時通知仍會照常推播。
+            未讀通知合併為一封 Email；即時推播照常。
           </p>
         </div>
         <div className="flex flex-wrap gap-2 px-5 py-4">
@@ -533,8 +529,7 @@ export default function NotificationSettingsPage() {
           >
             <h2 className="text-sm font-semibold">系統寄信</h2>
             <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-              僅具備 Feature Flag
-              管理權限者可調整。這些是全站開關，不會改變個別使用者的通知偏好。
+              全站開關，僅具 Feature Flag 管理權限者可調整；個人偏好不受影響。
             </p>
           </div>
           {systemEmailLoading ? (
@@ -618,7 +613,7 @@ export default function NotificationSettingsPage() {
                 className="mt-1 text-xs"
                 style={{ color: "var(--text-muted)" }}
               >
-                綁定 LINE 或 Discord 後，即可在這裡選擇要接收的通知。
+                綁定 LINE 或 Discord 後可選擇通知項目。
               </p>
             )}
           </div>

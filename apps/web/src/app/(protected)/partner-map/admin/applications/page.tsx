@@ -174,9 +174,6 @@ export default function PartnerApplicationsAdminPage() {
             特約商家申請
           </div>
           <h1 className="mt-2 text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>表單設定與審核</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6" style={{ color: "var(--text-muted)" }}>
-            調整公開頁要收集的資料，再從同一頁處理商家的合作申請。Discord 頻道通知請到 Discord 管理的「特約商家申請送出」事件設定。
-          </p>
         </div>
         <span className="rounded-full px-3 py-1.5 text-xs font-semibold" style={{ background: settings?.is_open ? "var(--success-dim)" : "var(--surface-hover)", color: settings?.is_open ? "var(--success)" : "var(--text-muted)" }}>
           {settings?.is_open ? "公開表單受理中" : "公開表單已關閉"}
@@ -188,7 +185,6 @@ export default function PartnerApplicationsAdminPage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>公開表單設定</h2>
-              <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>欄位調整儲存後，公開頁會立即套用新設定。</p>
             </div>
             <label className="flex min-h-11 items-center gap-2 text-sm" style={{ color: "var(--text-secondary)" }}>
               <input type="checkbox" checked={settings.is_open} onChange={(event) => setSettings((current) => current ? { ...current, is_open: event.target.checked } : current)} />
@@ -254,7 +250,7 @@ export default function PartnerApplicationsAdminPage() {
         </div>
       </section>
 
-      <p className="text-xs leading-5" style={{ color: "var(--text-muted)" }}>Discord 通知設定：請至「管理 → Discord」，在模組通知路由新增「特約商家申請送出」，選擇指定伺服器與頻道即可。</p>
+      <p className="text-xs leading-5" style={{ color: "var(--text-muted)" }}>Discord 通知請設定「特約商家申請送出」事件。</p>
     </div>
   );
 }

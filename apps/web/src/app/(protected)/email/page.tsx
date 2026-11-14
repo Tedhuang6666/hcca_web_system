@@ -1192,7 +1192,7 @@ function ComposeInner() {
         </div>
         {activeDraftId && (
           <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-            正在編輯雲端草稿；儲存後會依帳號同步，可在其他裝置繼續編輯。
+            雲端草稿，儲存後可跨裝置編輯。
           </p>
         )}
       </header>
@@ -1337,9 +1337,6 @@ function ComposeInner() {
                   複製收件人
                 </button>
               </div>
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                先選來源，再選要套用格式或只複製收件人，不會因為點下拉就覆蓋目前內容。
-              </p>
             </div>
             <div className="space-y-2">
               <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
@@ -1482,7 +1479,7 @@ function ComposeInner() {
             </div>
             {cardRows.length === 0 ? (
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                可加入「時間 / 地點 / 狀態」等重點欄位，會以卡片樣式呈現。
+                例如：時間、地點、狀態。
               </p>
             ) : (
               cardRows.map((row, i) => (
@@ -1766,7 +1763,7 @@ function ComposeInner() {
               {pasteTableOpen && (
                 <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
                   <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                    可只貼姓名與電子郵件，也可包含部分自訂欄位；資料會追加在現有表格後方。
+                    支援姓名、Email 與自訂欄位，資料會追加至現有表格。
                   </p>
                   <textarea
                     className="input min-h-28 font-mono text-xs"
@@ -1909,7 +1906,7 @@ function ComposeInner() {
                 <div>
                   <h3 className="text-xs font-semibold">條件式佔位符</h3>
                   <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                    依每位收件人的欄位值自動填入另一個欄位；規則會由上到下套用，後面的規則優先。
+                    依收件資料自動填入欄位；後面的規則優先。
                   </p>
                 </div>
                 <button
@@ -1928,7 +1925,7 @@ function ComposeInner() {
               )}
               {conditionalRules.length === 0 && definedVariables.length > 0 && (
                 <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                  尚未設定條件。範例：如果「第一志願」等於「攝影部」，就將「面試時間」設定為「115/06/20 14:00」。
+                  尚未設定條件
                 </p>
               )}
               {conditionalRules.map((rule, index) => {
@@ -2033,11 +2030,7 @@ function ComposeInner() {
                 + 新增按鈕
               </button>
             </div>
-            {buttons.length === 0 ? (
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                可加入一顆以上的按鈕（例如「前往簽到」「查看附件」），並各自選擇樣式。
-              </p>
-            ) : (
+            {buttons.length === 0 ? null : (
               buttons.map((btn, i) => (
                 <div key={i} className="space-y-2 rounded-lg p-2" style={{ background: "var(--bg-elevated)" }}>
                   <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_8rem]">
@@ -2088,11 +2081,7 @@ function ComposeInner() {
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => addBlock("divider")}>+ 分隔線</button>
               </div>
             </div>
-            {blocks.length === 0 ? (
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                在內文之後加入額外段落、圖片或分隔線，依排列順序呈現，打造更完整的版面。
-              </p>
-            ) : (
+            {blocks.length === 0 ? null : (
               blocks.map((blk, i) => (
                 <div key={i} className="space-y-2 rounded-lg p-2" style={{ background: "var(--bg-elevated)" }}>
                   <div className="flex items-center justify-between">

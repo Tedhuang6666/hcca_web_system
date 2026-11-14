@@ -25,7 +25,7 @@ export default function BudgetAdvanceReceipts({ budgetId, expenses }: { budgetId
   };
 
   return <section className="finance-budget__section budget-advance-receipts" aria-labelledby="budget-advance-heading">
-    <header><div><h3 id="budget-advance-heading">代墊簽收單</h3><p>勾選實際代墊支出，依代墊人彙整為 Word 簽收單，列出明細、合計與空白簽名欄。</p></div></header>
+    <header><div><h3 id="budget-advance-heading">代墊簽收單</h3><p>依代墊人彙整 Word 簽收單，含明細、合計與簽名欄。</p></div></header>
     {advances.length === 0 ? <p className="budget-workbook__empty">登記支出時填寫「代墊人」，就能在這裡產生簽收單。</p> : <>
       <button className="btn btn-secondary" type="button" onClick={() => setSelected(chosen.length === advances.length ? new Set() : new Set(advances.map((expense) => expense.id)))}>{chosen.length === advances.length ? "取消全選" : "全選代墊支出"}</button>
       <div className="budget-advance-receipts__list">{advances.map((expense) => <label key={expense.id}>

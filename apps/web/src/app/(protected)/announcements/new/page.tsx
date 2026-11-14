@@ -155,7 +155,7 @@ export default function NewAnnouncementPage() {
         <div>
           <h2 className="text-sm font-semibold">行動連結</h2>
           <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-            選填。可填入站內路徑或完整 HTTP(S) 網址，讓讀者直接前往下一步。
+            選填，支援站內路徑或完整 HTTP(S) 網址。
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]">

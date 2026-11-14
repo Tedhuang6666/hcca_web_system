@@ -99,7 +99,7 @@ export default function BusinessAccountPanel({ businessId }: { businessId: strin
             <ShieldCheck size={16} aria-hidden="true" />店家帳號權限
           </h2>
           <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-            被指定的帳號可從「我的店家」更新公開基本資料與營業時間；可設定一個或多個帳號。
+            指定帳號可由「我的店家」更新公開資料與營業時間。
           </p>
         </div>
         <button type="button" className="topbar-icon-btn" onClick={() => void load()} aria-label="重新整理店家帳號">
