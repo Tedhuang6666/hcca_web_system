@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.core.clock import TAIPEI, local_today
-from api.models.shop import Order, OrderItem, OrderStatus, Product
+from api.models.shop import Order, OrderItem, OrderStatus, Product, ProductVariantGroup
 from api.schemas.shop_analytics import (
     ShopSalesAnalyticsOut,
     ShopSalesCosts,
@@ -69,53 +69,24 @@ async def sales_analytics(
     class_id: uuid.UUID | None = None,
     is_paid: bool | None = None,
 ) -> ShopSalesAnalyticsOut:
-    end = date_to or local_today()
-    start = date_from or end - timedelta(days=29)
+    start, end = sales_date_range(date_from, date_to)
     days = (end - start).days + 1
-    if not 1 <= days <= 366:
-        raise ValueError("訂購迄日不得早於起日，每次最多分析 366 天")
     previous_start = compare_from or start - timedelta(days=days)
     previous_end = previous_start + timedelta(days=days - 1)
     ranges = [(start, end)] + ([(previous_start, previous_end)] if compare else [])
     periods = []
     for period_start, period_end in ranges:
-        query = (
-            select(Order)
-            .options(
-                selectinload(Order.items)
-                .selectinload(OrderItem.product)
-                .selectinload(Product.series),
-                selectinload(Order.school_class),
-            )
-            .where(
-                Order.test_product_id.is_(None),
-                Order.created_at >= datetime.combine(period_start, time.min, TAIPEI),
-                Order.created_at
-                < datetime.combine(period_end + timedelta(days=1), time.min, TAIPEI),
-            )
+        orders = await load_sales_orders(
+            session,
+            date_from=period_start,
+            date_to=period_end,
+            activity_id=activity_id,
+            category_id=category_id,
+            product_id=product_id,
+            grade=grade,
+            class_id=class_id,
+            is_paid=is_paid,
         )
-        if activity_id is not None:
-            query = query.where(Order.activity_id == activity_id)
-        if grade is not None:
-            query = query.where(Order.school_class.has(grade=grade))
-        if class_id is not None:
-            query = query.where(Order.class_id == class_id)
-        if is_paid is not None:
-            query = query.where(Order.is_paid.is_(is_paid))
-        if product_id is not None:
-            query = query.where(Order.items.any(OrderItem.product_id == product_id))
-        if category_id is not None:
-            query = query.where(
-                Order.items.any(
-                    OrderItem.product.has(
-                        or_(
-                            Product.category_id == category_id,
-                            Product.series.has(category_id=category_id),
-                        )
-                    )
-                )
-            )
-        orders = (await session.scalars(query)).unique().all()
         periods.append(_summarize(orders, period_start, period_end, product_id, category_id))
     previous = periods[1] if compare else None
     return ShopSalesAnalyticsOut(
@@ -124,6 +95,71 @@ async def sales_analytics(
         previous=previous,
         insights=build_sales_insights(periods[0], previous),
     )
+
+
+def sales_date_range(date_from: date | None, date_to: date | None) -> tuple[date, date]:
+    end = date_to or local_today()
+    start = date_from or end - timedelta(days=29)
+    if not 1 <= (end - start).days + 1 <= 366:
+        raise ValueError("訂購迄日不得早於起日，每次最多分析 366 天")
+    return start, end
+
+
+async def load_sales_orders(
+    session: AsyncSession,
+    *,
+    date_from: date,
+    date_to: date,
+    activity_id: uuid.UUID | None = None,
+    category_id: uuid.UUID | None = None,
+    product_id: uuid.UUID | None = None,
+    grade: int | None = None,
+    class_id: uuid.UUID | None = None,
+    is_paid: bool | None = None,
+    include_variants: bool = False,
+) -> list[Order]:
+    """分析與整理表共用篩選，保留整單明細供折扣分攤。"""
+    query = (
+        select(Order)
+        .options(
+            selectinload(Order.items).selectinload(OrderItem.product).selectinload(Product.series),
+            selectinload(Order.school_class),
+        )
+        .where(
+            Order.test_product_id.is_(None),
+            Order.created_at >= datetime.combine(date_from, time.min, TAIPEI),
+            Order.created_at < datetime.combine(date_to + timedelta(days=1), time.min, TAIPEI),
+        )
+    )
+    if include_variants:
+        query = query.options(
+            selectinload(Order.items)
+            .selectinload(OrderItem.product)
+            .selectinload(Product.variant_groups)
+            .selectinload(ProductVariantGroup.options)
+        )
+    if activity_id is not None:
+        query = query.where(Order.activity_id == activity_id)
+    if grade is not None:
+        query = query.where(Order.school_class.has(grade=grade))
+    if class_id is not None:
+        query = query.where(Order.class_id == class_id)
+    if is_paid is not None:
+        query = query.where(Order.is_paid.is_(is_paid))
+    if product_id is not None:
+        query = query.where(Order.items.any(OrderItem.product_id == product_id))
+    if category_id is not None:
+        query = query.where(
+            Order.items.any(
+                OrderItem.product.has(
+                    or_(
+                        Product.category_id == category_id,
+                        Product.series.has(category_id=category_id),
+                    )
+                )
+            )
+        )
+    return list((await session.scalars(query)).unique().all())
 
 
 def _add_costs(target: ShopSalesCosts, amount: int, cost: int, missing: int) -> None:

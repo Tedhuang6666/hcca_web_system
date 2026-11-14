@@ -443,6 +443,16 @@ async def test_sales_report_download_contains_scoped_values_and_details(
         assert "比較期" not in text
     else:
         workbook = load_workbook(BytesIO(response.content))
+        assert workbook.active.title == "售票情形"
+        table = workbook["售票情形"]
+        totals = next(row for row in table.values if row[0] == "總數量")
+        assert totals[1] == 3
+        assert totals[5] == 300
+        assert table.cell(table.max_row, 3).value == "折扣後總金額"
+        assert table.cell(table.max_row, 6).value == 267
+        assert {row[0] for row in list(table.values)[1:] if row[0] not in (None, "總數量")} == {
+            "紀念衫"
+        }
         assert {
             "報告說明",
             "關鍵指標",

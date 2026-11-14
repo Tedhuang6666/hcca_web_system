@@ -6,6 +6,7 @@ import asyncio
 import base64
 import html
 import math
+from datetime import UTC, datetime
 from io import BytesIO
 
 import pygal
@@ -27,7 +28,19 @@ from api.schemas.shop_analytics import (
     ShopSalesVariantRow,
 )
 from api.services.official_print import _font_faces, render_print_pdf
-from api.services.shop._analytics import sales_analytics
+from api.services.shop._analytics import (
+    _summarize,
+    load_sales_orders,
+    sales_analytics,
+    sales_date_range,
+)
+from api.services.shop._analytics_insights import build_sales_insights
+from api.services.shop._sales_table import (
+    TABLE_NOTE,
+    SalesTableRow,
+    add_sales_table,
+    build_sales_table,
+)
 
 METRICS = [
     ("total_amount", "訂購金額"),
@@ -83,7 +96,28 @@ NOTES = (
 async def create_sales_report(
     session: AsyncSession, request: ShopSalesReportCreate
 ) -> tuple[bytes, str, str]:
-    data = await sales_analytics(session, compare=False, **request.model_dump(exclude={"format"}))
+    if request.format == "xlsx":
+        start, end = sales_date_range(request.date_from, request.date_to)
+        orders = await load_sales_orders(
+            session,
+            **request.model_dump(exclude={"format", "date_from", "date_to"}),
+            date_from=start,
+            date_to=end,
+            include_variants=True,
+        )
+        current = _summarize(orders, start, end, request.product_id, request.category_id)
+        data = ShopSalesAnalyticsOut(
+            generated_at=datetime.now(UTC),
+            current=current,
+            insights=build_sales_insights(current, None),
+        )
+        rows = build_sales_table(
+            orders, product_id=request.product_id, category_id=request.category_id
+        )
+    else:
+        data = await sales_analytics(
+            session, compare=False, **request.model_dump(exclude={"format"})
+        )
     scope = []
     for field, model, prefix in [
         ("activity_id", Activity, "活動"),
@@ -107,9 +141,10 @@ async def create_sales_report(
     if request.is_paid is not None:
         scope.append("班聯已確認" if request.is_paid else "班聯未確認")
     scope_label = "；".join(scope) or "全部活動、全部商品、全部班級、全部收款狀態"
-    content = await asyncio.to_thread(
-        render_sales_pdf if request.format == "pdf" else render_sales_excel, data, scope_label
-    )
+    if request.format == "xlsx":
+        content = await asyncio.to_thread(render_sales_excel, data, scope_label, rows)
+    else:
+        content = await asyncio.to_thread(render_sales_pdf, data, scope_label)
     media_type = (
         "application/pdf"
         if request.format == "pdf"
@@ -308,10 +343,14 @@ def _sheet(workbook: Workbook, name: str, headers: list[str], rows: list[list]):
     return sheet
 
 
-def render_sales_excel(data: ShopSalesAnalyticsOut, scope: str) -> bytes:
+def render_sales_excel(
+    data: ShopSalesAnalyticsOut, scope: str, sales_rows: list[SalesTableRow] | None = None
+) -> bytes:
     workbook = Workbook()
     workbook.remove(workbook.active)
     period = data.current
+    if sales_rows is not None:
+        add_sales_table(workbook, sales_rows, period.metrics.discount_amount)
     _sheet(
         workbook,
         "報告說明",
@@ -320,6 +359,7 @@ def render_sales_excel(data: ShopSalesAnalyticsOut, scope: str) -> bytes:
             ["統計範圍", scope],
             ["資料區間", f"{period.date_from} 至 {period.date_to}"],
             ["產生時間（台北）", data.generated_at.astimezone(TAIPEI).isoformat()],
+            *([["售票情形", TABLE_NOTE]] if sales_rows is not None else []),
             *[[item.title, item.detail] for item in data.insights],
             *[["統計口徑", note] for note in NOTES],
         ],
