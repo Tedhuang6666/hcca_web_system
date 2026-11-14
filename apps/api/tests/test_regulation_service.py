@@ -458,19 +458,22 @@ async def test_reorder_articles_raises_for_article_not_in_regulation(
 # ── 審議流程狀態機 ───────────────────────────────────────────────────────
 
 
-async def test_transition_workflow_rejects_disallowed_transition(
-    db_session: AsyncSession, make_user
-) -> None:
-    org = await _make_org(db_session)
-    user = await make_user(email="transition-invalid@school.edu")
-    reg = await _make_regulation(db_session, org, user)  # DRAFT
+async def test_transition_workflow_rejects_disallowed_transition() -> None:
+    reg = Regulation(
+        title="測試法規",
+        category=RegulationCategory.ORDINANCE,
+        content="",
+        org_id=uuid.uuid4(),
+        created_by=uuid.uuid4(),
+        workflow_status=RegulationWorkflowStatus.DRAFT,
+    )
 
     with pytest.raises(ValueError, match="無法從"):
         await reg_svc.transition_workflow(
-            db_session,
-            reg,
-            to_status=RegulationWorkflowStatus.PUBLISHED,
-            actor_id=user.id,
+            session=None,  # type: ignore[arg-type]
+            reg=reg,
+            to_status=RegulationWorkflowStatus.SCHEDULED,
+            actor_id=uuid.uuid4(),
         )
 
 
