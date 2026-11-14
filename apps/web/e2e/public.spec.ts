@@ -14,7 +14,21 @@ test("public homepage exposes primary navigation", async ({ page }) => {
   expect(inlineExecutableScriptsWithoutNonce).toBe(0);
 
   await expect(page.getByRole("main").getByRole("heading", { level: 1 })).toBeVisible();
-  await expect(page.getByRole("link", { name: /最新公告/ }).first()).toBeVisible();
+  const viewport = page.viewportSize();
+  if (viewport && viewport.width < 640) {
+    await page.getByRole("button", { name: "開啟導覽" }).click();
+    await expect(
+      page
+        .getByRole("navigation", { name: "公開網站行動導覽" })
+        .getByRole("link", { name: "最新公告" }),
+    ).toBeVisible();
+  } else {
+    await expect(
+      page
+        .getByRole("navigation", { name: "公開網站導覽" })
+        .getByRole("link", { name: "最新公告" }),
+    ).toBeVisible();
+  }
 });
 
 test("login page exposes OAuth entry points", async ({ page }) => {
