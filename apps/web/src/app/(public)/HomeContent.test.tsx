@@ -40,6 +40,16 @@ it("does not promote an announcement whose urgent deadline has passed", () => {
   expect(screen.getByText("目前沒有新公告")).toBeVisible();
 });
 
+it("features the newest regular announcement once when there is no urgent notice", () => {
+  const older = { ...urgent, id: "older", title: "較早的公告", is_urgent: false, link_url: null };
+  const newer = { ...older, id: "newer", title: "較新的公告", published_at: "2026-11-02T08:00:00Z" };
+  render(<HomeContent {...props} announcements={[older, newer]} />);
+  expect(screen.getByRole("heading", { name: newer.title })).toBeVisible();
+  expect(screen.getAllByRole("link", { name: newer.title })).toHaveLength(1);
+  expect(screen.getByRole("link", { name: newer.title })).toHaveAttribute("href", "/news/newer");
+  expect(screen.getByRole("link", { name: /較早的公告/ })).toHaveAttribute("href", "/news/older");
+});
+
 it("distinguishes an unavailable announcement service from an empty list", () => {
   render(<HomeContent {...props} announcementsAvailable={false} />);
   expect(screen.getByRole("alert")).toHaveTextContent("無法取得最新公告");

@@ -65,10 +65,13 @@ export default function HomeContent({
   const urgent = urgentAnnouncement && !isAnnouncementExpired(urgentAnnouncement)
     ? urgentAnnouncement
     : null;
-  const latestAnnouncements = announcements
+  const activeAnnouncements = announcements
     .filter((item) => item.id !== urgent?.id && !isAnnouncementExpired(item))
-    .sort((a, b) => (b.published_at ?? b.created_at).localeCompare(a.published_at ?? a.created_at))
-    .slice(0, 4);
+    .sort((a, b) => (b.published_at ?? b.created_at).localeCompare(a.published_at ?? a.created_at));
+  const featuredAnnouncement = urgent ?? activeAnnouncements[0] ?? null;
+  const latestAnnouncements = activeAnnouncements
+    .filter((item) => item.id !== featuredAnnouncement?.id)
+    .slice(0, 3);
   const articles = (bundle?.nav_pages ?? [])
     .filter((page) => page.page_kind === "article")
     .slice()
@@ -86,21 +89,21 @@ export default function HomeContent({
     <div className="campus-content">
       <section className="campus-news" aria-labelledby="campus-news-title">
         <div className="campus-section-heading">
-          <h2 id="campus-news-title">校園近況</h2>
+          <h2 id="campus-news-title">最新消息</h2>
           <Link href="/news">全部公告<ArrowRight size={16} aria-hidden /></Link>
         </div>
         <div className="campus-news-layout">
-          <div>
-            {urgent && (
+          <div className={`campus-news-content${featuredAnnouncement && latestAnnouncements.length > 0 ? " has-news-list" : ""}`}>
+            {featuredAnnouncement && (
               <article className="campus-news-lead">
                 <div className="campus-meta">
-                  <span className="campus-status">重要</span>
-                  <time dateTime={urgent.published_at ?? urgent.created_at}>
-                    {formatDate(urgent.published_at ?? urgent.created_at)}
+                  {featuredAnnouncement.is_urgent && <span className="campus-status">重要</span>}
+                  <time dateTime={featuredAnnouncement.published_at ?? featuredAnnouncement.created_at}>
+                    {formatDate(featuredAnnouncement.published_at ?? featuredAnnouncement.created_at)}
                   </time>
                 </div>
-                <h3><Link href={urgent.link_url?.trim() || `/news/${urgent.id}`}>
-                  {urgent.title}<ArrowRight size={22} aria-hidden />
+                <h3><Link href={urgent?.link_url?.trim() || `/news/${featuredAnnouncement.id}`}>
+                  {featuredAnnouncement.title}<ArrowRight size={22} aria-hidden />
                 </Link></h3>
               </article>
             )}
@@ -118,7 +121,7 @@ export default function HomeContent({
                   </li>
                 ))}
               </ul>
-            ) : announcementsAvailable && !urgent && <p className="campus-empty">目前沒有新公告</p>}
+            ) : announcementsAvailable && !featuredAnnouncement && <p className="campus-empty">目前沒有新公告</p>}
             {!announcementsAvailable && <PublicLoadFailure message="無法取得最新公告" />}
           </div>
           <aside className="campus-participation" aria-label="校園參與">
@@ -142,15 +145,24 @@ export default function HomeContent({
             <Link href="/articles">全部文章<ArrowRight size={16} aria-hidden /></Link>
           </div>
           <div className="campus-stories-layout">
-            {articles.map((article, index) => (
-              <article key={article.id} className={index === 0 ? "campus-story campus-story-lead" : "campus-story"}>
-                <time className="campus-meta" dateTime={article.updated_at}>
-                  更新 {formatDate(article.updated_at)}
-                </time>
-                <h3><Link href={publicPageHref(article)}>{article.title}</Link></h3>
-                {index === 0 && article.summary && <p>{article.summary}</p>}
-              </article>
-            ))}
+            {articles.map((article, index) => {
+              const coverUrl = index === 0 ? uploadUrl(article.cover_image_url) : "";
+              return (
+                <article key={article.id} className={`campus-story${index === 0 ? " campus-story-lead" : ""}${coverUrl ? " has-cover" : ""}`}>
+                  {coverUrl && <div className="campus-story-media">
+                    <ShopImage src={coverUrl} alt={article.cover_image_alt || ""} width={960} height={600}
+                      sizes="(max-width: 767px) 100vw, (max-width: 1200px) 55vw, 640px" loading="lazy" />
+                  </div>}
+                  <div className="campus-story-copy">
+                    <time className="campus-meta" dateTime={article.updated_at}>
+                      更新 {formatDate(article.updated_at)}
+                    </time>
+                    <h3><Link href={publicPageHref(article)}>{article.title}</Link></h3>
+                    {index === 0 && article.summary && <p>{article.summary}</p>}
+                  </div>
+                </article>
+              );
+            })}
           </div>
         </section>
       )}

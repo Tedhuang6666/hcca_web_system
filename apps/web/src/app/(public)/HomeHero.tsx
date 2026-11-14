@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
+import Link from "next/link";
+import { ArrowDown, ArrowRight } from "lucide-react";
 
-import PublicEmblem from "@/components/site/PublicEmblem";
 import { BRANDING } from "@/lib/branding";
 import { sanitizeCustomCss } from "@/lib/sanitize";
 import type { PublicSiteBundleOut } from "@/lib/types";
@@ -21,25 +22,25 @@ export default async function HomeHero({ bundle }: { bundle: PublicSiteBundleOut
   const configuredSubtitle = settings?.hero_subtitle?.trim();
   const subtitle = configuredSubtitle && !LEGACY_SUBTITLES.has(configuredSubtitle)
     ? configuredSubtitle
-    : "校園消息、生活紀錄與學生自治。";
+    : null;
 
   return (
     <>
       {settings?.custom_css && (
         <style nonce={nonce} dangerouslySetInnerHTML={{ __html: sanitizeCustomCss(settings.custom_css) }} />
       )}
-      <section className="campus-masthead" aria-labelledby="campus-title">
-        <div>
+      <section className="public-hero public-home-hero" aria-labelledby="campus-title">
+        <div className="campus-masthead">
           <h1 id="campus-title">{title}</h1>
-          <p>{subtitle}</p>
-        </div>
-        <div className="campus-masthead-emblem" aria-hidden="true">
-          <PublicEmblem
-            src={settings?.site_logo_url?.trim() || BRANDING.publicEmblemUrl}
-            alt=""
-            sizes="(max-width: 639px) 64px, 112px"
-            priority
-          />
+          {subtitle && <p>{subtitle}</p>}
+          <div className="campus-masthead-actions">
+            <Link href="#campus-news-title" className="public-cta-primary">
+              最新消息 <ArrowDown size={17} aria-hidden />
+            </Link>
+            <Link href="/petitions/public" className="public-cta-secondary">
+              公開陳情 <ArrowRight size={17} aria-hidden />
+            </Link>
+          </div>
         </div>
       </section>
     </>
