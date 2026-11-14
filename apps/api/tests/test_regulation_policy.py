@@ -16,7 +16,7 @@ from api.models.regulation import (
     RegulationRevision,
     RegulationWorkflowStatus,
 )
-from api.schemas.regulation import RegulationArticleCreate, RegulationPublishRequest
+from api.schemas.regulation import RegulationArticleCreate
 from api.services import regulation as reg_svc
 from api.services.official_print import render_regulation_print_html
 from api.services.regulation_consistency import audit_regulation_document_consistency
@@ -425,21 +425,27 @@ def test_regulation_print_splits_merged_subparagraphs() -> None:
 
 
 @pytest.mark.asyncio
-async def test_publish_regulation_rejects_parliamentary_categories() -> None:
+@pytest.mark.parametrize(
+    "category",
+    [RegulationCategory.CONSTITUTION, RegulationCategory.ORDINANCE],
+)
+async def test_parliamentary_categories_cannot_skip_council_approval(
+    category: RegulationCategory,
+) -> None:
     reg = Regulation(
         title="測試條例",
-        category=RegulationCategory.ORDINANCE,
-        content="",
+        category=category,
+        content="第一條 測試內容",
         org_id=uuid.uuid4(),
         created_by=uuid.uuid4(),
         workflow_status=RegulationWorkflowStatus.DRAFT,
     )
     with pytest.raises(ValueError, match="憲章與條例必須經議會核定"):
-        await reg_svc.publish_regulation(
+        await reg_svc.transition_workflow(
             session=None,  # type: ignore[arg-type]
             reg=reg,
-            data=RegulationPublishRequest(change_brief="test"),
-            published_by=uuid.uuid4(),
+            to_status=RegulationWorkflowStatus.PUBLISHED,
+            actor_id=uuid.uuid4(),
         )
 
 

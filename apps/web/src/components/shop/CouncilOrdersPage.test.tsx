@@ -69,10 +69,12 @@ it("班級部分收款後立即更新補收款區，補齊後重新載入班級�
   fireEvent.change(screen.getByRole("spinbutton", { name: "本次實收金額（元）" }), { target: { value: "2000" } });
   fireEvent.click(screen.getByRole("button", { name: "確認收到款項" }));
   await screen.findByText(/剩餘 NT\$1,000 已列入補收款區/);
+  await screen.findByRole("navigation", { name: "班聯統籌工作" });
   switchTask("追加補收款");
   const balances = await screen.findByRole("list", { name: "整班尾款" });
   fireEvent.click(within(balances).getByRole("button", { name: "收齊尾款 NT$1,000" }));
   await screen.findByText("已收齊該班的整班尾款。");
+  await screen.findByRole("navigation", { name: "班聯統籌工作" });
   switchTask("班級繳款");
   expect(await within(screen.getByRole("region", { name: "登記班級收款" })).findByText("已收齊")).toBeVisible();
 });
