@@ -2212,3 +2212,13 @@ nav[aria-label="底部主選單"] .bottom-tab-bar__badge {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* 工作介面以真實待辦與個人事項為中心，與公開內容保持不同密度。 */
+.dashboard-personal-progress { padding-block: 0.5rem 1rem; border-bottom: 1px solid var(--border); }
+.dashboard-focus-grid:has(> :only-child) { grid-template-columns: minmax(0, 1fr); }
+.dashboard-focus-grid:has(> :only-child) .dashboard-action-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 1.5rem; }
+.dashboard-personal-progress .dashboard-widget { border: 0; border-top: 1px solid var(--border); border-radius: 0; background: transparent; box-shadow: none; animation: none; }
+.dashboard-personal-progress .dashboard-widget:hover { transform: none; box-shadow: none; }
+@media (max-width: 767px) {
+  .dashboard-focus-grid:has(> :only-child) .dashboard-action-list { grid-template-columns: 1fr; }
+}

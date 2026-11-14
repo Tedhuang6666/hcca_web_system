@@ -1,11 +1,5 @@
 import Link from "next/link";
-import {
-  ArrowRight,
-  BookOpenText,
-  FileSearch,
-  Landmark,
-  Handshake,
-} from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 import PublicHomeServices from "./PublicHomeServices";
 import { fetchPublicModuleStatuses } from "@/lib/serverFetch";
@@ -23,25 +17,21 @@ const DATABASES = [
     href: "/regulations",
     title: "法規資料庫",
     description: "現行條文與修正沿革",
-    icon: BookOpenText,
   },
   {
     href: "/documents",
     title: "公文資料庫",
     description: "公開公文、附件與基本資訊",
-    icon: FileSearch,
   },
   {
     href: "/public/budgets",
     title: "財務總覽",
     description: "公開預算、支出總額與最近支出紀錄",
-    icon: Landmark,
   },
   {
     href: "/public/special-agreement",
     title: "特約洽談",
     description: "合作流程與參考文件",
-    icon: Handshake,
   },
 ];
 
@@ -64,29 +54,19 @@ export default async function PublicHomePage() {
         <div className="mb-4">
           <h2 className="text-2xl font-semibold">查詢資料</h2>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="public-directory-list">
           {DATABASES.map((item) => {
-            const Icon = item.icon;
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className="group rounded-2xl border border-[var(--public-border)] bg-[var(--public-surface)] p-6 transition-colors hover:border-[var(--public-accent)] hover:bg-[var(--public-soft)]"
+                className="public-directory-link"
               >
-                <div className="flex items-start justify-between gap-5">
-                  <span className="grid h-12 w-12 place-items-center rounded-xl bg-[var(--public-accent-soft)] text-[var(--public-accent)]">
-                    <Icon size={24} aria-hidden />
-                  </span>
-                  <ArrowRight
-                    size={20}
-                    className="text-[var(--public-muted)] transition-colors group-hover:text-[var(--public-accent)]"
-                    aria-hidden
-                  />
+                <div>
+                  <h3>{item.title}</h3>
+                  <p>{item.description}</p>
                 </div>
-                <h3 className="mt-7 text-xl font-semibold">{item.title}</h3>
-                <p className="mt-2 text-sm leading-7 text-[var(--public-secondary)]">
-                  {item.description}
-                </p>
+                <ArrowRight size={20} aria-hidden />
               </Link>
             );
           })}

@@ -44,15 +44,6 @@ const SEVERITY_STYLES: Record<string, { color: string; bg: string; border: strin
   },
 };
 
-const HINT_LABEL: Record<string, string> = {
-  student: "學生視角",
-  teacher: "師長視角",
-  vendor: "合作夥伴視角",
-  default: "完整平台視角",
-  officer: "幹部視角",
-  leader: "領導視角",
-};
-
 const MODULE_LABEL: Record<TaskModule, string> = {
   document: "公文",
   regulation: "法規",
@@ -321,22 +312,10 @@ export default function DashboardPageClient({
               <h1 className="dashboard-title">
                 {greeting}，{userName || "使用者"}
               </h1>
-              {data && (
-                <span className="dashboard-role-badge">
-                  {HINT_LABEL[profile] ?? HINT_LABEL[layoutHint] ?? "個人化視角"}
-                </span>
-              )}
             </div>
-            <p className="dashboard-subtitle">
-              {priorityTasks.length > 0
-                ? dashboardContent.busySubtitle
-                : dashboardContent.emptySubtitle}
-            </p>
           </div>
           <div className="dashboard-hero-actions">
-            <p className="dashboard-updated">
-              {urgentCount > 0 ? `${urgentCount} 件需要優先處理` : "已依權限整理"}
-            </p>
+            {urgentCount > 0 && <p className="dashboard-updated">{urgentCount} 件需要優先處理</p>}
             <Link href={primaryAction.href} className="dashboard-primary-action">
               <primaryAction.icon size={14} aria-hidden={true} />
               {primaryAction.label}
@@ -346,7 +325,17 @@ export default function DashboardPageClient({
         </div>
       </section>
 
+      {profile === "student" && widgets.some((widget) => widget.key !== "announcements_recent") && (
+        <section className="dashboard-personal-progress" aria-labelledby="dashboard-progress-title">
+          <div className="dashboard-section-heading">
+            <h2 id="dashboard-progress-title">與我有關</h2>
+          </div>
+          <DashboardWidgets widgets={widgets.filter((widget) => widget.key !== "announcements_recent")} />
+        </section>
+      )}
+
       <section className="dashboard-focus-grid" aria-label="今日重點">
+        {(hasTaskAccess || priorityTasks.length > 0) && (
         <div className="dashboard-focus-main">
           <div className="dashboard-section-heading">
             <h2>優先處理</h2>
@@ -369,11 +358,11 @@ export default function DashboardPageClient({
               <ShieldCheck size={24} aria-hidden={true} />
               <div>
                 <p>目前沒有需要立即處理的事項</p>
-                <span>新待辦會顯示在這裡。</span>
               </div>
             </div>
           )}
         </div>
+        )}
 
         <aside className="dashboard-actions-panel" aria-label={dashboardContent.actionHeading}>
           <div className="dashboard-section-heading">
@@ -441,7 +430,6 @@ export default function DashboardPageClient({
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
             <span>
               <span className="block text-sm font-semibold">管理員常用操作</span>
-              <span className="mt-0.5 block text-xs">維護與管理工具</span>
             </span>
             <ChevronRight size={16} aria-hidden={true} />
           </summary>

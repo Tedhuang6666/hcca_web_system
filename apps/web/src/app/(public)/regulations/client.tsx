@@ -167,9 +167,6 @@ export default function RegulationsClient({
       <div className="workspace-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>法規</h1>
-          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            查詢現行規章與歷史版本。
-          </p>
         </div>
         <div className="regulation-page-actions flex items-center gap-2">
           {canManage && (
@@ -214,7 +211,7 @@ export default function RegulationsClient({
       {can("regulation:admin") && <RegulationSyncPanel onSynced={onSynced} />}
 
       {/* 搜尋 + 分類 */}
-      <div className="card p-4 flex flex-col gap-3">
+      <div className="regulation-query-tools flex flex-col gap-3">
         <div className="relative w-full">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
             width="14" height="14" viewBox="0 0 24 24" fill="none"
@@ -289,8 +286,7 @@ export default function RegulationsClient({
       ) : (
         <div
           key={`${category}:${workflow}:${debouncedSearch}:${showAll}`}
-          className="regulations-results grid gap-3"
-          style={{ gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))" }}
+          className="regulations-results regulation-result-list"
         >
           {sorted.map((reg, resultIndex) => (
             <RegCard key={reg.id} reg={reg} keyword={debouncedSearch.trim()} resultIndex={resultIndex} />
@@ -313,19 +309,19 @@ function RegCard({
 
   return (
     <div
-      className="card p-5 flex flex-col gap-3 reg-card-link regulation-result-card"
+      className="reg-card-link regulation-result-card regulation-result-row"
       style={{
         opacity: isArchived ? 0.6 : 1,
         ["--result-index" as string]: resultIndex,
       } as CSSProperties}
     >
     <Link href={regulationHref(reg)}
-      className="flex flex-col gap-3 flex-1"
+      className="regulation-result-main"
       style={{
         textDecoration: "none",
       }}>
       <div className="flex items-start justify-between gap-2">
-        <h2 className="font-semibold text-sm leading-snug flex-1 reg-card-title"
+        <h2 className="font-semibold text-base leading-relaxed flex-1 reg-card-title"
           style={{
             color: "var(--text-primary)",
             transition: "color var(--transition)",
@@ -340,10 +336,9 @@ function RegCard({
         <span className="text-xs" style={{ color: "var(--text-muted)" }}>v{reg.version}</span>
       </div>
       <div className="flex items-center justify-between text-xs" style={{ color: "var(--text-muted)" }}>
-        {reg.published_at
-          ? <span>發布 {new Date(reg.published_at).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" })}</span>
-          : <span>更新 {new Date(reg.updated_at).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" })}</span>
-        }
+        <time dateTime={reg.updated_at}>
+          更新 {new Date(reg.updated_at).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" })}
+        </time>
         {!isArchived ? (
           <span className="flex items-center gap-1 reg-card-cta" style={{ color: "var(--primary-text)" }}>
             閱讀全文
@@ -394,7 +389,7 @@ function RegCard({
       </div>
     )}
     {/* 底部工具列 */}
-    <div className="flex items-center justify-end gap-2 pt-1" style={{ borderTop: "1px solid var(--border)" }}>
+    <div className="regulation-result-tools">
       <button
         onClick={async (e) => {
           e.preventDefault();

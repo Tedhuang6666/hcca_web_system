@@ -1,10 +1,10 @@
 import {
-  fetchAnnouncements,
   fetchPublicJson,
   fetchPublicModuleStatuses,
 } from "@/lib/serverFetch";
 import type {
   AnnouncementOut,
+  AnnouncementListItem,
   CatalogCategoryOut,
   PublicSiteBundleOut,
   SurveyListItem,
@@ -21,7 +21,7 @@ export default async function DeferredHomeContent({
   openSurveys: SurveyListItem[];
 }) {
   const [announcements, catalog, moduleStatuses] = await Promise.all([
-    fetchAnnouncements(6),
+    fetchPublicJson<AnnouncementListItem[]>("/announcements?limit=6"),
     fetchPublicJson<CatalogCategoryOut[]>("/shop/catalog", { revalidate: 15 }),
     fetchPublicModuleStatuses(),
   ]);
@@ -30,7 +30,8 @@ export default async function DeferredHomeContent({
   return (
     <HomeContent
       bundle={bundle}
-      announcements={announcements}
+      announcements={announcements ?? []}
+      announcementsAvailable={announcements !== null}
       urgentAnnouncement={urgentAnnouncement}
       openSurveys={openSurveys}
       catalog={catalog}

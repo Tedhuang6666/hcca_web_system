@@ -50,13 +50,9 @@ export default async function PublicHomePage() {
     <PublicSiteShell
       navPages={bundle?.nav_pages ?? []}
       settings={bundle?.settings}
-      urgentAnnouncement={urgentAnnouncement}
+      urgentAnnouncement={null}
     >
-      <HomeHero
-        bundle={bundle}
-        urgentAnnouncement={urgentAnnouncement}
-        openSurvey={openSurveys[0] ?? null}
-      />
+      <HomeHero bundle={bundle} />
       <div className="public-home-deferred-region">
         <Suspense fallback={<DeferredHomeFallback />}>
           <DeferredHomeContent

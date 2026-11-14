@@ -13,8 +13,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { authApi } from "@/lib/api/auth";
 import { cacheCurrentUser } from "@/lib/auth-cache";
 import { BarChart2, ChevronDown, ClipboardList, ListChecks, PackageSearch, ShoppingBag, UsersRound } from "lucide-react";
-import PublicEmblem from "@/components/site/PublicEmblem";
-import { BRANDING } from "@/lib/branding";
+import PublicSiteFooter from "@/components/site/PublicSiteFooter";
 
 import "../../public-design-system.css";
 import "../../(public)/public-footer.css";
@@ -46,41 +45,7 @@ function PublicShopChrome({ children }: { children: React.ReactNode }) {
         <main id="main-content">
           <PageTransition>{children}</PageTransition>
         </main>
-        <footer className="public-footer">
-          <div className="public-footer-inner">
-            <div className="public-footer-brand">
-              <Link href="/" className="public-footer-brand-link">
-                <span className="public-footer-mark" aria-hidden="true">
-                  <PublicEmblem
-                    src={BRANDING.publicEmblemUrl}
-                    alt=""
-                    variant="small"
-                    className="h-full w-full object-contain"
-                    sizes="36px"
-                  />
-                </span>
-                <span>
-                  <strong>{BRANDING.orgName}</strong>
-                  <span>數位整合系統</span>
-                </span>
-              </Link>
-            </div>
-            <nav className="public-footer-links" aria-label="頁尾導覽">
-              <span className="public-footer-label">快速連結</span>
-              <Link href="/shop">商品訂購</Link>
-              <Link href="/shop/orders">我的預購</Link>
-              <Link href="/public">公開資料庫</Link>
-            </nav>
-            <nav className="public-footer-links" aria-label="法律與無障礙資訊">
-              <span className="public-footer-label">網站資訊</span>
-              <Link href="/legal/accessibility">無障礙聲明</Link>
-              <Link href="/legal/privacy">隱私政策</Link>
-            </nav>
-          </div>
-          <div className="public-footer-bottom">
-            <span>{BRANDING.orgShortName} · {BRANDING.platformName}</span>
-          </div>
-        </footer>
+        <PublicSiteFooter />
       </div>
     </PublicModuleStatusProvider>
   );

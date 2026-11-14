@@ -1,21 +1,12 @@
 import Link from "next/link";
-import {
-  ArrowRight,
-  BellRing,
-  Database,
-  FileText,
-  Megaphone,
-  MessageCircle,
-  ShoppingBag,
-  UsersRound,
-} from "lucide-react";
+import { ArrowRight, ShoppingBag } from "lucide-react";
 
 import LiveElectionCard from "@/components/site/LiveElectionCard";
-import PublicSpotlightLink from "@/components/site/PublicSpotlightLink";
+import PublicLoadFailure from "@/components/site/PublicLoadFailure";
 import ShopImage from "@/components/shop/ShopImage";
 import { uploadUrl } from "@/lib/config";
 import { isAnnouncementExpired } from "@/lib/announcement-expiration";
-import { publicPageHref } from "@/lib/publicNav";
+import { publicPageHref, resolvePublicNav } from "@/lib/publicNav";
 import type {
   AnnouncementListItem,
   AnnouncementOut,
@@ -26,74 +17,29 @@ import type {
 
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat("zh-TW", {
-    month: "numeric",
-    day: "numeric",
+    timeZone: "Asia/Taipei",
+    month: "2-digit",
+    day: "2-digit",
   }).format(new Date(value));
 }
 
 export function HomeEntrySection({ bundle }: { bundle: PublicSiteBundleOut | null }) {
-  const publicDatabaseDescription = bundle?.settings?.public_database_description?.trim();
+  const serviceKeys = new Set(["public-db", "petitions", "officers", "contact"]);
+  const services = resolvePublicNav(bundle?.settings?.theme_config)
+    .filter((item) => serviceKeys.has(item.key) && !item.hidden)
+    .sort((a, b) => a.order - b.order);
+
+  if (services.length === 0) return null;
 
   return (
-    <section className="public-home-entry-section" aria-labelledby="public-entry-title">
-      <div className="public-home-entry-heading">
-        <h2 id="public-entry-title">所有校園服務</h2>
-        <p>挑選想要查看的內容，所有資訊已整理在本數位系統中！</p>
-      </div>
-      <nav className="public-quick-grid public-home-quick-grid" aria-label="公開網站主要入口">
-        {[
-          {
-            href: "/news",
-            title: "最新公告",
-            desc: "掌握最新消息",
-            action: "查看公告",
-            icon: Megaphone,
-          },
-          {
-            href: "/articles",
-            title: "文章專欄",
-            desc: "校園生活指南與實用文章",
-            action: "閱讀文章",
-            icon: FileText,
-          },
-          {
-            href: "/public",
-            title: "公開資料",
-            desc: publicDatabaseDescription || "法規、公文與治理紀錄",
-            action: "查詢資料",
-            icon: Database,
-          },
-          {
-            href: "/petitions/public",
-            title: "公開陳情",
-            desc: "閱讀公開案件與處理回覆",
-            action: "查看陳情",
-            icon: MessageCircle,
-          },
-        ].map((item, index) => {
-          const Icon = item.icon;
-          return (
-            <PublicSpotlightLink
-              key={item.href}
-              href={item.href}
-              className="public-feature-card public-home-feature-card"
-              data-entry={index}
-            >
-              <span className="public-home-card-wash" aria-hidden="true" />
-              <span className="public-feature-icon"><Icon size={20} aria-hidden /></span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-base font-semibold">{item.title}</span>
-                <span className="mt-0.5 block text-sm text-[var(--public-secondary)]">
-                  {item.desc}
-                </span>
-              </span>
-              <span className="public-home-card-action" aria-hidden="true">
-                {item.action}
-                <ArrowRight className="public-feature-arrow" size={17} />
-              </span>
-            </PublicSpotlightLink>
-          );
-        })}
+    <section className="campus-services" aria-labelledby="campus-services-title">
+      <h2 id="campus-services-title">常用服務</h2>
+      <nav aria-label="校園常用服務">
+        {services.map((item) => (
+          <Link key={item.key} href={item.href}>
+            {item.label}<ArrowRight size={18} aria-hidden />
+          </Link>
+        ))}
       </nav>
     </section>
   );
@@ -102,6 +48,7 @@ export function HomeEntrySection({ bundle }: { bundle: PublicSiteBundleOut | nul
 export default function HomeContent({
   bundle,
   announcements,
+  announcementsAvailable = true,
   urgentAnnouncement,
   openSurveys,
   catalog,
@@ -109,181 +56,130 @@ export default function HomeContent({
 }: {
   bundle: PublicSiteBundleOut | null;
   announcements: AnnouncementListItem[];
+  announcementsAvailable?: boolean;
   urgentAnnouncement: AnnouncementOut | null;
   openSurveys: SurveyListItem[];
   catalog: CatalogCategoryOut[] | null;
   shopUnavailable: boolean;
 }) {
-  const openSurvey = openSurveys[0] ?? null;
-  const visibleUrgentAnnouncement = urgentAnnouncement && !isAnnouncementExpired(urgentAnnouncement)
+  const urgent = urgentAnnouncement && !isAnnouncementExpired(urgentAnnouncement)
     ? urgentAnnouncement
     : null;
   const latestAnnouncements = announcements
-    .filter((item) => item.id !== visibleUrgentAnnouncement?.id && !isAnnouncementExpired(item))
-    .slice(0, 2);
-  const recentlyUpdatedPages = [...(bundle?.nav_pages ?? [])]
+    .filter((item) => item.id !== urgent?.id && !isAnnouncementExpired(item))
+    .sort((a, b) => (b.published_at ?? b.created_at).localeCompare(a.published_at ?? a.created_at))
+    .slice(0, 4);
+  const articles = (bundle?.nav_pages ?? [])
+    .filter((page) => page.page_kind === "article")
+    .slice()
     .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
-    .slice(0, 2);
-  const recentItems = [
-    ...latestAnnouncements.map((item) => ({
-      href: `/news/${item.id}`,
-      label: "公告",
-      title: item.title,
-      detail: `${formatDate(item.published_at ?? item.created_at)} 發布`,
-      timestamp: item.published_at ?? item.created_at,
-      icon: BellRing,
-      priority: false,
-    })),
-    ...recentlyUpdatedPages.map((page) => ({
-      href: publicPageHref(page),
-      label: "公開內容",
-      title: page.title,
-      detail: `${formatDate(page.updated_at)} 更新`,
-      timestamp: page.updated_at,
-      icon: FileText,
-      priority: false,
-    })),
-  ].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
-  const activityItems = [
-    visibleUrgentAnnouncement && {
-      href: visibleUrgentAnnouncement.link_url?.trim() || `/news/${visibleUrgentAnnouncement.id}`,
-      label: "重要公告",
-      title: visibleUrgentAnnouncement.title,
-      detail: "請優先查看",
-      icon: Megaphone,
-      priority: true,
-    },
-    openSurvey && {
-      href: `/surveys/${encodeURIComponent(openSurvey.title)}`,
-      label: "開放填答",
-      title: openSurvey.title,
-      detail: openSurvey.closes_at ? `截止 ${formatDate(openSurvey.closes_at)}` : "正在收集意見",
-      icon: UsersRound,
-      priority: false,
-    },
-    ...recentItems,
-  ].filter((item): item is NonNullable<typeof item> => Boolean(item));
-  const hasActivityContent = activityItems.length > 0;
-  const featuredProducts = (catalog ?? [])
-    .flatMap((category) => [
-      ...category.products.map((product) => ({ ...product, categoryName: category.name })),
-      ...category.series.flatMap((series) =>
-        series.products.map((product) => ({ ...product, categoryName: category.name })),
-      ),
-    ])
-    .filter((product) => product.status === "active")
     .slice(0, 3);
+  const featuredProducts = Array.from(new Map((catalog ?? [])
+    .flatMap((category) => [
+      ...category.products,
+      ...category.series.flatMap((series) => series.products),
+    ].map((product) => ({ ...product, categoryName: category.name })))
+    .filter((product) => product.status === "active")
+    .map((product) => [product.id, product])).values()).slice(0, 3);
 
   return (
-    <>
-      {hasActivityContent && (
-        <section className="public-home-dynamics" aria-labelledby="public-dynamics-title" data-reveal>
-          <div className="public-home-dynamics-heading">
-            <div>
-              <h2 id="public-dynamics-title">重要資訊</h2>
-              <p>整理最近的重要更新，記得查看！</p>
-            </div>
-            <div className="public-home-dynamics-actions" aria-label="校園動態導覽">
-              <Link href="/news" className="public-text-link">所有公告</Link>
-              <Link href="/public" className="public-text-link">公開資料庫</Link>
-            </div>
-          </div>
-
-          <div className="public-home-dynamics-layout">
-            <div className="public-home-activity-feed">
-              <div className="public-home-feed-heading">
-                <BellRing size={18} aria-hidden />
-                <h3>最新動態</h3>
-                <span>{activityItems.length} 則</span>
-              </div>
-              <div>
-                {activityItems.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <Link
-                      key={`${item.label}-${item.href}`}
-                      href={item.href}
-                      className="public-home-activity-row"
-                      data-priority={item.priority ? "true" : undefined}
-                    >
-                      <span className="public-home-activity-icon" aria-hidden="true"><Icon size={17} /></span>
-                      <span className="min-w-0">
-                        <span className="public-home-activity-label">{item.label}</span>
-                        <span className="public-home-activity-title">{item.title}</span>
-                      </span>
-                      <span className="public-home-activity-detail">{item.detail}</span>
-                      <ArrowRight
-                        size={18}
-                        className="public-home-activity-arrow"
-                        aria-hidden="true"
-                      />
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
-            <LiveElectionCard />
-          </div>
-        </section>
-      )}
-
-      {!hasActivityContent && (
-        <section className="public-home-empty" aria-labelledby="public-empty-title">
-          <FileText size={22} aria-hidden />
-          <div>
-            <h2 id="public-empty-title">目前沒有新的校園動態</h2>
-            <p>歡迎到其他地方看看！</p>
-          </div>
-          <Link href="/public" className="public-text-link">查詢公開資料</Link>
-        </section>
-      )}
-
-      {!shopUnavailable && <section className="public-home-shop" aria-labelledby="public-shop-title">
-        <div className="public-home-shop-heading">
-          <div>
-            <span className="public-home-shop-eyebrow"><ShoppingBag size={16} aria-hidden /> 商品訂購</span>
-            <h2 id="public-shop-title">各項活動商品販售</h2>
-            <p>Nothing beats a HCCA merch!</p>
-          </div>
-          <Link href="/shop" className="public-home-shop-all">
-            瀏覽所有商品 <ArrowRight size={18} aria-hidden />
-          </Link>
+    <div className="campus-content">
+      <section className="campus-news" aria-labelledby="campus-news-title">
+        <div className="campus-section-heading">
+          <h2 id="campus-news-title">校園近況</h2>
+          <Link href="/news">全部公告<ArrowRight size={16} aria-hidden /></Link>
         </div>
-        {featuredProducts.length > 0 && (
-          <div className="public-home-shop-grid">
+        <div className="campus-news-layout">
+          <div>
+            {urgent && (
+              <article className="campus-news-lead">
+                <div className="campus-meta">
+                  <span className="campus-status">重要</span>
+                  <time dateTime={urgent.published_at ?? urgent.created_at}>
+                    {formatDate(urgent.published_at ?? urgent.created_at)}
+                  </time>
+                </div>
+                <h3><Link href={urgent.link_url?.trim() || `/news/${urgent.id}`}>
+                  {urgent.title}<ArrowRight size={22} aria-hidden />
+                </Link></h3>
+              </article>
+            )}
+            {latestAnnouncements.length > 0 ? (
+              <ul className="campus-news-list">
+                {latestAnnouncements.map((item) => (
+                  <li key={item.id}>
+                    <Link href={`/news/${item.id}`}>
+                      <time dateTime={item.published_at ?? item.created_at}>
+                        {formatDate(item.published_at ?? item.created_at)}
+                      </time>
+                      <span>{item.title}</span>
+                      <ArrowRight size={17} aria-hidden />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : announcementsAvailable && !urgent && <p className="campus-empty">目前沒有新公告</p>}
+            {!announcementsAvailable && <PublicLoadFailure message="無法取得最新公告" />}
+          </div>
+          <aside className="campus-participation" aria-label="校園參與">
+            <LiveElectionCard />
+            {openSurveys.slice(0, 2).map((survey) => (
+              <Link key={survey.id} href={`/surveys/${encodeURIComponent(survey.title)}`} className="campus-survey">
+                <span className="campus-meta">
+                  {survey.closes_at ? `填答至 ${formatDate(survey.closes_at)}` : "開放填答"}
+                </span>
+                <strong>{survey.title}</strong><ArrowRight size={18} aria-hidden />
+              </Link>
+            ))}
+          </aside>
+        </div>
+      </section>
+
+      {articles.length > 0 && (
+        <section className="campus-stories" aria-labelledby="campus-stories-title">
+          <div className="campus-section-heading">
+            <h2 id="campus-stories-title">文章專欄</h2>
+            <Link href="/articles">全部文章<ArrowRight size={16} aria-hidden /></Link>
+          </div>
+          <div className="campus-stories-layout">
+            {articles.map((article, index) => (
+              <article key={article.id} className={index === 0 ? "campus-story campus-story-lead" : "campus-story"}>
+                <time className="campus-meta" dateTime={article.updated_at}>
+                  更新 {formatDate(article.updated_at)}
+                </time>
+                <h3><Link href={publicPageHref(article)}>{article.title}</Link></h3>
+                {index === 0 && article.summary && <p>{article.summary}</p>}
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {!shopUnavailable && featuredProducts.length > 0 && (
+        <section className="campus-shop" aria-labelledby="campus-shop-title">
+          <div className="campus-section-heading">
+            <h2 id="campus-shop-title">活動商品</h2>
+            <Link href="/shop">商品目錄<ArrowRight size={16} aria-hidden /></Link>
+          </div>
+          <div className="campus-product-grid">
             {featuredProducts.map((product) => {
               const imageUrl = uploadUrl(product.image_url);
               return (
-                <Link key={product.id} href={`/shop?product=${product.id}`} className="public-home-shop-card">
-                  <span className="public-home-shop-image">
-                    {imageUrl ? (
-                      <ShopImage
-                        src={imageUrl}
-                        alt=""
-                        width={640}
-                        height={400}
-                        sizes="(max-width: 460px) 38vw, (max-width: 767px) 50vw, 33vw"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <ShoppingBag size={32} aria-hidden />
-                    )}
+                <Link key={product.id} href={`/shop?product=${product.id}`} className="campus-product">
+                  <span className="campus-product-image">
+                    {imageUrl ? <ShopImage src={imageUrl} alt="" width={640} height={480}
+                      sizes="(max-width: 639px) 44vw, (max-width: 1152px) 30vw, 360px" loading="lazy" />
+                      : <ShoppingBag size={32} aria-hidden />}
                   </span>
-                  <span className="public-home-shop-card-body">
-                    <span className="public-home-shop-category">{product.categoryName}</span>
-                    <span className="public-home-shop-name">{product.name}</span>
-                    <span className="public-home-shop-card-footer">
-                      <strong>NT$ {product.price.toLocaleString("zh-TW")}</strong>
-                      <span>查看商品 <ArrowRight size={16} aria-hidden /></span>
-                    </span>
-                  </span>
+                  <span className="campus-meta">{product.categoryName}</span>
+                  <strong>{product.name}</strong>
+                  <span className="campus-product-price">NT$ {product.price.toLocaleString("zh-TW")}</span>
                 </Link>
               );
             })}
           </div>
-        )}
-      </section>}
-
-    </>
+        </section>
+      )}
+    </div>
   );
 }

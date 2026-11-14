@@ -249,7 +249,7 @@
 }
 
 .shop-public-cart-link {
-  border-radius: 999px;
+  border-radius: 8px;
   background: var(--public-accent);
   padding: 0.45rem 1rem;
   color: var(--primary-fg);
@@ -274,7 +274,7 @@
   align-items: center;
   gap: 0.55rem;
   border: 0;
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--public-accent);
   padding: 0.65rem 1rem;
   color: var(--primary-fg);
@@ -345,7 +345,6 @@
 
 .shop-public-order-shortcut:hover {
   background: var(--public-accent-strong);
-  transform: translateY(-2px);
 }
 
 .shop-public-order-shortcut:focus-visible {
@@ -357,7 +356,6 @@
 .shop-public-cart-link:focus-visible {
   background: var(--public-accent-strong);
   color: var(--primary-fg);
-  transform: translateY(-1px);
 }
 
 .shop-public-activity-picker {
@@ -482,7 +480,7 @@
 .shop-public-series-filter button {
   min-height: 2.5rem;
   border: 1px solid var(--public-border);
-  border-radius: 999px;
+  border-radius: 8px;
   background: transparent;
   padding: 0.4rem 0.8rem;
   color: var(--public-secondary);

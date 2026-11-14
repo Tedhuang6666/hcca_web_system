@@ -1,13 +1,16 @@
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 
 import PublicSiteShell from "@/components/site/PublicSiteShell";
+import PublicLoadFailure from "@/components/site/PublicLoadFailure";
 import {
   fetchActiveUrgentAnnouncement,
-  fetchAnnouncements,
+  fetchPublicJson,
   fetchPublicBundle,
 } from "@/lib/serverFetch";
 import { pageMetadata } from "@/lib/seo";
 import { isAnnouncementExpired } from "@/lib/announcement-expiration";
+import type { AnnouncementListItem } from "@/lib/types";
 
 export const metadata = pageMetadata({
   title: "最新公告",
@@ -16,65 +19,60 @@ export const metadata = pageMetadata({
   type: "website",
 });
 
+const dateFormatter = new Intl.DateTimeFormat("zh-TW", { timeZone: "Asia/Taipei" });
+
 export default async function NewsPage() {
   const [bundle, items, urgentAnnouncement] = await Promise.all([
     fetchPublicBundle(),
-    fetchAnnouncements(100),
+    fetchPublicJson<AnnouncementListItem[]>("/announcements?limit=100"),
     fetchActiveUrgentAnnouncement(),
   ]);
-
-  const sorted = [...items].sort((a, b) =>
+  const sorted = [...(items ?? [])].sort((a, b) =>
     (b.published_at ?? b.created_at).localeCompare(a.published_at ?? a.created_at),
   );
+  const featured = urgentAnnouncement && !isAnnouncementExpired(urgentAnnouncement)
+    ? urgentAnnouncement
+    : sorted.find((item) => item.is_urgent && !isAnnouncementExpired(item));
+  const remaining = sorted.filter((item) => item.id !== featured?.id);
 
   return (
-    <PublicSiteShell
-      navPages={bundle?.nav_pages ?? []}
-      settings={bundle?.settings}
-      urgentAnnouncement={urgentAnnouncement}
-    >
-      <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
-        <header className="public-page-head mb-8">
-          <h1 className="text-3xl font-bold">最新公告</h1>
-        </header>
-        <div className="space-y-3">
-          {sorted.map((item) => {
-            const expired = isAnnouncementExpired(item);
-            return (
-              <Link
-                key={item.id}
-                href={`/news/${item.id}`}
-                className={`card card-hover block p-5 no-underline${expired ? " announcement-expired" : ""}`}
-              >
-                <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
-                  {expired ? (
-                    <span className="badge" style={{ color: "var(--text-muted)", background: "var(--bg-elevated)", borderColor: "var(--border)" }}>
-                      已過期
-                    </span>
-                  ) : item.is_urgent && (
-                    <span className="badge" style={{ color: "var(--warning)", background: "var(--warning-dim)", borderColor: "var(--warning-border)" }}>
-                      重要
-                    </span>
-                  )}
-                  <time dateTime={item.published_at ?? item.created_at}>
-                    {new Date(item.published_at ?? item.created_at).toLocaleDateString("zh-TW")}
-                  </time>
-                </div>
-                <h2 className={`mt-2 text-lg font-semibold leading-snug${expired ? " text-[var(--text-muted)]" : " text-[var(--text-primary)]"}`}>
-                  {item.title}
-                </h2>
-                <p className="mt-2 text-sm text-[var(--text-muted)]">
-                  公告人：{item.author_name || "未命名"}
-                </p>
-              </Link>
-            );
-          })}
-          {sorted.length === 0 && (
-            <div className="card p-10 text-center text-sm text-[var(--text-muted)]">
-              目前沒有公開公告
+    <PublicSiteShell navPages={bundle?.nav_pages ?? []} settings={bundle?.settings} urgentAnnouncement={null}>
+      <div className="public-news-index">
+        <header className="public-page-head"><h1>最新公告</h1></header>
+        {featured && (
+          <article className="public-news-feature">
+            <div className="public-news-meta">
+              <span className="public-news-status">重要</span>
+              <time dateTime={featured.published_at ?? featured.created_at}>
+                {dateFormatter.format(new Date(featured.published_at ?? featured.created_at))}
+              </time>
             </div>
-          )}
-        </div>
+            <h2><Link href={`/news/${featured.id}`}>{featured.title}<ArrowRight size={24} aria-hidden /></Link></h2>
+            {featured.author_name && <p className="public-news-author">{featured.author_name}</p>}
+          </article>
+        )}
+        <ul className="public-news-list">
+          {remaining.map((item) => (
+            <li key={item.id}>
+              <Link href={`/news/${item.id}`}>
+                <time dateTime={item.published_at ?? item.created_at}>
+                  {dateFormatter.format(new Date(item.published_at ?? item.created_at))}
+                </time>
+                <span className="public-news-row-copy">
+                  <span className="public-news-row-heading">
+                    <h2>{item.title}</h2>
+                    {isAnnouncementExpired(item) ? <span className="public-news-meta">已過期</span>
+                      : item.is_urgent && <span className="public-news-status">重要</span>}
+                  </span>
+                  {item.author_name && <span className="public-news-author">{item.author_name}</span>}
+                </span>
+                <ArrowRight size={18} aria-hidden />
+              </Link>
+            </li>
+          ))}
+        </ul>
+        {items === null ? <PublicLoadFailure message="無法取得公開公告" />
+          : !featured && remaining.length === 0 && <p className="public-index-empty">目前沒有公開公告</p>}
       </div>
     </PublicSiteShell>
   );

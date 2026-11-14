@@ -1,9 +1,7 @@
-import Link from "@/components/ui/IntentLink";
-
 import PageTransition from "@/components/layout/PageTransition";
-import PublicEmblem from "@/components/site/PublicEmblem";
 import PublicSiteBackLink from "@/components/site/PublicSiteBackLink";
 import PublicSiteHeader from "@/components/site/PublicSiteHeader";
+import PublicSiteFooter from "@/components/site/PublicSiteFooter";
 import { BRANDING } from "@/lib/branding";
 import { fetchActiveUrgentAnnouncement } from "@/lib/serverFetch";
 import type { AnnouncementOut, PublicSitePageOut, PublicSiteSettingsOut } from "@/lib/types";
@@ -72,42 +70,7 @@ export default async function PublicSiteShell({
         <PublicSiteBackLink />
         <PageTransition>{children}</PageTransition>
       </main>
-      <footer className="public-footer">
-        <div className="public-footer-inner">
-          <div className="public-footer-brand">
-            <Link href="/" className="public-footer-brand-link">
-              <span className="public-footer-mark" aria-hidden="true">
-                <PublicEmblem
-                  src={publicEmblemUrl}
-                  alt=""
-                  variant="small"
-                  className="h-full w-full object-contain"
-                  sizes="36px"
-                />
-              </span>
-              <span>
-                <strong>{BRANDING.orgName}</strong>
-                <span>數位整合系統</span>
-              </span>
-            </Link>
-          </div>
-          <nav className="public-footer-links" aria-label="頁尾導覽">
-            <span className="public-footer-label">快速連結</span>
-            <Link href="/news">最新公告</Link>
-            <Link href="/articles">文章專欄</Link>
-            <Link href="/about">關於班聯會</Link>
-            <Link href="/public">公開資料庫</Link>
-          </nav>
-          <nav className="public-footer-links" aria-label="法律與無障礙資訊">
-            <span className="public-footer-label">網站資訊</span>
-            <Link href="/legal/accessibility">無障礙聲明</Link>
-            <Link href="/legal/privacy">隱私政策</Link>
-          </nav>
-        </div>
-        <div className="public-footer-bottom">
-          <span>{BRANDING.orgShortName} · {BRANDING.platformName}</span>
-        </div>
-      </footer>
+      <PublicSiteFooter emblemUrl={publicEmblemUrl} />
     </div>
   );
 }
