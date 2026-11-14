@@ -28,11 +28,6 @@ const DATABASES = [
     title: "財務總覽",
     description: "公開預算、支出總額與最近支出紀錄",
   },
-  {
-    href: "/public/special-agreement",
-    title: "特約洽談",
-    description: "合作流程與參考文件",
-  },
 ];
 
 export default async function PublicHomePage() {

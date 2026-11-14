@@ -255,7 +255,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     documents: documentLastModified,
     elections: electionLastModified,
     contact: settingsLastModified,
-    "special-agreement": settingsLastModified,
     "partner-map": settingsLastModified,
     surveys: settingsLastModified,
     "petition-new": settingsLastModified,

@@ -1,7 +1,6 @@
 import {
   BookOpenText,
   FileSearch,
-  Handshake,
   Info,
   Landmark,
   Link2,
@@ -30,7 +29,6 @@ const ICONS: Record<string, LucideIcon> = {
   regulations: Scale,
   documents: FileSearch,
   elections: Radio,
-  "special-agreement": Handshake,
   "partner-map": MapPinned,
   surveys: ListChecks,
   petitions: MessageSquareText,
