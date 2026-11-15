@@ -251,12 +251,15 @@ describe("班代工作流程", () => {
     await waitFor(() => expect(api.classSummary).toHaveBeenLastCalledWith({ activity_id: "festival" }));
   });
 
-  it("提供本班截止設定並說明加購與補收款規則", async () => {
+  it("班代沒有本班截止設定，保留加購與補收款工具", async () => {
     await act(async () => { render(<ClassOrdersPage />); });
     await screen.findByRole("navigation", { name: "班代工作" });
     expect(screen.getByText("追加訂單補收款")).not.toBeVisible();
     expect(screen.getByText("查詢／修改訂單")).not.toBeVisible();
-    expect(await screen.findByText("本班截止時間")).toBeVisible();
+    expect(screen.queryByText("本班截止時間")).not.toBeInTheDocument();
+    expect(api.getClassDeadline).not.toHaveBeenCalled();
+    expect(api.closeCategory).not.toHaveBeenCalled();
+    expect(api.reopenCategory).not.toHaveBeenCalled();
     fireEvent.click(screen.getByText("訂單查詢與其他工具"));
     expect(screen.getByText(/班聯結單或統一截止後停止代購/)).not.toBeVisible();
     fireEvent.click(screen.getByText("加購與繳款說明"));

@@ -2389,7 +2389,6 @@ async def export_orders_csv(
 _COUNCIL_CODES = {
     PermissionCode.SHOP_MANAGE,
     PermissionCode.SHOP_MANAGE_ORDERS,
-    PermissionCode.SHOP_VIEW_ALL,
     PermissionCode.ADMIN_ALL,
 }
 
@@ -2397,18 +2396,13 @@ _COUNCIL_CODES = {
 async def _assert_close_permission(
     session: AsyncSession,
     current_user: User,
-    target_class_id: uuid.UUID | None,
 ) -> None:
-    """班代僅設定本班期限；班聯管理全域結單。"""
+    """結單與重新開單僅限班聯管理者，班代及唯讀權限不得操作。"""
     if current_user.is_superuser:
         return
     codes = await get_user_permission_codes(session, current_user.id)
     if _COUNCIL_CODES & set(codes):
         return
-    if target_class_id is not None:
-        cadre_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
-        if target_class_id in cadre_ids:
-            return
     raise HTTPException(status_code=403, detail="無結單權限")
 
 
@@ -2417,7 +2411,7 @@ async def read_class_deadline(
     category_id: uuid.UUID, class_id: uuid.UUID, session: DbDep, current_user: CurrentUser
 ) -> ShopOrderCloseOut | None:
     await _get_category_or_404(category_id, session)
-    await _assert_close_permission(session, current_user, class_id)
+    await _assert_close_permission(session, current_user)
     close = await class_settlement_svc.get_class_deadline(session, category_id, class_id)
     return shop_svc._serialize_close(close) if close is not None else None
 
@@ -2435,7 +2429,7 @@ async def close_category(
     current_user: CurrentUser,
 ) -> ShopOrderCloseOut:
     await _get_category_or_404(category_id, session)
-    await _assert_close_permission(session, current_user, payload.class_id)
+    await _assert_close_permission(session, current_user)
     try:
         close = await shop_svc.close_category_for_class(
             session,
@@ -2475,7 +2469,7 @@ async def reopen_category(
     class_id: uuid.UUID | None = Query(None, description="班級 ID，None=全局"),
 ) -> ShopOrderCloseOut:
     await _get_category_or_404(category_id, session)
-    await _assert_close_permission(session, current_user, class_id)
+    await _assert_close_permission(session, current_user)
     try:
         close = await shop_svc.reopen_category_for_class(
             session,

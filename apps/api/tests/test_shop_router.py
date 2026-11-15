@@ -488,7 +488,7 @@ async def test_supplement_collection_rejoins_original_class_and_has_own_receipt(
 
 
 async def test_class_deadline_is_scoped_and_assisted_orders_can_bypass_it(
-    db_session, authed_client_factory
+    db_session, authed_client_factory, admin_user
 ):
     sc = await _make_class(db_session)
     other = await _make_class(db_session, start="11601", end="11640")
@@ -497,6 +497,7 @@ async def test_class_deadline_is_scoped_and_assisted_orders_can_bypass_it(
     buyer = await _bare_user(db_session, student_id="11520")
     product = await _make_active_product(db_session, cadre)
     cc, bc = authed_client_factory(cadre), authed_client_factory(buyer)
+    manager = authed_client_factory(admin_user)
     path = f"/shop/categories/{product.category_id}/close"
     expired = {
         "class_id": str(sc.id),
@@ -504,7 +505,8 @@ async def test_class_deadline_is_scoped_and_assisted_orders_can_bypass_it(
     }
     assert (await bc.post(path, json=expired)).status_code == 403
     assert (await cc.post(path, json={**expired, "class_id": str(other.id)})).status_code == 403
-    assert (await cc.post(path, json=expired)).status_code == 201
+    assert (await cc.post(path, json=expired)).status_code == 403
+    assert (await manager.post(path, json=expired)).status_code == 201
     assert (
         await bc.put(
             f"/shop/registrations/current/products/{product.id}",
@@ -514,8 +516,8 @@ async def test_class_deadline_is_scoped_and_assisted_orders_can_bypass_it(
     payload = {"user_id": str(buyer.id), "items": [{"product_id": str(product.id), "quantity": 1}]}
     assert (await cc.post("/shop/orders/class", json=payload)).status_code == 201
     future = {**expired, "closes_at": (datetime.now(UTC) + timedelta(days=1)).isoformat()}
-    assert (await cc.post(path, json=future)).status_code == 201
-    loaded = await cc.get(
+    assert (await manager.post(path, json=future)).status_code == 201
+    loaded = await manager.get(
         f"/shop/categories/{product.category_id}/class-deadline", params={"class_id": str(sc.id)}
     )
     assert loaded.json()["closes_at"] == future["closes_at"].replace("+00:00", "Z")
@@ -525,7 +527,8 @@ async def test_class_deadline_is_scoped_and_assisted_orders_can_bypass_it(
             json={"variants": [{"quantity": 2}]},
         )
     ).status_code == 200
-    assert (await cc.delete(path, params={"class_id": str(sc.id)})).status_code == 200
+    assert (await cc.delete(path, params={"class_id": str(sc.id)})).status_code == 403
+    assert (await manager.delete(path, params={"class_id": str(sc.id)})).status_code == 200
     assert (await cc.post(path, json={})).status_code == 403
 
 
@@ -4418,7 +4421,7 @@ async def test_close_category_global_by_manager_then_conflict_on_repeat(
     assert second.status_code == 409
 
 
-async def test_close_category_by_cadre_for_own_class_allowed(
+async def test_close_category_by_cadre_for_own_class_returns_403(
     db_session, authed_client_factory
 ) -> None:
     sc = await _make_class(db_session)
@@ -4428,8 +4431,7 @@ async def test_close_category_by_cadre_for_own_class_allowed(
 
     ac = authed_client_factory(cadre)
     resp = await ac.post(f"/shop/categories/{category.id}/close", json={"class_id": str(sc.id)})
-    assert resp.status_code == 201
-    assert resp.json()["class_id"] == str(sc.id)
+    assert resp.status_code == 403
 
 
 async def test_close_category_globally_by_cadre_returns_403(

@@ -3,9 +3,12 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy import select
 
+from api.core.clock import local_today
 from api.models.activity import Activity, ActivityStatus
 from api.models.electronic_credential import ElectronicCredentialSettings
+from api.models.org import Org, Permission, Position, UserPosition
 from api.models.shop import ShopOrderClose
 from api.schemas.school_class import ClassStudentRangeCreate, SchoolClassCreate
 from api.schemas.shop import (
@@ -107,20 +110,58 @@ async def status(setup):
     return response.json()["statuses"][str(setup["category"].id)]
 
 
-async def test_cadre_can_control_only_own_class_cutoff(client, class_deadlines):
+async def test_only_council_can_control_class_cutoff(client, class_deadlines, db_session):
     s = class_deadlines
     body = {"class_id": str(s["class"].id)}
     assert (await client.post(close_path(s), json=body)).status_code == 401
-    for actor in ["student", "outsider"]:
+    assert (await client.delete(close_path(s), params=body)).status_code == 401
+    for actor in ["student", "outsider", "cadre"]:
         assert (await s[actor].post(close_path(s), json=body)).status_code == 403
         assert (await s[actor].delete(close_path(s), params=body)).status_code == 403
+        assert (
+            await s[actor].get(f"/shop/categories/{s['category'].id}/class-deadline", params=body)
+        ).status_code == 403
+    assert await db_session.scalar(select(ShopOrderClose.id)) is None
     assert (await s["cadre"].post(close_path(s), json={})).status_code == 403
     body["closes_at"] = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
-    for actor in ["cadre", "manager"]:
-        assert (await s[actor].post(close_path(s), json=body)).status_code == 201
-        assert (
-            await s[actor].delete(close_path(s), params={"class_id": body["class_id"]})
-        ).status_code == 200
+    assert (await s["cadre"].post(close_path(s), json=body)).status_code == 403
+    assert (await s["manager"].post(close_path(s), json=body)).status_code == 201
+    # 班代不可取消班聯設定；權限拒絕後結單紀錄仍有效。
+    assert (await s["cadre"].delete(close_path(s), params=body)).status_code == 403
+    assert (await db_session.scalar(select(ShopOrderClose))).is_active is True
+    assert (
+        await s["manager"].delete(close_path(s), params={"class_id": body["class_id"]})
+    ).status_code == 200
+
+
+@pytest.mark.parametrize(
+    "code", ["shop:manage", "shop:manage_orders", "admin:all", "shop:view_all"]
+)
+@pytest.mark.parametrize("class_scoped", [False, True])
+async def test_council_cutoff_requires_write_permission(
+    db_session, make_user, authed_client_factory, class_deadlines, code, class_scoped
+):
+    s = class_deadlines
+    user = await make_user(mfa_enabled=True)
+    org = Org(name="結單權限測試")
+    db_session.add(org)
+    await db_session.flush()
+    position = Position(org_id=org.id, name="結單測試職位")
+    db_session.add(position)
+    await db_session.flush()
+    db_session.add(Permission(position_id=position.id, code=code))
+    db_session.add(UserPosition(user_id=user.id, position_id=position.id, start_date=local_today()))
+    await db_session.flush()
+    actor = authed_client_factory(user)
+    body = {"class_id": str(s["class"].id)} if class_scoped else {}
+    if code == "shop:view_all":
+        assert (await actor.post(close_path(s), json=body)).status_code == 403
+        assert (await s["manager"].post(close_path(s), json=body)).status_code == 201
+        assert (await actor.delete(close_path(s), params=body)).status_code == 403
+        assert (await db_session.scalar(select(ShopOrderClose))).is_active is True
+    else:
+        assert (await actor.post(close_path(s), json=body)).status_code == 201
+        assert (await actor.delete(close_path(s), params=body)).status_code == 200
 
 
 @pytest.mark.parametrize("scheduled", [False, True])

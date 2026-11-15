@@ -4,7 +4,6 @@ import NumberInput from "@/components/ui/NumberInput";
 import Modal from "@/components/ui/Modal";
 import CollectionActivityPicker from "@/components/shop/CollectionActivityPicker";
 import SeparateOrderButton from "@/components/shop/SeparateOrderButton";
-import ClassOrderDeadline from "@/components/shop/ClassOrderDeadline";
 import SupplementOrders from "@/components/shop/SupplementOrders";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -1904,7 +1903,6 @@ export default function ClassOrdersPage() {
         </section>
 
       </div>
-      {myClassId && activeLedgerKey && <ClassOrderDeadline key={activeLedgerKey} classId={myClassId} categories={scopedCatalog} onSaved={() => void loadCloseStatus(scopedCatalog.map((category) => category.id), myClassId)} />}
 
       <div hidden={workspace !== "details" || !activeLedgerKey} className="space-y-5">
 
