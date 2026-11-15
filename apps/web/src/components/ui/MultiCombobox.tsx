@@ -37,6 +37,7 @@ export default function MultiCombobox({
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listboxId = useId();
 
   const selectedValues = useMemo(
@@ -57,6 +58,12 @@ export default function MultiCombobox({
   useEffect(() => {
     setActiveIndex(0);
   }, [candidates.length, open]);
+
+  useEffect(() => () => {
+    if (blurTimerRef.current !== null) {
+      clearTimeout(blurTimerRef.current);
+    }
+  }, []);
 
   const activeOptionId = open && candidates[activeIndex]
     ? `${listboxId}-option-${activeIndex}`
@@ -118,8 +125,20 @@ export default function MultiCombobox({
           setOpen(true);
           onSearch?.(e.target.value);
         }}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onFocus={() => {
+          if (blurTimerRef.current !== null) {
+            clearTimeout(blurTimerRef.current);
+            blurTimerRef.current = null;
+          }
+          setOpen(true);
+        }}
+        onBlur={() => {
+          if (blurTimerRef.current !== null) clearTimeout(blurTimerRef.current);
+          blurTimerRef.current = setTimeout(() => {
+            blurTimerRef.current = null;
+            setOpen(false);
+          }, 150);
+        }}
         onKeyDown={(e) => {
           if (!open && e.key !== "Tab") setOpen(true);
           if (e.key === "ArrowDown") {
