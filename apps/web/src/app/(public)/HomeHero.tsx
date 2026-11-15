@@ -7,6 +7,7 @@ import { BRANDING } from "@/lib/branding";
 import { galleryDate, readActivityAlbums } from "@/lib/public-activity-albums";
 import { sanitizeCustomCss } from "@/lib/sanitize";
 import type { PublicSiteBundleOut } from "@/lib/types";
+import HomeHeroScene from "./HomeHeroScene";
 
 const LEGACY_SUBTITLES = new Set([
   "連結學生、整理公共資訊，讓資訊能被更多人看見",
@@ -34,21 +35,25 @@ export default async function HomeHero({ bundle }: { bundle: PublicSiteBundleOut
         <style nonce={nonce} dangerouslySetInnerHTML={{ __html: sanitizeCustomCss(settings.custom_css) }} />
       )}
       <section className="public-home-hero" aria-labelledby="campus-title">
-        <div className="campus-masthead">
+        <HomeHeroScene>
           <div className="campus-masthead-copy">
-            <h1 id="campus-title">{title}</h1>
+            <h1 id="campus-title">{title === BRANDING.orgShortName
+              ? <><span>新竹高中</span><span>班聯會</span></>
+              : title}</h1>
             {subtitle && <p>{subtitle}</p>}
           </div>
             {activity && photos.length > 0 && (
               <Link href={"/gallery/" + activity.id} className="campus-hero-activity" aria-label={activity.title + "活動成果"}>
-                <ActivityImage photos={photos} sizes="(max-width: 1240px) 100vw, 1200px" preload />
+                <span className="campus-hero-photo">
+                  <ActivityImage photos={photos} sizes="(max-width: 767px) 100vw, (max-width: 1023px) 55vw, 1200px" preload />
+                </span>
                 <span className="campus-hero-activity-caption">
                   <span className="campus-event-heading"><span className="campus-event-meta">最新活動{activity.date && <> / <time dateTime={activity.date}>{galleryDate(activity.date)}</time></>}</span><strong>{activity.title}</strong></span>
                   <span className="campus-event-link">活動紀錄<ArrowRight size={20} aria-hidden /></span>
                 </span>
               </Link>
             )}
-        </div>
+        </HomeHeroScene>
       </section>
     </>
   );
