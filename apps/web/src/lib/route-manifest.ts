@@ -33,8 +33,8 @@ export const SHOP_PRODUCT_ROUTE_PATTERNS = [
 ] as const;
 
 export const PUBLIC_ROUTE_MANIFEST = {
-  prefixes: ["/about", "/articles", "/auth", "/legal", "/links", "/live", "/login", "/maintenance", "/module-status", "/news", "/officers", "/pages", "/public", "/shop/cart", "/unsubscribe"],
-  exact: ["/", "/announcements", "/documents", "/partner-map", "/petitions/public", "/profile/complete", "/regulations", "/surveys", "/raffle", "/blocked", "/contact", "/shop", "/system-info"],
+  prefixes: ["/about", "/articles", "/auth", "/gallery", "/legal", "/links", "/live", "/login", "/maintenance", "/module-status", "/news", "/officers", "/pages", "/public", "/shop/cart", "/unsubscribe"],
+  exact: ["/", "/activities", "/announcements", "/documents", "/partner-map", "/petitions/public", "/profile/complete", "/regulations", "/surveys", "/raffle", "/blocked", "/contact", "/shop", "/system-info"],
   patterns: [
     ...SHOP_PRODUCT_ROUTE_PATTERNS,
     /^\/shop\/orders\/[^/]+$/,
@@ -53,5 +53,5 @@ export const ROUTE_MANIFEST = [
   { group: "校園服務", routePrefixes: ["/shop", "/surveys", "/partner-map", "/recommended-vendors", "/exam-papers", "/credential"], public: false, shell: true },
   { group: "發布與營運", routePrefixes: ["/announcements", "/publications", "/email", "/finance", "/operations"], public: false, shell: true },
   { group: "系統管理", routePrefixes: ["/admin", "/orgs", "/settings", "/audit-logs"], public: false, shell: true },
-  { group: "公開內容", routePrefixes: [...PUBLIC_ROUTE_MANIFEST.prefixes, "/shop"], public: true, shell: false },
+  { group: "公開內容", routePrefixes: [...PUBLIC_ROUTE_MANIFEST.prefixes, "/activities", "/shop"], public: true, shell: false },
 ] as const;

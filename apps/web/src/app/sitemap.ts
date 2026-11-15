@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 
 import { regulationHref } from "@/lib/api/regulations";
 import { BRANDING } from "@/lib/branding";
+import { readActivityAlbums } from "@/lib/public-activity-albums";
 import { serverApiUrl } from "@/lib/config";
 import { publicPageHref, resolvePublicNav } from "@/lib/publicNav";
 import { isSitemapRoute } from "@/lib/route-access";
@@ -67,6 +68,7 @@ function fallbackSitemap(site: string): MetadataRoute.Sitemap {
     ["/", "daily", 1],
     ["/about", "monthly", 0.7],
     ["/articles", "weekly", 0.7],
+    ["/gallery", "monthly", 0.7],
     ["/news", "daily", 0.8],
     ["/announcements", "daily", 0.8],
     ["/regulations", "daily", 0.7],
@@ -275,6 +277,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const entries: MetadataRoute.Sitemap = [
     { url: `${site}/`, lastModified: homepageLastModified, changeFrequency: "daily", priority: 1 },
     ...navEntries,
+    ...readActivityAlbums(bundle.settings.homepage_blocks)
+      .filter((album) => album.photos.length > 0 || album.keyVisual)
+      .map((album) => ({
+        url: site + "/gallery/" + album.id,
+        lastModified: settingsLastModified,
+        changeFrequency: "monthly" as const,
+        priority: 0.7,
+      })),
     ...announcements.map((a) => ({
       url: `${site}/news/${encodeURIComponent(a.id)}`,
       lastModified: new Date(a.updated_at),

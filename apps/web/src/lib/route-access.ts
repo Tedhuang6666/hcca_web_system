@@ -25,6 +25,8 @@ const PUBLIC_EXACT_PATHS = new Set<string>([
 // 讓訪客可以透過側邊欄在法規、公文等公開區域間切換。
 const BARE_ROUTE_PATHS = [
   "/",
+  "/gallery",
+  "/activities",
   "/about",
   "/articles",
   "/system-info",
@@ -45,6 +47,7 @@ const BARE_ROUTE_PATHS = [
 
 const INDEXABLE_EXACT_PATHS = new Set([
   "/",
+  "/gallery",
   "/about",
   "/articles",
   "/contact",
@@ -66,6 +69,7 @@ const INDEXABLE_EXACT_PATHS = new Set([
 ]);
 
 const INDEXABLE_PREFIXES = [
+  "/gallery/",
   "/about/",
   "/articles/",
   "/announcements/",
@@ -139,6 +143,7 @@ const ROBOTS_DISALLOW_PATHS = [
 ];
 
 const ROBOTS_ALLOW_PATHS = [
+  "/gallery",
   "/about",
   "/articles",
   "/announcements",

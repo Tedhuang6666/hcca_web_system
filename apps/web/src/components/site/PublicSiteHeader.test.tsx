@@ -52,6 +52,7 @@ describe("公開網站手機導覽", () => {
     expect(menu.queryByRole("heading")).not.toBeInTheDocument();
     expect(menu.getAllByRole("link", { name: "文章專欄" })).toHaveLength(1);
     expect(menu.getByRole("link", { name: "公開陳情" })).toBeVisible();
+    expect(menu.getByRole("link", { name: /活動成果/ })).toHaveAttribute("href", "/gallery");
     expect(menu.getByRole("link", { name: "法規查詢" })).toHaveAttribute("aria-current", "page");
     expect(menu.getByRole("link", { name: "登入平台" })).toHaveAttribute("href", "/login?next=%2Fdashboard");
   });

@@ -27,5 +27,7 @@ describe("sitemap", () => {
     const regulationUrl = "https://hcca.tw/regulations/shared-id";
 
     expect(entries.filter((entry) => entry.url === regulationUrl)).toHaveLength(1);
+    expect(entries.some((entry) => entry.url === "https://hcca.tw/gallery")).toBe(true);
+    expect(entries.some((entry) => entry.url === "https://hcca.tw/gallery/welcome")).toBe(true);
   });
 });

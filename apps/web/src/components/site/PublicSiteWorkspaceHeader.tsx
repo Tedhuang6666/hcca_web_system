@@ -1,6 +1,7 @@
 "use client";
 
-import { ArrowUpRight, Eye, Globe2, RefreshCw } from "lucide-react";
+import Link from "next/link";
+import { ArrowUpRight, Eye, Images, RefreshCw } from "lucide-react";
 
 export default function PublicSiteWorkspaceHeader({ loading, onRefresh }: {
   loading: boolean;
@@ -10,15 +11,14 @@ export default function PublicSiteWorkspaceHeader({ loading, onRefresh }: {
       <header className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-sm">
         <div className="grid gap-8 px-6 py-7 lg:grid-cols-[1fr_auto] lg:items-center lg:px-8">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 text-xs font-semibold tracking-[0.16em] text-[var(--primary-text)]">
-              <Globe2 size={15} aria-hidden />
-              PUBLIC SITE CONTROL
-            </div>
             <h1 className="mt-3 text-2xl font-semibold text-[var(--text-primary)]">
               公開網站工作台
             </h1>
           </div>
           <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+            <Link href="/admin/gallery" className="btn btn-ghost min-h-11 justify-center px-4 text-sm">
+              <Images size={16} aria-hidden /> 活動影像
+            </Link>
             <button
               type="button"
               onClick={onRefresh}

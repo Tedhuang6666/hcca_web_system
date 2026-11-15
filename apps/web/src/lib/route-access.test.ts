@@ -9,6 +9,21 @@ import {
 } from "./route-access";
 
 describe("route manifest", () => {
+  it("allows activity results in the public shell without exposing management paths", () => {
+    expect(getRoutePolicy("/gallery")).toMatchObject({
+      public: true,
+      requiresAuth: false,
+      shell: "bare",
+      indexable: true,
+      sitemap: true,
+    });
+    expect(requiresAuthentication("/activities/admin")).toBe(true);
+    expect(requiresAuthentication("/admin/gallery")).toBe(true);
+    expect(getRoutePolicy("/gallery/welcome")).toMatchObject({
+      public: true, requiresAuth: false, shell: "bare", indexable: true,
+    });
+  });
+
   it("keeps login outside indexing with a nonce CSP shell", () => {
     expect(getRoutePolicy("/login")).toMatchObject({
       public: true,
