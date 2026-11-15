@@ -1,5 +1,6 @@
 """公開檔案的字面路徑與實體檔案必須落在同一個授權範圍。"""
 
+import mimetypes
 from pathlib import Path
 
 import pytest
@@ -145,6 +146,47 @@ async def test_public_site_image_still_serves_stored_image(
     assert response.status_code == 200
     assert response.content == b"public image"
     assert response.headers["content-type"] == "image/jpeg"
+
+
+@pytest.mark.parametrize("remote", (False, True))
+@pytest.mark.parametrize(
+    ("extension", "media_type"),
+    (
+        ("gif", "image/gif"),
+        ("jpeg", "image/jpeg"),
+        ("jpg", "image/jpeg"),
+        ("png", "image/png"),
+        ("webp", "image/webp"),
+        ("WEBP", "image/webp"),
+    ),
+)
+async def test_public_image_media_type_does_not_require_system_mime_database(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, remote: bool, extension: str, media_type: str
+):
+    key = "public-site/image." + extension
+    content = b"stored public image"
+    image = tmp_path / key
+    image.parent.mkdir()
+    image.write_bytes(content)
+    monkeypatch.setattr(mimetypes, "guess_type", lambda *args, **kwargs: (None, None))
+
+    class RemoteStorage:
+        def local_path(self, storage_key):
+            return None
+
+        async def read_bytes(self, storage_key):
+            assert storage_key == key
+            return content
+
+    storage = RemoteStorage() if remote else LocalStorageBackend(str(tmp_path))
+    monkeypatch.setattr(site, "get_storage", lambda: storage)
+    app = FastAPI()
+    app.include_router(site.router)
+    async with AsyncClient(transport=ASGITransport(app), base_url="http://test") as client:
+        response = await client.get("/site/public/images/" + key)
+    assert response.status_code == 200
+    assert response.headers["content-type"] == media_type
+    assert response.content == content
 
 
 async def test_storage_root_can_itself_be_a_symlink(tmp_path: Path):

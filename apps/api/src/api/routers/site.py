@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import mimetypes
 import uuid
 from typing import Annotated
 
@@ -188,7 +187,14 @@ class UploadedPublicFileOut(BaseModel):
     file_size: int
 
 
-_PUBLIC_IMAGE_EXTENSIONS = frozenset({".gif", ".jpeg", ".jpg", ".png", ".webp"})
+_PUBLIC_IMAGE_MEDIA_TYPES = {
+    ".gif": "image/gif",
+    ".jpeg": "image/jpeg",
+    ".jpg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+}
+_PUBLIC_IMAGE_EXTENSIONS = frozenset(_PUBLIC_IMAGE_MEDIA_TYPES)
 
 
 def _public_site_image_url(storage_key: str) -> str:
@@ -219,7 +225,7 @@ async def get_public_site_image(storage_key: str) -> Response:
     key = _public_image_key(storage_key)
     storage = get_storage()
     local_path = storage.local_path(key)
-    media_type = mimetypes.guess_type(key)[0] or "application/octet-stream"
+    media_type = _PUBLIC_IMAGE_MEDIA_TYPES["." + key.rsplit(".", 1)[-1].lower()]
     headers = {"Cache-Control": "public, max-age=31536000, immutable"}
 
     if local_path is not None:
