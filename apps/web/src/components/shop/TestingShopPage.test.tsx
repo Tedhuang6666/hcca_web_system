@@ -701,8 +701,7 @@ it.each(["activity", "deadline", "global"] as const)(
   },
 );
 
-it("hides a paid class activity and keeps another activity orderable", async () => {
-  window.history.replaceState({}, "", "/shop?product=formal");
+it("keeps a paid class activity visible and another activity orderable", async () => {
   window.localStorage.setItem("hcca:pref:shop:category:v1", JSON.stringify("goods"));
   api.me.mockResolvedValue({ id: "tester", display_name: "測試同學", email: "student@example.test", student_id: "student-1" });
   api.myClass.mockResolvedValue({ id: "class-1", label: "一年一班" });
@@ -726,13 +725,9 @@ it("hides a paid class activity and keeps another activity orderable", async () 
 
   const product = await screen.findByRole("link", { name: "查看商品：冬季商品" });
   expect(product).toBeVisible();
-  expect(screen.queryByText("校慶商品")).not.toBeInTheDocument();
-  expect(screen.queryByRole("link", { name: "查看商品：正式商品" })).not.toBeInTheDocument();
-  for (const text of ["部分活動已結單", "班聯已確認本班收款", "班代收款時間", "班聯確認時間", "活動結單時間"]) {
-    expect(screen.queryByText(text)).not.toBeInTheDocument();
-  }
+  const activities = screen.getByRole("navigation", { name: "選擇商品活動" });
+  expect(within(activities).getByRole("button", { name: /校慶商品.*暫停訂購/ })).toBeVisible();
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  expect(screen.queryByRole("navigation", { name: "選擇商品活動" })).not.toBeInTheDocument();
   expect(screen.queryByText("目前沒有可訂購的商品，請稍後再來看看。")).not.toBeInTheDocument();
   fireEvent.click(product);
   const register = await screen.findByRole("button", { name: "登記購買 · NT$100" });
@@ -743,7 +738,7 @@ it("hides a paid class activity and keeps another activity orderable", async () 
   ));
 });
 
-it("refreshes an empty locked catalog after payment is revoked while away", async () => {
+it("unlocks visible products after payment is revoked while away", async () => {
   api.me.mockResolvedValue({ id: "tester", student_id: "student-1" });
   api.myClass.mockResolvedValue({ id: "class-1", label: "一年一班" });
   api.getCurrentRegistrations.mockResolvedValue([]);
@@ -754,13 +749,16 @@ it("refreshes an empty locked catalog after payment is revoked while away", asyn
 
   render(<ShopPage />);
 
-  expect(await screen.findByText("目前沒有可訂購的商品，請稍後再來看看。")).toBeVisible();
-  fireEvent.focus(window);
   const product = await screen.findByRole("link", { name: "查看商品：正式商品" });
   expect(product).toBeVisible();
-  expect(api.catalog).toHaveBeenCalledTimes(2);
+  expect(await screen.findByRole("heading", { name: "班聯已確認本班收款" })).toBeVisible();
   fireEvent.click(product);
-  await waitFor(() => expect(screen.getByRole("button", { name: "登記購買 · NT$100" })).toBeEnabled());
+  const dialog = await screen.findByRole("dialog");
+  expect(await within(dialog).findByRole("button", { name: "班聯已確認本班收款" })).toBeDisabled();
+  fireEvent.focus(window);
+  await waitFor(() => expect(within(dialog).getByRole("button", { name: "登記購買 · NT$100" })).toBeEnabled());
+  expect(api.catalog).toHaveBeenCalledTimes(2);
+  expect(dialog).toBeVisible();
 });
 
 it("refreshes a closed direct link without closing the open product dialog", async () => {
@@ -830,19 +828,29 @@ it("keeps the same activity orderable for another class without payment confirma
   await waitFor(() => expect(register).toBeEnabled());
 });
 
-it("shows an empty catalog without payment notices when the class has paid for its only activity", async () => {
+it.each(["direct", "series"] as const)("keeps the only paid class activity browsable with registration disabled (%s)", async (placement) => {
   api.myClass.mockResolvedValue({ id: "class-1", label: "一年一班" });
   api.catalog.mockResolvedValue([{ id: "goods", name: "校慶商品", activity_id: "festival",
-    sort_order: 0, products: [], series: [{ id: "shirts", name: "衣服", products: [formalProduct] }] }]);
+    sort_order: 0, products: placement === "direct" ? [formalProduct] : [],
+    series: placement === "series" ? [{ id: "shirts", name: "衣服", products: [formalProduct] }] : [] }]);
   api.getCloseStatus.mockResolvedValue({ statuses: {
     goods: { is_closed: true, is_global: false },
   } });
 
   render(<ShopPage />);
 
-  expect(await screen.findByText("目前沒有可訂購的商品，請稍後再來看看。")).toBeVisible();
-  expect(screen.queryByText("部分活動已結單")).not.toBeInTheDocument();
-  expect(screen.queryByText("班聯已確認本班收款")).not.toBeInTheDocument();
+  const product = await screen.findByRole("link", { name: "查看商品：正式商品" });
+  expect(product).toBeVisible();
+  expect(await screen.findByRole("heading", { name: "班聯已確認本班收款" })).toBeVisible();
+  expect(product).not.toHaveAttribute("aria-disabled", "true");
+  expect(product).not.toHaveAttribute("tabindex", "-1");
+  expect(screen.queryByText("目前沒有可訂購的商品，請稍後再來看看。")).not.toBeInTheDocument();
+  fireEvent.click(product);
+  const dialog = await screen.findByRole("dialog");
+  const register = await within(dialog).findByRole("button", { name: "班聯已確認本班收款" });
+  expect(register).toBeDisabled();
+  fireEvent.click(register);
+  expect(api.setCurrentRegistrationProduct).not.toHaveBeenCalled();
 });
 
 it("does not label class payment confirmation as the activity closure time on a direct link", async () => {

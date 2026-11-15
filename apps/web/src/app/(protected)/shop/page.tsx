@@ -1056,6 +1056,7 @@ function ProductCard({
   const deadlinePassed = !testing && Boolean(deadline && new Date(deadline).getTime() <= Date.now());
   const locked = (!testing && (classClosed || councilClosed)) || deadlinePassed;
   const disabled = (soldOut || locked) && registeredQuantity === 0;
+  const detailsDisabled = disabled && !(classClosed && !councilClosed);
   const statusLabel = product.purchase_allowed === false
     ? product.purchase_restriction ?? "購買資格受限"
     : testing
@@ -1136,7 +1137,7 @@ function ProductCard({
         href={href}
         prefetch={false}
         onClick={(event) => {
-          if (disabled) {
+          if (detailsDisabled) {
             event.preventDefault();
             return;
           }
@@ -1145,8 +1146,8 @@ function ProductCard({
           event.preventDefault();
           onClick();
         }}
-        aria-disabled={disabled || undefined}
-        tabIndex={disabled ? -1 : undefined}
+        aria-disabled={detailsDisabled || undefined}
+        tabIndex={detailsDisabled ? -1 : undefined}
         className={className}
         style={style}
         aria-label={`查看商品：${product.name}`}>
@@ -1156,7 +1157,7 @@ function ProductCard({
       <button
         type="button"
         onClick={onClick}
-        disabled={disabled}
+        disabled={detailsDisabled}
         className={className}
         style={style}
         aria-label={`查看商品：${product.name}`}>
@@ -1657,8 +1658,6 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
         !category.order_closed_at
         && !(category.order_closes_at && new Date(category.order_closes_at).getTime() <= catalogTime)
         && !(closeStatus[category.id]?.is_closed && closeStatus[category.id]?.is_global)
-        // 本班已暫停的活動不再佔用訂購入口；有權限的測試商品仍保留。
-        && (!closeStatus[category.id]?.is_closed || categoryOrderable(category, catalogTime, true))
       ));
   const openProductDisplayed = !loading && displayedCatalog.some((category) => (
     category.products.some((product) => product.id === openProduct)
