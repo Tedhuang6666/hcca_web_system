@@ -1,36 +1,41 @@
 import { describe, expect, it } from "vitest";
-import { constrainCamera, fitWall, wallLayout, zoomCamera } from "./infinite-wall-layout";
+import { constrainCamera, wallLayout, zoomCamera, MIN_WALL_SCALE, MAX_WALL_SCALE } from "./infinite-wall-layout";
 
-describe("照片牆視角", () => {
-  it("positions every photo once, keeps portrait and landscape frames apart and fits the entire wall", () => {
-    for (const count of [1, 3, 80, 1000]) {
-      for (const viewport of [{ width: 390, height: 550 }, { width: 1440, height: 700 }]) {
-        const wall = wallLayout(Array.from({ length: count }, (_, index) => index % 2 ? 2 / 3 : 3 / 2), viewport);
-        expect(wall.tiles).toHaveLength(count);
-        expect(new Set(wall.tiles.map((tile) => tile.x + ":" + tile.y)).size).toBe(count);
-        const camera = fitWall(wall, viewport);
-        for (const tile of wall.tiles) {
-          expect(tile.x * camera.scale + camera.x).toBeGreaterThanOrEqual(0);
-          expect(tile.y * camera.scale + camera.y).toBeGreaterThanOrEqual(0);
-          expect((tile.x + tile.width) * camera.scale + camera.x).toBeLessThanOrEqual(viewport.width);
-          expect((tile.y + tile.height) * camera.scale + camera.y).toBeLessThanOrEqual(viewport.height);
-        }
+describe("無邊照片牆", () => {
+  it("repeats one or three photos across the full viewport at every allowed zoom", () => {
+    for (const count of [1, 3]) for (const size of [{ width: 390, height: 550 }, { width: 1440, height: 700 }]) {
+      for (const scale of [MIN_WALL_SCALE, 1, MAX_WALL_SCALE]) {
+        const camera = { x: -1234567, y: 987654, scale };
+        const { tiles } = wallLayout(Array(count).fill(1.5), size, camera);
+        const visible = tiles.filter((tile) => tile.x * scale + camera.x < size.width && (tile.x + tile.width) * scale + camera.x > 0
+          && tile.y * scale + camera.y < size.height && (tile.y + tile.height) * scale + camera.y > 0);
+        expect(tiles.length).toBeLessThan(100);
+        expect(visible.length).toBeGreaterThanOrEqual(1);
+        expect(Math.min(...tiles.map((tile) => tile.x * scale + camera.x))).toBeLessThan(0);
+        expect(Math.max(...tiles.map((tile) => (tile.x + tile.width) * scale + camera.x))).toBeGreaterThan(size.width);
+        expect(Math.min(...tiles.map((tile) => tile.y * scale + camera.y))).toBeLessThan(0);
+        expect(Math.max(...tiles.map((tile) => (tile.y + tile.height) * scale + camera.y))).toBeGreaterThan(size.height);
+        expect(tiles.every((tile) => tile.photoIndex >= 0 && tile.photoIndex < count)).toBe(true);
       }
     }
   });
 
-  it("keeps the zoom anchor stationary until the camera reaches an edge", () => {
-    const wall = { width: 3000, height: 2000 }, viewport = { width: 1000, height: 700 };
-    const camera = { x: -600, y: -400, scale: 1 }, anchor = { x: 200, y: 300 };
-    const next = zoomCamera(camera, 1.5, anchor, wall, viewport);
-    expect((anchor.x - next.x) / next.scale).toBe((anchor.x - camera.x) / camera.scale);
-    expect((anchor.y - next.y) / next.scale).toBe((anchor.y - camera.y) / camera.scale);
+  it("reveals every real photo as the grid is dragged and keeps portrait frames within their cells", () => {
+    const size = { width: 1440, height: 700 }, found = new Set<number>();
+    for (let step = 0; step < 80; step++) {
+      const { tiles } = wallLayout(Array.from({ length: 80 }, (_, index) => index % 2 ? 2 / 3 : 3 / 2), size, { x: -step * size.width * 0.3, y: 0, scale: 1 });
+      for (const tile of tiles) { found.add(tile.photoIndex); expect(tile.height).toBeLessThan(size.height * 0.36); }
+    }
+    expect(found.size).toBe(80);
   });
 
-  it("prevents losing the wall after long drags and limits extreme zoom", () => {
-    const wall = { width: 3000, height: 2000 }, viewport = { width: 1000, height: 700 };
-    expect(constrainCamera({ x: -1e9, y: 1e9, scale: 1 }, wall, viewport)).toEqual({ x: -2000, y: 0, scale: 1 });
-    expect(zoomCamera({ x: 0, y: 0, scale: 1 }, 100, { x: 0, y: 0 }, wall, viewport).scale).toBe(3);
-    expect(zoomCamera({ x: 0, y: 0, scale: 1 }, 0.0001, { x: 0, y: 0 }, wall, viewport).scale).toBeGreaterThan(0);
+  it("keeps the zoom anchor stationary and allows dragging beyond the original collection", () => {
+    const camera = { x: -600, y: -400, scale: 1 }, anchor = { x: 200, y: 300 };
+    const next = zoomCamera(camera, 1.5, anchor);
+    expect((anchor.x - next.x) / next.scale).toBe((anchor.x - camera.x) / camera.scale);
+    expect((anchor.y - next.y) / next.scale).toBe((anchor.y - camera.y) / camera.scale);
+    expect(constrainCamera({ x: -1e9, y: 1e9, scale: 1 })).toEqual({ x: -1e9, y: 1e9, scale: 1 });
+    expect(zoomCamera(camera, 100, anchor).scale).toBe(MAX_WALL_SCALE);
+    expect(zoomCamera(camera, 0.0001, anchor).scale).toBe(MIN_WALL_SCALE);
   });
 });

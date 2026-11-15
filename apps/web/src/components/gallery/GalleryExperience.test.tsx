@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import GalleryExperience from "./GalleryExperience";
 import { readActivityAlbums } from "@/lib/public-activity-albums";
 
+vi.mock("./useGalleryMotion", () => ({ useGalleryMotion: vi.fn() }));
+
 beforeEach(() => {
   vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true })));
   vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
@@ -30,14 +32,16 @@ describe("影像紀事", () => {
     const first = readActivityAlbums({})[0];
     const second = { ...first, id: "preparation", title: "籌備紀錄", photos: first.photos.map((photo) => ({ ...photo, id: photo.id + "-2" })) };
     const { container } = render(<GalleryExperience albums={[first, second]} />);
-    expect(within(screen.getByRole("region", { name: "活動照片牆" })).getAllByRole("button", { name: /放大：/ })).toHaveLength(6);
+    const wallPhotos = within(screen.getByRole("region", { name: "活動照片牆" })).getAllByRole("button", { name: /放大：/ });
+    expect(new Set(wallPhotos.map((photo) => photo.dataset.galleryAlbum + ":" + photo.dataset.galleryPhoto)).size).toBe(6);
     expect(screen.getAllByRole("region", { name: "活動照片牆" })).toHaveLength(1);
     expect(container.querySelector(".archive-masthead")).not.toBeNull();
-    expect(container.querySelector(".archive-stories, .archive-all-photos, .archive-key-visual")).toBeNull();
+    expect(container.querySelector(".archive-all-photos, .archive-key-visual")).toBeNull();
     expect(screen.queryByText(/HCCA \/|照片沒有邊界|SELECTED MOMENTS/)).not.toBeInTheDocument();
     fireEvent.change(screen.getByRole("combobox", { name: "選擇活動" }), { target: { value: second.id } });
     expect(screen.getByText("3 張照片")).toBeVisible();
-    expect(within(screen.getByRole("region", { name: "活動照片牆" })).getAllByRole("button", { name: /放大：籌備紀錄/ })).toHaveLength(3);
+    const filteredPhotos = within(screen.getByRole("region", { name: "活動照片牆" })).getAllByRole("button", { name: /放大：籌備紀錄/ });
+    expect(new Set(filteredPhotos.map((photo) => photo.dataset.galleryPhoto)).size).toBe(3);
     expect(screen.queryByRole("button", { name: /放大：迎新/ })).not.toBeInTheDocument();
     expect(window.location.search).toBe("?event=preparation");
   });
@@ -60,10 +64,11 @@ describe("影像紀事", () => {
     event.keyVisual = { ...event.photos[0], id: "key-visual", src: "/poster.webp", alt: "測試活動主視覺", photographer: "設計署名" };
     const { container } = render(<GalleryExperience albums={[event]} detail />);
     expect(container.querySelector(".archive-opening-photo img")).toHaveAttribute("alt", "測試活動主視覺");
-    expect(within(screen.getByRole("region", { name: "活動照片牆" })).queryByAltText("測試活動主視覺")).not.toBeInTheDocument();
-    expect(container.querySelector('[data-gallery-photo="unfeatured"]')).toBeVisible();
+    expect(within(screen.getByRole("region", { name: "活動照片牆" })).getAllByAltText("測試活動主視覺").length).toBeGreaterThan(0);
+    const wall = screen.getByRole("region", { name: "活動照片牆" });
+    expect(within(wall).getAllByRole("button", { name: /放大：/ }).some((photo) => photo.dataset.galleryPhoto === "unfeatured")).toBe(true);
     expect(container.querySelector('[data-gallery-photo="duplicate"]')).toBeNull();
-    expect(within(screen.getByRole("region", { name: "活動照片牆" })).getAllByRole("button", { name: /放大：迎新/ })).toHaveLength(4);
+    expect(screen.getByRole("article", { name: "迎新精選照片" })).toBeInTheDocument();
     expect(screen.queryByText("每一個片刻")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "活動主視覺" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /原始活動相簿/ })).toHaveAttribute("href", event.sourceUrl);
@@ -76,7 +81,7 @@ describe("影像紀事", () => {
     fireEvent.error(within(photo).getByRole("img"));
     fireEvent.error(within(photo).getByRole("img"));
     expect(within(photo).getByRole("status")).toHaveTextContent("照片暫時無法顯示");
-    expect(within(wall).getAllByRole("img")).toHaveLength(2);
+    expect(within(wall).getAllByRole("img").length).toBeGreaterThan(2);
   });
 
   it("falls back to an activity photo when the opening key visual fails", () => {
@@ -100,13 +105,13 @@ describe("影像紀事", () => {
     expect(container.querySelector<HTMLElement>(".archive-opening-photo .archive-photo-media")!.style.aspectRatio).toBe("");
   });
 
-  it("preserves a poster-only activity without creating an empty photo wall", () => {
+  it("fills the wall even for a poster-only activity", () => {
     const album = readActivityAlbums({})[0];
     album.keyVisual = { ...album.photos[0], id: "poster" };
     album.photos = [];
     const { container } = render(<GalleryExperience albums={[album]} detail />);
     expect(container.querySelector(".archive-opening-photo img")).toBeVisible();
-    expect(screen.queryByRole("region", { name: "活動照片牆" })).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "活動照片牆" })).toBeVisible();
     expect(screen.queryByText("活動紀錄整理中。")).not.toBeInTheDocument();
   });
 
@@ -125,4 +130,19 @@ describe("影像紀事", () => {
     fireEvent.click(screen.getByRole("button", { name: "關閉照片" }));
     expect(origin).toHaveFocus();
   });
+});
+
+it("restores featured spreads and credits the artist and each photographer in the frame", () => {
+  const album = readActivityAlbums({})[0];
+  album.photographer = "活動攝影";
+  album.photos[0].photographer = "逐張攝影";
+  album.keyVisual = { ...album.photos[0], id: "poster", src: "/poster.webp", photographer: "主視覺繪師" };
+  const { container } = render(<GalleryExperience albums={[album]} detail />);
+  const opening = container.querySelector<HTMLElement>(".archive-opening-photo")!;
+  expect(within(opening).getByText("繪師／主視覺繪師")).toHaveClass("archive-photo-credit");
+  expect(within(opening).queryByText("攝影／活動攝影")).not.toBeInTheDocument();
+  const featured = screen.getByRole("article", { name: "迎新精選照片" });
+  expect(within(featured).getByText("攝影／逐張攝影")).toHaveClass("archive-photo-credit");
+  expect(within(featured).getAllByText("攝影／活動攝影")).toHaveLength(2);
+  expect(within(featured).getAllByRole("button", { name: /放大：/ })).toHaveLength(3);
 });

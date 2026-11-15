@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import InfinitePhotoWall from "./InfinitePhotoWall";
 import type { GalleryItem } from "./GalleryViewer";
@@ -33,10 +33,10 @@ it("pans with the wheel inside the wall, zooms around the cursor and removes obs
   expect(plane.style.transform).not.toBe(initial);
   fireEvent.wheel(viewport, { deltaY: -60, ctrlKey: true });
   expect(screen.getByLabelText("縮放比例")).not.toHaveTextContent("100%");
-  fireEvent.click(screen.getByRole("button", { name: "顯示全部照片" }));
+  fireEvent.click(screen.getByRole("button", { name: "重設照片牆" }));
   const percentage = Number.parseInt(screen.getByLabelText("縮放比例").textContent || "");
   expect(percentage).toBeGreaterThan(0);
-  expect(percentage).toBeLessThan(100);
+  expect(percentage).toBe(100);
   unmount();
   expect(disconnect).toHaveBeenCalledOnce();
 });
@@ -51,7 +51,7 @@ it("supports keyboard pan and zoom without consuming photo activation keys", () 
   expect(plane.style.transform).not.toBe(initial);
   fireEvent.keyDown(viewport, { key: "+" });
   expect(screen.getByLabelText("縮放比例")).toHaveTextContent("125%");
-  fireEvent.click(screen.getByRole("button", { name: "放大：迎新・照片 0" }));
+  fireEvent.click(screen.getAllByRole("button", { name: /放大：迎新・照片/ })[0]);
   expect(onOpen).toHaveBeenCalledOnce();
 });
 
@@ -59,7 +59,7 @@ it("distinguishes a drag from a click and supports two pointer pinch zoom", () =
   const onOpen = vi.fn();
   const { container } = render(<InfinitePhotoWall items={items} paused={false} onOpen={onOpen} />);
   const viewport = screen.getByLabelText(/照片牆，可拖曳/);
-  const photo = screen.getByRole("button", { name: "放大：迎新・照片 0" });
+  const photo = screen.getAllByRole("button", { name: /放大：迎新・照片/ })[0];
   const plane = container.querySelector<HTMLElement>(".infinite-wall-plane")!;
   const initial = plane.style.transform;
   fireEvent.pointerDown(photo, { pointerId: 1, clientX: 400, clientY: 300, button: 0 });
@@ -91,4 +91,18 @@ it("pauses wheel and zoom controls while the full screen viewer is open", () => 
   fireEvent.pointerMove(viewport, { pointerId: 1, clientX: 100, clientY: 100 });
   expect(plane.style.transform).toBe(initial);
   expect(screen.getByRole("button", { name: "放大照片牆" })).toBeDisabled();
+});
+
+it("fills the wall with repeated photos while keeping one keyboard stop per visible photo", () => {
+  const { container } = render(<InfinitePhotoWall items={items.slice(0, 1)} paused={false} onOpen={vi.fn()} />);
+  expect(screen.getAllByRole("button", { name: "放大：迎新・照片 0" }).length).toBeGreaterThan(3);
+  expect(container.querySelectorAll('.infinite-wall-tile button[tabindex="0"]')).toHaveLength(1);
+});
+
+it("fits repeated frames to the actual image dimensions", async () => {
+  const { container } = render(<InfinitePhotoWall items={items.slice(0, 1)} paused={false} onOpen={vi.fn()} />);
+  const image = screen.getAllByRole("img")[0];
+  Object.defineProperties(image, { naturalWidth: { value: 1800 }, naturalHeight: { value: 2400 } });
+  fireEvent.load(image);
+  await waitFor(() => expect(Number.parseFloat(container.querySelector<HTMLElement>(".infinite-wall-image")!.style.aspectRatio)).toBe(0.75));
 });
