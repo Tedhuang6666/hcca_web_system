@@ -195,10 +195,14 @@ async def synchronize(session: AsyncSession) -> GallerySyncReportOut | None:
                             headers=Headers({"content-type": "image/webp"}),
                         )
                         try:
-                            stored = await get_storage().save(upload, prefix="site")
+                            stored = await get_storage().save(upload, prefix="public-site")
                         finally:
                             await upload.close()
-                        photo.update(src=stored.url, width=width, height=height)
+                        photo.update(
+                            src=f"/site/public/images/{stored.storage_key}",
+                            width=width,
+                            height=height,
+                        )
                     except DriveRetryLater:
                         manifest["_cursor"] = {"after": previous_attempt}
                         raise

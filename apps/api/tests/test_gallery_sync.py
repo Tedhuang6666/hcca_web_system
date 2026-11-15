@@ -9,6 +9,7 @@ from PIL import Image
 from pydantic import ValidationError
 
 from api.core.config import settings
+from api.routers import site as site_router
 from api.schemas.gallery_sync import GalleryDriveConfig
 from api.services import gallery_drive
 from api.services import gallery_sync as sync
@@ -86,7 +87,7 @@ async def setup_source(db, user, monkeypatch, tmp_path):
 
 
 async def test_multifolder_sync_deduplicates_strips_metadata_and_preserves_manual_edits(
-    db_session, make_user, monkeypatch, tmp_path
+    db_session, make_user, monkeypatch, tmp_path, client
 ):
     user = await make_user(is_superuser=True)
     site, source, drive = await setup_source(db_session, user, monkeypatch, tmp_path)
@@ -99,8 +100,13 @@ async def test_multifolder_sync_deduplicates_strips_metadata_and_preserves_manua
     assert all(photo["caption"] == "" and photo["alt"] == "" for photo in photos)
     assert "example.com" not in str(site.homepage_blocks)
     assert site.homepage_blocks["unrelated"] == "preserved"
+    monkeypatch.setattr(site_router, "get_storage", lambda: LocalStorageBackend(str(tmp_path)))
     for photo in photos:
-        with Image.open(tmp_path / photo["src"].removeprefix("/uploads/")) as image:
+        assert photo["src"].startswith("/site/public/images/public-site/")
+        response = await client.get(photo["src"])
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "image/webp"
+        with Image.open(BytesIO(response.content)) as image:
             assert not image.getexif()
             assert image.size == (100, 60)
     source.requested_at = datetime.now(UTC)
