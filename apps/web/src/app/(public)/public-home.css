@@ -1,19 +1,13 @@
 /* 首頁：校園近況先於系統介紹；真實照片負責色彩與情緒。 */
 .public-home {
-  --public-bg: #101115;
-  --public-text: #f2f2f0;
-  --public-secondary: #a3a3a3;
-  --public-muted: #a3a3a3;
-  --public-border: rgb(255 255 255 / 10%);
-  --public-soft: #1c1d22;
-  --public-accent-text: #dcc184;
+  /* 公開官網的色票由 .public-site 依 data-theme 提供。 */
   --public-content-max: 1232px;
   background: var(--public-bg);
   color: var(--public-text);
   padding-bottom: 4rem;
 }
-.public-home ::selection { background: #dcc184; color: #101115; }
-.public-home :is(a, button):focus-visible { outline: 2px solid #dcc184; outline-offset: 5px; }
+.public-home ::selection { background: var(--public-accent-soft); color: var(--public-accent-text); }
+.public-home :is(a, button):focus-visible { outline: 2px solid var(--public-focus); outline-offset: 5px; }
 .campus-masthead, .campus-content, .public-home-loading {
   width: min(100%, var(--public-content-max));
   margin-inline: auto;
