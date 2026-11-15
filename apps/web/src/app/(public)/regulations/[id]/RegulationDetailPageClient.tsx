@@ -22,7 +22,8 @@ import { apiErrorMessage } from "@/lib/api-helpers";
 import { apiUrl } from "@/lib/config";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { formatGeneratedHistoryRows, splitLegislativeHistory } from "@/lib/regulationHistory";
+import { formatRevisionDate, splitLegislativeHistory } from "@/lib/regulationHistory";
+import { regulationAppendices } from "@/lib/regulation-appendices";
 import { recordRecent } from "@/lib/recents";
 import {
   LINKABLE_ARTICLE_TYPES,
@@ -478,10 +479,11 @@ export default function RegulationDetailPageClient({
   // 不應在畫面上再追加一份系統合成的沿革。
   const generatedHistoryRows = legislativeHistoryRows.length > 0
     ? []
-    : formatGeneratedHistoryRows(sortedRevisions);
+    : sortedRevisions.map((revision) => `${formatRevisionDate(revision)}　${revision.change_brief}`);
   const hasHistoryRows = legislativeHistoryRows.length > 0 || generatedHistoryRows.length > 0;
   const latestRevision = sortedRevisions[sortedRevisions.length - 1] ?? null;
   const deletedCount = allArticles.filter(a => a.is_deleted).length;
+  const appendices = regulationAppendices(allArticles, reg.content);
 
   return (
     <>
@@ -498,7 +500,7 @@ export default function RegulationDetailPageClient({
           </h1>
           <div className="regulation-reading-meta">
             <span>{regulationPublicState(reg)}</span>
-            {reg.published_at && <span>公布日期：{administrativeDate(reg.published_at, true)}</span>}
+            {reg.published_at && <span>登錄公布日期：{administrativeDate(reg.published_at, true)}</span>}
             {reg.effective_date && <span>施行日期：{administrativeDate(reg.effective_date, true)}</span>}
           </div>
           <div className="regulation-reading-toolbar no-print">
@@ -605,7 +607,8 @@ export default function RegulationDetailPageClient({
         <div className="administrative-reader-tabs no-print flex gap-1 p-1 rounded-lg overflow-x-auto"
           style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
           {([
-            { key: "content" as Tab, label: "條文內容" },
+            { key: "content" as Tab, label: regulationPublicState(reg) === "現行" ? "現行條文" : "條文內容" },
+            { key: "history", label: "法規沿革" },
             { key: "revisions", label: "歷史版本" },
           ] as { key: Tab; label: string }[]).map(({ key, label }) => (
             <button key={key} aria-pressed={tab === key} onClick={() => handleTabChange(key)}
@@ -629,36 +632,6 @@ export default function RegulationDetailPageClient({
                 {reg.preface}
               </div>
             )}
-            {hasHistoryRows && (
-              <details
-                className="administrative-law-history reader-font-scale mb-6"
-                style={{
-                  background: "var(--bg-elevated)",
-                  border: "1px solid var(--border)",
-                  ...zoomStyle,
-                }}
-              >
-                <summary
-                  className="cursor-pointer px-4 py-2.5 text-xs font-semibold uppercase tracking-wider select-none"
-                  style={{ color: "var(--text-muted)" }}
-                >
-                  法規沿革
-                </summary>
-                <div
-                  className="px-4 pb-4 space-y-1 text-sm"
-                  style={{
-                    color: "var(--text-secondary)",
-                    lineHeight: 1.8,
-                    overflowWrap: "anywhere",
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
-                  }}
-                >
-                  {legislativeHistoryRows.map((row, index) => <p key={`manual-${index}-${row}`}>{row}</p>)}
-                  {generatedHistoryRows.map((row, index) => <p key={`generated-${index}-${row}`}>{row}</p>)}
-                </div>
-              </details>
-            )}
             {activeArticles.length === 0 && reg.content ? (
               <RegulationMarkdownContent
                 content={reg.content}
@@ -670,7 +643,7 @@ export default function RegulationDetailPageClient({
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                   <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>條文內容</h2>
                   <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                    共 {countLawArticles(allArticles)} 條未刪除條文
+                    共 {reg.article_count ?? countLawArticles(allArticles)} 條
                   </span>
                 </div>
                 <div className="no-print flex items-center gap-2 flex-wrap">
@@ -715,7 +688,7 @@ export default function RegulationDetailPageClient({
                       style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
                       <p className="administrative-toc-desktop-title text-xs font-semibold mb-2" style={{ color: "var(--text-muted)" }}>章節目錄</p>
                       <button type="button" className="administrative-toc-mobile-toggle" aria-expanded={mobileTocExpanded}
-                        aria-controls="law-toc-links" onClick={() => setMobileTocExpanded((value) => !value)}>章節目錄　{mobileTocExpanded ? "收合" : "展開"}</button>
+                        aria-controls="law-toc-links" onClick={() => setMobileTocExpanded((value) => !value)}>條文目錄　{mobileTocExpanded ? "收合" : "展開"}</button>
                       <div id="law-toc-links" className="space-y-1" data-expanded={mobileTocExpanded}>
                         {tocItems.map(item => (
                           <button
@@ -753,6 +726,7 @@ export default function RegulationDetailPageClient({
                           <ArticleRow
                             key={article.id}
                             article={article}
+                            appendices={appendices}
                             displayLabel={displayLabel}
                             hidden={hiddenByChapter}
                             chapterCollapsed={Boolean(article.article_type === "chapter" && chapterCollapsedMap[article.id])}
@@ -776,6 +750,21 @@ export default function RegulationDetailPageClient({
         )}
 
         {/* 修訂歷程 */}
+        {tab === "content" && appendices.length > 0 && (
+          <section id="law-appendices" className="administrative-law-appendices" aria-labelledby="law-appendices-title">
+            <h2 id="law-appendices-title" className="text-lg font-semibold">附錄</h2>
+            <ul>{appendices.map((appendix) => <li key={appendix.anchor} id={appendix.anchor}>
+              {appendix.articleId
+                ? <a href={`#a-${appendix.articleId}`} onClick={(event) => {
+                    event.preventDefault();
+                    setChapterCollapsedMap({});
+                    requestAnimationFrame(() => document.getElementById(`a-${appendix.articleId}`)?.scrollIntoView({ block: "start" }));
+                  }}>{appendix.label}</a>
+                : <>{appendix.label}<span>　尚未收錄</span></>}
+            </li>)}</ul>
+          </section>
+        )}
+
         {tab === "revisions" && (
           <div className="space-y-3">
             {publishedDoc && <Link className="administrative-source-link" href={`/documents/${publishedDoc.id}`}>公布公文：{publishedDoc.serial_number}</Link>}
@@ -797,12 +786,28 @@ export default function RegulationDetailPageClient({
           </div>
         )}
 
+        {tab === "history" && (
+          <section className="administrative-law-history" aria-labelledby="law-history-title">
+            <h2 id="law-history-title" className="text-lg font-semibold">法規沿革</h2>
+            <div className="administrative-history-events">
+              {hasHistoryRows
+                ? [...legislativeHistoryRows, ...generatedHistoryRows].map((row, index) => <p key={index}>{row}</p>)
+                : <p>尚未收錄沿革資料。</p>}
+            </div>
+            <dl className="administrative-history-dates">
+              <dt>登錄公布日期</dt><dd>{administrativeDate(reg.published_at, true)}</dd>
+              <dt>施行日期</dt><dd>{administrativeDate(reg.effective_date, true)}</dd>
+              <dt>系統收錄日期</dt><dd>{administrativeDate(reg.created_at, true)}</dd>
+            </dl>
+          </section>
+        )}
+
         {/* ── 元資訊頁尾 ───────────────────────────────────────────────────── */}
-        <div className="card p-4">
+        <div className="administrative-law-record no-print">
           <dl className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
             {([
               ["最後更新", new Date(reg.updated_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" }).replace(/\s+/gu, " ")],
-              ["建立日期", new Date(reg.created_at).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" })],
+              ["系統收錄日期", new Date(reg.created_at).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" })],
               ["狀態", regulationPublicState(reg)],
             ] as [string, string][]).map(([k, v]) => (
               <div key={k}>

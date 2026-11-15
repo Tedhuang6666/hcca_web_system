@@ -71,7 +71,7 @@ export default async function DocumentDetailRoute({
         { name: "公開公文", url: absoluteUrl("/documents") },
         { name: title, url: canonical },
       ])} />
-      <DocumentDetailEntry documentId={id} initialDoc={document} />
+      <DocumentDetailEntry key={id} documentId={id} initialDoc={document} initialLoadStatus={result.status} />
     </>
   );
 }

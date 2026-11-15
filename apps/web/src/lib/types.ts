@@ -1,11 +1,14 @@
 /** Generated from api-bridge.ts. */
-import type { ClassRosterSummary, CloseStatusItem as ApiCloseStatusItem, OrderListItem as ApiOrderListItem, OrderOut as ApiOrderOut, ShopDelegationContextOut as ApiShopDelegationContextOut } from "./api-bridge";
+import type { ClassRosterSummary, CloseStatusItem as ApiCloseStatusItem, OrderListItem as ApiOrderListItem, OrderOut as ApiOrderOut, ShopDelegationContextOut as ApiShopDelegationContextOut, RegulationOut as ApiRegulationOut } from "./api-bridge";
 
 // 舊頁面快照尚無部分收款欄位時，沿用未登記實收／非班級尾款。
 type PaymentSnapshotFields = "received_amount" | "is_class_balance";
 export type OrderListItem = Omit<ApiOrderListItem, PaymentSnapshotFields> & Partial<Pick<ApiOrderListItem, PaymentSnapshotFields>>;
 export type OrderOut = Omit<ApiOrderOut, PaymentSnapshotFields> & Partial<Pick<ApiOrderOut, PaymentSnapshotFields>>;
 export type ShopDelegationContextOut = Omit<ApiShopDelegationContextOut, "registration"> & { registration?: OrderOut | null };
+
+// 舊 API 或預載快照尚未包含後端條數時，由閱讀頁依 article 節點回退。
+export type RegulationOut = Omit<ApiRegulationOut, "article_count"> & { article_count?: number };
 
 // 班級鎖單涵蓋統一期限與班聯收款；家人代訂等本地狀態未提供全域資訊時沿用 false。
 export type CloseStatusItem = Omit<ApiCloseStatusItem, "is_global"> & { is_global?: boolean };
@@ -686,7 +689,6 @@ export type {
   RegulationArticleOut,
   RegulationCategory,
   RegulationListItem,
-  RegulationOut,
   RegulationPublishRequest,
   RegulationRevisionOut,
   RegulationSearchResult,

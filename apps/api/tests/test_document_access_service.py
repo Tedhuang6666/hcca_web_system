@@ -45,6 +45,38 @@ from api.services.document import (
 pytestmark = pytest.mark.asyncio
 
 
+async def test_list_summary_extracts_decree_body_and_preserves_formal_subject(
+    db_session: AsyncSession, make_user
+) -> None:
+    org = await _make_org(db_session)
+    creator = await make_user()
+    decree = _make_doc(
+        org,
+        creator,
+        category="decree",
+        subject=None,
+        title="國立新竹高級中學班級聯合自治會主席令",
+        doc_description="任命測試幹部擔任資訊部部長，自即日起生效。",
+    )
+    letter = _make_doc(org, creator, subject="原始正式主旨", summary="登錄摘要")
+    secret = _make_doc(
+        org,
+        creator,
+        classification=DocumentClassification.SECRET,
+        subject=None,
+        summary="應遮蔽的摘要",
+        content="應遮蔽的內容",
+    )
+    db_session.add_all([decree, letter, secret])
+    await db_session.flush()
+    items = await build_document_list_items(db_session, [decree, letter, secret], viewer_id=None)
+    assert items[0].summary == decree.doc_description
+    assert items[1].subject == "原始正式主旨"
+    assert items[1].summary == "登錄摘要"
+    assert items[2].is_redacted is True
+    assert items[2].summary is None
+
+
 async def _make_org(db_session: AsyncSession, **overrides: object) -> Org:
     defaults: dict = {"name": f"組織-{uuid.uuid4().hex[:6]}"}
     defaults.update(overrides)

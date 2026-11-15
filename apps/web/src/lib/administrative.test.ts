@@ -17,11 +17,14 @@ describe("行政公開資料", () => {
     expect(administrativeDate("invalid")).toBe("未載明");
   });
 
-  it("公布、凍結、廢止與失效分開表達，不從公布狀態推定施行效力", () => {
+  it("依現行旗標、施行日期、凍結與廢止資料呈現效力，封存不等於廢止", () => {
     const regulation = { is_active: true, is_repealed: false, workflow_status: "published" as const, freeze_reason: null };
-    expect(regulationPublicState(regulation)).toBe("已公布");
-    expect(regulationPublicState({ ...regulation, is_repealed: true })).toBe("已廢止");
+    expect(regulationPublicState(regulation)).toBe("現行");
+    expect(regulationPublicState({ ...regulation, is_repealed: true })).toBe("廢止");
     expect(regulationPublicState({ ...regulation, freeze_reason: "暫停適用" })).toBe("凍結中");
-    expect(regulationPublicState({ ...regulation, is_active: false })).toBe("已失效");
+    expect(regulationPublicState({ ...regulation, is_active: false })).toBe("非現行");
+    expect(regulationPublicState({ ...regulation, workflow_status: "archived" })).toBe("非現行");
+    expect(regulationPublicState({ ...regulation, effective_date: "2027-01-01T00:00:00Z" }, Date.UTC(2026, 10, 14))).toBe("尚未施行");
+    expect(regulationPublicState({ ...regulation, effective_date: "2026-01-01T00:00:00Z" }, Date.UTC(2026, 10, 14))).toBe("現行");
   });
 });

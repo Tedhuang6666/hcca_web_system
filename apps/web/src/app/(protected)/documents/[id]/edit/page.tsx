@@ -167,6 +167,7 @@ export default function EditDocumentPage() {
   const [templates, setTemplates] = useState<SerialTemplateOut[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [doc, setDoc] = useState<DocumentOut | null>(null);
+  const documentId = doc?.id ?? id;
   const draftValue = useMemo<DocumentEditDraft>(() => ({
     serialNumber,
     title,
@@ -397,9 +398,9 @@ export default function EditDocumentPage() {
       return JSON.stringify(draft) === JSON.stringify(originalDraft);
     }, [originalDraft]),
     save: useCallback(async () => {
-      await documentsApi.update(id, buildUpdatePayload(true));
+      await documentsApi.update(documentId, buildUpdatePayload(true));
       if (doc?.status === "draft") {
-        await documentsRecipientsApi.update(id, recipients.map(r => ({
+        await documentsRecipientsApi.update(documentId, recipients.map(r => ({
           recipient_type: r.recipient_type,
           name: r.name,
           email: r.email || undefined,
@@ -410,12 +411,12 @@ export default function EditDocumentPage() {
           email_position_ids: r.email_position_ids ?? [],
         })));
       }
-    }, [buildUpdatePayload, doc?.status, id, recipients]),
+    }, [buildUpdatePayload, doc?.status, documentId, recipients]),
   });
 
-  const fetchDoc = useCallback(async () => {
+  const fetchDoc = useCallback(async (identifier = id) => {
     try {
-      const d = await documentsApi.get(id);
+      const d = await documentsApi.get(identifier);
       const canEdit = d.status === "draft" || (d.status === "approved" && Boolean(d.issued_at));
       if (!canEdit) {
         toast.error("只能編輯草稿或已發文的核准公文");
@@ -429,6 +430,7 @@ export default function EditDocumentPage() {
       setClassification(d.classification);
       setCategory(d.category);
       setSubject(d.subject ?? "");
+      setSummary(d.summary ?? "");
       setBasis(d.basis ?? "");
       setDeclassificationCondition(d.declassification_condition ?? "none");
       setConfidentialityExpiresAt(d.confidentiality_expires_at ? d.confidentiality_expires_at.slice(0, 10) : "");
@@ -503,10 +505,10 @@ export default function EditDocumentPage() {
     if (!title.trim()) { toast.error("請輸入公文標題"); return; }
     setSaving(true);
     try {
-      await documentsApi.update(id, buildUpdatePayload(false));
+      const updated = await documentsApi.update(documentId, buildUpdatePayload(false));
       if (doc?.status === "draft") {
         // 更新受文者（整批覆寫）
-        await documentsRecipientsApi.update(id, recipients.map(r => ({
+        await documentsRecipientsApi.update(documentId, recipients.map(r => ({
           recipient_type: r.recipient_type, name: r.name, email: r.email || undefined,
           target_user_id: r.target_user_id,
           target_org_id: r.target_org_id,
@@ -517,7 +519,7 @@ export default function EditDocumentPage() {
       }
       clearDraft();
       toast.success("公文已更新");
-      router.push(`/documents/${id}`);
+      router.push(`/documents/${updated.id}`);
     } catch (e) {
       flushDraft();
       toast.error(apiErrorMessage(e, "儲存失敗"));
@@ -525,17 +527,17 @@ export default function EditDocumentPage() {
   };
 
   const uploadFile = async (file: File, reportProgress: (progress: number) => void) => {
-    const uploaded = await documentsApi.uploadAttachment(id, file, reportProgress);
+    const uploaded = await documentsApi.uploadAttachment(documentId, file, reportProgress);
     toast.success(`已上傳 ${uploaded.filename}`);
-    fetchDoc();
+    void fetchDoc(documentId);
     return uploaded;
   };
 
   const deleteAttachment = async (attId: string) => {
     try {
-      await documentsApi.deleteAttachment(id, attId);
+      await documentsApi.deleteAttachment(documentId, attId);
       toast.success("附件已刪除");
-      fetchDoc();
+      void fetchDoc(documentId);
     } catch (e) {
       toast.error(apiErrorMessage(e, "刪除失敗"));
     }
@@ -557,7 +559,7 @@ export default function EditDocumentPage() {
   return (
     <div className="app-page-width space-y-5">
       <div className="flex items-center gap-3">
-        <Link href={`/documents/${id}`}
+        <Link href={`/documents/${documentId}`}
           className="w-8 h-8 rounded-lg flex items-center justify-center  hover:"
           style={{ border: "1px solid var(--border)" }}>←</Link>
         <div>
@@ -806,7 +808,7 @@ export default function EditDocumentPage() {
                     <AttachmentNameEditor
                       name={a.display_name || a.filename}
                       onSave={async (name) => {
-                        const updated = await documentsApi.renameAttachment(id, a.id, name);
+                        const updated = await documentsApi.renameAttachment(documentId, a.id, name);
                         setDoc(current => current ? {
                           ...current,
                           attachments: current.attachments.map(attachment => attachment.id === a.id

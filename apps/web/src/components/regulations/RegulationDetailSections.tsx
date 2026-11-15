@@ -12,13 +12,14 @@ import {
   buildArticleDisplayRows as buildDisplayRowsFn,
 } from "@/lib/regulationStructure";
 import { formatRevisionDate } from "@/lib/regulationHistory";
+import { administrativeDate } from "@/lib/administrative";
 
 import { LawArticleRow } from "./LawArticleRow";
 
-export type Tab = "content" | "revisions";
+export type Tab = "content" | "history" | "revisions";
 
 export function isTab(value: string | null): value is Tab {
-  return value === "content" || value === "revisions";
+  return value === "content" || value === "history" || value === "revisions";
 }
 
 type ProposalChangeCard = {
@@ -255,7 +256,8 @@ export function RevisionCard({
             )}
           </div>
           <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-            {formatRevisionDate(rev)} · {rev.amended_by_name ?? rev.amended_by}
+            {formatRevisionDate(rev)}
+            <br />系統收錄者：{rev.amended_by_name ?? "未載明"}（{administrativeDate(rev.created_at)}收錄）
           </p>
           {rev.published_document_id && (
             <div className="mt-1 flex flex-col items-start gap-0.5 text-xs">
@@ -395,7 +397,8 @@ export function RevisionCard({
                   v{rev.version} 提案內容
                 </p>
                 <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-                  {formatRevisionDate(rev)} · {rev.amended_by_name ?? rev.amended_by}
+                  {formatRevisionDate(rev)}
+                  <br />系統收錄者：{rev.amended_by_name ?? "未載明"}（{administrativeDate(rev.created_at)}收錄）
                 </p>
               </div>
               <button onClick={() => setShowProposal(false)} className="topbar-icon-btn" aria-label="關閉">

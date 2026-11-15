@@ -13,7 +13,7 @@ type Result = RegulationListItem | RegulationSearchResult;
 const PUBLICATION_OPTIONS = [
   { key: "published", label: "已公布法規" },
   { key: "unpublished", label: "待公布" },
-  { key: "archived", label: "廢止法規" },
+  { key: "archived", label: "封存／廢止法規" },
 ];
 
 export default function RegulationSearch({ initialRegs = [] }: { initialRegs?: Result[] }) {
@@ -117,7 +117,7 @@ export default function RegulationSearch({ initialRegs = [] }: { initialRegs?: R
         <p role="status" aria-live="polite">{loading ? "檢索中…" : error ? "檢索失敗" : <>查得法規 <strong>{sorted.length}</strong> 筆</>}</p>
         <label>排序
           <select value={sort} onChange={(event) => setSort(event.target.value)}>
-            <option value="category">依類別排序</option><option value="title">依法規名稱排序</option><option value="published">依公布日期排序</option>
+            <option value="category">依類別排序</option><option value="title">依法規名稱排序</option><option value="published">依登錄公布日期排序</option>
           </select>
         </label>
       </div>
@@ -128,7 +128,7 @@ export default function RegulationSearch({ initialRegs = [] }: { initialRegs?: R
       ) : (
         <table className="administrative-table administrative-regulations">
           <caption className="sr-only">法規查詢結果</caption>
-          <thead><tr><th scope="col">法規類別</th><th scope="col">法規名稱</th><th scope="col">公布日期</th><th scope="col">狀態</th></tr></thead>
+          <thead><tr><th scope="col">法規類別</th><th scope="col">法規名稱</th><th scope="col">登錄公布日期</th><th scope="col">效力狀態</th></tr></thead>
           <tbody>{sorted.map((regulation) => (
             <tr key={regulation.id}>
               <td className="administrative-regulation-category">{REGULATION_CATEGORIES[regulation.category as RegulationCategory]}</td>

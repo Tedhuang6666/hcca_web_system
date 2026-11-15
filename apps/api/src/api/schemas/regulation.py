@@ -6,7 +6,7 @@ import uuid
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from api.models.regulation import (
     ArticleType,
@@ -223,6 +223,14 @@ class RegulationOut(BaseModel):
     revisions: list[RegulationRevisionOut] = []
     workflow_logs: list[RegulationWorkflowLogOut] = []
 
+    @computed_field(description="未刪除的條節點數；編、章、節、項、款、目不計入")
+    @property
+    def article_count(self) -> int:
+        return sum(
+            article.article_type == ArticleType.ARTICLE and not article.is_deleted
+            for article in self.articles
+        )
+
 
 class RegulationListItem(BaseModel):
     """法規列表輕量版（不含 Markdown 內容與條文，加快載入）"""
@@ -238,6 +246,7 @@ class RegulationListItem(BaseModel):
     workflow_status: RegulationWorkflowStatus
     org_id: uuid.UUID
     published_at: datetime | None
+    effective_date: datetime | None = None
     repealed_date: datetime | None = None
     freeze_reason: str | None = None
     freeze_at: datetime | None = None
@@ -318,6 +327,7 @@ class RegulationSearchResult(BaseModel):
     workflow_status: RegulationWorkflowStatus
     org_id: uuid.UUID
     published_at: datetime | None
+    effective_date: datetime | None = None
     repealed_date: datetime | None = None
     freeze_reason: str | None = None
     freeze_at: datetime | None = None

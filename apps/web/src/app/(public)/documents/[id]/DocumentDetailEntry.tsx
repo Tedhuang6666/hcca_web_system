@@ -22,17 +22,21 @@ function withArchive(document: DocumentOut | null): DocumentWithArchive | null {
 export default function DocumentDetailEntry({
   documentId,
   initialDoc,
+  initialLoadStatus = null,
 }: {
   documentId: string;
   initialDoc: DocumentOut | null;
+  initialLoadStatus?: number | null;
 }) {
   const [authenticated, setAuthenticated] = useState(false);
   const [workflowView, setWorkflowView] = useState(false);
   const { canAny } = usePermissions();
   const canManage = canAny("document:draft", "document:edit", "document:issue_direct", "document:approve", "document:reject", "document:admin", "document:view_all", "document:archive", "document:forward");
   const [document, setDocument] = useState(initialDoc);
-  const [loadingPublicDocument, setLoadingPublicDocument] = useState(!initialDoc);
-  const [publicLoadError, setPublicLoadError] = useState<"not_found" | "unavailable" | null>(null);
+  const [loadingPublicDocument, setLoadingPublicDocument] = useState(false);
+  const [publicLoadError, setPublicLoadError] = useState<"not_found" | "unavailable" | null>(
+    initialDoc ? null : initialLoadStatus === 404 ? "not_found" : "unavailable",
+  );
   const [retryVersion, setRetryVersion] = useState(0);
 
   useEffect(() => {

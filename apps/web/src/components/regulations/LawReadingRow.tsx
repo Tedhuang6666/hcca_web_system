@@ -4,10 +4,11 @@ import type { ComponentProps } from "react";
 import { Link2, X } from "lucide-react";
 import { SmartLinkedText } from "@/components/ui/OfficialText";
 import type { ArticleRow } from "./RegulationDetailSections";
+import { appendixTextParts, type RegulationAppendix } from "@/lib/regulation-appendices";
 
 /** 法規閱讀與條文引用。 */
 export default function LawReadingRow({ article, displayLabel, hidden, shareUrl, chapterCollapsed, onToggleChapter,
-  onCopyLink, highlighted, onClearHighlight }: ComponentProps<typeof ArticleRow>) {
+  onCopyLink, highlighted, onClearHighlight, appendices = [] }: ComponentProps<typeof ArticleRow> & { appendices?: RegulationAppendix[] }) {
   if (hidden) return null;
   const structural = ["volume", "chapter", "section"].includes(article.article_type);
   const content = article.content || article.title || "";
@@ -31,7 +32,11 @@ export default function LawReadingRow({ article, displayLabel, hidden, shareUrl,
             {shareUrl ? <a href={shareUrl} aria-label={`${displayLabel}引用連結`}>{displayLabel}</a> : displayLabel}
             {article.subtitle && <span>{article.subtitle}</span>}
           </div>
-          <div className="law-reading-text"><SmartLinkedText text={content} /></div>
+          <div className="law-reading-text">{appendixTextParts(content).map((part, index) => {
+            const appendix = appendices.find((entry) => entry.label === part.replace(/\s/g, "").replace("(", "（").replace(")", "）"));
+            return appendix ? <a key={index} href={`#${appendix.anchor}`}>{part}</a>
+              : <SmartLinkedText key={index} text={part} />;
+          })}</div>
         </>
       )}
       {article.is_deleted && <p className="law-reading-notice">（刪除）</p>}

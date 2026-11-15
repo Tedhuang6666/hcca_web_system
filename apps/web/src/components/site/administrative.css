@@ -43,6 +43,7 @@
 .administrative-documents th:first-child { width: 8rem; }
 .administrative-documents th:nth-child(2) { width: 17rem; }
 .administrative-serial { font-size: 0.875rem; overflow-wrap: anywhere; }
+.administrative-summary-label { color: var(--public-muted); font-size: 0.875em; font-weight: 400; }
 .administrative-search-matches { position: relative; z-index: 1; display: grid; gap: 0.5rem; margin-top: 0.75rem; font-size: 0.875rem; color: var(--public-muted); }
 .administrative-search-matches a { padding-block: 0.375rem; }
 .administrative-feedback { padding: 2.5rem 1rem; border-block: 1px solid var(--public-border); color: var(--public-muted); }
@@ -76,12 +77,14 @@
 .administrative-content .administrative-law-toc { position: sticky; top: 1.5rem; flex: 0 0 14rem; max-height: 75vh; overflow-y: auto; border: 0 !important; border-right: 1px solid var(--public-border) !important; background: transparent !important; padding-right: 1rem; scrollbar-color: var(--public-border) transparent; scrollbar-width: thin; }
 .administrative-law-toc button { min-height: 44px; border-radius: var(--administrative-radius); font-size: 0.875rem; }
 .administrative-toc-mobile-toggle { display: none; }
-.administrative-law-text { max-width: 48rem; }
-.law-reading-row { position: relative; display: grid; grid-template-columns: 5.5em minmax(0, 1fr); column-gap: 0.75em; padding: 0 2.25rem 0 0; scroll-margin-top: 2rem; line-height: 1.5; font-size: 1em; }
-.law-reading-row[data-kind="article"] { margin-top: 0.875em; min-height: 2em; }
+.administrative-law-text { max-width: 50rem; font-size: calc(1rem * var(--reader-font-scale, 1)); }
+.law-reading-row { position: relative; display: grid; grid-template-columns: 5.5em minmax(0, 1fr); column-gap: 0.75em; padding: 0 2.25rem 0 0; scroll-margin-top: 2rem; line-height: 1.85; font-size: 1em; }
+.law-reading-row[data-kind="article"] { display: block; margin-top: 1.5em; min-height: 2em; }
+.law-reading-row[data-kind="article"] .law-reading-number { margin-bottom: 0.25em; }
 .law-reading-heading { display: block; margin-top: 1.5em; margin-bottom: 0.375em; min-height: 2em; }
 .law-reading-heading :is(h2, h3) { font-size: 1.0625em; font-weight: 600; }
-.law-reading-heading-line { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.25rem; }
+.law-reading-heading-line { position: relative; text-align: center; padding-block: 0.5em; }
+.law-reading-heading-line .law-reading-chapter-toggle { display: block; margin-inline: auto; }
 .law-reading-chapter-toggle { min-height: 32px; color: var(--public-muted); font-size: 0.8125em; text-decoration: underline; text-underline-offset: 0.25em; cursor: pointer; }
 .law-reading-heading:first-child { margin-top: 0; }
 .law-reading-number { font-weight: 600; color: var(--public-text); }
@@ -89,6 +92,14 @@
 .law-reading-number a:hover { color: var(--public-accent-text); text-decoration: underline; text-underline-offset: 0.2em; }
 .law-reading-number > span { display: block; font-size: 0.8125em; font-weight: 400; color: var(--public-muted); }
 .law-reading-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.law-reading-text > a, .administrative-law-appendices a { color: var(--public-accent-text); text-decoration: underline; text-underline-offset: 0.2em; }
+.administrative-law-history, .administrative-law-appendices { max-width: 50rem; margin-block: 1.5rem; }
+.administrative-history-events { margin-block: 1.5rem; line-height: 1.85; white-space: pre-wrap; overflow-wrap: anywhere; }
+.administrative-history-events p + p { margin-top: 0.75rem; }
+.administrative-history-dates { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.75rem 1.5rem; border-top: 1px solid var(--public-border); padding-top: 1.25rem; font-size: 0.875rem; }
+.administrative-history-dates dt, .administrative-law-appendices li > span { color: var(--public-muted); }
+.administrative-law-appendices li { padding-block: 0.625rem; scroll-margin-top: 2rem; }
+.administrative-law-record { border-top: 1px solid var(--public-border); padding-top: 1rem; }
 .law-reading-row[data-kind="paragraph"] { margin-top: 0.375em; padding-left: 1em; }
 .law-reading-row[data-kind="subparagraph"] { margin-top: 0.1875em; padding-left: 2em; }
 .law-reading-row[data-kind="item"] { margin-top: 0.125em; padding-left: 3em; }
@@ -108,7 +119,7 @@
 .administrative-document-zoom button { min-width: 44px; min-height: 44px; cursor: pointer; }
 .administrative-document-zoom button:disabled { opacity: 0.5; cursor: default; }
 .administrative-document-stage { padding: 2rem; background: var(--public-soft); border: 1px solid var(--public-border); }
-.official-paper { width: 100%; max-width: 210mm; min-height: 297mm; margin-inline: auto; padding: 22mm 20mm; background: var(--public-surface); color: var(--public-text); border: 1px solid var(--public-border); font-family: inherit; font-size: calc(1rem * var(--reader-font-scale, 1)); line-height: 2; overflow-wrap: anywhere; }
+.official-paper { width: 100%; max-width: 210mm; min-height: 297mm; margin-inline: auto; padding: 22mm 20mm; background: var(--public-surface); color: var(--public-text); box-shadow: 0 2px 8px rgb(0 0 0 / 5%); font-family: inherit; font-size: calc(1rem * var(--reader-font-scale, 1)); line-height: 1.8; overflow-wrap: anywhere; }
 .official-paper-header { margin-bottom: 2rem; }
 .official-paper-header h2 { font-size: 1.5rem; line-height: 1.7; font-weight: 600; text-align: center; white-space: pre-line; }
 .official-paper-meta { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 0.5rem; margin: 1.75rem 0 0 auto; width: fit-content; max-width: 100%; font-size: 0.875rem; }
@@ -156,7 +167,7 @@
   .administrative-regulations .administrative-subject { grid-column: 1 / -1; grid-row: 2; }
   .administrative-regulations .administrative-state { grid-column: 2; grid-row: 1; }
   .administrative-regulations .administrative-date { grid-column: 1 / -1; }
-  .administrative-regulations .administrative-date::before { content: "公布日期　"; }
+  .administrative-regulations .administrative-date::before { content: "登錄公布日期　"; }
   .administrative-documents tr { grid-template-columns: minmax(0, 1fr); }
   .administrative-documents .administrative-subject { grid-row: 2; }
   .administrative-documents .administrative-date::before { content: "發文日期　"; }

@@ -29,6 +29,8 @@ from api.models.user import User
 from api.schemas.document import DocumentListItem
 from api.services.permission import active_tenure_filter
 
+from ._summary import document_content_summary
+
 REDACTED_CONFIDENTIAL_TEXT = "(此公文為密件)"
 SENSITIVE_DOCUMENT_CLASSIFICATIONS = frozenset(
     {
@@ -635,9 +637,12 @@ async def build_document_list_items(
                         "serial_number": REDACTED_CONFIDENTIAL_TEXT,
                         "title": REDACTED_CONFIDENTIAL_TEXT,
                         "subject": None,
+                        "summary": None,
                         "is_redacted": True,
                     }
                 )
+        if not item.is_redacted and not (item.subject or "").strip():
+            item.summary = document_content_summary(doc)
         items.append(item)
     return items
 

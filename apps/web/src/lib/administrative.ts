@@ -37,9 +37,13 @@ export function countLawArticles(articles: RegulationArticleOut[]): number {
 
 export function regulationPublicState(regulation: Pick<RegulationListItem,
   "is_active" | "is_repealed" | "workflow_status" | "freeze_reason"
->): string {
-  if (regulation.is_repealed || regulation.workflow_status === "archived") return "已廢止";
-  if (!regulation.is_active) return "已失效";
+> & { effective_date?: string | null }, now = Date.now()): string {
+  if (regulation.is_repealed) return "廢止";
+  if (regulation.workflow_status === "archived") return "非現行";
+  if (regulation.workflow_status !== "published") return "尚未公布";
+  if (regulation.effective_date && new Date(regulation.effective_date).getTime() > now) return "尚未施行";
+  if (!regulation.is_active) return "非現行";
   if (regulation.freeze_reason) return "凍結中";
-  return regulation.workflow_status === "published" ? "已公布" : "尚未公布";
+  // is_active 是後端明示的現行狀態，不單憑公布程序推定效力。
+  return "現行";
 }

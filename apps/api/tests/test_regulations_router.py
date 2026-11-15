@@ -24,6 +24,43 @@ from api.models.user import User
 pytestmark = pytest.mark.asyncio
 
 
+async def test_public_article_count_excludes_structural_nodes_and_deleted_articles(
+    db_session: AsyncSession, client, make_user
+) -> None:
+    org = await _make_org(db_session)
+    creator = await make_user()
+    reg = await _make_regulation(
+        db_session,
+        org,
+        creator,
+        published_at=datetime.now(UTC),
+        workflow_status=RegulationWorkflowStatus.PUBLISHED,
+        effective_date=datetime(2020, 1, 1, tzinfo=UTC),
+    )
+    kinds = [ArticleType.ARTICLE] * 23 + [ArticleType.CHAPTER] * 6 + [ArticleType.SUBPARAGRAPH] * 23
+    kinds += [ArticleType.SECTION, ArticleType.PARAGRAPH, ArticleType.ITEM, ArticleType.ARTICLE]
+    for index, kind in enumerate(kinds):
+        db_session.add(
+            RegulationArticle(
+                regulation_id=reg.id,
+                sort_index=index,
+                article_type=kind,
+                title=f"節點{index}",
+                content="原條文內容",
+                is_deleted=index == len(kinds) - 1,
+            )
+        )
+    await db_session.flush()
+
+    response = await client.get(f"/regulations/{reg.id}")
+    assert response.status_code == 200
+    assert response.json()["article_count"] == 23
+    assert len(response.json()["articles"]) > 23
+    response = await client.get("/regulations", params={"org_id": str(org.id)})
+    assert response.status_code == 200
+    assert response.json()[0]["effective_date"].startswith("2020-01-01")
+
+
 async def _grant_permission(
     db: AsyncSession, user: User, org: Org, code: str, *, position_name: str = "職位"
 ) -> None:

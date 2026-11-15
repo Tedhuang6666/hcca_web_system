@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { documentsApi } from "@/lib/api/documents";
 import { usePermissions } from "@/hooks/usePermissions";
 import { administrativeDate, DOCUMENT_CATEGORIES } from "@/lib/administrative";
+import { documentListing } from "@/lib/document-listing";
 import type { DocumentListItem } from "@/lib/types";
 
 const DocumentWorkspace = dynamic(() => import("./client"));
@@ -146,7 +147,8 @@ export default function DocumentSearch({ initialDocs = [] }: { initialDocs?: Doc
               <td className="administrative-serial">{document.is_redacted ? "不公開" : document.serial_number}</td>
               <td className="administrative-subject">{document.is_redacted ? "不公開" : (
                 <Link href={`/documents/${encodeURIComponent(document.serial_number)}`} className="administrative-row-link" prefetch={false}>
-                  {document.summary || document.subject || document.title}
+                  {documentListing(document).isSummary && <span className="administrative-summary-label">內容摘要：</span>}
+                  {documentListing(document).text}
                 </Link>
               )}</td>
             </tr>

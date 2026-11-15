@@ -28133,6 +28133,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Effective Date */
+            effective_date?: string | null;
             /** Freeze At */
             freeze_at?: string | null;
             /** Freeze Reason */
@@ -28178,6 +28180,11 @@ export interface components {
             amended_articles?: string | null;
             /** @default enact */
             amendment_type: components["schemas"]["RegulationAmendmentType"];
+            /**
+             * Article Count
+             * @description 未刪除的條節點數；編、章、節、項、款、目不計入
+             */
+            readonly article_count: number;
             /**
              * Articles
              * @default []
@@ -28359,6 +28366,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Effective Date */
+            effective_date?: string | null;
             /** Freeze At */
             freeze_at?: string | null;
             /** Freeze Reason */
