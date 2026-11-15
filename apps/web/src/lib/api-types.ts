@@ -10503,6 +10503,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop/orders/quantities.xlsx": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 下載訂單統計詳情 Excel（含內部成本） */
+        get: operations["download_order_quantities_shop_orders_quantities_xlsx_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shop/orders/receipts/changed.pdf": {
         parameters: {
             query?: never;
@@ -56343,6 +56360,45 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrderQuantityRow"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_order_quantities_shop_orders_quantities_xlsx_get: {
+        parameters: {
+            query?: {
+                activity_id?: string | null;
+                grade?: number | null;
+                class_id?: string | null;
+                category_id?: string | null;
+                product_id?: string | null;
+                is_paid?: boolean | null;
+                status?: components["schemas"]["OrderStatus"] | null;
+                date_from?: string | null;
+                date_to?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": unknown;
                 };
             };
             /** @description Validation Error */

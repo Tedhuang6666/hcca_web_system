@@ -125,6 +125,7 @@ from api.services.shop._purchase_rules import (
     product_purchase_restriction,
     purchase_restrictions,
 )
+from api.services.shop._quantity_export import export_quantity_excel
 from api.services.shop._targets import lookup_targets
 from api.services.shop._testing import can_test_products, start_product_testing
 from api.services.shop._visibility import has_purchase_qualifications
@@ -2038,6 +2039,53 @@ async def order_quantities(
         status=status_filter,
         date_from=date_from,
         date_to=date_to,
+    )
+
+
+@router.get(
+    "/orders/quantities.xlsx",
+    response_class=Response,
+    summary="下載訂單統計詳情 Excel（含內部成本）",
+    responses={
+        200: {"content": {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {}}}
+    },
+)
+async def download_order_quantities(
+    session: DbDep,
+    _: ManagerUser,
+    activity_id: uuid.UUID | None = Query(None),
+    grade: int | None = Query(None),
+    class_id: uuid.UUID | None = Query(None),
+    category_id: uuid.UUID | None = Query(None),
+    product_id: uuid.UUID | None = Query(None),
+    is_paid: bool | None = Query(None),
+    status_filter: OrderStatus | None = Query(None, alias="status"),
+    date_from: datetime | None = Query(None),
+    date_to: datetime | None = Query(None),
+) -> Response:
+    try:
+        content = await export_quantity_excel(
+            session,
+            activity_id=activity_id,
+            grade=grade,
+            class_id=class_id,
+            category_id=category_id,
+            product_id=product_id,
+            is_paid=is_paid,
+            status=status_filter,
+            date_from=date_from,
+            date_to=date_to,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    filename = quote(f"訂單統計詳情_{local_today()}.xlsx")
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{filename}",
+            "Cache-Control": "private, no-store",
+        },
     )
 
 

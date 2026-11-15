@@ -1313,6 +1313,20 @@ export default function CouncilOrdersPage() {
       {tab === "quantities" && (
         <section>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            {canViewAdvancedStats && <AnimatedDownloadButton
+              request={() => shopApi.downloadOrderQuantities({
+                ...dateParams,
+                grade,
+                class_id: classId,
+                category_id: categoryId,
+                product_id: productId,
+                is_paid: isPaid,
+                status: statusFilter,
+              })}
+              disabled={loading || Boolean(loadError) || optionsLoading || optionsError || mutationBusy}
+              className="btn btn-primary min-h-11"
+              label="下載訂單統計詳情 Excel"
+              onError={(error) => toast.error(apiErrorMessage(error, "訂單統計詳情下載失敗，請重試。"))} />}
             <AnimatedDownloadButton
               href="/api/shop/reports/orders.xlsx"
               className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs"

@@ -19,6 +19,18 @@ import type { ShopTargetLookupRequest, ShopTargetOut } from "../types";
 
 type ReceiptScope = Pick<ClassReceiptBatchCreate, "activity_id" | "category_id">;
 
+type OrderQuantityFilters = {
+  activity_id?: string;
+  grade?: string;
+  class_id?: string;
+  category_id?: string;
+  product_id?: string;
+  is_paid?: string;
+  status?: string;
+  date_from?: string;
+  date_to?: string;
+};
+
 // ── 商店 ──────────────────────────────────────────────────────────────────────
 
 export const shopApi = {
@@ -312,23 +324,25 @@ export const shopApi = {
   },
 
   // 班聯數量彙總
-  orderQuantities: (params?: {
-    activity_id?: string;
-    grade?: string;
-    class_id?: string;
-    category_id?: string;
-    product_id?: string;
-    is_paid?: string;
-    status?: string;
-    date_from?: string;
-    date_to?: string;
-  }) => {
+  orderQuantities: (params?: OrderQuantityFilters) => {
     const query = new URLSearchParams();
     Object.entries(params ?? {}).forEach(([key, value]) => {
       if (value) query.set(key, value);
     });
     const qs = query.toString();
     return get<OrderQuantityRow[]>(`/shop/orders/quantities${qs ? `?${qs}` : ""}`);
+  },
+  downloadOrderQuantities: async (params?: OrderQuantityFilters) => {
+    const query = new URLSearchParams();
+    Object.entries(params ?? {}).forEach(([key, value]) => {
+      if (value) query.set(key, value);
+    });
+    const qs = query.toString();
+    const response = await authFetch(`${BASE}/shop/orders/quantities.xlsx${qs ? `?${qs}` : ""}`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new ApiError(response.status, await errorMessageFromResponse(response));
+    return response;
   },
 
   // 圖片上傳

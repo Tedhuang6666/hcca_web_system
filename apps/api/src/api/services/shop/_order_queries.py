@@ -480,7 +480,7 @@ async def class_payment_report(session: AsyncSession) -> list[ClassPaymentReport
     )
 
 
-async def order_quantities(
+async def load_quantity_orders(
     session: AsyncSession,
     *,
     activity_id: uuid.UUID | None = None,
@@ -492,8 +492,8 @@ async def order_quantities(
     status: OrderStatus | None = None,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
-) -> list[OrderQuantityRow]:
-    """回傳各商品規格組合的訂購數量（用於採購彙總）。"""
+) -> list[Order]:
+    """商品總量頁面與 Excel 使用相同的訂單篩選。"""
 
     q = (
         select(Order)
@@ -530,7 +530,35 @@ async def order_quantities(
         q = q.where(Order.items.any(OrderItem.product_id == product_id))
     if category_id:
         q = q.where(Order.items.any(OrderItem.product.has(_product_category_filter(category_id))))
-    orders = (await session.execute(q)).scalars().unique().all()
+    return list((await session.execute(q)).scalars().unique().all())
+
+
+async def order_quantities(
+    session: AsyncSession,
+    *,
+    activity_id: uuid.UUID | None = None,
+    grade: int | None = None,
+    class_id: uuid.UUID | None = None,
+    category_id: uuid.UUID | None = None,
+    product_id: uuid.UUID | None = None,
+    is_paid: bool | None = None,
+    status: OrderStatus | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+) -> list[OrderQuantityRow]:
+    """回傳各商品規格組合的訂購數量（用於採購彙總）。"""
+    orders = await load_quantity_orders(
+        session,
+        activity_id=activity_id,
+        grade=grade,
+        class_id=class_id,
+        category_id=category_id,
+        product_id=product_id,
+        is_paid=is_paid,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+    )
 
     # 逐 item 展開 variant key
     tally: dict[tuple, dict] = {}

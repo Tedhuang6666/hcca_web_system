@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import CouncilOrdersPage from "@/app/(protected)/shop/council-orders/page";
 
 const api = vi.hoisted(() => ({
+  downloadOrderQuantities: vi.fn(),
   catalog: vi.fn(), listActivities: vi.fn(), recipientOptions: vi.fn(), orderSummary: vi.fn(), orderQuantities: vi.fn(),
   classPaymentReport: vi.fn(), classRepresentativeReminderTargets: vi.fn(), createMessage: vi.fn(),
   listSupplementOrders: vi.fn(),
@@ -52,6 +53,33 @@ async function openPage() {
   await act(async () => { render(<CouncilOrdersPage />); });
   fireEvent.click(screen.getByText(/更多篩選：/));
 }
+
+it("依商品總量目前篩選下載統計詳情，下載失敗可重試", async () => {
+  api.downloadOrderQuantities.mockRejectedValue(new Error("failed"));
+  await openPage();
+  switchTask("商品總量");
+  fireEvent.change(screen.getByRole("combobox", { name: "年級" }), { target: { value: "2" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "班聯收款狀態" }), { target: { value: "false" } });
+  const button = screen.getByRole("button", { name: "下載訂單統計詳情 Excel" });
+  await waitFor(() => expect(button).toBeEnabled());
+  fireEvent.click(button);
+  await waitFor(() => expect(api.downloadOrderQuantities).toHaveBeenCalledWith(expect.objectContaining({
+    grade: "2", is_paid: "false",
+  })));
+  await waitFor(() => expect(notifications.error).toHaveBeenCalledWith("訂單統計詳情下載失敗，請重試。"));
+  await waitFor(() => expect(button).toBeEnabled());
+  fireEvent.click(button);
+  await waitFor(() => expect(api.downloadOrderQuantities).toHaveBeenCalledTimes(2));
+});
+
+it("只有商品管理者能看到包含成本的 Excel 下載", async () => {
+  access.isAdmin = false;
+  access.permissions = new Set(["shop:view_all"]);
+  await openPage();
+  switchTask("商品總量");
+  await waitFor(() => expect(api.orderQuantities).toHaveBeenCalled());
+  expect(screen.queryByRole("button", { name: "下載訂單統計詳情 Excel" })).not.toBeInTheDocument();
+});
 
 it("班級部分收款後立即更新補收款區，補齊後重新載入班級名單", async () => {
   api.orderSummary.mockResolvedValue({ ...summary(), rows: [{ ...summary().rows[0], total_amount: 3000, unpaid_amount: 3000 }] });

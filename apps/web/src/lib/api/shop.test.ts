@@ -3,6 +3,20 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { shopApi } from "./shop";
 
 describe("shop quantity API", () => {
+  it("downloads quantity details with current filters and preserves server errors", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("xlsx"));
+    vi.stubGlobal("fetch", fetchMock);
+    await shopApi.downloadOrderQuantities({ category_id: "theme", is_paid: "false", date_from: undefined });
+    const url = new URL(String(fetchMock.mock.calls[0][0]), "http://localhost");
+    expect(url.pathname).toMatch(/\/shop\/orders\/quantities\.xlsx$/);
+    expect(url.searchParams.get("category_id")).toBe("theme");
+    expect(url.searchParams.get("is_paid")).toBe("false");
+    expect(url.searchParams.has("date_from")).toBe(false);
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ detail: "需要權限" }), {
+      status: 403, headers: { "Content-Type": "application/json" },
+    }));
+    await expect(shopApi.downloadOrderQuantities()).rejects.toThrow("需要權限");
+  });
   it("loads active class representative accounts for payment reminders", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify([
       { class_id: "class-1", class_label: "高一一班", user_id: "rep-1", user_name: "班代" },
