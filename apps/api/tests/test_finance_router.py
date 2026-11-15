@@ -1047,7 +1047,7 @@ async def test_public_finance_totals_and_expenses_only_show_published_budget_dat
     assert public_detail.status_code == 200
     assert public_detail.json()["expenses"][0]["items"][0]["name"] == "原子筆"
     assert public_detail.json()["expenses"][0]["created_at"]
-    assert public_detail.json()["expenses"][0]["operator_name"] == member_user.display_name
+    assert "operator_name" not in public_detail.json()["expenses"][0]
     public_receipt_url = public_detail.json()["expenses"][0]["evidence"][0]["url"]
     public_receipt = await client.get(public_receipt_url)
     assert public_receipt.status_code == 200
@@ -1887,7 +1887,7 @@ async def test_direct_budget_income_survives_upload_and_is_public_without_intern
     assert public["income_items"][0]["amount"] == 500
     assert public["income_records"][0]["amount"] == 200
     assert "note" not in public["income_records"][0]
-    assert "income_item_id" not in public["income_records"][0]
+    assert public["income_records"][0]["income_item_id"] == income_id
     assert "recorded_by_id" not in public["income_records"][0]
     assert (await actor.get(f"/finance/public/budgets/{budget_id}/totals")).json()[
         "income_total"
@@ -2033,6 +2033,10 @@ async def test_existing_budget_income_journals_remain_visible_without_double_cou
     assert public["income_records"][0]["amount"] == 200
     assert "note" not in public["income_records"][0]
     assert "is_legacy" not in public["income_records"][0]
+    assert (
+        public["income_records"][0]["income_item_id"]
+        == detail["income_records"][0]["income_item_id"]
+    )
     assert (await actor.get(f"/finance/public/budgets/{budget_id}/totals")).json()[
         "income_total"
     ] == 200

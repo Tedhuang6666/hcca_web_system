@@ -26081,8 +26081,6 @@ export interface components {
             id: string;
             /** Items */
             items: components["schemas"]["PublicBudgetExpenseItemOut"][];
-            /** Operator Name */
-            operator_name: string;
             /** Purpose */
             purpose: string;
             /** Total Amount */
@@ -26104,6 +26102,11 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /**
+             * Income Item Id
+             * Format: uuid
+             */
+            income_item_id: string;
             /** Name */
             name: string;
         };

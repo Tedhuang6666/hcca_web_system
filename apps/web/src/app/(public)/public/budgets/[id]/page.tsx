@@ -6,6 +6,7 @@ import { ArrowLeft, Check, CircleAlert, FileText, ShieldCheck } from "lucide-rea
 import { fetchPublicBudget } from "@/lib/publicSeoFetch";
 import { pageMetadata } from "@/lib/seo";
 import PublicBudgetExecutionTable from "@/components/finance/PublicBudgetExecutionTable";
+import PublicBudgetFinancialSummary from "@/components/finance/PublicBudgetFinancialSummary";
 import { publicBudgetWorkbookLines } from "@/components/finance/publicBudgetExecution";
 
 type PageProps = {
@@ -57,10 +58,10 @@ export default async function PublicBudgetDetailPage({ params, searchParams }: P
           <h1>{budget.name}</h1>
           <p>{isCouncilReview
             ? "這份草案正提供議員審理，內容仍可能調整，不能視為核定預算。"
-            : "查看議會通過的預算與逐筆支出紀錄。"}</p>
+            : "查看議會通過的預算與逐筆收支紀錄。"}</p>
           {!isCouncilReview && councilApprovedOn && <p>議會通過日期：{councilApprovedOn.replaceAll("-", "/")}</p>}
         </div>
-        <div className="public-budget-detail__total"><span>{isCouncilReview ? "審理草案總額" : "核准預算總額"}</span><strong>{formatAmount(total)}</strong><small>{budget.allocations.length} 筆編列明細</small></div>
+        <div className="public-budget-detail__total"><span>{isCouncilReview ? "審理草案支出預算" : "核准支出預算"}</span><strong>{formatAmount(total)}</strong><small>{budget.allocations.length} 筆編列明細</small></div>
       </header>
 
       {isCouncilReview && budget.review_submission && <aside className="public-budget-detail__review-notice">
@@ -70,9 +71,11 @@ export default async function PublicBudgetDetailPage({ params, searchParams }: P
 
       <aside className="public-budget-detail__privacy"><ShieldCheck size={18} aria-hidden="true" /><p><strong>核銷明細與已上傳憑證會公開。</strong>公開用途與品項明細；登錄人、銀行帳戶及核銷備註不公開。</p></aside>
 
+      {!isCouncilReview && <PublicBudgetFinancialSummary lines={lines} />}
+
       <section className="public-budget-detail__section" aria-labelledby="public-budget-lines-heading">
         <header><div><FileText size={18} aria-hidden="true" /><div><h2 id="public-budget-lines-heading">{isCouncilReview ? "本次送審明細" : "核准編列明細"}</h2><p>{isCouncilReview ? "金額只對應本次開放審理的草案。" : "金額依核准預算案的末層條目彙整。"}</p></div></div><span>{budget.allocations.length} 筆</span></header>
-        <PublicBudgetExecutionTable lines={lines} showOperator={false} />
+        <PublicBudgetExecutionTable lines={lines} />
       </section>
 
       {budget.submissions.length > 0 && <section className="public-budget-detail__approvals" aria-labelledby="public-budget-approvals-heading">

@@ -568,6 +568,7 @@ class BudgetIncomeRecordUpdate(BaseModel):
 
 class PublicBudgetIncomeRecordOut(BaseModel):
     id: uuid.UUID
+    income_item_id: uuid.UUID
     category: str
     name: str
     amount: int
@@ -575,7 +576,6 @@ class PublicBudgetIncomeRecordOut(BaseModel):
 
 
 class BudgetIncomeRecordOut(PublicBudgetIncomeRecordOut):
-    income_item_id: uuid.UUID
     note: str | None
     is_legacy: bool = False
 
@@ -701,7 +701,6 @@ class PublicBudgetExpenseOut(BaseModel):
     id: uuid.UUID
     entry_date: date
     created_at: datetime
-    operator_name: str
     purpose: str
     allocation_node_id: uuid.UUID
     allocation_name: str

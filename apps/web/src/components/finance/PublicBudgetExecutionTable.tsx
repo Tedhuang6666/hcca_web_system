@@ -12,7 +12,7 @@ import { groupPublicBudgetLines, type PublicBudgetExecutionLine } from "./public
 export type { PublicBudgetExecutionLine } from "./publicBudgetExecution";
 
 function formatAmount(value: number) {
-  return `NT$${value.toLocaleString("zh-TW")}`;
+  return `${value < 0 ? "-" : ""}NT$${Math.abs(value).toLocaleString("zh-TW")}`;
 }
 
 function formatDate(value: string) {
@@ -42,10 +42,8 @@ function publicEvidenceUrl(url: string) {
 
 export default function PublicBudgetExecutionTable({
   lines,
-  showOperator = true,
 }: {
   lines: PublicBudgetExecutionLine[];
-  showOperator?: boolean;
 }) {
   const [selectedLine, setSelectedLine] = useState<PublicBudgetExecutionLine | null>(null);
   const closeDetails = useCallback(() => setSelectedLine(null), []);
@@ -55,18 +53,21 @@ export default function PublicBudgetExecutionTable({
     <>
       <div className="public-finance__activities">
         {groups.map((group) => (
-          <details className="public-finance__activity" key={group.id} open={groups.length === 1 || group.spent > group.allocated}>
+          <details className="public-finance__activity" key={group.id} open={groups.length === 1 || group.expenseSpent > group.expenseBudget}>
             <summary>
               <div className="public-finance__activity-name">
                 <h3>{group.name}</h3>
                 <span>{group.lines.length} 項</span>
               </div>
               <dl>
-                <div><dt>支出預算</dt><dd>{formatAmount(group.allocated)}</dd></div>
-                <div><dt>已支出</dt><dd className={group.spent > group.allocated ? "is-over-budget" : ""}>{formatAmount(group.spent)}</dd></div>
+                <div><dt>預計收入</dt><dd>{formatAmount(group.incomeBudget)}</dd></div>
+                <div><dt>支出預算</dt><dd>{formatAmount(group.expenseBudget)}</dd></div>
+                <div><dt>已登錄收入</dt><dd>{formatAmount(group.incomeReceived)}</dd></div>
+                <div><dt>已列帳支出</dt><dd className={group.expenseSpent > group.expenseBudget ? "is-over-budget" : ""}>{formatAmount(group.expenseSpent)}</dd></div>
+                <div><dt>已登錄差額（非帳戶餘額）</dt><dd>{formatAmount(group.difference)}</dd></div>
               </dl>
               <ChevronDown size={18} aria-hidden="true" />
-              {group.allocated > 0 && <meter min={0} max={group.allocated} value={Math.min(Math.max(group.spent, 0), group.allocated)} aria-label={`${group.name}預算執行率`} />}
+              {group.expenseBudget > 0 && <meter min={0} max={group.expenseBudget} value={Math.min(Math.max(group.expenseSpent, 0), group.expenseBudget)} aria-label={`${group.name}預算執行率`} />}
             </summary>
             <div className="public-finance__lines" role="region" aria-label={`${group.name}收支預算明細`} tabIndex={0}>
               <table>
@@ -100,12 +101,12 @@ export default function PublicBudgetExecutionTable({
                         className={`${line.isGroup ? "is-group" : ""} ${line.income ? "is-income-row" : ""} ${overBudget ? "is-over-budget" : ""}`}
                       >
                         <th scope="row" style={{ paddingLeft: `${0.85 + Math.max(0, line.depth - 1) * 1.25}rem` }}>
-                          {showDetails && !line.income ? (
+                          {showDetails ? (
                             <button
                               type="button"
                               className="public-finance__line-trigger"
                               aria-haspopup="dialog"
-                              aria-label={`查看「${line.name}」的支出紀錄與憑證`}
+                              aria-label={`查看「${line.name}」的${line.income ? "收入紀錄" : "支出紀錄與憑證"}`}
                               onClick={() => {
                                 setSelectedLine(line);
                               }}
@@ -147,16 +148,33 @@ export default function PublicBudgetExecutionTable({
 
       {selectedLine && (
         <Modal
-          title={`${selectedLine.name}｜支出紀錄`}
+          title={`${selectedLine.name}｜${selectedLine.income ? "收入" : "支出"}紀錄`}
           onClose={closeDetails}
           size="2xl"
         >
           <div className="public-budget-execution-modal">
             <p className="public-budget-execution-modal__summary">
               <span>{selectedLine.budgetName}</span>
-              <span>{selectedLine.expenses.length} 筆支出紀錄</span>
+              <span>{selectedLine.income ? (selectedLine.incomeRecords?.length ?? 0) : selectedLine.expenses.length} 筆{selectedLine.income ? "收入" : "支出"}紀錄</span>
             </p>
-            {selectedLine.expenses.length > 0 ? (
+            {selectedLine.income ? (
+              (selectedLine.incomeRecords?.length ?? 0) > 0 ? (
+                <div className="public-budget-detail__expense-list">
+                  {selectedLine.incomeRecords?.map((record) => (
+                    <article key={record.id}>
+                      <div className="public-budget-detail__expense-heading">
+                        <h3>{record.name}</h3>
+                        <strong>{formatAmount(record.amount)}</strong>
+                      </div>
+                      <dl className="public-budget-detail__expense-meta">
+                        <div><dt>入帳日期</dt><dd><time dateTime={record.entry_date}>{formatDate(record.entry_date)}</time></dd></div>
+                        <div><dt>收入項目</dt><dd>{record.category}／{record.name}</dd></div>
+                      </dl>
+                    </article>
+                  ))}
+                </div>
+              ) : <div className="public-budget-execution-modal__empty"><p>這個預算項目目前沒有可公開的收入紀錄。</p></div>
+            ) : selectedLine.expenses.length > 0 ? (
               <div className="public-budget-detail__expense-list">
                 {selectedLine.expenses.map((expense) => (
                   <article key={expense.id}>
@@ -175,10 +193,6 @@ export default function PublicBudgetExecutionTable({
                         <dt>登錄時間</dt>
                         <dd><time dateTime={expense.created_at}>{formatDateTime(expense.created_at)}</time></dd>
                       </div>
-                      {showOperator && <div>
-                        <dt>操作人</dt>
-                        <dd>{expense.operator_name}</dd>
-                      </div>}
                     </dl>
                     {expense.items.length > 0 && (
                       <ul aria-label={`${expense.purpose} 購買品項`}>

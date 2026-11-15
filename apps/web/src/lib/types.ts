@@ -1057,7 +1057,7 @@ export type PublicBudgetDetail = {
   nodes: FinanceBudgetNode[]; allocations: PublicBudgetAllocation[]
   expenses: PublicBudgetExpenseOut[]
   income_items?: FinanceBudgetPlanRow[]
-  income_records?: Omit<FinanceBudgetIncomeRecord, "income_item_id" | "note" | "is_legacy">[]
+  income_records?: Omit<FinanceBudgetIncomeRecord, "note" | "is_legacy">[]
 }
 
 

@@ -17,6 +17,7 @@ export type PublicBudgetExecutionLine = {
   isGroup: boolean;
   isBudgetStart: boolean;
   expenses: PublicBudgetExpenseOut[];
+  incomeRecords?: NonNullable<PublicBudgetDetail["income_records"]>;
   allocations?: PublicBudgetAllocation[];
   category?: string;
   categoryId?: string;
@@ -124,14 +125,14 @@ export function publicBudgetWorkbookLines(
     }
     return { ...line, category, categoryId };
   });
-  const keyFor = (item: { category: string; name: string }) => JSON.stringify([item.category, item.name]);
-  const received = new Map<string, number>();
+  const recordsByItem = new Map<string, NonNullable<PublicBudgetDetail["income_records"]>>();
   for (const record of budget.income_records ?? []) {
-    const key = keyFor(record);
-    received.set(key, (received.get(key) ?? 0) + record.amount);
+    const records = recordsByItem.get(record.income_item_id) ?? [];
+    records.push(record);
+    recordsByItem.set(record.income_item_id, records);
   }
   const items = budget.income_items ?? [];
-  const planned = new Set(items.map(keyFor));
+  const planned = new Set(items.map((item) => item.id));
   const incomeLines: PublicBudgetExecutionLine[] = items.map((item) => ({
     id: `${summary.id}-income-${item.id}`,
     budgetName: summary.name,
@@ -139,7 +140,8 @@ export function publicBudgetWorkbookLines(
     categoryId: categories.get(item.category) ?? `${summary.id}-income-${item.category}`,
     name: item.name,
     allocated: item.amount,
-    spent: received.get(keyFor(item)) ?? 0,
+    spent: (recordsByItem.get(item.id) ?? []).reduce((sum, record) => sum + record.amount, 0),
+    incomeRecords: recordsByItem.get(item.id) ?? [],
     remaining: 0,
     depth: 1,
     isGroup: false,
@@ -149,20 +151,18 @@ export function publicBudgetWorkbookLines(
     allocations: [{ ...item, node_id: item.id }],
   }));
   // A revised workbook can remove an income item after money was received.
-  const historical = new Map<string, NonNullable<PublicBudgetDetail["income_records"]>[number]>();
-  for (const record of budget.income_records ?? []) {
-    const key = keyFor(record);
-    if (!planned.has(key)) historical.set(key, record);
-  }
-  for (const [key, record] of historical) {
+  for (const [itemId, records] of recordsByItem) {
+    if (planned.has(itemId)) continue;
+    const record = records[0];
     incomeLines.push({
-      id: `${summary.id}-historical-income-${key}`,
+      id: `${summary.id}-historical-income-${itemId}`,
       budgetName: summary.name,
       category: record.category,
       categoryId: categories.get(record.category) ?? `${summary.id}-income-${record.category}`,
       name: record.name,
       allocated: 0,
-      spent: received.get(key) ?? 0,
+      spent: records.reduce((sum, record) => sum + record.amount, 0),
+      incomeRecords: records,
       remaining: 0,
       depth: 1,
       isGroup: false,
@@ -175,13 +175,28 @@ export function publicBudgetWorkbookLines(
   return [...lines, ...incomeLines];
 }
 
+export function publicBudgetTotals(lines: PublicBudgetExecutionLine[]) {
+  let incomeBudget = 0;
+  let incomeReceived = 0;
+  let expenseBudget = 0;
+  let expenseSpent = 0;
+  for (const line of lines) {
+    if (line.income) {
+      incomeBudget += line.allocated;
+      incomeReceived += line.spent;
+    } else {
+      expenseBudget += line.allocated;
+      expenseSpent += line.spent;
+    }
+  }
+  return { incomeBudget, incomeReceived, expenseBudget, expenseSpent, difference: incomeReceived - expenseSpent };
+}
+
 export function groupPublicBudgetLines(lines: PublicBudgetExecutionLine[]) {
   const groups = new Map<string, {
     id: string;
     name: string;
     budgetName: string;
-    allocated: number;
-    spent: number;
     lines: PublicBudgetExecutionLine[];
   }>();
   for (const line of lines) {
@@ -190,19 +205,13 @@ export function groupPublicBudgetLines(lines: PublicBudgetExecutionLine[]) {
       id,
       name: line.category ?? line.budgetName,
       budgetName: line.budgetName,
-      allocated: 0,
-      spent: 0,
       lines: [],
     };
-    if (!line.income) {
-      group.allocated += line.allocated;
-      group.spent += line.spent;
-    }
     // The activity heading already names a root that has no activity of its own.
     if (!line.isGroup || line.depth > 0 || line.allocated !== 0 || line.spent !== 0 || line.expenses.length > 0) {
       group.lines.push(line);
     }
     groups.set(id, group);
   }
-  return Array.from(groups.values());
+  return Array.from(groups.values(), (group) => ({ ...group, ...publicBudgetTotals(group.lines) }));
 }

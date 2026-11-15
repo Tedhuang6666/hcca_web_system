@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { PublicBudgetDetail, PublicBudgetListItem } from "@/lib/types";
-import { budgetExecutionLines, groupPublicBudgetLines, publicBudgetWorkbookLines } from "./publicBudgetExecution";
+import { budgetExecutionLines, groupPublicBudgetLines, publicBudgetTotals, publicBudgetWorkbookLines } from "./publicBudgetExecution";
 
 const budget: PublicBudgetDetail = {
   id: "budget-1",
@@ -57,7 +57,6 @@ const budget: PublicBudgetDetail = {
       id: "expense-1",
       entry_date: "2026-10-04",
       created_at: "2026-10-04T13:49:00Z",
-      operator_name: "王小明",
       purpose: "貼紙購買",
       allocation_node_id: "dance",
       allocation_name: "聯合舞會",
@@ -113,13 +112,13 @@ describe("public workbook", () => {
     const lines = publicBudgetWorkbookLines({
       ...budget,
       income_items: [incomeItem],
-      income_records: [{ id: "receipt", entry_date: "2026-11-01", category: "聯合舞會", name: "預售票", amount: 400 }],
+      income_records: [{ id: "receipt", income_item_id: "tickets", entry_date: "2026-11-01", category: "聯合舞會", name: "預售票", amount: 400 }],
     }, summary);
     const groups = groupPublicBudgetLines(lines);
     const dance = groups.find((group) => group.name === "聯合舞會");
 
     expect(groups).toHaveLength(2);
-    expect(dance).toMatchObject({ allocated: 160_000, spent: 284 });
+    expect(dance).toMatchObject({ expenseBudget: 160_000, expenseSpent: 284, incomeBudget: 100_000, incomeReceived: 400, difference: 116 });
     expect(dance?.lines.find((line) => line.income)).toMatchObject({
       name: "預售票", allocated: 100_000, spent: 400,
       allocations: [{ quantity: 800, unit_price: 250, note: "兩校分帳" }],
@@ -130,13 +129,13 @@ describe("public workbook", () => {
     const lines = publicBudgetWorkbookLines({
       ...budget,
       income_records: [
-        { id: "receipt-1", entry_date: "2026-11-01", category: "迎新", name: "報名費", amount: 400 },
-        { id: "receipt-2", entry_date: "2026-11-02", category: "迎新", name: "報名費", amount: 100 },
+        { id: "receipt-1", income_item_id: "old-item", entry_date: "2026-11-01", category: "迎新", name: "報名費", amount: 400 },
+        { id: "receipt-2", income_item_id: "old-item", entry_date: "2026-11-02", category: "迎新", name: "報名費", amount: 100 },
       ],
     }, summary);
     const group = groupPublicBudgetLines(lines).find((item) => item.name === "迎新");
 
-    expect(group).toMatchObject({ allocated: 0, spent: 0 });
+    expect(group).toMatchObject({ expenseBudget: 0, expenseSpent: 0, incomeBudget: 0, incomeReceived: 500, difference: 500 });
     expect(group?.lines).toMatchObject([{ name: "報名費", income: true, historical: true, spent: 500 }]);
   });
 
@@ -146,5 +145,22 @@ describe("public workbook", () => {
       ...publicBudgetWorkbookLines(budget, { ...summary, id: "budget-2" }),
     ]);
     expect(groups.filter((group) => group.name === "聯合舞會")).toHaveLength(2);
+  });
+
+  it("matches same-named items by ID and retains receipts from a replaced item", () => {
+    const lines = publicBudgetWorkbookLines({
+      ...budget,
+      income_items: [incomeItem, { ...incomeItem, id: "tickets-2", amount: 2000 }],
+      income_records: [
+        { id: "r1", income_item_id: "tickets", entry_date: "2026-11-01", category: incomeItem.category, name: incomeItem.name, amount: 100 },
+        { id: "r2", income_item_id: "tickets-2", entry_date: "2026-11-02", category: incomeItem.category, name: incomeItem.name, amount: 200 },
+        { id: "r3", income_item_id: "old-tickets", entry_date: "2026-11-03", category: incomeItem.category, name: incomeItem.name, amount: 300 },
+      ],
+    }, summary);
+
+    expect(lines.filter((line) => line.income).map((line) => [line.spent, line.historical ?? false]))
+      .toEqual([[100, false], [200, false], [300, true]]);
+    expect(publicBudgetTotals(lines)).toEqual({ incomeBudget: 102_000, incomeReceived: 600, expenseBudget: 165_250, expenseSpent: 284, difference: 316 });
+    expect(groupPublicBudgetLines(lines).reduce((sum, group) => sum + group.incomeReceived, 0)).toBe(600);
   });
 });

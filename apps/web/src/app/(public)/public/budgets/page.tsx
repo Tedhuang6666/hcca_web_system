@@ -1,6 +1,7 @@
 import { Landmark } from "lucide-react";
 
 import PublicBudgetExecutionTable from "@/components/finance/PublicBudgetExecutionTable";
+import PublicBudgetFinancialSummary from "@/components/finance/PublicBudgetFinancialSummary";
 import { publicBudgetWorkbookLines } from "@/components/finance/publicBudgetExecution";
 import {
   fetchPublicBudget,
@@ -10,14 +11,10 @@ import { pageMetadata } from "@/lib/seo";
 
 export const metadata = pageMetadata({
   title: "財務總覽",
-  description: "查看各項活動編列的預算、實際支出與公開憑證。",
+  description: "查看各項活動的收支預算、已登錄收入、支出明細與公開憑證。",
   path: "/public/budgets",
   type: "website",
 });
-
-function formatAmount(value: number) {
-  return `NT$${value.toLocaleString("zh-TW")}`;
-}
 
 export default async function PublicBudgetsPage() {
   const budgetResult = await fetchPublicBudgets();
@@ -31,16 +28,6 @@ export default async function PublicBudgetsPage() {
     const summary = currentBudgets[index];
     return detail && summary ? publicBudgetWorkbookLines(detail, summary) : [];
   });
-  const expenseLines = executionLines.filter((line) => !line.income);
-  const budgetTotal = expenseLines.reduce(
-    (total, line) => total + line.allocated,
-    0,
-  );
-  const spentTotal = expenseLines.reduce(
-    (total, line) => total + line.spent,
-    0,
-  );
-  const executionRate = budgetTotal > 0 ? spentTotal / budgetTotal * 100 : null;
   const executionLoadFailed = budgetDetails.some((detail) => detail === null);
 
   return (
@@ -76,20 +63,8 @@ export default async function PublicBudgetsPage() {
             </div>
             <span>{currentBudgets.length} 份核准預算</span>
           </header>
-          <div className="public-finance__totals">
-            <article>
-              <span>核准支出預算</span>
-              <strong>{formatAmount(budgetTotal)}</strong>
-            </article>
-            <article>
-              <span>已列帳支出</span>
-              <strong>{formatAmount(spentTotal)}</strong>
-            </article>
-            <article className={spentTotal > budgetTotal ? "is-over-budget" : ""}>
-              <span>預算執行率</span>
-              <strong>{executionRate === null ? "—" : `${executionRate.toFixed(1)}%`}</strong>
-            </article>
-          </div>
+          <PublicBudgetFinancialSummary lines={executionLines} />
+          <h3 className="public-finance__activities-heading">各活動財務概況</h3>
           <PublicBudgetExecutionTable lines={executionLines} />
         </section>
       ) : (

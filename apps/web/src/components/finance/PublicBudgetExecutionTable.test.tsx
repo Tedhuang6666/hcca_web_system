@@ -25,7 +25,6 @@ const line: PublicBudgetExecutionLine = {
     allocation_name: "網域費用（續約）",
     entry_date: "2026-10-01",
     created_at: "2026-10-03T16:30:00Z",
-    operator_name: "王小明",
     purpose: "網域續約",
     total_amount: 756,
     items: [{
@@ -65,8 +64,7 @@ describe("PublicBudgetExecutionTable", () => {
     })).toBeVisible();
     expect(screen.getByText("網域續約一年")).toBeVisible();
     expect(screen.getByText("登錄時間")).toBeVisible();
-    expect(screen.getByText("操作人")).toBeVisible();
-    expect(screen.getByText("王小明")).toBeVisible();
+    expect(screen.queryByText("操作人")).not.toBeInTheDocument();
     expect(screen.getByRole("img", { name: "網域續約收據.pdf 第 1 頁" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "預覽 PDF" })).not.toBeInTheDocument();
     expect(screen.getByRole("img", { name: "網域續約收據.jpg 預覽" })).toBeVisible();
@@ -116,12 +114,13 @@ describe("PublicBudgetExecutionTable", () => {
     expect(screen.getByRole("button", { name: `查看「${line.name}」的支出紀錄與憑證` })).toBeEnabled();
   });
 
-  it("preserves the detail page's choice to omit the operator", async () => {
-    render(<PublicBudgetExecutionTable lines={[line]} showOperator={false} />);
+  it("omits operator information even if an older response supplies it", async () => {
+    const legacyExpense = { ...line.expenses[0], operator_name: "測試操作人" };
+    render(<PublicBudgetExecutionTable lines={[{ ...line, expenses: [legacyExpense] }]} />);
     fireEvent.click(screen.getByRole("button", { name: `查看「${line.name}」的支出紀錄與憑證` }));
     expect(await screen.findByRole("dialog")).toBeVisible();
     expect(screen.queryByText("操作人")).not.toBeInTheDocument();
-    expect(screen.queryByText("王小明")).not.toBeInTheDocument();
+    expect(screen.queryByText("測試操作人")).not.toBeInTheDocument();
   });
 
   it("labels income by actual receipts without inventing an outstanding payment", () => {
@@ -131,8 +130,37 @@ describe("PublicBudgetExecutionTable", () => {
     ]} />);
     expect(screen.getByText("票券收入")).toBeVisible();
     expect(screen.getByText("收入")).toBeVisible();
-    expect(screen.getByText("NT$400")).toBeVisible();
+    expect(screen.getAllByText("NT$400").length).toBeGreaterThan(0);
     expect(screen.queryByText("尚未收款")).not.toBeInTheDocument();
     expect(screen.queryByText("NT$600")).not.toBeInTheDocument();
+  });
+
+  it("opens individual income records and restores keyboard focus on close", async () => {
+    render(<PublicBudgetExecutionTable lines={[{
+      ...line, income: true, name: "票券收入", expenses: [],
+      incomeRecords: [
+        { id: "r1", income_item_id: "tickets", name: "票券收入", category: "舞會", amount: 300, entry_date: "2026-11-01" },
+        { id: "r2", income_item_id: "tickets", name: "票券收入", category: "舞會", amount: 456, entry_date: "2026-11-02" },
+      ],
+    }]} />);
+    const trigger = screen.getByRole("button", { name: "查看「票券收入」的收入紀錄" });
+    trigger.focus();
+    fireEvent.click(trigger);
+    const dialog = await screen.findByRole("dialog", { name: "票券收入｜收入紀錄" });
+    expect(dialog).toBeVisible();
+    expect(screen.getByText("2 筆收入紀錄")).toBeVisible();
+    expect(screen.getByText("2026/11/01")).toBeVisible();
+    expect(screen.getByText("2026/11/02")).toBeVisible();
+    expect(screen.getByText("NT$300")).toBeVisible();
+    expect(screen.getByText("NT$456")).toBeVisible();
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    expect(trigger).toHaveFocus();
+  });
+
+  it("shows the income empty state", async () => {
+    render(<PublicBudgetExecutionTable lines={[{ ...line, income: true, expenses: [], incomeRecords: [] }]} />);
+    fireEvent.click(screen.getByRole("button", { name: `查看「${line.name}」的收入紀錄` }));
+    expect(await screen.findByText("這個預算項目目前沒有可公開的收入紀錄。")).toBeVisible();
   });
 });
