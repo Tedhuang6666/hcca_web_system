@@ -8,6 +8,9 @@ vi.mock("./useGalleryMotion", () => ({ useGalleryMotion: vi.fn() }));
 beforeEach(() => {
   vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true })));
   vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  vi.stubGlobal("IntersectionObserver", class { observe() {} disconnect() {} });
+  vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+  vi.stubGlobal("cancelAnimationFrame", vi.fn());
   HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
   HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); };
   window.history.replaceState(null, "", "/gallery");

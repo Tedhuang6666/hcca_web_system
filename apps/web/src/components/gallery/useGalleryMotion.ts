@@ -28,6 +28,13 @@ export function useGalleryMotion(rootRef: RefObject<HTMLDivElement | null>, sele
             { y: 0, rotation: 0, scale: 1, ease: "none",
               scrollTrigger: { trigger: photo, start: "top bottom", end: "center 55%", scrub: 1 } });
         });
+        const wall = root.querySelector(".infinite-wall");
+        if (wall) {
+          gsap.fromTo(".infinite-wall-plane", { scale: 0.8, rotation: -5 }, { scale: 1, rotation: 0, ease: "none",
+            scrollTrigger: { trigger: wall, start: "top bottom", end: "top 15%", scrub: 1.2 } });
+          gsap.from(".infinite-wall-heading h2", { xPercent: -16, ease: "none",
+            scrollTrigger: { trigger: wall, start: "top bottom", end: "top 20%", scrub: 1 } });
+        }
       }, root);
       revert = () => context.revert();
       ScrollTrigger.refresh();

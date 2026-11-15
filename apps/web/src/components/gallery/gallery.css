@@ -66,13 +66,19 @@
 .archive-endnote { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 1rem 2rem; margin-top: 0.75rem; border-top: 1px solid var(--archive-line); color: var(--archive-muted); font-size: 0.75rem; }
 .archive-endnote a { display: inline-flex; gap: 0.5rem; min-height: 44px; align-items: center; color: inherit; text-underline-offset: 0.25em; }
 .infinite-wall { position: relative; margin-top: 7rem; margin-inline: calc(-1 * var(--archive-gutter)); padding-bottom: 72px; background: #0a0b0d; }
-.infinite-wall-viewport { position: relative; isolation: isolate; height: clamp(328px, calc(100svh - 282px), 928px); overflow: hidden; touch-action: none; overscroll-behavior: contain; cursor: grab; }
+.infinite-wall-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding: 3rem var(--archive-gutter) 1rem; }
+.infinite-wall-heading h2 { margin: 0; font-size: clamp(3.5rem, 8vw, 6rem); line-height: 1.15; font-weight: 500; letter-spacing: -0.04em; }
+.infinite-wall-heading > span { color: var(--archive-muted); font-size: 0.75rem; white-space: nowrap; }
+.infinite-wall-viewport { position: relative; isolation: isolate; height: clamp(480px, 78svh, 960px); overflow: hidden; touch-action: none; overscroll-behavior: contain; cursor: grab; }
 .infinite-wall-viewport[data-dragging] { cursor: grabbing; user-select: none; }
-.infinite-wall-plane { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
-.infinite-wall-tile { position: absolute; container-type: inline-size; }
+.infinite-wall-plane { position: absolute; inset: 0; transform-origin: center; will-change: transform; }
+.infinite-wall-tile { position: absolute; container-type: inline-size; will-change: transform; }
+.infinite-wall-viewport::after { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 3; background: linear-gradient(#0a0b0d, transparent 12%, transparent 88%, #0a0b0d); }
 .archive-photo { display: block; position: relative; width: 100%; margin: 0; padding: 12px 12px 0; border: 0; border-radius: 0; background: #f4f0e7; color: #39352f; box-shadow: 0 10px 28px rgb(0 0 0 / 35%); font: inherit; text-align: left; cursor: zoom-in; }
-.infinite-wall-tile:nth-child(4n + 1) .archive-photo { transform: rotate(-2deg); }
-.infinite-wall-tile:nth-child(4n + 3) .archive-photo { transform: rotate(2deg); }
+.infinite-wall-tile .archive-photo { transform: rotate(-2deg); transition: transform 0.8s cubic-bezier(.16,1,.3,1); }
+.infinite-wall-tile:nth-child(3n) .archive-photo { transform: rotate(3deg); }
+.infinite-wall-tile:nth-child(3n + 1) .archive-photo { transform: rotate(0); }
+.infinite-wall-tile .archive-photo:is(:hover, :focus-visible) { transform: rotate(0) scale(1.06); }
 .infinite-wall-tile:focus-within, .infinite-wall-tile:hover { z-index: 1; }
 .infinite-wall-viewport[data-dragging] .archive-photo { cursor: grabbing; }
 .infinite-wall-image { display: block; position: relative; overflow: hidden; background: #ded9cf; }
@@ -146,7 +152,9 @@
   .layout-journal .archive-spread-item:nth-child(odd) { grid-column: 1 / 6; }
   .layout-film .archive-spread-item:nth-child(n) { flex-basis: 82%; }
   .layout-film .archive-spread-item:nth-child(even) { flex-basis: 62%; margin-top: 3rem; }
-  .infinite-wall-viewport { height: max(308px, calc(100svh - 312px)); }
+  .infinite-wall-heading { padding-top: 2rem; }
+  .infinite-wall-heading h2 { font-size: 3.25rem; }
+  .infinite-wall-viewport { height: max(440px, 68svh); }
   .gallery-viewer { padding-inline: 0.75rem; }
   .gallery-viewer-toolbar > div { gap: 0.125rem; }
   .gallery-viewer-image-frame { width: min(100%, calc((100dvh - 200px) * var(--photo-ratio))); }
