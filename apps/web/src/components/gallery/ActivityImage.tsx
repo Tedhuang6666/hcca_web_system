@@ -8,13 +8,14 @@ import type { GalleryPhoto } from "@/lib/public-activity-albums";
 import "./activity-image.css";
 
 /** Keep image failures local: retry the original, then the next photo, then compact text. */
-export default function ActivityImage({ photos, sizes, preload = false, fill = false, imageRef, onUnavailable }: {
+export default function ActivityImage({ photos, sizes, preload = false, fill = false, imageRef, onUnavailable, onDimensions }: {
   photos: GalleryPhoto[];
   sizes: string;
   preload?: boolean;
   fill?: boolean;
   imageRef?: Ref<HTMLImageElement>;
   onUnavailable?: (src: string) => void;
+  onDimensions?: (width: number, height: number) => void;
 }) {
   const [failed, setFailed] = useState<string[]>([]);
   const [originals, setOriginals] = useState<string[]>([]);
@@ -33,6 +34,10 @@ export default function ActivityImage({ photos, sizes, preload = false, fill = f
   return <Image key={src + unoptimized} ref={imageRef} src={src} alt={photo.alt || photo.caption}
     {...(fill ? { fill: true } : { width: photo.width, height: photo.height })}
     sizes={sizes} preload={preload} draggable={false} unoptimized={unoptimized}
+    onLoad={(event) => {
+      const { naturalWidth, naturalHeight } = event.currentTarget;
+      if (naturalWidth && naturalHeight) onDimensions?.(naturalWidth, naturalHeight);
+    }}
     onError={() => {
       if (!unoptimized) setOriginals((current) => [...current, photo.src]);
       else {

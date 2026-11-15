@@ -1,22 +1,10 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import GalleryExperience from "./GalleryExperience";
 import { readActivityAlbums } from "@/lib/public-activity-albums";
 
-vi.mock("./useGalleryMotion", () => ({ useGalleryMotion: vi.fn() }));
-const observers: { callback: IntersectionObserverCallback; targets: Element[]; disconnect: ReturnType<typeof vi.fn> }[] = [];
-
 beforeEach(() => {
   vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true })));
-  vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
-  vi.stubGlobal("cancelAnimationFrame", vi.fn());
-  observers.length = 0;
-  vi.stubGlobal("IntersectionObserver", class {
-    targets: Element[] = [];
-    disconnect = vi.fn();
-    constructor(public callback: IntersectionObserverCallback) { observers.push(this); }
-    observe(target: Element) { this.targets.push(target); }
-  });
   vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
   HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
   HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); };
@@ -25,25 +13,33 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("影像紀事", () => {
-  it("distinguishes unavailable activity data from an empty selection", () => {
+  it("distinguishes unavailable activity data from an empty gallery", () => {
     render(<GalleryExperience albums={[]} unavailable />);
     expect(screen.getByRole("alert")).toHaveTextContent("無法載入活動影像");
     expect(screen.queryByText("活動紀錄整理中。")).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "活動照片牆" })).not.toBeInTheDocument();
   });
-  it("filters every stage to one activity without asking visitors to select a display mode", () => {
+
+  it("renders an empty gallery without a photo wall", () => {
+    render(<GalleryExperience albums={[]} />);
+    expect(screen.getByText("活動紀錄整理中。")).toBeVisible();
+    expect(screen.queryByRole("region", { name: "活動照片牆" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the opening and one photo wall, removes the extra sections and filters by activity", () => {
     const first = readActivityAlbums({})[0];
     const second = { ...first, id: "preparation", title: "籌備紀錄", photos: first.photos.map((photo) => ({ ...photo, id: photo.id + "-2" })) };
-    render(<GalleryExperience albums={[first, second]} />);
+    const { container } = render(<GalleryExperience albums={[first, second]} />);
+    expect(within(screen.getByRole("region", { name: "活動照片牆" })).getAllByRole("button", { name: /放大：/ })).toHaveLength(6);
+    expect(screen.getAllByRole("region", { name: "活動照片牆" })).toHaveLength(1);
+    expect(container.querySelector(".archive-masthead")).not.toBeNull();
+    expect(container.querySelector(".archive-stories, .archive-all-photos, .archive-key-visual")).toBeNull();
+    expect(screen.queryByText(/HCCA \/|照片沒有邊界|SELECTED MOMENTS/)).not.toBeInTheDocument();
     fireEvent.change(screen.getByRole("combobox", { name: "選擇活動" }), { target: { value: second.id } });
-    expect(screen.getByRole("heading", { level: 2, name: "籌備紀錄" })).toBeVisible();
-    expect(screen.queryByRole("heading", { level: 2, name: "迎新" })).not.toBeInTheDocument();
+    expect(screen.getByText("3 張照片")).toBeVisible();
+    expect(within(screen.getByRole("region", { name: "活動照片牆" })).getAllByRole("button", { name: /放大：籌備紀錄/ })).toHaveLength(3);
+    expect(screen.queryByRole("button", { name: /放大：迎新/ })).not.toBeInTheDocument();
     expect(window.location.search).toBe("?event=preparation");
-    expect(screen.getByRole("region", { name: "無邊影像" })).toBeVisible();
-    expect(screen.getByRole("region", { name: "全部活動照片" })).toBeVisible();
-    expect(screen.queryByRole("group", { name: "展示方式" })).not.toBeInTheDocument();
-    const wall = screen.getByRole("region", { name: "無邊影像" });
-    expect(within(wall).getAllByRole("button", { name: /放大：籌備紀錄/ })).toHaveLength(25);
-    expect(within(wall).queryByRole("button", { name: /放大：迎新/ })).not.toBeInTheDocument();
   });
 
   it("opens photos, switches images and closes the accessible viewer", () => {
@@ -57,43 +53,61 @@ describe("影像紀事", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("preserves key art and makes unfeatured photos available in the continuous contact sheet", () => {
+  it("puts key art in the center of the opening and unfeatured photos in the wall", () => {
     const event = readActivityAlbums({})[0];
-    event.photos.push({ ...event.photos[0], id: "unfeatured", featured: false });
-    event.keyVisual = { ...event.photos[0], id: "key-visual", alt: "測試活動主視覺", photographer: "設計署名" };
-    render(<GalleryExperience albums={[event]} detail />);
-    expect(screen.getByText("活動主視覺")).toBeVisible();
-    expect(screen.getAllByAltText("測試活動主視覺")[0]).toBeVisible();
-    const contactSheet = screen.getByRole("region", { name: "全部活動照片" });
-    expect(contactSheet.querySelector('[data-gallery-photo="unfeatured"]')).toBeVisible();
-    expect(within(contactSheet).getAllByRole("button", { name: /放大：迎新/ })).toHaveLength(5);
-    expect(screen.queryByRole("button", { name: /瀏覽全部照片/ })).not.toBeInTheDocument();
-  });
-
-  it("opens with a real photo and replaces a failed cover with another photo from the event", () => {
-    const event = readActivityAlbums({})[0];
-    event.keyVisual = { ...event.photos[0], id: "poster", src: "/site/public/images/poster.webp", alt: "活動海報" };
+    event.photos.push({ ...event.photos[0], id: "duplicate" });
+    event.photos.push({ ...event.photos[0], id: "unfeatured", src: "/unfeatured.webp", featured: false });
+    event.keyVisual = { ...event.photos[0], id: "key-visual", src: "/poster.webp", alt: "測試活動主視覺", photographer: "設計署名" };
     const { container } = render(<GalleryExperience albums={[event]} detail />);
-    const cover = () => container.querySelector<HTMLImageElement>(".archive-opening-photo img")!;
-    expect(cover()).toHaveAttribute("alt", event.photos[0].alt);
-    fireEvent.error(cover());
-    fireEvent.error(cover());
-    expect(cover()).toHaveAttribute("alt", event.photos[1].alt);
-    expect(screen.queryByRole("button", { name: /瀏覽全部照片/ })).not.toBeInTheDocument();
+    expect(container.querySelector(".archive-opening-photo img")).toHaveAttribute("alt", "測試活動主視覺");
+    expect(within(screen.getByRole("region", { name: "活動照片牆" })).queryByAltText("測試活動主視覺")).not.toBeInTheDocument();
+    expect(container.querySelector('[data-gallery-photo="unfeatured"]')).toBeVisible();
+    expect(container.querySelector('[data-gallery-photo="duplicate"]')).toBeNull();
+    expect(within(screen.getByRole("region", { name: "活動照片牆" })).getAllByRole("button", { name: /放大：迎新/ })).toHaveLength(4);
+    expect(screen.queryByText("每一個片刻")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "活動主視覺" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /原始活動相簿/ })).toHaveAttribute("href", event.sourceUrl);
   });
 
-  it("loads the next batch automatically and disconnects its observers on unmount", () => {
+  it("keeps a failed image local without removing the rest of the wall", () => {
+    render(<GalleryExperience albums={readActivityAlbums({})} />);
+    const wall = screen.getByRole("region", { name: "活動照片牆" });
+    const photo = within(wall).getAllByRole("button", { name: /放大：迎新/ })[0];
+    fireEvent.error(within(photo).getByRole("img"));
+    fireEvent.error(within(photo).getByRole("img"));
+    expect(within(photo).getByRole("status")).toHaveTextContent("照片暫時無法顯示");
+    expect(within(wall).getAllByRole("img")).toHaveLength(2);
+  });
+
+  it("falls back to an activity photo when the opening key visual fails", () => {
     const album = readActivityAlbums({})[0];
-    album.photos = Array.from({ length: 80 }, (_, index) => ({ ...album.photos[index % 3], id: "photo-" + index }));
-    const { unmount } = render(<GalleryExperience albums={[album]} />);
-    const sheet = screen.getByRole("region", { name: "全部活動照片" });
-    expect(within(sheet).getAllByRole("button", { name: /放大：/ })).toHaveLength(36);
-    const observer = observers.find((entry) => entry.targets.some((target) => target.className === "archive-load-more"))!;
-    act(() => observer.callback([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver));
-    expect(within(sheet).getAllByRole("button", { name: /放大：/ })).toHaveLength(72);
-    expect(observer.disconnect).toHaveBeenCalled();
-    unmount();
-    expect(observers.every((entry) => entry.disconnect.mock.calls.length > 0)).toBe(true);
+    album.keyVisual = { ...album.photos[0], id: "poster", src: "/site/public/images/poster.webp", alt: "活動主視覺海報" };
+    const { container } = render(<GalleryExperience albums={[album]} detail />);
+    const cover = () => container.querySelector<HTMLImageElement>(".archive-opening-photo img")!;
+    expect(cover()).toHaveAttribute("alt", "活動主視覺海報");
+    fireEvent.error(cover());
+    expect(cover()).toHaveAttribute("alt", album.photos[0].alt);
+  });
+
+  it("sizes the opening frame from the loaded image instead of stale poster dimensions", async () => {
+    const album = readActivityAlbums({})[0];
+    album.keyVisual = { ...album.photos[0], id: "poster", src: "/poster.webp", width: 1800, height: 3200 };
+    const { container } = render(<GalleryExperience albums={[album]} detail />);
+    const image = container.querySelector<HTMLImageElement>(".archive-opening-photo img")!;
+    Object.defineProperties(image, { naturalWidth: { value: 1800 }, naturalHeight: { value: 2400 } });
+    fireEvent.load(image);
+    await waitFor(() => expect(container.querySelector<HTMLElement>(".archive-opening-scene")!.style.getPropertyValue("--opening-ratio")).toBe("0.75"));
+    expect(container.querySelector<HTMLElement>(".archive-opening-photo .archive-photo-media")!.style.aspectRatio).toBe("");
+  });
+
+  it("preserves a poster-only activity without creating an empty photo wall", () => {
+    const album = readActivityAlbums({})[0];
+    album.keyVisual = { ...album.photos[0], id: "poster" };
+    album.photos = [];
+    const { container } = render(<GalleryExperience albums={[album]} detail />);
+    expect(container.querySelector(".archive-opening-photo img")).toBeVisible();
+    expect(screen.queryByRole("region", { name: "活動照片牆" })).not.toBeInTheDocument();
+    expect(screen.queryByText("活動紀錄整理中。")).not.toBeInTheDocument();
   });
 
   it("resolves a shared photo inside the initially selected event and restores focus after closing", () => {

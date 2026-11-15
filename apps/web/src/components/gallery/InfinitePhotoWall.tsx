@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { Maximize2, MoveUpRight } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Minus, Plus, Scan } from "lucide-react";
 import ActivityImage from "./ActivityImage";
 import type { GalleryItem } from "./GalleryViewer";
-import { WALL_TILE_COUNT, wallCell } from "./infinite-wall-layout";
+import { constrainCamera, fitWall, wallLayout, zoomCamera, type WallCamera } from "./infinite-wall-layout";
 
 export default function InfinitePhotoWall({ items, paused, onOpen }: {
   items: GalleryItem[];
@@ -12,208 +12,154 @@ export default function InfinitePhotoWall({ items, paused, onOpen }: {
   onOpen: (item: GalleryItem, origin: HTMLElement) => void;
 }) {
   const viewportRef = useRef<HTMLDivElement>(null);
-  const [indices, setIndices] = useState(() => Array.from({ length: WALL_TILE_COUNT }, (_, index) => index % items.length));
-  const pausedRef = useRef(paused);
-
-  useEffect(() => { pausedRef.current = paused; }, [paused]);
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const dragStart = useRef({ x: 0, y: 0 });
+  const suppressClick = useRef(false);
+  const [dragging, setDragging] = useState(false);
+  const [size, setSize] = useState({ width: 1200, height: 640 });
+  const [camera, setCamera] = useState<WallCamera>({ x: 0, y: 0, scale: 1 });
+  const layout = useMemo(() => wallLayout(items.map((item) => item.width / item.height), size), [items, size]);
+  const view = constrainCamera(camera, layout, size);
+  const minimumScale = fitWall(layout, size).scale * 0.75;
 
   useEffect(() => {
     const viewport = viewportRef.current;
-    if (!viewport || !items.length) return;
-    const tiles = Array.from(viewport.querySelectorAll<HTMLElement>(".infinite-wall-tile"));
-    const buttons = tiles.map((tile) => tile.querySelector("button")!);
-    const target = { x: 0, y: 0 };
-    const pointer = { x: 0, y: 0 };
-    const velocity = { x: 0, y: 0 };
-    const positions = tiles.map(() => ({ x: 0, y: 0 }));
-    let assigned = tiles.map((_, index) => index % items.length);
-    let cellWidth = 320, cellHeight = 300;
-    let viewWidth = 0, viewHeight = 0;
-    let frame = 0, lastTime = 0, visible = true;
-    let drag: { id: number; x: number; y: number; lastX: number; lastY: number; time: number; moved: boolean; touch: boolean } | null = null;
-    let suppressClick = false;
-    let lastScroll = window.scrollY;
-
+    if (!viewport) return;
     const resize = () => {
-      const rect = viewport.getBoundingClientRect();
-      viewWidth = rect.width; viewHeight = rect.height;
-      cellWidth = rect.width < 768 ? Math.max(190, rect.width * 0.66) : rect.width * 0.3;
-      cellHeight = Math.max(180, rect.height * 0.36);
+      const { width, height } = viewport.getBoundingClientRect();
+      if (width && height) setSize({ width, height });
     };
-
-    const render = (time: number) => {
-      frame = 0;
-      const elapsed = lastTime ? Math.min((time - lastTime) / 16.667, 2) : 1;
-      lastTime = time;
-      if (!pausedRef.current && !document.hidden && visible) {
-        const focused = viewport.contains(document.activeElement) && document.activeElement !== viewport;
-        if (!drag && !focused) {
-          target.x += velocity.x * elapsed;
-          target.y += velocity.y * elapsed;
-          velocity.x *= Math.pow(0.93, elapsed);
-          velocity.y *= Math.pow(0.93, elapsed);
-        }
-        let changed = false;
-        const focusable = new Set<number>();
-        const next = [...assigned];
-        tiles.forEach((tile, index) => {
-          // Different settling speeds create depth without splitting the grid at its seams.
-          const depth = [0.055, 0.085, 0.12, 0.07, 0.1][index % 5];
-          const position = positions[index];
-          position.x += (target.x - position.x) * (1 - Math.pow(1 - depth, elapsed));
-          position.y += (target.y - position.y) * (1 - Math.pow(1 - depth, elapsed));
-          const parallax = 14 + (index % 4) * 9;
-          const cell = wallCell(index, position.x + pointer.x * parallax - cellWidth * 0.4,
-            position.y + pointer.y * parallax - cellHeight * 0.35, cellWidth, cellHeight, items.length);
-          const item = items[cell.photoIndex];
-          const size = [1.03, 0.72, 0.92, 0.8, 1.08][index % 5];
-          const width = Math.min(cellWidth * size, cellHeight * 0.96 * item.width / item.height);
-          const height = width * item.height / item.width;
-          const x = cell.x + (cellWidth - width) / 2 + (index % 3 - 1) * cellWidth * 0.06;
-          const y = cell.y + (cellHeight - height) / 2 + (index % 4 - 1.5) * cellHeight * 0.1;
-          tile.style.width = width + "px";
-          tile.style.transform = `translate3d(${x}px, ${y}px, 0)`;
-          const onScreen = x + width > 0 && x < viewWidth && y + height > 0 && y < viewHeight;
-          tile.style.visibility = onScreen ? "visible" : "hidden";
-          buttons[index].tabIndex = onScreen && !focusable.has(cell.photoIndex) ? 0 : -1;
-          if (onScreen) focusable.add(cell.photoIndex);
-          if (assigned[index] !== cell.photoIndex) {
-            next[index] = cell.photoIndex;
-            changed = true;
-          }
-        });
-        if (changed) { assigned = next; setIndices(next); }
-      }
-      if (visible && !document.hidden) frame = requestAnimationFrame(render);
-    };
-    const start = () => { if (!frame && visible && !document.hidden) { lastTime = 0; frame = requestAnimationFrame(render); } };
-    const stop = () => { cancelAnimationFrame(frame); frame = 0; };
-    const observer = new IntersectionObserver(([entry]) => {
-      visible = entry.isIntersecting;
-      if (visible) start(); else stop();
-    }, { rootMargin: "100px" });
-    observer.observe(viewport);
-    const sizeObserver = new ResizeObserver(resize);
-    sizeObserver.observe(viewport);
     resize();
-    start();
+    const observer = new ResizeObserver(resize);
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, []);
 
-    const scroll = () => {
-      const delta = window.scrollY - lastScroll;
-      lastScroll = window.scrollY;
-      if (visible && !pausedRef.current && !drag) { target.y -= delta * 0.48; target.x -= delta * 0.16; }
-    };
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
     const wheel = (event: WheelEvent) => {
-      if (event.ctrlKey || pausedRef.current) return;
-      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewport.clientHeight : 1;
-      target.x -= event.deltaX * unit * 0.7;
-      // Vertical scrolling stays native; the page scroll also moves the photo space.
-    };
-    const down = (event: PointerEvent) => {
-      if (pausedRef.current || event.button !== 0) return;
-      suppressClick = false;
-      velocity.x = velocity.y = 0;
-      drag = { id: event.pointerId, x: event.clientX, y: event.clientY,
-        lastX: event.clientX, lastY: event.clientY, time: event.timeStamp, moved: false, touch: event.pointerType !== "mouse" };
-    };
-    const move = (event: PointerEvent) => {
+      if (paused) return;
+      event.preventDefault();
+      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? size.height : 1;
       const rect = viewport.getBoundingClientRect();
-      pointer.x += (((event.clientX - rect.left) / rect.width - 0.5) * 2 - pointer.x) * 0.3;
-      pointer.y += (((event.clientY - rect.top) / rect.height - 0.5) * 2 - pointer.y) * 0.3;
-      if (!drag || drag.id !== event.pointerId) return;
-      const dx = event.clientX - drag.lastX, dy = event.clientY - drag.lastY;
-      if (!drag.moved) {
-        const totalX = event.clientX - drag.x, totalY = event.clientY - drag.y;
-        if (Math.abs(totalX) + Math.abs(totalY) < 7) return;
-        if (drag.touch && Math.abs(totalY) > Math.abs(totalX)) { drag = null; return; }
-        drag.moved = true;
-        viewport.setPointerCapture(event.pointerId);
-        viewport.dataset.dragging = "true";
-      }
-      const elapsed = Math.max(event.timeStamp - drag.time, 8);
-      target.x += dx;
-      if (!drag.touch) target.y += dy;
-      velocity.x = Math.max(-40, Math.min(40, dx / elapsed * 16));
-      velocity.y = drag.touch ? 0 : Math.max(-40, Math.min(40, dy / elapsed * 16));
-      drag.lastX = event.clientX; drag.lastY = event.clientY; drag.time = event.timeStamp;
+      setCamera((current) => {
+        const start = constrainCamera(current, layout, size);
+        return event.ctrlKey || event.metaKey
+          ? zoomCamera(start, Math.exp(-event.deltaY * unit * 0.006), { x: event.clientX - rect.left, y: event.clientY - rect.top }, layout, size)
+          : constrainCamera({ ...start, x: start.x - (event.shiftKey ? event.deltaY : event.deltaX) * unit, y: start.y - (event.shiftKey ? 0 : event.deltaY) * unit }, layout, size);
+      });
     };
-    const up = (event: PointerEvent) => {
-      if (!drag || drag.id !== event.pointerId) return;
-      suppressClick = drag.moved;
-      if (event.timeStamp - drag.time > 100) velocity.x = velocity.y = 0;
-      drag = null;
-      delete viewport.dataset.dragging;
-      if (viewport.hasPointerCapture(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
-    };
-    const cancel = () => {
-      if (!drag) return;
-      suppressClick = drag.moved;
-      drag = null; velocity.x = velocity.y = 0;
-      delete viewport.dataset.dragging;
-    };
-    const click = (event: MouseEvent) => {
-      if (suppressClick) { event.preventDefault(); event.stopPropagation(); suppressClick = false; }
-    };
-    const keys = (event: KeyboardEvent) => {
-      if (event.target !== viewport || pausedRef.current) return;
-      const directions: Record<string, [number, number]> = { ArrowLeft: [180, 0], ArrowRight: [-180, 0], ArrowUp: [0, 180], ArrowDown: [0, -180] };
-      const direction = directions[event.key];
-      if (direction) { event.preventDefault(); target.x += direction[0]; target.y += direction[1]; }
-    };
-    const leave = () => { pointer.x = pointer.y = 0; };
-    const visibility = () => { if (document.hidden) stop(); else start(); };
-    viewport.addEventListener("pointerdown", down);
-    viewport.addEventListener("pointermove", move);
-    viewport.addEventListener("pointerup", up);
-    viewport.addEventListener("pointercancel", cancel);
-    viewport.addEventListener("lostpointercapture", cancel);
-    viewport.addEventListener("pointerleave", leave);
-    viewport.addEventListener("click", click, true);
-    viewport.addEventListener("keydown", keys);
-    viewport.addEventListener("wheel", wheel, { passive: true });
-    window.addEventListener("scroll", scroll, { passive: true });
-    document.addEventListener("visibilitychange", visibility);
-    return () => {
-      stop(); observer.disconnect(); sizeObserver.disconnect();
-      viewport.removeEventListener("pointerdown", down);
-      viewport.removeEventListener("pointermove", move);
-      viewport.removeEventListener("pointerup", up);
-      viewport.removeEventListener("pointercancel", cancel);
-      viewport.removeEventListener("lostpointercapture", cancel);
-      viewport.removeEventListener("pointerleave", leave);
-      viewport.removeEventListener("click", click, true);
-      viewport.removeEventListener("keydown", keys);
-      viewport.removeEventListener("wheel", wheel);
-      window.removeEventListener("scroll", scroll);
-      document.removeEventListener("visibilitychange", visibility);
-    };
-  }, [items]);
+    viewport.addEventListener("wheel", wheel, { passive: false });
+    return () => viewport.removeEventListener("wheel", wheel);
+  }, [layout, paused, size]);
 
-  return <section className="infinite-wall" aria-labelledby="infinite-wall-title">
-    <header className="infinite-wall-heading"><h2 id="infinite-wall-title">無邊影像</h2><span>{items.length} 幅影像</span></header>
+  const zoom = (factor: number) => setCamera((current) => zoomCamera(constrainCamera(current, layout, size), factor, { x: size.width / 2, y: size.height / 2 }, layout, size));
+  const reset = () => setCamera(fitWall(layout, size));
+
+  return <section className="infinite-wall" aria-label="活動照片牆">
     <div ref={viewportRef} className="infinite-wall-viewport" tabIndex={0}
-      aria-label="無限視差攝影牆，可拖曳或使用方向鍵探索">
-      <div className="infinite-wall-plane">
-        {indices.map((photoIndex, slot) => {
-          const item = items[photoIndex];
-          return <div key={slot} className="infinite-wall-tile" style={{
-            left: 0, top: 0, width: "24%",
-            transform: `translate(${(slot % 5) * 125 - 40}%, ${Math.floor(slot / 5) * 170 - 50}%)`,
-            "--tile-order": slot,
-          } as CSSProperties}>
+      aria-label="照片牆，可拖曳、雙指縮放或使用方向鍵，按加減鍵縮放、Home 顯示全部"
+      data-dragging={dragging || undefined}
+      onPointerDown={(event) => {
+        if (paused || event.button !== 0 || pointers.current.size >= 2) return;
+        if (!pointers.current.size) {
+          suppressClick.current = false;
+          dragStart.current = { x: event.clientX, y: event.clientY };
+        }
+        pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        if (pointers.current.size > 1) suppressClick.current = true;
+      }}
+      onPointerMove={(event) => {
+        const previous = pointers.current.get(event.pointerId);
+        if (!previous || paused) return;
+        const before = [...pointers.current.values()];
+        pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        const after = [...pointers.current.values()];
+        if (after.length === 2) {
+          const oldDistance = Math.hypot(before[0].x - before[1].x, before[0].y - before[1].y);
+          const distance = Math.hypot(after[0].x - after[1].x, after[0].y - after[1].y);
+          const rect = event.currentTarget.getBoundingClientRect();
+          const center = { x: (after[0].x + after[1].x) / 2 - rect.left, y: (after[0].y + after[1].y) / 2 - rect.top };
+          const dx = (after[0].x + after[1].x - before[0].x - before[1].x) / 2;
+          const dy = (after[0].y + after[1].y - before[0].y - before[1].y) / 2;
+          setCamera((current) => {
+            const start = constrainCamera(current, layout, size);
+            return zoomCamera({ ...start, x: start.x + dx, y: start.y + dy }, oldDistance > 0 ? distance / oldDistance : 1, center, layout, size);
+          });
+          suppressClick.current = true;
+        } else {
+          if (!suppressClick.current && Math.hypot(event.clientX - dragStart.current.x, event.clientY - dragStart.current.y) < 7) return;
+          suppressClick.current = true;
+          setCamera((current) => {
+            const start = constrainCamera(current, layout, size);
+            return constrainCamera({ ...start, x: start.x + event.clientX - previous.x, y: start.y + event.clientY - previous.y }, layout, size);
+          });
+        }
+        setDragging(true);
+        if (!event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.setPointerCapture(event.pointerId);
+      }}
+      onPointerUp={(event) => {
+        pointers.current.delete(event.pointerId);
+        if (!pointers.current.size) setDragging(false);
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+      }}
+      onPointerCancel={() => { pointers.current.clear(); setDragging(false); suppressClick.current = true; }}
+      onLostPointerCapture={(event) => {
+        // A touch initially captured by a photo transfers to the viewport during a drag.
+        if (event.target !== event.currentTarget) return;
+        pointers.current.delete(event.pointerId);
+        if (!pointers.current.size) setDragging(false);
+      }}
+      onPointerLeave={(event) => {
+        if (event.pointerType === "mouse" && !dragging) pointers.current.delete(event.pointerId);
+      }}
+      onClickCapture={(event) => {
+        if (suppressClick.current && event.detail > 0) { event.preventDefault(); event.stopPropagation(); }
+        suppressClick.current = false;
+      }}
+      onKeyDown={(event) => {
+        if (paused || event.target !== event.currentTarget) return;
+        const directions: Record<string, [number, number]> = { ArrowLeft: [120, 0], ArrowRight: [-120, 0], ArrowUp: [0, 120], ArrowDown: [0, -120] };
+        const direction = directions[event.key];
+        if (direction) {
+          event.preventDefault();
+          setCamera((current) => { const start = constrainCamera(current, layout, size); return constrainCamera({ ...start, x: start.x + direction[0], y: start.y + direction[1] }, layout, size); });
+        } else if (["+", "=", "-", "Home"].includes(event.key)) {
+          event.preventDefault();
+          if (event.key === "Home") reset(); else zoom(event.key === "-" ? 0.8 : 1.25);
+        }
+      }}>
+      <div className="infinite-wall-plane" style={{ width: layout.width, height: layout.height, transform: `translate3d(${view.x}px, ${view.y}px, 0) scale(${view.scale})` }}>
+        {items.map((item, index) => {
+          const tile = layout.tiles[index];
+          return <div key={item.albumId + ":" + item.id} className="infinite-wall-tile" style={{ left: tile.x, top: tile.y, width: tile.width }}>
             <button type="button" className="archive-photo" data-gallery-photo={item.id} data-gallery-album={item.albumId}
-              tabIndex={-1}
               aria-label={"放大：" + item.albumTitle + "・" + (item.caption || item.alt || "活動照片")}
-              onClick={(event) => onOpen(item, event.currentTarget)}>
-              <span className="infinite-wall-image"><ActivityImage key={item.src} photos={[item]}
-                sizes="(max-width: 767px) 60vw, 30vw" /></span>
-              <span className="infinite-wall-caption"><span>{item.caption || item.albumTitle}</span><Maximize2 size={14} aria-hidden /></span>
+              onFocus={(event) => {
+                if (!event.currentTarget.matches(":focus-visible")) return;
+                setCamera((current) => {
+                  const start = constrainCamera(current, layout, size);
+                  const x = tile.x * start.scale + start.x, y = tile.y * start.scale + start.y;
+                  if (x >= 16 && y >= 16 && x + tile.width * start.scale <= size.width - 16 && y + tile.height * start.scale <= size.height - 16) return current;
+                  return constrainCamera({ ...start, x: size.width / 2 - (tile.x + tile.width / 2) * start.scale, y: size.height / 2 - (tile.y + tile.height / 2) * start.scale }, layout, size);
+                });
+              }}
+              onClick={(event) => { if (!paused) onOpen(item, event.currentTarget); }}>
+              <span className="infinite-wall-image" style={{ aspectRatio: item.width / item.height }}>
+                <ActivityImage photos={[item]} sizes="(max-width: 767px) 70vw, 35vw" preload={index === 0} fill />
+              </span>
+              <span className="infinite-wall-caption">{item.caption || item.albumTitle}</span>
             </button>
           </div>;
         })}
       </div>
-      <div className="infinite-wall-compass" aria-hidden><MoveUpRight size={20} /><span>拖曳探索</span></div>
     </div>
-    <footer className="infinite-wall-foot"><span>HCCA / INFINITE MEMORIES</span><span>照片沒有邊界，回憶也是。</span></footer>
+    <div className="infinite-wall-tools" role="group" aria-label="照片牆縮放">
+      <button type="button" aria-label="縮小照片牆" title="縮小照片牆" disabled={paused || view.scale <= minimumScale + 0.001} onClick={() => zoom(0.8)}><Minus size={18} aria-hidden /></button>
+      <output aria-label="縮放比例">{Math.round(view.scale * 100)}%</output>
+      <button type="button" aria-label="放大照片牆" title="放大照片牆" disabled={paused || view.scale >= 3} onClick={() => zoom(1.25)}><Plus size={18} aria-hidden /></button>
+      <button type="button" aria-label="顯示全部照片" title="顯示全部照片" disabled={paused} onClick={reset}><Scan size={18} aria-hidden /></button>
+    </div>
   </section>;
 }
