@@ -7,6 +7,7 @@ import copy
 import uuid
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
+from time import monotonic
 
 from fastapi import UploadFile
 from PIL import Image, ImageOps, UnidentifiedImageError
@@ -19,11 +20,12 @@ from api.models.gallery_sync import GalleryDriveSync
 from api.models.site import PublicSiteSettings
 from api.models.user import User
 from api.schemas.gallery_sync import GalleryDriveConfig, GalleryDriveStatusOut, GallerySyncReportOut
-from api.services.gallery_drive import GalleryDriveClient
+from api.services.gallery_drive import DriveRetryLater, GalleryDriveClient
 from api.services.permission import get_user_permission_codes
 from api.services.storage import get_storage
 
 MAX_SYNC_IMAGES = 20_000
+DOWNLOAD_BATCH_SECONDS = 45
 
 
 def next_sync(frequency: str, now: datetime) -> datetime | None:
@@ -75,8 +77,10 @@ async def configure(
 def prepare_image(raw: bytes) -> tuple[bytes, int, int]:
     try:
         with Image.open(BytesIO(raw)) as original:
-            if original.format not in {"JPEG", "PNG", "WEBP"}:
+            if original.format not in {"JPEG", "MPO", "PNG", "WEBP"}:
                 raise ValueError("僅支援 JPEG、PNG 與 WebP")
+            # 部分相機的 JPG 帶有 MPO 輔助影像；公開相簿只匯入主要照片。
+            original.seek(0)
             if original.width * original.height > 40_000_000:
                 raise ValueError("照片超過 4000 萬像素")
             image = ImageOps.exif_transpose(original)
@@ -114,8 +118,12 @@ async def synchronize(session: AsyncSession) -> GallerySyncReportOut | None:
     )
     report.checked_at = now
     manifest = copy.deepcopy(source.manifest)
+    retry = manifest.get("_retry", {})
+    if retry.get("error"):
+        report.errors = [error for error in report.errors if error != retry["error"]]
     prepared: list[tuple[str, dict, dict]] = []
     remaining = False
+    retry_delay = 0
     try:
         actor = await session.get(User, source.created_by)
         codes = await get_user_permission_codes(session, source.created_by)
@@ -131,6 +139,8 @@ async def synchronize(session: AsyncSession) -> GallerySyncReportOut | None:
             for folder in config.sources:
                 try:
                     files = await drive.list_images(folder.folder_id, folder.recursive)
+                except DriveRetryLater:
+                    raise
                 except ValueError as exc:
                     report.errors.append(f"資料夾 {folder.folder_id}：{exc}")
                     continue
@@ -142,11 +152,12 @@ async def synchronize(session: AsyncSession) -> GallerySyncReportOut | None:
                     if len(candidates) > MAX_SYNC_IMAGES:
                         raise ValueError(f"所有來源合計超過 {MAX_SYNC_IMAGES} 張照片，請減少來源")
             downloads = 0
+            batch_started = monotonic()
             ordered = list(candidates.items())
             cursor = manifest.get("_cursor", {}).get("after")
             cursor_index = next((i for i, (key, _) in enumerate(ordered) if key == cursor), -1)
             ordered = ordered[cursor_index + 1 :]
-            last_attempt = ""
+            last_attempt = cursor or ""
             for key, (folder, file) in ordered:
                 names = {people[email] for email in file.owners if email in people}
                 credit = next(iter(names)) if len(names) == 1 else folder.photographer
@@ -167,10 +178,13 @@ async def synchronize(session: AsyncSession) -> GallerySyncReportOut | None:
                     not previous or not file.checksum or previous.get("checksum") != file.checksum
                 )
                 if needs_image:
-                    if downloads >= 50:
+                    if downloads >= 50 or (
+                        downloads and monotonic() - batch_started >= DOWNLOAD_BATCH_SECONDS
+                    ):
                         remaining = True
                         continue
                     downloads += 1
+                    previous_attempt = last_attempt
                     last_attempt = key
                     try:
                         raw = await drive.download_image(file.id)
@@ -185,12 +199,21 @@ async def synchronize(session: AsyncSession) -> GallerySyncReportOut | None:
                         finally:
                             await upload.close()
                         photo.update(src=stored.url, width=width, height=height)
+                    except DriveRetryLater:
+                        manifest["_cursor"] = {"after": previous_attempt}
+                        raise
                     except ValueError as exc:
                         report.errors.append(f"{file.name[:160]}：{exc}")
                         continue
                 prepared.append((key, photo, state))
             # 前一批失敗的照片不會阻塞後續照片；完整巡迴後仍可重試失敗項目。
             manifest["_cursor"] = {"after": last_attempt if remaining else ""}
+    except DriveRetryLater as exc:
+        retry_delay = min(300 * 2 ** min(retry.get("attempts", 0), 3), 1800)
+        message = f"{exc}，{retry_delay // 60} 分鐘後自動重試"
+        manifest["_retry"] = {"attempts": retry.get("attempts", 0) + 1, "error": message}
+        report.errors.append(message)
+        remaining = True
     except ValueError as exc:
         report.errors.append(str(exc))
 
@@ -244,10 +267,15 @@ async def synchronize(session: AsyncSession) -> GallerySyncReportOut | None:
     elif prepared:
         report.errors.append("找不到公開網站設定")
     source.manifest = manifest
-    source.requested_at = now if remaining else None
-    source.next_sync_at = (
-        now + timedelta(minutes=1) if remaining else next_sync(config.frequency, now)
-    )
+    if retry_delay:
+        source.requested_at = None
+        source.next_sync_at = datetime.now(UTC) + timedelta(seconds=retry_delay)
+    else:
+        manifest.pop("_retry", None)
+        source.requested_at = now if remaining else None
+        source.next_sync_at = (
+            now + timedelta(minutes=1) if remaining else next_sync(config.frequency, now)
+        )
     if not report.errors and not remaining:
         source.last_synced_at = now
     source.last_report = report.model_dump(mode="json")

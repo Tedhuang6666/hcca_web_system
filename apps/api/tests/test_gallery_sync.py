@@ -13,7 +13,7 @@ from api.schemas.gallery_sync import GalleryDriveConfig
 from api.services import gallery_drive
 from api.services import gallery_sync as sync
 from api.services import site as site_svc
-from api.services.gallery_drive import DriveImage, GalleryDriveClient
+from api.services.gallery_drive import DriveImage, DriveRetryLater, GalleryDriveClient
 from api.services.regulation_drive import DriveReadError
 from api.services.storage import LocalStorageBackend
 
@@ -442,3 +442,112 @@ async def test_gallery_sync_imports_thousands_in_resumable_batches(
     again = await sync.synchronize(db_session)
     assert again.created == 0 and again.unchanged == 3079 and not again.errors
     assert Drive.downloads == 3079
+
+
+@pytest.mark.parametrize("image_format", ["JPEG", "MPO"])
+def test_gallery_prepares_plain_and_multiframe_jpg_as_one_clean_photo(image_format):
+    raw = BytesIO()
+    first = Image.new("RGB", (100, 60), "red")
+    exif = Image.Exif()
+    exif[270] = "private camera metadata"
+    exif[274] = 6
+    options = {"save_all": True, "append_images": [Image.new("RGB", (100, 60), "blue")]}
+    first.save(raw, format=image_format, exif=exif, **(options if image_format == "MPO" else {}))
+    with Image.open(BytesIO(raw.getvalue())) as original:
+        assert original.format == image_format
+        assert getattr(original, "n_frames", 1) == (2 if image_format == "MPO" else 1)
+    content, width, height = sync.prepare_image(raw.getvalue())
+    assert (width, height) == (60, 100)
+    with Image.open(BytesIO(content)) as photo:
+        assert photo.format == "WEBP" and getattr(photo, "n_frames", 1) == 1
+        assert not photo.getexif()
+        assert "exif" not in photo.info and "xmp" not in photo.info
+        red, green, blue = photo.convert("RGB").getpixel((30, 50))
+        assert red > 200 and green < 30 and blue < 30
+
+
+@pytest.mark.parametrize("image_format", ["GIF", "BMP"])
+def test_gallery_still_rejects_other_image_formats(image_format):
+    raw = BytesIO()
+    Image.new("RGB", (100, 60), "red").save(raw, format=image_format)
+    with pytest.raises(ValueError, match="僅支援"):
+        sync.prepare_image(raw.getvalue())
+
+
+@pytest.mark.parametrize(
+    ("status", "body"),
+    [
+        (403, b"<title>Sorry...</title>Your network is sending automated queries."),
+        (403, b'{"error":{"errors":[{"reason":"userRateLimitExceeded"}]}}'),
+        (429, b"Rate limit exceeded"),
+        (503, b"Service unavailable"),
+    ],
+)
+async def test_gallery_drive_recognizes_temporary_download_blocks(monkeypatch, status, body):
+    monkeypatch.setattr(settings, "GOOGLE_DRIVE_API_KEY", "test-key")
+    async with GalleryDriveClient() as drive:
+        await drive.client.aclose()
+        drive.client = httpx.AsyncClient(
+            base_url="https://www.googleapis.com/drive/v3/",
+            transport=httpx.MockTransport(lambda _: httpx.Response(status, content=body)),
+        )
+        with pytest.raises(DriveRetryLater, match="保留匯入進度"):
+            await drive.download_image("firstphoto12")
+
+
+async def test_gallery_sync_backs_off_and_retries_the_blocked_photo(
+    db_session, make_user, monkeypatch, tmp_path
+):
+    user = await make_user(is_superuser=True)
+    site, source, drive = await setup_source(db_session, user, monkeypatch, tmp_path)
+    blocked = True
+    attempts = []
+
+    async def download_image(self, identifier):
+        attempts.append(identifier)
+        if identifier == "secondphoto1" and blocked:
+            raise DriveRetryLater("Google 暫時限制照片存取，已保留匯入進度")
+        return image_bytes()
+
+    monkeypatch.setattr(drive, "download_image", download_image)
+    first = await sync.synchronize(db_session)
+    assert first.created == 1 and len(first.errors) == 1
+    assert "5 分鐘後" in first.errors[0]
+    assert source.manifest["_cursor"]["after"] == "welcome:firstphoto12"
+    assert source.requested_at is None and source.last_synced_at is None
+    assert (source.next_sync_at - datetime.now(UTC)).total_seconds() > 290
+    assert await sync.synchronize(db_session) is None
+    assert attempts == ["firstphoto12", "secondphoto1"]
+
+    source.next_sync_at = datetime.now(UTC) - sync.timedelta(seconds=1)
+    second = await sync.synchronize(db_session)
+    assert second.created == 1 and len(second.errors) == 1
+    assert "10 分鐘後" in second.errors[0]
+    assert attempts == ["firstphoto12", "secondphoto1", "secondphoto1"]
+    assert (source.next_sync_at - datetime.now(UTC)).total_seconds() > 590
+
+    blocked = False
+    source.next_sync_at = datetime.now(UTC) - sync.timedelta(seconds=1)
+    recovered = await sync.synchronize(db_session)
+    assert recovered.created == 2 and not recovered.errors
+    assert source.last_synced_at is not None and "_retry" not in source.manifest
+    assert attempts == ["firstphoto12", "secondphoto1", "secondphoto1", "secondphoto1"]
+    assert len(site.homepage_blocks["activity_gallery"]["events"][0]["photos"]) == 2
+
+
+async def test_gallery_sync_saves_partial_progress_when_downloads_are_slow(
+    db_session, make_user, monkeypatch, tmp_path
+):
+    user = await make_user(is_superuser=True)
+    _, source, drive = await setup_source(db_session, user, monkeypatch, tmp_path)
+
+    async def list_images(self, folder, recursive=True):
+        return [DriveImage(f"slowphoto{i:04d}", f"{i}.jpg", str(i), (), 0, "") for i in range(6)]
+
+    monkeypatch.setattr(drive, "list_images", list_images)
+    monkeypatch.setattr(sync, "monotonic", lambda: drive.downloads * 20)
+    first = await sync.synchronize(db_session)
+    assert first.created == 3 and source.requested_at is not None
+    second = await sync.synchronize(db_session)
+    assert second.created == 6 and source.requested_at is None
+    assert drive.downloads == 6 and not second.errors

@@ -1,5 +1,6 @@
 """公開 Drive 相片讀取；只接受固定 Google API 路徑。"""
 
+import json
 from dataclasses import dataclass
 
 import httpx
@@ -9,6 +10,40 @@ from api.services.regulation_drive import _ID_RE, DriveReadError, RegulationDriv
 IMAGE_TYPES = frozenset({"image/jpeg", "image/png", "image/webp"})
 MAX_IMAGE_BYTES = 30 * 1024 * 1024
 MAX_SOURCE_IMAGES = 10_000
+
+
+class DriveRetryLater(DriveReadError):
+    """Google 暫時封鎖或限流，應保留游標並延後重試。"""
+
+
+async def _check_drive_response(response: httpx.Response) -> None:
+    if response.is_success:
+        return
+    if response.status_code in {429, 500, 502, 503, 504}:
+        raise DriveRetryLater("Google 暫時限制照片存取，已保留匯入進度")
+    if response.status_code == 403:
+        sample = bytearray()
+        async for chunk in response.aiter_bytes():
+            sample.extend(chunk[: 8192 - len(sample)])
+            if len(sample) >= 8192:
+                break
+        reasons = set()
+        try:
+            error = json.loads(sample).get("error", {})
+            reasons = {
+                item.get("reason")
+                for item in error.get("errors", []) + error.get("details", [])
+                if isinstance(item, dict)
+            }
+        except (ValueError, AttributeError, TypeError):
+            pass
+        if b"automated queries" in sample.lower() or reasons & {
+            "rateLimitExceeded",
+            "userRateLimitExceeded",
+            "RATE_LIMIT_EXCEEDED",
+        }:
+            raise DriveRetryLater("Google 暫時限制照片存取，已保留匯入進度")
+    response.raise_for_status()
 
 
 @dataclass(frozen=True)
@@ -48,7 +83,7 @@ class GalleryDriveClient(RegulationDriveClient):
                     params["pageToken"] = page_token
                 try:
                     response = await self.client.get("files", params=params)
-                    response.raise_for_status()
+                    await _check_drive_response(response)
                     payload = response.json()
                     if payload.get("incompleteSearch"):
                         raise DriveReadError("Drive 檔案清單不完整，未匯入此來源")
@@ -96,8 +131,10 @@ class GalleryDriveClient(RegulationDriveClient):
                     f"files/{folder_id}",
                     params={"fields": "mimeType", "supportsAllDrives": "true"},
                 )
-                response.raise_for_status()
+                await _check_drive_response(response)
                 mime_type = response.json()["mimeType"]
+            except DriveReadError:
+                raise
             except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
                 raise DriveReadError("無法確認來源資料夾，請檢查資料夾分享權限與 API 金鑰") from exc
             if mime_type != "application/vnd.google-apps.folder":
@@ -116,7 +153,7 @@ class GalleryDriveClient(RegulationDriveClient):
             async with self.client.stream(
                 "GET", f"files/{file_id}", params={"alt": "media", "supportsAllDrives": "true"}
             ) as response:
-                response.raise_for_status()
+                await _check_drive_response(response)
                 async for chunk in response.aiter_bytes():
                     size += len(chunk)
                     if size > MAX_IMAGE_BYTES:
