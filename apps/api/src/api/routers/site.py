@@ -19,6 +19,7 @@ from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_any
 from api.models.site import PublicLinkCategory, PublicSitePage
 from api.models.user import User
+from api.routers.gallery_sync import router as gallery_sync_router
 from api.schemas.analytics import PublicArticleViewCreate
 from api.schemas.site import (
     PublicLinkCategoryCreate,
@@ -48,6 +49,7 @@ from api.services.analytics import record_public_article_view
 from api.services.storage import get_storage, validate_storage_key
 
 router = APIRouter(prefix="/site", tags=["公開官網"])
+router.include_router(gallery_sync_router)
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]

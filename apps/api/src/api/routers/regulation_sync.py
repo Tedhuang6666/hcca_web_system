@@ -69,10 +69,13 @@ async def configure_sync(
     if source is None:
         source = RegulationSyncSource(org_id=org_id, manifest={}, last_report={})
         session.add(source)
-    if source.folder_id and source.folder_id != body.folder_id:
+    if source.folder_id and (
+        source.folder_id != body.folder_id or source.extra_folder_ids != body.extra_folder_ids
+    ):
         source.manifest, source.last_report = {}, {}
         source.last_synced_at = None
     source.folder_id, source.frequency = body.folder_id, body.frequency
+    source.extra_folder_ids = [value for value in body.extra_folder_ids if value != body.folder_id]
     source.created_by = user.id
     source.next_sync_at = next_sync(body.frequency, datetime.now(UTC))
     await session.flush()

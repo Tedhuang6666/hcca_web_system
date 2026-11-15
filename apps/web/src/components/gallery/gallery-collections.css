@@ -1,0 +1,7 @@
+.gallery-collections { display: flex; flex-wrap: wrap; align-items: end; gap: 1rem; width: min(1200px, calc(100% - 2rem)); margin: 1.5rem auto; color: var(--text-primary); }
+.gallery-collections label { display: grid; gap: 0.5rem; flex: 1; max-width: 20rem; min-width: 10rem; font-size: 0.875rem; }
+.gallery-collections select { width: 100%; min-height: 44px; padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface); color: inherit; font: inherit; }
+.gallery-collections button { min-height: 44px; padding-inline: 0.75rem; text-decoration: underline; text-underline-offset: 0.2em; }
+.gallery-collections :is(select, button):focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.gallery-collections-empty { padding: 4rem 1rem; text-align: center; color: var(--text-secondary); }
+@media (max-width: 480px) { .gallery-collections label { max-width: none; min-width: 100%; } }

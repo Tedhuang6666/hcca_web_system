@@ -273,6 +273,43 @@ def test_inline_subparagraph_space_is_not_swallowed():
     assert draft.articles[0].content == "會員義務："
 
 
+async def test_multiple_regulation_folders_deduplicate_and_abort_on_incomplete_source(
+    db_session, make_user, monkeypatch
+):
+    user = await make_user(is_superuser=True)
+    source = await _source(db_session, user)
+    source.extra_folder_ids = ["anotherfolder1"]
+    calls = []
+    fail_secondary = False
+
+    class Drive:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            pass
+
+        async def list_files(self, folder_id):
+            calls.append(folder_id)
+            if fail_secondary and folder_id == "anotherfolder1":
+                raise ValueError("來源清單不完整")
+            return [DriveFile("samefile1234", "測試條例.docx", "docx")]
+
+        async def download(self, file):
+            return _document(["測試條例", "第一條規定。"]), file.name
+
+    monkeypatch.setattr(sync, "RegulationDriveClient", Drive)
+    report = await sync.synchronize_source(db_session, source.id)
+    assert calls == ["abcdefghijk", "anotherfolder1"]
+    assert [item.status for item in report.items] == ["created"]
+    assert len((await db_session.scalars(select(Regulation))).all()) == 1
+    source.requested_at = datetime.now(UTC)
+    fail_secondary = True
+    report = await sync.synchronize_source(db_session, source.id)
+    assert report.error == "來源清單不完整"
+    assert not report.items
+
+
 async def test_task_commits_report_before_invalidating_public_cache(
     db_session, make_user, monkeypatch
 ):

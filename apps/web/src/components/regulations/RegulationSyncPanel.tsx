@@ -72,7 +72,7 @@ function SourceSettings({ orgId, onSynced }: { orgId: string; onSynced: () => vo
     regulationSyncApi.status(orgId).then((data) => {
       if (!active) return;
       setStatus(data);
-      if (data.source) { setFolder(data.source.folder_id); setFrequency(data.source.frequency); }
+      if (data.source) { setFolder([data.source.folder_id, ...(data.source.extra_folder_ids ?? [])].join("\n")); setFrequency(data.source.frequency); }
     }).catch((err: unknown) => { if (active) setError(apiErrorMessage(err, "無法載入同步設定")); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
@@ -94,7 +94,8 @@ function SourceSettings({ orgId, onSynced }: { orgId: string; onSynced: () => vo
   async function save() {
     setBusy(true); setError(""); setMessage("");
     try {
-      setStatus(await regulationSyncApi.configure(orgId, { folder_id: folder, frequency }));
+      const folders = folder.split("\n").map((value) => value.trim()).filter(Boolean);
+      setStatus(await regulationSyncApi.configure(orgId, { folder_id: folders[0], extra_folder_ids: folders.slice(1), frequency }));
       setDirty(false); setMessage("已儲存同步設定。");
     } catch (err) { setError(apiErrorMessage(err, "儲存失敗，請稍後重試")); }
     finally { setBusy(false); }
@@ -112,7 +113,7 @@ function SourceSettings({ orgId, onSynced }: { orgId: string; onSynced: () => vo
       {status && <>
         <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_10rem]">
           <label className="block text-sm">Drive 資料夾網址或 ID
-            <input className="input mt-1 min-h-11 w-full" value={folder} disabled={busy || pending}
+            <textarea className="input mt-1 min-h-11 w-full" rows={3} placeholder="每行一個資料夾" value={folder} disabled={busy || pending}
               onChange={(event) => { setFolder(event.target.value); setDirty(true); }} />
           </label>
           <label className="block text-sm">自動更新頻率

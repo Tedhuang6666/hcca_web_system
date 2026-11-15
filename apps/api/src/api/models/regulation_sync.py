@@ -5,8 +5,8 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import JSON, DateTime, ForeignKey, String
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from api.core.database import Base
@@ -25,6 +25,12 @@ class RegulationSyncSource(Base, TimestampMixin):
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
     folder_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    extra_folder_ids: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB(), "postgresql"),
+        nullable=False,
+        default=list,
+        server_default="[]",
+    )
     frequency: Mapped[str] = mapped_column(String(10), nullable=False, default="daily")
     next_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

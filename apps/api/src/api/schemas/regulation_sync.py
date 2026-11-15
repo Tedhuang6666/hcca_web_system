@@ -14,6 +14,12 @@ DEFAULT_REGULATION_FOLDER = "1DUxeDy7MeN0c_CoeLfd0S7oRWKr6oGkw"
 class RegulationSyncSourceUpdate(BaseModel):
     folder_id: str = Field(default=DEFAULT_REGULATION_FOLDER, max_length=300)
     frequency: Literal["manual", "daily", "weekly"] = "daily"
+    extra_folder_ids: list[str] = Field(default_factory=list, max_length=19)
+
+    @field_validator("extra_folder_ids")
+    @classmethod
+    def validate_extra_folders(cls, values: list[str]) -> list[str]:
+        return list(dict.fromkeys(cls.validate_folder(value) for value in values))
 
     @field_validator("folder_id")
     @classmethod
@@ -54,6 +60,7 @@ class RegulationSyncSourceOut(BaseModel):
     id: uuid.UUID
     org_id: uuid.UUID
     folder_id: str
+    extra_folder_ids: list[str] = Field(default_factory=list)
     frequency: Literal["manual", "daily", "weekly"]
     next_sync_at: datetime | None
     requested_at: datetime | None

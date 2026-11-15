@@ -122,6 +122,7 @@ from api.models.finance import (  # noqa: F401
     JournalLine,
     JournalStatus,
 )
+from api.models.gallery_sync import GalleryDriveSync  # noqa: F401
 from api.models.governance import (  # noqa: F401
     AutomationRule,
     AutomationRuleStatus,

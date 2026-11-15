@@ -8,6 +8,7 @@ export type GalleryPhoto = {
   width: number;
   height: number;
   photographer?: string;
+  section?: string;
   featured: boolean;
 };
 
@@ -85,6 +86,7 @@ function readPhoto(value: unknown): GalleryPhoto | null {
     id, src, width: Math.round(value.width), height: Math.round(value.height),
     alt: text(value.alt), caption: text(value.caption),
     photographer: text(value.photographer, 120) || undefined,
+    section: text(value.section, 120) || undefined,
     featured: value.featured === true,
   };
 }

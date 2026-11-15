@@ -114,6 +114,7 @@ celery_app.conf.update(
 
 # ── Celery Beat 定時任務排程 ──────────────────────────────────────────────────
 celery_app.conf.include = list(celery_app.conf.include or []) + [
+    "api.services.gallery_tasks",
     "api.services.outbox_tasks",
     "api.services.regulation_tasks",
     "api.services.email_tasks",
@@ -137,6 +138,10 @@ celery_app.conf.include = list(celery_app.conf.include or []) + [
 ]
 
 celery_app.conf.beat_schedule = {
+    "sync-gallery-drive-every-minute": {
+        "task": "api.services.gallery_tasks.sync_gallery",
+        "schedule": 60.0,
+    },
     "sync-regulation-sources-every-minute": {
         "task": "api.services.regulation_tasks.sync_regulation_sources",
         "schedule": 60.0,

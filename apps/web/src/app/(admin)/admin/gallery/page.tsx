@@ -9,6 +9,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { uploadUrl } from "@/lib/config";
 import { galleryFingerprint, gallerySettingsValue, readActivityAlbums, type GalleryPhoto, type PublicActivityAlbum } from "@/lib/public-activity-albums";
 import { uploadGalleryPhoto } from "@/lib/gallery-upload";
+import GalleryDrivePanel from "@/components/gallery/GalleryDrivePanel";
 import "./gallery-admin.css";
 
 export default function GalleryAdminPage() {
@@ -141,6 +142,7 @@ export default function GalleryAdminPage() {
       }}>重新載入</button>}
     </div>}
     {status && <p role="status">{status}</p>}
+    {!loading && <GalleryDrivePanel albums={events} disabled={dirty || busy || uploading} onSynced={load} />}
     {loading ? <p role="status">正在載入活動影像…</p> : <fieldset disabled={busy || uploading} className="gallery-admin-workspace">
       <div className="gallery-admin-event-bar">
         <label>活動<select value={activeId} onChange={(event) => {

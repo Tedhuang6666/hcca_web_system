@@ -15,6 +15,11 @@ export type CloseStatusItem = Omit<ApiCloseStatusItem, "is_global"> & { is_globa
 
 export type {
   RegulationSyncSourceUpdate,
+  GalleryDriveConfig,
+  GalleryDriveStatusOut,
+  GalleryDriveSource,
+  GalleryPhotographerMapping,
+  GallerySyncReportOut,
   RegulationSyncSourceOut,
   RegulationSyncStatusOut,
   RegulationSyncReportOut,

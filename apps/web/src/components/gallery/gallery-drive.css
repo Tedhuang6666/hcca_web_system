@@ -1,0 +1,20 @@
+.gallery-drive-panel { margin-block: 1.5rem; border-block: 1px solid var(--border); }
+.gallery-drive-panel > summary { padding-block: 1rem; min-height: 44px; cursor: pointer; font-weight: 600; }
+.gallery-drive-settings { padding-block: 0.5rem 1.5rem; }
+.gallery-drive-settings fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.gallery-drive-settings legend, .gallery-drive-settings h3 { margin-block: 1.5rem 0.75rem; font-size: 1rem; font-weight: 600; }
+.gallery-drive-source { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; padding-block: 1.25rem; border-bottom: 1px solid var(--border); margin-bottom: 1rem; }
+.gallery-drive-person { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 1rem; align-items: end; margin-block: 1rem; }
+.gallery-drive-source > button { justify-self: end; }
+.gallery-drive-settings label.gallery-drive-check { display: flex; gap: 0.75rem; align-items: center; min-height: 44px; }
+.gallery-drive-note { max-width: 65ch; color: var(--text-secondary); font-size: 0.875rem; }
+.gallery-drive-frequency { max-width: 20rem; margin-block: 1.5rem; }
+.gallery-drive-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+.gallery-drive-settings [role="alert"] { color: var(--danger); }
+.gallery-drive-report { margin-top: 1.5rem; font-size: 0.875rem; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.gallery-drive-settings :is(button, input, select, summary):focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.gallery-drive-settings fieldset:disabled { opacity: 0.65; }
+@media (max-width: 767px) {
+  .gallery-drive-source, .gallery-drive-person { grid-template-columns: 1fr; }
+  .gallery-drive-source > button { justify-self: start; }
+}

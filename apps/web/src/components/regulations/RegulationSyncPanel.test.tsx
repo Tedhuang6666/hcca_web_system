@@ -32,7 +32,7 @@ describe("法規來源同步", () => {
     fireEvent.change(screen.getByLabelText("自動更新頻率"), { target: { value: "weekly" } });
     expect(screen.getByRole("button", { name: "立即對照並同步" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "儲存設定" }));
-    await waitFor(() => expect(regulationSyncApi.configure).toHaveBeenCalledWith("org", { folder_id: "abcdefghijk", frequency: "weekly" }));
+    await waitFor(() => expect(regulationSyncApi.configure).toHaveBeenCalledWith("org", { folder_id: "abcdefghijk", extra_folder_ids: [], frequency: "weekly" }));
     await screen.findByText("已儲存同步設定。");
     fireEvent.click(screen.getByRole("button", { name: "立即對照並同步" }));
     await screen.findByRole("button", { name: "同步中…" });

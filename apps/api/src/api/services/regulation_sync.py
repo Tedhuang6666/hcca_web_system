@@ -311,7 +311,14 @@ async def synchronize_source(
         groups: dict[str, list] = defaultdict(list)
         failed_titles: set[str] = set()
         async with RegulationDriveClient() as drive:
-            files = await drive.list_files(source.folder_id)
+            # 完整列出所有來源才開始更新；重疊的父子資料夾以檔案 ID 去重。
+            by_id = {}
+            for folder_id in dict.fromkeys([source.folder_id, *source.extra_folder_ids]):
+                for file in await drive.list_files(folder_id):
+                    by_id.setdefault(file.id, file)
+                if len(by_id) > 500:
+                    raise ValueError("來源合計超過 500 份文件，本次不更新法規")
+            files = list(by_id.values())
             for file in files:
                 try:
                     raw, filename = await drive.download(file)

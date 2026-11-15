@@ -11383,6 +11383,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/site/admin/gallery-drive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Status */
+        get: operations["get_status_site_admin_gallery_drive_get"];
+        /** Configure */
+        put: operations["configure_site_admin_gallery_drive_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/site/admin/gallery-drive/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request Sync */
+        post: operations["request_sync_site_admin_gallery_drive_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/site/admin/images": {
         parameters: {
             query?: never;
@@ -20008,6 +20043,91 @@ export interface components {
          * @enum {string}
          */
         FundStorageType: "petty_cash" | "safe" | "bank";
+        /** GalleryDriveConfig */
+        GalleryDriveConfig: {
+            /**
+             * Frequency
+             * @default quarter_hour
+             * @enum {string}
+             */
+            frequency: "manual" | "quarter_hour" | "daily";
+            /** Photographers */
+            photographers?: components["schemas"]["GalleryPhotographerMapping"][];
+            /** Sources */
+            sources?: components["schemas"]["GalleryDriveSource"][];
+        };
+        /** GalleryDriveSource */
+        GalleryDriveSource: {
+            /** Album Id */
+            album_id: string;
+            /** Folder Id */
+            folder_id: string;
+            /**
+             * Photographer
+             * @default
+             */
+            photographer: string;
+            /**
+             * Recursive
+             * @default true
+             */
+            recursive: boolean;
+            /**
+             * Section
+             * @default
+             */
+            section: string;
+        };
+        /** GalleryDriveStatusOut */
+        GalleryDriveStatusOut: {
+            config: components["schemas"]["GalleryDriveConfig"];
+            /** Drive Ready */
+            drive_ready: boolean;
+            last_report: components["schemas"]["GallerySyncReportOut"];
+            /** Last Synced At */
+            last_synced_at?: string | null;
+            /** Next Sync At */
+            next_sync_at?: string | null;
+            /** Requested At */
+            requested_at?: string | null;
+        };
+        /** GalleryPhotographerMapping */
+        GalleryPhotographerMapping: {
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+            /** Name */
+            name: string;
+        };
+        /** GallerySyncReportOut */
+        GallerySyncReportOut: {
+            /** Checked At */
+            checked_at?: string | null;
+            /**
+             * Created
+             * @default 0
+             */
+            created: number;
+            /** Errors */
+            errors?: string[];
+            /**
+             * Unattributed
+             * @default 0
+             */
+            unattributed: number;
+            /**
+             * Unchanged
+             * @default 0
+             */
+            unchanged: number;
+            /**
+             * Updated
+             * @default 0
+             */
+            updated: number;
+        };
         /** GitHubVersionView */
         GitHubVersionView: {
             /** Branch */
@@ -28443,6 +28563,8 @@ export interface components {
         };
         /** RegulationSyncSourceOut */
         RegulationSyncSourceOut: {
+            /** Extra Folder Ids */
+            extra_folder_ids?: string[];
             /** Folder Id */
             folder_id: string;
             /**
@@ -28470,6 +28592,8 @@ export interface components {
         };
         /** RegulationSyncSourceUpdate */
         RegulationSyncSourceUpdate: {
+            /** Extra Folder Ids */
+            extra_folder_ids?: string[];
             /**
              * Folder Id
              * @default 1DUxeDy7MeN0c_CoeLfd0S7oRWKr6oGkw
@@ -58258,6 +58382,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_status_site_admin_gallery_drive_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GalleryDriveStatusOut"];
+                };
+            };
+        };
+    };
+    configure_site_admin_gallery_drive_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GalleryDriveConfig"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GalleryDriveStatusOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    request_sync_site_admin_gallery_drive_run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GalleryDriveStatusOut"];
                 };
             };
         };
