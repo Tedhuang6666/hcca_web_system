@@ -100,9 +100,9 @@ it("shows the requested common services in order with the petition center destin
   render(<HomeEntrySection bundle={null} />);
   expect(screen.getAllByRole("link").map((link) => [link.textContent, link.getAttribute("href")]))
     .toEqual([
-      ["連結整理", "/links"],
-      ["陳情中心", "/petitions"],
+      ["學生陳情", "/petitions"],
+      ["商品訂購", "/shop"],
       ["公開資料", "/public"],
-      ["聯絡我們", "/contact"],
+      ["文章專欄", "/articles"],
     ]);
 });

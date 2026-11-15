@@ -25,13 +25,13 @@ function formatDate(value: string): string {
 
 export function HomeEntrySection({ bundle }: { bundle: PublicSiteBundleOut | null }) {
   const navItems = resolvePublicNav(bundle?.settings?.theme_config);
-  const services = ["links", "petitions", "public-db", "contact"].flatMap((key) => {
+  const services = ["petitions", "shop", "public-db", "articles"].flatMap((key) => {
     const item = navItems.find((entry) => entry.key === key);
     if (!item || item.hidden) return [];
     return [{
       ...item,
       href: key === "petitions" ? "/petitions" : item.href,
-      label: key === "petitions" ? "陳情中心"
+      label: key === "petitions" ? "學生陳情"
         : key === "public-db" && item.label === "公開資料庫" ? "公開資料" : item.label,
     }];
   });
@@ -144,6 +144,8 @@ export default function HomeContent({
           </aside>
         </div>
       </section>
+
+      <HomeEntrySection bundle={bundle} />
 
       {articles.length > 0 && (
         <section className="campus-stories" aria-labelledby="campus-stories-title">

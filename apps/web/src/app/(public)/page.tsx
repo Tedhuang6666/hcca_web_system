@@ -4,7 +4,6 @@ import type { Metadata } from "next";
 import PublicSiteShell from "@/components/site/PublicSiteShell";
 import { fetchPublicShellData, fetchPublicSurveys } from "@/lib/serverFetch";
 import DeferredHomeContent from "./DeferredHomeContent";
-import { HomeEntrySection } from "./HomeContent";
 import HomeHero from "./HomeHero";
 
 export const metadata: Metadata = {
@@ -37,17 +36,18 @@ export default async function PublicHomePage() {
       settings={bundle?.settings}
       urgentAnnouncement={null}
     >
-      <HomeHero bundle={bundle} />
-      <div className="public-home-deferred-region">
-        <Suspense fallback={<DeferredHomeFallback />}>
-          <DeferredHomeContent
-            bundle={bundle}
-            urgentAnnouncement={urgentAnnouncement}
-            openSurveys={openSurveys}
-          />
-        </Suspense>
+      <div className="public-home">
+        <HomeHero bundle={bundle} />
+        <div className="public-home-deferred-region">
+          <Suspense fallback={<DeferredHomeFallback />}>
+            <DeferredHomeContent
+              bundle={bundle}
+              urgentAnnouncement={urgentAnnouncement}
+              openSurveys={openSurveys}
+            />
+          </Suspense>
+        </div>
       </div>
-      <HomeEntrySection bundle={bundle} />
     </PublicSiteShell>
   );
 }

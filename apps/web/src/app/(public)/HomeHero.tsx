@@ -1,12 +1,10 @@
 import { headers } from "next/headers";
 import Link from "next/link";
-import Image from "next/image";
-import { ArrowDown, ArrowRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
-import PublicEmblem from "@/components/site/PublicEmblem";
+import ActivityImage from "@/components/gallery/ActivityImage";
 import { BRANDING } from "@/lib/branding";
-import { readActivityAlbums } from "@/lib/public-activity-albums";
-import { uploadUrl } from "@/lib/config";
+import { galleryDate, readActivityAlbums } from "@/lib/public-activity-albums";
 import { sanitizeCustomCss } from "@/lib/sanitize";
 import type { PublicSiteBundleOut } from "@/lib/types";
 
@@ -20,56 +18,36 @@ export default async function HomeHero({ bundle }: { bundle: PublicSiteBundleOut
   const nonce = (await headers()).get("x-nonce") ?? undefined;
   const settings = bundle?.settings;
   const configuredTitle = settings?.hero_title?.trim();
-  const title = configuredTitle && configuredTitle !== BRANDING.orgShortName && configuredTitle !== BRANDING.orgName
+  const title = configuredTitle && configuredTitle !== BRANDING.platformName && configuredTitle !== BRANDING.orgName
     ? configuredTitle
-    : BRANDING.platformName;
+    : BRANDING.orgShortName;
   const configuredSubtitle = settings?.hero_subtitle?.trim();
   const subtitle = configuredSubtitle && !LEGACY_SUBTITLES.has(configuredSubtitle)
     ? configuredSubtitle
-    : null;
+    : "最新消息、活動紀錄與學生自治資訊。";
   const activity = readActivityAlbums(settings ? settings.homepage_blocks : null).find((album) => album.photos.length > 0);
-  const photo = activity?.photos[0];
+  const photos = activity ? [...activity.photos.filter((photo) => photo.featured), ...activity.photos.filter((photo) => !photo.featured)] : [];
 
   return (
     <>
       {settings?.custom_css && (
         <style nonce={nonce} dangerouslySetInnerHTML={{ __html: sanitizeCustomCss(settings.custom_css) }} />
       )}
-      <section className={`public-hero public-home-hero${photo ? " has-activity-photo" : ""}`} aria-labelledby="campus-title">
+      <section className="public-home-hero" aria-labelledby="campus-title">
         <div className="campus-masthead">
           <div className="campus-masthead-copy">
-            <h1 id="campus-title">{title === BRANDING.platformName ? <>
-              <span>{BRANDING.orgShortName}</span><span className="campus-title-system">{BRANDING.platformName.slice(BRANDING.orgShortName.length)}</span>
-            </> : title}</h1>
+            <h1 id="campus-title">{title}</h1>
             {subtitle && <p>{subtitle}</p>}
-            <div className="campus-masthead-actions">
-              <Link href="#campus-news-title" className="public-cta-primary">
-                最新消息 <ArrowDown size={17} aria-hidden />
-              </Link>
-              <Link href="/petitions/public" className="public-cta-secondary">
-                公開陳情 <ArrowRight size={17} aria-hidden />
-              </Link>
-            </div>
           </div>
-          <div className="campus-masthead-visual">
-            {activity && photo && (
+            {activity && photos.length > 0 && (
               <Link href={"/gallery/" + activity.id} className="campus-hero-activity" aria-label={activity.title + "活動成果"}>
-                <Image src={uploadUrl(photo.src)} alt={photo.alt} width={photo.width} height={photo.height}
-                  sizes="(max-width: 767px) 100vw, (max-width: 1152px) 50vw, 560px" preload />
+                <ActivityImage photos={photos} sizes="(max-width: 1240px) 100vw, 1200px" preload />
                 <span className="campus-hero-activity-caption">
-                  <strong>{activity.title}</strong><span>活動成果<ArrowRight size={17} aria-hidden /></span>
+                  <span className="campus-event-heading"><span className="campus-event-meta">最新活動{activity.date && <> / <time dateTime={activity.date}>{galleryDate(activity.date)}</time></>}</span><strong>{activity.title}</strong></span>
+                  <span className="campus-event-link">活動紀錄<ArrowRight size={20} aria-hidden /></span>
                 </span>
               </Link>
             )}
-            <div className="campus-masthead-emblem" aria-hidden="true">
-              <PublicEmblem
-                src={settings?.site_logo_url?.trim() || BRANDING.publicEmblemUrl}
-                alt=""
-                sizes={photo ? "80px" : "(max-width: 639px) 80px, 144px"}
-                priority
-              />
-            </div>
-          </div>
         </div>
       </section>
     </>

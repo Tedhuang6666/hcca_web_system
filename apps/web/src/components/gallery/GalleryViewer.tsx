@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import ActivityImage from "./ActivityImage";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { ChevronLeft, ChevronRight, Download, Share2, X } from "lucide-react";
 import { uploadUrl } from "@/lib/config";
@@ -147,8 +147,8 @@ export default function GalleryViewer({ items, initialIndex, origin, onClose }: 
         {items.length > 1 && <button className="gallery-viewer-prev" type="button" aria-label="上一張照片" onClick={() => change(-1)}><ChevronLeft size={28} /></button>}
         <div className="gallery-viewer-image-frame" key={item.id}
           style={{ "--photo-ratio": item.width / item.height } as CSSProperties}>
-          <Image ref={imageRef} src={uploadUrl(item.src)} alt={item.alt || item.caption || item.albumTitle}
-            fill sizes="100vw" loading="eager" onError={() => setImageFailed(true)} />
+          <ActivityImage imageRef={imageRef} photos={[{ ...item, alt: item.alt || item.caption || item.albumTitle }]}
+            fill sizes="100vw" preload onUnavailable={() => setImageFailed(true)} />
         </div>
         {items.length > 1 && <button className="gallery-viewer-next" type="button" aria-label="下一張照片" onClick={() => change(1)}><ChevronRight size={28} /></button>}
       </div>

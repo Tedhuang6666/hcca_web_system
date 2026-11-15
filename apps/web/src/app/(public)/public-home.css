@@ -1,67 +1,38 @@
-/* 首頁以內容排序建立節奏，與商品、文章詳情共用品牌 tokens。 */
-.campus-masthead,
-.campus-content,
-.campus-services,
-.public-home-loading {
-  width: min(100%, var(--public-content-max, 72rem));
+/* 首頁：校園近況先於系統介紹；真實照片負責色彩與情緒。 */
+.public-home {
+  --public-bg: #101115;
+  --public-text: #f2f2f0;
+  --public-secondary: #a3a3a3;
+  --public-muted: #a3a3a3;
+  --public-border: rgb(255 255 255 / 10%);
+  --public-soft: #1c1d22;
+  --public-accent-text: #dcc184;
+  --public-content-max: 1232px;
+  background: var(--public-bg);
+  color: var(--public-text);
+  padding-bottom: 4rem;
+}
+.public-home ::selection { background: #dcc184; color: #101115; }
+.public-home :is(a, button):focus-visible { outline: 2px solid #dcc184; outline-offset: 5px; }
+.campus-masthead, .campus-content, .public-home-loading {
+  width: min(100%, var(--public-content-max));
   margin-inline: auto;
   padding-inline: var(--public-gutter, 1rem);
 }
-
-.public-home-hero {
-  background: color-mix(in srgb, var(--public-accent-soft) 56%, var(--public-bg));
-  border-bottom: 1px solid var(--public-border);
-}
-
-.campus-masthead {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: clamp(1rem, 3vw, 2rem);
-  padding-block: clamp(2.5rem, 5.5vw, 4.5rem);
-}
-
-.campus-masthead-copy { display: grid; min-width: 0; justify-items: start; gap: 1.5rem; }
-.campus-masthead-emblem { width: clamp(5rem, 10vw, 9rem); }
-.campus-masthead-emblem :is(picture, img) { display: block; width: 100%; height: auto; }
-
-.campus-masthead h1 {
-  margin: 0;
-  color: var(--public-text);
-  font-size: clamp(2.25rem, 5.5vw, 4rem);
-  font-weight: 700;
-  line-height: 1.3;
-  letter-spacing: -0.025em;
-  text-wrap: balance;
-}
-
-.campus-masthead p {
-  max-width: 38rem;
-  margin: 0;
-  color: var(--public-secondary);
-  font-size: 1rem;
-  line-height: 1.8;
-}
-
-.campus-masthead-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; }
-.public-home-hero .campus-masthead-actions :is(.public-cta-primary, .public-cta-secondary) {
-  width: auto;
-  min-width: 0;
-  min-height: 46px;
-  flex: 0 1 auto;
-}
-.campus-content { display: grid; gap: clamp(2.5rem, 5vw, 4rem); padding-top: clamp(2.5rem, 4vw, 3.5rem); }
-
-.campus-masthead-visual { position: relative; min-width: 0; }
-.has-activity-photo .campus-masthead { grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: clamp(1.5rem, 4vw, 3.5rem); }
-.has-activity-photo .campus-masthead h1 { font-size: clamp(2rem, 4vw, 3.25rem); }
-.has-activity-photo .campus-title-system { display: block; }
-.campus-hero-activity { display: block; color: var(--public-text); text-decoration: none; border-radius: 8px; }
-.campus-hero-activity > img { display: block; width: 100%; height: auto; border-radius: 8px; }
-.campus-hero-activity-caption { display: flex; justify-content: space-between; align-items: center; gap: 1rem; min-height: 44px; padding-top: 0.5rem; font-size: 0.875rem; }
-.campus-hero-activity-caption > span { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--public-secondary); }
-.campus-hero-activity:hover .campus-hero-activity-caption { color: var(--public-accent-text); text-decoration: underline; text-underline-offset: 0.25em; }
-.has-activity-photo .campus-masthead-emblem { position: absolute; top: 0.75rem; right: 0.75rem; width: 80px; padding: 0.5rem; border-radius: 50%; background: var(--public-bg); pointer-events: none; }
+.campus-masthead { padding-top: clamp(1.75rem, 4vw, 3rem); }
+.campus-masthead-copy { display: flex; align-items: end; justify-content: space-between; gap: 1rem 2rem; padding-bottom: 1.75rem; }
+.campus-masthead h1 { margin: 0; color: var(--public-text); font-size: clamp(2rem, 3.6vw, 3rem); font-weight: 700; line-height: 1.3; letter-spacing: -0.025em; }
+.campus-masthead p { margin: 0 0 0.2rem; color: var(--public-secondary); font-size: 0.9375rem; line-height: 1.8; }
+.campus-hero-activity { display: block; color: inherit; text-decoration: none; }
+.campus-hero-activity > img { display: block; width: 100%; height: auto; max-height: 640px; object-fit: cover; object-position: center 48%; border-radius: 4px; }
+.campus-hero-activity-caption { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding-block: 1.25rem 0; }
+.campus-event-heading { display: grid; gap: 0.4rem; }
+.campus-event-meta { color: var(--public-muted); font-size: 0.75rem; font-variant-numeric: tabular-nums; }
+.campus-event-heading strong { color: var(--public-text); font-size: clamp(1.375rem, 2.5vw, 1.875rem); font-weight: 600; }
+.campus-event-link { display: inline-flex; align-items: center; gap: 1rem; min-height: 44px; color: var(--public-secondary); font-size: 0.875rem; }
+.campus-hero-activity:hover .campus-event-link { color: var(--public-accent-text); }
+.campus-content { display: grid; grid-template-columns: minmax(0, 2fr) minmax(14rem, 1fr); gap: 3.5rem 4rem; padding-top: 3.5rem; }
+.campus-stories, .campus-shop { grid-column: 1 / -1; }
 
 .campus-section-heading {
   display: flex;
@@ -153,9 +124,9 @@
 .campus-product-price { font-size: 0.9375rem; font-variant-numeric: tabular-nums; }
 .campus-product:hover strong { color: var(--public-accent-text); text-decoration: underline; text-underline-offset: 0.25em; }
 
-.campus-services { display: grid; grid-template-columns: minmax(10rem, 0.7fr) minmax(0, 2fr); gap: 1rem 3rem; padding-block: clamp(2.5rem, 5vw, 4rem); }
-.campus-services h2 { padding-top: 1rem; }
-.campus-services nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 2rem; border-top: 1px solid var(--public-border); }
+.campus-services { min-width: 0; }
+.campus-services h2 { margin: 0; padding-bottom: 1rem; border-bottom: 1px solid var(--public-border); }
+.campus-services nav { display: grid; grid-template-columns: 1fr; }
 .campus-services a { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 64px; padding-block: 1rem; border-bottom: 1px solid var(--public-border); color: var(--public-text); font-weight: 600; text-decoration: none; }
 .campus-services a:hover { color: var(--public-accent-text); }
 .public-home-loading { min-height: 20rem; padding-block: 2rem; color: var(--public-muted); }
@@ -169,17 +140,19 @@
 }
 
 @media (max-width: 767px) {
-  .has-activity-photo .campus-masthead { grid-template-columns: 1fr; }
+  .campus-masthead-copy { display: block; padding-bottom: 1.25rem; }
+  .campus-masthead p { margin-top: 0.65rem; }
+  .campus-hero-activity > img { max-height: none; }
+  .campus-content { grid-template-columns: 1fr; gap: 3rem; padding-top: 3rem; }
+  .campus-services nav { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 1.25rem; }
   .campus-news-layout:has(> aside:not(:empty)) { grid-template-columns: 1fr; }
   .campus-news-content.has-news-list { grid-template-columns: 1fr; gap: 1.5rem; }
   .campus-stories-layout { column-gap: 1.5rem; }
-  .campus-services { grid-template-columns: 1fr; gap: 1rem; }
+
 }
 
 @media (max-width: 639px) {
-  .campus-masthead h1 { font-size: clamp(1.5rem, 7.5vw, 2rem); }
-  .campus-masthead-emblem { align-self: start; }
-  .campus-title-system { display: block; }
+  .campus-masthead h1 { font-size: clamp(1.875rem, 8.5vw, 2.25rem); }
   .campus-masthead p { font-size: 0.9375rem; }
   .campus-news-list a { grid-template-columns: 2.75rem minmax(0, 1fr) auto; gap: 0.65rem; }
   .campus-stories-layout { grid-template-columns: 1fr; }
