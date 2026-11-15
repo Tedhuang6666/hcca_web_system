@@ -2,12 +2,12 @@
 
 import { useCallback, useState } from "react";
 import Image from "next/image";
-import { ExternalLink, Paperclip, ReceiptText } from "lucide-react";
+import { ChevronDown, ExternalLink, Paperclip, ReceiptText } from "lucide-react";
 
 import Modal from "@/components/ui/Modal";
 import { apiUrl } from "@/lib/config";
 import { PdfEvidenceViewer } from "./EvidencePreview";
-import type { PublicBudgetExecutionLine } from "./publicBudgetExecution";
+import { groupPublicBudgetLines, type PublicBudgetExecutionLine } from "./publicBudgetExecution";
 
 export type { PublicBudgetExecutionLine } from "./publicBudgetExecution";
 
@@ -42,80 +42,107 @@ function publicEvidenceUrl(url: string) {
 
 export default function PublicBudgetExecutionTable({
   lines,
+  showOperator = true,
 }: {
   lines: PublicBudgetExecutionLine[];
+  showOperator?: boolean;
 }) {
   const [selectedLine, setSelectedLine] = useState<PublicBudgetExecutionLine | null>(null);
   const closeDetails = useCallback(() => setSelectedLine(null), []);
+  const groups = groupPublicBudgetLines(lines);
 
   return (
     <>
-      <div className="public-finance__lines" role="region" aria-label="預算執行表，可左右捲動" tabIndex={0}>
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">項目／細項</th>
-              <th scope="col">數量</th>
-              <th scope="col">單價</th>
-              <th scope="col">預算金額</th>
-              <th scope="col">已支出</th>
-              <th scope="col">可用餘額</th>
-              <th scope="col">備註</th>
-              <th scope="col">收據</th>
-            </tr>
-          </thead>
-          <tbody>
-            {lines.map((line) => {
-              const ratio = line.allocated > 0
-                ? Math.round((line.spent / line.allocated) * 100)
-                : 0;
-              const hasOwnActivity = line.allocated > 0
-                || line.spent > 0
-                || line.expenses.length > 0;
-              const showDetails = !line.isGroup || hasOwnActivity;
-              return (
-                <tr
-                  key={line.id}
-                  className={`${line.isGroup ? "is-group" : ""} ${ratio > 100 ? "is-over-budget" : ""}`}
-                >
-                  <th scope="row" style={{ paddingLeft: `${0.85 + line.depth * 1.25}rem` }}>
-                    {showDetails ? (
-                      <button
-                        type="button"
-                        className="public-finance__line-trigger"
-                        aria-haspopup="dialog"
-                        aria-label={`查看「${line.name}」的支出紀錄與憑證`}
-                        onClick={() => {
-                          setSelectedLine(line);
-                        }}
+      <div className="public-finance__activities">
+        {groups.map((group) => (
+          <details className="public-finance__activity" key={group.id} open={groups.length === 1 || group.spent > group.allocated}>
+            <summary>
+              <div className="public-finance__activity-name">
+                <h3>{group.name}</h3>
+                <span>{group.lines.length} 項</span>
+              </div>
+              <dl>
+                <div><dt>支出預算</dt><dd>{formatAmount(group.allocated)}</dd></div>
+                <div><dt>已支出</dt><dd className={group.spent > group.allocated ? "is-over-budget" : ""}>{formatAmount(group.spent)}</dd></div>
+              </dl>
+              <ChevronDown size={18} aria-hidden="true" />
+              {group.allocated > 0 && <meter min={0} max={group.allocated} value={Math.min(Math.max(group.spent, 0), group.allocated)} aria-label={`${group.name}預算執行率`} />}
+            </summary>
+            <div className="public-finance__lines" role="region" aria-label={`${group.name}收支預算明細`} tabIndex={0}>
+              <table>
+                <caption className="sr-only">{group.budgetName}：{group.name}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">項目／細項</th>
+                    <th scope="col" className="public-finance__secondary-column">數量</th>
+                    <th scope="col" className="public-finance__secondary-column">單價</th>
+                    <th scope="col">預算金額</th>
+                    <th scope="col">支出／實收</th>
+                    <th scope="col" className="public-finance__secondary-column">尚可動支預算</th>
+                    <th scope="col" className="public-finance__secondary-column">備註</th>
+                    <th scope="col">憑證</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {group.lines.map((line) => {
+                    const overBudget = !line.income && line.spent > line.allocated;
+                    const hasOwnActivity = line.allocated > 0
+                      || line.spent > 0
+                      || line.expenses.length > 0;
+                    const showDetails = !line.isGroup || hasOwnActivity;
+                    const quantity = line.allocations?.map((allocation) => allocation.quantity == null ? "—" : `${allocation.quantity}${allocation.unit || ""}`).join("、") || "—";
+                    const unitPrice = line.allocations?.map((allocation) => allocation.unit_price == null ? "—" : formatAmount(allocation.unit_price)).join("、") || "—";
+                    const note = line.allocations?.map((allocation) => allocation.note).filter(Boolean).join("；");
+                    const evidenceCount = line.expenses.reduce((sum, expense) => sum + expense.evidence.length, 0);
+                    return (
+                      <tr
+                        key={line.id}
+                        className={`${line.isGroup ? "is-group" : ""} ${line.income ? "is-income-row" : ""} ${overBudget ? "is-over-budget" : ""}`}
                       >
-                        <strong>{line.name}</strong>
-                        <ReceiptText size={15} aria-hidden="true" />
-                      </button>
-                    ) : (
-                      <strong>{line.name}</strong>
-                    )}
-                    {line.isBudgetStart && <small>{line.budgetName}</small>}
-                  </th>
-                  <td>{line.allocations?.map((allocation) => allocation.quantity == null ? "—" : `${allocation.quantity}${allocation.unit || ""}`).join("、") || "—"}</td>
-                  <td>{line.allocations?.map((allocation) => allocation.unit_price == null ? "—" : formatAmount(allocation.unit_price)).join("、") || "—"}</td>
-                  <td>{showDetails ? formatAmount(line.allocated) : "—"}</td>
-                  <td className="is-expense">{showDetails ? formatAmount(line.spent) : "—"}</td>
-                  <td>{showDetails ? formatAmount(line.remaining) : "—"}</td>
-                  <td className="public-finance__workbook-note">{line.allocations?.map((allocation) => allocation.note).filter(Boolean).join("；") || "—"}</td>
-                  <td>{line.expenses.length > 0 ? <button className="public-finance__line-trigger" type="button" aria-haspopup="dialog" aria-label={`查看收據：${line.name}`} onClick={() => setSelectedLine(line)}>{line.expenses.reduce((sum, expense) => sum + expense.evidence.length, 0)} 份</button> : "—"}</td>
-                </tr>
-              );
-            })}
-            {lines.length === 0 && (
-              <tr>
-                <td className="public-finance__empty-line" colSpan={8}>
-                  這個期間尚未公開預算明細。
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+                        <th scope="row" style={{ paddingLeft: `${0.85 + Math.max(0, line.depth - 1) * 1.25}rem` }}>
+                          {showDetails && !line.income ? (
+                            <button
+                              type="button"
+                              className="public-finance__line-trigger"
+                              aria-haspopup="dialog"
+                              aria-label={`查看「${line.name}」的支出紀錄與憑證`}
+                              onClick={() => {
+                                setSelectedLine(line);
+                              }}
+                            >
+                              <strong>{line.name}</strong>
+                              <ReceiptText size={15} aria-hidden="true" />
+                            </button>
+                          ) : (
+                            <strong>{line.name}</strong>
+                          )}
+                          <small className="public-finance__line-kind">{line.income ? (line.historical ? "收入 · 歷史收款" : "收入") : (overBudget ? `支出 · 超出預算 ${formatAmount(line.spent - line.allocated)}` : "支出")}</small>
+                          {showDetails && <details className="public-finance__mobile-details">
+                            <summary>編列明細</summary>
+                            <dl>
+                              <div><dt>數量</dt><dd>{quantity}</dd></div>
+                              <div><dt>單價</dt><dd>{unitPrice}</dd></div>
+                              {!line.income && <div><dt>尚可動支預算</dt><dd>{formatAmount(line.remaining)}</dd></div>}
+                            </dl>
+                            {note && <p>{note}</p>}
+                          </details>}
+                        </th>
+                        <td className="public-finance__secondary-column">{quantity}</td>
+                        <td className="public-finance__secondary-column">{unitPrice}</td>
+                        <td data-label="預算金額">{showDetails && !line.historical ? formatAmount(line.allocated) : "—"}</td>
+                        <td data-label={line.income ? "實收" : "已支出"} className={line.income ? "is-income" : "is-expense"}>{showDetails ? formatAmount(line.spent) : "—"}</td>
+                        <td className="public-finance__secondary-column">{showDetails && !line.income ? formatAmount(line.remaining) : "—"}</td>
+                        <td className="public-finance__workbook-note public-finance__secondary-column">{note ? <details><summary>查看備註</summary><p>{note}</p></details> : "—"}</td>
+                        <td className="public-finance__line-evidence">{line.income || !showDetails ? "—" : evidenceCount > 0 ? <button className="public-finance__line-trigger" type="button" aria-haspopup="dialog" aria-label={`查看收據：${line.name}`} onClick={() => setSelectedLine(line)}>憑證 {evidenceCount} 份</button> : <span>尚無公開憑證</span>}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </details>
+        ))}
+        {groups.length === 0 && <p className="public-finance__empty-line">這個期間尚未公開預算明細。</p>}
       </div>
 
       {selectedLine && (
@@ -148,10 +175,10 @@ export default function PublicBudgetExecutionTable({
                         <dt>登錄時間</dt>
                         <dd><time dateTime={expense.created_at}>{formatDateTime(expense.created_at)}</time></dd>
                       </div>
-                      <div>
+                      {showOperator && <div>
                         <dt>操作人</dt>
                         <dd>{expense.operator_name}</dd>
-                      </div>
+                      </div>}
                     </dl>
                     {expense.items.length > 0 && (
                       <ul aria-label={`${expense.purpose} 購買品項`}>

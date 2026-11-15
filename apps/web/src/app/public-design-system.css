@@ -776,9 +776,10 @@
 .public-index-empty { padding-block: 2rem; color: var(--public-muted); }
 .public-directory-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 3rem; border-top: 1px solid var(--public-border); }
 .public-directory-link { display: flex; justify-content: space-between; align-items: center; gap: 1rem; min-height: 100px; padding-block: 1.5rem; border-bottom: 1px solid var(--public-border); color: var(--public-text); text-decoration: none; }
-.public-directory-link h3 { font-size: 1.2rem; font-weight: 600; }
+.public-directory-link h2 { font-size: 1.2rem; font-weight: 600; }
 .public-directory-link p { margin-top: 0.4rem; color: var(--public-secondary); font-size: 0.875rem; line-height: 1.7; }
-.public-directory-link:hover h3 { color: var(--public-accent-text); }
+.public-directory-link:hover h2 { color: var(--public-accent-text); }
+.public-directory-link:focus-visible { outline: 2px solid var(--public-accent-text); outline-offset: 4px; }
 .regulation-query-tools { border-block: 1px solid var(--border); padding-block: 1rem; }
 .regulation-result-list { display: block; border-top: 1px solid var(--border); }
 .regulation-result-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 1rem; min-width: 0; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; padding-block: 1.25rem; background: transparent; box-shadow: none; animation: none; }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { PublicBudgetDetail, PublicBudgetListItem } from "@/lib/types";
-import { budgetExecutionLines } from "./publicBudgetExecution";
+import { budgetExecutionLines, groupPublicBudgetLines, publicBudgetWorkbookLines } from "./publicBudgetExecution";
 
 const budget: PublicBudgetDetail = {
   id: "budget-1",
@@ -90,5 +90,61 @@ describe("budgetExecutionLines", () => {
       spent: 0,
       expenses: [{ id: "expense-1", total_amount: 284 }],
     });
+  });
+});
+
+describe("public workbook", () => {
+  const incomeItem = {
+    id: "tickets", category: "聯合舞會", name: "預售票", income: true,
+    amount: 100_000, quantity: 800, unit: "張", unit_price: 250,
+    note: "兩校分帳", is_new: false,
+  };
+
+  it("retains explicitly budgeted zero-value items", () => {
+    const lines = publicBudgetWorkbookLines({
+      ...budget,
+      nodes: [...budget.nodes, { id: "zero", budget_id: budget.id, parent_id: "dance", name: "備用物資", sort_order: 2, allocated_amount: 0, used_amount: 0, remaining_amount: 0 }],
+      allocations: [{ id: "zero-allocation", node_id: "zero", amount: 0 }],
+    }, summary);
+    expect(lines.find((line) => line.name === "備用物資")).toMatchObject({ allocated: 0 });
+  });
+
+  it("keeps income with its activity without adding it to spending totals", () => {
+    const lines = publicBudgetWorkbookLines({
+      ...budget,
+      income_items: [incomeItem],
+      income_records: [{ id: "receipt", entry_date: "2026-11-01", category: "聯合舞會", name: "預售票", amount: 400 }],
+    }, summary);
+    const groups = groupPublicBudgetLines(lines);
+    const dance = groups.find((group) => group.name === "聯合舞會");
+
+    expect(groups).toHaveLength(2);
+    expect(dance).toMatchObject({ allocated: 160_000, spent: 284 });
+    expect(dance?.lines.find((line) => line.income)).toMatchObject({
+      name: "預售票", allocated: 100_000, spent: 400,
+      allocations: [{ quantity: 800, unit_price: 250, note: "兩校分帳" }],
+    });
+  });
+
+  it("keeps historical receipts and income-only categories visible after a revision", () => {
+    const lines = publicBudgetWorkbookLines({
+      ...budget,
+      income_records: [
+        { id: "receipt-1", entry_date: "2026-11-01", category: "迎新", name: "報名費", amount: 400 },
+        { id: "receipt-2", entry_date: "2026-11-02", category: "迎新", name: "報名費", amount: 100 },
+      ],
+    }, summary);
+    const group = groupPublicBudgetLines(lines).find((item) => item.name === "迎新");
+
+    expect(group).toMatchObject({ allocated: 0, spent: 0 });
+    expect(group?.lines).toMatchObject([{ name: "報名費", income: true, historical: true, spent: 500 }]);
+  });
+
+  it("keeps identically named activities in different budgets separate", () => {
+    const groups = groupPublicBudgetLines([
+      ...publicBudgetWorkbookLines(budget, summary),
+      ...publicBudgetWorkbookLines(budget, { ...summary, id: "budget-2" }),
+    ]);
+    expect(groups.filter((group) => group.name === "聯合舞會")).toHaveLength(2);
   });
 });

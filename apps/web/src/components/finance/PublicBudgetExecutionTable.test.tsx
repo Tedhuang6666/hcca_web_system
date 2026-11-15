@@ -96,7 +96,7 @@ describe("PublicBudgetExecutionTable", () => {
   it("keeps a parent budget row's own spending visible and opens its records", async () => {
     render(<PublicBudgetExecutionTable lines={[{ ...line, isGroup: true }]} />);
 
-    expect(screen.getAllByText("NT$756")).toHaveLength(2);
+    expect(screen.getAllByText("NT$756").length).toBeGreaterThanOrEqual(2);
     fireEvent.click(screen.getByRole("button", {
       name: "查看「網域費用（續約）」的支出紀錄與憑證",
     }));
@@ -105,5 +105,34 @@ describe("PublicBudgetExecutionTable", () => {
       name: "網域費用（續約）｜支出紀錄",
     })).toBeVisible();
     expect(screen.getByText("網域續約一年")).toBeVisible();
+  });
+
+  it("shows unavailable evidence as text while keeping expense records accessible", () => {
+    render(<PublicBudgetExecutionTable lines={[{
+      ...line, expenses: [{ ...line.expenses[0], evidence: [] }],
+    }]} />);
+    expect(screen.getByText("尚無公開憑證")).toBeVisible();
+    expect(screen.queryByRole("button", { name: `查看收據：${line.name}` })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: `查看「${line.name}」的支出紀錄與憑證` })).toBeEnabled();
+  });
+
+  it("preserves the detail page's choice to omit the operator", async () => {
+    render(<PublicBudgetExecutionTable lines={[line]} showOperator={false} />);
+    fireEvent.click(screen.getByRole("button", { name: `查看「${line.name}」的支出紀錄與憑證` }));
+    expect(await screen.findByRole("dialog")).toBeVisible();
+    expect(screen.queryByText("操作人")).not.toBeInTheDocument();
+    expect(screen.queryByText("王小明")).not.toBeInTheDocument();
+  });
+
+  it("labels income by actual receipts without inventing an outstanding payment", () => {
+    render(<PublicBudgetExecutionTable lines={[
+      line,
+      { ...line, id: "income", name: "票券收入", income: true, allocated: 1000, spent: 400, expenses: [] },
+    ]} />);
+    expect(screen.getByText("票券收入")).toBeVisible();
+    expect(screen.getByText("收入")).toBeVisible();
+    expect(screen.getByText("NT$400")).toBeVisible();
+    expect(screen.queryByText("尚未收款")).not.toBeInTheDocument();
+    expect(screen.queryByText("NT$600")).not.toBeInTheDocument();
   });
 });

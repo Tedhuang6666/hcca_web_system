@@ -126,8 +126,9 @@ describe("editing from a budget row", () => {
 it("shows workbook quantities, unit prices, budget notes and receipt counts publicly", () => {
   const publicBudget = { id: "budget", name: "預算", period_name: "上學期", visibility: "approved" as const, submissions: [], nodes: detail.nodes, allocations: [{ id: "paper", node_id: "paper-node", amount: 500, quantity: 5, unit: "包", unit_price: 100, note: "依實際張數" }], expenses: [{ ...expense, operator_name: "測試人員" }] };
   render(<PublicBudgetExecutionTable lines={budgetExecutionLines(publicBudget, publicBudget)} />);
-  expect(screen.getByText("5包")).toBeVisible();
-  expect(screen.getByText("NT$100")).toBeVisible();
-  expect(screen.getByText("依實際張數")).toBeVisible();
+  expect(screen.getAllByText("5包").length).toBeGreaterThan(0);
+  expect(screen.getAllByText("NT$100").length).toBeGreaterThan(0);
+  fireEvent.click(screen.getByText("查看備註"));
+  expect(screen.getAllByText("依實際張數").some((element) => element.closest("details")?.open)).toBe(true);
   expect(screen.getByRole("button", { name: "查看收據：影印紙" })).toHaveTextContent("1 份");
 });

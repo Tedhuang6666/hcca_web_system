@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Check, CircleAlert, FileText, Paperclip, ReceiptText, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Check, CircleAlert, FileText, ShieldCheck } from "lucide-react";
 
 import { fetchPublicBudget } from "@/lib/publicSeoFetch";
 import { pageMetadata } from "@/lib/seo";
-import EvidencePreview from "@/components/finance/EvidencePreview";
-import PublicBudgetIncomeTable from "@/components/finance/PublicBudgetIncomeTable";
-import { orderBudgetNodes } from "@/components/finance/publicBudgetExecution";
+import PublicBudgetExecutionTable from "@/components/finance/PublicBudgetExecutionTable";
+import { publicBudgetWorkbookLines } from "@/components/finance/publicBudgetExecution";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -45,56 +44,7 @@ export default async function PublicBudgetDetailPage({ params, searchParams }: P
   if (!budget) notFound();
   const isCouncilReview = budget.visibility === "council_review";
 
-  const nodes = new Map(budget.nodes.map((node) => [node.id, node]));
-  const nodeOrder = new Map(orderBudgetNodes(budget.nodes).map(({ node }, index) => (
-    [node.id, index]
-  )));
-  const pathFor = (nodeId: string) => {
-    const path: (typeof budget.nodes)[number][] = [];
-    let current = nodes.get(nodeId);
-    const seen = new Set<string>();
-    while (current && !seen.has(current.id)) {
-      seen.add(current.id);
-      path.unshift(current);
-      current = current.parent_id ? nodes.get(current.parent_id) : undefined;
-    }
-    return path;
-  };
-  const groupedAllocations = budget.allocations.reduce((result, allocation) => {
-    const path = pathFor(allocation.node_id);
-    const groupNode = path[0];
-    const groupId = groupNode?.id || allocation.node_id;
-    const group = result.get(groupId) || {
-      id: groupId,
-      name: groupNode?.name || "未分類",
-      total: 0,
-      rows: [] as Array<{ allocation: typeof allocation; detail: string }>,
-    };
-    group.total += allocation.amount;
-    group.rows.push({
-      allocation,
-      detail: path.slice(1).map((item) => item.name).join(" ＞ ") || group.name,
-    });
-    result.set(groupId, group);
-    return result;
-  }, new Map<string, {
-    id: string;
-    name: string;
-    total: number;
-    rows: Array<{ allocation: (typeof budget.allocations)[number]; detail: string }>;
-  }>());
-  const groups = Array.from(groupedAllocations.values())
-    .map((group) => ({
-      ...group,
-      rows: group.rows.sort((left, right) => (
-        (nodeOrder.get(left.allocation.node_id) ?? Number.MAX_SAFE_INTEGER)
-        - (nodeOrder.get(right.allocation.node_id) ?? Number.MAX_SAFE_INTEGER)
-      )),
-    }))
-    .sort((left, right) => (
-      (nodeOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER)
-      - (nodeOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER)
-    ));
+  const lines = publicBudgetWorkbookLines(budget, budget);
   const total = budget.allocations.reduce((sum, allocation) => sum + allocation.amount, 0);
   const councilApprovedOn = budget.submissions.at(-1)?.council_approved_on;
 
@@ -122,49 +72,8 @@ export default async function PublicBudgetDetailPage({ params, searchParams }: P
 
       <section className="public-budget-detail__section" aria-labelledby="public-budget-lines-heading">
         <header><div><FileText size={18} aria-hidden="true" /><div><h2 id="public-budget-lines-heading">{isCouncilReview ? "本次送審明細" : "核准編列明細"}</h2><p>{isCouncilReview ? "金額只對應本次開放審理的草案。" : "金額依核准預算案的末層條目彙整。"}</p></div></div><span>{budget.allocations.length} 筆</span></header>
-        <div className="public-budget-detail__table"><table><thead><tr><th>項目</th><th>細項</th><th>數量</th><th>單價</th><th>總額（含稅）</th><th>項目總額</th><th>備註</th></tr></thead>
-          <tbody>
-            {groups.flatMap((group) => group.rows.map(({ allocation, detail }, rowIndex) => <tr key={allocation.id}>
-              {rowIndex === 0 && <th scope="rowgroup" rowSpan={group.rows.length}>{group.name}</th>}
-              <td><strong>{detail}</strong></td>
-              <td>{allocation.quantity ?? "—"}{allocation.unit || ""}</td>
-              <td>{allocation.unit_price ? formatAmount(allocation.unit_price) : "＊"}</td>
-              <td><strong>{formatAmount(allocation.amount)}</strong></td>
-              {rowIndex === 0 && <td rowSpan={group.rows.length} className="public-budget-detail__group-total"><strong>{formatAmount(group.total)}</strong></td>}
-              <td>{allocation.note || "—"}</td>
-            </tr>))}
-          </tbody></table></div>
-        <div className="public-budget-detail__cards">{groups.map((group) => <section key={group.id}><header><h3>{group.name}</h3><span>項目總額<strong>{formatAmount(group.total)}</strong></span></header>{group.rows.map(({ allocation, detail }) => <article key={allocation.id}><div><h4>{detail}</h4><strong>{formatAmount(allocation.amount)}</strong></div><dl><div><dt>數量</dt><dd>{allocation.quantity ?? "—"}{allocation.unit || ""}</dd></div><div><dt>單價</dt><dd>{allocation.unit_price ? formatAmount(allocation.unit_price) : "＊"}</dd></div></dl>{allocation.note && <p>{allocation.note}</p>}</article>)}</section>)}</div>
+        <PublicBudgetExecutionTable lines={lines} showOperator={false} />
       </section>
-
-      {!isCouncilReview && <section className="public-budget-detail__expenses" aria-labelledby="public-budget-expenses-heading">
-        <header>
-          <div><ReceiptText size={18} aria-hidden="true" /><div><h2 id="public-budget-expenses-heading">支出與憑證</h2><p>此核准預算的支出明細與附件憑證。</p></div></div>
-          <span>{budget.expenses.length} 筆支出</span>
-        </header>
-        {budget.expenses.length > 0 ? <div className="public-budget-detail__expense-list">
-          {budget.expenses.map((expense) => (
-            <article key={expense.id}>
-              <div className="public-budget-detail__expense-heading">
-                <div><time dateTime={expense.entry_date}>{expense.entry_date.replaceAll("-", "/")}</time><h3>{expense.purpose}</h3><p>{expense.allocation_name}</p></div>
-                <strong>{formatAmount(expense.total_amount)}</strong>
-              </div>
-              {expense.items.length > 0 && <ul aria-label={`${expense.purpose} 購買品項`}>
-                {expense.items.map((item) => <li key={item.id}>
-                  <span><strong>{item.name}</strong><small>{item.quantity} {item.unit} × {formatAmount(item.unit_price)}</small></span>
-                  <b>{formatAmount(item.amount)}</b>
-                </li>)}
-              </ul>}
-              {expense.evidence.length > 0 && <div className="public-budget-detail__expense-evidence" aria-label={`${expense.purpose} 憑證`}>
-                <span><Paperclip size={14} aria-hidden="true" />收據與憑證</span>
-                {expense.evidence.map((evidence) => <EvidencePreview key={evidence.id} url={evidence.url} filename={evidence.filename} />)}
-              </div>}
-            </article>
-          ))}
-        </div> : <p className="public-budget-detail__expenses-empty">目前尚未登錄支出。</p>}
-      </section>}
-
-      <PublicBudgetIncomeTable items={budget.income_items || []} records={budget.income_records || []} />
 
       {budget.submissions.length > 0 && <section className="public-budget-detail__approvals" aria-labelledby="public-budget-approvals-heading">
         <header><h2 id="public-budget-approvals-heading">{isCouncilReview ? "既有核准紀錄" : "核准紀錄"}</h2><p>初始預算與每一次追加案都會依審核時間保留。</p></header>

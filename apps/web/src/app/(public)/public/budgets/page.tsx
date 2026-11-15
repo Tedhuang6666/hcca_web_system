@@ -1,18 +1,16 @@
 import { Landmark } from "lucide-react";
 
 import PublicBudgetExecutionTable from "@/components/finance/PublicBudgetExecutionTable";
-import PublicBudgetIncomeTable from "@/components/finance/PublicBudgetIncomeTable";
-import { budgetExecutionLines } from "@/components/finance/publicBudgetExecution";
+import { publicBudgetWorkbookLines } from "@/components/finance/publicBudgetExecution";
 import {
   fetchPublicBudget,
   fetchPublicBudgets,
-  fetchPublicBudgetTotals,
 } from "@/lib/publicSeoFetch";
 import { pageMetadata } from "@/lib/seo";
 
 export const metadata = pageMetadata({
   title: "財務總覽",
-  description: "查看公開預算、執行金額、剩餘預算與近期支出紀錄。",
+  description: "查看各項活動編列的預算、實際支出與公開憑證。",
   path: "/public/budgets",
   type: "website",
 });
@@ -28,27 +26,22 @@ export default async function PublicBudgetsPage() {
   const approvedBudgets = budgets.filter((budget) => budget.visibility === "approved");
   const currentPeriod = approvedBudgets[0]?.period_name;
   const currentBudgets = approvedBudgets.filter((budget) => budget.period_name === currentPeriod);
-  const [budgetDetails, budgetTotals] = await Promise.all([
-    Promise.all(currentBudgets.map((budget) => fetchPublicBudget(budget.id))),
-    Promise.all(currentBudgets.map((budget) => fetchPublicBudgetTotals(budget.id))),
-  ]);
+  const budgetDetails = await Promise.all(currentBudgets.map((budget) => fetchPublicBudget(budget.id)));
   const executionLines = budgetDetails.flatMap((detail, index) => {
     const summary = currentBudgets[index];
-    return detail && summary ? budgetExecutionLines(detail, summary) : [];
+    return detail && summary ? publicBudgetWorkbookLines(detail, summary) : [];
   });
-  const budgetTotal = executionLines.reduce(
+  const expenseLines = executionLines.filter((line) => !line.income);
+  const budgetTotal = expenseLines.reduce(
     (total, line) => total + line.allocated,
     0,
   );
-  const spentTotal = executionLines.reduce(
+  const spentTotal = expenseLines.reduce(
     (total, line) => total + line.spent,
     0,
   );
-  const remainingTotal = budgetTotal - spentTotal;
-  const incomeTotal = budgetTotals.reduce((total, row) => total + (row?.income_total ?? 0), 0);
-  const expenseTotal = budgetTotals.reduce((total, row) => total + (row?.expense_total ?? 0), 0);
-  const executionLoadFailed = budgetDetails.some((detail) => detail === null)
-    || budgetTotals.some((totals) => totals === null);
+  const executionRate = budgetTotal > 0 ? spentTotal / budgetTotal * 100 : null;
+  const executionLoadFailed = budgetDetails.some((detail) => detail === null);
 
   return (
     <div className="public-budget-index public-finance">
@@ -79,32 +72,25 @@ export default async function PublicBudgetsPage() {
         <section className="public-finance__overview" aria-labelledby="public-finance-overview-heading">
           <header className="public-finance__section-heading">
             <div>
-              <span>{currentPeriod}</span>
-              <h2 id="public-finance-overview-heading">預算執行概況</h2>
+              <h2 id="public-finance-overview-heading">{currentPeriod}</h2>
             </div>
             <span>{currentBudgets.length} 份核准預算</span>
           </header>
           <div className="public-finance__totals">
             <article>
-              <span>核准預算</span>
+              <span>核准支出預算</span>
               <strong>{formatAmount(budgetTotal)}</strong>
             </article>
             <article>
               <span>已列帳支出</span>
               <strong>{formatAmount(spentTotal)}</strong>
             </article>
-            <article className={remainingTotal < 0 ? "is-over-budget" : ""}>
-              <span>{remainingTotal < 0 ? "超出預算" : "剩餘預算"}</span>
-              <strong>{formatAmount(Math.abs(remainingTotal))}</strong>
+            <article className={spentTotal > budgetTotal ? "is-over-budget" : ""}>
+              <span>預算執行率</span>
+              <strong>{executionRate === null ? "—" : `${executionRate.toFixed(1)}%`}</strong>
             </article>
           </div>
-          <div className="public-finance__cash-flow" aria-label="本期間收入與支出總額">
-            <span>本期收支總額</span>
-            <p className="is-income">收入<strong>{formatAmount(incomeTotal)}</strong></p>
-            <p className="is-expense">支出<strong>{formatAmount(expenseTotal)}</strong></p>
-          </div>
           <PublicBudgetExecutionTable lines={executionLines} />
-          {budgetDetails.map((detail) => detail && <PublicBudgetIncomeTable key={detail.id} items={detail.income_items || []} records={detail.income_records || []} />)}
         </section>
       ) : (
         <section className="public-budget-index__empty">
