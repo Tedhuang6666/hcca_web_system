@@ -3,9 +3,9 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { ArrowDown } from "lucide-react";
 
-const SCROLL_MEDIA = "(min-width: 1024px) and (min-height: 700px) and (prefers-reduced-motion: no-preference)";
+const SCROLL_MEDIA = "(min-height: 540px) and (prefers-reduced-motion: no-preference)";
 
-/** The server-rendered split layout remains usable when motion cannot initialize. */
+/** A complete static composition is rendered before optional scroll choreography. */
 export default function HomeHeroScene({ children }: { children: ReactNode }) {
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -30,29 +30,32 @@ export default function HomeHeroScene({ children }: { children: ReactNode }) {
             SCROLL_MEDIA,
             () => {
               if (root.querySelector(".activity-image-unavailable")) return;
+              const activity = root.querySelector<HTMLElement>(".campus-hero-activity");
+              if (!activity) return;
               root.dataset.motion = "scroll";
-              const copy = root.querySelector<HTMLElement>(".campus-masthead-copy");
-              const composition = root.querySelector<HTMLElement>(".campus-hero-composition");
-              if (copy && composition && copy.scrollHeight > composition.clientHeight) {
-                delete root.dataset.motion;
-                return;
-              }
               const timeline = gsap.timeline({
                 defaults: { ease: "none" },
                 scrollTrigger: {
                   trigger: root,
-                  start: "top top",
-                  end: "bottom bottom",
+                  start: "top top+=96",
+                  end: () => "+=" + Math.min(window.innerHeight * 0.38, 360),
                   scrub: true,
                   invalidateOnRefresh: true,
                 },
               });
               timeline
-                .to(".campus-masthead-copy", { opacity: 0, y: -32, duration: 0.3 }, 0)
-                .fromTo(".campus-hero-activity", { width: "54%", rotation: 4 },
-                  { width: "100%", rotation: 0, duration: 1 }, 0);
+                .fromTo(activity, { x: 40, y: 28, rotation: 4 },
+                  { x: 0, y: 0, rotation: 0, duration: 0.5 }, 0)
+                .fromTo(activity, { "--photo-bleed": 0 },
+                  { "--photo-bleed": 1, duration: 0.55 }, 0.25)
+                .fromTo(".campus-event-meta", { opacity: 0.8, y: 12 },
+                  { opacity: 1, y: 0, duration: 0.2 }, 0.6)
+                .fromTo(".campus-event-title", { opacity: 0.8, y: 12 },
+                  { opacity: 1, y: 0, duration: 0.2 }, 0.7)
+                .fromTo(".campus-event-link", { opacity: 0.8, y: 12 },
+                  { opacity: 1, y: 0, duration: 0.2 }, 0.8);
 
-              // A failed image must also restore the title and remove the scroll runway.
+              // Image failure restores the compact, readable static layout.
               const observer = new MutationObserver(() => {
                 if (root.querySelector(".activity-image-unavailable")) media.revert();
               });
@@ -84,8 +87,8 @@ export default function HomeHeroScene({ children }: { children: ReactNode }) {
     <div className="campus-masthead" ref={rootRef}>
       <div className="campus-hero-stage">
         <div className="campus-hero-composition">{children}</div>
-        <a className="campus-hero-next" href="#campus-news-title">
-          最新消息<ArrowDown size={18} aria-hidden />
+        <a className="campus-hero-next" href="#campus-news-title" aria-label="跳至最新消息">
+          <ArrowDown size={20} aria-hidden />
         </a>
       </div>
     </div>

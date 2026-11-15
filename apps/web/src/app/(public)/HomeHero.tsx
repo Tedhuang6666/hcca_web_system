@@ -25,9 +25,14 @@ export default async function HomeHero({ bundle }: { bundle: PublicSiteBundleOut
   const configuredSubtitle = settings?.hero_subtitle?.trim();
   const subtitle = configuredSubtitle && !LEGACY_SUBTITLES.has(configuredSubtitle)
     ? configuredSubtitle
-    : "最新消息、活動紀錄與學生自治資訊。";
+    : "學生自治 / 校園活動 / 公開資訊";
   const activity = readActivityAlbums(settings ? settings.homepage_blocks : null).find((album) => album.photos.length > 0);
   const photos = activity ? [...activity.photos.filter((photo) => photo.featured), ...activity.photos.filter((photo) => !photo.featured)] : [];
+  // The built-in album opens on the closer action shot; edited albums retain their order.
+  if (settings && settings.homepage_blocks?.activity_gallery === undefined) {
+    const actionIndex = photos.findIndex((photo) => photo.src === "/images/activities/welcome/team-games.webp");
+    if (actionIndex > 0) photos.unshift(...photos.splice(actionIndex, 1));
+  }
 
   return (
     <>
@@ -36,20 +41,24 @@ export default async function HomeHero({ bundle }: { bundle: PublicSiteBundleOut
       )}
       <section className="public-home-hero" aria-labelledby="campus-title">
         <HomeHeroScene>
+          <div className="campus-edition" aria-hidden="true">{BRANDING.acronym}</div>
           <div className="campus-masthead-copy">
             <h1 id="campus-title">{title === BRANDING.orgShortName
               ? <><span>新竹高中</span><span>班聯會</span></>
               : title}</h1>
-            {subtitle && <p>{subtitle}</p>}
+            {subtitle && <p>{subtitle === "學生自治 / 校園活動 / 公開資訊"
+              ? <><span>學生自治</span><span>校園活動</span><span>公開資訊</span></>
+              : subtitle}</p>}
           </div>
             {activity && photos.length > 0 && (
-              <Link href={"/gallery/" + activity.id} className="campus-hero-activity" aria-label={activity.title + "活動成果"}>
+              <Link href={"/gallery/" + activity.id} className="campus-hero-activity" aria-label={activity.title + "活動紀錄與攝影集"}>
                 <span className="campus-hero-photo">
-                  <ActivityImage photos={photos} sizes="(max-width: 767px) 100vw, (max-width: 1023px) 55vw, 1200px" preload />
+                  <ActivityImage photos={photos} sizes="100vw" preload />
                 </span>
                 <span className="campus-hero-activity-caption">
-                  <span className="campus-event-heading"><span className="campus-event-meta">最新活動{activity.date && <> / <time dateTime={activity.date}>{galleryDate(activity.date)}</time></>}</span><strong>{activity.title}</strong></span>
-                  <span className="campus-event-link">活動紀錄<ArrowRight size={20} aria-hidden /></span>
+                  <span className="campus-event-meta">{activity.date && <time dateTime={activity.date}>{galleryDate(activity.date)}</time>}</span>
+                  <strong className="campus-event-title">{activity.title}</strong>
+                  <span className="campus-event-link">活動紀錄 / 攝影集<ArrowRight size={20} aria-hidden /></span>
                 </span>
               </Link>
             )}
