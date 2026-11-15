@@ -8,6 +8,7 @@ from api.services.regulation_drive import _ID_RE, DriveReadError, RegulationDriv
 
 IMAGE_TYPES = frozenset({"image/jpeg", "image/png", "image/webp"})
 MAX_IMAGE_BYTES = 30 * 1024 * 1024
+MAX_SOURCE_IMAGES = 10_000
 
 
 @dataclass(frozen=True)
@@ -73,9 +74,13 @@ class GalleryDriveClient(RegulationDriveClient):
                                 depth,
                                 section,
                             )
-                        if len(files) > 1000:
-                            raise DriveReadError("單一來源超過 1000 張照片")
+                        if len(files) > MAX_SOURCE_IMAGES:
+                            raise DriveReadError(
+                                f"單一來源超過 {MAX_SOURCE_IMAGES} 張照片，請拆成較小的來源資料夾"
+                            )
                     page_token = payload.get("nextPageToken", "")
+                except DriveReadError:
+                    raise
                 except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
                     raise DriveReadError(
                         "無法完整讀取照片來源，請檢查資料夾分享權限與 API 金鑰"
@@ -85,6 +90,21 @@ class GalleryDriveClient(RegulationDriveClient):
                 if page_token in tokens:
                     raise DriveReadError("Drive 分頁重複，未匯入此來源")
                 tokens.add(page_token)
+        if not files:
+            try:
+                response = await self.client.get(
+                    f"files/{folder_id}",
+                    params={"fields": "mimeType", "supportsAllDrives": "true"},
+                )
+                response.raise_for_status()
+                mime_type = response.json()["mimeType"]
+            except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+                raise DriveReadError("無法確認來源資料夾，請檢查資料夾分享權限與 API 金鑰") from exc
+            if mime_type != "application/vnd.google-apps.folder":
+                raise DriveReadError("來源指向單一檔案，請改用包含照片的 Google Drive 資料夾連結")
+            raise DriveReadError(
+                "來源資料夾沒有可匯入的 JPEG、PNG 或 WebP 照片，請檢查子資料夾與分享權限"
+            )
         return sorted(files.values(), key=lambda file: (file.name, file.id))
 
     async def download_image(self, file_id: str) -> bytes:

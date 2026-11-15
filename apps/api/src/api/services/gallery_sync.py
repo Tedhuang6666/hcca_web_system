@@ -23,6 +23,8 @@ from api.services.gallery_drive import GalleryDriveClient
 from api.services.permission import get_user_permission_codes
 from api.services.storage import get_storage
 
+MAX_SYNC_IMAGES = 20_000
+
 
 def next_sync(frequency: str, now: datetime) -> datetime | None:
     seconds = {"quarter_hour": 900, "daily": 86400}.get(frequency)
@@ -137,8 +139,8 @@ async def synchronize(session: AsyncSession) -> GallerySyncReportOut | None:
                     # 直接指定的子資料夾優先於遞迴父資料夾。
                     if key not in candidates or file.depth < candidates[key][1].depth:
                         candidates[key] = (folder, file)
-                    if len(candidates) > 2000:
-                        raise ValueError("所有來源合計超過 2000 張照片，請減少來源")
+                    if len(candidates) > MAX_SYNC_IMAGES:
+                        raise ValueError(f"所有來源合計超過 {MAX_SYNC_IMAGES} 張照片，請減少來源")
             downloads = 0
             ordered = list(candidates.items())
             cursor = manifest.get("_cursor", {}).get("after")

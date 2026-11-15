@@ -10,6 +10,7 @@ from pydantic import ValidationError
 
 from api.core.config import settings
 from api.schemas.gallery_sync import GalleryDriveConfig
+from api.services import gallery_drive
 from api.services import gallery_sync as sync
 from api.services import site as site_svc
 from api.services.gallery_drive import DriveImage, GalleryDriveClient
@@ -328,3 +329,116 @@ def test_gallery_config_rejects_duplicate_email_and_invalid_folder():
     ]:
         with pytest.raises(ValidationError):
             GalleryDriveConfig.model_validate(body)
+
+
+async def test_gallery_drive_reads_thousands_of_images_across_pages(monkeypatch):
+    monkeypatch.setattr(settings, "GOOGLE_DRIVE_API_KEY", "test-key")
+    pages = []
+
+    def handle(request):
+        offset = int(request.url.params.get("pageToken", "0"))
+        pages.append(offset)
+        end = min(offset + 1000, 3079)
+        payload = {
+            "files": [
+                {"id": f"largephoto{i:05d}", "name": f"{i:05d}.jpg", "mimeType": "image/jpeg"}
+                for i in range(offset, end)
+            ]
+        }
+        if end < 3079:
+            payload["nextPageToken"] = str(end)
+        return httpx.Response(200, json=payload)
+
+    async with GalleryDriveClient() as drive:
+        await drive.client.aclose()
+        drive.client = httpx.AsyncClient(
+            base_url="https://www.googleapis.com/drive/v3/", transport=httpx.MockTransport(handle)
+        )
+        photos = await drive.list_images("parentfolder1")
+    assert pages == [0, 1000, 2000, 3000]
+    assert len(photos) == 3079
+    assert len({photo.id for photo in photos}) == 3079
+
+
+@pytest.mark.parametrize(
+    ("mime_type", "message"),
+    [
+        ("image/jpeg", "來源指向單一檔案"),
+        ("application/vnd.google-apps.folder", "沒有可匯入"),
+    ],
+)
+async def test_gallery_drive_reports_empty_or_nonfolder_sources(monkeypatch, mime_type, message):
+    monkeypatch.setattr(settings, "GOOGLE_DRIVE_API_KEY", "test-key")
+
+    def handle(request):
+        payload = {"files": []} if request.url.path.endswith("/files") else {"mimeType": mime_type}
+        return httpx.Response(200, json=payload)
+
+    async with GalleryDriveClient() as drive:
+        await drive.client.aclose()
+        drive.client = httpx.AsyncClient(
+            base_url="https://www.googleapis.com/drive/v3/", transport=httpx.MockTransport(handle)
+        )
+        with pytest.raises(DriveReadError, match=message):
+            await drive.list_images("parentfolder1")
+
+
+async def test_gallery_drive_keeps_capacity_errors_visible(monkeypatch):
+    monkeypatch.setattr(settings, "GOOGLE_DRIVE_API_KEY", "test-key")
+    monkeypatch.setattr(gallery_drive, "MAX_SOURCE_IMAGES", 2)
+    payload = {
+        "files": [
+            {"id": f"largephoto{i:05d}", "name": f"{i}.jpg", "mimeType": "image/jpeg"}
+            for i in range(3)
+        ]
+    }
+    async with GalleryDriveClient() as drive:
+        await drive.client.aclose()
+        drive.client = httpx.AsyncClient(
+            base_url="https://www.googleapis.com/drive/v3/",
+            transport=httpx.MockTransport(lambda _: httpx.Response(200, json=payload)),
+        )
+        with pytest.raises(DriveReadError, match="單一來源超過 2 張照片"):
+            await drive.list_images("parentfolder1")
+
+
+async def test_gallery_sync_imports_thousands_in_resumable_batches(
+    db_session, make_user, monkeypatch, tmp_path
+):
+    user = await make_user(is_superuser=True)
+    site, source, _ = await setup_source(db_session, user, monkeypatch, tmp_path)
+    raw = image_bytes()
+
+    class Drive:
+        downloads = 0
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            pass
+
+        async def list_images(self, folder, recursive=True):
+            return [
+                DriveImage(f"largephoto{i:05d}", f"{i:05d}.jpg", str(i), (), 0, "")
+                for i in range(3079)
+            ]
+
+        async def download_image(self, _):
+            Drive.downloads += 1
+            return raw
+
+    monkeypatch.setattr(sync, "GalleryDriveClient", Drive)
+    for batch in range(62):
+        report = await sync.synchronize(db_session)
+        assert report is not None and not report.errors
+        assert report.created == min((batch + 1) * 50, 3079)
+        assert Drive.downloads == report.created
+    assert source.requested_at is None
+    assert source.last_synced_at is not None
+    photos = site.homepage_blocks["activity_gallery"]["events"][0]["photos"]
+    assert len(photos) == len({photo["id"] for photo in photos}) == 3079
+    source.requested_at = datetime.now(UTC)
+    again = await sync.synchronize(db_session)
+    assert again.created == 0 and again.unchanged == 3079 and not again.errors
+    assert Drive.downloads == 3079
