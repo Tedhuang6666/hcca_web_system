@@ -292,13 +292,6 @@ def create_app() -> FastAPI:
     # GZip 壓縮回應：最早 add（最內層），在 response path 最先執行，
     # 把 app 輸出的 JSON 壓縮後再向外傳給其他 middleware。minimum_size=500 避免壓縮小回應。
     app.add_middleware(GZipMiddleware, minimum_size=500)
-    app.add_middleware(
-        SecurityHeadersMiddleware,
-        enabled=settings.SECURITY_HEADERS_ENABLED,
-        hsts_enabled=settings.COOKIE_SECURE,
-        hsts_max_age=settings.SECURITY_HSTS_MAX_AGE_SECONDS,
-        content_security_policy=settings.SECURITY_CSP,
-    )
     # Prometheus metrics middleware（最外層、每筆 request 都會看到）
     app.add_middleware(PrometheusMetricsMiddleware)
     app.add_middleware(SecurityAuditMiddleware)
@@ -361,6 +354,15 @@ def create_app() -> FastAPI:
         TrustedProxyMiddleware,
         enabled=settings.TRUST_CLOUDFLARE_PROXY,
         extra_cidrs=settings.CF_TRUSTED_PROXIES,
+    )
+    # 安全標頭放在最外層：CSRF、限流、WAF、維護模式與 TrustedHost 提早拒絕的
+    # 回應同樣需要 CSP、HSTS 與 nosniff。它只改寫回應標頭，不依賴 client IP。
+    app.add_middleware(
+        SecurityHeadersMiddleware,
+        enabled=settings.SECURITY_HEADERS_ENABLED,
+        hsts_enabled=settings.COOKIE_SECURE,
+        hsts_max_age=settings.SECURITY_HSTS_MAX_AGE_SECONDS,
+        content_security_policy=settings.SECURITY_CSP,
     )
 
     # 模組健康端點：在 include_router 之前掛上，這樣每個模組會自帶

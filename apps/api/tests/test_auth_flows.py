@@ -572,3 +572,36 @@ async def test_audit_middleware_records_authenticated_actor(
     assert records, "敏感路徑應寫入稽核紀錄"
     assert records[-1].user_id == str(member_user.id)
     assert records[-1].user_email == member_user.email
+
+
+async def test_admin_ip_whitelist_applies_to_every_superuser_request(
+    make_user: Callable[..., Any],
+    member_user: User,
+    authed_client_factory: Callable[[User], AsyncClient],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """不論以哪種方式取得 session，白名單外 IP 的超級管理員請求都要被拒。"""
+    superuser = await make_user(is_superuser=True, mfa_enabled=True)
+    monkeypatch.setattr(settings, "ADMIN_IP_WHITELIST", ["10.9.8.7"])
+
+    blocked = await authed_client_factory(superuser).get("/auth/me")
+    member = await authed_client_factory(member_user).get("/auth/me")
+    monkeypatch.setattr(settings, "ADMIN_IP_WHITELIST", ["10.9.8.7", "127.0.0.1"])
+    allowed = await authed_client_factory(superuser).get("/auth/me")
+
+    assert blocked.status_code == 403
+    assert member.status_code == 200
+    assert allowed.status_code == 200
+
+
+async def test_security_headers_present_on_csrf_rejection() -> None:
+    """提早被 middleware 拒絕的回應也要帶安全標頭。"""
+    from httpx import ASGITransport
+
+    from api.main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as raw:
+        response = await raw.post("/receivables", json={})
+
+    assert response.status_code == 403
+    assert response.headers.get("x-content-type-options") == "nosniff"
