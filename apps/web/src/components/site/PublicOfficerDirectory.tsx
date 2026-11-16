@@ -189,7 +189,9 @@ export default function PublicOfficerDirectory({
           )}
         </div>
       )}
-      {directRosters.length > 0 && <OfficerRosterTabs tabs={directRosters} />}
+      {directRosters.length > 0 && (
+        <OfficerRosterTabs tabs={directRosters} showHeading={showHeading} />
+      )}
       {directRosters.length === 0 && grouped.map(({ orgName, roles }) => (
         <section key={orgName} aria-labelledby={`org-${orgName}`}>
           <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
