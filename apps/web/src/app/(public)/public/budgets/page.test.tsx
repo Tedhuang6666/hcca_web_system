@@ -35,7 +35,7 @@ describe("public finance overview", () => {
     expect(within(registered).getByText("NT$200")).toBeVisible();
     expect(within(registered).getByText("NT$300")).toBeVisible();
     expect(within(registered).getByText("-NT$100")).toBeVisible();
-    expect(within(registered).getByText("已登錄收支差額（非帳戶餘額）")).toBeVisible();
+    expect(within(registered).getByText("預算收支差額（非帳戶餘額）")).toBeVisible();
     expect(screen.getAllByText("-NT$100")).toHaveLength(2);
     expect(screen.getByRole("button", { name: "查看「票券收入」的收入紀錄" })).toBeVisible();
   });
