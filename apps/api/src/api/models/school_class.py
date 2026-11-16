@@ -301,7 +301,7 @@ class ClassConsolidationMixin:
     """
     可重用的「班級結單 / 繳費」欄位 Mixin。
 
-    本次套用於 shop.Order；學餐 meal.MealOrder 日後可直接 mixin 共用同一套欄位，
+    本次套用於 shop.Order，
     讓兩系統共享「依班級歸戶、幹部標示繳費」的制度。
     """
 

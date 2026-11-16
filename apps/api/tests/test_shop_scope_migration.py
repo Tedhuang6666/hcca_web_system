@@ -27,7 +27,7 @@ from api.models.user import User
 def _migration():
     path = (
         Path(__file__).parents[1]
-        / "alembic/versions/20261009230000_split_unlinked_shop_activity_orders.py"
+        / "alembic/archive/20261009230000_split_unlinked_shop_activity_orders.py"
     )
     spec = importlib.util.spec_from_file_location("shop_scope_migration", path)
     assert spec and spec.loader

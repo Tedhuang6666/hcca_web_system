@@ -365,7 +365,9 @@ async def test_digest_email_only_notification_is_hidden_and_not_immediately_sche
     transports.batch.assert_not_called()
 
 
-@pytest.mark.parametrize("notification_id", [str(uuid.uuid4()), "invalid-id"])
+@pytest.mark.parametrize(
+    "notification_id", [str(uuid.uuid4()), "invalid-id"], ids=["missing-uuid", "invalid-id"]
+)
 async def test_missing_notification_is_skipped(
     delivery_sessions, fastkick, transports, notification_id
 ):

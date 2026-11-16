@@ -158,19 +158,6 @@ RULES: list[LifecycleRule] = [
         danger_level="caution",
         affects_modules=("shop",),
     ),
-    LifecycleRule(
-        id="meal_orders_old",
-        label="學餐訂單（過舊）",
-        description="超過保留天數的學餐訂單紀錄。學餐訂單屬個資，保留 2 年後 archive 並清理。",
-        model_path="api.models.meal:MealOrder",
-        default_retention_days=730,
-        min_retention_days=365,
-        timestamp_field="created_at",
-        extra_filter=None,
-        default_action="archive_then_purge",
-        danger_level="caution",
-        affects_modules=("meal",),
-    ),
 ]
 
 

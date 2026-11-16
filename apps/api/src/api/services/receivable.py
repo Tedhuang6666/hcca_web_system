@@ -10,7 +10,6 @@ from datetime import UTC, datetime
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.models.meal import MealOrder, MealOrderStatus
 from api.models.receivable import Receivable, ReceivableSource, ReceivableStatus
 from api.models.shop import Order, OrderStatus
 from api.schemas.receivable import ReceivableCreate, ReceivableUpdate
@@ -192,35 +191,6 @@ async def sync_shop_order(db: AsyncSession, order: Order) -> Receivable | None:
     return item
 
 
-async def sync_meal_order(db: AsyncSession, order: MealOrder) -> Receivable:
-    item = await db.scalar(
-        select(Receivable).where(
-            Receivable.source_type == ReceivableSource.MEAL_ORDER.value,
-            Receivable.source_id == order.id,
-        )
-    )
-    if item is None:
-        item = Receivable(
-            source_type=ReceivableSource.MEAL_ORDER.value,
-            source_id=order.id,
-            title=f"學餐訂單 {order.serial_number}",
-        )
-        db.add(item)
-    item.user_id = order.user_id
-    item.class_id = order.class_id
-    item.amount = order.total_price
-    item.paid_amount = order.total_price if order.is_paid else 0
-    item.paid_at = order.paid_at
-    item.collected_by_id = order.paid_by_id
-    item.status = (
-        ReceivableStatus.CANCELED.value
-        if order.status == MealOrderStatus.CANCELLED
-        else _status_for_amounts(item.amount, item.paid_amount, item.refunded_amount).value
-    )
-    await db.flush()
-    return item
-
-
 async def export_csv(db: AsyncSession, rows: list[Receivable]) -> str:
     output = io.StringIO()
     writer = csv.writer(output)
@@ -262,11 +232,5 @@ async def _sync_source_payment(db: AsyncSession, item: Receivable, *, is_paid: b
                 item.class_id = order.class_id
             order.is_paid = is_paid
             order.received_amount = item.paid_amount
-            order.paid_at = item.paid_at if is_paid else None
-            order.paid_by_id = item.collected_by_id if is_paid else None
-    elif item.source_type == ReceivableSource.MEAL_ORDER.value:
-        order = await db.get(MealOrder, item.source_id)
-        if order:
-            order.is_paid = is_paid
             order.paid_at = item.paid_at if is_paid else None
             order.paid_by_id = item.collected_by_id if is_paid else None
