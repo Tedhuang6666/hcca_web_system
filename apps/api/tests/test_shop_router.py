@@ -129,6 +129,11 @@ async def test_assisted_individual_payment_notices_target_buyer(
     assert "需額外繳費" in messages[0][2]
     assert "班聯會公告的繳費期限" in messages[0][2]
     assert "逾期未繳，班聯會將取消您的訂單" in messages[0][2]
+    if collection in {"class_paid", "collected"}:
+        # 已收款的訂單是金流紀錄，不得一次清除。
+        with pytest.raises(ValueError, match="已收款訂單"):
+            await shop_svc.clear_all_orders(db_session)
+        return
     # 清除訂購資料也必須清掉待寄信件，避免寄出已不存在訂單的催款通知。
     assert await shop_svc.clear_all_orders(db_session) >= 1
     assert not list(
@@ -5174,3 +5179,118 @@ async def test_category_collection_rejects_linked_or_missing_topic(
             },
         )
         assert response.status_code == 400
+
+
+async def _paid_class_order(db_session, *, price: int = 40, quantity: int = 2):
+    school_class = await _make_class(db_session, start="11601", end="11640")
+    cadre = await _bare_user(db_session, student_id="11601")
+    await class_svc.add_cadre(db_session, school_class, user_id=cadre.id)
+    student = await _bare_user(db_session, student_id="11620")
+    category = await _make_category(db_session, cadre)
+    product = await _make_active_product(
+        db_session, cadre, category=category, price=price, stock=20
+    )
+    orders = await shop_svc.create_direct_order(
+        db_session,
+        user_id=student.id,
+        class_id=school_class.id,
+        data=ClassOrderUpsert(
+            user_id=student.id,
+            items=[OrderItemCreate(product_id=product.id, quantity=quantity)],
+        ),
+        assisted_by_id=cadre.id,
+    )
+    return orders[0]
+
+
+async def test_clear_all_order_data_refuses_when_money_was_collected(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant_permission(db_session, member_user, "shop:manage")
+    order = await _paid_class_order(db_session)
+    await shop_svc.set_order_paid(db_session, order, is_paid=True, actor_id=member_user.id)
+    await db_session.flush()
+
+    response = await authed_client_factory(member_user).delete("/shop/orders")
+
+    assert response.status_code == 409
+    assert await db_session.scalar(select(func.count()).select_from(Order)) == 1
+
+
+async def test_cancelled_order_cannot_be_marked_paid(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant_permission(db_session, member_user, "shop:manage")
+    order = await _paid_class_order(db_session)
+    await shop_svc.cancel_order(
+        db_session,
+        order,
+        requested_by=member_user.id,
+        bypass_owner_check=True,
+        bypass_registration_window=True,
+    )
+    await db_session.flush()
+
+    response = await authed_client_factory(member_user).patch(
+        f"/shop/orders/{order.id}/payment", json={"is_paid": True}
+    )
+
+    assert response.status_code == 422
+    await db_session.refresh(order)
+    assert order.is_paid is False
+
+
+async def test_full_receivable_refund_marks_order_refunded(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant_permission(db_session, member_user, "finance:record")
+    order = await _paid_class_order(db_session, price=40, quantity=2)
+    receivable = await db_session.scalar(
+        select(Receivable).where(
+            Receivable.source_type == ReceivableSource.SHOP_ORDER.value,
+            Receivable.source_id == order.id,
+        )
+    )
+    assert receivable is not None
+    ac = authed_client_factory(member_user)
+    assert (await ac.post(f"/receivables/{receivable.id}/mark-paid", json={})).status_code == 200
+
+    partial = await ac.post(f"/receivables/{receivable.id}/refund", json={"refunded_amount": 30})
+    assert partial.status_code == 200
+    assert partial.json()["status"] == "refunding"
+    await db_session.refresh(order)
+    assert order.status != OrderStatus.REFUNDED
+    assert order.received_amount == 50
+    assert order.is_paid is False
+
+    full = await ac.post(f"/receivables/{receivable.id}/refund", json={"refunded_amount": 80})
+    assert full.status_code == 200
+    assert full.json()["status"] == "refunded"
+    await db_session.refresh(order)
+    assert order.status == OrderStatus.REFUNDED
+    assert order.received_amount == 0
+    assert (await ac.post(f"/receivables/{receivable.id}/mark-paid", json={})).status_code == 409
+
+
+async def test_cancelled_order_receivable_cannot_be_marked_paid(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant_permission(db_session, member_user, "finance:record")
+    order = await _paid_class_order(db_session)
+    await shop_svc.cancel_order(
+        db_session,
+        order,
+        requested_by=member_user.id,
+        bypass_owner_check=True,
+        bypass_registration_window=True,
+    )
+    await db_session.flush()
+    receivable = await db_session.scalar(select(Receivable).where(Receivable.source_id == order.id))
+
+    response = await authed_client_factory(member_user).post(
+        f"/receivables/{receivable.id}/mark-paid", json={}
+    )
+
+    assert response.status_code == 409
+    await db_session.refresh(order)
+    assert order.is_paid is False

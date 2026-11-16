@@ -10066,7 +10066,7 @@ export interface paths {
         post?: never;
         /**
          * 清除全部商品訂購資料
-         * @description 僅限商品管理者。刪除所有商品訂單與訂單明細，清除相關應收款及尚未寄出的確認通知，並回補仍占用的有限庫存與優惠使用次數；商品目錄和稽核紀錄保留。
+         * @description 僅限商品管理者。刪除所有商品訂單與訂單明細，清除相關應收款及尚未寄出的確認通知，並回補仍占用的有限庫存與優惠使用次數；商品目錄和稽核紀錄保留。仍有已收款訂單時拒絕執行（409），避免一併刪除金流紀錄。
          */
         delete: operations["clear_all_order_data_shop_orders_delete"];
         options?: never;

@@ -240,3 +240,115 @@ async def test_export_receivables_csv_returns_csv_content_type(
 
     assert resp.status_code == 200
     assert "text/csv" in resp.headers["content-type"]
+
+
+async def _manual(ac, payer_id, **overrides) -> str:
+    created = await ac.post("/receivables", json=_payload(payer_id, **overrides))
+    assert created.status_code == 201, created.text
+    return created.json()["id"]
+
+
+async def test_mark_paid_rejects_overpayment(
+    db_session, member_user, authed_client_factory, make_user
+) -> None:
+    await _grant(db_session, member_user, "finance:record")
+    payer = await make_user(email="overpay-payer@school.edu")
+    ac = authed_client_factory(member_user)
+    receivable_id = await _manual(ac, payer.id, amount=500)
+
+    resp = await ac.post(f"/receivables/{receivable_id}/mark-paid", json={"paid_amount": 501})
+
+    assert resp.status_code == 422
+
+
+async def test_refund_cannot_exceed_paid_amount(
+    db_session, member_user, authed_client_factory, make_user
+) -> None:
+    await _grant(db_session, member_user, "finance:record")
+    payer = await make_user(email="over-refund-payer@school.edu")
+    ac = authed_client_factory(member_user)
+    receivable_id = await _manual(ac, payer.id, amount=500)
+    await ac.post(f"/receivables/{receivable_id}/mark-paid", json={"paid_amount": 300})
+
+    resp = await ac.post(f"/receivables/{receivable_id}/refund", json={"refunded_amount": 301})
+
+    assert resp.status_code == 422
+
+
+async def test_refund_requires_collected_money(
+    db_session, member_user, authed_client_factory, make_user
+) -> None:
+    await _grant(db_session, member_user, "finance:record")
+    payer = await make_user(email="unpaid-refund-payer@school.edu")
+    ac = authed_client_factory(member_user)
+    receivable_id = await _manual(ac, payer.id, amount=500)
+
+    resp = await ac.post(f"/receivables/{receivable_id}/refund", json={})
+
+    assert resp.status_code == 409
+
+
+async def test_cancelled_or_refunded_receivable_cannot_be_marked_paid(
+    db_session, member_user, authed_client_factory, make_user
+) -> None:
+    await _grant(db_session, member_user, "finance:record")
+    payer = await make_user(email="cancelled-pay-payer@school.edu")
+    ac = authed_client_factory(member_user)
+    cancelled_id = await _manual(ac, payer.id, amount=500)
+    assert (
+        await ac.patch(f"/receivables/{cancelled_id}", json={"status": "canceled"})
+    ).status_code == 200
+    refunded_id = await _manual(ac, payer.id, amount=200)
+    await ac.post(f"/receivables/{refunded_id}/mark-paid", json={})
+    assert (await ac.post(f"/receivables/{refunded_id}/refund", json={})).status_code == 200
+
+    for receivable_id in (cancelled_id, refunded_id):
+        resp = await ac.post(f"/receivables/{receivable_id}/mark-paid", json={})
+        assert resp.status_code == 409
+
+
+async def test_manual_status_is_derived_from_amounts(
+    db_session, member_user, authed_client_factory, make_user
+) -> None:
+    await _grant(db_session, member_user, "finance:record")
+    payer = await make_user(email="derived-status-payer@school.edu")
+    ac = authed_client_factory(member_user)
+    receivable_id = await _manual(ac, payer.id, amount=500)
+
+    forged = await ac.patch(f"/receivables/{receivable_id}", json={"status": "paid"})
+    inconsistent = await ac.patch(
+        f"/receivables/{receivable_id}", json={"paid_amount": 100, "refunded_amount": 200}
+    )
+    partial = await ac.patch(f"/receivables/{receivable_id}", json={"paid_amount": 100})
+
+    assert forged.status_code == 422
+    assert inconsistent.status_code == 422
+    assert partial.status_code == 200
+    assert partial.json()["status"] == "partial"
+
+
+async def test_order_linked_receivable_amounts_cannot_be_patched(
+    db_session, member_user, authed_client_factory, make_user
+) -> None:
+    from api.models.receivable import Receivable, ReceivableSource
+
+    await _grant(db_session, member_user, "finance:record")
+    payer = await make_user(email="linked-payer@school.edu")
+    linked = Receivable(
+        source_type=ReceivableSource.SHOP_ORDER.value,
+        source_id=uuid.uuid4(),
+        user_id=payer.id,
+        title="商品訂單 X",
+        amount=300,
+    )
+    db_session.add(linked)
+    await db_session.flush()
+    ac = authed_client_factory(member_user)
+
+    status_resp = await ac.patch(f"/receivables/{linked.id}", json={"status": "paid"})
+    amount_resp = await ac.patch(f"/receivables/{linked.id}", json={"amount": 0})
+    note_resp = await ac.patch(f"/receivables/{linked.id}", json={"note": "已電話聯繫"})
+
+    assert status_resp.status_code == 409
+    assert amount_resp.status_code == 409
+    assert note_resp.status_code == 200

@@ -1887,11 +1887,15 @@ async def _create_assisted_orders(
     description=(
         "僅限商品管理者。刪除所有商品訂單與訂單明細，清除相關應收款及尚未寄出的確認通知，"
         "並回補仍占用的有限庫存與優惠使用次數；商品目錄和稽核紀錄保留。"
+        "仍有已收款訂單時拒絕執行（409），避免一併刪除金流紀錄。"
     ),
     dependencies=[Depends(require_permission(PermissionCode.SHOP_MANAGE))],
 )
 async def clear_all_order_data(session: DbDep, current_user: CurrentUser) -> ShopOrdersClearOut:
-    deleted_order_count = await shop_svc.clear_all_orders(session)
+    try:
+        deleted_order_count = await shop_svc.clear_all_orders(session)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     await audit_svc.record(
         session,
         entity_type="shop_order_data",
