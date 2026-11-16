@@ -698,7 +698,7 @@ describe("班代工作流程", () => {
     expect(variantSearch).toHaveAttribute("placeholder", "搜尋顏色（30 個規格）");
     fireEvent.change(variantSearch, { target: { value: "色票30" } });
     const colorOptions = within(screen.getByRole("group", { name: "顏色" }));
-    fireEvent.click(colorOptions.getByRole("radio", { name: "色票30" }));
+    fireEvent.click(await colorOptions.findByRole("radio", { name: "色票30" }));
 
     expect(screen.getByRole("button", { name: /加入清單，繼續選商品/ })).toBeEnabled();
   });
