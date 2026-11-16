@@ -54,6 +54,7 @@ type ActivityOptionRow = {
   key: string;
   label: string;
   closed: boolean;
+  hasUncollectedOrders?: boolean;
 };
 
 const CLASS_ORDER_PAGE_SIZE = 500;
@@ -198,7 +199,12 @@ export default function ClassOrdersPage() {
       if (!isCollectableOrder(order)) continue;
       const key = orderScopeKey(order);
       const row = rows.get(key) ?? { key, label: order.category_name ?? activityLabel(key), closed: true };
-      rows.set(key, { ...row, label: order.activity_name ?? order.category_name ?? row.label });
+      rows.set(key, {
+        ...row,
+        label: order.activity_name ?? order.category_name ?? row.label,
+        hasUncollectedOrders: row.hasUncollectedOrders
+          || (!order.is_class_collected && order.total_price > 0),
+      });
     }
     return Array.from(rows.values()).sort((a, b) => a.label.localeCompare(b.label, "zh-Hant"));
   }, [activityOrders, activityLabel, catalog]);

@@ -91,7 +91,7 @@ describe("班代工作流程", () => {
       { ...current[0], id: "old", name: "去年活動", order_closed_at: "2025-01-01T00:00:00Z" },
     ]);
     api.listClassOrders.mockImplementation(async (params: { category_id?: string }) => params.category_id ? [] : [
-      { id: "old-order", user_id: "a", status: "pending", category_id: "old", total_price: 900, is_class_collected: false },
+      { id: "old-order", user_id: "a", status: "pending", category_id: "old", total_price: 900, is_class_collected: true },
     ]);
     await act(async () => { render(<ClassOrdersPage />); });
     expect(screen.getByRole("radio", { name: "園遊會" })).toBeChecked();
@@ -278,7 +278,7 @@ describe("班代工作流程", () => {
     expect(screen.getByRole("button", { name: /加入清單，繼續選商品/ })).toBeEnabled();
   });
 
-  it("已結單活動預設隱藏，主動查看後保留收款名冊與收款操作", async () => {
+  it("已結單活動仍有本班未收款時直接顯示入口，並可繼續收款", async () => {
     api.catalog.mockResolvedValue([{ id: "category", name: "園遊會", activity_id: "festival",
       activity_name: "園遊會", order_closed_at: "2026-10-27T12:00:00Z", series: [], products: [] }]);
     api.listClassOrders.mockResolvedValue([
@@ -288,9 +288,9 @@ describe("班代工作流程", () => {
     api.setClassCollected.mockResolvedValue({});
     await act(async () => { render(<ClassOrdersPage />); });
     await openCollectWorkspace(false);
-    expect(screen.queryByRole("radio", { name: /園遊會/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /園遊會.*已結單.*待收款/ })).toBeVisible();
+    expect(screen.queryByRole("button", { name: /查看已結單活動/ })).not.toBeInTheDocument();
     expect(api.classSummary).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: /查看已結單活動/ }));
     fireEvent.click(screen.getByRole("radio", { name: /園遊會/ }));
     const table = await screen.findByRole("table", { name: "園遊會各座號收款" });
     const collect = within(table).getAllByRole("button", { name: /^已收到 NT\$/ })
@@ -299,6 +299,46 @@ describe("班代工作流程", () => {
     fireEvent.click(screen.getByRole("button", { name: "確認收到款項" }));
     await waitFor(() => expect(api.setClassCollected).toHaveBeenCalledWith("closed-order", true));
     expect(api.catalog).toHaveBeenCalledWith(undefined, true);
+  });
+
+  it.each([
+    { label: "已收齊", status: "pending", is_class_collected: true, total_price: 100 },
+    { label: "已取消", status: "cancelled", is_class_collected: false, total_price: 100 },
+    { label: "已退款", status: "refunded", is_class_collected: false, total_price: 100 },
+    { label: "零元", status: "pending", is_class_collected: false, total_price: 0 },
+  ])("只有$label訂單的已結單活動仍收進折疊區", async (order) => {
+    api.catalog.mockResolvedValue([{ id: "category", name: "園遊會", activity_id: "festival",
+      order_closed_at: "2026-10-27T12:00:00Z", series: [], products: [] }]);
+    api.listClassOrders.mockResolvedValue([{ ...order, id: "order", activity_id: "festival", user_id: "a" }]);
+    await act(async () => { render(<ClassOrdersPage />); });
+    expect(screen.queryByRole("radio", { name: /園遊會/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "查看已結單活動（1）" }));
+    expect(screen.getByRole("radio", { name: /園遊會.*已結單/ })).toBeVisible();
+    expect(screen.queryByRole("radio", { name: /園遊會.*待收款/ })).not.toBeInTheDocument();
+  });
+
+  it("依各活動的本班未收款狀態顯示入口，收齊後重新進入會折疊", async () => {
+    api.catalog.mockResolvedValue([
+      { id: "owing", name: "待補收活動", activity_id: null, order_closed_at: "2026-10-27T12:00:00Z", series: [], products: [] },
+      { id: "settled", name: "收齊活動", activity_id: null, order_closed_at: "2026-10-27T12:00:00Z", series: [], products: [] },
+    ]);
+    const orders = [
+      { id: "unpaid", category_id: "owing", activity_id: null, user_id: "a", status: "pending", total_price: 50, is_class_collected: false },
+      { id: "paid", category_id: "owing", activity_id: null, user_id: "a", status: "pending", total_price: 100, is_class_collected: true },
+      { id: "settled", category_id: "settled", activity_id: null, user_id: "a", status: "pending", total_price: 100, is_class_collected: true },
+    ];
+    api.listClassOrders.mockResolvedValue(orders);
+    let view: ReturnType<typeof render>;
+    await act(async () => { view = render(<ClassOrdersPage />); });
+    expect(screen.getByRole("radio", { name: /待補收活動.*已結單.*待收款/ })).toBeVisible();
+    expect(screen.queryByRole("radio", { name: /收齊活動/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看已結單活動（1）" })).toBeVisible();
+    view!.unmount();
+
+    api.listClassOrders.mockResolvedValue(orders.map((order) => ({ ...order, is_class_collected: true })));
+    await act(async () => { render(<ClassOrdersPage />); });
+    expect(screen.queryByRole("radio", { name: /待補收活動/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看已結單活動（2）" })).toBeVisible();
   });
 
   it("代訂與清單數量都能先刪空再輸入，並送出實際填寫的數量", async () => {
@@ -565,7 +605,6 @@ describe("班代工作流程", () => {
     fireEvent.click(screen.getByText("訂單查詢與其他工具"));
     fireEvent.click(screen.getByRole("button", { name: "查詢／修改訂單" }));
 
-    fireEvent.click(screen.getByRole("button", { name: /查看已結單活動/ }));
     fireEvent.click(screen.getByRole("radio", { name: /一般商品/ }));
     await screen.findAllByRole("link", { name: "ORD-2" });
     const table = screen.getAllByRole("table").find((candidate) =>
@@ -736,7 +775,6 @@ describe("班代工作流程", () => {
     api.setClassCollected.mockResolvedValue({});
     await act(async () => { render(<ClassOrdersPage />); });
     await openCollectWorkspace();
-    fireEvent.click(screen.getByRole("button", { name: /查看已結單活動/ }));
     fireEvent.click(screen.getByRole("radio", { name: /一般商品/ }));
     const collectButtons = await screen.findAllByRole("button", { name: /^已收到 NT\$/ });
     fireEvent.click(collectButtons.find((button) => !button.hasAttribute("disabled"))!);
