@@ -19,9 +19,8 @@
 .campus-edition { grid-column: 1 / -1; margin-bottom: 1rem; color: var(--public-accent-text); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.12em; }
 .campus-masthead-copy { position: relative; z-index: 1; display: flex; grid-column: 1 / -1; align-items: end; justify-content: space-between; gap: 1rem; min-width: 0; padding-bottom: 1rem; }
 .campus-masthead h1 { max-width: 12ch; margin: 0; color: var(--public-text); font-size: clamp(2rem, 9.8vw, 3rem); font-weight: 700; line-height: 1.12; letter-spacing: -0.025em; overflow-wrap: anywhere; text-wrap: balance; }
-.campus-masthead h1 > span { display: block; }
+.campus-masthead h1.campus-title-single-line { max-width: none; overflow-wrap: normal; white-space: nowrap; }
 .campus-masthead p { max-width: 8em; margin: 0 0 0.2rem; color: var(--public-secondary); font-size: 0.8125rem; line-height: 1.8; text-wrap: pretty; }
-.campus-masthead p > span { display: block; }
 .campus-hero-activity {
   --photo-inset-left: max(2rem, calc((100vw - var(--public-content-max)) / 2 + 11rem));
   --photo-inset-right: max(1rem, calc((100vw - var(--public-content-max)) / 2 + var(--public-gutter)));
@@ -61,8 +60,6 @@
   .campus-masthead-copy { align-items: start; padding-bottom: 0; }
   .campus-masthead h1 { font-size: clamp(3rem, 5vw, 4.5rem); }
   .campus-masthead p { max-width: none; margin-top: 0.25rem; font-size: 0.875rem; }
-  .campus-masthead p > span { display: inline; }
-  .campus-masthead p > span + span::before { content: " / "; }
   .campus-hero-activity { margin-top: -2rem; }
   .campus-hero-photo { height: clamp(25rem, 57vw, 40rem); aspect-ratio: auto; }
   .campus-hero-photo > img { object-position: center 48%; }

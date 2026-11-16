@@ -12,6 +12,7 @@ import HomeHeroScene from "./HomeHeroScene";
 const LEGACY_SUBTITLES = new Set([
   "連結學生、整理公共資訊，讓資訊能被更多人看見",
   "查看正在發生的事件，並表達你的意見！",
+  "學生自治 / 校園活動 / 公開資訊",
   BRANDING.platformName,
 ]);
 
@@ -25,7 +26,7 @@ export default async function HomeHero({ bundle }: { bundle: PublicSiteBundleOut
   const configuredSubtitle = settings?.hero_subtitle?.trim();
   const subtitle = configuredSubtitle && !LEGACY_SUBTITLES.has(configuredSubtitle)
     ? configuredSubtitle
-    : "學生自治 / 校園活動 / 公開資訊";
+    : "";
   const activity = readActivityAlbums(settings ? settings.homepage_blocks : null).find((album) => album.photos.length > 0);
   const photos = activity ? [...activity.photos.filter((photo) => photo.featured), ...activity.photos.filter((photo) => !photo.featured)] : [];
   // The built-in album opens on the closer action shot; edited albums retain their order.
@@ -43,12 +44,10 @@ export default async function HomeHero({ bundle }: { bundle: PublicSiteBundleOut
         <HomeHeroScene>
           <div className="campus-edition" aria-hidden="true">{BRANDING.acronym}</div>
           <div className="campus-masthead-copy">
-            <h1 id="campus-title">{title === BRANDING.orgShortName
-              ? <><span>新竹高中</span><span>班聯會</span></>
-              : title}</h1>
-            {subtitle && <p>{subtitle === "學生自治 / 校園活動 / 公開資訊"
-              ? <><span>學生自治</span><span>校園活動</span><span>公開資訊</span></>
-              : subtitle}</p>}
+            <h1 id="campus-title" className={title === BRANDING.orgShortName ? "campus-title-single-line" : undefined}>
+              {title}
+            </h1>
+            {subtitle && <p>{subtitle}</p>}
           </div>
             {activity && photos.length > 0 && (
               <Link href={"/gallery/" + activity.id} className="campus-hero-activity" aria-label={activity.title + "活動紀錄與攝影集"}>
