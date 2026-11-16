@@ -719,6 +719,15 @@ async def list_documents(
         q = q.where(Document.issued_at <= datetime.combine(issued_to, time.max, tzinfo=UTC))
     if roc_year is not None:
         q = q.where((func.extract("year", Document.issued_at) - 1911) == roc_year)
+    if viewer_id is not None and (keyword or handler_keyword or recipient_keyword):
+        # 密件在列表中會遮蔽標題與內容；若仍允許以內文、承辦人或受文者關鍵字比對，
+        # 「有沒有出現在結果裡」本身就洩漏內容。文字搜尋只涵蓋非密件與自己起案的密件。
+        q = q.where(
+            or_(
+                ~Document.classification.in_(SENSITIVE_DOCUMENT_CLASSIFICATIONS),
+                Document.created_by == viewer_id,
+            )
+        )
     if handler_keyword:
         pattern = like_contains(handler_keyword)
         q = q.where(
