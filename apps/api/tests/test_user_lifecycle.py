@@ -240,3 +240,80 @@ async def test_restore_without_permission_returns_403(
     response = await ac.post(f"/admin/users/{target.id}/lifecycle/restore", json={})
 
     assert response.status_code == 403
+
+
+async def _lifecycle_manager(make_user: Callable[..., object], db_session: AsyncSession) -> User:
+    from api.models.org import Permission
+
+    manager = await make_user(email=f"lifecycle-{uuid.uuid4().hex[:6]}@school.edu")
+    org = Org(name=f"學務-{uuid.uuid4().hex[:6]}")
+    db_session.add(org)
+    await db_session.flush()
+    position = Position(org_id=org.id, name="學籍承辦")
+    db_session.add(position)
+    await db_session.flush()
+    db_session.add(Permission(position_id=position.id, code="system:user_lifecycle"))
+    db_session.add(
+        UserPosition(
+            user_id=manager.id,
+            position_id=position.id,
+            start_date=local_today() - timedelta(days=1),
+        )
+    )
+    await db_session.flush()
+    return manager
+
+
+async def test_non_superuser_cannot_freeze_superuser(
+    authed_client_factory: Callable[[User], AsyncClient],
+    make_user: Callable[..., object],
+    db_session: AsyncSession,
+) -> None:
+    manager = await _lifecycle_manager(make_user, db_session)
+    superuser = await make_user(email="protected-super@school.edu", is_superuser=True)
+
+    response = await _authed(authed_client_factory, manager).post(
+        f"/admin/users/{superuser.id}/lifecycle/freeze", json={}
+    )
+
+    assert response.status_code == 403
+    await db_session.refresh(superuser)
+    assert superuser.is_active is True
+
+
+async def test_owner_cannot_be_frozen_even_by_superuser(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    make_user: Callable[..., object],
+    db_session: AsyncSession,
+    monkeypatch,
+) -> None:
+    from api.core.config import settings
+
+    owner = await make_user(email="owner@school.edu", is_superuser=True)
+    monkeypatch.setattr(settings, "OWNER_EMAILS", ["owner@school.edu"])
+
+    response = await _authed(authed_client_factory, admin_user).post(
+        f"/admin/users/{owner.id}/lifecycle/freeze", json={}
+    )
+
+    assert response.status_code == 409
+    await db_session.refresh(owner)
+    assert owner.is_active is True
+
+
+async def test_anonymized_account_cannot_be_restored(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    make_user: Callable[..., object],
+    db_session: AsyncSession,
+) -> None:
+    deleted = await make_user(email="abc123@deleted.local", is_active=False)
+
+    response = await _authed(authed_client_factory, admin_user).post(
+        f"/admin/users/{deleted.id}/lifecycle/restore", json={}
+    )
+
+    assert response.status_code == 409
+    await db_session.refresh(deleted)
+    assert deleted.is_active is False

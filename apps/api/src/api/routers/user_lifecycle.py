@@ -15,6 +15,7 @@ from api.dependencies.permissions import require_permission
 from api.models.user import User
 from api.services import audit as audit_svc
 from api.services import user_lifecycle as svc
+from api.services.account_protection import is_anonymized, protected_target
 
 router = APIRouter(prefix="/admin/users", tags=["管理員 / 學籍異動"])
 
@@ -67,6 +68,11 @@ async def _run_action(
         "archive_alumni": svc.archive_alumni,
         "restore": svc.restore,
     }[action]
+    label = {"freeze": "凍結", "archive_alumni": "轉為校友", "restore": "復原"}[action]
+    target = await protected_target(db, requester=requester, target_id=user_id, action_label=label)
+    if action == "restore" and is_anonymized(target):
+        # 假名化是個資刪除請求的結果，不能以學籍復原把帳號重新啟用。
+        raise HTTPException(status_code=409, detail="已假名化的帳號不可復原")
     try:
         result = await fn(db, user_id=user_id, reason=body.reason)
     except ValueError as exc:
