@@ -106,7 +106,7 @@ def _bundle_pricing_results(
     if not bundles:
         return results
 
-    # 同一套商品優先採用折抵較高的套組價，成套件數不再參與其他優惠。
+    # 套餐與相同件數原可享有的優惠擇優；已成套件數不再重複折抵。
     bundles.sort(
         key=lambda row: (
             -row[1],
@@ -116,35 +116,83 @@ def _bundle_pricing_results(
     )
     amounts = dict(product_subtotals or {})
     quantities = dict(product_quantities or {})
-    selected = []
-    for promotion, discount_amount in bundles:
-        amount = _discount_amount(promotion, subtotal, amounts, quantities, categories)
-        if amount <= 0:
-            continue
-        selected.append(PromotionResult(promotion, min(discount_amount, amount)))
-        products = promotion.target_products
-        count = min(quantities.get(product.id, 0) for product in products)
-        for product in products:
-            quantity = quantities[product.id]
-            leftover = quantity - count
-            if leftover:
-                # 按件數分攤規格加價，避免把已成套商品的加價再拿去折抵。
-                amounts[product.id] = amounts[product.id] * leftover // quantity
-                quantities[product.id] = leftover
-            else:
-                amounts.pop(product.id, None)
-                quantities.pop(product.id, None)
+    others = [
+        result
+        for result in results
+        if result.promotion is not None
+        and result.promotion.discount_type != ShopDiscountType.BUNDLE_PRICE
+    ]
 
-    if not selected:
-        return results
-    remaining_subtotal = sum(amounts.values())
-    for result in results:
-        promotion = result.promotion
-        if promotion is None or promotion.discount_type == ShopDiscountType.BUNDLE_PRICE:
-            continue
-        amount = _discount_amount(promotion, remaining_subtotal, amounts, quantities, categories)
-        selected.append(PromotionResult(promotion, min(result.discount_amount, amount)))
-    return selected
+    def remaining_results(
+        amounts: dict[uuid.UUID, int], quantities: dict[uuid.UUID, int]
+    ) -> list[PromotionResult]:
+        remaining = sum(amounts.values())
+        return [
+            PromotionResult(
+                result.promotion,
+                min(
+                    result.discount_amount,
+                    _discount_amount(result.promotion, remaining, amounts, quantities, categories),
+                ),
+            )
+            for result in others
+            if result.promotion is not None
+        ]
+
+    selected: list[PromotionResult] = []
+    remaining = remaining_results(amounts, quantities)
+    total_discount = min(subtotal, sum(row.discount_amount for row in remaining))
+    while bundles:
+        best_total = total_discount
+        best = None
+        for promotion, discount_amount in bundles:
+            available = min(
+                discount_amount,
+                _discount_amount(promotion, sum(amounts.values()), amounts, quantities, categories),
+            )
+            if available <= 0:
+                continue
+            products = promotion.target_products
+            max_count = min(quantities.get(product.id, 0) for product in products)
+            savings = max(0, sum(product.price for product in products) - promotion.discount_value)
+            # 保留部分件數可維持滿額／滿件優惠，不能只比較全部成套與全部不成套。
+            for count in range(max_count, 0, -1):
+                candidate_amounts = dict(amounts)
+                candidate_quantities = dict(quantities)
+                for product in products:
+                    quantity = quantities[product.id]
+                    leftover = quantity - count
+                    if leftover:
+                        # 規格加價按件數分攤，已成套部分不再參與其他折扣。
+                        candidate_amounts[product.id] = amounts[product.id] * leftover // quantity
+                        candidate_quantities[product.id] = leftover
+                    else:
+                        candidate_amounts.pop(product.id, None)
+                        candidate_quantities.pop(product.id, None)
+                amount = min(available, savings * count)
+                candidate_remaining = remaining_results(candidate_amounts, candidate_quantities)
+                candidate_total = min(
+                    subtotal,
+                    sum(row.discount_amount for row in selected)
+                    + amount
+                    + sum(row.discount_amount for row in candidate_remaining),
+                )
+                if candidate_total > best_total:
+                    best_total = candidate_total
+                    best = (
+                        promotion,
+                        amount,
+                        candidate_amounts,
+                        candidate_quantities,
+                        candidate_remaining,
+                    )
+        if best is None:
+            break
+        promotion, amount, amounts, quantities, remaining = best
+        selected.append(PromotionResult(promotion, amount))
+        total_discount = best_total
+        bundles = [row for row in bundles if row[0].id != promotion.id]
+    return selected + remaining
 
 
 def _free_pricing_results(

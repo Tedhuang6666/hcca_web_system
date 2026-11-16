@@ -293,10 +293,9 @@ def test_gifted_quantity_keeps_surcharges_and_extra_sets_paid():
         )
         assert {row.promotion.name: row.discount_amount for row in allocations} == {
             "贈品": 550,
-            "運動套餐": 50,
-            "折扣": 10,
+            "折扣": 67,
         }
-        assert 1240 - sum(row.discount_amount for row in allocations) == 630
+        assert 1240 - sum(row.discount_amount for row in allocations) == 623
 
 
 def test_overlapping_gifts_do_not_discount_the_same_quantity_twice():
@@ -312,3 +311,96 @@ def test_overlapping_gifts_do_not_discount_the_same_quantity_twice():
         )
         assert sum(row.discount_amount for row in allocations) == 110
         assert all(row.promotion.discount_value == 100 for row in allocations)
+
+
+@pytest.mark.parametrize("topic_scope", [False, True])
+def test_author_discount_beats_bundles_after_reserving_gift(topic_scope):
+    jacket, shirt, hat, towel, badge, bag = [_product(p) for p in (750, 300, 250, 200, 60, 60)]
+    category_id = uuid4()
+    scope = {"categories": [str(category_id)] if topic_scope else None}
+    promotions = [
+        _promotion("外套贈品", ShopDiscountType.PERCENTAGE, 100, [jacket], **scope),
+        _promotion("作者九折", ShopDiscountType.PERCENTAGE, 10, **scope),
+        _promotion("過冬套餐", ShopDiscountType.BUNDLE_PRICE, 1000, [jacket, shirt], **scope),
+        _promotion("外套與帽子套餐", ShopDiscountType.BUNDLE_PRICE, 967, [jacket, hat], **scope),
+    ]
+    items = [(jacket, 4), (shirt, 2), (hat, 1), (towel, 1), (badge, 2), (bag, 1)]
+    amounts = {product.id: product.price * count for product, count in items}
+    quantities = {product.id: count for product, count in items}
+    for ordered in permutations(promotions):
+        allocations = _allocate(
+            ordered, amounts, quantities, {product.id: category_id for product, _ in items}
+        )
+        assert {row.promotion.name: row.discount_amount for row in allocations} == {
+            "外套贈品": 750,
+            "作者九折": 348,
+        }
+        assert sum(amounts.values()) - sum(row.discount_amount for row in allocations) == 3132
+
+
+@pytest.mark.parametrize("topic_scope", [False, True])
+def test_choose_bundle_and_individual_discount_for_different_products(topic_scope):
+    products = [_product(price) for price in (300, 200, 100, 100)]
+    category_id = uuid4()
+    scope = {"categories": [str(category_id)] if topic_scope else None}
+    promotions = [
+        _promotion("作者九折", ShopDiscountType.PERCENTAGE, 10, **scope),
+        _promotion("較貴套餐", ShopDiscountType.BUNDLE_PRICE, 480, products[:2], **scope),
+        _promotion("較優惠套餐", ShopDiscountType.BUNDLE_PRICE, 150, products[2:], **scope),
+    ]
+    for ordered in permutations(promotions):
+        allocations = _allocate(
+            ordered,
+            {product.id: product.price for product in products},
+            {product.id: 1 for product in products},
+            {product.id: category_id for product in products},
+        )
+        assert {row.promotion.name: row.discount_amount for row in allocations} == {
+            "作者九折": 50,
+            "較優惠套餐": 50,
+        }
+
+
+def test_partial_bundle_keeps_the_more_valuable_spend_threshold_discount():
+    shirt, shorts = _product(500), _product(500)
+    bundle = _promotion("套餐", ShopDiscountType.BUNDLE_PRICE, 950, [shirt, shorts])
+    threshold = _promotion("滿千折百", ShopDiscountType.FIXED, 100)
+    threshold.min_order_price = 1000
+    for ordered in permutations([bundle, threshold]):
+        allocations = _allocate(
+            ordered,
+            {shirt.id: 1000, shorts.id: 1000},
+            {shirt.id: 2, shorts.id: 2},
+            {},
+        )
+        assert {row.promotion.name: row.discount_amount for row in allocations} == {
+            "套餐": 50,
+            "滿千折百": 100,
+        }
+
+
+def test_overlapping_bundles_compare_savings_after_losing_individual_discount():
+    first, shared, last = [_product(100) for _ in range(3)]
+    products = [first, shared, last]
+    promotions = [
+        _promotion(
+            "幹部單價",
+            ShopDiscountType.PRICE_OVERRIDE,
+            0,
+            [first, shared],
+            prices=[(first, 90), (shared, 90)],
+        ),
+        _promotion("折抵三十但失去二十", ShopDiscountType.BUNDLE_PRICE, 170, [first, shared]),
+        _promotion("折抵二十五但只失去十", ShopDiscountType.BUNDLE_PRICE, 175, [shared, last]),
+    ]
+    for ordered in permutations(promotions):
+        allocations = _allocate(
+            ordered,
+            {product.id: product.price for product in products},
+            {product.id: 1 for product in products},
+            {},
+        )
+        assert {row.promotion.name: row.discount_amount for row in allocations} == {
+            "幹部單價": 10,
+            "折抵二十五但只失去十": 25,
+        }
