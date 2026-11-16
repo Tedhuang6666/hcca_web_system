@@ -45,6 +45,20 @@
 .campus-hero-activity:is(:hover, :focus-visible) .campus-event-link { text-decoration: underline; text-underline-offset: 0.3em; }
 .public-home .campus-hero-activity:focus-visible { outline: 0; }
 .campus-hero-activity:focus-visible::after { position: absolute; inset: 6px calc(var(--photo-inset-right) + 6px) 6px calc(var(--photo-inset-left) + 6px); border: 3px solid #fff; content: ""; pointer-events: none; }
+[data-theme="light"] .campus-hero-activity-caption {
+  background: linear-gradient(
+    transparent,
+    color-mix(in srgb, var(--public-bg) 82%, transparent) 45%,
+    var(--public-bg)
+  );
+}
+[data-theme="light"] .campus-hero-activity :is(.campus-event-meta, .campus-event-title, .campus-event-link) {
+  color: var(--public-text);
+}
+[data-theme="light"] .campus-hero-activity:focus-visible::after {
+  border-color: var(--public-text);
+  box-shadow: 0 0 0 2px var(--public-bg);
+}
 .campus-hero-activity:focus-visible :is(.campus-event-meta, .campus-event-title, .campus-event-link) { opacity: 1 !important; transform: none !important; }
 .campus-hero-next { display: flex; align-items: center; justify-content: center; width: 44px; min-height: 44px; margin-top: 0.5rem; margin-left: auto; color: var(--public-secondary); text-decoration: none; }
 .campus-hero-next:hover { color: var(--public-accent-text); }
