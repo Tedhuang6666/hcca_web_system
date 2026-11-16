@@ -1140,20 +1140,6 @@ async def update_budget_expense(
     return expense
 
 
-async def budget_advance_receipt_expenses(
-    db: AsyncSession, budget_id: uuid.UUID, expense_ids: list[uuid.UUID]
-) -> list[dict]:
-    await get_budget(db, budget_id)
-    expenses = await _budget_expense_details(db, budget_id)
-    selected_ids = set(expense_ids)
-    selected = [expense for expense in expenses if expense["id"] in selected_ids]
-    if len(selected) != len(selected_ids):
-        raise HTTPException(422, "所選支出不屬於此預算或已不存在，請重新選取")
-    if any(not expense["advanced_by_name"] for expense in selected):
-        raise HTTPException(422, "請先為所選支出填寫代墊人")
-    return selected
-
-
 async def update_budget_income_item(
     db: AsyncSession, budget_id: uuid.UUID, income_id: uuid.UUID, body: BudgetIncomeItemUpdate
 ) -> tuple[FinanceBudgetIncomeItem, int]:

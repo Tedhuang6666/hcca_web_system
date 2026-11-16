@@ -16,6 +16,8 @@ from sqlalchemy import DateTime, Uuid, create_engine, inspect, select, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.schema import MetaData
 
+from api.models.governance import GovernanceCase, Matter
+
 API_ROOT = Path(__file__).resolve().parents[2] / "apps/api"
 
 
@@ -59,7 +61,53 @@ class MigrationBaselineTests(unittest.TestCase):
                     "CREATE TABLE baseline_probe (value integer PRIMARY KEY)"
                 )
                 connection.exec_driver_sql("INSERT INTO baseline_probe VALUES (42)")
+            matter_id, case_id, program_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+            with engines[1].begin() as connection:
+                connection.execute(
+                    Matter.__table__.insert().values(
+                        id=matter_id,
+                        title="保留的現行事情",
+                        matter_type="administration",
+                    )
+                )
+                connection.execute(
+                    GovernanceCase.__table__.insert().values(
+                        id=case_id,
+                        matter_id=matter_id,
+                        title="保留的現行案件",
+                    )
+                )
+                connection.execute(
+                    text(
+                        "INSERT INTO programs (id, matter_id, name, status, sort_order, is_active, created_at, updated_at) "
+                        "VALUES (:id, :matter_id, '退役專案', 'todo', 0, true, now(), now())"
+                    ),
+                    {"id": program_id, "matter_id": matter_id},
+                )
+                connection.execute(
+                    text("UPDATE governance_cases SET program_id=:program_id WHERE id=:case_id"),
+                    {"program_id": program_id, "case_id": case_id},
+                )
             migrate(engines[1])
+            with engines[1].begin() as connection:
+                self.assertEqual(
+                    connection.scalar(select(Matter.title).where(Matter.id == matter_id)),
+                    "保留的現行事情",
+                )
+                self.assertEqual(
+                    connection.scalar(
+                        select(GovernanceCase.matter_id).where(GovernanceCase.id == case_id)
+                    ),
+                    matter_id,
+                )
+                self.assertNotIn(
+                    "program_id",
+                    {c["name"] for c in inspect(connection).get_columns("governance_cases")},
+                )
+                connection.execute(
+                    GovernanceCase.__table__.delete().where(GovernanceCase.id == case_id)
+                )
+                connection.execute(Matter.__table__.delete().where(Matter.id == matter_id))
             with engines[1].begin() as connection:
                 self.assertEqual(connection.scalar(text("SELECT value FROM baseline_probe")), 42)
                 connection.exec_driver_sql("DROP TABLE baseline_probe")
@@ -137,6 +185,35 @@ class MigrationBaselineTests(unittest.TestCase):
                     )
                     return result
 
+            retired_tables = {
+                "activity_roles",
+                "activity_members",
+                "discord_activity_workspaces",
+                "activity_links",
+                "inventory_categories",
+                "inventory_items",
+                "inventory_transactions",
+                "inventory_procurements",
+                "inventory_procurement_items",
+                "support_tickets",
+                "support_ticket_events",
+                "support_audit_logs",
+                "support_approvals",
+                "support_impersonation_sessions",
+                "support_assistance_sessions",
+                "support_guide_entries",
+                "finance_bank_transactions",
+                "programs",
+                "planning_documents",
+                "planning_document_revisions",
+                "planning_document_attachments",
+                "planning_document_revision_attachments",
+                "matter_role_assignments",
+                "governance_workflow_templates",
+            }
+            for engine in engines:
+                self.assertFalse(retired_tables.intersection(inspect(engine).get_table_names()))
+
             baseline, history = snapshot(engines[0]), snapshot(engines[1])
             differences = []
             for table in sorted(set(baseline) | set(history)):
@@ -155,6 +232,20 @@ class MigrationBaselineTests(unittest.TestCase):
             self.assertTrue(
                 baseline == snapshot(engines[2]), "Offline SQL differs from online baseline"
             )
+            downgrade_config = Config(str(API_ROOT / "alembic.ini"))
+            downgrade_config.set_main_option("script_location", str(API_ROOT / "alembic"))
+            with engines[0].connect() as connection:
+                revision_before = connection.scalar(text("SELECT version_num FROM alembic_version"))
+            with self.assertRaisesRegex(RuntimeError, "升級前備份"):
+                with engines[0].connect() as connection:
+                    downgrade_config.attributes["connection"] = connection
+                    command.downgrade(downgrade_config, "20261117020000")
+            with engines[0].connect() as connection:
+                self.assertEqual(
+                    connection.scalar(text("SELECT version_num FROM alembic_version")),
+                    revision_before,
+                )
+            self.assertNotIn("programs", inspect(engines[0]).get_table_names())
             self.assertFalse(
                 any(
                     name.startswith(("meal_", "menu_"))

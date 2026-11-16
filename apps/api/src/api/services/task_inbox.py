@@ -512,14 +512,6 @@ async def build_task_inbox(db: AsyncSession, user: User) -> TaskInboxResponse:
     return TaskInboxResponse(items=items, total=len(items), by_module=by_module)
 
 
-def task_count_from_inbox(inbox: TaskInboxResponse) -> TaskCountResponse:
-    return TaskCountResponse(
-        total=inbox.total,
-        by_module=inbox.by_module,
-        urgent_count=sum(1 for item in inbox.items if item.severity == "critical"),
-    )
-
-
 async def build_task_count_cached(db: AsyncSession, user: User) -> TaskCountResponse:
     """以 COUNT 查詢取得徽章數量，避免為共用 Topbar 載入完整待辦資料。"""
     cache_key = f"task_count:{user.id}"

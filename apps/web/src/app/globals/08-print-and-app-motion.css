@@ -632,26 +632,25 @@
   .topbar,
   .sidebar,
   .AppShell-sidebar,
-  [class*='Sidebar'],
-  [class*='sidebar'],
-  [class*='Topbar'],
-  [class*='topbar'],
+  [class*="Sidebar"],
+  [class*="sidebar"],
+  [class*="Topbar"],
+  [class*="topbar"],
   button:not(.print-include),
   .btn:not(.print-include),
-  [role='toolbar'],
-  [role='navigation'],
+  [role="toolbar"],
+  [role="navigation"],
   .toast,
   [data-toast],
-  [class*='Toast'],
-  [class*='Modal'],
-  [class*='Drawer'],
-  [class*='dropdown'],
-  [class*='Dropdown'],
+  [class*="Toast"],
+  [class*="Modal"],
+  [class*="dropdown"],
+  [class*="Dropdown"],
   .floating-action,
-  [class*='fab'],
+  [class*="fab"],
   .pagination,
-  [aria-label*='頁碼'],
-  [aria-label*='篩選'],
+  [aria-label*="頁碼"],
+  [aria-label*="篩選"],
   footer:not(.print-include) {
     display: none !important;
   }
@@ -660,8 +659,8 @@
   main,
   [data-main-content],
   .main-content,
-  [class*='PageContent'],
-  [class*='page-content'] {
+  [class*="PageContent"],
+  [class*="page-content"] {
     max-width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
@@ -669,15 +668,15 @@
 
   /* ── 超連結顯示 URL ── */
   a[href]::after {
-    content: ' (' attr(href) ')';
+    content: " (" attr(href) ")";
     font-size: 8pt;
     color: #555;
   }
-  a[href^='#']::after,
-  a[href^='javascript']::after,
-  [class*='icon-btn']::after,
+  a[href^="#"]::after,
+  a[href^="javascript"]::after,
+  [class*="icon-btn"]::after,
   button::after {
-    content: '';
+    content: "";
   }
 
   /* ── 分頁控制 ── */

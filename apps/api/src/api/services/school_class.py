@@ -1240,24 +1240,6 @@ async def get_or_create_council_representative_position(
     return position
 
 
-async def remove_manual_member(
-    session: AsyncSession, class_id: uuid.UUID, user_id: uuid.UUID
-) -> bool:
-    result = await session.execute(
-        select(ClassManualMember).where(
-            ClassManualMember.class_id == class_id,
-            ClassManualMember.user_id == user_id,
-        )
-    )
-    member = result.scalar_one_or_none()
-    if member is None:
-        return False
-    await session.delete(member)
-    await remove_cadre(session, class_id, user_id)
-    await session.flush()
-    return True
-
-
 async def list_manual_members(session: AsyncSession, sc: SchoolClass) -> list[ClassManualMemberOut]:
     if not sc.manual_members:
         refreshed = await get_class(session, sc.id)

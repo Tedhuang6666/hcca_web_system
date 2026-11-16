@@ -212,7 +212,6 @@ class Settings(BaseSettings):
     RECOVERY_AGENT_URL: str = ""
     RECOVERY_AGENT_TOKEN: str = ""
     RECOVERY_MAX_RESTARTS_PER_HOUR: int = Field(default=2, ge=1, le=10)
-    RECOVERY_TASK_MAX_RETRIES: int = Field(default=3, ge=0, le=10)
 
     # --- PostHog 產品分析 ---
     POSTHOG_API_KEY: str = Field(default="")
@@ -244,7 +243,6 @@ class Settings(BaseSettings):
     MODULE_CIRCUIT_ENABLED: bool = Field(default=True)
     MODULE_CIRCUIT_5XX_THRESHOLD: int = Field(default=10, ge=1)
     MODULE_CIRCUIT_WINDOW_SECONDS: int = Field(default=60, ge=1)
-    MODULE_CIRCUIT_COOLDOWN_SECONDS: int = Field(default=120, ge=1)
 
     # --- 模組斷路器：升級門檻（依錯誤嚴重度）---
     # 1h 滾動窗口內跳閘次數達門檻 → 升級為 manual 維護（不自動恢復）

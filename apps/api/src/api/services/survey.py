@@ -519,14 +519,6 @@ async def close_expired_surveys(session: AsyncSession, *, now: datetime | None =
     return len(surveys)
 
 
-async def archive_survey(session: AsyncSession, survey: Survey) -> Survey:
-    if survey.status == SurveyStatus.ARCHIVED:
-        raise ValueError("問卷已封存")
-    survey.status = SurveyStatus.ARCHIVED
-    await session.flush()
-    return survey
-
-
 # ── 題目 CRUD ─────────────────────────────────────────────────────────────────
 
 

@@ -707,21 +707,3 @@ async def _process_claimed_event(event_id: uuid.UUID, owner: str) -> None:
                     )
                 await update_db.commit()
             record_outbox_delivery(event_type, outcome)
-
-
-async def replay_dead_event(session: AsyncSession, event_id: uuid.UUID) -> OutboxEvent:
-    """將 dead-letter 事件重設為 pending，供管理介面人工重播。"""
-    event = await session.get(OutboxEvent, event_id)
-    if event is None:
-        raise LookupError("找不到此 outbox 事件")
-    if event.status != OutboxStatus.DEAD:
-        raise ValueError("只有 dead 事件可以重播")
-    event.status = OutboxStatus.PENDING
-    event.retry_count = 0
-    event.last_error = None
-    event.processed_at = None
-    event.next_attempt_at = datetime.now(UTC)
-    event.locked_until = None
-    event.locked_by = None
-    await session.flush()
-    return event

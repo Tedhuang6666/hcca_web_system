@@ -19,7 +19,7 @@ description: 維護 HCCA 的 API、前端、資料庫契約與開發工具時，
    - 修錯：排錯決策，先區分業務問題與工具／環境問題。
    - 其他：驗證矩陣，不漏相關檢查、不把未跑當通過。
 5. 用 `bash scripts/check.sh <scope>` 執行檢查。環境不通時讀
-   [LOCAL_TOOLING.md](../../../docs/LOCAL_TOOLING.md)，完成不受阻的工作並記錄限制。
+   [ENVIRONMENT.md](../../../docs/ENVIRONMENT.md)，完成不受阻的工作並記錄限制。
 6. `detect-changes` 與 diff 審閱完成後，只提交本次相關檔案；中文 commit、無署名，不主動 push。
 7. 回報結果、實跑證據、限制與 commit。若尚有後續步驟，用 workflow 裡的接手格式寫明。
 

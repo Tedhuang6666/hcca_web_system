@@ -6,7 +6,6 @@ from alembic import context
 from alembic.script import ScriptDirectory
 from sqlalchemy import Connection, create_engine, inspect, pool
 
-import api.legacy_models  # noqa: F401
 
 # --- 載入完整 ORM registry（Autogenerate 必需）---
 import api.models  # noqa: F401

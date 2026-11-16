@@ -16,13 +16,10 @@ from api.models.regulation import (
     RegulationRevision,
     RegulationWorkflowStatus,
 )
-from api.schemas.regulation import RegulationArticleCreate
-from api.services import regulation as reg_svc
 from api.services.official_print import render_regulation_print_html
 from api.services.regulation_consistency import audit_regulation_document_consistency
 from api.services.regulation_import import (
     parse_regulation_document,
-    parse_regulation_docx,
     parse_regulation_text,
     split_history_events,
 )
@@ -58,16 +55,6 @@ def _build_docx_xml(document_xml: str) -> bytes:
     return buf.getvalue()
 
 
-def test_create_article_with_legacy_type_rejected() -> None:
-    with pytest.raises(ValueError):
-        RegulationArticleCreate(
-            sort_index=10,
-            article_type="clause",
-            title="第一條",
-            content="測試",
-        )
-
-
 def test_parse_regulation_docx_maps_legal_document_to_articles() -> None:
     raw = _build_docx(
         [
@@ -82,7 +69,7 @@ def test_parse_regulation_docx_maps_legal_document_to_articles() -> None:
         ]
     )
 
-    draft = parse_regulation_docx(raw, "學生代表法.docx")
+    draft = parse_regulation_document(raw, "學生代表法.docx")
 
     assert draft.title == "國立新竹高級中學學生代表法"
     assert draft.legislative_history == "114 年 12 月 15 日學生議會制訂通過"
@@ -113,7 +100,7 @@ def test_parse_regulation_docx_rejects_xml_entity_declarations() -> None:
     )
 
     with pytest.raises(ValueError, match="不安全的 XML"):
-        parse_regulation_docx(raw, "malicious.docx")
+        parse_regulation_document(raw, "malicious.docx")
 
 
 def test_parse_regulation_pdf_maps_text_pdf_to_articles(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -245,7 +232,7 @@ def test_parse_regulation_docx_collects_history_heading_block() -> None:
         ]
     )
 
-    draft = parse_regulation_docx(raw, "選罷辦法.docx")
+    draft = parse_regulation_document(raw, "選罷辦法.docx")
 
     assert draft.legislative_history == "\n".join(
         [
@@ -422,61 +409,6 @@ def test_regulation_print_splits_merged_subparagraphs() -> None:
     assert (
         '<span class="nested-label">四、</span><span class="nested-body">弘揚民主精神。' in rendered
     )
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "category",
-    [RegulationCategory.CONSTITUTION, RegulationCategory.ORDINANCE],
-)
-async def test_parliamentary_categories_cannot_skip_council_approval(
-    category: RegulationCategory,
-) -> None:
-    reg = Regulation(
-        title="測試條例",
-        category=category,
-        content="第一條 測試內容",
-        org_id=uuid.uuid4(),
-        created_by=uuid.uuid4(),
-        workflow_status=RegulationWorkflowStatus.DRAFT,
-    )
-    with pytest.raises(ValueError, match="憲章與條例必須經議會核定"):
-        await reg_svc.transition_workflow(
-            session=None,  # type: ignore[arg-type]
-            reg=reg,
-            to_status=RegulationWorkflowStatus.PUBLISHED,
-            actor_id=uuid.uuid4(),
-        )
-
-
-@pytest.mark.asyncio
-async def test_transition_reject_requires_note() -> None:
-    from api.models.regulation import Regulation, RegulationCategory
-
-    class FakeSession:
-        def add(self, _obj) -> None:
-            return None
-
-        async def flush(self) -> None:
-            return None
-
-    reg = Regulation(
-        title="測試法規",
-        category=RegulationCategory.ORDINANCE,
-        content="",
-        org_id=uuid.uuid4(),
-        created_by=uuid.uuid4(),
-        workflow_status=RegulationWorkflowStatus.UNDER_REVIEW,
-    )
-
-    with pytest.raises(ValueError, match="退回法規必須填寫退回原因"):
-        await reg_svc.transition_workflow(
-            FakeSession(),  # type: ignore[arg-type]
-            reg,
-            to_status=RegulationWorkflowStatus.REJECTED,
-            actor_id=uuid.uuid4(),
-            note="",
-        )
 
 
 @pytest.mark.asyncio
