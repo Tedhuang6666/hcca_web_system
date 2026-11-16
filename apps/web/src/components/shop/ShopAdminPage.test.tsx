@@ -364,7 +364,7 @@ describe("商品管理與統計", () => {
 
   it("收合的限購設定無效時會自動展開並聚焦，編輯保留原本的選填資料", async () => {
     const product = { id: "old", category_id: "cat", name: "紀念袋", price: 100, stock_quantity: 20,
-      description: "原本描述", max_quantity_per_user: 2, requires_seating: false, status: "draft", variant_groups: [] };
+      description: "原本描述", max_quantity_per_user: 2, status: "draft", variant_groups: [] };
     api.listCategories.mockResolvedValue([{ id: "cat", name: "校慶" }]);
     api.listProducts.mockResolvedValue([product]);
     api.updateProduct.mockRejectedValue(new Error("offline"));

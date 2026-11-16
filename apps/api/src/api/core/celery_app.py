@@ -182,11 +182,6 @@ celery_app.conf.beat_schedule = {
         "task": "api.services.shop_tasks.notify_class_cadres_on_deadline",
         "schedule": 300.0,
     },
-    # 每 60 秒清除過期的劃位暫時保留鎖
-    "cleanup-expired-seat-holds-every-60s": {
-        "task": "api.services.shop_tasks.cleanup_expired_seat_holds",
-        "schedule": 60.0,
-    },
     # 每 60 秒關閉已超過截止時間的問卷
     "close-expired-surveys-every-60s": {
         "task": "api.services.survey_tasks.close_expired_surveys",

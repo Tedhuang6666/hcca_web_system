@@ -47,7 +47,6 @@ export type {
   AccessBlockStatus,
   ActivityOut,
   AddSinglePosition,
-  AdminAssignRequest,
   AdminDashboardStats,
   AnalyticsInsightsOut,
   AnnouncementAudience,
@@ -341,8 +340,6 @@ export type {
   GoogleOneTapRequest,
   GoogleTasksStatusOut,
   HTTPValidationError,
-  HoldOut,
-  HoldRequest,
   ImageUploadOut,
   IncidentDetailOut,
   IncidentEventBody,
@@ -734,15 +731,6 @@ export type {
   SchoolClassUpdate,
   SearchIndexOut,
   SearchResultOut,
-  SeatAssignmentStatus,
-  SeatBookingOut,
-  SeatInput,
-  SeatMapOut,
-  SeatOut,
-  SeatSelectRequest,
-  SeatState,
-  SeatStatus,
-  SeatsReplace,
   SecurityEventOut,
   SelectedOption,
   SelfAnonymizeRequestOut,
@@ -825,9 +813,6 @@ export type {
   VoteEventCreate,
   VoteEventKind,
   VoteEventOut,
-  WaveInput,
-  WaveOut,
-  WavesReplace,
   WebPushConfigOut,
   WebPushKeys,
   WebPushSubscriptionIn,
@@ -851,20 +836,15 @@ export type {
   WsView,
   YearMode,
   ZombieCredentialEntry,
-  ZoneCreate,
-  ZoneListItem,
-  ZoneOut,
-  ZoneUpdate,
   api__routers__admin__PositionCreate,
   api__routers__admin__PositionUpdate,
+  AssignmentOut,
   api__routers__data_lifecycle__ExecuteBody,
   api__routers__data_lifecycle__ExecuteOut,
-  api__routers__term_rollover__AssignmentOut,
   api__routers__term_rollover__ExecuteBody,
   api__routers__term_rollover__ExecuteOut,
   api__schemas__org__PositionCreate,
-  api__schemas__org__PositionUpdate,
-  api__schemas__seating__AssignmentOut
+  api__schemas__org__PositionUpdate
 } from './api-bridge'
 
 import type {
@@ -882,7 +862,7 @@ import type {
   RateLimitOverride,
   RecipientOut,
   RecipientType,
-  TaskInboxResponse,
+  TaskInboxResponse
 } from './api-bridge'
 
 // 財務報帳工作流的手寫擴充；後端新增欄位時，財務 API 先以此維持型別安全。
@@ -1149,24 +1129,6 @@ export interface RecipientCreatePayload {
 
 
 // ── 商店系統型別 ──────────────────────────────────────────────────────────────
-
-
-// ── 劃位 / 票券型別 ──────────────────────────────────────────────────────────
-export type SeatingMode = "at_purchase" | "scheduled" | "admin_assign";
-/** 使用者選位畫面每個座位的即時狀態 */
-export type SeatStateKind = "available" | "disabled" | "blocked" | "held" | "mine" | "taken";
-
-export type DecorationKind = "screen" | "door" | "aisle_h" | "aisle_v" | "label" | "box";
-export interface LayoutDecoration {
-  id: string;
-  type: DecorationKind;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  label: string;
-  color?: string;  // 自訂 CSS 顏色（hex / rgba）
-}
 
 
 // ── 特約地圖型別 ──────────────────────────────────────────────────────────────

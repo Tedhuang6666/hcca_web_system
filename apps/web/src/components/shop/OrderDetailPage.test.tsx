@@ -12,8 +12,6 @@ const api = vi.hoisted(() => ({
   catalog: vi.fn(),
   getCloseStatus: vi.fn(),
   getProduct: vi.fn(),
-  orderAssignments: vi.fn(),
-  listZones: vi.fn(),
   previewCurrentPromotion: vi.fn(),
   applyCurrentPromotion: vi.fn(),
 }));
@@ -31,10 +29,6 @@ vi.mock("@/lib/api", () => ({
     getProduct: api.getProduct,
     previewCurrentPromotion: api.previewCurrentPromotion,
     applyCurrentPromotion: api.applyCurrentPromotion,
-  },
-  seatingApi: {
-    orderAssignments: api.orderAssignments,
-    listZones: api.listZones,
   },
   apiErrorMessage: (_error: unknown, fallback: string) => fallback,
 }));
@@ -102,9 +96,7 @@ beforeEach(() => {
   api.listOrders.mockResolvedValue([firstOrder, addedOrder]);
   api.listDelegatedOrders.mockResolvedValue([]);
   api.getCurrentRegistrations.mockResolvedValue([]);
-  api.getProduct.mockResolvedValue({ requires_seating: false, image_url: "/uploads/bag.png" });
-  api.orderAssignments.mockResolvedValue([]);
-  api.listZones.mockResolvedValue([]);
+  api.getProduct.mockResolvedValue({ image_url: "/uploads/bag.png" });
 });
 
 describe("公開訂單詳情", () => {
@@ -199,11 +191,9 @@ describe("公開訂單詳情", () => {
 
   it("uses the first product media image when the primary image is empty", async () => {
     api.getProduct.mockResolvedValue({
-      requires_seating: false,
       image_url: "",
       media: [{ image_url: "/uploads/bag-gallery.png" }],
     });
-    api.orderAssignments.mockRejectedValue(new Error("座位資料暫時無法載入"));
     const { container } = render(<OrderDetailPage />);
 
     expect(await screen.findByRole("heading", { name: "校慶" })).toBeVisible();

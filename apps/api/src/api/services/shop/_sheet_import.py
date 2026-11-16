@@ -259,7 +259,6 @@ async def _build_order(
         if (
             await product_purchase_restriction(session, product, None)
             or product.max_quantity_per_user is not None
-            or product.requires_seating
         ):
             raise AnswerNeedsReview(f"商品「{product.name}」有限購或身分限制，需人工確認")
         delta = quantities[product_id] - old_quantities[product_id]

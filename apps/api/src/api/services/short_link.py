@@ -73,7 +73,6 @@ RESERVED_ROOT_SLUGS = frozenset(
         "recommended-vendors",
         "regulations",
         "search",
-        "seating",
         "serial-templates",
         "settings",
         "shop",

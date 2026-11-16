@@ -152,30 +152,8 @@ def notify_class_cadres_on_deadline(self) -> dict:  # noqa: ANN001
     max_retries=3,
 )
 def cleanup_expired_seat_holds(self) -> dict:  # noqa: ANN001
-    """Celery Beat 定時任務：清除過期的劃位暫時保留鎖（SeatHold）。
+    """劃位功能已移除；保留同名空任務，讓部署前已排入佇列的舊訊息能正常消化。
 
-    每分鐘執行；保留鎖過期後座位即釋放回可選狀態。選位畫面查詢時亦會即時
-    濾掉過期 hold，此任務只是把垃圾列清掉、避免無限累積。
+    下一次部署後即可刪除此任務。
     """
-
-    async def _run() -> int:
-        from api.core.database import task_session
-        from api.services import seating as seating_svc
-
-        async with task_session() as session:
-            try:
-                removed = await seating_svc.cleanup_expired_holds(session)
-                await session.commit()
-                return removed
-            except Exception:
-                await session.rollback()
-                raise
-
-    try:
-        count = asyncio.run(_run())
-        if count:
-            logger.info("[Celery Beat] 清除過期劃位保留鎖 %d 筆", count)
-        return {"removed": count}
-    except Exception as exc:
-        logger.error("[Celery Beat] 清除過期劃位保留鎖失敗: %s", exc)
-        raise self.retry(exc=exc, countdown=60) from exc
+    return {"removed": 0}

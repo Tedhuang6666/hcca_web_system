@@ -17,8 +17,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: 
 
 const product = {
   id: "formal", name: "總覽商品", price: 100, image_url: null, status: "active",
-  is_unlimited: true, stock_quantity: 0, has_variants: false, has_option_surcharge: false,
-  requires_seating: false, sale_start: null, sale_end: null,
+  is_unlimited: true, stock_quantity: 0, has_variants: false, has_option_surcharge: false, sale_start: null, sale_end: null,
 };
 const catalog = [{ id: "goods", name: "校慶商品", activity_id: "festival",
   sort_order: 0, products: [product], series: [] }];

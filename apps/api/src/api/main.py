@@ -101,7 +101,6 @@ from api.routers import (
     saved_filters,
     school_class,
     search,
-    seating,
     shop,
     shop_sheet,
     shop_teacher,
@@ -381,7 +380,6 @@ def create_app() -> FastAPI:
     attach_module_health(line_webhook.router, module_id="line")
     attach_module_health(discord.router, module_id="discord")
     attach_module_health(elections.router, module_id="elections")
-    attach_module_health(seating.router, module_id="seating")
     attach_module_health(finance.router, module_id="finance")
     attach_module_health(publications.router, module_id="publications")
     attach_module_health(email.router, module_id="email")
@@ -408,7 +406,6 @@ def create_app() -> FastAPI:
         "line",
         "discord",
         "elections",
-        "seating",
         "finance",
         "publications",
         "email",
@@ -462,7 +459,6 @@ def create_app() -> FastAPI:
     app.include_router(shop_teacher.router)
     app.include_router(shop_sheet.router)
     app.include_router(merchandise_submissions.router)
-    app.include_router(seating.router)
     app.include_router(school_class.router)
     app.include_router(survey.router)
     app.include_router(notifications.router)

@@ -5024,57 +5024,6 @@ async def test_testing_permission_revocation_hides_previous_registration(
     ).status_code == 403
 
 
-async def test_testing_ticket_visibility_and_launch_releases_seat_holds(
-    db_session, authed_client_factory
-):
-    from api.models.seating import Seat, SeatHold, SeatingZone
-
-    manager = await _bare_user(db_session)
-    manager.is_superuser = True
-    outsider = await _bare_user(db_session)
-    tester = await _bare_user(db_session)
-    await _grant_permission(db_session, tester, "shop:test")
-    product = await _make_testing_product(db_session, manager)
-    other = await _make_testing_product(db_session, manager)
-    zones = [SeatingZone(product_id=p.id, name="測試場次") for p in (product, other)]
-    db_session.add_all(zones)
-    await db_session.flush()
-    for zone in zones:
-        seat = Seat(zone_id=zone.id, label="A1", x=0, y=0)
-        db_session.add(seat)
-        await db_session.flush()
-        db_session.add(
-            SeatHold(
-                seat_id=seat.id,
-                zone_id=zone.id,
-                user_id=tester.id,
-                expires_at=datetime.now(UTC) + timedelta(minutes=10),
-            )
-        )
-    await db_session.flush()
-    outsider_client = authed_client_factory(outsider)
-    for url in (
-        f"/seating/products/{product.id}/zones",
-        f"/seating/zones/{zones[0].id}",
-        f"/seating/zones/{zones[0].id}/map",
-    ):
-        assert (await outsider_client.get(url)).status_code == 404
-        assert (await authed_client_factory(tester).get(url)).status_code == 200
-    await _grant_permission(db_session, outsider, "seating:manage")
-    assert (
-        await outsider_client.post(
-            "/seating/zones",
-            json={
-                "product_id": str(product.id),
-                "name": "越權場次",
-            },
-        )
-    ).status_code == 404
-    response = await authed_client_factory(manager).post(f"/shop/products/{product.id}/activate")
-    assert response.status_code == 200
-    assert list(await db_session.scalars(select(SeatHold.zone_id))) == [zones[1].id]
-
-
 async def test_expired_product_testing_permission_does_not_grant_access(
     db_session, authed_client_factory
 ):

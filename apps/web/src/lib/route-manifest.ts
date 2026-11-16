@@ -18,7 +18,6 @@ export const MODULE_MANIFEST = {
   line: { label: "LINE 通知", routePrefixes: ["/line"], navIds: [], navigationGroup: "發布與營運" },
   discord: { label: "Discord 機器人", routePrefixes: ["/discord", "/admin/discord"], navIds: ["discordAdmin"], navigationGroup: "發布與營運" },
   elections: { label: "選舉開票", routePrefixes: ["/elections", "/admin/elections"], navIds: ["electionsAdmin"], navigationGroup: "治理事務" },
-  seating: { label: "票務劃位", routePrefixes: ["/seating"], navIds: [], navigationGroup: "校園服務" },
   finance: { label: "財務與收款", routePrefixes: ["/finance", "/receivables"], navIds: ["finance", "receivables"], navigationGroup: "發布與營運" },
   publications: { label: "發布中心", routePrefixes: ["/publications"], navIds: ["publications"], navigationGroup: "發布與營運" },
   email: { label: "電子郵件", routePrefixes: ["/email"], navIds: ["email"], navigationGroup: "發布與營運" },

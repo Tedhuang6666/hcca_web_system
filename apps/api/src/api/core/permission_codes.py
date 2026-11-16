@@ -100,9 +100,6 @@ class PermissionCode(StrEnum):
     FINANCE_BUDGET_PROPOSE = "finance:budget_propose"
     FINANCE_BUDGET_REVIEW = "finance:budget_review"
 
-    SEATING_MANAGE = "seating:manage"
-    SEATING_ASSIGN = "seating:assign"
-
     CLASS_MANAGE = "class:manage"
     CLASS_VIEW_MEMBERS = "class:view_members"
     CLASS_MANAGE_MEMBERS = "class:manage_members"
@@ -652,18 +649,6 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "desc": "核准、退回或否決共同預算與追加預算案",
     },
     {
-        "group": "商品系統",
-        "code": PermissionCode.SEATING_MANAGE,
-        "label": "管理劃位",
-        "desc": "建立場次座位圖、設定分批開放時段與座位",
-    },
-    {
-        "group": "商品系統",
-        "code": PermissionCode.SEATING_ASSIGN,
-        "label": "代為劃位",
-        "desc": "依到場順序為已購票者指定座位（管理員代劃）",
-    },
-    {
         "group": "班級管理",
         "code": PermissionCode.CLASS_MANAGE,
         "label": "管理班級",
@@ -932,11 +917,15 @@ PERMISSION_CATEGORY_ORDER: tuple[str, ...] = (
 for _permission in ALL_PERMISSION_CODES:
     _permission["category"] = PERMISSION_CATEGORY_BY_GROUP[_permission["group"]]
 
-KNOWN_PERMISSION_CODES: frozenset[str] = frozenset(
-    item["code"] for item in ALL_PERMISSION_CODES
-) | {
-    PermissionCode.AUDIT_VIEW,
-}
+# 已移除功能的權限碼：不再顯示於權限目錄，但既有職位可能仍保存這些字串；
+# 視為已知可避免管理員重新儲存該職位時被判定為未知權限而失敗。
+RETIRED_PERMISSION_CODES: frozenset[str] = frozenset({"seating:manage", "seating:assign"})
+
+KNOWN_PERMISSION_CODES: frozenset[str] = (
+    frozenset(item["code"] for item in ALL_PERMISSION_CODES)
+    | {PermissionCode.AUDIT_VIEW}
+    | RETIRED_PERMISSION_CODES
+)
 
 
 def validate_permission_codes(codes: list[str]) -> list[str]:

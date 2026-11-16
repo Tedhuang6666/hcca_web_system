@@ -6,27 +6,15 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { authApi, seatingApi, shopApi, apiErrorMessage } from "@/lib/api";
+import { authApi, shopApi, apiErrorMessage } from "@/lib/api";
 import { OrderStatusBadge } from "@/components/ui/StatusBadge";
-import type { SeatBookingOut, OrderListItem, OrderOut, ProductOut, ZoneListItem } from "@/lib/types";
+import type { OrderListItem, OrderOut } from "@/lib/types";
 import { useWS } from "@/hooks/useWS";
 import { groupActivityPreorders } from "@/lib/shop-preorders";
 import { refreshAutomaticRegistrationPromotions } from "@/lib/shop-registration-promotions";
 import OrderItemSources from "@/components/shop/OrderItemSources";
 import ProductThumbnail from "@/components/shop/ProductThumbnail";
 import OrderItemGiftBreakdown from "@/components/shop/OrderItemGiftBreakdown";
-
-type SeatingItem = {
-  productId: string;
-  product: ProductOut;
-  quantity: number;
-  zones: ZoneListItem[];
-  sources: {
-    orderId: string;
-    quantity: number;
-    assignments: SeatBookingOut[];
-  }[];
-};
 
 type ActivityPreorder = ReturnType<typeof groupActivityPreorders>[number];
 
@@ -49,7 +37,6 @@ export default function OrderDetailPage() {
   const [order, setOrder] = useState<OrderOut | null>(null);
   const [orders, setOrders] = useState<OrderOut[]>([]);
   const [activityPreorder, setActivityPreorder] = useState<ActivityPreorder | null>(null);
-  const [seatingItems, setSeatingItems] = useState<SeatingItem[]>([]);
   const [productImages, setProductImages] = useState<Record<string, string | null>>({});
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -206,49 +193,19 @@ export default function OrderDetailPage() {
       }
       setEditableProductIds(editableIds);
 
-      const assignmentsByOrder = new Map<string, SeatBookingOut[]>();
-      await Promise.all(relatedOrders.map(async (relatedOrder) => {
-        assignmentsByOrder.set(
-          relatedOrder.id,
-          await seatingApi.orderAssignments(relatedOrder.id).catch(() => []),
-        );
-      }));
-
-      const quantitiesByProduct = new Map<string, Map<string, number>>();
-      for (const relatedOrder of relatedOrders) {
-        for (const item of relatedOrder.items) {
-          const sources = quantitiesByProduct.get(item.product_id) ?? new Map<string, number>();
-          sources.set(relatedOrder.id, (sources.get(relatedOrder.id) ?? 0) + item.quantity);
-          quantitiesByProduct.set(item.product_id, sources);
-        }
-      }
-
+      const productIds = new Set(
+        relatedOrders.flatMap((relatedOrder) => relatedOrder.items.map((item) => item.product_id)),
+      );
       const imageUrls = new Map<string, string | null>();
-      const seating = await Promise.all([...quantitiesByProduct.entries()].map(async ([productId, sources]) => {
+      await Promise.all([...productIds].map(async (productId) => {
         try {
           const product = await shopApi.getProduct(productId);
           imageUrls.set(productId, product.image_url || product.media[0]?.image_url || null);
-          if (!product.requires_seating) return null;
-          const zones = await seatingApi.listZones(productId);
-          const zoneIds = new Set(zones.map((zone) => zone.id));
-          return {
-            productId,
-            product,
-            quantity: [...sources.values()].reduce((sum, quantity) => sum + quantity, 0),
-            zones,
-            sources: [...sources.entries()].map(([orderId, quantity]) => ({
-              orderId,
-              quantity,
-              assignments: (assignmentsByOrder.get(orderId) ?? [])
-                .filter((assignment) => zoneIds.has(assignment.zone_id)),
-            })),
-          } satisfies SeatingItem;
         } catch {
-          return null;
+          // 商品圖片只是輔助資訊，讀取失敗時沿用預設縮圖。
         }
       }));
       setProductImages(Object.fromEntries(imageUrls));
-      setSeatingItems(seating.filter((item): item is SeatingItem => item !== null));
     } catch (e) {
       setOrder(null);
       setOrders([]);
@@ -452,79 +409,6 @@ export default function OrderDetailPage() {
         </section>
       )}
 
-      {/* 劃位 */}
-      {seatingItems.map(({ product, quantity, zones, sources }) => {
-        const isAdminAssign = product.seating_mode === "admin_assign";
-        const assignments = sources.flatMap((source) => source.assignments);
-        const assignedByZone = assignments.reduce<Record<string, SeatBookingOut[]>>((acc, assignment) => {
-          (acc[assignment.zone_id] ||= []).push(assignment);
-          return acc;
-        }, {});
-        return (
-          <section key={product.id} className="shop-order-detail-panel space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="mb-0">劃位 — {product.name}</h2>
-              <span className="text-xs" style={{ color: "var(--text-muted)" }}>購票 {quantity} 張</span>
-            </div>
-
-            {isAdminAssign ? (
-              <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-                此票種由主辦單位依到場順序安排座位，無需自行劃位。
-              </p>
-            ) : zones.length === 0 ? (
-              <p className="text-sm" style={{ color: "var(--text-muted)" }}>主辦單位尚未開放座位圖。</p>
-            ) : (
-              <div className="space-y-2">
-                {zones.map((z) => {
-                  const seated = assignedByZone[z.id] || [];
-                  const notOpen = z.seating_opens_at && new Date(z.seating_opens_at) > new Date();
-                  return (
-                    <div key={z.id} className="flex items-center justify-between rounded-lg px-3 py-2"
-                      style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-                      <div>
-                        <p className="text-sm font-medium">{z.name}</p>
-                        {z.starts_at && (
-                          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                            {new Date(z.starts_at).toLocaleString("zh-TW", { dateStyle: "short", timeStyle: "short" })}
-                          </p>
-                        )}
-                        {seated.length > 0 && (
-                          <p className="text-xs mt-0.5" style={{ color: "var(--primary-text)" }}>
-                            已劃：{seated.map((a) => a.seat_label).join(", ")}
-                          </p>
-                        )}
-                        {notOpen && (
-                          <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-                            開放時間 {new Date(z.seating_opens_at!).toLocaleString("zh-TW", { dateStyle: "short", timeStyle: "short" })}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {sources.map((source) => (
-                          <Link
-                            key={`${z.id}:${source.orderId}`}
-                            href={`/seating/${z.id}?order_id=${source.orderId}`}
-                            className="btn btn-primary text-xs"
-                          >
-                            {source.assignments.some((assignment) => assignment.zone_id === z.id)
-                              ? "調整座位" : "選擇座位"}（{source.quantity} 張）
-                          </Link>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {isAdminAssign && assignments.length > 0 && (
-              <p className="text-sm" style={{ color: "var(--primary-text)" }}>
-                已安排座位：{assignments.map((a) => a.seat_label).join(", ")}
-              </p>
-            )}
-          </section>
-        );
-      })}
     </div>
   );
 }

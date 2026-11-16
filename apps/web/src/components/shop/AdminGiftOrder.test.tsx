@@ -8,7 +8,7 @@ vi.mock("@/lib/api", () => ({ shopApi: api, apiErrorMessage: (_: unknown, fallba
 
 const product = { id: "shirt", name: "紀念衫", price: 100, status: "active" as const,
   stock_quantity: 10, purchase_allowed: true, is_unlimited: false, has_variants: true,
-  has_option_surcharge: true, requires_seating: false };
+  has_option_surcharge: true };
 const catalog: CatalogCategoryOut[] = [{ id: "cat", name: "紀念品", sort_order: 0, series: [], products: [product] }];
 const classes: SchoolClassListItem[] = [
   { id: "class", label: "一年一班", academic_year: 115, class_code: "101", grade: 1, is_active: true },

@@ -323,8 +323,6 @@ function ProductFormModal({
     }).catch(() => { if (active) setRulesState("error"); });
     return () => { active = false; };
   }, [initial?.id, rulesAttempt]);
-  const [requiresSeating, setRequiresSeating] = useState(initial?.requires_seating ?? false);
-  const [seatingMode, setSeatingMode] = useState<string>(initial?.seating_mode ?? "at_purchase");
   const [busy, setBusy] = useState(false);
   const [mediaUploadsInProgress, setMediaUploadsInProgress] = useState(0);
   type ProductField = "name" | "price" | "originalPrice" | "unitCost" | "stock" | "limit" | "variants";
@@ -440,8 +438,6 @@ function ProductFormModal({
         max_quantity_per_user: maxQuantity,
         purchase_rules: purchaseRules,
         sale_end: deadlineFromInput(saleEnd),
-        requires_seating: requiresSeating,
-        seating_mode: requiresSeating ? seatingMode : null,
       };
       const savedProduct = editing
         ? await shopApi.updateProduct(initial!.id, {
@@ -733,31 +729,6 @@ function ProductFormModal({
                 目前有效截止：{new Date(initial.effective_sale_end).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}
               </p>}
             </Field>
-            <div className="rounded-lg p-3 space-y-2" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-              <label className="flex items-center gap-2 text-xs" style={{ color: "var(--text-secondary)" }}>
-                <input type="checkbox" checked={requiresSeating} onChange={(e) => setRequiresSeating(e.target.checked)} />
-                此為需劃位票種（電影 / 演唱會等）
-              </label>
-              {requiresSeating && (
-                <>
-                  <Field label="劃位時機">
-                    <select value={seatingMode} onChange={(e) => setSeatingMode(e.target.value)} className="input w-full">
-                      <option value="at_purchase">購買即劃位</option>
-                      <option value="scheduled">指定時間開放後自助劃位</option>
-                      <option value="admin_assign">管理員依到場順序代為劃位</option>
-                    </select>
-                  </Field>
-                  {editing && (
-                    <Link href={`/seating/admin/${initial!.id}`} className="btn btn-ghost text-xs">
-                      → 管理場次與座位圖
-                    </Link>
-                  )}
-                  {!editing && (
-                    <p className="text-xs" style={{ color: "var(--text-muted)" }}>儲存後即可在商品上「管理場次與座位圖」。</p>
-                  )}
-                </>
-              )}
-            </div>
           </div>
         </details>
         {editing && <p className="text-xs" style={{ color: "var(--text-secondary)" }}>尺寸、顏色等既有規格可在商品詳情設定。</p>}

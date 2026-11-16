@@ -249,15 +249,6 @@ async def _assert_room_access(room: str, user_id: str) -> None:
                 raise PermissionError("無權加入此組織房間")
             return
 
-        if room.startswith("seat-zone:"):
-            from api.models.seating import SeatingZone
-
-            zone_id = uuid.UUID(room.split(":", 1)[1])
-            exists = await db.scalar(select(SeatingZone.id).where(SeatingZone.id == zone_id))
-            if not exists:
-                raise PermissionError("找不到此劃位場次")
-            return
-
         if room == "shop:orders":
             if "shop:manage" not in codes:
                 raise PermissionError("無權加入商品訂單房間")

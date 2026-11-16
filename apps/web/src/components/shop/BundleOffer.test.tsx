@@ -5,8 +5,7 @@ import BundleOffer from "./BundleOffer";
 
 function product(id: string, name: string, price: number): CatalogProductOut {
   return { id, name, price, status: "active", is_unlimited: true, stock_quantity: 0,
-    purchase_allowed: true, has_variants: false, has_option_surcharge: false,
-    requires_seating: false };
+    purchase_allowed: true, has_variants: false, has_option_surcharge: false };
 }
 
 const hoodie = product("hoodie", "帽T", 600);

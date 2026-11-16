@@ -23,17 +23,6 @@ async def broadcast_user_event(
     await manager.broadcast_to_room(f"user:{user_id}", message)
 
 
-async def broadcast_seat_zone_changed(zone_id: uuid.UUID) -> None:
-    """通知座位圖重新載入；不在事件本身攜帶個人化座位狀態。"""
-    await manager.broadcast_to_room(
-        f"seat-zone:{zone_id}",
-        {
-            "type": "seat_map.changed",
-            "data": {"zone_id": str(zone_id)},
-        },
-    )
-
-
 async def broadcast_order_updated(
     *,
     domain: str,

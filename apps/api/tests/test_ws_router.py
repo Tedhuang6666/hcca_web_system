@@ -198,7 +198,7 @@ async def test_room_access_org_non_member_denied(member_user: User) -> None:
         pass
 
 
-async def test_room_access_unknown_seat_zone_denied(member_user: User) -> None:
+async def test_room_access_retired_seat_zone_room_denied(member_user: User) -> None:
     with pytest.raises(PermissionError):
         await _assert_room_access(f"seat-zone:{uuid.uuid4()}", str(member_user.id))
 

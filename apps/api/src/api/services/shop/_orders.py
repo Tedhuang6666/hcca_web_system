@@ -17,7 +17,6 @@ from api.models.activity_link import ActivityLink, ActivityLinkKind
 from api.models.outbox import OutboxEvent, OutboxStatus
 from api.models.receivable import Receivable, ReceivableSource
 from api.models.school_class import SchoolClass
-from api.models.seating import SeatAssignment, SeatAssignmentStatus
 from api.models.shop import (
     Cart,
     CartItem,
@@ -1420,7 +1419,6 @@ async def update_order_item_quantity(
             if (
                 await product_purchase_restriction(session, product, None)
                 or product.max_quantity_per_user is not None
-                or product.requires_seating
             ):
                 raise ValueError("此商品有限購或身分限制，需人工確認")
         else:
@@ -1441,18 +1439,6 @@ async def update_order_item_quantity(
                 product_quantity + delta,
                 excluding_order_id=order.id,
             )
-
-    if quantity < item.quantity:
-        assigned_seats = await session.scalar(
-            select(func.count())
-            .select_from(SeatAssignment)
-            .where(
-                SeatAssignment.order_item_id == item.id,
-                SeatAssignment.status == SeatAssignmentStatus.ACTIVE,
-            )
-        )
-        if (assigned_seats or 0) > quantity:
-            raise ValueError("此品項已有劃位，請先解除多餘座位再調整數量")
 
     if delta and not product.is_unlimited:
         product.stock_quantity -= delta

@@ -16,8 +16,7 @@ const urgent: AnnouncementOut = {
 const product: CatalogProductOut = {
   id: "bag", name: "活動紀念袋", price: 100, status: "active", stock_quantity: 10,
   is_unlimited: false, purchase_allowed: true, has_variants: false,
-  has_option_surcharge: false, requires_seating: false,
-};
+  has_option_surcharge: false,};
 const category: CatalogCategoryOut = {
   id: "event", name: "校園活動", sort_order: 0, products: [product],
   series: [{ id: "series", name: "紀念品", sort_order: 0, products: [product] }],
