@@ -3058,8 +3058,8 @@ async def test_class_receipt_contains_all_active_orders_in_class_and_activity(
     assert text.count("400") == 2
     assert text.count("優惠折抵") == 2
     assert sum(line.strip() == "優惠折抵 -30" for line in text.splitlines()) == 2
-    assert text.count("尺寸：L") == 2
-    assert text.count("紀念衫") == 2  # 相同規格與成交單價已合併。
+    assert text.count("L:4") == 2
+    assert text.count("紀念衫") == 2  # 同品項合併，備註保留規格總數。
     date_fields = []
 
     def visit_date(value, cm, tm, _font, _size):

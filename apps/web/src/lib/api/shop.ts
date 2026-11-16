@@ -4,6 +4,7 @@ import type {
   OrderItemQuantityUpdate,
   ChangedOrderReceiptCreate,
   ClassReceiptBatchCreate,
+  ClassOrderConfirmationCreate,
   ClassMemberOut,
   ShopSalesAnalyticsOut,
   ShopSalesReportCreate,
@@ -234,6 +235,16 @@ export const shopApi = {
   downloadClassReceipt: async (classId: string, activityId: string | null) => {
     const query = activityId ? `?${new URLSearchParams({ activity_id: activityId })}` : "";
     const response = await authFetch(`${BASE}/shop/orders/classes/${classId}/receipt.pdf${query}`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new ApiError(response.status, await errorMessageFromResponse(response));
+    return response;
+  },
+  downloadClassOrderConfirmations: async (scope: ReceiptScope, classIds?: string[]) => {
+    const response = await authFetch(`${BASE}/shop/orders/classes/confirmations.pdf`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...csrfHeaders("POST") },
+      body: JSON.stringify({ ...scope, class_ids: classIds ?? null } satisfies ClassOrderConfirmationCreate),
       credentials: "include",
     });
     if (!response.ok) throw new ApiError(response.status, await errorMessageFromResponse(response));

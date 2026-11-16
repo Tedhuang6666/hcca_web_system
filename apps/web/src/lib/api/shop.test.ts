@@ -3,6 +3,21 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { shopApi } from "./shop";
 
 describe("shop quantity API", () => {
+  it("總數確認單傳遞所選班級或全部班級，並保留後端錯誤", async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response("pdf"));
+    vi.stubGlobal("fetch", fetchMock);
+    await shopApi.downloadClassOrderConfirmations({ category_id: "shirts" }, ["class-1"]);
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(/\/shop\/orders\/classes\/confirmations.pdf$/);
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: "POST", credentials: "include" });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ category_id: "shirts", class_ids: ["class-1"] });
+    await shopApi.downloadClassOrderConfirmations({ activity_id: "festival" });
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ activity_id: "festival", class_ids: null });
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ detail: "尚無班級訂單" }), {
+      status: 400, headers: { "Content-Type": "application/json" },
+    }));
+    await expect(shopApi.downloadClassOrderConfirmations({})).rejects.toThrow("尚無班級訂單");
+  });
+
   it("downloads quantity details with current filters and preserves server errors", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response("xlsx"));
     vi.stubGlobal("fetch", fetchMock);

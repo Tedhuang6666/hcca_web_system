@@ -1208,6 +1208,28 @@ export default function CouncilOrdersPage() {
                 <AnimatedDownloadButton
                   request={() => {
                     setReceiptError("");
+                    return shopApi.downloadClassOrderConfirmations(
+                      { category_id: receiptCategoryId }, [...selectedReceiptClasses]
+                    );
+                  }}
+                  label={`列印所選 ${selectedReceiptClasses.size} 班總數確認單`}
+                  disabled={mutationBusy || loading || !receiptCategoryId || selectedReceiptClasses.size === 0}
+                  className="btn btn-secondary min-h-11 px-3 text-xs disabled:opacity-50"
+                  onError={(error) => setReceiptError(apiErrorMessage(error, "總數確認單下載失敗，請重試。"))}
+                />
+                <AnimatedDownloadButton
+                  request={() => {
+                    setReceiptError("");
+                    return shopApi.downloadClassOrderConfirmations({ category_id: receiptCategoryId });
+                  }}
+                  label="列印各班總數確認單"
+                  disabled={mutationBusy || loading || !receiptCategoryId}
+                  className="btn btn-ghost min-h-11 px-3 text-xs disabled:opacity-50"
+                  onError={(error) => setReceiptError(apiErrorMessage(error, "總數確認單下載失敗，請重試。"))}
+                />
+                <AnimatedDownloadButton
+                  request={() => {
+                    setReceiptError("");
                     return shopApi.downloadClassReceipts({ category_id: receiptCategoryId }, undefined, true);
                   }}
                   label="列印所有未繳款班級／個人收據"

@@ -43,6 +43,7 @@ from api.schemas.shop import (
     CatalogCategoryOut,
     ChangedOrderReceiptCreate,
     ClassCollectionUpdate,
+    ClassOrderConfirmationCreate,
     ClassOrderCreate,
     ClassOrderUpsert,
     ClassPaymentOut,
@@ -748,6 +749,54 @@ async def list_promotions(
         include_testing=await can_test_products(session, current_user),
     )
     return [shop_svc.serialize_promotion(promotion) for promotion in promotions]
+
+
+@router.post(
+    "/orders/classes/confirmations.pdf",
+    summary="列印各班級訂購總數確認單",
+    response_class=Response,
+    responses={
+        200: {"content": {"application/pdf": {"schema": {"type": "string", "format": "binary"}}}}
+    },
+    dependencies=[
+        Depends(
+            require_any(
+                PermissionCode.SHOP_MANAGE,
+                PermissionCode.SHOP_MANAGE_ORDERS,
+                PermissionCode.ADMIN_ALL,
+            )
+        )
+    ],
+)
+async def download_class_order_confirmations(
+    payload: ClassOrderConfirmationCreate, session: DbDep
+) -> Response:
+    if payload.class_ids is not None:
+        found = set(
+            await session.scalars(
+                select(SchoolClass.id).where(SchoolClass.id.in_(payload.class_ids))
+            )
+        )
+        if found != set(payload.class_ids):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到指定班級")
+    try:
+        pdf = await shop_svc.export_class_order_confirmations_pdf(
+            session,
+            payload.class_ids,
+            activity_id=payload.activity_id,
+            category_id=payload.category_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    filename = "班級訂購總數確認單.pdf"
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename, safe='')}",
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @router.post(

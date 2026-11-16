@@ -10418,6 +10418,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop/orders/classes/confirmations.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 列印各班級訂購總數確認單 */
+        post: operations["download_class_order_confirmations_shop_orders_classes_confirmations_pdf_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shop/orders/classes/receipts.pdf": {
         parameters: {
             query?: never;
@@ -14984,6 +15001,15 @@ export interface components {
              * Format: uuid
              */
             user_id: string;
+        };
+        /** ClassOrderConfirmationCreate */
+        ClassOrderConfirmationCreate: {
+            /** Activity Id */
+            activity_id?: string | null;
+            /** Category Id */
+            category_id?: string | null;
+            /** Class Ids */
+            class_ids?: string[] | null;
         };
         /** ClassOrderCreate */
         ClassOrderCreate: {
@@ -56189,6 +56215,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ShopClassSummaryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_class_order_confirmations_shop_orders_classes_confirmations_pdf_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClassOrderConfirmationCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
                 };
             };
             /** @description Validation Error */

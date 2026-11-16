@@ -8,7 +8,7 @@ import re
 import unicodedata
 import uuid
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from io import BytesIO
 from pathlib import Path
@@ -40,6 +40,57 @@ class _ReceiptOrder:
     items: list[OrderItem]
     total_price: int
     received_amount: int = 0
+
+
+@dataclass
+class _ReceiptProduct:
+    name: str
+    quantity: int = 0
+    amount: int = 0
+    prices: set[int] = field(default_factory=set)
+    variants: dict[tuple[tuple[str, str], ...], int] = field(default_factory=dict)
+
+
+def _receipt_products(orders: list[Order] | list[_ReceiptOrder]) -> list[_ReceiptProduct]:
+    """同商品合併規格，數量與金額均來自成交快照。"""
+    products: dict[uuid.UUID, _ReceiptProduct] = {}
+    for order in orders:
+        for item in order.items:
+            product = products.setdefault(item.product_id, _ReceiptProduct(item.product.name))
+            options = tuple(
+                sorted(
+                    (str(option.get("group_name", "")), str(option.get("value", "")))
+                    for option in item.selected_options
+                )
+            )
+            product.quantity += item.quantity
+            product.amount += item.unit_price * item.quantity
+            product.prices.add(item.unit_price)
+            product.variants[options] = product.variants.get(options, 0) + item.quantity
+    return list(products.values())
+
+
+def _receipt_variant_summary(product: _ReceiptProduct) -> str:
+    if not any(product.variants):
+        return ""
+    groups = {group for options in product.variants for group, _ in options}
+    parts = []
+    for options, quantity in sorted(product.variants.items()):
+        label = (
+            "／".join(
+                f"{group}={value}" if len(groups) > 1 and group else value
+                for group, value in options
+            )
+            or "無規格"
+        )
+        parts.append(f"{label}:{quantity}")
+    return "、".join(parts)
+
+
+def _receipt_cell_rows(value: str, width: float) -> list[str]:
+    """每個表格列可放兩行，超長內容才接續下一列。"""
+    lines = _receipt_text_lines(value, width, font_size=10)
+    return ["\n".join(lines[index : index + 2]) for index in range(0, len(lines), 2)]
 
 
 def _receipt_order_options() -> tuple[Load, ...]:
@@ -177,37 +228,21 @@ def _render_class_receipt_pdf(
     issued_on: date,
     printed_at: datetime | None = None,
 ) -> bytes:
-    # 同商品、規格與成交單價合併；金額只使用訂單快照，不依目前商品價格重算。
-    grouped: dict[tuple[uuid.UUID, int, tuple[tuple[str, str], ...]], tuple[str, int]] = {}
-    for order in orders:
-        for item in order.items:
-            options = tuple(
-                sorted(
-                    (str(option.get("group_name", "")), str(option.get("value", "")))
-                    for option in item.selected_options
-                )
-            )
-            key = (item.product_id, item.unit_price, options)
-            name, quantity = grouped.get(key, (item.product.name, 0))
-            grouped[key] = (name, quantity + item.quantity)
-
     rows: list[tuple[str, str, str, str, str]] = []
     subtotal = 0
-    for (_, unit_price, options), (name, quantity) in grouped.items():
-        amount = unit_price * quantity
-        subtotal += amount
-        remarks = "、".join(f"{group}：{value}" if group else value for group, value in options)
-        if not rows and activity_name != "一般商品":
-            remarks = f"{activity_name}\n{remarks}".rstrip()
-        names = _receipt_text_lines(name, _RECEIPT_COLUMNS[0][1])
-        notes = _receipt_text_lines(remarks, _RECEIPT_COLUMNS[4][1])
+    for product in _receipt_products(orders):
+        subtotal += product.amount
+        prices = sorted(product.prices)
+        unit_price = str(prices[0]) if len(prices) == 1 else f"{prices[0]}～{prices[-1]}"
+        names = _receipt_cell_rows(product.name, _RECEIPT_COLUMNS[0][1])
+        notes = _receipt_cell_rows(_receipt_variant_summary(product), _RECEIPT_COLUMNS[4][1])
         for index in range(max(len(names), len(notes))):
             rows.append(
                 (
                     names[index] if index < len(names) else "",
-                    f"{quantity:,}" if index == 0 else "",
-                    f"{unit_price:,}" if index == 0 else "",
-                    f"{amount:,}" if index == 0 else "",
+                    f"{product.quantity:,}" if index == 0 else "",
+                    unit_price if index == 0 else "",
+                    f"{product.amount:,}" if index == 0 else "",
                     notes[index] if index < len(notes) else "",
                 )
             )
@@ -274,7 +309,7 @@ def _render_class_receipt_pdf(
                             font_size=(
                                 min(12, width / (len(value) * 0.65))
                                 if column in (1, 2, 3) and value
-                                else 12
+                                else 10
                             ),
                             align="right" if column in (1, 2, 3) else "left",
                             height=22.9,
@@ -293,6 +328,8 @@ def _render_class_receipt_pdf(
                 page_note = f"第 {page_index + 1}/{page_count} 頁，總額為整份收據合計"
             else:
                 page_note = f"第 {page_index + 1}/{page_count} 頁，新台幣 {total:,} 元整"
+            if activity_name != "一般商品":
+                page_note = f"{activity_name} · {page_note}"
             fields.append(_receipt_field(page_note, 36, 380 + offset, 540, font_size=8))
         sections.append(f'<section class="page">{"".join(fields)}</section>')
     markup = f"""<!doctype html><html lang="zh-TW"><head><meta charset="UTF-8">

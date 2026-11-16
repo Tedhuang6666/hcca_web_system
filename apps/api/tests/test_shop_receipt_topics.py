@@ -16,6 +16,91 @@ from api.models.shop_order_receipt_print import ShopOrderReceiptPrint
 from api.services.shop import _receipts
 
 
+@pytest.mark.parametrize("topics", [False, True], indirect=True)
+@pytest.mark.parametrize("selected", [False, True])
+async def test_class_confirmation_totals_specs_and_scope_without_recording_receipts(
+    db_session, admin_user, authed_client_factory, topics, selected
+):
+    school_class, activity, categories, products = topics
+    other_class = SchoolClass(
+        academic_year=115, class_code="102", label="一年二班", created_by=admin_user.id
+    )
+    db_session.add(other_class)
+    await db_session.flush()
+    orders = []
+    for size, quantity, paid in [("L", 2, False), ("XL", 4, True)]:
+        order = await _order(
+            db_session, admin_user, school_class, activity, [products[0]], total=quantity * 100
+        )
+        order.items[0].quantity = quantity
+        order.items[0].selected_options = [{"group_name": "尺寸", "value": size}]
+        order.is_paid = paid
+        orders.append(order)
+    await _order(db_session, admin_user, other_class, activity, [products[0]], total=101)
+    await _order(db_session, admin_user, school_class, activity, [products[1]], total=202)
+    await _order(
+        db_session, admin_user, school_class, activity, [products[0]], total=101, supplement=True
+    )
+    for state in [OrderStatus.CANCELLED, OrderStatus.REFUNDED]:
+        excluded = await _order(
+            db_session, admin_user, school_class, activity, [products[0]], total=101
+        )
+        excluded.status = state
+    test_order = await _order(
+        db_session, admin_user, school_class, activity, [products[0]], total=101
+    )
+    test_order.test_product_id = products[0].id
+    await db_session.flush()
+    payload = {"category_id": str(categories[0].id)}
+    if selected:
+        payload["class_ids"] = [str(school_class.id)]
+    response = await authed_client_factory(admin_user).post(
+        "/shop/orders/classes/confirmations.pdf", json=payload
+    )
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.headers["cache-control"] == "no-store"
+    pdf = PdfReader(BytesIO(response.content))
+    assert len(pdf.pages) == (1 if selected else 2)
+    text = "".join(pdf.pages[0].extract_text().split())
+    assert "班級訂購總數確認單" in text
+    assert "一年一班" in text and "主題1" in text
+    assert "L:2、XL:4" in text
+    assert "總件數：6件" in text
+    assert "訂單總額：600元" in text
+    assert "優惠折抵：6元" in text
+    assert "商品2" not in text
+    assert "班級確認人" in text and "核對人" in text
+    if not selected:
+        assert "一年二班" in pdf.pages[1].extract_text()
+    assert await db_session.scalar(select(func.count(ShopOrderReceiptPrint.order_id))) == 0
+    for order, paid in zip(orders, [False, True], strict=True):
+        await db_session.refresh(order)
+        assert order.is_paid is paid
+
+
+async def test_class_confirmations_require_permission_and_report_invalid_scopes(
+    db_session, admin_user, member_user, client, authed_client_factory
+):
+    path = "/shop/orders/classes/confirmations.pdf"
+    assert (await client.post(path, json={})).status_code == 401
+    assert (await authed_client_factory(member_user).post(path, json={})).status_code == 403
+    manager = authed_client_factory(admin_user)
+    assert (await manager.post(path, json={})).status_code == 400
+    assert (await manager.post(path, json={"class_ids": [str(uuid.uuid4())]})).status_code == 404
+    assert (await manager.post(path, json={"class_ids": []})).status_code == 422
+    assert (await manager.post(path, json={"category_id": str(uuid.uuid4())})).status_code == 400
+    assert (
+        await manager.post(
+            path,
+            json={
+                "activity_id": str(uuid.uuid4()),
+                "category_id": str(uuid.uuid4()),
+            },
+        )
+    ).status_code == 400
+
+
 @pytest.fixture
 async def topics(db_session, admin_user, request):
     activity = None

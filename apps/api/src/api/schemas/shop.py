@@ -787,6 +787,12 @@ class ClassPaymentUpdate(BaseModel):
     )
 
 
+class ClassOrderConfirmationCreate(BaseModel):
+    activity_id: uuid.UUID | None = None
+    category_id: uuid.UUID | None = None
+    class_ids: list[uuid.UUID] | None = Field(default=None, min_length=1, max_length=200)
+
+
 class ClassReceiptBatchCreate(BaseModel):
     activity_id: uuid.UUID | None = Field(
         default=None, description="收據活動；保留相容舊呼叫，null 時依主題或一般商品處理"

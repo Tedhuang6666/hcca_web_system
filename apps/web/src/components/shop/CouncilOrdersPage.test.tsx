@@ -4,6 +4,7 @@ import CouncilOrdersPage from "@/app/(protected)/shop/council-orders/page";
 
 const api = vi.hoisted(() => ({
   downloadOrderQuantities: vi.fn(),
+  downloadClassOrderConfirmations: vi.fn(),
   catalog: vi.fn(), listActivities: vi.fn(), recipientOptions: vi.fn(), orderSummary: vi.fn(), orderQuantities: vi.fn(),
   classPaymentReport: vi.fn(), classRepresentativeReminderTargets: vi.fn(), createMessage: vi.fn(),
   listSupplementOrders: vi.fn(),
@@ -53,6 +54,29 @@ async function openPage() {
   await act(async () => { render(<CouncilOrdersPage />); });
   fireEvent.click(screen.getByText(/更多篩選：/));
 }
+
+it("可列印所選或全部班級總數確認單，失敗可重試且不更動收款", async () => {
+  api.downloadClassOrderConfirmations.mockRejectedValueOnce(new Error("offline"));
+  api.downloadClassOrderConfirmations.mockResolvedValue(new Blob(["pdf"], { type: "application/pdf" }));
+  await openPage();
+  switchTask("收款單據");
+  const all = screen.getByRole("button", { name: "列印各班總數確認單" });
+  expect(all).toBeDisabled();
+  fireEvent.change(screen.getByRole("combobox", { name: "收據活動" }), { target: { value: "shirts" } });
+  await waitFor(() => expect(all).toBeEnabled());
+  fireEvent.click(all);
+  expect(await screen.findByRole("alert")).toHaveTextContent("總數確認單下載失敗，請重試。");
+  await waitFor(() => expect(all).toBeEnabled());
+  fireEvent.click(all);
+  await waitFor(() => expect(api.downloadClassOrderConfirmations).toHaveBeenCalledTimes(2));
+  expect(api.downloadClassOrderConfirmations).toHaveBeenLastCalledWith({ category_id: "shirts" });
+  fireEvent.click(await screen.findByRole("checkbox", { name: "選取一年一班收據" }));
+  fireEvent.click(screen.getByRole("button", { name: "列印所選 1 班總數確認單" }));
+  await waitFor(() => expect(api.downloadClassOrderConfirmations).toHaveBeenLastCalledWith(
+    { category_id: "shirts" }, ["class"],
+  ));
+  expect(api.setClassPaid).not.toHaveBeenCalled();
+});
 
 it("依商品總量目前篩選下載統計詳情，下載失敗可重試", async () => {
   api.downloadOrderQuantities.mockRejectedValue(new Error("failed"));

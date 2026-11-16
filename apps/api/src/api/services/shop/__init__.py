@@ -36,6 +36,7 @@ from api.services.shop._catalog import (
     update_variant_option,
 )
 from api.services.shop._catalog_links import filter_catalog_to_direct_product
+from api.services.shop._confirmation import export_class_order_confirmations_pdf
 from api.services.shop._export import (
     export_orders_csv,
     export_orders_excel,
@@ -107,6 +108,7 @@ from api.services.shop._receipts import (
 from api.services.shop._registration_preview import preview_registration_promotion
 
 __all__ = [
+    "export_class_order_confirmations_pdf",
     "preview_registration_promotion",
     "export_class_receipt_pdf",
     "export_class_receipts_pdf",

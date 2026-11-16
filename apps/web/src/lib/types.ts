@@ -143,6 +143,7 @@ export type {
   ClassPaymentOut,
   ClassPaymentReportItemOut,
   ClassReceiptBatchCreate,
+  ClassOrderConfirmationCreate,
   ChangedOrderReceiptCreate,
   ClassRepresentativeOverviewItemOut,
   ClassRoleAssign,

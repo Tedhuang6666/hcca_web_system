@@ -9,7 +9,9 @@ from zoneinfo import ZoneInfo
 import pytest
 from pypdf import PdfReader
 
+from api.models.school_class import SchoolClass
 from api.models.shop import Order, OrderItem, Product
+from api.services.shop._confirmation import _render_class_order_confirmations_pdf
 from api.services.shop._receipts import _RECEIPT_TEMPLATE, _render_class_receipt_pdf
 
 
@@ -50,7 +52,7 @@ def _text_positions(page) -> list[tuple[str, float, float, float]]:
     return positions
 
 
-@pytest.mark.parametrize(("count", "page_count"), [(7, 2), (8, 2), (15, 4)])
+@pytest.mark.parametrize(("count", "page_count"), [(7, 2), (8, 2), (15, 3)])
 def test_receipt_reuses_original_borders_and_logo_on_every_double_copy_page(count, page_count):
     pdf = _render(_order(count))
     template = PdfReader(_RECEIPT_TEMPLATE).pages[0]
@@ -76,7 +78,7 @@ def test_long_names_and_specs_continue_in_empty_rows_without_losing_text():
     order = _order(1, name="長品名" * 25)
     order.items[0].selected_options = [{"group_name": "規格", "value": "特殊規格" * 20}]
     pdf = _render(order)
-    assert len(pdf.pages) == 2
+    assert len(pdf.pages) == 1
     for offset in (0, 345.77):
         names = []
         specs = []
@@ -88,7 +90,7 @@ def test_long_names_and_specs_continue_in_empty_rows_without_losing_text():
                     elif 413 < x < 574:
                         specs.append(text)
         assert "".join(names) == "長品名" * 25 + "00"
-        assert "".join(specs) == "校慶預購規格：" + "特殊規格" * 20
+        assert "".join(specs) == "特殊規格" * 20 + ":1"
 
 
 def test_discount_on_an_extra_page_keeps_the_whole_receipt_total():
@@ -143,9 +145,12 @@ def test_filled_fields_match_the_template_font_size_and_baselines():
             ]
             assert matches == [(pytest.approx(baseline, abs=0.05), pytest.approx(12))]
         row = [(text, top, size) for text, _, top, size in copy if 159 < top < 182]
-        assert {text for text, _, _ in row} == {"紀念商品00", "1", "100", "校慶預購"}
-        assert all(size == pytest.approx(12) for _, _, size in row)
-        assert all(top == pytest.approx(row[0][1], abs=0.05) for _, top, _ in row)
+        assert {text for text, _, _ in row} == {"紀念商品00", "1", "100", "L:1"}
+        assert all(
+            size == pytest.approx(10 if text in {"紀念商品00", "L:1"} else 12, abs=0.01)
+            for text, _, size in row
+        )
+        assert max(top for _, top, _ in row) - min(top for _, top, _ in row) < 3
 
 
 def test_print_time_is_small_and_placed_at_the_page_upper_left():
@@ -192,10 +197,121 @@ def test_general_goods_note_is_omitted_and_selected_spec_is_preserved(with_spec)
     )
     text = pdf.pages[0].extract_text()
     assert "一般商品" not in text
-    assert text.count("尺寸：L") == (2 if with_spec else 0)
+    assert text.count("L:1") == (2 if with_spec else 0)
     remarks = [
         text
         for text, x, top, _ in _text_positions(pdf.pages[0])
         if 413 < x < 574 and (159 < top < 318 or 504 < top < 664)
     ]
-    assert remarks == (["尺寸：L", "尺寸：L"] if with_spec else [])
+    assert remarks == (["L:1", "L:1"] if with_spec else [])
+
+
+def test_specs_merge_across_orders_and_prices_without_changing_money():
+    product = Product(id=uuid4(), name="紀念衫")
+    orders = [
+        Order(
+            total_price=180,
+            items=[
+                OrderItem(
+                    product=product,
+                    product_id=product.id,
+                    quantity=2,
+                    unit_price=100,
+                    selected_options=[{"group_name": "尺寸", "value": "L"}],
+                )
+            ],
+        ),
+        Order(
+            total_price=480,
+            items=[
+                OrderItem(
+                    product=product,
+                    product_id=product.id,
+                    quantity=4,
+                    unit_price=120,
+                    selected_options=[{"group_name": "尺寸", "value": "XL"}],
+                )
+            ],
+        ),
+    ]
+    pdf = PdfReader(
+        BytesIO(_render_class_receipt_pdf("一年一班", 115, "校慶預購", orders, date(2026, 10, 21)))
+    )
+    assert len(pdf.pages) == 1
+    text = pdf.pages[0].extract_text()
+    assert text.count("紀念衫") == 2
+    assert text.count("L:2、XL:4") == 2
+    assert text.count("100～120") == 2
+    assert text.count("680") == 2
+    assert text.count("優惠折抵") == 2
+    assert text.count("660") == 2
+    quantities = [
+        value
+        for value, x, top, _ in _text_positions(pdf.pages[0])
+        if 184 < x < 231 and (159 < top < 182 or 504 < top < 528)
+    ]
+    assert quantities == ["6", "6"]
+
+
+def test_many_specs_of_one_product_fit_one_double_copy_page():
+    order = _order(20)
+    product = order.items[0].product
+    for index, item in enumerate(order.items):
+        item.product = product
+        item.product_id = order.items[0].product_id
+        item.selected_options = [{"group_name": "尺寸", "value": f"S{index:02d}"}]
+    pdf = _render(order)
+    assert len(pdf.pages) == 1
+    text = "".join(pdf.pages[0].extract_text().split())
+    assert text.count("紀念商品00") == 2
+    for index in range(20):
+        assert text.count(f"S{index:02d}:1") == 2
+
+
+def test_confirmation_many_products_keep_headers_totals_and_all_items_across_pages():
+    order = _order(80)
+    school_class = SchoolClass(academic_year=115, class_code="101", label="一年一班")
+    pdf = PdfReader(
+        BytesIO(
+            _render_class_order_confirmations_pdf(
+                [(school_class, [order])],
+                "校慶預購",
+                datetime(2026, 11, 16, tzinfo=ZoneInfo("Asia/Taipei")),
+            )
+        )
+    )
+    assert len(pdf.pages) >= 3
+    text = "".join(page.extract_text() for page in pdf.pages)
+    for index in range(80):
+        assert text.count(f"紀念商品{index:02d}") == 1
+    for page in pdf.pages:
+        if "紀念商品" in page.extract_text():
+            assert "品項" in page.extract_text() and "規格數量" in page.extract_text()
+    final = "".join(pdf.pages[-1].extract_text().split())
+    assert "總件數：80件" in final
+    assert "訂單總額：8,000元" in final
+    assert "班級確認人" in final
+
+
+def test_variant_combinations_and_unspecified_items_are_counted_separately():
+    from api.services.shop._receipts import _receipt_products, _receipt_variant_summary
+
+    order = _order(4)
+    product = order.items[0].product
+    for item in order.items:
+        item.product = product
+        item.product_id = order.items[0].product_id
+    order.items[0].selected_options = [
+        {"group_name": "尺寸", "value": "L"},
+        {"group_name": "顏色", "value": "黑"},
+    ]
+    order.items[1].selected_options = list(reversed(order.items[0].selected_options))
+    order.items[2].selected_options = [
+        {"group_name": "顏色", "value": "白"},
+        {"group_name": "尺寸", "value": "L"},
+    ]
+    order.items[3].selected_options = []
+    summary = _receipt_variant_summary(_receipt_products([order])[0])
+    assert "尺寸=L／顏色=黑:2" in summary
+    assert "尺寸=L／顏色=白:1" in summary
+    assert "無規格:1" in summary
