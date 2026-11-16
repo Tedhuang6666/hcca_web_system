@@ -108,6 +108,41 @@ async def test_submit_document_by_creator_with_permission_succeeds(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("case", ["creator", "duplicate"])
+async def test_submit_rejects_self_or_duplicate_approvers(
+    db_session: AsyncSession, authed_client_factory, case: str
+) -> None:
+    org = Org(name=f"自審組織-{uuid.uuid4().hex[:6]}")
+    creator = User(email=f"self-{case}@example.com", display_name="Creator", is_active=True)
+    approver = User(email=f"dup-{case}@example.com", display_name="Approver", is_active=True)
+    db_session.add_all([org, creator, approver])
+    await db_session.flush()
+    await _grant_permission(db_session, creator, org, "document:submit")
+    doc = _make_draft(org, creator)
+    db_session.add(doc)
+    await db_session.flush()
+    approver_ids = (
+        [str(approver.id), str(creator.id)]
+        if case == "creator"
+        else [str(approver.id), str(approver.id)]
+    )
+
+    resp = await _authed(authed_client_factory, creator).post(
+        f"/documents/{doc.id}/submit", json={"approver_ids": approver_ids}
+    )
+
+    assert resp.status_code == 409
+    await db_session.refresh(doc)
+    assert doc.status == DocumentStatus.DRAFT
+    assert (
+        await db_session.scalar(
+            select(DocumentApproval.id).where(DocumentApproval.document_id == doc.id)
+        )
+        is None
+    )
+
+
+@pytest.mark.asyncio
 async def test_submit_document_by_non_creator_without_permission_returns_403(
     db_session: AsyncSession, authed_client_factory
 ) -> None:

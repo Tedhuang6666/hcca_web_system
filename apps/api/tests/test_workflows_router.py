@@ -176,3 +176,87 @@ async def test_create_link_404_when_instance_missing(
         json={"target_type": "document", "title": "相關公文"},
     )
     assert response.status_code == 404
+
+
+async def _grant(db_session: AsyncSession, user: User, code: str) -> None:
+    from datetime import timedelta
+
+    from api.core.clock import local_today
+    from api.models.org import Org, Permission, Position, UserPosition
+
+    org = Org(name=f"wf-org-{uuid.uuid4().hex[:6]}")
+    db_session.add(org)
+    await db_session.flush()
+    position = Position(org_id=org.id, name="管理人")
+    db_session.add(position)
+    await db_session.flush()
+    db_session.add(Permission(position_id=position.id, code=code))
+    db_session.add(
+        UserPosition(
+            user_id=user.id,
+            position_id=position.id,
+            start_date=local_today() - timedelta(days=1),
+        )
+    )
+    await db_session.flush()
+
+
+async def test_council_manager_cannot_transition_judicial_workflow(
+    authed_client_factory: Callable[[User], AsyncClient],
+    member_user: User,
+    db_session: AsyncSession,
+) -> None:
+    await _grant(db_session, member_user, "council_proposal:manage")
+    judicial = await _make_instance(
+        db_session, workflow_type="judicial_petition", source_type="judicial_petition"
+    )
+    ac = authed_client_factory(member_user)
+
+    transition = await ac.post(
+        f"/workflows/instances/{judicial.id}/transition",
+        json={"status": "decided", "payload": {"decision_summary": "越權決定"}},
+    )
+    link = await ac.post(
+        f"/workflows/instances/{judicial.id}/links",
+        json={"target_type": "document", "target_id": str(uuid.uuid4()), "title": "越權連結"},
+    )
+
+    assert transition.status_code == 403
+    assert link.status_code == 403
+    await db_session.refresh(judicial)
+    assert judicial.status == "submitted"
+
+
+async def test_transition_rejects_unknown_status(
+    authed_client_factory: Callable[[User], AsyncClient],
+    member_user: User,
+    db_session: AsyncSession,
+) -> None:
+    await _grant(db_session, member_user, "council_proposal:manage")
+    council = await _make_instance(db_session)
+    ac = authed_client_factory(member_user)
+
+    response = await ac.post(
+        f"/workflows/instances/{council.id}/transition", json={"status": "xyz"}
+    )
+
+    assert response.status_code == 422
+    await db_session.refresh(council)
+    assert council.status == "submitted"
+
+
+async def test_council_manager_can_transition_council_workflow(
+    authed_client_factory: Callable[[User], AsyncClient],
+    member_user: User,
+    db_session: AsyncSession,
+) -> None:
+    await _grant(db_session, member_user, "council_proposal:manage")
+    council = await _make_instance(db_session)
+    ac = authed_client_factory(member_user)
+
+    response = await ac.post(
+        f"/workflows/instances/{council.id}/transition", json={"status": "committee_review"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "committee_review"

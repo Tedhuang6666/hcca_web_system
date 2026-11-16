@@ -12,7 +12,7 @@ from api.core.permission_codes import PermissionCode
 from api.core.ws_manager import manager
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_permission
-from api.models.election import BallotBox, Election
+from api.models.election import BallotBox, Election, ElectionStatus
 from api.models.user import User
 from api.routers._common import or_404
 from api.schemas.election import (
@@ -225,7 +225,8 @@ async def get_public_live_summary(election_ref: str, session: DbDep) -> Election
     if election_id is None:
         raise HTTPException(status_code=404, detail="找不到此選舉")
     election = await _election_or_404(session, election_id)
-    if not election.is_public:
+    # 草稿階段的候選人與設定尚未公布；與公開列表一致，不對外提供。
+    if not election.is_public or election.status == ElectionStatus.DRAFT:
         raise HTTPException(status_code=404, detail="找不到此選舉")
     summary = await election_svc.get_live_summary(session, election_id)
     if summary is None:

@@ -31,6 +31,16 @@ from api.services.governance._events import record_event as record_matter_event
 
 _COMPLETED_STATUSES = {"passed", "rejected", "withdrawn", "decided", "dismissed", "published"}
 
+# 各類工作流可寫入的狀態；狀態會同步寫回來源資料，不能接受任意字串。
+_ALLOWED_STATUSES: dict[str, frozenset[str]] = {
+    "judicial_petition": frozenset(item.value for item in JudicialPetitionStatus),
+    "council_proposal": frozenset(item.value for item in CouncilProposalStatus),
+}
+
+
+class WorkflowTransitionError(ValueError):
+    """不支援的工作流狀態轉移。"""
+
 
 def _step_for(workflow_type: str, status: str) -> str:
     steps = {
@@ -205,6 +215,9 @@ async def transition_instance(
     note: str | None = None,
     payload: dict | None = None,
 ) -> WorkflowInstance:
+    allowed = _ALLOWED_STATUSES.get(instance.workflow_type)
+    if allowed is not None and status not in allowed:
+        raise WorkflowTransitionError(f"此工作流不支援狀態「{status}」")
     previous = instance.status
     instance.status = status
     instance.current_step = _step_for(instance.workflow_type, status)

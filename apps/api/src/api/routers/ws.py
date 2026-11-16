@@ -35,7 +35,11 @@ async def public_election_websocket(websocket: WebSocket, election_id: uuid.UUID
         from api.models.election import Election
 
         election = await db.scalar(
-            select(Election).where(Election.id == election_id, Election.is_public.is_(True))
+            select(Election).where(
+                Election.id == election_id,
+                Election.is_public.is_(True),
+                Election.status != "draft",
+            )
         )
     if election is None:
         await websocket.close(code=4004, reason="找不到此公開選舉")

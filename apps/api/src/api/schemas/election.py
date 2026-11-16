@@ -173,6 +173,8 @@ class CandidateTally(BaseModel):
     rank: int
     meets_threshold: bool
     is_elected: bool
+    # 與當選門檻最後一席同票、無法單憑票數決定當選者時為 True；此時 is_elected 一律為 False。
+    tied_at_cutoff: bool = False
 
 
 class BallotBoxTally(BaseModel):

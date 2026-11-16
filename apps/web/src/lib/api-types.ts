@@ -14351,6 +14351,11 @@ export interface components {
             percentage: number;
             /** Rank */
             rank: number;
+            /**
+             * Tied At Cutoff
+             * @default false
+             */
+            tied_at_cutoff: boolean;
             /** Votes */
             votes: number;
         };
