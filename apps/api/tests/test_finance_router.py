@@ -1050,10 +1050,14 @@ async def test_public_finance_totals_and_expenses_only_show_published_budget_dat
     )
     public_detail = await client.get(f"/finance/public/budgets/{budget.json()['id']}")
     assert public_detail.status_code == 200
-    assert public_detail.json()["expenses"][0]["items"][0]["name"] == "原子筆"
-    assert public_detail.json()["expenses"][0]["created_at"]
-    assert "operator_name" not in public_detail.json()["expenses"][0]
-    public_receipt_url = public_detail.json()["expenses"][0]["evidence"][0]["url"]
+    public_expenses = public_detail.json()["expenses"]
+    direct_public_expense = next(
+        expense for expense in public_expenses if expense["purpose"] == "文具採購"
+    )
+    assert direct_public_expense["items"][0]["name"] == "原子筆"
+    assert direct_public_expense["created_at"]
+    assert "operator_name" not in direct_public_expense
+    public_receipt_url = direct_public_expense["evidence"][0]["url"]
     public_receipt = await client.get(public_receipt_url)
     assert public_receipt.status_code == 200
     settlement = await reviewer_client.get(

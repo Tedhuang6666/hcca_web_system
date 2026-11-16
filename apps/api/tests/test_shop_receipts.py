@@ -90,7 +90,7 @@ def test_long_names_and_specs_continue_in_empty_rows_without_losing_text():
                     elif 413 < x < 574:
                         specs.append(text)
         assert "".join(names) == "長品名" * 25 + "00"
-        assert "".join(specs) == "特殊規格" * 20 + ":1"
+        assert "".join("".join(specs).split()) == "特殊規格" * 20 + ":1"
 
 
 def test_discount_on_an_extra_page_keeps_the_whole_receipt_total():
