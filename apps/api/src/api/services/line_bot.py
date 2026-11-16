@@ -84,10 +84,10 @@ async def create_open_url(user_id: uuid.UUID, path: str | None) -> str:
 async def consume_open_token(token: str) -> tuple[uuid.UUID, str] | None:
     """消耗一次性 LINE 自動登入 token。"""
     key = f"{_OPEN_LINK_PREFIX}{token}"
-    raw = await redis_client.get(key)
+    # GETDEL 讓讀取與刪除在 Redis 內原子完成，避免同一 token 被並行請求兌換兩次。
+    raw = await redis_client.getdel(key)
     if not raw:
         return None
-    await redis_client.delete(key)
     try:
         payload = json.loads(raw)
         return uuid.UUID(payload["user_id"]), _safe_frontend_path(payload.get("path"))

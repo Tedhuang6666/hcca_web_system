@@ -204,6 +204,31 @@ async def test_open_from_line_valid_token_sets_cookies(
     assert settings.ACCESS_TOKEN_COOKIE_NAME in response.cookies
 
 
+async def test_open_from_line_token_is_single_use(client: AsyncClient, member_user: User) -> None:
+    url = await line_bot_svc.create_open_url(member_user.id, "/dashboard")
+    token = url.rsplit("token=", 1)[-1]
+
+    first = await client.get("/line/open", params={"token": token})
+    second = await client.get("/line/open", params={"token": token})
+
+    assert settings.ACCESS_TOKEN_COOKIE_NAME in first.cookies
+    assert second.headers["location"].endswith("/login")
+    assert settings.ACCESS_TOKEN_COOKIE_NAME not in second.cookies
+
+
+async def test_open_from_line_refuses_privileged_account(
+    client: AsyncClient, admin_user: User
+) -> None:
+    url = await line_bot_svc.create_open_url(admin_user.id, "/admin/system")
+    token = url.rsplit("token=", 1)[-1]
+
+    response = await client.get("/line/open", params={"token": token})
+
+    assert response.status_code in (302, 307)
+    assert "/login?next=%2Fadmin%2Fsystem" in response.headers["location"]
+    assert settings.ACCESS_TOKEN_COOKIE_NAME not in response.cookies
+
+
 # ── 管理員狀態查詢 ────────────────────────────────────────────────────────────
 
 

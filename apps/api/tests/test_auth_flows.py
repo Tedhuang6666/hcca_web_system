@@ -16,6 +16,7 @@ from unittest.mock import AsyncMock
 import pytest
 from authlib.integrations.base_client import MismatchingStateError
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.config import settings
@@ -452,6 +453,39 @@ async def test_google_callback_retries_over_https_origin(
 
     assert response.status_code in (302, 307)
     assert response.headers["location"].startswith("https://hcca.tw/auth/google/login?")
+
+
+async def test_google_callback_rejects_unverified_email(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import api.routers.auth as auth_module
+
+    existing = User(email="owner@school.edu", display_name="既有帳號", is_active=True)
+    db_session.add(existing)
+    await db_session.flush()
+    monkeypatch.setattr(
+        auth_module.google,
+        "authorize_access_token",
+        AsyncMock(
+            return_value={
+                "userinfo": {
+                    "sub": "attacker-sub",
+                    "email": "owner@school.edu",
+                    "email_verified": False,
+                }
+            }
+        ),
+    )
+
+    response = await client.get("/auth/google/callback?code=c&state=s", follow_redirects=False)
+
+    assert response.status_code in (302, 307)
+    assert "/login?error=" in response.headers["location"]
+    assert settings.ACCESS_TOKEN_COOKIE_NAME not in response.cookies
+    identity = await db_session.scalar(
+        select(UserIdentity).where(UserIdentity.external_id == "attacker-sub")
+    )
+    assert identity is None
 
 
 async def test_discord_login_returns_503_when_not_configured(

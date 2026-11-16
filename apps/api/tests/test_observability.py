@@ -335,11 +335,11 @@ async def test_metrics_endpoint_is_enabled(client: AsyncClient) -> None:
 
 async def test_authenticated_performance_channel_issues_short_lived_access_token(
     client: AsyncClient,
-    admin_user,
+    member_user,
     monkeypatch,
 ) -> None:
     monkeypatch.setattr(settings, "PERFORMANCE_MONITOR_TOKEN", "test-performance-token")
-    monkeypatch.setattr(settings, "PERFORMANCE_MONITOR_USER_ID", str(admin_user.id))
+    monkeypatch.setattr(settings, "PERFORMANCE_MONITOR_USER_ID", str(member_user.id))
 
     denied = await client.post(
         "/internal/observability/auth-session",
@@ -356,6 +356,58 @@ async def test_authenticated_performance_channel_issues_short_lived_access_token
     assert payload["cookie_name"] == settings.ACCESS_TOKEN_COOKIE_NAME
     assert payload["expires_in_seconds"] == settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
     assert payload["access_token"]
+
+
+async def test_authenticated_performance_session_refuses_superuser(
+    client: AsyncClient,
+    admin_user,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(settings, "PERFORMANCE_MONITOR_TOKEN", "test-performance-token")
+    monkeypatch.setattr(settings, "PERFORMANCE_MONITOR_USER_ID", str(admin_user.id))
+
+    response = await client.post(
+        "/internal/observability/auth-session",
+        headers={"X-Performance-Monitor-Token": "test-performance-token"},
+    )
+
+    assert response.status_code == 503
+
+
+async def test_authenticated_performance_token_is_revocable(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    member_user,
+    monkeypatch,
+) -> None:
+    from sqlalchemy import select
+
+    from api.models.user_session import UserSession
+    from api.services import user_session as user_session_svc
+
+    monkeypatch.setattr(settings, "PERFORMANCE_MONITOR_TOKEN", "test-performance-token")
+    monkeypatch.setattr(settings, "PERFORMANCE_MONITOR_USER_ID", str(member_user.id))
+    response = await client.post(
+        "/internal/observability/auth-session",
+        headers={"X-Performance-Monitor-Token": "test-performance-token"},
+    )
+    token = response.json()["access_token"]
+    client.cookies.set(settings.ACCESS_TOKEN_COOKIE_NAME, token)
+    assert (await client.get("/auth/me")).status_code == 200
+
+    sessions = (
+        await db_session.scalars(
+            select(UserSession).where(
+                UserSession.user_id == member_user.id,
+                UserSession.auth_method == "synthetic-performance",
+            )
+        )
+    ).all()
+    assert len(sessions) == 1
+    await user_session_svc.revoke(db_session, sessions[0], reason="test")
+    await db_session.flush()
+
+    assert (await client.get("/auth/me")).status_code == 401
 
 
 async def test_authenticated_performance_results_are_recorded_for_both_strategies(

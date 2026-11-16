@@ -29,6 +29,7 @@ from api.services.line_bot import (
     is_configured,
     unlink_user,
 )
+from api.services.permission import is_privileged_account
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +139,10 @@ async def open_from_line(
     user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if user is None or not user.is_active:
         return RedirectResponse(url=f"{frontend}/login")
+
+    if await is_privileged_account(db, user_id=user.id, is_superuser=user.is_superuser):
+        # 管理帳號不接受免密碼連結登入，改導向正常登入流程。
+        return RedirectResponse(url=f"{frontend}/login?{urlencode({'next': path})}")
 
     if user.mfa_enabled:
         challenge_token = create_mfa_challenge_token(subject=str(user_id))

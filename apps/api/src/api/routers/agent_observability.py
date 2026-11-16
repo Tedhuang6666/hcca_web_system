@@ -20,9 +20,9 @@ from api.core.config import settings
 from api.core.database import get_db
 from api.core.metrics import get_celery_stats, get_redis_stats
 from api.core.permission_codes import PermissionCode
-from api.core.security import create_access_token
 from api.models.observability import PageSpeedAudit, PageSpeedRun
 from api.models.user import User
+from api.services import user_session as user_session_svc
 from api.services.observability import (
     _has_pageview_observation,
     _has_rum_observation,
@@ -186,11 +186,20 @@ async def authenticated_session(session: DbDep) -> dict[str, Any]:
     user = await session.get(User, user_id)
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE)
+    if user.is_superuser:
+        # 靜態 header token 一旦外洩，不能換到可略過所有權限檢查的 session。
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="效能監測帳號不可為超級管理員",
+        )
     permissions = await get_user_permission_codes(session, user.id, on_date=local_today())
-    access_token = create_access_token(
-        str(user.id),
-        {
-            "is_admin": user.is_superuser or PermissionCode.ADMIN_ALL in permissions,
+    # 建立正式 UserSession，讓登出、撤銷全部工作階段與管理員撤銷都能讓此 token 失效；
+    # refresh token 不回傳，access token 到期後即無法續用。
+    tokens = await user_session_svc.issue_session_tokens(
+        session,
+        user_id=user.id,
+        extra_claims={
+            "is_admin": PermissionCode.ADMIN_ALL in permissions,
             "permissions": sorted(permissions),
             "user": {
                 "email": user.email,
@@ -206,10 +215,12 @@ async def authenticated_session(session: DbDep) -> dict[str, Any]:
                 "ui_locale": user.ui_locale,
             },
         },
-        amr=["synthetic-performance"],
+        user_agent="hcca-synthetic-performance",
+        ip_address=None,
+        auth_method="synthetic-performance",
     )
     return {
-        "access_token": access_token,
+        "access_token": tokens.access_token,
         "cookie_name": settings.ACCESS_TOKEN_COOKIE_NAME,
         "expires_in_seconds": settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     }

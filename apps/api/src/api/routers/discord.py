@@ -52,6 +52,7 @@ from api.services.discord_bot import (
     upsert_user_link,
 )
 from api.services.discord_notification_routes import EVENT_CATALOG, list_event_catalog
+from api.services.permission import is_privileged_account
 
 logger = logging.getLogger(__name__)
 
@@ -372,6 +373,10 @@ async def open_from_discord(
     user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if user is None or not user.is_active:
         return RedirectResponse(url=f"{frontend}/login")
+
+    if await is_privileged_account(db, user_id=user.id, is_superuser=user.is_superuser):
+        # 管理帳號不接受免密碼連結登入，改導向正常登入流程。
+        return RedirectResponse(url=f"{frontend}/login?{urlencode({'next': path})}")
 
     if await passkey_svc.requires_mfa(db, user):
         challenge_token = create_mfa_challenge_token(subject=str(user_id))
