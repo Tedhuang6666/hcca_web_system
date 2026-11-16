@@ -130,6 +130,28 @@ async def reset_event(db: AsyncSession, event_id: uuid.UUID) -> RaffleEvent:
     if event is None:
         raise ValueError("找不到抽獎活動")
 
+    # 重設會刪除抽獎紀錄；先把完整結果保存在回傳值，由呼叫端寫入稽核紀錄，
+    # 避免「抽到不滿意就重抽」不留痕跡。
+    previous_draws = (
+        (
+            await db.execute(
+                select(RaffleDraw)
+                .options(selectinload(RaffleDraw.prize))
+                .where(RaffleDraw.event_id == event.id)
+                .order_by(RaffleDraw.draw_number)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    event.__dict__["reset_snapshot"] = [
+        {
+            "draw_number": item.draw_number,
+            "prize": item.prize.name if item.prize else None,
+            "drawn_at": item.created_at.isoformat() if item.created_at else None,
+        }
+        for item in previous_draws
+    ]
     await db.execute(delete(RaffleDraw).where(RaffleDraw.event_id == event.id))
     await db.execute(delete(RaffleSession).where(RaffleSession.event_id == event.id))
     for prize in event.prizes:
@@ -393,6 +415,15 @@ async def draw(db: AsyncSession, body: RaffleDrawRequest) -> RaffleDraw:
         .with_for_update()
     )
     event = event_result.scalar_one()
+    # 取得活動鎖後重新讀取 session：同一 token 的並行請求在鎖後才看得到前一筆已抽獎，
+    # 否則會以舊的 has_drawn 再抽一次而撞唯一約束（500）。
+    session = (
+        await db.execute(
+            select(RaffleSession)
+            .where(RaffleSession.id == session.id)
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one()
 
     existing_result = await db.execute(
         select(RaffleDraw)
