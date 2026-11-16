@@ -259,7 +259,7 @@ export default function InfinitePhotoWall({ items, paused, onOpen }: {
 
   if (!items.length) return null;
   return <section className="infinite-wall" aria-label="活動照片牆">
-    <header className="infinite-wall-heading"><h2 id="infinite-wall-title">無邊影像</h2><span>{items.length} 幅影像</span></header>
+    <header className="infinite-wall-heading"><h2 id="infinite-wall-title">活動照片牆</h2><span>{items.length} 幅影像</span></header>
     <div ref={viewportRef} className="infinite-wall-viewport" tabIndex={0}
       aria-label="照片牆，可拖曳、雙指縮放或使用方向鍵，按加減鍵縮放、Home 重設視角">
       <div className="infinite-wall-plane">
