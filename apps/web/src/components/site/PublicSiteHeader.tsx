@@ -161,7 +161,7 @@ function PublicSiteHeaderContent({
     ...[
       ["news", "最新公告"],
       publicDataSlot,
-      ["surveys", "校園調查"],
+      ["surveys", "問卷調查"],
     ].flatMap(([key, label]) => {
       const item = itemByKey.get(key);
       return item ? [{ ...item, label }] : [];

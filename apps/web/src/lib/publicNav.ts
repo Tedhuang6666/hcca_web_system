@@ -53,7 +53,7 @@ export const PUBLIC_NAV_ITEMS: PublicNavItemDef[] = [
   { key: "documents", href: "/documents", label: "公文查詢", description: "公開公文、字號與附件", iconKey: "documents", group: "data", guestUsable: true, moduleId: "documents" },
   { key: "elections", href: "/public/elections", label: "即時開票", description: "公開選舉票數與進度", iconKey: "elections", group: "data", guestUsable: true, moduleId: "elections" },
   { key: "partner-map", href: "/partner-map", label: "特約地圖", description: "合作店家與學生優惠", iconKey: "partner-map", group: "data", guestUsable: true, moduleId: "partnerMap" },
-  { key: "surveys", href: "/surveys", label: "公開問卷", description: "參與目前開放的校園調查", iconKey: "surveys", group: "data", guestUsable: true, moduleId: "surveys" },
+  { key: "surveys", href: "/surveys", label: "公開問卷", description: "參與目前開放的問卷調查", iconKey: "surveys", group: "data", guestUsable: true, moduleId: "surveys" },
 
   { key: "petitions", href: "/petitions/public", label: "公開陳情", description: "閱讀已公開案件與處理回覆", iconKey: "petitions", group: "participation", guestUsable: true, moduleId: "petitions" },
 ];
