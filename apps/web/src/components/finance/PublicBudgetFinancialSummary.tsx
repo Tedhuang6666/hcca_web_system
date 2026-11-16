@@ -25,9 +25,9 @@ export default function PublicBudgetFinancialSummary({ lines }: { lines: PublicB
       <section aria-label="已登錄收支">
         <h3>已登錄收支</h3>
         <dl className="public-finance__totals">
-          <div><dt>已登錄收入</dt><dd>{formatAmount(totals.incomeReceived)}</dd></div>
-          <div><dt>已列帳支出</dt><dd>{formatAmount(totals.expenseSpent)}</dd></div>
-          <div><dt>已登錄收支差額（非帳戶餘額）</dt><dd>{formatAmount(totals.difference)}</dd></div>
+          <div><dt>預算收入紀錄</dt><dd>{formatAmount(totals.incomeReceived)}</dd></div>
+          <div><dt>預算執行支出</dt><dd>{formatAmount(totals.expenseSpent)}</dd></div>
+          <div><dt>預算收支差額（非帳戶餘額）</dt><dd>{formatAmount(totals.difference)}</dd></div>
         </dl>
         <p>未含期初餘額、未入帳款項及代墊清算。</p>
       </section>

@@ -30,7 +30,6 @@ from api.models.finance import (
     FinanceBudgetExpenseEvidence,
     FinanceBudgetExpenseItem,
     FinanceBudgetIncomeItem,
-    FinanceBudgetIncomeRecord,
     FinanceBudgetNode,
     FinanceBudgetSubmission,
     FiscalPeriod,
@@ -868,6 +867,109 @@ async def _budget_expense_details(db: AsyncSession, budget_id: uuid.UUID) -> lis
     ]
 
 
+async def _public_budget_claim_expense_details(
+    db: AsyncSession, budget: FinanceBudget
+) -> list[dict]:
+    approved_node_ids = (
+        select(FinanceBudgetAllocation.node_id)
+        .join(FinanceBudgetSubmission)
+        .where(
+            FinanceBudgetSubmission.budget_id == budget.id,
+            FinanceBudgetSubmission.status == BudgetSubmissionStatus.APPROVED,
+        )
+    )
+    rows = (
+        await db.execute(
+            select(ExpenseClaimItem, JournalEntry, FinanceBudgetNode)
+            .join(JournalEntry, JournalEntry.id == ExpenseClaimItem.journal_entry_id)
+            .join(FinanceBudgetNode, FinanceBudgetNode.id == ExpenseClaimItem.budget_node_id)
+            .where(
+                JournalEntry.ledger_id == budget.ledger_id,
+                JournalEntry.source_type == "expense_claim",
+                JournalEntry.status == JournalStatus.POSTED,
+                FinanceBudgetNode.budget_id == budget.id,
+                FinanceBudgetNode.is_active.is_(True),
+                FinanceBudgetNode.id.in_(approved_node_ids),
+            )
+            .order_by(
+                JournalEntry.entry_date.desc(),
+                JournalEntry.created_at.desc(),
+                ExpenseClaimItem.created_at,
+                ExpenseClaimItem.id,
+            )
+        )
+    ).all()
+    item_ids = [item.id for item, _, _ in rows]
+    evidence_rows = (
+        list(
+            (
+                await db.execute(
+                    select(ExpenseClaimItemEvidence)
+                    .where(ExpenseClaimItemEvidence.item_id.in_(item_ids))
+                    .order_by(ExpenseClaimItemEvidence.created_at, ExpenseClaimItemEvidence.id)
+                )
+            ).scalars()
+        )
+        if item_ids
+        else []
+    )
+    evidence_by_item: dict[uuid.UUID, list[ExpenseClaimItemEvidence]] = {}
+    for receipt_record in evidence_rows:
+        evidence_by_item.setdefault(receipt_record.item_id, []).append(receipt_record)
+
+    supplemental_entries: set[uuid.UUID] = set()
+    expenses = []
+    for item, entry, node in rows:
+        amount = _claim_item_total(item.unit_price, item.tax_rate, item.quantity)
+        evidence_details = [
+            {
+                "id": receipt.id,
+                "filename": receipt.filename,
+                "url": (
+                    f"/finance/public/budgets/{budget.id}/expense-claims/{entry.id}/"
+                    f"evidence/{receipt.id}"
+                ),
+            }
+            for receipt in evidence_by_item.get(item.id, [])
+        ]
+        if entry.evidence_url and entry.id not in supplemental_entries:
+            evidence_details.append(
+                {
+                    "id": entry.id,
+                    "filename": "報帳附件",
+                    "url": (
+                        f"/finance/public/budgets/{budget.id}/expense-claims/{entry.id}/"
+                        f"evidence/{entry.id}"
+                    ),
+                }
+            )
+            supplemental_entries.add(entry.id)
+        expenses.append(
+            {
+                "id": item.id,
+                "entry_date": entry.entry_date,
+                "created_at": entry.created_at,
+                "purpose": re.sub(r"^報帳｜|（\d+ 項）$", "", entry.description),
+                "allocation_node_id": node.id,
+                "allocation_name": node.name,
+                "total_amount": amount,
+                "items": [
+                    {
+                        "id": item.id,
+                        "name": item.name,
+                        "unit_price": item.unit_price,
+                        "tax_rate": item.tax_rate,
+                        "quantity": item.quantity,
+                        "unit": item.unit,
+                        "amount": amount,
+                    }
+                ],
+                "evidence": evidence_details,
+            }
+        )
+    return expenses
+
+
 async def create_budget_expense(
     db: AsyncSession,
     budget_id: uuid.UUID,
@@ -1611,21 +1713,13 @@ async def public_expense_claim_detail(
 
 
 async def public_budget_period_totals(db: AsyncSession, budget_id: uuid.UUID) -> dict:
-    """Only expose ledger totals for the period of a published, approved budget."""
+    """分開回傳預算明細與正式會計分錄總額，兩者可能重疊。"""
     budget = await db.get(FinanceBudget, budget_id)
     if not budget or not budget.is_public:
         raise HTTPException(404, "公開預算不存在")
-    approved_initial = await db.scalar(
-        select(FinanceBudgetSubmission.id).where(
-            FinanceBudgetSubmission.budget_id == budget.id,
-            FinanceBudgetSubmission.kind == BudgetSubmissionKind.INITIAL,
-            FinanceBudgetSubmission.status == BudgetSubmissionStatus.APPROVED,
-        )
-    )
-    if not approved_initial:
-        raise HTTPException(404, "公開預算不存在")
+    detail, _, _ = await public_budget_detail(db, budget.id)
 
-    income, expenses = (
+    accounting_income, accounting_expenses = (
         await db.execute(
             select(
                 func.coalesce(
@@ -1663,22 +1757,13 @@ async def public_budget_period_totals(db: AsyncSession, budget_id: uuid.UUID) ->
             )
         )
     ).one()
-    direct_expenses = await db.scalar(
-        select(func.coalesce(func.sum(FinanceBudgetExpense.total_amount), 0)).where(
-            FinanceBudgetExpense.budget_id == budget.id
-        )
-    )
+    budget_income = sum(int(record["amount"]) for record in detail["income_records"])
+    budget_expenses = sum(int(expense["total_amount"]) for expense in detail["expenses"])
     return {
-        "income_total": int(income)
-        + int(
-            await db.scalar(
-                select(func.coalesce(func.sum(FinanceBudgetIncomeRecord.amount), 0)).where(
-                    FinanceBudgetIncomeRecord.budget_id == budget.id
-                )
-            )
-            or 0
-        ),
-        "expense_total": int(expenses) + int(direct_expenses or 0),
+        "budget_income_total": budget_income,
+        "budget_expense_total": budget_expenses,
+        "accounting_income_total": int(accounting_income),
+        "accounting_expense_total": int(accounting_expenses),
     }
 
 
@@ -1722,12 +1807,42 @@ async def public_budget_detail(
     if not approved_initial:
         raise HTTPException(404, "公開預算不存在")
     detail = await budget_detail(db, budget)
-    for expense in detail["expenses"]:
+    approved_submission_ids = {
+        submission.id
+        for submission in detail["submissions"]
+        if submission.status == BudgetSubmissionStatus.APPROVED
+    }
+    approved_allocation_ids = {
+        allocation["id"]
+        for allocation in detail["allocations"]
+        if allocation["submission_id"] in approved_submission_ids
+    }
+    active_node_ids = {node["id"] for node in detail["nodes"]}
+    direct_expenses = [
+        expense
+        for expense in detail["expenses"]
+        if expense["allocation_id"] in approved_allocation_ids
+        and expense["allocation_node_id"] in active_node_ids
+    ]
+    for expense in direct_expenses:
         for evidence in expense["evidence"]:
             evidence["url"] = (
                 f"/finance/public/budgets/{budget.id}/expenses/{expense['id']}/"
                 f"evidence/{evidence['id']}"
             )
+    claim_expenses = await _public_budget_claim_expense_details(db, budget)
+    detail["expenses"] = sorted(
+        [*direct_expenses, *claim_expenses],
+        key=lambda expense: (expense["entry_date"], expense["created_at"]),
+        reverse=True,
+    )
+    used_by_node: dict[uuid.UUID, int] = {}
+    for expense in detail["expenses"]:
+        node_id = expense["allocation_node_id"]
+        used_by_node[node_id] = used_by_node.get(node_id, 0) + expense["total_amount"]
+    for node in detail["nodes"]:
+        node["used_amount"] = used_by_node.get(node["id"], 0)
+        node["remaining_amount"] = node["allocated_amount"] - node["used_amount"]
     return detail, period, None
 
 

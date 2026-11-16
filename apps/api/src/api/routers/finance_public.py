@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.models.finance import (
+    BudgetSubmissionKind,
     BudgetSubmissionStatus,
     ExpenseClaimItem,
     ExpenseClaimItemEvidence,
@@ -22,6 +23,7 @@ from api.models.finance import (
     FinanceBudgetNode,
     FinanceBudgetSubmission,
     JournalEntry,
+    JournalStatus,
 )
 from api.routers.finance_common import _inline_evidence_headers as _inline_evidence_headers
 from api.schemas.finance import (
@@ -232,19 +234,40 @@ async def download_public_expense_claim_evidence(
     evidence_id: uuid.UUID,
     db: DbDep,
 ):
-    claim_detail = await service.public_expense_claim_detail(db, budget_id, entry_id)
-    visible_evidence_ids = {
-        evidence["id"] for item in claim_detail["items"] for evidence in item["evidence"]
-    }
-    if evidence_id == entry_id:
-        if not claim_detail["supplemental_evidence"]:
-            raise HTTPException(404, "公開憑證不存在")
-    elif evidence_id not in visible_evidence_ids:
-        raise HTTPException(404, "公開憑證不存在")
-
-    entry = await db.get(JournalEntry, entry_id)
+    entry = await db.scalar(
+        select(JournalEntry).where(
+            JournalEntry.id == entry_id,
+            JournalEntry.source_type == "expense_claim",
+            JournalEntry.status == JournalStatus.POSTED,
+        )
+    )
     budget = await db.get(FinanceBudget, budget_id)
-    if not entry or not budget:
+    if not budget or not budget.is_public or not entry or entry.ledger_id != budget.ledger_id:
+        raise HTTPException(404, "公開憑證不存在")
+    approved_initial = await db.scalar(
+        select(FinanceBudgetSubmission.id).where(
+            FinanceBudgetSubmission.budget_id == budget.id,
+            FinanceBudgetSubmission.kind == BudgetSubmissionKind.INITIAL,
+            FinanceBudgetSubmission.status == BudgetSubmissionStatus.APPROVED,
+        )
+    )
+    approved_claim_item = await db.scalar(
+        select(ExpenseClaimItem.id)
+        .join(FinanceBudgetNode, FinanceBudgetNode.id == ExpenseClaimItem.budget_node_id)
+        .join(FinanceBudgetAllocation, FinanceBudgetAllocation.node_id == FinanceBudgetNode.id)
+        .join(FinanceBudgetSubmission)
+        .where(
+            ExpenseClaimItem.journal_entry_id == entry.id,
+            FinanceBudgetNode.budget_id == budget.id,
+            FinanceBudgetNode.is_active.is_(True),
+            FinanceBudgetSubmission.budget_id == budget.id,
+            FinanceBudgetSubmission.status == BudgetSubmissionStatus.APPROVED,
+        )
+        .limit(1)
+    )
+    if not approved_initial or not approved_claim_item:
+        raise HTTPException(404, "公開憑證不存在")
+    if evidence_id == entry.id and not entry.evidence_url:
         raise HTTPException(404, "公開憑證不存在")
 
     evidence = await db.get(ExpenseClaimItemEvidence, evidence_id)
@@ -269,6 +292,7 @@ async def download_public_expense_claim_evidence(
             or item.journal_entry_id != entry.id
             or not node
             or node.budget_id != budget.id
+            or not node.is_active
             or not approved_allocation
         ):
             raise HTTPException(404, "公開憑證不存在")

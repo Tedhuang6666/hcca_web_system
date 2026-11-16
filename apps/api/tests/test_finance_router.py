@@ -983,7 +983,12 @@ async def test_public_finance_totals_and_expenses_only_show_published_budget_dat
 
     totals = await client.get(totals_path)
     assert totals.status_code == 200
-    assert totals.json() == {"income_total": 500, "expense_total": 530}
+    assert totals.json() == {
+        "budget_income_total": 0,
+        "budget_expense_total": 530,
+        "accounting_income_total": 500,
+        "accounting_expense_total": 450,
+    }
     records = await client.get("/finance/public/expenses")
     assert records.status_code == 200
     record = next(item for item in records.json() if item["purpose"] == "活動海報印刷")
@@ -1890,7 +1895,7 @@ async def test_direct_budget_income_survives_upload_and_is_public_without_intern
     assert public["income_records"][0]["income_item_id"] == income_id
     assert "recorded_by_id" not in public["income_records"][0]
     assert (await actor.get(f"/finance/public/budgets/{budget_id}/totals")).json()[
-        "income_total"
+        "budget_income_total"
     ] == 200
 
     # The server finds the existing period's budget without a client-supplied budget_id.
@@ -1908,7 +1913,7 @@ async def test_direct_budget_income_survives_upload_and_is_public_without_intern
     assert correction.status_code == 200
     assert correction.json()["note"] is None
     assert (await actor.get(f"/finance/public/budgets/{budget_id}/totals")).json()[
-        "income_total"
+        "budget_income_total"
     ] == 250
 
     period.is_closed = True
@@ -2038,5 +2043,5 @@ async def test_existing_budget_income_journals_remain_visible_without_double_cou
         == detail["income_records"][0]["income_item_id"]
     )
     assert (await actor.get(f"/finance/public/budgets/{budget_id}/totals")).json()[
-        "income_total"
+        "budget_income_total"
     ] == 200

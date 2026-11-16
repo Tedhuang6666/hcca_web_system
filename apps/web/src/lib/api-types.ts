@@ -26289,12 +26289,31 @@ export interface components {
             /** Unit Price */
             unit_price?: number | null;
         };
-        /** PublicFinanceTotalsOut */
+        /**
+         * PublicFinanceTotalsOut
+         * @description 預算執行與正式會計分錄分開統計；兩者可能重疊，不應相加。
+         */
         PublicFinanceTotalsOut: {
-            /** Expense Total */
-            expense_total: number;
-            /** Income Total */
-            income_total: number;
+            /**
+             * Accounting Expense Total
+             * @description 該會計期間已過帳支出分錄合計；可能與預算支出重疊。
+             */
+            accounting_expense_total: number;
+            /**
+             * Accounting Income Total
+             * @description 該會計期間已過帳收入分錄合計；可能與預算收入重疊。
+             */
+            accounting_income_total: number;
+            /**
+             * Budget Expense Total
+             * @description 公開預算明細中已列帳支出的合計。
+             */
+            budget_expense_total: number;
+            /**
+             * Budget Income Total
+             * @description 公開預算收入逐筆紀錄的合計。
+             */
+            budget_income_total: number;
         };
         /** PublicLinkCategoryCreate */
         PublicLinkCategoryCreate: {

@@ -62,9 +62,9 @@ export default function PublicBudgetExecutionTable({
               <dl>
                 <div><dt>預計收入</dt><dd>{formatAmount(group.incomeBudget)}</dd></div>
                 <div><dt>支出預算</dt><dd>{formatAmount(group.expenseBudget)}</dd></div>
-                <div><dt>已登錄收入</dt><dd>{formatAmount(group.incomeReceived)}</dd></div>
-                <div><dt>已列帳支出</dt><dd className={group.expenseSpent > group.expenseBudget ? "is-over-budget" : ""}>{formatAmount(group.expenseSpent)}</dd></div>
-                <div><dt>已登錄差額（非帳戶餘額）</dt><dd>{formatAmount(group.difference)}</dd></div>
+                <div><dt>預算收入紀錄</dt><dd>{formatAmount(group.incomeReceived)}</dd></div>
+                <div><dt>預算執行支出</dt><dd className={group.expenseSpent > group.expenseBudget ? "is-over-budget" : ""}>{formatAmount(group.expenseSpent)}</dd></div>
+                <div><dt>預算收支差額（非帳戶餘額）</dt><dd>{formatAmount(group.difference)}</dd></div>
               </dl>
               <ChevronDown size={18} aria-hidden="true" />
               {group.expenseBudget > 0 && <meter min={0} max={group.expenseBudget} value={Math.min(Math.max(group.expenseSpent, 0), group.expenseBudget)} aria-label={`${group.name}預算執行率`} />}
