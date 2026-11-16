@@ -44,6 +44,7 @@ import ShopPromotionPanel from "./ShopPromotionPanel";
 import { deadlineFromInput, deadlineInputValue } from "@/lib/shop-deadlines";
 import { parseSmartOptionsText, uniqueSmartOptions } from "@/lib/shop-admin-options";
 import type { SmartOptionDraft, SmartSourceGroup } from "@/lib/shop-admin-options";
+import { confirmAction } from "@/components/ui/ConfirmDialog";
 
 async function listProductChoices() {
   const products: ProductOut[] = [];
@@ -1228,7 +1229,7 @@ function VariantManager({
   );
 
   const removeGroup = async (g: ProductVariantGroupOut) => {
-    if (!confirm(`確定刪除規格類別「${g.name}」？`)) return;
+    if (!(await confirmAction({ title: `確定刪除規格類別「${g.name}」？`, danger: true }))) return;
     try {
       await shopApi.deleteVariantGroup(g.id);
       onChanged();
@@ -1791,7 +1792,7 @@ export default function ShopAdminPage() {
   }
 
   const delCategory = async (c: ProductCategoryOut) => {
-    if (!confirm(`確定刪除活動「${c.name}」？活動下必須沒有系列或商品才能刪除。`)) return;
+    if (!(await confirmAction({ title: `確定刪除活動「${c.name}」？活動下必須沒有系列或商品才能刪除。`, danger: true }))) return;
     try {
       await shopApi.deleteCategory(c.id);
       loadCategories();
@@ -1801,7 +1802,7 @@ export default function ShopAdminPage() {
     }
   };
   const delSeries = async (s: ProductSeriesOut) => {
-    if (!confirm(`確定刪除系列「${s.name}」？系列下必須沒有商品才能刪除。`)) return;
+    if (!(await confirmAction({ title: `確定刪除系列「${s.name}」？系列下必須沒有商品才能刪除。`, danger: true }))) return;
     try {
       await shopApi.deleteSeries(s.id);
       if (cat) loadSeries(cat.id);
@@ -1811,7 +1812,7 @@ export default function ShopAdminPage() {
     }
   };
   const delProduct = async (p: ProductOut) => {
-    if (!confirm(`確定刪除商品「${p.name}」？已有訂單紀錄的商品無法刪除。`)) return;
+    if (!(await confirmAction({ title: `確定刪除商品「${p.name}」？已有訂單紀錄的商品無法刪除。`, danger: true }))) return;
     try {
       await shopApi.deleteProduct(p.id);
       toast.success("商品已刪除");
@@ -1829,9 +1830,12 @@ export default function ShopAdminPage() {
   };
   const toggleProduct = async (p: ProductOut, startTesting = false) => {
     if (productStatusBusy) return;
-    if (p.status === "testing" && !confirm(
-      `正式開放「${p.name}」？將清除這項商品的測試訂單、付款／收款等相關紀錄，並回補庫存。此操作無法復原。`,
-    )) return;
+    if (p.status === "testing" && !(await confirmAction({
+      title: `正式開放「${p.name}」？`,
+      description: "將清除這項商品的測試訂單、付款／收款等相關紀錄，並回補庫存。此操作無法復原。",
+      confirmLabel: "正式開放",
+      danger: true,
+    }))) return;
     setProductStatusBusy(true);
     setProductActionError("");
     try {

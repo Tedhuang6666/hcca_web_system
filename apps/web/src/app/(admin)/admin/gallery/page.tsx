@@ -11,6 +11,7 @@ import { galleryFingerprint, gallerySettingsValue, readActivityAlbums, type Gall
 import { uploadGalleryPhoto } from "@/lib/gallery-upload";
 import GalleryDrivePanel from "@/components/gallery/GalleryDrivePanel";
 import "./gallery-admin.css";
+import { confirmAction } from "@/components/ui/ConfirmDialog";
 
 export default function GalleryAdminPage() {
   const { can, isReady } = usePermissions();
@@ -137,8 +138,8 @@ export default function GalleryAdminPage() {
     {error && <div role="alert" className="gallery-admin-error">{error}
       {!events.length && <button type="button" onClick={() => void load()}>重新載入</button>}
       {failed && <button type="button" disabled={uploading} onClick={() => void upload(failed.files, failed.poster, failed.eventId, failed.photographer)}>重試失敗的 {failed.files.length} 張</button>}
-      {!failed && events.length > 0 && <button type="button" disabled={uploading || busy} onClick={() => {
-        if (!dirty || window.confirm("捨棄此頁尚未發布的變更並重新載入？")) void load();
+      {!failed && events.length > 0 && <button type="button" disabled={uploading || busy} onClick={async () => {
+        if (!dirty || (await confirmAction({ title: "捨棄此頁尚未發布的變更並重新載入？", danger: true }))) void load();
       }}>重新載入</button>}
     </div>}
     {status && <p role="status">{status}</p>}
@@ -220,8 +221,8 @@ export default function GalleryAdminPage() {
             setEvents((current) => { const next = [...current]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; return next; });
             setDirty(true);
           }}>活動往前排列</button>
-          <button type="button" className="btn btn-ghost" onClick={() => {
-            if (!window.confirm("將「" + (active.title || "未命名活動") + "」從網站移除？發布變更後生效。")) return;
+          <button type="button" className="btn btn-ghost" onClick={async () => {
+            if (!(await confirmAction({ title: "將「" + (active.title || "未命名活動") + "」從網站移除？發布變更後生效。", danger: true }))) return;
             const next = events.filter((event) => event.id !== activeId);
             setEvents(next); setActiveId(next[0]?.id ?? ""); setCredit(next[0]?.photographer ?? ""); setSelected(new Set()); setDirty(true);
           }}>移除活動</button>

@@ -8,6 +8,7 @@ import { documentsApi, orgsApi, usersApi, withFallback, apiErrorMessage } from "
 import type { OrgRead, UserSummary } from "@/lib/api";
 import type { DocumentApprovalDelegationOut, UserPositionRead } from "@/lib/types";
 import { orgDisplayName } from "@/lib/orgs";
+import { confirmAction } from "@/components/ui/ConfirmDialog";
 
 function toInputValue(date: string | null) {
   if (!date) return "";
@@ -136,7 +137,7 @@ export default function DocumentDelegationsPage() {
   };
 
   const deactivate = async (id: string) => {
-    if (!confirm("確定要停用這筆代理授權嗎？")) return;
+    if (!(await confirmAction({ title: "確定要停用這筆代理授權嗎？", danger: true }))) return;
     try {
       await documentsApi.deleteDelegation(id);
       toast.success("代理授權已停用");

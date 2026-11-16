@@ -8,6 +8,7 @@ import { orgDisplayName } from "@/lib/orgs";
 import { usePermissions } from "@/hooks/usePermissions";
 import DraftStatus from "@/components/ui/DraftStatus";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
+import { confirmAction } from "@/components/ui/ConfirmDialog";
 
 type YearMode = "roc" | "ce";
 
@@ -142,7 +143,7 @@ export default function SerialTemplatesPage() {
   };
 
   const handleDeactivate = async (id: string, prefix: string) => {
-    if (!confirm(`確定要停用字號模板「${prefix}」？停用後無法用於新公文。`)) return;
+    if (!(await confirmAction({ title: `確定要停用字號模板「${prefix}」？停用後無法用於新公文。`, danger: true }))) return;
     try {
       await serialTemplatesApi.deactivate(id);
       toast.success("已停用");

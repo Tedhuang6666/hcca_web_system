@@ -18,6 +18,7 @@ import SmartEmptyState from "@/components/ui/SmartEmptyState";
 import DraftStatus from "@/components/ui/DraftStatus";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import { DOCUMENT_TEMPLATE_PRESETS } from "@/lib/documentTemplatePresets";
+import { confirmAction } from "@/components/ui/ConfirmDialog";
 
 const CATEGORY_OPTIONS: { value: DocumentCategory; label: string }[] = [
   { value: "letter", label: "函" },
@@ -252,7 +253,7 @@ export default function DocumentTemplatesPage() {
   };
 
   const deactivate = async (item: DocumentTemplateOut) => {
-    if (!confirm(`停用公文範本「${item.name}」？`)) return;
+    if (!(await confirmAction({ title: `停用公文範本「${item.name}」？`, danger: true }))) return;
     try {
       await documentTemplatesApi.deactivate(item.id);
       toast.success("公文範本已停用");

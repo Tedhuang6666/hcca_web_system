@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { apiErrorMessage } from "@/lib/api-helpers";
 import { loginDestination } from "@/lib/login-destination";
@@ -42,7 +43,7 @@ export default function PasskeyLogin({ nextPath }: { nextPath: string }) {
       window.location.replace(loginDestination(safeNextPath(nextPath, "/dashboard")));
     } catch (error) {
       window.history.replaceState(null, "", window.location.pathname);
-      alert(apiErrorMessage(error, "生物辨識快速登入失敗，請改用 Google 或 Discord 登入"));
+      toast.error(apiErrorMessage(error, "生物辨識快速登入失敗，請改用 Google 或 Discord 登入"));
     } finally {
       setBusy(false);
     }

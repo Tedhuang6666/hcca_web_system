@@ -13,6 +13,7 @@ import AnnouncementAudiencePicker, {
 import { contentFromMarkdown, markdownFromContent } from "@/components/announcements/announcementContent";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
+import { confirmAction } from "@/components/ui/ConfirmDialog";
 
 const DEFAULT_AUDIENCE: AudienceValue = {
   audience_type: "all",
@@ -162,7 +163,7 @@ export default function EditAnnouncementPage() {
   };
 
   const remove = async () => {
-    if (!canEdit || !item || !confirm("確定刪除這則公告？")) return;
+    if (!canEdit || !item || !(await confirmAction({ title: "確定刪除這則公告？", danger: true }))) return;
     setSaving(true);
     try {
       await announcementsApi.delete(item.id);
