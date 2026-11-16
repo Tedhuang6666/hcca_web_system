@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 from fastapi import Depends, HTTPException, Request, status
@@ -168,6 +169,8 @@ async def get_current_user(
             },
         )
 
+    # 供 SecurityAuditMiddleware 在回應後記錄操作者；只放識別資料，不保留 ORM 物件。
+    request.state.user = SimpleNamespace(id=user.id, email=user.email)
     return user
 
 

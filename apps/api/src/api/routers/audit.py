@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.clock import local_today
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
+from api.core.spreadsheet import safe_row
 from api.dependencies.auth import get_current_active_user
 from api.models.audit_log import AuditLog
 from api.models.org import Position, UserPosition
@@ -230,17 +231,19 @@ async def export_audit_logs_csv(
     )
     for row in rows:
         writer.writerow(
-            [
-                row.created_at.isoformat(),
-                row.action,
-                row.entity_type,
-                row.entity_id,
-                row.actor_id or "",
-                row.actor_email or "",
-                row.ip_address or "",
-                row.summary or "",
-                json.dumps(row.meta or {}, ensure_ascii=False, sort_keys=True),
-            ]
+            safe_row(
+                [
+                    row.created_at.isoformat(),
+                    row.action,
+                    row.entity_type,
+                    row.entity_id,
+                    row.actor_id or "",
+                    row.actor_email or "",
+                    row.ip_address or "",
+                    row.summary or "",
+                    json.dumps(row.meta or {}, ensure_ascii=False, sort_keys=True),
+                ]
+            )
         )
 
     filename = f"audit_logs_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.csv"

@@ -8,6 +8,7 @@ import uuid
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.spreadsheet import safe_mapping
 from api.models.shop import Order, OrderItem, Product, ProductCategory, ProductSeries
 from api.models.user import User
 
@@ -85,7 +86,9 @@ async def export_orders_excel(
         "訂單總金額（NT$）",
         "建立時間",
     ]
-    df = pd.DataFrame(rows) if rows else pd.DataFrame(columns=columns)
+    df = (
+        pd.DataFrame([safe_mapping(row) for row in rows]) if rows else pd.DataFrame(columns=columns)
+    )
 
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:

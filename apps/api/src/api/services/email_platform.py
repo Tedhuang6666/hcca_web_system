@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.core.config import settings
+from api.core.spreadsheet import safe_mapping
 from api.email.renderer import (
     apply_conditional_rules,
     validate_conditional_rules,
@@ -472,6 +473,7 @@ async def export_recipients(db: AsyncSession, message_id: uuid.UUID, fmt: str) -
         }
         for row in rows
     ]
+    data = [safe_mapping(item) for item in data]
     if fmt == "xlsx":
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:

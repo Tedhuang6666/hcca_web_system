@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.spreadsheet import safe_row
 from api.models.meal import MealOrder, MealOrderStatus
 from api.models.receivable import Receivable, ReceivableSource, ReceivableStatus
 from api.models.shop import Order, OrderStatus
@@ -347,16 +348,18 @@ async def export_csv(db: AsyncSession, rows: list[Receivable]) -> str:
     )
     for row in rows:
         writer.writerow(
-            [
-                row.id,
-                row.title,
-                row.source_type,
-                row.amount,
-                row.paid_amount,
-                row.status,
-                row.user_id or "",
-                row.class_id or "",
-            ]
+            safe_row(
+                [
+                    row.id,
+                    row.title,
+                    row.source_type,
+                    row.amount,
+                    row.paid_amount,
+                    row.status,
+                    row.user_id or "",
+                    row.class_id or "",
+                ]
+            )
         )
     return output.getvalue()
 

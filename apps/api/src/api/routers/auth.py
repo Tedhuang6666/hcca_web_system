@@ -899,6 +899,9 @@ async def logout(
                 await user_session_svc.revoke(db, session, reason="logout")
     await db.commit()
     _delete_auth_cookies(response)
+    # 清掉 OAuth／MFA 暫存（state、mfa_challenge、mfa_reauth_until 等），
+    # 避免共用瀏覽器的下一位使用者沿用前一位的步驟驗證狀態。
+    request.session.clear()
 
     _ph = get_posthog_client()
     if _ph and access_cookie:

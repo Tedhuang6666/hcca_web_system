@@ -524,3 +524,51 @@ def test_decode_token_roundtrip_sanity() -> None:
     payload = decode_token(token)
     assert payload["sub"] == "sanity-check-subject"
     assert payload["type"] == "access"
+
+
+async def test_logout_clears_oauth_session_state(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """登出後不得保留 OAuth state／MFA 暫存，避免共用瀏覽器沿用前一位的狀態。"""
+    import api.routers.auth as auth_module
+
+    async def fake_redirect(request, redirect_uri, **kwargs):
+        request.session["oauth_marker"] = "previous-user"
+        from fastapi.responses import RedirectResponse
+
+        return RedirectResponse("https://accounts.google.com/o/oauth2/auth")
+
+    monkeypatch.setattr(auth_module.google, "authorize_redirect", fake_redirect)
+    login = await client.get("/auth/google/login", follow_redirects=False)
+    cookie_name = settings.SESSION_COOKIE_NAME
+    assert any(h.startswith(f"{cookie_name}=") for h in login.headers.get_list("set-cookie"))
+
+    response = await client.post("/auth/logout")
+
+    cleared = [
+        h for h in response.headers.get_list("set-cookie") if h.startswith(f"{cookie_name}=")
+    ]
+    assert cleared, "logout 應覆寫 session cookie"
+    assert (
+        "null" in cleared[0]
+        or "Max-Age=0" in cleared[0]
+        or "expires=Thu, 01 Jan 1970" in cleared[0]
+    )
+
+
+async def test_audit_middleware_records_authenticated_actor(
+    member_user: User,
+    authed_client_factory: Callable[[User], AsyncClient],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    import logging
+
+    caplog.set_level(logging.INFO, logger="api.core.audit")
+    client = authed_client_factory(member_user)
+
+    await client.patch("/users/me", json={})
+
+    records = [r for r in caplog.records if r.getMessage() == "Security audit: sensitive operation"]
+    assert records, "敏感路徑應寫入稽核紀錄"
+    assert records[-1].user_id == str(member_user.id)
+    assert records[-1].user_email == member_user.email
