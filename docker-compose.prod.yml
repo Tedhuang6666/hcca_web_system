@@ -60,6 +60,8 @@ x-api-common: &api-common
     REDIS_REALTIME_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis-realtime:6379/0
     CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis-broker:6379/0
     CELERY_RESULT_BACKEND: ""
+    GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE: ${GOOGLE_DRIVE_SERVICE_ACCOUNT_HOST_FILE:+/run/secrets/google-drive-service-account.json}
+    GOOGLE_DRIVE_SERVICE_ACCOUNT_HOST_FILE: ""
   depends_on:
     db:
       condition: service_healthy
@@ -76,6 +78,7 @@ x-api-common: &api-common
   volumes:
     - uploads:/app/uploads
     - backups:/app/backups
+    - "${GOOGLE_DRIVE_SERVICE_ACCOUNT_HOST_FILE:-/dev/null}:/run/secrets/google-drive-service-account.json:ro"
 
 services:
   db:

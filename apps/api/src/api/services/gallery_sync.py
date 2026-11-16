@@ -15,12 +15,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.datastructures import Headers
 
-from api.core.config import settings
 from api.models.gallery_sync import GalleryDriveSync
 from api.models.site import PublicSiteSettings
 from api.models.user import User
 from api.schemas.gallery_sync import GalleryDriveConfig, GalleryDriveStatusOut, GallerySyncReportOut
-from api.services.gallery_drive import DriveRetryLater, GalleryDriveClient
+from api.services.gallery_drive import DriveRetryLater, GalleryDriveClient, gallery_drive_ready
 from api.services.permission import get_user_permission_codes
 from api.services.storage import get_storage
 
@@ -43,7 +42,7 @@ async def get_source(session: AsyncSession, *, lock: bool = False) -> GalleryDri
 def status_out(source: GalleryDriveSync | None) -> GalleryDriveStatusOut:
     return GalleryDriveStatusOut(
         config=GalleryDriveConfig.model_validate(source.config if source else {}),
-        drive_ready=bool(settings.GOOGLE_DRIVE_API_KEY),
+        drive_ready=gallery_drive_ready(),
         requested_at=source.requested_at if source else None,
         next_sync_at=source.next_sync_at if source else None,
         last_synced_at=source.last_synced_at if source else None,

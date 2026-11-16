@@ -6,13 +6,13 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.config import settings
 from api.core.database import get_db
 from api.dependencies.permissions import require_any
 from api.models.user import User
 from api.schemas.gallery_sync import GalleryDriveConfig, GalleryDriveStatusOut
 from api.services import gallery_sync as sync
 from api.services.audit import record
+from api.services.gallery_drive import gallery_drive_ready
 
 router = APIRouter(prefix="/admin/gallery-drive", tags=["活動照片來源"])
 DbDep = Annotated[AsyncSession, Depends(get_db)]
@@ -46,8 +46,8 @@ async def configure(
 
 @router.post("/run", response_model=GalleryDriveStatusOut, status_code=202)
 async def request_sync(session: DbDep, user: Manager) -> GalleryDriveStatusOut:
-    if not settings.GOOGLE_DRIVE_API_KEY:
-        raise HTTPException(409, "尚未設定 Drive API 金鑰")
+    if not gallery_drive_ready():
+        raise HTTPException(409, "尚未設定 Google Drive 唯讀授權")
     source = await sync.get_source(session, lock=True)
     if source is None or not source.config.get("sources"):
         raise HTTPException(409, "請先儲存活動照片來源")

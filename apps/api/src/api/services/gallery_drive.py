@@ -1,19 +1,37 @@
-"""公開 Drive 相片讀取；只接受固定 Google API 路徑。"""
+"""Google Drive 相片讀取；只接受固定 Google API 路徑。"""
 
+import asyncio
 import json
+import os
 from dataclasses import dataclass
+from pathlib import Path
 
 import httpx
+from google.auth.credentials import Credentials
+from google.auth.exceptions import GoogleAuthError
+from google.auth.transport.requests import Request
+from google.oauth2 import service_account
 
+from api.core.config import settings
 from api.services.regulation_drive import _ID_RE, DriveReadError, RegulationDriveClient
 
 IMAGE_TYPES = frozenset({"image/jpeg", "image/png", "image/webp"})
 MAX_IMAGE_BYTES = 30 * 1024 * 1024
 MAX_SOURCE_IMAGES = 10_000
+DRIVE_READ_SCOPE = "https://www.googleapis.com/auth/drive.readonly"
+SERVICE_ACCOUNT_ENV = "GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE"
 
 
 class DriveRetryLater(DriveReadError):
     """Google 暫時封鎖或限流，應保留游標並延後重試。"""
+
+
+def gallery_drive_ready() -> bool:
+    """回報相簿 Drive 憑證是否可供背景工作使用。"""
+    credential_file = os.environ.get(SERVICE_ACCOUNT_ENV, "").strip()
+    if credential_file:
+        return Path(credential_file).is_file() and os.access(credential_file, os.R_OK)
+    return bool(settings.GOOGLE_DRIVE_API_KEY)
 
 
 async def _check_drive_response(response: httpx.Response) -> None:
@@ -57,6 +75,51 @@ class DriveImage:
 
 
 class GalleryDriveClient(RegulationDriveClient):
+    def __init__(self) -> None:
+        credential_file = os.environ.get(SERVICE_ACCOUNT_ENV, "").strip()
+        self._service_account_credentials: Credentials | None = None
+        self._credential_lock: asyncio.Lock | None = None
+        if not credential_file:
+            super().__init__()
+            return
+        if not gallery_drive_ready():
+            raise DriveReadError("Google Drive 服務帳戶憑證檔案不存在或無法讀取")
+        try:
+            self._service_account_credentials = (
+                service_account.Credentials.from_service_account_file(
+                    credential_file,
+                    scopes=[DRIVE_READ_SCOPE],
+                )
+            )
+        except (OSError, GoogleAuthError, ValueError, TypeError, KeyError) as exc:
+            raise DriveReadError(
+                "無法讀取 Google Drive 服務帳戶憑證，請檢查唯讀 JSON 檔案"
+            ) from exc
+        self._credential_lock = asyncio.Lock()
+        self.client = httpx.AsyncClient(
+            base_url="https://www.googleapis.com/drive/v3/",
+            timeout=30,
+            follow_redirects=False,
+        )
+
+    async def _authorization_headers(self) -> dict[str, str]:
+        credentials = self._service_account_credentials
+        if credentials is None:
+            return {}
+        lock = self._credential_lock
+        if lock is None:
+            raise DriveReadError("Google Drive 服務帳戶授權未初始化")
+        try:
+            async with lock:
+                if not credentials.valid:
+                    await asyncio.to_thread(credentials.refresh, Request())
+                token = credentials.token
+        except Exception as exc:
+            raise DriveRetryLater("Google Drive 授權暫時失敗，已保留匯入進度") from exc
+        if not token:
+            raise DriveRetryLater("Google Drive 授權暫時失敗，已保留匯入進度")
+        return {"Authorization": f"Bearer {token}"}
+
     async def list_images(self, folder_id: str, recursive: bool = True) -> list[DriveImage]:
         folders = [(folder_id, 0, "")]
         visited: set[str] = set()
@@ -82,7 +145,9 @@ class GalleryDriveClient(RegulationDriveClient):
                 if page_token:
                     params["pageToken"] = page_token
                 try:
-                    response = await self.client.get("files", params=params)
+                    response = await self.client.get(
+                        "files", params=params, headers=await self._authorization_headers()
+                    )
                     await _check_drive_response(response)
                     payload = response.json()
                     if payload.get("incompleteSearch"):
@@ -118,7 +183,7 @@ class GalleryDriveClient(RegulationDriveClient):
                     raise
                 except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
                     raise DriveReadError(
-                        "無法完整讀取照片來源，請檢查資料夾分享權限與 API 金鑰"
+                        "無法完整讀取照片來源，請檢查資料夾分享權限與 Google Drive 憑證"
                     ) from exc
                 if not page_token:
                     break
@@ -130,13 +195,14 @@ class GalleryDriveClient(RegulationDriveClient):
                 response = await self.client.get(
                     f"files/{folder_id}",
                     params={"fields": "mimeType", "supportsAllDrives": "true"},
+                    headers=await self._authorization_headers(),
                 )
                 await _check_drive_response(response)
                 mime_type = response.json()["mimeType"]
             except DriveReadError:
                 raise
             except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
-                raise DriveReadError("無法確認來源資料夾，請檢查資料夾分享權限與 API 金鑰") from exc
+                raise DriveReadError("無法確認來源資料夾，請檢查資料夾分享權限與唯讀授權") from exc
             if mime_type != "application/vnd.google-apps.folder":
                 raise DriveReadError("來源指向單一檔案，請改用包含照片的 Google Drive 資料夾連結")
             raise DriveReadError(
@@ -150,8 +216,12 @@ class GalleryDriveClient(RegulationDriveClient):
         chunks: list[bytes] = []
         size = 0
         try:
+            headers = await self._authorization_headers()
             async with self.client.stream(
-                "GET", f"files/{file_id}", params={"alt": "media", "supportsAllDrives": "true"}
+                "GET",
+                f"files/{file_id}",
+                params={"alt": "media", "supportsAllDrives": "true"},
+                headers=headers,
             ) as response:
                 await _check_drive_response(response)
                 async for chunk in response.aiter_bytes():
@@ -160,5 +230,5 @@ class GalleryDriveClient(RegulationDriveClient):
                         raise DriveReadError("照片超過 30 MB")
                     chunks.append(chunk)
         except httpx.HTTPError as exc:
-            raise DriveReadError("無法下載照片，請確認照片可公開讀取") from exc
+            raise DriveReadError("無法下載照片，請確認唯讀授權具有照片檢視權限") from exc
         return b"".join(chunks)

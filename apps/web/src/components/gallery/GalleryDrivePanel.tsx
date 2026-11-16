@@ -78,7 +78,7 @@ function DriveSettings({ albums, disabled, onSynced }: Props) {
     {message && <p role="status">{message}</p>}
     {status && <>
       {disabled && <p role="status">請先發布活動變更，再管理 Drive 來源。</p>}
-      {!status.drive_ready && <p role="status">尚未設定 Drive API 金鑰，請由系統管理員完成連線。</p>}
+      {!status.drive_ready && <p role="status">尚未設定 Google Drive 唯讀授權，請由系統管理員完成連線。</p>}
       <fieldset disabled={disabled || busy || pending}>
         <legend>照片來源</legend>
         {!config.sources.length && <p>尚未設定照片來源</p>}
