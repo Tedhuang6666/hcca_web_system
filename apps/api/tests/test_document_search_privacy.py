@@ -65,3 +65,47 @@ async def test_keyword_search_does_not_match_others_confidential_documents(
     assert own_secret.id in found_ids
     assert secret.id not in found_ids
     assert secret.id in {doc.id for doc in listed}
+
+
+async def test_autosave_on_issued_document_still_records_revision(
+    db_session: AsyncSession, make_user
+) -> None:
+    from datetime import UTC, datetime
+
+    from sqlalchemy import func, select
+
+    from api.models.document import DocumentRevision
+    from api.schemas.document import DocumentUpdate
+    from api.services.document import update_document
+
+    org = Org(name=f"發文組織-{uuid.uuid4().hex[:6]}")
+    db_session.add(org)
+    await db_session.flush()
+    author = await make_user(email="issued-author@example.com")
+    issued = _doc(org, author, content="原始發文內容", issued_at=datetime.now(UTC))
+    draft = _doc(org, author, status=DocumentStatus.DRAFT, content="草稿")
+    db_session.add_all([issued, draft])
+    await db_session.flush()
+
+    await update_document(
+        db_session,
+        issued,
+        data=DocumentUpdate(content="發文後修改", autosave=True),
+        changed_by=author.id,
+    )
+    await update_document(
+        db_session,
+        draft,
+        data=DocumentUpdate(content="草稿自動儲存", autosave=True),
+        changed_by=author.id,
+    )
+
+    async def revisions(doc: Document) -> int:
+        return await db_session.scalar(
+            select(func.count())
+            .select_from(DocumentRevision)
+            .where(DocumentRevision.document_id == doc.id)
+        )
+
+    assert await revisions(issued) == 1
+    assert await revisions(draft) == 0

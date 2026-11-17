@@ -377,7 +377,8 @@ async def update_document(
     if "visibility_level" in update_fields:
         doc.is_public = doc.visibility_level == DocumentVisibility.PUBLICLY_OPEN
 
-    if changed and not data.autosave:
+    # 自動儲存只在草稿階段省略版本快照；已發文的公文每次修改都必須留下版本。
+    if changed and (not data.autosave or doc.status != DocumentStatus.DRAFT):
         result = await session.execute(
             select(func.max(DocumentRevision.revision_number)).where(
                 DocumentRevision.document_id == doc.id
@@ -396,7 +397,6 @@ async def update_document(
         )
 
     await session.flush()
-    record_document_approval("approved")
     return doc
 
 
@@ -554,6 +554,7 @@ async def approve_step(
         doc.status = DocumentStatus.APPROVED
         doc.completed_at = now
         await _record_petition_document_issued(session, doc, actor_id=approver_id)
+        record_document_approval("approved")
         logger.info("公文核准完成 serial=%s", doc.serial_number)
 
     await session.flush()
