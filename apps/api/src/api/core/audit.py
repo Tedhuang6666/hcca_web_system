@@ -77,38 +77,38 @@ class SecurityAuditMiddleware:
             nonlocal status_code
             if message["type"] == "http.response.start":
                 status_code = message["status"]
+                actor = _audit_actor.get()
+                user = state.get("user")
+                user_id = (
+                    actor[0]
+                    if actor is not None
+                    else str(user.id)
+                    if user is not None
+                    else "anonymous"
+                )
+                user_email = (
+                    actor[1] if actor is not None else user.email if user is not None else "unknown"
+                )
+
+                # 記錄敏感操作（info level；失敗時 status_code >= 400 方升為 warning）
+                log_fn = logger.warning if status_code >= 400 else logger.info
+                log_fn(
+                    "Security audit: sensitive operation",
+                    extra={
+                        "timestamp": datetime.now(UTC).isoformat(),
+                        "method": method,
+                        "path": path,
+                        "user_id": user_id,
+                        "user_email": user_email,
+                        "client_ip": client_ip,
+                        "status_code": status_code,
+                        "query_params": _query_params(scope),
+                    },
+                )
+                clear_audit_actor()
             await send(message)
 
         await self.app(scope, receive, send_wrapper)
-
-        # 提取使用者資訊（若可用；由上游 auth middleware/dependency 寫入 scope["state"]）
-        try:
-            actor = _audit_actor.get()
-            user = state.get("user")
-            user_id = (
-                actor[0] if actor is not None else str(user.id) if user is not None else "anonymous"
-            )
-            user_email = (
-                actor[1] if actor is not None else user.email if user is not None else "unknown"
-            )
-
-            # 記錄敏感操作（info level；失敗時 status_code >= 400 方升為 warning）
-            log_fn = logger.warning if status_code >= 400 else logger.info
-            log_fn(
-                "Security audit: sensitive operation",
-                extra={
-                    "timestamp": datetime.now(UTC).isoformat(),
-                    "method": method,
-                    "path": path,
-                    "user_id": user_id,
-                    "user_email": user_email,
-                    "client_ip": client_ip,
-                    "status_code": status_code,
-                    "query_params": _query_params(scope),
-                },
-            )
-        finally:
-            clear_audit_actor()
 
 
 __all__ = ["SecurityAuditMiddleware", "set_audit_actor"]
