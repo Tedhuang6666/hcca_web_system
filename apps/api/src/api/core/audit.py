@@ -59,6 +59,7 @@ class SecurityAuditMiddleware:
             await self.app(scope, receive, send)
             return
 
+        state = scope.setdefault("state", {})
         client_ip = _client_ip(scope)
         status_code = 500
 
@@ -71,7 +72,6 @@ class SecurityAuditMiddleware:
         await self.app(scope, receive, send_wrapper)
 
         # 提取使用者資訊（若可用；由上游 auth middleware/dependency 寫入 scope["state"]）
-        state = scope.get("state") or {}
         user = state.get("user")
         user_id = str(user.id) if user is not None else "anonymous"
         user_email = user.email if user is not None else "unknown"

@@ -30,8 +30,7 @@ describe("budget Excel download", () => {
   });
 
   it("downloads the workbook with credentials and releases its temporary URL", async () => {
-    const workbook = new Blob(["excel-content"]);
-    const fetchMock = vi.fn().mockResolvedValue(new Response(workbook));
+    const fetchMock = vi.fn().mockResolvedValue(new Response("excel-content"));
     vi.stubGlobal("fetch", fetchMock);
 
     await financeApi.exportBudget("budget-123");
