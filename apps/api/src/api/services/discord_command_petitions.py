@@ -12,8 +12,8 @@ from api.models.user import User
 from api.schemas.petition import PetitionCreate, PetitionInternalNoteCreate, PetitionStatusUpdate
 from api.services import petition as petition_svc
 from api.services.discord_bot import (
-    create_open_url,
     enqueue_petition_private_channel,
+    plain_frontend_url,
 )
 from api.services.discord_command_common import (
     DiscordCommandError,
@@ -68,7 +68,7 @@ async def handle(
                     "case_number": item.case_number,
                     "title": item.title,
                     "status": str(item.status),
-                    "open_url": await create_open_url(user.id, f"/petitions/manage?case={item.id}"),
+                    "open_url": plain_frontend_url(f"/petitions/manage?case={item.id}"),
                 }
                 for item in cases
             ]
