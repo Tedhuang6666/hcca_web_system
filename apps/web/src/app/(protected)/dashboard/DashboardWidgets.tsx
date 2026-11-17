@@ -138,7 +138,7 @@ function WidgetCard({ widget, index }: { widget: DashboardWidget; index: number 
                     <div className="flex items-center gap-2 mt-0.5">
                       {item.badge && (
                         <span
-                          className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                          className="text-xs px-1.5 py-0.5 rounded font-medium"
                           style={{
                             color: severity.color,
                             background: severity.bg,
@@ -164,7 +164,7 @@ function WidgetCard({ widget, index }: { widget: DashboardWidget; index: number 
                     </div>
                     {item.recommended_action && (
                       <p
-                        className="mt-1 truncate text-[11px]"
+                        className="mt-1 truncate text-xs"
                         style={{ color: "var(--text-muted)" }}
                       >
                         {item.recommended_action}

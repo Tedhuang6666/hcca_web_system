@@ -311,7 +311,7 @@
   gap: 0.75rem;
   color: var(--public-text);
   font-size: 0.95rem;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.2;
   text-decoration: none;
 }
@@ -613,7 +613,7 @@
   padding: 0 0.5rem;
   color: var(--public-muted);
   font-size: 0.72rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.08em;
 }
 
@@ -625,7 +625,7 @@
   background: var(--public-accent-soft);
   color: var(--public-accent-text);
   font-size: 0.62rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.02em;
 }
 
@@ -638,7 +638,7 @@
   background: color-mix(in srgb, var(--public-accent) 14%, transparent);
   color: var(--public-accent-text);
   font-size: 0.6rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.02em;
 }
 
@@ -700,7 +700,7 @@
   background: rgba(52, 211, 153, 0.14);
   color: #6ee7b7;
   font-size: 0.72rem;
-  font-weight: 800;
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -724,7 +724,7 @@
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
-  font-weight: 800;
+  font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -762,7 +762,7 @@
   gap: 0.2rem;
   margin-left: auto;
   color: #e8c970;
-  font-weight: 800;
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -823,7 +823,7 @@
   flex: 0 0 auto;
   color: var(--primary-text);
   font-size: 0.75rem;
-  font-weight: 800;
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -843,7 +843,7 @@
   margin-left: auto;
   color: var(--primary-text);
   font-size: 0.8rem;
-  font-weight: 800;
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -937,7 +937,7 @@
   border-radius: 8px;
   padding: 0 1rem;
   font-size: 0.95rem;
-  font-weight: 800;
+  font-weight: 700;
   text-decoration: none;
 }
 
@@ -981,7 +981,7 @@
   margin: 0 0 0.65rem;
   color: var(--public-text);
   font-size: 0.875rem;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .public-mobile-service-search {
@@ -1029,7 +1029,7 @@
   color: var(--public-text);
   padding: 0.7rem 0.85rem;
   font-size: 0.96rem;
-  font-weight: 750;
+  font-weight: 700;
   text-decoration: none;
 }
 
@@ -1075,7 +1075,7 @@
   color: var(--public-accent-text);
   padding: 0 0.75rem;
   font-size: 0.78rem;
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .public-emblem-stage {
@@ -1194,7 +1194,7 @@
      避免金色小字落在淺色面板上對比不足。*/
   color: var(--public-text);
   font-size: 0.78rem;
-  font-weight: 850;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -1210,7 +1210,7 @@
 
 .public-side-panel h2 {
   font-size: 1rem;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .public-mini-list,
@@ -1257,7 +1257,7 @@
   padding-inline: 0.25rem;
   color: var(--public-accent-text);
   font-size: 0.82rem;
-  font-weight: 800;
+  font-weight: 700;
   text-decoration: none;
 }
 

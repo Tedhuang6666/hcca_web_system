@@ -329,6 +329,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .live-board::before,
   .live-candidate-row,
 .live-vote-bump,
 .live-overtake-badge,

@@ -62,7 +62,7 @@ function ErrorRow({ item }: { item: RecentErrorItem }) {
           <summary className="min-h-11 cursor-pointer py-3 text-xs" style={{ color: "var(--text-secondary)" }}>
             展開追蹤資訊
           </summary>
-          <pre className="max-h-72 overflow-auto rounded-md p-2 font-mono text-[11px] leading-snug" style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
+          <pre className="max-h-72 overflow-auto rounded-md p-2 font-mono text-xs leading-snug" style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
             {item.traceback_head}
           </pre>
         </details>

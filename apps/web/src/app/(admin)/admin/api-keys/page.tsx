@@ -248,7 +248,7 @@ export default function ApiKeysPage() {
                   style={{ opacity: k.is_active ? 1 : 0.5 }}>
                   <td className="px-3 py-2">{k.name}</td>
                   <td className="px-3 py-2 font-mono">{k.key_prefix}…</td>
-                  <td className="px-3 py-2 font-mono text-[10px]">
+                  <td className="px-3 py-2 font-mono text-xs">
                     {k.scopes.length === 0 ? "—" : k.scopes.join(", ")}
                   </td>
                   <td className="px-3 py-2 text-right">{k.rate_limit_per_minute}</td>

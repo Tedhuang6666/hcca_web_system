@@ -406,7 +406,7 @@ function PermissionPicker({
     <div className="mt-4 block">
       <div className="mb-1.5 flex items-center justify-between gap-2">
         <span className="text-xs font-medium text-[var(--text-muted)]">{label}</span>
-        <span className="text-[11px] text-[var(--text-muted)]">已選 {values.length} 項</span>
+        <span className="text-xs text-[var(--text-muted)]">已選 {values.length} 項</span>
       </div>
       <input
         className="input mb-2 h-9 text-sm"

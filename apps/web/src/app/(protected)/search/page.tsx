@@ -166,7 +166,7 @@ function SearchInner() {
                         </h3>
                         {meta && (
                           <span
-                            className="text-[10px] font-medium px-1.5 py-0.5 rounded"
+                            className="text-xs font-medium px-1.5 py-0.5 rounded"
                             style={{ color, background: `color-mix(in srgb, ${color} 8%, transparent)`, border: `1px solid color-mix(in srgb, ${color} 20%, transparent)` }}
                           >
                             {meta.label}

@@ -20,7 +20,7 @@
   gap: 0.28rem;
   color: var(--success);
   font-size: 0.66rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.04em;
 }
 
@@ -52,7 +52,7 @@
 
 .survey-response-meter strong {
   color: var(--primary-text);
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .survey-response-meter-track {
@@ -75,7 +75,7 @@
 .survey-response-meter p {
   margin: 0;
   color: var(--success);
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .survey-question-card {
@@ -113,7 +113,7 @@
   margin-left: 0.5rem;
   color: var(--success);
   font-size: 0.67rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.04em;
   vertical-align: middle;
 }

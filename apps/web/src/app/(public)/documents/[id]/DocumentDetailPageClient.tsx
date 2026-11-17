@@ -155,7 +155,7 @@ const UserPicker = memo(function UserPicker({
                 ? { background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }
                 : { background: "var(--bg-elevated)", border: "1px solid transparent" }}
             >
-              <span className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold"
+              <span className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold"
                 style={{ background: selected ? "var(--primary)" : "var(--bg-surface)", color: selected ? "var(--primary-fg)" : "var(--text-muted)" }}>
                 {selected ? idx + 1 : ""}
               </span>
@@ -861,7 +861,7 @@ export default function DocumentDetailPageClient({
                   <option key={user.id} value={user.id}>{user.display_name}（{user.email}）</option>
                 ))}
               </select>
-              <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+              <span className="text-xs" style={{ color: "var(--text-muted)" }}>
                 對方會收到 Email，並取得這份公文的查閱權限。
               </span>
             </label>

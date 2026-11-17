@@ -141,7 +141,7 @@ function CredentialCard({ credential }: { credential: ElectronicCredentialOut })
           <BrandEmblem size={44} priority />
           <div>
             <p className="text-sm font-semibold tracking-[0.08em] text-[#fffdf7]">HCCA</p>
-            <p className="text-[11px] text-[#b9c3d2]">新竹高中班聯會數位憑證</p>
+            <p className="text-xs text-[#b9c3d2]">新竹高中班聯會數位憑證</p>
           </div>
         </div>
         <div className="credential-card__status">

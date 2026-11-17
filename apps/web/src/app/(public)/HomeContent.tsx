@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { ArrowRight, ShoppingBag } from "lucide-react";
 
-import LiveElectionCard from "@/components/site/LiveElectionCard";
 import PublicLoadFailure from "@/components/site/PublicLoadFailure";
 import ShopImage from "@/components/shop/ShopImage";
 import { uploadUrl } from "@/lib/config";
@@ -132,7 +131,6 @@ export default function HomeContent({
             {!announcementsAvailable && <PublicLoadFailure message="無法取得最新公告" />}
           </div>
           <aside className="campus-participation" aria-label="校園參與">
-            <LiveElectionCard />
             {openSurveys.slice(0, 2).map((survey) => (
               <Link key={survey.id} href={`/surveys/${encodeURIComponent(survey.title)}`} className="campus-survey">
                 <span className="campus-meta">

@@ -135,13 +135,13 @@ export default function SessionManagement() {
                   <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
                     {session.device_label}
                     {session.is_current && (
-                      <span className="ml-2 rounded px-1.5 py-0.5 text-[10px]" style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
+                      <span className="ml-2 rounded px-1.5 py-0.5 text-xs" style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
                         目前裝置
                       </span>
                     )}
                     {session.is_revoked && (
                       <span
-                        className="ml-2 rounded px-1.5 py-0.5 text-[10px]"
+                        className="ml-2 rounded px-1.5 py-0.5 text-xs"
                         style={{ background: "var(--danger-dim)", color: "var(--danger)" }}
                       >
                         已撤銷

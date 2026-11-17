@@ -285,7 +285,7 @@ function MetaPreview({ meta }: { meta: Record<string, unknown> }) {
       {entries.map(([key, value]) => (
         <span
           key={key}
-          className="rounded-md px-2 py-1 text-[11px]"
+          className="rounded-md px-2 py-1 text-xs"
           style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
           {key}: {typeof value === "object" ? JSON.stringify(value) : String(value)}
         </span>
@@ -585,7 +585,7 @@ export default function AuditLogsPage() {
             className="flex items-end justify-between gap-3 rounded-lg px-3 py-2 lg:min-w-56"
             style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
             <div>
-              <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>目前結果</p>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>目前結果</p>
               <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
                 {logs.length} 筆{hasMore ? "+" : ""}
               </p>
@@ -636,7 +636,7 @@ export default function AuditLogsPage() {
                           {log.actor_email ?? "系統"}
                         </p>
                         {log.actor_id && (
-                          <p className="font-mono text-[11px]" style={{ color: "var(--text-muted)" }}>
+                          <p className="font-mono text-xs" style={{ color: "var(--text-muted)" }}>
                             {shortId(log.actor_id)}
                           </p>
                         )}
@@ -647,7 +647,7 @@ export default function AuditLogsPage() {
                         <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
                           {entityLabel(log.entity_type)}
                         </p>
-                        <p className="font-mono text-[11px]" style={{ color: "var(--text-muted)" }}>
+                        <p className="font-mono text-xs" style={{ color: "var(--text-muted)" }}>
                           {shortId(log.entity_id)}
                         </p>
                       </div>
@@ -708,7 +708,7 @@ export default function AuditLogsPage() {
                 ["日誌 ID", selectedLog.id],
               ].map(([label, value]) => (
                 <div key={label} className="rounded-lg p-3" style={{ background: "var(--bg-hover)" }}>
-                  <dt className="text-[11px] font-medium" style={{ color: "var(--text-muted)" }}>{label}</dt>
+                  <dt className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>{label}</dt>
                   <dd className="mt-1 break-all text-sm" style={{ color: "var(--text-primary)" }}>{value}</dd>
                 </div>
               ))}

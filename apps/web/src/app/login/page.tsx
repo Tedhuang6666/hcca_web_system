@@ -109,7 +109,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
             </p>
           </div>
 
-          <footer className="relative z-10 text-[11px]" style={{ color: "var(--text-muted)" }}>
+          <footer className="relative z-10 text-xs" style={{ color: "var(--text-muted)" }}>
             <span>© {new Date().getFullYear()} {BRANDING.orgName}</span>
           </footer>
         </section>

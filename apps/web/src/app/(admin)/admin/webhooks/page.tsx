@@ -16,6 +16,7 @@ import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import Modal from "@/components/ui/Modal";
 import {
   webhooksApi,
   type WebhookDeliveryOut,
@@ -286,8 +287,8 @@ export default function WebhooksPage() {
                   className="border-b border-[var(--border)]"
                   style={{ opacity: s.is_active ? 1 : 0.5 }}>
                   <td className="px-3 py-2">{s.name}</td>
-                  <td className="px-3 py-2 break-all font-mono text-[10px]">{s.url}</td>
-                  <td className="px-3 py-2 font-mono text-[10px]">{s.events.join(", ")}</td>
+                  <td className="px-3 py-2 break-all font-mono text-xs">{s.url}</td>
+                  <td className="px-3 py-2 font-mono text-xs">{s.events.join(", ")}</td>
                   <td className="px-3 py-2 text-right">{s.max_retries}</td>
                   <td className="px-3 py-2 text-center">
                     <button
@@ -323,67 +324,54 @@ export default function WebhooksPage() {
       </section>
 
       {deliveriesFor && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: "var(--bg-overlay)" }}
-          onClick={() => setDeliveriesFor(null)}
-          role="dialog"
-          aria-modal="true">
-          <div
-            className="max-h-[80vh] w-full max-w-4xl overflow-auto rounded-lg border p-5 shadow-xl"
-            style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
-            onClick={(e) => e.stopPropagation()}>
-            <h3 className="mb-3 text-base font-semibold text-[var(--text-primary)]">
-              投遞紀錄 · {deliveriesFor.sub.name}
-            </h3>
-            {deliveriesFor.items.length === 0 ? (
-              <p className="text-sm text-[var(--text-muted)]">尚無投遞。</p>
-            ) : (
-              <table className="w-full text-[11px]">
-                <thead className="text-[var(--text-secondary)]">
-                  <tr className="border-b border-[var(--border)]">
-                    <th className="py-1 text-left">event</th>
-                    <th className="py-1 text-left">狀態</th>
-                    <th className="py-1 text-right">嘗試</th>
-                    <th className="py-1 text-right">HTTP</th>
-                    <th className="py-1 text-left">錯誤</th>
-                    <th className="py-1 text-right">最後嘗試</th>
+        <Modal
+          title={`投遞紀錄 · ${deliveriesFor.sub.name}`}
+          size="3xl"
+          onClose={() => setDeliveriesFor(null)}
+          footer={
+            <button type="button" className="btn btn-ghost" onClick={() => setDeliveriesFor(null)}>
+              關閉
+            </button>
+          }>
+          {deliveriesFor.items.length === 0 ? (
+            <p className="text-sm text-[var(--text-muted)]">尚無投遞。</p>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="text-[var(--text-secondary)]">
+                <tr className="border-b border-[var(--border)]">
+                  <th className="py-1 text-left">event</th>
+                  <th className="py-1 text-left">狀態</th>
+                  <th className="py-1 text-right">嘗試</th>
+                  <th className="py-1 text-right">HTTP</th>
+                  <th className="py-1 text-left">錯誤</th>
+                  <th className="py-1 text-right">最後嘗試</th>
+                </tr>
+              </thead>
+              <tbody>
+                {deliveriesFor.items.map((d) => (
+                  <tr key={d.id} className="border-b border-[var(--border)]">
+                    <td className="py-1 font-mono">{d.event_type}</td>
+                    <td className="py-1">
+                      <span style={{ color: STATUS_COLOR[d.status] ?? "inherit" }}>
+                        {d.status}
+                      </span>
+                    </td>
+                    <td className="py-1 text-right">{d.attempt_count}</td>
+                    <td className="py-1 text-right">{d.response_status ?? "—"}</td>
+                    <td className="py-1 max-w-[16rem] truncate" title={d.error_message ?? ""}>
+                      {d.error_message ?? "—"}
+                    </td>
+                    <td className="py-1 text-right">
+                      {d.last_attempted_at
+                        ? new Date(d.last_attempted_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })
+                        : "—"}
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {deliveriesFor.items.map((d) => (
-                    <tr key={d.id} className="border-b border-[var(--border)]">
-                      <td className="py-1 font-mono">{d.event_type}</td>
-                      <td className="py-1">
-                        <span style={{ color: STATUS_COLOR[d.status] ?? "inherit" }}>
-                          {d.status}
-                        </span>
-                      </td>
-                      <td className="py-1 text-right">{d.attempt_count}</td>
-                      <td className="py-1 text-right">{d.response_status ?? "—"}</td>
-                      <td className="py-1 max-w-[16rem] truncate" title={d.error_message ?? ""}>
-                        {d.error_message ?? "—"}
-                      </td>
-                      <td className="py-1 text-right">
-                        {d.last_attempted_at
-                          ? new Date(d.last_attempted_at).toLocaleString()
-                          : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-            <div className="mt-3 flex justify-end">
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => setDeliveriesFor(null)}>
-                關閉
-              </button>
-            </div>
-          </div>
-        </div>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Modal>
       )}
     </main>
   );

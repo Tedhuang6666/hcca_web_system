@@ -159,7 +159,7 @@ export default function PetitionsPageClient({
                       <div className="flex items-center gap-2 min-w-0">
                         <p className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>{item.title}</p>
                         {item.is_confidential && (
-                          <span className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ background: "var(--warning-dim)", color: "var(--warning)" }}>
+                          <span className="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium" style={{ background: "var(--warning-dim)", color: "var(--warning)" }}>
                             密件處理
                           </span>
                         )}

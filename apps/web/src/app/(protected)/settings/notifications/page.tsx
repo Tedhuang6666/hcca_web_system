@@ -633,20 +633,20 @@ export default function NotificationSettingsPage() {
             >
               <div className="flex-1" />
               <div
-                className="w-12 text-center text-[11px] font-semibold"
+                className="w-12 text-center text-xs font-semibold"
                 style={{ color: "var(--text-muted)" }}
               >
                 站內
               </div>
               <div
-                className="w-12 text-center text-[11px] font-semibold"
+                className="w-12 text-center text-xs font-semibold"
                 style={{ color: "var(--text-muted)" }}
               >
                 Email
               </div>
               {showLine && (
                 <div
-                  className="w-12 text-center text-[11px] font-semibold"
+                  className="w-12 text-center text-xs font-semibold"
                   style={{ color: "var(--text-muted)" }}
                 >
                   LINE
@@ -654,7 +654,7 @@ export default function NotificationSettingsPage() {
               )}
               {showDiscord && (
                 <div
-                  className="w-16 text-center text-[11px] font-semibold"
+                  className="w-16 text-center text-xs font-semibold"
                   style={{ color: "var(--text-muted)" }}
                 >
                   Discord
@@ -748,7 +748,7 @@ export default function NotificationSettingsPage() {
               <h2 className="text-sm font-semibold">瀏覽器推播</h2>
               {pushPermission === "granted" && (
                 <span
-                  className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                  className="text-xs px-1.5 py-0.5 rounded font-medium"
                   style={{
                     background:
                       "color-mix(in srgb, var(--success) 12%, transparent)",
@@ -760,7 +760,7 @@ export default function NotificationSettingsPage() {
               )}
               {pushPermission === "denied" && (
                 <span
-                  className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                  className="text-xs px-1.5 py-0.5 rounded font-medium"
                   style={{
                     background:
                       "color-mix(in srgb, var(--danger) 12%, transparent)",
@@ -772,7 +772,7 @@ export default function NotificationSettingsPage() {
               )}
               {pushPermission === "default" && (
                 <span
-                  className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                  className="text-xs px-1.5 py-0.5 rounded font-medium"
                   style={{
                     background:
                       "color-mix(in srgb, var(--warning) 12%, transparent)",

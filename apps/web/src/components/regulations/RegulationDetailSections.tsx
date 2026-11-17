@@ -235,13 +235,13 @@ export function RevisionCard({
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{rev.change_brief}</span>
             {rev.is_total_amendment && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded"
+              <span className="text-xs px-1.5 py-0.5 rounded"
                 style={{ color: "#f59e0b", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.25)" }}>
                 全文修訂
               </span>
             )}
             {isLatest && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded"
+              <span className="text-xs px-1.5 py-0.5 rounded"
                 style={{ color: "var(--success)", background: "var(--success-dim)", border: "1px solid rgba(34,197,94,0.25)" }}>
                 最新版本
               </span>
@@ -421,7 +421,7 @@ export function RevisionCard({
                   <section className="space-y-3">
                     <div className="flex items-center justify-between">
                       <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>逐條修正理由</p>
-                      <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                      <span className="text-xs" style={{ color: "var(--text-muted)" }}>
                         共 {parsedProposal.changes.length} 筆
                       </span>
                     </div>
@@ -434,7 +434,7 @@ export function RevisionCard({
                         >
                           <div className="flex items-center gap-2 flex-wrap mb-2">
                             <span
-                              className="text-[11px] px-2 py-0.5 rounded-full"
+                              className="text-xs px-2 py-0.5 rounded-full"
                               style={{
                                 color: change.status === "新增"
                                   ? "var(--success)"

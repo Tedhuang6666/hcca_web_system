@@ -1,10 +1,9 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import type { AnnouncementOut, CatalogCategoryOut, CatalogProductOut, PublicSiteBundleOut } from "@/lib/types";
 import HomeContent, { HomeEntrySection } from "./HomeContent";
 
-vi.mock("@/components/site/LiveElectionCard", () => ({ default: () => null }));
 
 const urgent: AnnouncementOut = {
   id: "notice-1", title: "校園活動預購公告", audience_type: "all", author_id: "author",

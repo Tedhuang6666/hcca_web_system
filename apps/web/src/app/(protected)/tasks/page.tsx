@@ -422,7 +422,7 @@ function TaskRow({ t }: { t: TaskItem }) {
             {t.title}
           </p>
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-            <span className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+            <span className="text-xs px-1.5 py-0.5 rounded font-medium"
               style={{ color: sev.color, background: sev.bg, border: `1px solid ${sev.border}` }}>
               {MODULE_LABEL[t.module] ?? t.module}
             </span>
@@ -445,14 +445,14 @@ function TaskRow({ t }: { t: TaskItem }) {
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <span
-              className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+              className="rounded px-1.5 py-0.5 text-xs font-semibold"
               style={{ background: sev.bg, color: sev.color, border: `1px solid ${sev.border}` }}>
               優先 {t.priority_score}
             </span>
             {t.priority_reasons.slice(0, 2).map((reason) => (
               <span
                 key={reason}
-                className="rounded px-1.5 py-0.5 text-[10px]"
+                className="rounded px-1.5 py-0.5 text-xs"
                 style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
                 {reason}
               </span>

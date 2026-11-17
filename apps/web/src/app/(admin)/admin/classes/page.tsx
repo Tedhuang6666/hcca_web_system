@@ -576,7 +576,7 @@ function ClassList({
                   </p>
                 </div>
                 <span
-                  className="rounded px-2 py-1 text-[11px]"
+                  className="rounded px-2 py-1 text-xs"
                   style={{
                     color: item.is_active ? "#047857" : "var(--text-muted)",
                     background: item.is_active ? "rgba(16,185,129,0.12)" : "transparent",

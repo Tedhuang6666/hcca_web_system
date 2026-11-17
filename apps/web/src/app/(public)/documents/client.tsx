@@ -1290,7 +1290,7 @@ export default function DocumentListClient({
                           return (
                             <span className="flex items-center gap-1.5 font-medium"
                               style={{ color: isOverdue ? "var(--danger)" : "#fb923c" }}>
-                              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isOverdue ? "bg-red-500" : "bg-orange-400 animate-pulse"}`} />
+                              <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: isOverdue ? "var(--danger)" : "var(--warning)" }} />
                               {formatTaipeiDate(doc.due_date)}
                             </span>
                           );
@@ -1394,7 +1394,7 @@ export default function DocumentListClient({
                         {doc.due_date && (isOverdue || isSoon) && (
                           <p className="flex items-center gap-1 text-xs mt-0.5 font-medium"
                             style={{ color: isOverdue ? "var(--danger)" : "#fb923c" }}>
-                            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isOverdue ? "bg-red-500" : "bg-orange-400 animate-pulse"}`} />
+                            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: isOverdue ? "var(--danger)" : "var(--warning)" }} />
                             限辦 {formatTaipeiDate(doc.due_date)}
                             {isOverdue && " · 已逾期"}
                           </p>

@@ -1,6 +1,5 @@
 import Image from "next/image";
-import Link from "next/link";
-import { ArrowLeft, Clock3, List } from "lucide-react";
+import { Clock3, List } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
@@ -77,14 +76,12 @@ export default async function ArticleDetailPage({ params }: { params: Promise<{ 
       >
         <ArticleViewTracker slug={slug} />
         <div className={`public-article-detail${examScope ? " is-exam-scope-article" : ""}`}>
-          <Link href="/articles" className="public-article-back"><ArrowLeft size={16} aria-hidden /> 返回文章專欄</Link>
-
           <header className={`public-article-detail-header${examScope ? " is-exam-scope-header" : ""}${coverImageUrl ? " has-cover" : ""}`}>
             <div className="public-article-detail-copy">
               <h1>{page.title}</h1>
               {!examScope && page.summary && <p className="public-article-detail-summary">{page.summary}</p>}
               <div className="public-article-meta">
-                <time dateTime={page.updated_at}>更新於 {new Date(page.updated_at).toLocaleDateString("zh-TW")}</time>
+                <time dateTime={page.updated_at}>更新於 {new Date(page.updated_at).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" })}</time>
                 <span aria-hidden="true">·</span>
                 <span><Clock3 size={14} aria-hidden /> 約 {readingTime} 分鐘閱讀</span>
               </div>

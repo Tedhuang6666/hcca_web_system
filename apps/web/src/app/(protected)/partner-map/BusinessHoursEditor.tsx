@@ -20,7 +20,7 @@ export default function BusinessHoursEditor({
       <legend className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
         每週營業時間 <span className="font-normal" style={{ color: "var(--text-muted)" }}>選填</span>
       </legend>
-      <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+      <p className="text-xs" style={{ color: "var(--text-muted)" }}>
         未設定的日期不會影響顯示；設定後，營業外地圖圖標會自動變灰。
       </p>
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -60,7 +60,7 @@ export default function BusinessHoursEditor({
                   />
                 </div>
               ) : (
-                <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>公休</span>
+                <span className="text-xs" style={{ color: "var(--text-muted)" }}>公休</span>
               )}
             </div>
           );

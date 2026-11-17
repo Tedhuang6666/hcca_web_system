@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
 import QRCode from "qrcode";
@@ -10,10 +9,12 @@ import { discordApi, mfaApi, apiErrorMessage } from "@/lib/api";
 import type { DiscordBindingOut, MFASetupOut, MFAStatusOut, PasskeyOut } from "@/lib/types";
 import OtpInput from "@/components/auth/OtpInput";
 import { SectionSkeleton } from "@/components/ui/Skeleton";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { safeNextPath } from "@/lib/safe-redirect";
 
 export default function SecuritySettingsPage() {
   const router = useRouter();
+  const confirm = useConfirm();
   const searchParams = useSearchParams();
   const mfaRequired = searchParams.get("mfa_required") === "1";
   const nextPath = safeNextPath(searchParams.get("next"), "/dashboard");
@@ -195,6 +196,12 @@ export default function SecuritySettingsPage() {
   };
 
   const unlinkDiscord = async () => {
+    if (!(await confirm({
+      title: "解除 Discord 綁定？",
+      description: "解除後將無法使用 Discord 登入，也不會再收到 Bot 通知。",
+      confirmLabel: "解除綁定",
+      danger: true,
+    }))) return;
     setDiscordBusy(true);
     try {
       await discordApi.unlink();
@@ -234,13 +241,8 @@ export default function SecuritySettingsPage() {
         </div>
       )}
 
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold">安全設定</h1>
-        </div>
-        <Link href="/settings/account" className="btn btn-ghost">
-          回帳號設定
-        </Link>
+      <header>
+        <h1 className="text-xl font-semibold">安全設定</h1>
       </header>
 
       <section className="card overflow-hidden">

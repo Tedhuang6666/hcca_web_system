@@ -66,10 +66,22 @@ const TYPE_META: Record<string, { icon: React.ReactNode; color: string; label: s
   },
 };
 
+const OTHER_TYPE_LABELS: Record<string, string> = {
+  announcement: "公告通知",
+  petition_status_updated: "陳情狀態",
+  regulation_publish_ready: "法規待公布",
+  regulation_published: "法規公布",
+  regulation_review_assigned: "法規審議",
+  shop_order_paid: "商品訂單",
+  survey_invitation: "問卷邀請",
+  work_item_assigned: "工作指派",
+  work_item_due: "工作期限",
+};
+
 function getMeta(type: string) {
   return TYPE_META[type] ?? {
     icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>,
-    color: "var(--text-muted)", label: type,
+    color: "var(--text-muted)", label: OTHER_TYPE_LABELS[type] ?? "通知",
   };
 }
 
@@ -137,11 +149,11 @@ function NotificationCard({
         )}
         <div className="flex items-center gap-2 mt-1">
           <span
-            className="text-[10px] px-1.5 py-0.5 rounded"
+            className="text-xs px-1.5 py-0.5 rounded"
             style={{ color: meta.color, background: `color-mix(in srgb, ${meta.color} 9%, transparent)` }}>
             {meta.label}
           </span>
-          <span className="text-[10px]" style={{ color: "var(--text-disabled)" }}>
+          <span className="text-xs" style={{ color: "var(--text-disabled)" }}>
             {timeAgo(n.created_at, now)}
           </span>
         </div>
@@ -355,11 +367,11 @@ export default function NotificationsPage() {
       ) : displayed.length === 0 ? (
         <SmartEmptyState
           reason={unreadOnly || dateFrom || dateTo ? "filtered" : "none"}
-          subject="通知"
-          message={unreadOnly ? "沒有未讀通知" : undefined}
+          subject={unreadOnly ? "未讀通知" : "通知"}
           onClearFilters={() => {
             setDateFrom("");
             setDateTo("");
+            setUnreadOnly(false);
           }}
         />
       ) : (
