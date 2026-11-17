@@ -346,7 +346,7 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
               <Link href="/tasks" onClick={() => setShowBell(false)}
                 className="block px-4 py-2 text-center text-[11px] font-medium"
                 style={{
-                  color: "var(--primary)",
+                  color: "var(--primary-text)",
                   textDecoration: "none",
                   borderBottom: "1px solid var(--border)",
                 }}>
@@ -372,7 +372,7 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
                     onClick={handleMarkAllRead}
                     disabled={unreadCount === 0}
                     className="text-[11px] font-medium disabled:opacity-40"
-                    style={{ color: "var(--primary)" }}>
+                    style={{ color: "var(--primary-text)" }}>
                     全數已讀
                   </button>
                 </div>
@@ -415,7 +415,7 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
               <div className="px-4 py-2" style={{ borderTop: "1px solid var(--border)" }}>
                 <Link href="/notifications" onClick={() => setShowBell(false)}
                   className="block text-center text-[11px] font-medium"
-                  style={{ color: "var(--primary)", textDecoration: "none" }}>
+                  style={{ color: "var(--primary-text)", textDecoration: "none" }}>
                   查看全部通知 →
                 </Link>
               </div>
@@ -458,7 +458,7 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
                   className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-semibold flex-shrink-0"
                   style={{
                     background: "linear-gradient(135deg, rgba(201,168,76,0.18) 0%, rgba(201,168,76,0.08) 100%)",
-                    color: "var(--primary)",
+                    color: "var(--primary-text)",
                     border: "1.5px solid rgba(201,168,76,0.35)",
                   }}
                   aria-hidden="true">
@@ -475,7 +475,7 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
                 <span
                   className="hidden sm:block text-[10px] px-1.5 py-0.5 rounded-sm font-medium leading-none"
                   style={{
-                    background: "rgba(245,158,11,0.12)",
+                    background: "var(--warning-dim)",
                     color: "var(--warning)",
                     border: "1px solid var(--warning-border)",
                   }}>

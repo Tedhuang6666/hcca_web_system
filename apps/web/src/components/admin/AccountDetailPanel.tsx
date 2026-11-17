@@ -456,7 +456,7 @@ function AccountDetail({
     <div className={styles.root}>
       <header className="flex min-w-0 flex-col gap-4 border-b pb-5" style={{ borderColor: "var(--border)" }}>
         <div className="flex min-w-0 items-start gap-3">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full" style={{ background: "var(--primary-dim)", color: "var(--primary)" }}><UserRound size={22} /></div>
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full" style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}><UserRound size={22} /></div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="break-words text-xl font-semibold" style={{ color: "var(--text-primary)" }}>{user.display_name}</h2>
@@ -508,7 +508,7 @@ function AccountDetail({
                         {entry.academic_year} 學年度 · 學號 {entry.student_id}
                       </p>
                     </div>
-                    <span className="rounded-full px-2.5 py-1 text-xs font-medium" style={{ background: entry.is_active ? "var(--primary-dim)" : "var(--bg-surface)", color: entry.is_active ? "var(--primary)" : "var(--text-muted)" }}>
+                    <span className="rounded-full px-2.5 py-1 text-xs font-medium" style={{ background: entry.is_active ? "var(--primary-dim)" : "var(--bg-surface)", color: entry.is_active ? "var(--primary-text)" : "var(--text-muted)" }}>
                       {entry.is_active ? "目前班級" : "歷史班級"} · {entry.seat_number} 號
                     </span>
                   </div>
@@ -590,7 +590,7 @@ function AccountDetail({
                 )}
               </div>
             )}
-            <Link href="/admin/people?section=classes" className="mt-3 inline-flex min-h-11 items-center gap-1 text-xs font-medium" style={{ color: "var(--primary)" }}>
+            <Link href="/admin/people?section=classes" className="mt-3 inline-flex min-h-11 items-center gap-1 text-xs font-medium" style={{ color: "var(--primary-text)" }}>
               管理班級名冊與座號<ChevronRight size={14} />
             </Link>
           </Section>
@@ -653,7 +653,7 @@ function AccountDetail({
               <p>有效權限：{user.is_superuser ? "超管（全部權限）" : `${user.effective_permissions.length} 個`}</p>
             </div>
             <div className="mt-3 flex flex-wrap gap-1.5">{user.positions.slice(0, 6).map((position) => <span key={position.user_position_id ?? position.id} className="rounded-full px-2 py-1 text-[11px]" style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>{position.name}</span>)}</div>
-            <Link href="/admin/people?section=organization" className="mt-4 inline-flex min-h-11 items-center gap-1 text-xs font-medium" style={{ color: "var(--primary)" }}>前往組織與職位管理<ChevronRight size={14} /></Link>
+            <Link href="/admin/people?section=organization" className="mt-4 inline-flex min-h-11 items-center gap-1 text-xs font-medium" style={{ color: "var(--primary-text)" }}>前往組織與職位管理<ChevronRight size={14} /></Link>
           </Section>
         </aside>
       </div>

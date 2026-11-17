@@ -28,7 +28,7 @@ export function VersionHistory({ revisions }: { revisions: RevisionOut[] }) {
         </h2>
         <span
           className="badge text-[10px]"
-          style={{ color: "var(--primary)", background: "var(--primary-dim)", borderColor: "var(--primary-dim)" }}>
+          style={{ color: "var(--primary-text)", background: "var(--primary-dim)", borderColor: "var(--primary-dim)" }}>
           {revisions.length}
         </span>
       </div>
@@ -45,10 +45,10 @@ export function VersionHistory({ revisions }: { revisions: RevisionOut[] }) {
                 style={{
                   background: isOpen ? "var(--primary-dim)" : "var(--bg-elevated)",
                   border: `1px solid ${isOpen ? "var(--border-focus)" : "var(--border)"}`,
-                  color: isOpen ? "var(--primary)" : "var(--text-secondary)",
+                  color: isOpen ? "var(--primary-text)" : "var(--text-secondary)",
                 }}>
                 <div className="flex items-center gap-2">
-                  <span className="font-mono font-bold" style={{ color: "var(--primary)" }}>
+                  <span className="font-mono font-bold" style={{ color: "var(--primary-text)" }}>
                     v{rev.revision_number}
                   </span>
                   <span className="truncate max-w-36" style={{ color: "var(--text-primary)" }}>

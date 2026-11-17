@@ -47,7 +47,7 @@ export default function AuthCallbackPage() {
     <div className="min-h-screen flex items-center justify-center"
       style={{ background: "var(--primary-fg)" }}>
       <div className="text-center space-y-3">
-        <Loader2 size={40} className="mx-auto animate-spin" style={{ color: "var(--primary)" }} aria-label="載入中" />
+        <Loader2 size={40} className="mx-auto animate-spin" style={{ color: "var(--primary-text)" }} aria-label="載入中" />
         <p className="text-slate-400 text-sm">正在完成登入...</p>
       </div>
     </div>

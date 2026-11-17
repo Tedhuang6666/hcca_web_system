@@ -4,11 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle,
   Download,
-  FileLock2,
   Lock,
   RefreshCcw,
   ShieldOff,
-  UserCheck } from "lucide-react";
+  UserCheck,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
@@ -147,14 +147,9 @@ export default function PrivacyPage() {
   return (
     <main className="mx-auto max-w-5xl p-4 md:p-6">
       <header className="mb-5">
-        <div className="mb-2 inline-flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)]">
-          <FileLock2 size={14} aria-hidden />
-          個資處理（個資法 §10 / §11 義務）
-        </div>
         <h1 className="text-2xl font-bold text-[var(--text-primary)]">個資匯出與假名化</h1>
         <p className="mt-1 max-w-3xl text-xs text-[var(--text-muted)]">
-          當事人請求查閱自己資料或請求刪除時使用。執行前請參考{" "}
-          <code>docs/LEGAL_EXPORT_SOP.md</code>，並確認已驗證當事人身分。
+          執行前請確認已驗證當事人身分。
         </p>
       </header>
 

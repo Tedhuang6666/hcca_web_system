@@ -73,8 +73,8 @@ const RESEND_CONCURRENCY = 5;
 
 const STATUS_META: Record<EmailStatus, { label: string; color: string }> = {
   draft: { label: "草稿", color: "var(--text-muted)" },
-  scheduled: { label: "已排程", color: "var(--primary)" },
-  queued: { label: "寄送中", color: "var(--primary)" },
+  scheduled: { label: "已排程", color: "var(--primary-text)" },
+  queued: { label: "寄送中", color: "var(--primary-text)" },
   sent: { label: "已寄送", color: "var(--success)" },
   failed: { label: "失敗", color: "var(--danger)" },
   retrying: { label: "重試中", color: "var(--warning)" },
@@ -87,7 +87,7 @@ const RECIPIENT_STATUS_META: Record<
   EmailCampaignRecipientOut["status"],
   { label: string; color: string }
 > = {
-  queued: { label: "等待寄送", color: "var(--primary)" },
+  queued: { label: "等待寄送", color: "var(--primary-text)" },
   sent: { label: "寄送成功", color: "var(--success)" },
   failed: { label: "寄送失敗", color: "var(--danger)" },
   retrying: { label: "等待重試", color: "var(--warning)" },
@@ -331,10 +331,7 @@ export default function EmailLogsPage() {
     <div className="mx-auto max-w-5xl space-y-5">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--primary)" }}>
-            EMAIL LOGS
-          </p>
-          <h1 className="mt-1 text-xl font-semibold">寄信紀錄</h1>
+          <h1 className="text-xl font-semibold">寄信紀錄</h1>
         </div>
         <div className="flex flex-wrap gap-2">
           <button

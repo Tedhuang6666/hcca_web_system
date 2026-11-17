@@ -10,14 +10,6 @@
   --text-disabled: #89879a;
 }
 
-.scroll-progress-bar {
-  transition: none;
-}
-
-.float-btn {
-  animation: none;
-}
-
 .dashboard-task-row {
   border-left-width: 1px;
 }
@@ -31,13 +23,5 @@
 
   .guided-form-shell .btn {
     min-height: 44px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .scroll-progress-bar,
-  .float-btn {
-    transition: none;
-    animation: none;
   }
 }

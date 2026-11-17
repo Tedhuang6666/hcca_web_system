@@ -10,7 +10,6 @@ import {
   RefreshCcw,
   RotateCcw,
   Save,
-  ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -187,14 +186,7 @@ export default function SystemSettingsPage() {
     <main className="mx-auto max-w-6xl p-4 md:p-6">
       <header className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <div className="mb-2 inline-flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)]">
-            <ShieldCheck size={14} aria-hidden />
-            超級管理員 / 高危功能
-          </div>
           <h1 className="text-2xl font-bold text-[var(--text-primary)]">系統設定</h1>
-          <p className="mt-1 break-all text-xs text-[var(--text-muted)]">
-            檔案：<code>{data.env_path}</code>
-          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" onClick={load} className="btn btn-ghost">
@@ -253,7 +245,7 @@ export default function SystemSettingsPage() {
                     {fields.length} 項
                   </span>
                   {dirtyInCat > 0 && (
-                    <span className="rounded bg-[var(--primary-dim)] px-1.5 py-0.5 text-xs text-[var(--primary)]">
+                    <span className="rounded bg-[var(--primary-dim)] px-1.5 py-0.5 text-xs text-[var(--primary-text)]">
                       未存 {dirtyInCat}
                     </span>
                   )}
@@ -322,7 +314,7 @@ function FieldRow({
             </span>
           )}
           {dirty && (
-            <span className="rounded bg-[var(--primary-dim)] px-1 py-0.5 text-[10px] text-[var(--primary)]">
+            <span className="rounded bg-[var(--primary-dim)] px-1 py-0.5 text-[10px] text-[var(--primary-text)]">
               未儲存
             </span>
           )}

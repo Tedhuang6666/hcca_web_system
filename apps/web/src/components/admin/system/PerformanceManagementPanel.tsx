@@ -149,7 +149,7 @@ export default function PerformanceManagementPanel() {
         <div className="card flex min-h-[260px] flex-col items-center justify-center gap-3 p-8 text-center">
           <h2 className="text-lg font-semibold">無法查看數據分析</h2>
           <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-            需要 analytics:view 權限才能查看統計儀表板。
+            請洽系統管理員開啟權限。
           </p>
         </div>
       </div>
@@ -341,7 +341,7 @@ export default function PerformanceManagementPanel() {
                   <p className="text-xs" style={{ color: "var(--text-muted)" }}>{fmtDate(item.published_at)}</p>
                 </div>
                 <span className="rounded-full px-2.5 py-1 text-xs font-medium"
-                  style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
+                  style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
                   {item.reader_count} 次閱讀
                 </span>
               </li>
@@ -714,7 +714,7 @@ function InsightBadge({ item }: { item: AnalyticsInsightItem }) {
   const colors = {
     critical: { color: "var(--danger)", bg: "var(--danger-dim)", border: "var(--danger-border)", label: "緊急" },
     warning: { color: "var(--warning)", bg: "var(--warning-dim)", border: "var(--warning-border)", label: "提醒" },
-    info: { color: "var(--primary)", bg: "var(--primary-dim)", border: "var(--info-border)", label: "觀察" },
+    info: { color: "var(--primary-text)", bg: "var(--primary-dim)", border: "var(--info-border)", label: "觀察" },
   }[item.severity];
   return (
     <span

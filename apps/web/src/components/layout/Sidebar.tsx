@@ -488,7 +488,7 @@ export default function Sidebar() {
                 className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0"
                 style={{
                   background: "linear-gradient(135deg, rgba(201,168,76,0.18) 0%, rgba(201,168,76,0.08) 100%)",
-                  color: "var(--primary)",
+                  color: "var(--primary-text)",
                   border: "1.5px solid rgba(201,168,76,0.35)",
                 }}
                 aria-hidden="true">
@@ -508,7 +508,7 @@ export default function Sidebar() {
               <span
                 className="text-[10px] px-1.5 py-0.5 rounded font-medium flex-shrink-0"
                 style={{
-                  background: "rgba(245,158,11,0.12)",
+                  background: "var(--warning-dim)",
                   color: "var(--warning)",
                   border: "1px solid var(--warning-border)",
                 }}>

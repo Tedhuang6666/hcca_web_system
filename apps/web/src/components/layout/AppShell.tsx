@@ -260,7 +260,6 @@ function SessionGate({
       <div className="app-content-loading" aria-live="polite">
         <LoadingState
           title={redirecting ? "正在前往登入頁" : "正在確認登入狀態"}
-          description="系統正在確認身分與頁面權限。"
         />
       </div>
     );
@@ -337,7 +336,6 @@ function AppShellContent({
       <div className="app-content-loading" aria-live="polite">
         <LoadingState
           title="正在同步權限"
-          description="系統正在確認你可使用的功能，請稍候。"
         />
       </div>
     );

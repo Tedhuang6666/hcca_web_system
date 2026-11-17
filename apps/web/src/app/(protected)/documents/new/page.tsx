@@ -152,10 +152,10 @@ function officialOrgFullName(org: OrgRead | null, orgs: readonly OrgRead[]): str
 }
 
 const DOCUMENT_STEPS: GuidedFormStepDefinition[] = [
-  { label: "基本資料", description: "先選擇組織與公文用途。" },
-  { label: "撰寫內容", description: "完成本次要傳達的重點。" },
-  { label: "對象與附件", description: "加入收件人、連結或檔案。" },
-  { label: "確認設定", description: "檢查字號、可見範圍與承辦資訊。" },
+  { label: "基本資料" },
+  { label: "撰寫內容" },
+  { label: "對象與附件" },
+  { label: "確認設定" },
 ];
 
 const CONTENT_COPY: Record<DocumentCategory, {
@@ -866,7 +866,7 @@ export default function NewDocumentPage() {
       <GuidedForm
         footerClassName="max-md:bottom-[calc(76px+env(safe-area-inset-bottom))]"
         steps={DOCUMENT_STEPS.map((step, index) => isAnnouncement && index === 2
-          ? { label: "附件", description: "加入連結或檔案。" }
+          ? { label: "附件" }
           : step)}
         activeStep={activeStep}
         onStepChange={setActiveStep}
@@ -924,9 +924,6 @@ export default function NewDocumentPage() {
                   ? { ...inputStyle, border: "1px solid var(--danger)" }
                   : inputStyle}
               />
-              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                預設為「{autoTitle || "發文組織＋公文類別"}」，可依需要修改。
-              </p>
               {showErr("title") && (
                 <p className="mt-1 text-xs" style={{ color: "var(--danger)" }}>{fieldError.title}</p>
               )}
@@ -1102,7 +1099,7 @@ export default function NewDocumentPage() {
             <div>
               <Label>
                 {copy.descriptionLabel}
-                <span className="ml-2 font-normal opacity-60 text-[10px]">
+                <span className="ml-2 hidden font-normal text-xs md:inline" style={{ color: "var(--text-muted)" }}>
                   Tab 降級 ／ Shift+Tab 升級 ／ Enter 續編
                 </span>
               </Label>
@@ -1155,7 +1152,7 @@ export default function NewDocumentPage() {
                     className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg"
                     style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
                     <span className="badge text-[10px] flex-shrink-0"
-                      style={{ color: "var(--primary)", background: "var(--primary-dim)", borderColor: "var(--primary-dim)" }}>
+                      style={{ color: "var(--primary-text)", background: "var(--primary-dim)", borderColor: "var(--primary-dim)" }}>
                       {isNotice
                         ? { main: "受文者", attendee: "出席者", observer: "列席者", primary: "正本（出席）", copy: "副本" }[r.recipient_type] ?? r.recipient_type
                         : isRecord
@@ -1179,7 +1176,7 @@ export default function NewDocumentPage() {
                         )))}
                         className="min-h-11 rounded px-2 text-[10px]"
                         style={{
-                          color: r.delivery_method === "email" ? "var(--primary)" : "var(--text-muted)",
+                          color: r.delivery_method === "email" ? "var(--primary-text)" : "var(--text-muted)",
                           background: r.delivery_method === "email" ? "var(--primary-dim)" : "var(--bg-surface)",
                           border: "1px solid var(--border)",
                         }}
@@ -1245,7 +1242,7 @@ export default function NewDocumentPage() {
                   <li key={lnk.id} className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg"
                     style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                      strokeWidth="2" strokeLinecap="round" style={{ color: "var(--primary)", flexShrink: 0 }}>
+                      strokeWidth="2" strokeLinecap="round" style={{ color: "var(--primary-text)", flexShrink: 0 }}>
                       <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
                       <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
                     </svg>
@@ -1350,7 +1347,7 @@ export default function NewDocumentPage() {
                 <div className="rounded-xl px-4 py-3 text-center"
                   style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
                   <p className="text-[10px] mb-1" style={{ color: "var(--text-muted)" }}>發文後字號預覽</p>
-                  <p className="text-sm font-mono font-bold" style={{ color: "var(--primary)" }}>
+                  <p className="text-sm font-mono font-bold" style={{ color: "var(--primary-text)" }}>
                     {selectedTemplate ? selectedTemplate.preview : "尚未設定正式字號"}
                   </p>
                 </div>
@@ -1405,9 +1402,6 @@ export default function NewDocumentPage() {
             {Object.keys(touched).length > 0 && hasErrors && (
               <p className="text-xs text-center" style={{ color: "var(--danger)" }}>請填寫所有必填欄位</p>
             )}
-            <p className="text-xs text-center" style={{ color: "var(--text-muted)" }}>
-              儲存後可在詳情頁設定審核人並送審
-            </p>
           </div>
 
           {/* 承辦人 */}

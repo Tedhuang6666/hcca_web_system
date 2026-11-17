@@ -94,7 +94,7 @@ export default function RecommendedVendorMap({
             <div className="space-y-1 text-sm">
               <strong>{item.name}</strong>
               {item.address && <p>{item.address}</p>}
-              <button type="button" className="font-medium underline" style={{ color: "var(--primary)" }} onClick={() => onSelect(item.id)}>
+              <button type="button" className="font-medium underline" style={{ color: "var(--primary-text)" }} onClick={() => onSelect(item.id)}>
                 查看商家資訊
               </button>
             </div>

@@ -67,10 +67,7 @@ export default function OperationsPage() {
   return (
     <main className="mx-auto max-w-6xl space-y-6 p-5 md:p-6">
       <header>
-        <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--primary)" }}>
-          OPERATIONS
-        </p>
-        <h1 className="mt-1 text-2xl font-semibold">營運中心</h1>
+        <h1 className="text-2xl font-semibold">營運中心</h1>
       </header>
 
       {visibleTools.length === 0 ? (
@@ -88,7 +85,7 @@ export default function OperationsPage() {
                 className="rounded-md border p-4 transition-colors hover:bg-[var(--bg-hover)]"
                 style={{ borderColor: "var(--border)", textDecoration: "none" }}
               >
-                <Icon size={18} aria-hidden={true} style={{ color: "var(--primary)" }} />
+                <Icon size={18} aria-hidden={true} style={{ color: "var(--primary-text)" }} />
                 <h2 className="mt-3 text-sm font-semibold">{tool.label}</h2>
                 <p className="mt-1 text-xs leading-5" style={{ color: "var(--text-muted)" }}>
                   {tool.desc}

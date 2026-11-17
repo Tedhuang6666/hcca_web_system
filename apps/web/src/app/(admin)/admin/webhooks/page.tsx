@@ -11,7 +11,7 @@ import {
   Plus,
   RefreshCcw,
   Trash2,
-  Webhook } from "lucide-react";
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
@@ -161,13 +161,9 @@ export default function WebhooksPage() {
     <main className="mx-auto max-w-6xl p-4 md:p-6">
       <header className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <div className="mb-2 inline-flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)]">
-            <Webhook size={14} aria-hidden />
-            Webhooks（外部系統推送）
-          </div>
           <h1 className="text-2xl font-bold text-[var(--text-primary)]">Webhooks</h1>
           <p className="mt-1 max-w-3xl text-xs text-[var(--text-muted)]">
-            以 HTTP POST 投遞事件，失敗自動重試。HMAC 密鑰僅顯示一次。
+            密鑰僅顯示一次。
           </p>
         </div>
         <div className="flex gap-2">

@@ -87,7 +87,7 @@ export default function AnnouncementDetailPageClient({
             </span>
           )}
           {item.audience_type !== "all" && (
-            <span className="badge" style={{ color: "var(--primary)", background: "var(--primary-dim)", borderColor: "var(--border-strong)" }}>
+            <span className="badge" style={{ color: "var(--primary-text)", background: "var(--primary-dim)", borderColor: "var(--border-strong)" }}>
               對象：{AUDIENCE_LABEL[item.audience_type] ?? item.audience_type}
             </span>
           )}

@@ -225,11 +225,10 @@ export default function SecuritySettingsPage() {
             color: "var(--warning)",
           }}
         >
-          <span className="text-base leading-none flex-shrink-0">🔐</span>
           <div>
-            <p className="font-semibold">需要設定雙重驗證（2FA）才能繼續</p>
+            <p className="font-semibold">需要設定兩步驟驗證才能繼續</p>
             <p className="mt-0.5 text-xs opacity-80">
-              您嘗試存取的功能需要管理員啟用 2FA 保護。請依下方步驟完成設定，完成後將自動返回。
+              完成下方設定後會自動返回。
             </p>
           </div>
         </div>
@@ -237,13 +236,7 @@ export default function SecuritySettingsPage() {
 
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--primary)" }}>
-            SECURITY
-          </p>
-          <h1 className="mt-1 text-xl font-semibold">安全設定</h1>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            管理帳號的多因素認證
-          </p>
+          <h1 className="text-xl font-semibold">安全設定</h1>
         </div>
         <Link href="/settings/account" className="btn btn-ghost">
           回帳號設定

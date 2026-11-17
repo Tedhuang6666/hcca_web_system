@@ -334,7 +334,7 @@ export default function DocumentTemplatesPage() {
                   type="checkbox"
                   checked={activeOnly}
                   onChange={(e) => setActiveOnly(e.target.checked)}
-                  className="accent-blue-600"
+                  className="accent-[var(--primary)]"
                 />
                 僅有效
               </label>

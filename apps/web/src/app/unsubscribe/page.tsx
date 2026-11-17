@@ -79,7 +79,7 @@ function UnsubscribeInner() {
           )}
 
           <div className="mt-6 flex gap-4 text-sm">
-            <Link href="/settings/notifications" style={{ color: "var(--primary)" }}>
+            <Link href="/settings/notifications" style={{ color: "var(--primary-text)" }}>
               通知設定
             </Link>
             <Link href="/" style={{ color: "var(--text-muted)" }}>

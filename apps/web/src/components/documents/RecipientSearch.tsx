@@ -264,7 +264,7 @@ export function RecipientSearch({
                   style={{
                     background: "var(--primary-dim)",
                     borderColor: "var(--primary-dim)",
-                    color: "var(--primary)",
+                    color: "var(--primary-text)",
                   }}
                 >
                   {list.name} · {list.members.length} 人
@@ -346,7 +346,7 @@ export function RecipientSearch({
                   >
                     <div
                       className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold"
-                      style={{ background: "var(--primary-dim)", color: "var(--primary)" }}
+                      style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}
                     >
                       {u.display_name.charAt(0)}
                     </div>

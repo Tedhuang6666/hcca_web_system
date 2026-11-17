@@ -232,7 +232,7 @@ export function AccountDirectoryPanel({
                 className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-medium"
                 aria-pressed={activeOnly}
                 style={{
-                  color: activeOnly ? "var(--primary)" : "var(--text-muted)",
+                  color: activeOnly ? "var(--primary-text)" : "var(--text-muted)",
                   background: activeOnly ? "var(--primary-dim)" : "transparent",
                   border: "1px solid var(--border)",
                 }}
@@ -279,7 +279,7 @@ export function AccountDirectoryPanel({
                 background: selectedId === user.id ? "var(--primary-dim)" : "transparent",
               }}
             >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold" style={{ background: user.is_active ? "var(--primary-dim)" : "var(--bg-elevated)", color: user.is_active ? "var(--primary)" : "var(--text-muted)" }}>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold" style={{ background: user.is_active ? "var(--primary-dim)" : "var(--bg-elevated)", color: user.is_active ? "var(--primary-text)" : "var(--text-muted)" }}>
                 {user.display_name.slice(0, 1) || <UserRound size={16} />}
               </div>
               <div className="min-w-0 flex-1">

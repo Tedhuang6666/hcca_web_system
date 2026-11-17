@@ -132,11 +132,8 @@ export default function PetitionsPageClient({
           <h2 id="petition-login-heading" className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
             登入後查看本人案件
           </h2>
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-            登入後即可查看並追蹤你送出的陳情。
-          </p>
           <Link href="/login?next=%2Fpetitions" className="btn btn-primary w-fit">
-            登入後查看案件
+            登入
           </Link>
         </section>
       ) : (

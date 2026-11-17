@@ -297,7 +297,7 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
               : Array.from(new Set([...selected, ...visibleCodes])))}
             disabled={visibleCodes.length === 0}
             className="min-h-9 rounded-lg px-2.5 text-[11px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40"
-            style={{ color: "var(--primary)", border: "1px solid var(--border-strong)", background: "var(--primary-dim)" }}
+            style={{ color: "var(--primary-text)", border: "1px solid var(--border-strong)", background: "var(--primary-dim)" }}
           >
             {allVisibleSelected ? "清除目前顯示" : "選取目前顯示"}
           </button>
@@ -334,7 +334,7 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
                 className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full cursor-pointer transition-colors"
                 style={{
                   background: isHighRiskPermission(item.code) ? "rgba(245,158,11,0.12)" : "var(--primary-dim)",
-                  color: isHighRiskPermission(item.code) ? "#f59e0b" : "var(--primary)",
+                  color: isHighRiskPermission(item.code) ? "#f59e0b" : "var(--primary-text)",
                   border: `1px solid ${isHighRiskPermission(item.code) ? "rgba(245,158,11,0.28)" : "var(--border-strong)"}`,
                 }}
                 title="點擊移除此權限"
@@ -404,7 +404,7 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
                         {groupSelectedCount > 0 && (
                           <span
                             className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
-                            style={{ background: "var(--primary-dim)", color: "var(--primary)" }}
+                            style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}
                           >
                             {groupSelectedCount}/{groupCodes.length}
                           </span>
@@ -445,12 +445,12 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
                                   type="checkbox"
                                   checked={on}
                                   onChange={() => toggle(code)}
-                                  className="accent-blue-600 flex-shrink-0 mt-0.5"
+                                  className="accent-[var(--primary)] flex-shrink-0 mt-0.5"
                                 />
                                 <div className="flex-1 min-w-0">
                                   <p
                                     className="text-xs font-medium"
-                                    style={{ color: on ? "var(--primary)" : "var(--text-primary)" }}
+                                    style={{ color: on ? "var(--primary-text)" : "var(--text-primary)" }}
                                   >
                                     {info.label ?? code}
                                     {isHighRiskPermission(code) && (

@@ -3,13 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
-  Archive,
   Eye,
   FileArchive,
   Lock,
   Play,
   RefreshCcw,
-  Trash2 } from "lucide-react";
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
@@ -173,13 +173,9 @@ export default function DataLifecyclePage() {
     <main className="mx-auto max-w-6xl p-4 md:p-6">
       <header className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <div className="mb-2 inline-flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)]">
-            <Archive size={14} aria-hidden />
-            資料生命週期 / 批次歸檔與清理
-          </div>
           <h1 className="text-2xl font-bold text-[var(--text-primary)]">資料生命週期</h1>
           <p className="mt-1 max-w-3xl text-xs text-[var(--text-muted)]">
-            舊資料歸檔為 .jsonl.gz 後清除。「安全」規則每週一 04:00 自動執行，其餘手動執行；請先預覽筆數。
+            「安全」規則每週一 04:00 自動執行，其餘需手動執行。
           </p>
         </div>
         <button type="button" onClick={reload} className="btn btn-ghost">
@@ -219,7 +215,7 @@ export default function DataLifecyclePage() {
                     </h3>
                     <span
                       className="rounded px-1.5 py-0.5 text-[10px] font-medium"
-                      style={{ background: `${dangerColor}22`, color: dangerColor }}>
+                      style={{ background: `color-mix(in srgb, ${dangerColor} 13%, transparent)`, color: dangerColor }}>
                       {rule.danger_level === "safe"
                         ? "安全"
                         : rule.danger_level === "caution"

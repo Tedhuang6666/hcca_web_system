@@ -31,7 +31,7 @@ function FallbackWidgetIcon(p: IconProps) {
 }
 
 const SEVERITY_STYLES: Record<string, { color: string; bg: string; border: string }> = {
-  info: { color: "var(--primary)", bg: "var(--primary-dim)", border: "var(--info-border)" },
+  info: { color: "var(--primary-text)", bg: "var(--primary-dim)", border: "var(--info-border)" },
   warning: {
     color: "var(--warning)",
     bg: "var(--warning-dim)",
@@ -292,7 +292,7 @@ export default function DashboardPageClient({
   const isOperator = isAdmin || permissions.size > 0 || layoutHint !== "student";
   const dashboardContent = getDashboardContent(profile, can, canAny, isOperator);
   const primaryAction = !hasTaskAccess && dashboardContent.primaryAction.href === "/tasks"
-    ? { href: "/announcements", label: "查看公告", detail: "掌握校內最新消息", icon: Bell }
+    ? { href: "/announcements", label: "查看公告", icon: Bell }
     : dashboardContent.primaryAction;
   const quickActions = hasTaskAccess
     ? dashboardContent.quickActions
@@ -499,7 +499,6 @@ export default function DashboardPageClient({
 type DashboardAction = {
   href: string;
   label: string;
-  detail: string;
   icon: React.ComponentType<IconProps>;
   tone?: "primary" | "warning" | "danger" | "neutral";
 };
@@ -567,27 +566,27 @@ function getPrimaryAction(
   isOperator: boolean,
 ): DashboardAction {
   if (can("class:shop_collect") && !can("shop:manage")) {
-    return { href: "/shop/class-orders", label: "班代代訂與收款", detail: "依座號替同學代訂、登記收款", icon: ListChecks };
+    return { href: "/shop/class-orders", label: "班代代訂與收款", icon: ListChecks };
   }
   if (profile === "vendor") {
-    return { href: "/partner-map/admin", label: "管理特約資訊", detail: "商家、優惠與曝光", icon: ShoppingCart };
+    return { href: "/partner-map/admin", label: "管理特約資訊", icon: ShoppingCart };
   }
   if (profile === "teacher") {
     if (!can("class:shop_collect")) {
-      return { href: "/surveys", label: "查看問卷", detail: "回覆、審閱與追蹤", icon: PenLine };
+      return { href: "/surveys", label: "查看問卷", icon: PenLine };
     }
-    return { href: "/shop/class-orders", label: "班級收單", detail: "查看班級商品訂單", icon: ListChecks };
+    return { href: "/shop/class-orders", label: "班級收單", icon: ListChecks };
   }
   if (can("document:draft")) {
-    return { href: "/documents/new", label: "新增公文", detail: "建立草稿", icon: Plus };
+    return { href: "/documents/new", label: "新增公文", icon: Plus };
   }
   if (can("announcement:create")) {
-    return { href: "/publications", label: "發布公告", detail: "前往發布中心", icon: Send };
+    return { href: "/publications", label: "發布公告", icon: Send };
   }
   if (isOperator) {
-    return { href: "/tasks", label: "查看待辦", detail: "統一工作佇列", icon: ListChecks };
+    return { href: "/tasks", label: "查看待辦", icon: ListChecks };
   }
-  return { href: "/partner-map", label: "查看特約", detail: "優惠、地點與合作店家", icon: Search };
+  return { href: "/partner-map", label: "查看特約", icon: Search };
 }
 
 function getQuickActions(
@@ -599,15 +598,15 @@ function getQuickActions(
   if (profile !== "default") return getServiceActions(profile, can, canAny).slice(0, 6);
 
   const actions: DashboardAction[] = [
-    { href: "/tasks", label: "我的待辦", detail: "簽核、問卷、訂單集中處理", icon: ListChecks, tone: "primary" },
-    { href: "/announcements", label: "最新公告", detail: "校內訊息與公開事項", icon: Bell },
-    { href: "/surveys", label: "問卷專區", detail: "快速填寫與查看結果", icon: PenLine },
-    { href: "/shop", label: "商品訂購", detail: "活動票券與班級訂單", icon: ShoppingCart },
-    { href: "/search", label: "全站搜尋", detail: "找公文、法規與公告", icon: Search },
+    { href: "/tasks", label: "我的待辦", icon: ListChecks, tone: "primary" },
+    { href: "/announcements", label: "最新公告", icon: Bell },
+    { href: "/surveys", label: "問卷專區", icon: PenLine },
+    { href: "/shop", label: "商品訂購", icon: ShoppingCart },
+    { href: "/search", label: "全站搜尋", icon: Search },
   ];
 
   if (isOperator || can("document:draft")) {
-    actions.unshift({ href: "/documents/new", label: "建立公文", detail: "套範本、送簽核", icon: FileText, tone: "primary" });
+    actions.unshift({ href: "/documents/new", label: "建立公文", icon: FileText, tone: "primary" });
   }
   return actions.slice(0, 6);
 }
@@ -618,25 +617,24 @@ function getServiceActions(
   canAny: (...codes: string[]) => boolean,
 ): DashboardAction[] {
   const commonStudent: DashboardAction[] = [
-    { href: "/announcements", label: "看最新公告", detail: "校內訊息與公開事項", icon: Bell },
-    { href: "/surveys", label: "填寫問卷", detail: "參與校園決策與回饋", icon: PenLine },
-    { href: "/petitions/new", label: "我要陳情", detail: "提交問題、建議或申訴", icon: MessageSquare },
-    { href: "/shop", label: "購買商品票券", detail: "活動商品與票券訂購", icon: ShoppingCart },
-    { href: "/partner-map", label: "找特約商家", detail: "優惠、地點與合作店家", icon: Search },
+    { href: "/announcements", label: "看最新公告", icon: Bell },
+    { href: "/surveys", label: "填寫問卷", icon: PenLine },
+    { href: "/petitions/new", label: "我要陳情", icon: MessageSquare },
+    { href: "/shop", label: "購買商品票券", icon: ShoppingCart },
+    { href: "/partner-map", label: "找特約商家", icon: Search },
   ];
 
   if (profile === "student") return commonStudent;
   if (profile === "teacher") {
     const teacherActions: DashboardAction[] = [
-      { href: "/announcements", label: "看校內公告", detail: "掌握近期校務與活動", icon: Bell },
-      { href: "/surveys", label: "問卷與回覆", detail: "查看需協助的問卷事項", icon: PenLine },
-      { href: "/exam-papers", label: "段考題庫", detail: "查找與管理教學資料", icon: FileText },
+      { href: "/announcements", label: "看校內公告", icon: Bell },
+      { href: "/surveys", label: "問卷與回覆", icon: PenLine },
+      { href: "/exam-papers", label: "段考題庫", icon: FileText },
     ];
     if (can("class:shop_collect")) {
       teacherActions.splice(1, 0, {
         href: "/shop/class-orders",
         label: "班級收單",
-        detail: "協助班級商品與票券訂購",
         icon: ListChecks,
       });
     }
@@ -644,19 +642,19 @@ function getServiceActions(
   }
   if (profile === "vendor") {
     return [
-      { href: "/partner-map/admin", label: "管理特約內容", detail: "商家資料、地點與優惠", icon: ShoppingCart },
-      { href: "/partner-map", label: "查看公開頁面", detail: "確認學生看到的商家資訊", icon: Search },
-      { href: "/tasks", label: "處理待辦", detail: "合作事項與通知集中處理", icon: ListChecks },
-      { href: "/announcements", label: "合作公告", detail: "查看校內與合作資訊", icon: Bell },
-      { href: "/settings", label: "帳號設定", detail: "通知、安全與介面偏好", icon: Settings },
+      { href: "/partner-map/admin", label: "管理特約內容", icon: ShoppingCart },
+      { href: "/partner-map", label: "查看公開頁面", icon: Search },
+      { href: "/tasks", label: "處理待辦", icon: ListChecks },
+      { href: "/announcements", label: "合作公告", icon: Bell },
+      { href: "/settings", label: "帳號設定", icon: Settings },
     ];
   }
   const actions: DashboardAction[] = [
-    { href: "/tasks", label: "我的待辦", detail: "簽核、問卷、訂單集中處理", icon: ListChecks, tone: "primary" },
-    { href: "/documents", label: "公文作業", detail: "草稿、簽核與公文查找", icon: FileText },
-    { href: "/regulations", label: "法規資料庫", detail: "查詢、修正與公布法規", icon: Scale },
-    { href: "/announcements", label: "發布與公告", detail: "公告、電子郵件與通知", icon: Megaphone },
-    { href: "/search", label: "全站搜尋", detail: "找公文、法規、會議與公告", icon: Search },
+    { href: "/tasks", label: "我的待辦", icon: ListChecks, tone: "primary" },
+    { href: "/documents", label: "公文作業", icon: FileText },
+    { href: "/regulations", label: "法規資料庫", icon: Scale },
+    { href: "/announcements", label: "發布與公告", icon: Megaphone },
+    { href: "/search", label: "全站搜尋", icon: Search },
   ];
   return actions.slice(0, 6);
 }
@@ -668,17 +666,17 @@ function getAdminActions(
 ): DashboardAction[] {
   const actions: DashboardAction[] = [];
   if (isAdmin || can("admin:users")) {
-    actions.push({ href: "/admin", label: "管理後台", detail: "人員、權限與系統總覽", icon: Settings });
-    actions.push({ href: "/admin/people", label: "人員管理", detail: "帳號與身分資料", icon: Users });
+    actions.push({ href: "/admin", label: "管理後台", icon: Settings });
+    actions.push({ href: "/admin/people", label: "人員管理", icon: Users });
   }
   if (canAny("announcement:create", "email:*")) {
-    actions.push({ href: "/publications", label: "發布中心", detail: "公告與電子郵件", icon: Megaphone });
+    actions.push({ href: "/publications", label: "發布中心", icon: Megaphone });
   }
   if (can("shop:manage")) {
-    actions.push({ href: "/shop/admin", label: "商品後台", detail: "商品、訂單與結單", icon: ShoppingCart });
+    actions.push({ href: "/shop/admin", label: "商品後台", icon: ShoppingCart });
   }
   if (isAdmin || can("admin:all")) {
-    actions.push({ href: "/admin/system?tab=modules", label: "模組維護", detail: "開關、維護與公告", icon: Wrench });
+    actions.push({ href: "/admin/system?tab=modules", label: "模組維護", icon: Wrench });
   }
   return actions.slice(0, 6);
 }
@@ -733,10 +731,7 @@ function QuickActionCard({
       <span className="dashboard-action-icon" aria-hidden="true">
         <action.icon size={16} aria-hidden={true} />
       </span>
-      <span className="min-w-0">
-        <span className="dashboard-action-label">{action.label}</span>
-        <span className="dashboard-action-detail">{action.detail}</span>
-      </span>
+      <span className="dashboard-action-label min-w-0">{action.label}</span>
     </Link>
   );
 }
@@ -768,12 +763,9 @@ function EmptyState() {
         borderRadius: "var(--radius-lg)",
       }}>
       <ShieldCheck size={32} aria-hidden={true}
-        style={{ color: "var(--primary)", display: "inline-block", marginBottom: 12 }} />
-      <p className="text-sm font-medium mb-2" style={{ color: "var(--text-primary)" }}>
-        今天一片寧靜
-      </p>
-      <p className="text-xs mb-5" style={{ color: "var(--text-muted)" }}>
-        沒有待辦也沒有新訊息。要不要逛一下這些地方？
+        style={{ color: "var(--primary-text)", display: "inline-block", marginBottom: 12 }} />
+      <p className="text-sm font-semibold mb-4" style={{ color: "var(--text-primary)" }}>
+        目前沒有待辦或新訊息
       </p>
       <div className="flex flex-wrap gap-2 justify-center">
         {links.map((l) => (
@@ -783,7 +775,7 @@ function EmptyState() {
             className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
             style={{
               background: "var(--primary-dim)",
-              color: "var(--primary)",
+              color: "var(--primary-text)",
               border: "1px solid var(--border-strong)",
               textDecoration: "none",
             }}>

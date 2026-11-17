@@ -136,7 +136,7 @@ export default function SystemOperationsWorkspace({
           <LockKeyhole className="mx-auto mb-3 text-[var(--danger)]" size={32} aria-hidden />
           <h1 className="text-xl font-semibold text-[var(--text-primary)]">無法查看系統營運</h1>
           <p className="mt-2 text-sm text-[var(--text-secondary)]">
-            需要超級管理員或 analytics:view 權限才能使用這個工作區。
+            請洽系統管理員開啟權限。
           </p>
         </section>
       </main>

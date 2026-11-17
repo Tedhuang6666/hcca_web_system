@@ -162,10 +162,7 @@ export default function BackofficePage() {
   return (
     <main className="mx-auto max-w-6xl space-y-6 p-5 md:p-6">
       <header>
-        <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--primary)" }}>
-          BACKOFFICE
-        </p>
-        <h1 className="mt-1 text-2xl font-semibold">模組後台</h1>
+        <h1 className="text-2xl font-semibold">模組後台</h1>
       </header>
 
       {visibleTools.length === 0 ? (

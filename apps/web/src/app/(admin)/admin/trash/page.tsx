@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Info, Lock, RefreshCcw, Search, Trash2 } from "lucide-react";
+import { AlertTriangle, Info, Lock, RefreshCcw, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
@@ -56,10 +56,6 @@ export default function TrashPage() {
     <main className="mx-auto max-w-6xl p-4 md:p-6">
       <header className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
-          <div className="mb-2 inline-flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)]">
-            <Trash2 size={14} aria-hidden />
-            誤刪救援
-          </div>
           <h1 className="text-2xl font-bold text-[var(--text-primary)]">誤刪救援</h1>
           <p className="mt-1 max-w-3xl text-xs text-[var(--text-muted)]">
             最近的刪除紀錄；還原請聯絡工程師。

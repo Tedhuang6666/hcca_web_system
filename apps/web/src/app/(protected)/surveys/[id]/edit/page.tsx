@@ -325,7 +325,7 @@ function QuestionRow({
           aria-label={`編輯第 ${index + 1} 題`}
         >
           <span className="shrink-0 text-xs font-bold px-2 py-0.5 rounded"
-            style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
+            style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
             第 {index + 1} 題
           </span>
           <span className="truncate text-sm" style={{ color: "var(--text-primary)" }}>
@@ -402,7 +402,7 @@ function QuestionRow({
       {!DISPLAY_TYPES.has(questionType) && (
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="checkbox" checked={required} onChange={e => setRequired(e.target.checked)}
-            className="accent-sky-400" />
+            className="accent-[var(--primary)]" />
           <span className="text-sm" style={{ color: "var(--text-secondary)" }}>必填</span>
         </label>
       )}
@@ -466,13 +466,13 @@ function QuestionRow({
                 <label className="flex items-center gap-1 text-xs cursor-pointer"
                   style={{ color: "var(--text-muted)" }}>
                   <input type="checkbox" checked={exclusiveOpts.includes(opt)}
-                    onChange={() => toggleExclusive(opt)} className="accent-sky-400" />
+                    onChange={() => toggleExclusive(opt)} className="accent-[var(--primary)]" />
                   互斥
                 </label>
                 <label className="flex items-center gap-1 text-xs cursor-pointer"
                   style={{ color: "var(--text-muted)" }}>
                   <input type="checkbox" checked={otherOpts.includes(opt)}
-                    onChange={() => toggleOther(opt)} className="accent-sky-400" />
+                    onChange={() => toggleOther(opt)} className="accent-[var(--primary)]" />
                   其他
                 </label>
               </div>
@@ -871,7 +871,7 @@ export default function EditSurveyPage() {
   if (loading) {
     return (
       <div className="py-20 text-center" style={{ color: "var(--text-muted)" }}>
-        <Loader2 size={28} className="mx-auto mb-3 animate-spin" style={{ color: "var(--primary)" }} aria-label="載入中" />
+        <Loader2 size={28} className="mx-auto mb-3 animate-spin" style={{ color: "var(--primary-text)" }} aria-label="載入中" />
         <p className="text-sm">載入中…</p>
       </div>
     );
@@ -960,7 +960,7 @@ export default function EditSurveyPage() {
               type="checkbox"
               checked={showAnnouncementPopup}
               onChange={e => setShowAnnouncementPopup(e.target.checked)}
-              className="accent-sky-400"
+              className="accent-[var(--primary)]"
             />
             設為重要公告，進入系統時提示使用者
           </label>
@@ -1032,7 +1032,7 @@ export default function EditSurveyPage() {
                             on ? prev.filter(x => x !== org.id) : [...prev, org.id])}
                           className="text-xs px-2.5 py-1 rounded-full"
                           style={on
-                            ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
+                            ? { background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--border-strong)" }
                             : { background: "var(--bg-surface)", color: "var(--text-muted)", border: "1px solid var(--border)" }}>
                           {org.name}
                         </button>
@@ -1116,7 +1116,7 @@ export default function EditSurveyPage() {
         {!newIsDisplay && (
           <label className="flex min-h-11 items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={newRequired} onChange={event => setNewRequired(event.target.checked)}
-              className="accent-sky-400" />
+              className="accent-[var(--primary)]" />
             <span className="text-sm" style={{ color: "var(--text-secondary)" }}>必填</span>
           </label>
         )}

@@ -88,7 +88,7 @@ export default function OrgDetailPage() {
   if (loading || !org) {
     return (
       <div className="flex items-center justify-center py-32">
-        <Loader2 size={32} className="animate-spin" style={{ color: "var(--primary)" }} aria-label="載入中" />
+        <Loader2 size={32} className="animate-spin" style={{ color: "var(--primary-text)" }} aria-label="載入中" />
       </div>
     );
   }
@@ -130,7 +130,7 @@ export default function OrgDetailPage() {
           {isAdmin && (
             <Link href="/admin/people?section=organization"
               className="text-xs px-3 py-1.5 rounded-lg flex-shrink-0 transition-colors"
-              style={{ color: "var(--primary)", border: "1px solid var(--border-strong)" }}>
+              style={{ color: "var(--primary-text)", border: "1px solid var(--border-strong)" }}>
               管理權限
             </Link>
           )}
@@ -181,7 +181,7 @@ export default function OrgDetailPage() {
                           {pos.permission_codes.map(code => (
                             <span key={code}
                               className="text-[10px] px-1.5 py-0.5 rounded font-mono"
-                              style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--primary-dim)" }}>
+                              style={{ background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--primary-dim)" }}>
                               {code}
                             </span>
                           ))}
@@ -195,7 +195,7 @@ export default function OrgDetailPage() {
                               className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg"
                               style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
                               <span className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0"
-                                style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
+                                style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
                                 {u.display_name.charAt(0)}
                               </span>
                               {u.display_name}
@@ -232,7 +232,7 @@ export default function OrgDetailPage() {
                       className="flex items-center gap-3 px-4 py-3"
                       style={idx < orgMembers.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}>
                       <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold"
-                        style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
+                        style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
                         {u.display_name.charAt(0)}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -280,7 +280,7 @@ export default function OrgDetailPage() {
                   className="flex items-center gap-2 px-3 py-2 rounded-xl transition-colors hover:bg-white/5"
                   style={{ border: "1px solid var(--border)", textDecoration: "none" }}>
                   <div className="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold flex-shrink-0"
-                    style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
+                    style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
                     {parent.name.charAt(0)}
                   </div>
                   <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>{parent.name}</span>

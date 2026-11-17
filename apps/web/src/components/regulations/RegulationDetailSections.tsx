@@ -144,15 +144,7 @@ export function filenameFromContentDisposition(disposition: string | null, fallb
   return disposition.match(/filename="?([^"]+)"?/i)?.[1] ?? fallback;
 }
 
-export const PROSE = `prose prose-invert prose-sm max-w-none
-  prose-headings: prose-headings:font-semibold
-  prose-p: prose-p:leading-relaxed
-  prose-strong: prose-a:text-sky-400
-  prose-code: prose-code:bg-sky-900/30 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded
-  prose-blockquote:border-l-sky-500
-  prose-li: prose-hr:border-slate-700
-  prose-table: prose-th: prose-th:bg-slate-800/50
-  prose-td:border-slate-700 prose-th:border-slate-700`;
+export const PROSE = "prose max-w-none";
 
 // ── 條文列（thin wrapper，沿用 LawArticleRow 視覺）────────────────────────────
 
@@ -236,7 +228,7 @@ export function RevisionCard({
     <div className="card p-4">
       <div className="flex items-start gap-3">
         <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold"
-          style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }}>
+          style={{ background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--border-strong)" }}>
           v{rev.version}
         </div>
         <div className="flex-1 min-w-0">
@@ -264,7 +256,7 @@ export function RevisionCard({
               <Link
                 href={`/documents/${rev.published_document_id}`}
                 className="inline-flex hover:opacity-80"
-                style={{ color: "var(--primary)" }}
+                style={{ color: "var(--primary-text)" }}
               >
                 查看公布公文 →
               </Link>
@@ -283,7 +275,7 @@ export function RevisionCard({
               <button
                 onClick={() => setShowProposal(true)}
                 className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg hover:opacity-80"
-                style={{ color: "var(--primary)", border: "1px solid var(--border-strong)", background: "var(--primary-dim)" }}
+                style={{ color: "var(--primary-text)", border: "1px solid var(--border-strong)", background: "var(--primary-dim)" }}
               >
                 查看當時提案內容
               </button>
@@ -296,7 +288,7 @@ export function RevisionCard({
           {rev.resolution_link && (
             <a href={rev.resolution_link} target="_blank" rel="noopener noreferrer"
               className="mt-1.5 inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded transition-opacity hover:opacity-80"
-              style={{ color: "var(--primary)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }}>
+              style={{ color: "var(--primary-text)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }}>
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
                 <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
                 <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
@@ -323,7 +315,7 @@ export function RevisionCard({
           {rev.content_snapshot && (
             <button onClick={() => setExpanded(p => !p)}
               className="text-xs px-2.5 py-1 rounded-lg transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-80"
-              style={{ color: "var(--primary)", border: "1px solid var(--border-strong)", background: "var(--primary-dim)" }}>
+              style={{ color: "var(--primary-text)", border: "1px solid var(--border-strong)", background: "var(--primary-dim)" }}>
               {expanded ? "▲ 收起" : "▼ 查看快照"}
             </button>
           )}
@@ -351,7 +343,7 @@ export function RevisionCard({
                   background: isHighlighted ? "var(--primary-dim)" : "var(--bg-elevated)",
                 }}
               >
-                <p className="text-xs font-semibold mb-1" style={{ color: isHighlighted ? "var(--primary)" : "var(--text-primary)" }}>
+                <p className="text-xs font-semibold mb-1" style={{ color: isHighlighted ? "var(--primary-text)" : "var(--text-primary)" }}>
                   {label}
                 </p>
                 {article.title && article.article_type !== "article" && (
@@ -448,7 +440,7 @@ export function RevisionCard({
                                   ? "var(--success)"
                                   : change.status === "刪除"
                                     ? "var(--danger)"
-                                    : "var(--primary)",
+                                    : "var(--primary-text)",
                                 background: change.status === "新增"
                                   ? "var(--success-dim)"
                                   : change.status === "刪除"
@@ -470,7 +462,7 @@ export function RevisionCard({
                             type="button"
                             onClick={() => jumpToSnapshotArticle(change)}
                             className="mt-3 inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg hover:opacity-80"
-                            style={{ color: "var(--primary)", border: "1px solid var(--border-strong)", background: "var(--primary-dim)" }}
+                            style={{ color: "var(--primary-text)", border: "1px solid var(--border-strong)", background: "var(--primary-dim)" }}
                           >
                             跳到當時條文
                           </button>

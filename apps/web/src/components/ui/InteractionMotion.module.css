@@ -66,7 +66,7 @@
 }
 
 .confirmMarker[data-tone="prompt"] {
-  color: var(--primary);
+  color: var(--primary-text);
   background: color-mix(in srgb, var(--primary) 12%, var(--bg-elevated));
 }
 
@@ -140,7 +140,7 @@
 }
 
 .smartEmptyState[data-reason="new"] .smartEmptyMark {
-  color: var(--primary);
+  color: var(--primary-text);
 }
 
 .smartEmptyState[data-reason="filtered"] .smartEmptyMark {

@@ -455,7 +455,6 @@ export default function RegulationDetailPageClient({
           </div>
           <DetailPageLoading
             title="法規詳情載入中"
-            description="正在準備條文、版本與修正紀錄。"
           />
         </div>
       );
@@ -464,7 +463,6 @@ export default function RegulationDetailPageClient({
       <div className="regulation-detail-loading">
         <DetailPageLoading
           title="法規詳情載入中"
-          description="正在準備條文、版本與修正紀錄。"
         />
       </div>
     );
@@ -544,13 +542,13 @@ export default function RegulationDetailPageClient({
           <div className="rounded-xl px-4 py-3 flex items-start gap-3"
             style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)" }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth="2" style={{ color: "#ef4444", flexShrink: 0, marginTop: 2 }}>
+              strokeWidth="2" style={{ color: "var(--danger)", flexShrink: 0, marginTop: 2 }}>
               <circle cx="12" cy="12" r="10" />
               <line x1="15" y1="9" x2="9" y2="15" />
               <line x1="9" y1="9" x2="15" y2="15" />
             </svg>
             <div>
-              <p className="text-sm font-semibold" style={{ color: "#ef4444" }}>
+              <p className="text-sm font-semibold" style={{ color: "var(--danger)" }}>
                 本法規已廢止
               </p>
               <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>
@@ -565,11 +563,11 @@ export default function RegulationDetailPageClient({
           <div className="rounded-xl px-4 py-3 flex items-center gap-3"
             style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)" }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth="2" style={{ color: "#ef4444", flexShrink: 0 }}>
+              strokeWidth="2" style={{ color: "var(--danger)", flexShrink: 0 }}>
               <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
               <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
             </svg>
-            <p className="text-sm" style={{ color: "#ef4444" }}>
+            <p className="text-sm" style={{ color: "var(--danger)" }}>
               本法規已停用，僅供歷史查閱，目前不具法律效力。
             </p>
           </div>
@@ -581,13 +579,13 @@ export default function RegulationDetailPageClient({
             style={{ background: "rgba(251,146,60,0.08)", border: "1px solid rgba(251,146,60,0.3)" }}>
             <div className="flex items-start gap-3">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                strokeWidth="2" style={{ color: "#fb923c", flexShrink: 0, marginTop: 2 }}>
+                strokeWidth="2" style={{ color: "var(--warning)", flexShrink: 0, marginTop: 2 }}>
                 <circle cx="12" cy="12" r="10" />
                 <line x1="12" y1="8" x2="12" y2="12" />
                 <line x1="12" y1="16" x2="12.01" y2="16" />
               </svg>
               <div className="flex-1">
-                <p className="text-sm font-semibold" style={{ color: "#fb923c" }}>
+                <p className="text-sm font-semibold" style={{ color: "var(--warning)" }}>
                   本法規已凍結，效力暫停
                 </p>
                 <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>
@@ -614,7 +612,7 @@ export default function RegulationDetailPageClient({
             <button key={key} aria-pressed={tab === key} onClick={() => handleTabChange(key)}
               className="flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] whitespace-nowrap"
               style={tab === key
-                ? { background: "var(--primary-dim)", border: "1px solid var(--border-strong)", color: "var(--primary)" }
+                ? { background: "var(--primary-dim)", border: "1px solid var(--border-strong)", color: "var(--primary-text)" }
                 : { color: "var(--text-muted)" }}>
               {label}
             </button>
@@ -656,7 +654,7 @@ export default function RegulationDetailPageClient({
                     }}
                     className="text-xs px-3 py-1.5 rounded-lg transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-80 inline-flex items-center gap-1.5"
                     style={{
-                      color: allChaptersCollapsed ? "var(--primary)" : "var(--text-muted)",
+                      color: allChaptersCollapsed ? "var(--primary-text)" : "var(--text-muted)",
                       border: "1px solid var(--border)",
                       background: allChaptersCollapsed ? "var(--primary-dim)" : "transparent",
                     }}>
@@ -665,7 +663,7 @@ export default function RegulationDetailPageClient({
                   <button onClick={() => setTocVisible(v => !v)}
                     className="text-xs px-3 py-1.5 rounded-lg transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-80 inline-flex items-center gap-1.5"
                     style={{
-                      color: tocVisible ? "var(--primary)" : "var(--text-muted)",
+                      color: tocVisible ? "var(--primary-text)" : "var(--text-muted)",
                       border: "1px solid var(--border)",
                       background: tocVisible ? "var(--primary-dim)" : "transparent",
                     }}>
@@ -704,7 +702,7 @@ export default function RegulationDetailPageClient({
                             className="w-full text-left text-xs px-2 py-1 rounded hover:opacity-80"
                             style={{
                               paddingLeft: `${0.5 + item.indent * 0.75}rem`,
-                              color: activeAnchorId === item.anchor ? "var(--primary)" : "var(--text-secondary)",
+                              color: activeAnchorId === item.anchor ? "var(--primary-text)" : "var(--text-secondary)",
                               background: activeAnchorId === item.anchor ? "var(--primary-dim)" : "transparent",
                               border: activeAnchorId === item.anchor ? "1px solid var(--border-strong)" : "1px solid transparent",
                               fontWeight: item.indent === 0 ? 600 : 400,
@@ -826,7 +824,7 @@ export default function RegulationDetailPageClient({
           className="no-print fixed bottom-5 right-5 z-40 inline-flex h-11 w-11 items-center justify-center rounded-full shadow-lg transition-opacity hover:opacity-85"
           style={{
             background: "var(--bg-surface)",
-            color: "var(--primary)",
+            color: "var(--primary-text)",
             border: "1px solid var(--border-strong)",
           }}
           title="回到最上方"

@@ -62,7 +62,7 @@ export default function AnnouncementEditor({
               onClick={() => setTab(key)}
               className="btn btn-sm"
               style={tab === key
-                ? { background: "var(--primary-dim)", color: "var(--primary)", borderColor: "var(--border-strong)" }
+                ? { background: "var(--primary-dim)", color: "var(--primary-text)", borderColor: "var(--border-strong)" }
                 : undefined}>
               {key === "write" ? "撰寫" : "預覽"}
             </button>
@@ -73,7 +73,7 @@ export default function AnnouncementEditor({
           onClick={() => setShowImageTools(v => !v)}
           className="btn btn-sm"
           style={showImageTools
-            ? { background: "var(--primary-dim)", color: "var(--primary)", borderColor: "var(--border-strong)" }
+            ? { background: "var(--primary-dim)", color: "var(--primary-text)", borderColor: "var(--border-strong)" }
             : undefined}
         >
           {showImageTools ? "收合圖片" : "圖片"}

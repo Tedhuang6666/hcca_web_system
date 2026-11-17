@@ -286,7 +286,7 @@ function PublicSiteHeaderContent({
                   />
                   {normalizedQuery && <span aria-live="polite">{serviceResultCount} 項結果</span>}
                 </label>
-                {filteredTaskNav.length > 0 && (
+                {normalizedQuery && filteredTaskNav.length > 0 && (
                   <section className="public-nav-dropdown-quick">
                     <p className="public-nav-dropdown-label">快速入口</p>
                     <div className="public-nav-dropdown-quick-links">
@@ -300,14 +300,7 @@ function PublicSiteHeaderContent({
                           <span className="public-nav-dropdown-icon" aria-hidden="true">
                             <PublicNavIcon iconKey={item.iconKey} size={18} />
                           </span>
-                          <span className="min-w-0">
-                            <span className="flex items-center gap-1.5">
-                              <span className="text-sm font-semibold">{item.label}</span>
-                            </span>
-                            <span className="mt-0.5 block text-xs text-[var(--public-muted)]">
-                              {item.description}
-                            </span>
-                          </span>
+                          <span className="min-w-0 text-sm font-semibold">{item.label}</span>
                         </Link>
                       ))}
                     </div>
@@ -332,15 +325,7 @@ function PublicSiteHeaderContent({
                           <span className="public-nav-dropdown-icon" aria-hidden="true">
                             <PublicNavIcon iconKey={item.iconKey} size={18} />
                           </span>
-                          <span className="min-w-0">
-                            <span className="flex items-center gap-1.5">
-                              <span className="text-sm font-semibold">{item.label}</span>
-                              {item.guestUsable && !group.meta.hint}
-                            </span>
-                            <span className="mt-0.5 block text-xs text-[var(--public-muted)]">
-                              {item.description}
-                            </span>
-                          </span>
+                          <span className="min-w-0 text-sm font-semibold">{item.label}</span>
                         </Link>
                       ))}
                     </div>

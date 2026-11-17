@@ -172,7 +172,7 @@ export function LawArticleRow({
         onClearHighlight();
       }}
       className="no-print inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-md transition-opacity hover:opacity-80"
-      style={{ color: "var(--primary)", border: "1px solid var(--border-strong)", background: "var(--bg-surface)" }}
+      style={{ color: "var(--primary-text)", border: "1px solid var(--border-strong)", background: "var(--bg-surface)" }}
       title="關閉高亮"
       aria-label="關閉高亮"
     >

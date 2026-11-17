@@ -295,7 +295,7 @@ export default function DocumentDelegationsPage() {
                       </div>
                       <div className="flex items-center gap-2">
                         {delegation.is_active && (
-                          <button onClick={() => startEdit(delegation)} className="text-xs px-2.5 py-1 rounded" style={{ color: "var(--primary)", background: "var(--primary-dim)" }}>
+                          <button onClick={() => startEdit(delegation)} className="text-xs px-2.5 py-1 rounded" style={{ color: "var(--primary-text)", background: "var(--primary-dim)" }}>
                             編輯
                           </button>
                         )}

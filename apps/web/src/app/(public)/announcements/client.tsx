@@ -88,9 +88,6 @@ export default function AnnouncementsClient({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold">公告檢視</h1>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            瀏覽竹嶺班聯數位整合平台的公開消息與緊急通知
-          </p>
         </div>
         <div className="flex items-center gap-2">
           {canListDrafts && (
@@ -130,7 +127,7 @@ export default function AnnouncementsClient({
                     <div className="mb-2 flex flex-wrap items-center gap-2">
                       <StatusBadge item={item} />
                       {item.audience_type !== "all" && (
-                        <span className="badge" style={{ color: "var(--primary)", background: "var(--primary-dim)", borderColor: "var(--border-strong)" }}>
+                        <span className="badge" style={{ color: "var(--primary-text)", background: "var(--primary-dim)", borderColor: "var(--border-strong)" }}>
                           {AUDIENCE_LABEL[item.audience_type] ?? item.audience_type}
                         </span>
                       )}

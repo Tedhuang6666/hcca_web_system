@@ -200,7 +200,7 @@ export default function NewPositionPage() {
               <ArrowLeft />返回權限管理
             </Link>
             <div className="mt-4 flex items-start gap-3">
-              <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl" style={{ color: "var(--primary)", background: "var(--primary-dim)" }}>
+              <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl" style={{ color: "var(--primary-text)", background: "var(--primary-dim)" }}>
                 <ShieldPlus />
               </span>
               <div>
@@ -257,11 +257,11 @@ export default function NewPositionPage() {
                             style={{
                               border: `1px solid ${active ? "var(--border-strong)" : "var(--border)"}`,
                               background: active ? "var(--primary-dim)" : "var(--bg-base)",
-                              color: active ? "var(--primary)" : "var(--text-secondary)",
+                              color: active ? "var(--primary-text)" : "var(--text-secondary)",
                             }}
                           >
                             <span className="block text-xs font-semibold">{option.label}</span>
-                            <span className="mt-1 block text-[11px] leading-4" style={{ color: active ? "var(--primary)" : "var(--text-muted)" }}>{option.description}</span>
+                            <span className="mt-1 block text-[11px] leading-4" style={{ color: active ? "var(--primary-text)" : "var(--text-muted)" }}>{option.description}</span>
                           </button>
                         );
                       })}
@@ -311,7 +311,7 @@ export default function NewPositionPage() {
                 <div>
                   <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>職位權限</h2>
                 </div>
-                <span className="rounded-full px-2.5 py-1 text-xs font-semibold" style={{ color: "var(--primary)", background: "var(--primary-dim)" }}>{codes.length} 個</span>
+                <span className="rounded-full px-2.5 py-1 text-xs font-semibold" style={{ color: "var(--primary-text)", background: "var(--primary-dim)" }}>{codes.length} 個</span>
               </div>
               <PermCheckboxes selected={codes} onChange={setCodes} permCodes={permCodes} />
             </section>

@@ -88,7 +88,7 @@ export default function MultiCombobox({
             <span
               key={s.value}
               className="multi-combobox-chip inline-flex max-w-full items-center gap-1 rounded-md px-2 py-0.5 text-xs"
-              style={{ background: "var(--primary-dim)", color: "var(--primary)" }}
+              style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}
             >
               <span className="min-w-0 break-words">{s.label}</span>
               <button

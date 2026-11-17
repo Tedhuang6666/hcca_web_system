@@ -169,7 +169,7 @@ export default function PartnerApplicationsAdminPage() {
     <div className="mx-auto max-w-6xl space-y-5 px-5 py-6 lg:px-8">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--primary)" }}>
+          <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--primary-text)" }}>
             <ClipboardCheck size={18} aria-hidden />
             特約商家申請
           </div>

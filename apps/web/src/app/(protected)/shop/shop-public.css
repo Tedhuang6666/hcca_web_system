@@ -1128,7 +1128,7 @@
 .shop-class-correction-toggle {
   min-height: 44px;
   padding: 0.4rem 0;
-  color: var(--primary);
+  color: var(--primary-text);
   font-size: 0.82rem;
   font-weight: 650;
   text-align: left;

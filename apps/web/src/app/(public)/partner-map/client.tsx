@@ -339,13 +339,13 @@ function RecommendedDetailPanel({
       style={{ background: "var(--bg)", borderColor: "var(--border)" }}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-medium" style={{ color: "#2563EB" }}>推薦商家</p>
+          <p className="text-xs font-semibold" style={{ color: "var(--tag-blue-fg)" }}>推薦商家</p>
           <h2 className="mt-1 text-lg font-semibold" style={{ color: "var(--text-primary)" }}>{vendor.name}</h2>
         </div>
         <button className="topbar-icon-btn" onClick={onClose} aria-label="關閉推薦商家詳情">×</button>
       </div>
       <div className="mt-4 space-y-4">
-        {vendor.category && <p className="text-xs font-medium" style={{ color: "#2563EB" }}>{vendor.category}</p>}
+        {vendor.category && <p className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>{vendor.category}</p>}
         {vendor.summary && <p className="text-sm" style={{ color: "var(--text-secondary)" }}>{vendor.summary}</p>}
         {vendor.description && (
           <p className="whitespace-pre-wrap text-sm" style={{ color: "var(--text-secondary)" }}>{vendor.description}</p>
@@ -369,7 +369,7 @@ function RecommendedDetailPanel({
             {vendor.menu_url && <a className="btn btn-secondary w-fit" href={vendor.menu_url} target="_blank" rel="noreferrer">查看菜單 <ExternalLink size={15} aria-hidden="true" /></a>}
           </div>
         )}
-        {vendor.hygiene_verified && <p className="text-xs font-medium text-emerald-700">✓ 衛生檢驗資訊已確認</p>}
+        {vendor.hygiene_verified && <p className="text-xs font-semibold" style={{ color: "var(--success)" }}>衛生檢驗資訊已確認</p>}
       </div>
     </aside>
   );

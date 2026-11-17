@@ -3,11 +3,11 @@
 import { useCallback, useMemo, useState } from "react";
 import {
   AlertTriangle,
-  CalendarRange,
   Eye,
   Lock,
   Play,
-  RotateCcw } from "lucide-react";
+  RotateCcw,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
@@ -185,10 +185,6 @@ export default function TermRolloverPage() {
   return (
     <main className="mx-auto max-w-6xl p-4 md:p-6">
       <header className="mb-5">
-        <div className="mb-2 inline-flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)]">
-          <CalendarRange size={14} aria-hidden />
-          換屆精靈
-        </div>
         <h1 className="text-2xl font-bold text-[var(--text-primary)]">換屆精靈</h1>
         <p className="mt-1 max-w-3xl text-xs text-[var(--text-muted)]">
           批次結束舊一屆任期、建立新一屆任期。永遠先「預覽」確認所有變更，再執行。
@@ -375,7 +371,7 @@ export default function TermRolloverPage() {
             borderColor: "var(--success-border)",
             color: "var(--success)",
           }}>
-          ✅ 換屆完成 · batch_id <code>{executeResult.batch_id}</code> · 結束{" "}
+          換屆完成 · 結束{" "}
           {executeResult.terminated_count} 個任期 · 新增 {executeResult.created_count}{" "}
           個任期 ·{" "}
           <span className="text-[var(--text-secondary)]">

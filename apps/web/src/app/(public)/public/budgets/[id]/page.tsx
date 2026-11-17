@@ -56,9 +56,7 @@ export default async function PublicBudgetDetailPage({ params, searchParams }: P
         <div>
           <span>{budget.period_name}</span>
           <h1>{budget.name}</h1>
-          <p>{isCouncilReview
-            ? "這份草案正提供議員審理，內容仍可能調整，不能視為核定預算。"
-            : "查看議會通過的預算與逐筆收支紀錄。"}</p>
+          {isCouncilReview && <p>這份草案正提供議員審理，內容仍可能調整，不能視為核定預算。</p>}
           {!isCouncilReview && councilApprovedOn && <p>議會通過日期：{councilApprovedOn.replaceAll("-", "/")}</p>}
         </div>
         <div className="public-budget-detail__total"><span>{isCouncilReview ? "審理草案支出預算" : "核准支出預算"}</span><strong>{formatAmount(total)}</strong><small>{budget.allocations.length} 筆編列明細</small></div>
@@ -74,12 +72,12 @@ export default async function PublicBudgetDetailPage({ params, searchParams }: P
       {!isCouncilReview && <PublicBudgetFinancialSummary lines={lines} />}
 
       <section className="public-budget-detail__section" aria-labelledby="public-budget-lines-heading">
-        <header><div><FileText size={18} aria-hidden="true" /><div><h2 id="public-budget-lines-heading">{isCouncilReview ? "本次送審明細" : "核准編列明細"}</h2><p>{isCouncilReview ? "金額只對應本次開放審理的草案。" : "金額依核准預算案的末層條目彙整。"}</p></div></div><span>{budget.allocations.length} 筆</span></header>
+        <header><div><FileText size={18} aria-hidden="true" /><div><h2 id="public-budget-lines-heading">{isCouncilReview ? "本次送審明細" : "核准編列明細"}</h2>{isCouncilReview && <p>金額只對應本次開放審理的草案。</p>}</div></div><span>{budget.allocations.length} 筆</span></header>
         <PublicBudgetExecutionTable lines={lines} />
       </section>
 
       {budget.submissions.length > 0 && <section className="public-budget-detail__approvals" aria-labelledby="public-budget-approvals-heading">
-        <header><h2 id="public-budget-approvals-heading">{isCouncilReview ? "既有核准紀錄" : "核准紀錄"}</h2><p>初始預算與每一次追加案都會依審核時間保留。</p></header>
+        <header><h2 id="public-budget-approvals-heading">{isCouncilReview ? "既有核准紀錄" : "核准紀錄"}</h2></header>
         <ol>
           {budget.submissions.map((submission) => (
             <li key={submission.id}>

@@ -54,7 +54,7 @@ export default async function LinksPage() {
                         </span>
                       )}
                     </span>
-                    <ArrowUpRight size={18} className="shrink-0 text-[var(--primary)]" aria-hidden />
+                    <ArrowUpRight size={18} className="shrink-0 text-[var(--primary-text)]" aria-hidden />
                   </a>
                 ))}
               </div>

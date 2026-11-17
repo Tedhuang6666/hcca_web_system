@@ -375,7 +375,7 @@ function PersonDirectoryPanel() {
               onClick={() => { setAccountId(null); setMobileDetailOpen(false); setDirectoryView(view); }}
               className="min-h-11 shrink-0 rounded-lg px-4 text-sm font-medium"
               style={{
-                color: directoryView === view ? "var(--primary)" : "var(--text-muted)",
+                color: directoryView === view ? "var(--primary-text)" : "var(--text-muted)",
                 background: directoryView === view ? "var(--primary-dim)" : "var(--bg-surface)",
                 border: "1px solid var(--border)",
               }}
@@ -424,7 +424,7 @@ function PersonDirectoryPanel() {
                 className="md:hidden inline-flex min-h-11 flex-shrink-0 items-center gap-1 rounded-md px-2.5 py-2 text-xs font-medium"
                 style={{
                   border: "1px solid var(--border)",
-                  color: (status || classId) ? "var(--primary)" : "var(--text-muted)",
+                  color: (status || classId) ? "var(--primary-text)" : "var(--text-muted)",
                   background: (status || classId) ? "var(--primary-dim)" : "transparent",
                 }}
                 aria-expanded={filterOpen}
@@ -492,7 +492,7 @@ function PersonDirectoryPanel() {
                       <span key={label} className="rounded px-1.5 py-0.5 text-[11px]" style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}>{label}</span>
                     ))}
                     {person.role_titles.slice(0, 2).map((label) => (
-                      <span key={label} className="rounded px-1.5 py-0.5 text-[11px]" style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>{label}</span>
+                      <span key={label} className="rounded px-1.5 py-0.5 text-[11px]" style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>{label}</span>
                     ))}
                   </div>
                 </button>
@@ -740,7 +740,7 @@ function PersonDetailPanel({
         <div className="flex min-w-0 flex-col gap-4">
           <div>
             <div className="flex min-w-0 items-start gap-2">
-              <UserRound size={22} className="shrink-0" style={{ color: "var(--primary)" }} />
+              <UserRound size={22} className="shrink-0" style={{ color: "var(--primary-text)" }} />
               <h2 className="min-w-0 break-words text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
                 {person.display_name}
               </h2>
@@ -822,7 +822,7 @@ function PersonDetailPanel({
         <Panel className="h-fit p-4">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>班級與座號</h3>
-            <Link href="/admin/people?section=classes" className="inline-flex min-h-11 shrink-0 items-center gap-1 text-xs font-medium" style={{ color: "var(--primary)" }}>
+            <Link href="/admin/people?section=classes" className="inline-flex min-h-11 shrink-0 items-center gap-1 text-xs font-medium" style={{ color: "var(--primary-text)" }}>
               管理<ChevronRight size={14} />
             </Link>
           </div>
@@ -864,7 +864,7 @@ function PersonDetailPanel({
         {person.user_id && canManageAccounts && (
           <button type="button" onClick={() => { if (person.user_id) onOpenAccount(person.user_id); }}
             className="flex min-h-14 w-full min-w-0 items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left"
-            style={{ borderColor: "var(--border)", color: "var(--primary)" }}>
+            style={{ borderColor: "var(--border)", color: "var(--primary-text)" }}>
             <span className="min-w-0"><span className="block text-sm font-medium">管理連結帳號</span>
               <span className="mt-1 block break-all text-xs" style={{ color: "var(--text-muted)" }}>學籍、幹部任期、登入與安全設定</span>
             </span>
@@ -947,7 +947,7 @@ function AffiliationRow({
           <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
             {item.title ?? item.position_name ?? item.role_key ?? KIND_LABEL[item.kind]}
           </p>
-          <span className="rounded px-1.5 py-0.5 text-[11px]" style={{ background: `${color}17`, color }}>
+          <span className="rounded px-1.5 py-0.5 text-[11px]" style={{ background: `color-mix(in srgb, ${color} 9%, transparent)`, color }}>
             {KIND_LABEL[item.kind]}
           </span>
           {item.status === "pending_user" && (
@@ -1192,7 +1192,7 @@ function AffiliationDialog({
               type="button"
               onClick={() => setKind(item)}
               className="cursor-pointer rounded-md px-2 py-2 text-xs font-medium transition-colors"
-              style={kind === item ? { background: "var(--primary-dim)", color: "var(--primary)" } : { border: "1px solid var(--border)", color: "var(--text-secondary)" }}
+              style={kind === item ? { background: "var(--primary-dim)", color: "var(--primary-text)" } : { border: "1px solid var(--border)", color: "var(--text-secondary)" }}
             >
               {KIND_LABEL[item]}
             </button>

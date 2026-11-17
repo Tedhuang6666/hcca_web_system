@@ -564,7 +564,7 @@ export default function EditDocumentPage() {
           style={{ border: "1px solid var(--border)" }}>←</Link>
         <div>
           <h1 className="text-xl font-semibold ">編輯公文</h1>
-          <p className="text-sm font-mono" style={{ color: "var(--primary)" }}>
+          <p className="text-sm font-mono" style={{ color: "var(--primary-text)" }}>
             {doc.serial_number || "（草稿，尚未發文）"}
           </p>
           {lastSavedAt && (
@@ -726,7 +726,7 @@ export default function EditDocumentPage() {
             {recipients.map(r => (
               <div key={r.id} className="flex items-center gap-2 text-xs px-3 py-2 rounded"
                 style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-                <span className="px-1.5 py-0.5 rounded" style={{ color: "var(--primary)", background: "var(--primary-dim)" }}>
+                <span className="px-1.5 py-0.5 rounded" style={{ color: "var(--primary-text)", background: "var(--primary-dim)" }}>
                   {{ main: "受文者", primary: "正本", copy: "副本", attendee: "出席者", observer: "列席者" }[r.recipient_type]}
                 </span>
                 <span className=" flex-1">{r.name}</span>
@@ -741,7 +741,7 @@ export default function EditDocumentPage() {
                     )))}
                     className="min-h-11 rounded px-2 text-[10px]"
                     style={{
-                      color: r.delivery_method === "email" ? "var(--primary)" : "var(--text-muted)",
+                      color: r.delivery_method === "email" ? "var(--primary-text)" : "var(--text-muted)",
                       background: r.delivery_method === "email" ? "var(--primary-dim)" : "var(--bg-surface)",
                       border: "1px solid var(--border)",
                     }}
@@ -757,7 +757,7 @@ export default function EditDocumentPage() {
             <div className="flex gap-2">
               <select value={newRecipient.recipient_type}
                 onChange={e => setNewRecipient(p => ({ ...p, recipient_type: e.target.value as RecipientType }))}
-                className="text-xs px-2 py-1.5 rounded outline-none" style={{ ...selectStyle, color: "var(--primary)" }}>
+                className="text-xs px-2 py-1.5 rounded outline-none" style={{ ...selectStyle, color: "var(--primary-text)" }}>
                 <option value="main">受文者</option>
                 <option value="primary">正本</option>
                 <option value="copy">副本</option>
@@ -773,7 +773,7 @@ export default function EditDocumentPage() {
                 onChange={e => setNewRecipient(p => ({ ...p, email: e.target.value }))}
                 className="flex-1 bg-transparent  text-xs px-2 py-1.5 rounded outline-none" style={inputStyle} />
               <button onClick={addRecipient} className="text-xs px-3 py-1.5 rounded"
-                style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }}>
+                style={{ background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--border-strong)" }}>
                 ＋ 新增
               </button>
             </div>
@@ -856,7 +856,7 @@ export default function EditDocumentPage() {
                 <div className="rounded-lg px-3 py-2.5 text-center"
                   style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-strong)" }}>
                   <p className="text-[10px] mb-1" style={{ color: "var(--text-muted)" }}>發文後字號預覽</p>
-                  <p className="text-sm font-mono font-semibold" style={{ color: "var(--primary)" }}>
+                  <p className="text-sm font-mono font-semibold" style={{ color: "var(--primary-text)" }}>
                     {selectedTemplate?.preview ?? "尚未設定正式字號"}
                   </p>
                 </div>

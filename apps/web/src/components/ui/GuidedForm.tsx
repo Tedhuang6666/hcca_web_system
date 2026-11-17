@@ -9,7 +9,7 @@ const GuidedFormAnimationContext = createContext(true);
 
 export type GuidedFormStepDefinition = {
   label: string;
-  description: string;
+  description?: string;
 };
 
 type GuidedFormProps = {
@@ -107,7 +107,9 @@ export default function GuidedForm({
         <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
           第 {activeStep + 1} 步，共 {steps.length} 步 · {active.label}
         </p>
-        <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{active.description}</p>
+        {active.description && (
+          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{active.description}</p>
+        )}
         <ol className="mt-3 flex gap-1.5" aria-label="步驟進度">
           {steps.map((step, index) => (
             <li key={step.label} className="flex-1">
