@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { BRANDING } from "@/lib/branding";
@@ -66,10 +65,7 @@ export default async function PublicPetitionDetailPage({ params }: PublicPetitio
         { name: "公開陳情", url: absoluteUrl("/petitions/public") },
         { name: item.title, url: canonical },
       ])} />
-      <article className="max-w-3xl mx-auto space-y-6">
-        <Link href="/petitions/public" className="text-sm" style={{ color: "var(--text-muted)" }}>
-          ← 返回公開陳情
-        </Link>
+      <article className="max-w-3xl mx-auto space-y-8">
         <header>
           <p className="text-sm" style={{ color: "var(--text-muted)" }}>
             #{item.case_number} · {item.current_org_name} · {item.type_name}
@@ -81,20 +77,15 @@ export default async function PublicPetitionDetailPage({ params }: PublicPetitio
             公開於 {new Intl.DateTimeFormat("zh-TW", { dateStyle: "medium", timeZone: "Asia/Taipei" }).format(new Date(item.published_at))}
           </p>
         </header>
-        <section className="card p-5 space-y-4">
+        <section className="space-y-3 border-t pt-6" style={{ borderColor: "var(--border)" }}>
           <h2 className="font-semibold">陳情內容</h2>
-          <p className="whitespace-pre-wrap text-sm leading-7" style={{ color: "var(--text-primary)" }}>
+          <p className="whitespace-pre-wrap text-base leading-8" style={{ color: "var(--text-primary)" }}>
             {item.content}
           </p>
         </section>
-        <section
-          className="card p-5 space-y-4"
-          style={{ background: "var(--success-dim)", borderColor: "var(--success-border)" }}
-        >
-          <h2 className="font-semibold" style={{ color: "var(--success)" }}>
-            承辦回覆
-          </h2>
-          <p className="whitespace-pre-wrap text-sm leading-7">
+        <section className="space-y-3 border-t pt-6" style={{ borderColor: "var(--border)" }}>
+          <h2 className="font-semibold">承辦回覆</h2>
+          <p className="whitespace-pre-wrap text-base leading-8" style={{ color: "var(--text-primary)" }}>
             {item.reply || "本案已結案，暫無公開回覆。"}
           </p>
         </section>

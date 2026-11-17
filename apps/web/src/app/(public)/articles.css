@@ -202,7 +202,6 @@
 }
 
 .public-article-row:focus-visible,
-.public-article-back:focus-visible,
 .public-article-toc a:focus-visible {
   outline: 2px solid var(--public-focus);
   outline-offset: 2px;
@@ -277,16 +276,6 @@
 
 .public-article-detail {
   max-width: 78rem;
-}
-
-.public-article-back {
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  gap: 0.45rem;
-  color: var(--public-secondary);
-  font-size: 0.82rem;
-  text-underline-offset: 0.22em;
 }
 
 .public-article-detail-header {

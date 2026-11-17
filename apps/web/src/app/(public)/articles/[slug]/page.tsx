@@ -1,6 +1,5 @@
 import Image from "next/image";
-import Link from "next/link";
-import { ArrowLeft, Clock3, List } from "lucide-react";
+import { Clock3, List } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
@@ -77,8 +76,6 @@ export default async function ArticleDetailPage({ params }: { params: Promise<{ 
       >
         <ArticleViewTracker slug={slug} />
         <div className={`public-article-detail${examScope ? " is-exam-scope-article" : ""}`}>
-          <Link href="/articles" className="public-article-back"><ArrowLeft size={16} aria-hidden /> 返回文章專欄</Link>
-
           <header className={`public-article-detail-header${examScope ? " is-exam-scope-header" : ""}${coverImageUrl ? " has-cover" : ""}`}>
             <div className="public-article-detail-copy">
               <h1>{page.title}</h1>

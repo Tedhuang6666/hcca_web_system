@@ -42,33 +42,31 @@ export default async function PublicPetitionsPage() {
       </header>
 
       {items.length === 0 ? (
-        <div className="card p-5 text-sm" style={{ color: "var(--text-muted)" }}>
+        <p className="border-t py-8 text-sm" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>
           目前尚無已公開陳情。
-        </div>
+        </p>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <ul className="border-t" style={{ borderColor: "var(--border)" }}>
           {items.map((item) => (
-            <Link
-              key={item.id}
-              href={`/petitions/public/${item.id}`}
-              className="card card-hover p-5 space-y-3"
-              style={{ textDecoration: "none" }}
-            >
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                #{item.case_number} · {item.current_org_name} · {item.type_name}
-              </p>
-              <h2 className="font-semibold" style={{ color: "var(--text-primary)" }}>
-                {item.title}
-              </h2>
-              <p className="text-sm line-clamp-3" style={{ color: "var(--text-muted)" }}>
-                {item.reply || "已結案，暫無公開回覆。"}
-              </p>
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                公開於 {formatPublishedAt(item.published_at)}
-              </p>
-            </Link>
+            <li key={item.id} className="border-b" style={{ borderColor: "var(--border)" }}>
+              <Link
+                href={`/petitions/public/${item.id}`}
+                className="block space-y-1.5 rounded-md px-2 py-4 -mx-2 transition-colors hover:bg-[var(--bg-hover)]"
+                style={{ textDecoration: "none" }}
+              >
+                <h2 className="font-semibold" style={{ color: "var(--text-primary)" }}>
+                  {item.title}
+                </h2>
+                <p className="text-sm line-clamp-2" style={{ color: "var(--text-secondary)" }}>
+                  {item.reply || "已結案，暫無公開回覆。"}
+                </p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  #{item.case_number} · {item.current_org_name} · {item.type_name} · 公開於 {formatPublishedAt(item.published_at)}
+                </p>
+              </Link>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </div>
   );
