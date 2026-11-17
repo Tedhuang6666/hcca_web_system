@@ -79,7 +79,10 @@ async def test_direct_gift_is_separate_zero_priced_and_counted(db_session, authe
     assert len(await shop_svc.list_orders(db_session, user_id=buyer.id)) == 2
     receivables = list(await db_session.scalars(select(Receivable)))
     assert len(receivables) == 1 and receivables[0].source_id == paid_order.id
-    assert not list(await db_session.scalars(select(OutboxEvent)))
+    events = list(await db_session.scalars(select(OutboxEvent)))
+    assert len(events) == 2
+    assert {event.event_type for event in events} == {"realtime.room"}
+    assert {event.payload["order_id"] for event in events} == {gift["id"]}
 
     analysis = await sales_analytics(db_session, date_from=local_today(), date_to=local_today())
     assert analysis.current.metrics.item_count == 3

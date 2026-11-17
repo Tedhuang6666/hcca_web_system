@@ -888,7 +888,9 @@ async def clear_all_orders(
 
     order_id_strings = {str(order_id) for order_id in order_ids}
     confirmations_query = select(OutboxEvent).where(
-        OutboxEvent.event_type.in_(("shop.order_confirmed", "shop.order_payment_required"))
+        OutboxEvent.event_type.in_(
+            ("shop.order_confirmed", "shop.order_payment_required", "realtime.room")
+        )
     )
     if not clearing_tests:
         confirmations_query = confirmations_query.where(OutboxEvent.status == OutboxStatus.PENDING)

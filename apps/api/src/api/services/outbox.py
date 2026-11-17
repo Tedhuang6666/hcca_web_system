@@ -102,7 +102,11 @@ async def _dispatch(db: AsyncSession, event: OutboxEvent) -> None:
     etype = event.event_type
     payload = event.payload
 
-    if etype in {
+    if etype == "realtime.room":
+        from api.core.ws_manager import publish_room_from_worker
+
+        await publish_room_from_worker(payload["room"], payload["message"])
+    elif etype in {
         "notification.websocket",
         "notification.web_push",
         "notification.email_batch",
@@ -140,7 +144,7 @@ async def _dispatch(db: AsyncSession, event: OutboxEvent) -> None:
             text = f"{text}\n{href}"
         push_text_message(str(payload.get("line_user_id")), text)
     elif etype == "email.send":
-        # 通用 email 發送事件：解耦業務模組（meal/digest/...）對 mail service 的直接依賴
+        # 通用 email 發送事件：解耦業務模組對 mail service 的直接依賴
         to = payload.get("to", "")
         subject = payload.get("subject", "")
         body_text = payload.get("body", "")

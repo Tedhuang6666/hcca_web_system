@@ -82,14 +82,15 @@ x-api-common: &api-common
 
 services:
   db:
-    image: postgres:16-alpine
-    restart: unless-stopped
+    extends:
+      file: docker-compose.infrastructure.yml
+      service: db
     mem_limit: ${DB_MEM_LIMIT:-768m}
     mem_reservation: 256m
     cpus: ${DB_CPUS:-1.5}
     logging: *default-logging
     labels:
-      autoheal: "true"
+      autoheal: 'true'
     command: >
       postgres
       -c max_connections=${POSTGRES_MAX_CONNECTIONS:-100}
@@ -101,85 +102,33 @@ services:
       -c statement_timeout=${POSTGRES_STATEMENT_TIMEOUT_MS:-5000}
       -c lock_timeout=${POSTGRES_LOCK_TIMEOUT_MS:-2000}
       -c idle_in_transaction_session_timeout=${POSTGRES_IDLE_IN_TRANSACTION_TIMEOUT_MS:-10000}
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   redis:
-    image: redis:7-alpine
-    restart: unless-stopped
+    extends:
+      file: docker-compose.infrastructure.yml
+      service: redis
     mem_limit: ${REDIS_MEM_LIMIT:-256m}
     mem_reservation: 96m
     cpus: ${REDIS_CPUS:-0.5}
     logging: *default-logging
     labels:
-      autoheal: "true"
-    # noeviction（Redis 預設）：broker 任務絕不可被 evict 掉；queue-routing 修正後
-    # 佇列不再無限成長，mem_limit 僅作 backstop。
-    command: ["sh", "-c", "redis-server --appendonly yes --maxmemory-policy noeviction --requirepass \"$${REDIS_PASSWORD}\""]
-    environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
-    volumes:
-      - redisdata:/data
-    healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      autoheal: 'true'
 
   redis-cache:
-    image: redis:7-alpine
-    restart: unless-stopped
-    command:
-      ["sh", "-c", "redis-server --maxmemory $${REDIS_CACHE_MAXMEMORY:-256mb} --maxmemory-policy allkeys-lfu --requirepass \"$${REDIS_PASSWORD}\""]
-    environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
-      REDIS_CACHE_MAXMEMORY: ${REDIS_CACHE_MAXMEMORY:-256mb}
-    volumes:
-      - rediscachedata:/data
-    healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    extends:
+      file: docker-compose.infrastructure.yml
+      service: redis-cache
 
   redis-broker:
-    image: redis:7-alpine
-    restart: unless-stopped
-    command: ["sh", "-c", "redis-server --appendonly yes --maxmemory-policy noeviction --requirepass \"$${REDIS_PASSWORD}\""]
-    environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
-    volumes:
-      - redisbrokerdata:/data
-    healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    extends:
+      file: docker-compose.infrastructure.yml
+      service: redis-broker
 
   redis-realtime:
-    image: redis:7-alpine
-    restart: unless-stopped
-    command: ["sh", "-c", "redis-server --save \"\" --appendonly no --maxmemory-policy noeviction --requirepass \"$${REDIS_PASSWORD}\""]
-    environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
-    healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    extends:
+      file: docker-compose.infrastructure.yml
+      service: redis-realtime
 
-  # migrate 改放 "migrate" profile：預設 up 不會啟動，避免每次重啟 worker/api 或
-  # autoheal 拉起容器時都重跑一次 migration。部署有新 schema 時手動跑一次：
-  #   docker compose --env-file .env.production -f docker-compose.prod.yml --profile migrate run --rm migrate
   migrate:
     <<: *api-common
     restart: "no"
@@ -279,7 +228,7 @@ services:
       --pool=solo
       --concurrency=${CELERY_WORKER_CONCURRENCY:-1}
       --prefetch-multiplier=1
-      --queues=default,email,meal,documents,backup,recovery
+      --queues=default,email,documents,backup,recovery
     environment:
       ENVIRONMENT: production
       DEBUG: "false"
@@ -497,43 +446,20 @@ services:
 
   # ── PgBouncer transaction 連線池（正式環境預設）──────────────────────────
   pgbouncer:
-    image: edoburu/pgbouncer:v1.25.2-p0
-    restart: unless-stopped
+    extends:
+      file: docker-compose.infrastructure.yml
+      service: pgbouncer
     mem_limit: ${PGBOUNCER_MEM_LIMIT:-64m}
     mem_reservation: 16m
     cpus: ${PGBOUNCER_CPUS:-0.25}
     logging: *default-logging
     labels:
-      autoheal: "true"
+      autoheal: 'true'
     environment:
-      DB_HOST: db
-      DB_PORT: "5432"
-      DB_USER: ${POSTGRES_USER:?set POSTGRES_USER}
-      DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
-      DB_NAME: ${POSTGRES_DB:?set POSTGRES_DB}
-      # edoburu entrypoint 只有在 plain/scram-sha-256 下才會把 DB_PASSWORD
-      # 寫入 userlist；避免只生成 MD5 hash，導致 PostgreSQL SCRAM backend login 失敗。
-      AUTH_TYPE: scram-sha-256
-      LISTEN_PORT: "6432"
-      POOL_MODE: transaction
-      MAX_CLIENT_CONN: "200"
-      DEFAULT_POOL_SIZE: ${PGBOUNCER_DEFAULT_POOL_SIZE:-20}
-      MIN_POOL_SIZE: "5"
-      RESERVE_POOL_SIZE: "5"
-      # 讓 exporter 僅能執行 read-only SHOW 指令，不能操作 PgBouncer admin console。
+      MAX_CLIENT_CONN: '200'
       STATS_USERS: ${POSTGRES_USER:?set POSTGRES_USER}
-      # transaction 模式下每筆交易結束清狀態；配合 app 端關 prepared statement cache。
-      SERVER_RESET_QUERY: DISCARD ALL
-      # asyncpg 會送 extra_float_digits 等啟動參數，PgBouncer 需放行避免報錯。
-      IGNORE_STARTUP_PARAMETERS: extra_float_digits,options
-    depends_on:
-      db:
-        condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "nc -z 127.0.0.1 6432 || exit 1"]
       interval: 15s
-      timeout: 5s
-      retries: 5
       start_period: 20s
 
   prometheus:
@@ -556,7 +482,7 @@ services:
         condition: service_healthy
 
   grafana:
-    image: grafana/grafana:12.0.2
+    image: grafana/grafana:12.1.0
     restart: unless-stopped
     profiles: ["monitoring"]
     logging: *default-logging
@@ -667,7 +593,7 @@ services:
       - /dev/disk:/dev/disk:ro
 
   redis-exporter:
-    image: oliver006/redis_exporter:v1.67.0
+    image: oliver006/redis_exporter:v1.75.0
     restart: unless-stopped
     profiles: ["monitoring"]
     mem_limit: 64m
@@ -680,7 +606,7 @@ services:
       - redis
 
   postgres-exporter:
-    image: prometheuscommunity/postgres-exporter:v0.16.0
+    image: prometheuscommunity/postgres-exporter:v0.17.1
     restart: unless-stopped
     profiles: ["monitoring"]
     mem_limit: 64m

@@ -157,22 +157,6 @@ from api.models.judicial_petition import (  # noqa: F401
     JudicialPetitionType,
 )
 from api.models.line_account import LineAccountLink  # noqa: F401
-from api.models.meal import (  # noqa: F401
-    MealClassPickupCode,
-    MealOrder,
-    MealOrderItem,
-    MealOrderStatus,
-    MealPickupSlot,
-    MealPickupStatus,
-    MealProduct,
-    MealProductAvailability,
-    MealVendor,
-    MealVendorApplication,
-    MealVendorManager,
-    MealVendorStatus,
-    MenuItem,
-    MenuSchedule,
-)
 from api.models.merchandise_submission import (  # noqa: F401
     MerchandiseSubmission,
     MerchandiseSubmissionFile,

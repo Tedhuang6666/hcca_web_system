@@ -19,8 +19,8 @@ class ActivityLinkKind(enum.StrEnum):
     SURVEY = "survey"
     SHOP_PRODUCT = "shop_product"
     SHOP_ORDER = "shop_order"
-    MEAL_SCHEDULE = "meal_schedule"
-    MEAL_ORDER = "meal_order"
+    MEAL_SCHEDULE = "meal_schedule"  # 僅供歷史活動連結辨識，無執行期模型。
+    MEAL_ORDER = "meal_order"  # 僅供歷史活動連結辨識，無執行期模型。
     DOCUMENT = "document"
     REGULATION = "regulation"
     PETITION = "petition"

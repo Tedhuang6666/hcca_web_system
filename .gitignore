@@ -76,7 +76,7 @@ RegulationArticleCreate
 .vscode/
 .mcp.json
 
-# AI instructions and internal documents stay local; do not commit or upload.
+# 個人設定與歷史筆記留在本機；共同規範與現行維護入口納入版本控制。
 .codex/
 .agents/
 docs/
@@ -145,3 +145,23 @@ output/receipt-format/
 apps/web/public/shop/104/
 output/
 .codegraph/
+
+# Maintained, portable project instructions and runbooks.
+!/AGENTS.md
+!/CLAUDE.md
+!/PROJECT_CONTEXT.md
+!apps/api/AGENTS.md
+!apps/web/AGENTS.md
+!docs/
+docs/*
+!docs/README.md
+!docs/AI_WORKFLOW.md
+!docs/HANDOFF_CHECKLIST.md
+!docs/ENVIRONMENT.md
+!docs/TECHNICAL_DEBT.md
+!.agents/
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/hcca-maintenance/
+!.agents/skills/hcca-maintenance/SKILL.md

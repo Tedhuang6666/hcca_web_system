@@ -95,7 +95,7 @@ services:
 
   # ── Meilisearch（全站搜尋；未設定時 API 會自動 fallback DB 搜尋） ───────
   meilisearch:
-    image: getmeili/meilisearch:v1.13
+    image: getmeili/meilisearch:v1.14.0
     container_name: campus_meilisearch
     restart: unless-stopped
     environment:
@@ -234,7 +234,7 @@ services:
       start_period: 30s
 
   # ── Celery Worker（核心 queue：default + documents） ───────────
-  # 多 queue 隔離：email retry 卡住不會拖累 meal close、模組 recovery 等流程。
+  # 多 queue 隔離：email retry 卡住不會拖累備份與模組 recovery 等流程。
   celery-worker:
     <<: *api-common
     container_name: campus_celery_worker
@@ -305,7 +305,7 @@ services:
       python -m celery -A api.core.celery_app.celery_app worker
       --loglevel=info
       --concurrency=2
-      --queues=meal,backup,recovery
+      --queues=backup,recovery
       -n util@%h
     environment:
       ENVIRONMENT: development

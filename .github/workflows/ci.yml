@@ -24,6 +24,12 @@ jobs:
       - name: Validate Celery queue consumers
         run: python scripts/validate-celery-topology.py
 
+      - name: Prevent technical debt growth
+        run: bash scripts/check.sh debt
+
+      - name: Validate Compose entrypoints and image parity
+        run: python scripts/validate-compose.py
+
       - name: Install uv
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
@@ -107,7 +113,7 @@ jobs:
         run: uv sync --locked --project apps/api
 
       - name: Apply all database migrations
-        run: uv run --locked --directory apps/api alembic upgrade head
+        run: uv run --locked --directory apps/api alembic -x baseline=true upgrade head
 
       # 覆蓋率門檻由 pyproject [tool.coverage.report] fail_under 控制（ratchet：補測試後逐步調高）。
       - name: Run Pytest with coverage
@@ -137,7 +143,7 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: password
-          POSTGRES_DB: campus_platform_schema
+          POSTGRES_DB: campus_platform_schema_test
         ports:
           - 5432:5432
         options: >-
@@ -147,8 +153,8 @@ jobs:
           --health-retries 5
 
     env:
-      DATABASE_URL: postgresql+asyncpg://postgres:password@localhost:5432/campus_platform_schema
-      DATABASE_URL_SYNC: postgresql+psycopg2://postgres:password@localhost:5432/campus_platform_schema
+      DATABASE_URL: postgresql+asyncpg://postgres:password@localhost:5432/campus_platform_schema_test
+      DATABASE_URL_SYNC: postgresql+psycopg2://postgres:password@localhost:5432/campus_platform_schema_test
       REDIS_URL: redis://localhost:6379/0
       SECRET_KEY: ci-test-secret-key-32-characters-min
 
@@ -171,6 +177,11 @@ jobs:
 
       - name: Verify models match migration head
         run: uv run --locked --directory apps/api alembic check
+
+      - name: Compare baseline with complete migration history
+        env:
+          TEST_DATABASE_URL: postgresql+asyncpg://postgres:password@localhost:5432/campus_platform_schema_test
+        run: uv run --locked --project apps/api python -m unittest discover -s scripts/tests -p 'test_migration_baseline.py'
 
   api-contract:
     name: OpenAPI Contract Drift

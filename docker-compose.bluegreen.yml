@@ -151,105 +151,41 @@ x-worker-service: &worker-service
 
 services:
   db:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    extends:
+      file: docker-compose.infrastructure.yml
+      service: db
 
   pgbouncer:
-    image: edoburu/pgbouncer:v1.25.2-p0
-    restart: unless-stopped
+    extends:
+      file: docker-compose.infrastructure.yml
+      service: pgbouncer
     mem_limit: ${PGBOUNCER_MEM_LIMIT:-64m}
     mem_reservation: 16m
     cpus: ${PGBOUNCER_CPUS:-0.25}
     environment:
-      DB_HOST: db
-      DB_PORT: "5432"
-      DB_USER: ${POSTGRES_USER:?set POSTGRES_USER}
-      DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
-      DB_NAME: ${POSTGRES_DB:?set POSTGRES_DB}
-      AUTH_TYPE: scram-sha-256
-      LISTEN_PORT: "6432"
-      POOL_MODE: transaction
       MAX_CLIENT_CONN: ${PGBOUNCER_MAX_CLIENT_CONN:-200}
-      DEFAULT_POOL_SIZE: ${PGBOUNCER_DEFAULT_POOL_SIZE:-20}
-      MIN_POOL_SIZE: "5"
-      RESERVE_POOL_SIZE: "5"
-      SERVER_RESET_QUERY: DISCARD ALL
-      IGNORE_STARTUP_PARAMETERS: extra_float_digits,options
-    depends_on:
-      db:
-        condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "nc -z 127.0.0.1 6432 || exit 1"]
       interval: 10s
-      timeout: 5s
-      retries: 5
 
   redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    command: ["sh", "-c", "redis-server --appendonly yes --maxmemory-policy noeviction --requirepass \"$${REDIS_PASSWORD}\""]
-    environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
-    volumes:
-      - redisdata:/data
-    healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    extends:
+      file: docker-compose.infrastructure.yml
+      service: redis
 
   redis-cache:
-    image: redis:7-alpine
-    restart: unless-stopped
-    command:
-      ["sh", "-c", "redis-server --maxmemory $${REDIS_CACHE_MAXMEMORY:-256mb} --maxmemory-policy allkeys-lfu --requirepass \"$${REDIS_PASSWORD}\""]
-    environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
-      REDIS_CACHE_MAXMEMORY: ${REDIS_CACHE_MAXMEMORY:-256mb}
-    volumes:
-      - rediscachedata:/data
-    healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    extends:
+      file: docker-compose.infrastructure.yml
+      service: redis-cache
 
   redis-broker:
-    image: redis:7-alpine
-    restart: unless-stopped
-    command: ["sh", "-c", "redis-server --appendonly yes --maxmemory-policy noeviction --requirepass \"$${REDIS_PASSWORD}\""]
-    environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
-    volumes:
-      - redisbrokerdata:/data
-    healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    extends:
+      file: docker-compose.infrastructure.yml
+      service: redis-broker
 
   redis-realtime:
-    image: redis:7-alpine
-    restart: unless-stopped
-    command: ["sh", "-c", "redis-server --save \"\" --appendonly no --maxmemory-policy noeviction --requirepass \"$${REDIS_PASSWORD}\""]
-    environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
-    healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    extends:
+      file: docker-compose.infrastructure.yml
+      service: redis-realtime
 
   migrate:
     <<: *api-common
@@ -304,7 +240,7 @@ services:
       python -m celery -A api.core.celery_app.celery_app worker
       --loglevel=info
       --concurrency=${CELERY_WORKER_CONCURRENCY:-4}
-      --queues=celery,default,documents,email,meal,backup,recovery
+      --queues=celery,default,documents,email,backup,recovery
       -n worker-blue@%h
     # 不設 healthcheck：`inspect ping` 每 30s 起重量級 python 行程、等 broker 回覆，
     # 忙時 ping 卡住會堆積吃光 CPU；且 Docker 判 unhealthy 自動重啟反而打掉忙碌 worker。
@@ -318,7 +254,7 @@ services:
       python -m celery -A api.core.celery_app.celery_app worker
       --loglevel=info
       --concurrency=${CELERY_WORKER_CONCURRENCY:-4}
-      --queues=celery,default,documents,email,meal,backup,recovery
+      --queues=celery,default,documents,email,backup,recovery
       -n worker-green@%h
     # 同 worker-blue：不設 healthcheck，避免 inspect ping 堆積與 unhealthy 自動重啟。
     healthcheck:

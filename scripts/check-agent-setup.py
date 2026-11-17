@@ -35,6 +35,19 @@ LOCAL_DOCUMENTS = (
     "docs/tooling-optimization.md",
     ".agents/skills/hcca-maintenance/SKILL.md",
 )
+VERSIONED_DOCUMENTS = (
+    "AGENTS.md",
+    "CLAUDE.md",
+    "PROJECT_CONTEXT.md",
+    "apps/api/AGENTS.md",
+    "apps/web/AGENTS.md",
+    "docs/README.md",
+    "docs/AI_WORKFLOW.md",
+    "docs/HANDOFF_CHECKLIST.md",
+    "docs/ENVIRONMENT.md",
+    "docs/TECHNICAL_DEBT.md",
+    ".agents/skills/hcca-maintenance/SKILL.md",
+)
 
 
 def broken_links(root: Path, relative: str) -> list[str]:
@@ -74,7 +87,11 @@ def validate_test_database(url: str) -> str | None:
 
 
 def check_documents(root: Path) -> list[str]:
-    errors = [error for path in PUBLIC_DOCUMENTS for error in broken_links(root, path)]
+    errors = [
+        error
+        for path in (*PUBLIC_DOCUMENTS, *VERSIONED_DOCUMENTS)
+        for error in broken_links(root, path)
+    ]
     errors.extend(
         error
         for path in LOCAL_DOCUMENTS
@@ -112,7 +129,12 @@ def check_documents(root: Path) -> list[str]:
         .stdout.decode()
         .split("\0")
     )
-    for relative in (*PUBLIC_DOCUMENTS, "scripts/check.sh", ".gitnexusignore"):
+    for relative in (
+        *PUBLIC_DOCUMENTS,
+        *VERSIONED_DOCUMENTS,
+        "scripts/check.sh",
+        ".gitnexusignore",
+    ):
         if relative not in tracked:
             errors.append(f"Maintenance entrypoint is not versioned/staged: {relative}")
     return errors
