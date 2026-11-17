@@ -62,7 +62,7 @@ jobs:
         working-directory: apps/web
         run: |
           npm ci
-          npx playwright install --with-deps chromium
+          npx playwright install chromium
           npm install --no-save --ignore-scripts lighthouse@13.4.0
 
       - name: Validate monitor secret
