@@ -95,16 +95,6 @@ def parse_regulation_document(
     return _parse_regulation_paragraphs(_extract_paragraphs(file_bytes, filename=filename))
 
 
-def parse_regulation_docx(
-    file_bytes: bytes, filename: str | None = None
-) -> ImportedRegulationDraft:
-    return _parse_regulation_paragraphs(_extract_docx_paragraphs(file_bytes, filename=filename))
-
-
-def parse_regulation_pdf(file_bytes: bytes, filename: str | None = None) -> ImportedRegulationDraft:
-    return _parse_regulation_paragraphs(_extract_pdf_paragraphs(file_bytes, filename=filename))
-
-
 def parse_regulation_text(
     *,
     title: str,

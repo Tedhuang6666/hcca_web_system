@@ -187,24 +187,6 @@ async def get_user_permission_codes_for_org(
     return frozenset(codes)
 
 
-async def get_org_permission_codes(db: AsyncSession, org_id: uuid.UUID) -> frozenset[str]:
-    """回傳組織內職位權限與組織及其上級組織預設權限碼聯集。"""
-    result = await db.execute(
-        select(Permission.code)
-        .select_from(Org)
-        .outerjoin(Position, Position.org_id == Org.id)
-        .outerjoin(Permission, Permission.position_id == Position.id)
-        .where(Org.id == org_id)
-    )
-    codes: set[str] = set()
-    for (position_code,) in result.all():
-        if position_code:
-            codes.add(position_code)
-    default_codes_by_org = await _get_org_default_permission_codes_by_org(db, {org_id})
-    codes.update(default_codes_by_org.get(org_id, set()))
-    return frozenset(codes)
-
-
 async def get_user_permission_codes_by_org(
     db: AsyncSession,
     user_id: uuid.UUID,
@@ -318,13 +300,3 @@ async def get_user_org_ids(
         .distinct()
     )
     return list(result.scalars().all())
-
-
-async def user_has_permission(
-    db: AsyncSession,
-    user_id: uuid.UUID,
-    permission_code: str,
-) -> bool:
-    """快速檢查使用者是否擁有特定權限碼（全域）"""
-    codes = await get_user_permission_codes(db, user_id)
-    return permission_code in codes

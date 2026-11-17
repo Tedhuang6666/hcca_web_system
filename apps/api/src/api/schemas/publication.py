@@ -7,7 +7,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from api.models.publication import PublicationDeliveryStatus, PublicationStatus
+from api.models.publication import PublicationStatus
 
 
 class PublicationCampaignCreate(BaseModel):
@@ -35,24 +35,6 @@ class PublicationCampaignUpdate(BaseModel):
     channels: list[str] | None = None
     scheduled_at: datetime | None = None
     status: PublicationStatus | None = None
-
-
-class PublicationDeliveryOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    campaign_id: uuid.UUID
-    channel: str
-    recipient_user_id: uuid.UUID | None
-    status: PublicationDeliveryStatus
-    target: str | None
-    provider_message_id: str | None
-    error_detail: str | None
-    sent_at: datetime | None
-    read_at: datetime | None
-    clicked_at: datetime | None
-    created_at: datetime
-    updated_at: datetime
 
 
 class PublicationCampaignOut(BaseModel):

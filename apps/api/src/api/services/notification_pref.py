@@ -219,11 +219,3 @@ def set_muted_modules(prefs: dict | None, modules: list[str]) -> dict:
         if key.startswith("__") and key != _MUTED_MODULES_KEY:
             result[key] = val
     return result
-
-
-def is_module_muted(prefs: dict | None, notification_type: str) -> bool:
-    """快速判斷某通知類型的所屬模組是否被靜音（供發送前 gate 用）。"""
-    module = TYPE_MODULE_MAP.get(notification_type)
-    if module is None:
-        return False
-    return module in get_muted_modules(prefs)

@@ -27,7 +27,6 @@ class EventSpec(NamedTuple):
 
 # (audit entity_type, audit action) -> EventSpec
 GOVERNANCE_EVENT_MAP: dict[tuple[str, str], EventSpec] = {
-    # ── 公文 ───────────────────────────────────────────────
     ("document", "create"): EventSpec("document.created", "document", "公文建立"),
     ("document", "document.create_from_template"): EventSpec(
         "document.created", "document", "公文建立"
@@ -38,60 +37,34 @@ GOVERNANCE_EVENT_MAP: dict[tuple[str, str], EventSpec] = {
     ("document", "batch.approve"): EventSpec("document.approved", "document", "公文核准"),
     ("document", "batch.reject"): EventSpec("document.rejected", "document", "公文退件"),
     ("document", "batch.archive"): EventSpec("document.archived", "document", "公文歸檔"),
-    # ── 法規 ───────────────────────────────────────────────
-    ("regulation", "regulation.create"): EventSpec("regulation.created", "regulation", "法規建立"),
     ("regulation", "regulation.publish"): EventSpec(
         "regulation.published", "regulation", "法規公布"
     ),
-    ("regulation", "regulation.workflow_published"): EventSpec(
-        "regulation.published", "regulation", "法規公布"
-    ),
-    ("regulation", "regulation.archive"): EventSpec(
-        "regulation.archived", "regulation", "法規停用"
-    ),
-    ("regulation", "regulation.repeal"): EventSpec("regulation.repealed", "regulation", "法規廢止"),
-    # ── 問卷 ───────────────────────────────────────────────
     ("survey", "survey.create"): EventSpec("survey.created", "survey", "問卷建立"),
     ("survey", "survey.open"): EventSpec("survey.opened", "survey", "問卷開放"),
     ("survey", "survey.close"): EventSpec("survey.closed", "survey", "問卷結束"),
-    # ── 陳情（audit entity_type=petition_case → 正規化 petition）──
     ("petition_case", "petition.create"): EventSpec("petition.created", "petition", "陳情建立"),
-    # ── 評議 ───────────────────────────────────────────────
     ("judicial_petition", "judicial_petition.create"): EventSpec(
         "judicial.created", "judicial_petition", "評議提出"
     ),
     ("judicial_petition", "judicial_petition.status"): EventSpec(
         "judicial.status_changed", "judicial_petition", "評議狀態變更"
     ),
-    # ── 議會提案 ───────────────────────────────────────────
     ("council_proposal", "council_proposal.create"): EventSpec(
         "proposal.created", "council_proposal", "提案提出"
     ),
     ("council_proposal", "council_proposal.status"): EventSpec(
         "proposal.status_changed", "council_proposal", "提案狀態變更"
     ),
-    # ── 活動 ───────────────────────────────────────────────
-    ("activity", "activity.create"): EventSpec("activity.created", "activity", "活動建立"),
-    ("activity", "activity.archive"): EventSpec("activity.archived", "activity", "活動歸檔"),
-    # ── 公告 ───────────────────────────────────────────────
     ("announcement", "announcement.create"): EventSpec(
         "announcement.created", "announcement", "公告建立"
     ),
     ("announcement", "announcement.publish"): EventSpec(
         "announcement.published", "announcement", "公告發布"
     ),
-    # ── 商品訂單 ───────────────────────────────────────────
     ("order", "shop.order_create"): EventSpec("order.created", "order", "訂單成立"),
     ("order", "shop.order_payment"): EventSpec("order.paid", "order", "訂單付款"),
     ("order", "shop.order_cancel"): EventSpec("order.canceled", "order", "訂單取消"),
-    # ── 學餐 ───────────────────────────────────────────────
-    ("meal_order", "meal.order_create"): EventSpec("order.created", "meal_order", "訂單成立"),
-    ("meal_order", "meal.order_confirm"): EventSpec("order.confirmed", "meal_order", "訂單確認"),
-    ("meal_order", "meal.order_complete"): EventSpec("order.completed", "meal_order", "訂單完成"),
-    ("meal_schedule", "meal.schedule_close"): EventSpec(
-        "meal.schedule_closed", "meal_schedule", "學餐結單"
-    ),
-    # ── 組織 / 發布 / 試卷 / 收款 ───────────────────────────
     ("org", "org.create"): EventSpec("org.created", "org", "組織建立"),
     ("publication", "publication.send"): EventSpec("publication.sent", "publication", "發布送出"),
     ("exam_paper", "exam_paper.create"): EventSpec("exam.paper_created", "exam_paper", "試卷上傳"),
@@ -107,11 +80,8 @@ ENTITY_HREF: dict[str, Callable[[str], str]] = {
     "petition": lambda i: f"/petitions/{i}",
     "judicial_petition": lambda i: "/judicial-petitions",
     "council_proposal": lambda i: "/council-proposals",
-    "activity": lambda i: f"/activities/{i}",
     "announcement": lambda i: f"/announcements/{i}",
     "order": lambda i: f"/shop/orders/{i}",
-    "meal_order": lambda i: "/meal/orders",
-    "meal_schedule": lambda i: "/meal",
     "org": lambda i: f"/orgs/{i}",
     "publication": lambda i: "/publications",
     "exam_paper": lambda i: "/exam-papers",
@@ -128,7 +98,6 @@ ENTITY_HREF: dict[str, Callable[[str], str]] = {
     "position": lambda i: "/admin/permissions",
     "school_class": lambda i: "/admin/classes",
     "product": lambda i: "/shop/admin",
-    "meal_vendor": lambda i: "/meal/vendor",
     "partner_business": lambda i: "/partner-map/admin",
     "document_template": lambda i: "/document-templates",
     "serial_template": lambda i: "/serial-templates",
@@ -145,8 +114,6 @@ ENTITY_LABELS: dict[str, str] = {
     "activity": "活動",
     "announcement": "公告",
     "order": "商品訂單",
-    "meal_order": "學餐訂單",
-    "meal_schedule": "學餐排程",
     "org": "組織",
     "publication": "發布",
     "exam_paper": "試卷",
@@ -164,7 +131,6 @@ ENTITY_LABELS: dict[str, str] = {
     "position": "職位",
     "school_class": "班級",
     "product": "商品",
-    "meal_vendor": "餐商",
     "partner_business": "特約商家",
     "document_template": "公文範本",
     "serial_template": "字號模板",

@@ -409,10 +409,3 @@ class PartnerSubmissionOut(BaseModel):
     business_id: uuid.UUID | None
     created_at: datetime
     updated_at: datetime
-
-
-class PartnerMapBounds(BaseModel):
-    min_lat: float = Field(..., ge=-90, le=90)
-    max_lat: float = Field(..., ge=-90, le=90)
-    min_lng: float = Field(..., ge=-180, le=180)
-    max_lng: float = Field(..., ge=-180, le=180)

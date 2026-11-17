@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
 import mimetypes
 import uuid
 from pathlib import Path
-from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from fastapi.responses import Response
 from sqlalchemy import select
 
 from api.core.permission_codes import PermissionCode
@@ -45,7 +42,6 @@ from api.routers.finance_common import (
     require_ledger_permission as require_ledger_permission,
 )
 from api.schemas.finance import (
-    BudgetAdvanceReceiptCreate,
     ExpenseBudgetUpdate,
     ExpenseClaimCreate,
     ExpenseProcurementUpdate,
@@ -57,7 +53,6 @@ from api.schemas.finance import (
 )
 from api.services import audit as audit_svc
 from api.services import finance as service
-from api.services import finance_documents
 from api.services.file_delivery import deliver_stored_file
 from api.services.storage import get_storage
 
@@ -417,36 +412,6 @@ async def list_claim_items(entry_id: uuid.UUID, db: DbDep, _: CurrentUser) -> li
         }
         for item in items
     ]
-
-
-@router.post(
-    "/budgets/{budget_id}/advance-receipt.docx",
-    response_class=Response,
-    responses={
-        200: {
-            "content": {
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
-                    "schema": {"type": "string", "format": "binary"}
-                }
-            }
-        }
-    },
-    dependencies=[Depends(require_budget_permission(PermissionCode.FINANCE_VIEW))],
-)
-async def export_advance_receipt(
-    budget_id: uuid.UUID, body: BudgetAdvanceReceiptCreate, db: DbDep, _: CurrentUser
-) -> Response:
-    budget = await service.get_budget(db, budget_id)
-    selected = await service.budget_advance_receipt_expenses(db, budget.id, body.expense_ids)
-    content = await asyncio.to_thread(finance_documents.advance_receipt, budget.name, selected)
-    return Response(
-        content,
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={
-            "Content-Disposition": "attachment; filename*=UTF-8''" + quote("預先代墊簽收單.docx"),
-            "Cache-Control": "no-store",
-        },
-    )
 
 
 @router.get("/expense-evidence/{evidence_id}")

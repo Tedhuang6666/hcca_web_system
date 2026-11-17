@@ -1,17 +1,19 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { FinanceBudgetDetail, FinanceBudgetExpenseOut } from "@/lib/types";
 import { consolidatedBudgetRows } from "./budgetWorkbook";
 import BudgetConsolidatedTable from "./BudgetConsolidatedTable";
-import BudgetAdvanceReceipts from "./BudgetAdvanceReceipts";
 import BudgetExpenseRegister from "./BudgetExpenseRegister";
 import { financeApi } from "@/lib/api";
+import { toast } from "sonner";
 
 vi.mock("@/lib/api", () => ({ financeApi: {
-  exportAdvanceReceipt: vi.fn().mockResolvedValue(undefined),
+  exportBudget: vi.fn().mockResolvedValue(undefined),
   updateBudgetIncomeItem: vi.fn().mockResolvedValue({}),
   updateBudgetAllocation: vi.fn().mockResolvedValue({}),
 } }));
+
+vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
 const initial = { id: "initial", budget_id: "budget", kind: "initial", status: "approved", title: "初始", created_by_id: "operator", is_council_review_public: false, is_full_snapshot: true } as const;
 const latest = { ...initial, id: "latest", kind: "supplemental", title: "第一次追加" } as const;
@@ -64,16 +66,22 @@ describe("integrated budget workbook", () => {
     expect(financeApi.updateBudgetIncomeItem).not.toHaveBeenCalled();
   });
 
-  it("generates a receipt for selected actual advances only", async () => {
-    const expense = (id: string, name: string | null, amount: number): FinanceBudgetExpenseOut => ({ id, budget_id: "budget", allocation_id: "paper", department_org_id: "org", department_name: "財務", allocation_node_id: "paper", allocation_name: "影印紙", entry_date: "2026-08-20", purpose: `採購 ${id}`, total_amount: amount, advanced_by_name: name, note: null, items: [], evidence: [], created_at: "2026-08-20T00:00:00Z" });
-    render(<BudgetAdvanceReceipts budgetId="budget" expenses={[expense("one", "代墊人甲", 100), expense("two", "代墊人甲", 200), expense("direct", null, 50)]} />);
-    expect(screen.getAllByRole("checkbox")).toHaveLength(2);
-    expect(screen.getByRole("button", { name: "下載 Word 簽收單" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "全選代墊支出" }));
-    expect(screen.getByText("已選 2 筆 · NT$300")).toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole("checkbox")[1]);
-    fireEvent.click(screen.getByRole("button", { name: "下載 Word 簽收單" }));
-    await vi.waitFor(() => expect(financeApi.exportAdvanceReceipt).toHaveBeenCalledWith("budget", ["one"]));
+  it("exports the workbook and recovers after a failed download", async () => {
+    let finish: () => void = () => {};
+    const pending = new Promise<void>((resolve) => { finish = resolve; });
+    vi.mocked(financeApi.exportBudget).mockReturnValueOnce(pending);
+    render(<BudgetConsolidatedTable detail={detail} canRecordExpense={false} canRecordIncome={false} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "匯出 Excel" }));
+    expect(financeApi.exportBudget).toHaveBeenCalledWith("budget");
+    expect(screen.getByRole("button", { name: "匯出中…" })).toBeDisabled();
+    await act(async () => { finish(); await pending; });
+    expect(screen.getByRole("button", { name: "匯出 Excel" })).toBeEnabled();
+
+    vi.mocked(financeApi.exportBudget).mockRejectedValueOnce(new Error("下載失敗"));
+    fireEvent.click(screen.getByRole("button", { name: "匯出 Excel" }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("下載失敗"));
+    expect(screen.getByRole("button", { name: "匯出 Excel" })).toBeEnabled();
   });
 
   it("uses server allocation choices and exposes only the granted historical edit", () => {

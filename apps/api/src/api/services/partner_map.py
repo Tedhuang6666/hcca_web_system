@@ -608,16 +608,6 @@ def active_offer_count(business: PartnerBusiness) -> int:
     return sum(1 for offer in business.offers if is_offer_current(offer))
 
 
-async def count_active_offers(db: AsyncSession, business_id: uuid.UUID) -> int:
-    value = await db.scalar(
-        select(func.count(PartnerOffer.id)).where(
-            PartnerOffer.business_id == business_id,
-            active_offer_clause(),
-        )
-    )
-    return int(value or 0)
-
-
 async def create_submission(
     db: AsyncSession, data: PartnerSubmissionCreate, submitted_by: uuid.UUID | None
 ) -> PartnerSubmission:

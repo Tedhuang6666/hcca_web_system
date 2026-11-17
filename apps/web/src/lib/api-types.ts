@@ -5220,23 +5220,6 @@ export interface paths {
         patch: operations["update_budget_name_finance_budgets__budget_id__patch"];
         trace?: never;
     };
-    "/finance/budgets/{budget_id}/advance-receipt.docx": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Export Advance Receipt */
-        post: operations["export_advance_receipt_finance_budgets__budget_id__advance_receipt_docx_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/finance/budgets/{budget_id}/expenses": {
         parameters: {
             query?: never;
@@ -13895,11 +13878,6 @@ export interface components {
             /** File */
             file: string;
         };
-        /** BudgetAdvanceReceiptCreate */
-        BudgetAdvanceReceiptCreate: {
-            /** Expense Ids */
-            expense_ids: string[];
-        };
         /** BudgetAllocationCreate */
         BudgetAllocationCreate: {
             /** Amount */
@@ -16871,9 +16849,6 @@ export interface components {
             previous_comments?: string[];
             /** Recommended Actions */
             recommended_actions?: string[];
-            /** Related Items */
-            related_items?: components["schemas"]["ContextLink"][];
-            source_activity?: components["schemas"]["ContextLink"] | null;
         };
         /** DocumentApprovalDelegationCreate */
         DocumentApprovalDelegationCreate: {
@@ -24818,8 +24793,6 @@ export interface components {
             petition_id: string;
             /** Recommended Actions */
             recommended_actions?: string[];
-            /** Related Activities */
-            related_activities?: components["schemas"]["ContextLink"][];
             /** Related Regulations */
             related_regulations?: components["schemas"]["ContextLink"][];
             /** Similar Petitions */
@@ -28724,8 +28697,6 @@ export interface components {
         };
         /** RegulationUsageContextOut */
         RegulationUsageContextOut: {
-            /** Pending Reviews */
-            pending_reviews?: components["schemas"]["ContextLink"][];
             /**
              * Regulation Id
              * Format: uuid
@@ -44817,41 +44788,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BudgetOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    export_advance_receipt_finance_budgets__budget_id__advance_receipt_docx_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                budget_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BudgetAdvanceReceiptCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
                 };
             };
             /** @description Validation Error */

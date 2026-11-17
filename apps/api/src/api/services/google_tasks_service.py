@@ -175,30 +175,6 @@ async def push_work_item(
         return None
 
 
-async def delete_google_task(
-    session: AsyncSession,
-    item: WorkItem,
-    config: UserGoogleTasksConfig,
-) -> None:
-    """刪除 Google Tasks 上對應的 task。"""
-    if not item.google_task_id:
-        return
-    from googleapiclient.errors import HttpError
-
-    try:
-        creds = await get_valid_credentials(session, config)
-        service = _build_service(creds)
-        tasklist_id = config.google_tasklist_id or await ensure_tasklist(session, config)
-        service.tasks().delete(tasklist=tasklist_id, task=item.google_task_id).execute()
-        item.google_task_id = None
-        await session.flush()
-    except HttpError as exc:
-        if exc.resp.status != 404:
-            logger.warning("[GoogleTasks] delete 失敗（task=%s）：%s", item.google_task_id, exc)
-    except Exception as exc:
-        logger.warning("[GoogleTasks] delete 失敗（task=%s）：%s", item.google_task_id, exc)
-
-
 async def pull_from_google(
     session: AsyncSession,
     config: UserGoogleTasksConfig,

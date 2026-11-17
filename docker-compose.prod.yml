@@ -228,7 +228,7 @@ services:
       --pool=solo
       --concurrency=${CELERY_WORKER_CONCURRENCY:-1}
       --prefetch-multiplier=1
-      --queues=default,email,documents,backup,recovery
+      --queues=default,email,backup,recovery
     environment:
       ENVIRONMENT: production
       DEBUG: "false"

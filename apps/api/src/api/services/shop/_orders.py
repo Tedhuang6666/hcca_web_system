@@ -13,7 +13,6 @@ from sqlalchemy.orm import selectinload
 
 from api.core.config import settings
 from api.models.activity import Activity, ActivityStatus
-from api.models.activity_link import ActivityLink, ActivityLinkKind
 from api.models.outbox import OutboxEvent, OutboxStatus
 from api.models.receivable import Receivable, ReceivableSource
 from api.models.school_class import SchoolClass
@@ -903,12 +902,6 @@ async def clear_all_orders(
         delete(Receivable).where(
             Receivable.source_type == ReceivableSource.SHOP_ORDER.value,
             Receivable.source_id.in_(order_ids),
-        )
-    )
-    await session.execute(
-        delete(ActivityLink).where(
-            ActivityLink.target_type == ActivityLinkKind.SHOP_ORDER.value,
-            ActivityLink.target_id.in_(order_ids),
         )
     )
     await session.execute(delete(Order).where(Order.id.in_(order_ids)))

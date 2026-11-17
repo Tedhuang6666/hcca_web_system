@@ -2,14 +2,18 @@ from __future__ import annotations
 
 import uuid
 
+import pytest
+from sqlalchemy import select
+
 from api.models.discord_account import DiscordRolePolicy
-from api.models.governance import Matter
+from api.models.governance import GovernanceDiscordEventRoute, GovernanceDiscordWorkspace, Matter
+from api.models.outbox import OutboxEvent
 from api.services.discord_governance import (
     compose_nickname,
     remove_applied_prefix,
     select_prefix_labels,
 )
-from api.services.governance_discord import upsert_route, upsert_workspace
+from api.services.governance_discord import emit_matter_event
 
 
 def _policy(label: str | None, priority: int, *, active: bool = True) -> DiscordRolePolicy:
@@ -61,58 +65,44 @@ def test_remove_applied_prefix_preserves_user_edited_base_name():
     assert compose_nickname(["秘書長"], base)[0] == "秘書長｜新的自訂暱稱"
 
 
-async def test_governance_workspace_supports_existing_and_managed_modes(db_session):
+@pytest.mark.parametrize("href", [None, "/announcements/current"])
+async def test_existing_workspace_events_preserve_only_available_links(db_session, href):
     matter = Matter(title="校慶籌備", matter_type="activity")
     db_session.add(matter)
     await db_session.flush()
-
-    workspace = await upsert_workspace(
-        db_session,
-        matter,
-        {
-            "guild_id": "guild",
-            "mode": "existing",
-            "category_id": "category",
-            "discussion_channel_id": "discussion",
-            "announcement_channel_id": "announcement",
-            "staff_channel_id": "staff",
-            "mention_role_id": "role",
-            "auto_sync": True,
-            "is_active": True,
-        },
+    workspace = GovernanceDiscordWorkspace(
+        matter_id=matter.id,
+        guild_id="guild",
+        mode="existing",
+        discussion_channel_id="discussion",
+        is_active=True,
     )
-    route = await upsert_route(
-        db_session,
-        workspace,
-        {
-            "event_type": "announcement.*",
-            "channel_kind": "discussion",
-            "channel_id": None,
-            "create_thread": True,
-            "mention_role_id": "role",
-            "is_active": True,
-        },
+    db_session.add(workspace)
+    await db_session.flush()
+    db_session.add(
+        GovernanceDiscordEventRoute(
+            workspace_id=workspace.id,
+            event_type="announcement.*",
+            channel_kind="discussion",
+            is_active=True,
+        )
     )
+    await db_session.flush()
 
-    assert workspace.mode == "existing"
-    assert workspace.discussion_channel_id == "discussion"
-    assert route.event_type == "announcement.*"
-
-    managed = await upsert_workspace(
+    await emit_matter_event(
         db_session,
-        matter,
-        {
-            "guild_id": "guild",
-            "mode": "managed",
-            "category_id": None,
-            "discussion_channel_id": None,
-            "announcement_channel_id": None,
-            "staff_channel_id": None,
-            "mention_role_id": "role",
-            "auto_sync": True,
-            "is_active": True,
-        },
+        matter_id=matter.id,
+        event_type="announcement.published",
+        title="公告發布",
+        body="測試公告",
+        href=href,
     )
 
-    assert managed.id == workspace.id
-    assert managed.mode == "managed"
+    event = await db_session.scalar(
+        select(OutboxEvent).where(
+            OutboxEvent.event_type == "discord.channel_alert",
+        )
+    )
+    assert event is not None
+    assert event.payload["channel_id"] == "discussion"
+    assert event.payload["link"] == href

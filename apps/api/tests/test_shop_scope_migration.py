@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import uuid
 from pathlib import Path
 
+import pytest_asyncio
+from alembic import command
+from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy import select, text
+from sqlalchemy import inspect, select, text
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from api.models.receivable import Receivable
 from api.models.shop import (
@@ -22,6 +28,49 @@ from api.models.shop import (
     ShopPromotion,
 )
 from api.models.user import User
+
+
+@pytest_asyncio.fixture
+async def db_session():
+    """封存 migration 使用退役前結構，整個獨立 schema 隨交易回滾。"""
+    url = os.environ["TEST_DATABASE_URL"]
+    assert url.startswith("postgresql+asyncpg://"), "Requires PostgreSQL migration schema"
+    engine = create_async_engine(url, poolclass=NullPool)
+    schema = f"legacy_shop_{uuid.uuid4().hex}"
+    try:
+        async with engine.connect() as connection:
+            transaction = await connection.begin()
+            try:
+                await connection.execute(text(f'CREATE SCHEMA "{schema}"'))
+                await connection.execute(text(f'SET LOCAL search_path TO "{schema}"'))
+
+                def install_legacy_schema(sync_connection):
+                    api_root = Path(__file__).parents[1]
+                    config = Config(str(api_root / "alembic.ini"))
+                    config.set_main_option("script_location", str(api_root / "alembic"))
+                    config.attributes["connection"] = sync_connection
+                    config.attributes["bootstrap_baseline"] = True
+                    command.upgrade(config, "20261117020000")
+                    quote = sync_connection.dialect.identifier_preparer.quote
+                    tables = inspect(sync_connection).get_table_names()
+                    names = ", ".join(
+                        f"{quote(schema)}.{quote(name)}"
+                        for name in tables
+                        if name != "alembic_version"
+                    )
+                    sync_connection.exec_driver_sql(f"TRUNCATE {names} RESTART IDENTITY CASCADE")
+
+                await connection.run_sync(install_legacy_schema)
+                async with AsyncSession(
+                    bind=connection,
+                    expire_on_commit=False,
+                    join_transaction_mode="create_savepoint",
+                ) as session:
+                    yield session
+            finally:
+                await transaction.rollback()
+    finally:
+        await engine.dispose()
 
 
 def _migration():
