@@ -10,6 +10,7 @@ from urllib.parse import parse_qsl
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 logger = logging.getLogger(__name__)
+logger.propagate = True
 _audit_actor: ContextVar[tuple[str, str] | None] = ContextVar("audit_actor", default=None)
 
 
