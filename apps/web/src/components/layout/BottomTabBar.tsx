@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "@/components/ui/IntentLink";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { LogIn, MoreHorizontal } from "lucide-react";
 import { useWS } from "@/hooks/useWS";
 import { useInboxCountsContext } from "@/contexts/InboxCountsContext";
@@ -47,57 +47,15 @@ interface Tab {
 type Role = "guest" | "student" | "cadre";
 
 const CADRE_PREFIXES = ["document:", "regulation:", "audit:"] as const;
-const LIQUID_DOCK_HEIGHT = 60;
-const LIQUID_BEAD_RADIUS = 20;
 
-interface DockPointer {
-  id: number;
-  startX: number;
-  moved: boolean;
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max);
-}
+const MOBILE_LABELS: Record<string, string> = {
+  documents: "公文",
+  shop: "商品",
+  surveys: "問卷",
+};
 
 function dockCenter(index: number, width: number, count: number) {
   return ((index + 0.5) / count) * width;
-}
-
-function dockIndexAt(x: number, width: number, count: number) {
-  return clamp(Math.floor((x / width) * count), 0, count - 1);
-}
-
-function buildLiquidDockPath(width: number, height: number, beadX: number, velocity: number) {
-  const inset = 10;
-  const top = 14;
-  const bottom = height - 3;
-  const corner = 20;
-  const speed = Math.min(Math.abs(velocity), 18);
-  const notchWidth = LIQUID_BEAD_RADIUS * (1.45 + speed * 0.008);
-  const notchDepth = 9 + speed * 0.32;
-  const leftContact = clamp(beadX - notchWidth, inset + corner, width - inset - corner - 40);
-  const rightContact = clamp(beadX + notchWidth, inset + corner + 40, width - inset - corner);
-  const left = inset;
-  const right = width - inset;
-
-  return [
-    `M ${left + corner} ${top}`,
-    `H ${leftContact - 12}`,
-    `C ${leftContact - 4} ${top}, ${leftContact - 7} ${top + notchDepth}, ${leftContact} ${top + notchDepth}`,
-    `C ${leftContact + 11} ${top + notchDepth + 2}, ${beadX - 17} ${top + notchDepth * 0.22}, ${beadX} ${top + notchDepth * 0.18}`,
-    `C ${beadX + 17} ${top + notchDepth * 0.22}, ${rightContact - 11} ${top + notchDepth + 2}, ${rightContact} ${top + notchDepth}`,
-    `C ${rightContact + 7} ${top + notchDepth}, ${rightContact + 4} ${top}, ${rightContact + 12} ${top}`,
-    `H ${right - corner}`,
-    `Q ${right} ${top} ${right} ${top + corner}`,
-    `V ${bottom - corner}`,
-    `Q ${right} ${bottom} ${right - corner} ${bottom}`,
-    `H ${left + corner}`,
-    `Q ${left} ${bottom} ${left} ${bottom - corner}`,
-    `V ${top + corner}`,
-    `Q ${left} ${top} ${left + corner} ${top}`,
-    "Z",
-  ].join(" ");
 }
 
 /**
@@ -110,22 +68,8 @@ function buildLiquidDockPath(width: number, height: number, beadX: number, veloc
  */
 export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
   const pathname = usePathname();
-  const router = useRouter();
   const dockRef = useRef<HTMLDivElement>(null);
-  const targetXRef = useRef(0);
-  const beadXRef = useRef(0);
-  const velocityRef = useRef(0);
-  const animationFrameRef = useRef<number | null>(null);
-  const shapePathRef = useRef<SVGPathElement>(null);
-  const shapeHighlightRef = useRef<SVGPathElement>(null);
-  const beadRef = useRef<HTMLSpanElement>(null);
-  const hasInitialPositionRef = useRef(false);
-  const pointerRef = useRef<DockPointer | null>(null);
-  const suppressClickRef = useRef(false);
   const [dockWidth, setDockWidth] = useState(0);
-  const [dragging, setDragging] = useState(false);
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const [reducedMotion, setReducedMotion] = useState(false);
   const [role, setRole] = useState<Role>("guest");
   const [roleResolved, setRoleResolved] = useState(false);
   const [userRoom, setUserRoom] = useState<string | null>(null);
@@ -141,59 +85,6 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
     setUnreadCount: setNotifCount,
     refresh: refreshCounts,
   } = useInboxCountsContext();
-
-  const renderMotion = useCallback((x: number, velocity: number) => {
-    if (dockWidth > 0) {
-      const path = buildLiquidDockPath(dockWidth, LIQUID_DOCK_HEIGHT, x, velocity);
-      shapePathRef.current?.setAttribute("d", path);
-      shapeHighlightRef.current?.setAttribute("d", path);
-    }
-    if (beadRef.current) {
-      const scaleX = 1 + Math.min(Math.abs(velocity) * 0.012, 0.16);
-      const scaleY = 1 - Math.min(Math.abs(velocity) * 0.004, 0.06);
-      beadRef.current.style.left = `${x}px`;
-      beadRef.current.style.transform =
-        `translate(-50%, -50%) scale(${scaleX}, ${scaleY})`;
-    }
-  }, [dockWidth]);
-
-  const wakeSpring = useCallback(() => {
-    if (animationFrameRef.current !== null) return;
-
-    const tick = () => {
-      const distance = targetXRef.current - beadXRef.current;
-      velocityRef.current = velocityRef.current * 0.78 + distance * 0.16;
-      beadXRef.current += velocityRef.current;
-
-      if (Math.abs(distance) < 0.08 && Math.abs(velocityRef.current) < 0.08) {
-        beadXRef.current = targetXRef.current;
-        velocityRef.current = 0;
-        renderMotion(beadXRef.current, 0);
-        animationFrameRef.current = null;
-        return;
-      }
-
-      renderMotion(beadXRef.current, velocityRef.current);
-      animationFrameRef.current = requestAnimationFrame(tick);
-    };
-
-    animationFrameRef.current = requestAnimationFrame(tick);
-  }, [renderMotion]);
-
-  useEffect(() => {
-    return () => {
-      if (animationFrameRef.current !== null) cancelAnimationFrame(animationFrameRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const syncReducedMotion = () => setReducedMotion(media.matches);
-    syncReducedMotion();
-    media.addEventListener("change", syncReducedMotion);
-    return () => media.removeEventListener("change", syncReducedMotion);
-  }, []);
 
   // 解析身分（依登入狀態與權限分桶）
   useEffect(() => {
@@ -362,118 +253,7 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
     return () => observer.disconnect();
   }, [tabs.length]);
 
-  useEffect(() => {
-    if (!dockWidth || !tabs.length || activeIndex < 0) return;
-
-    const nextX = dockCenter(activeIndex, dockWidth, tabs.length);
-    targetXRef.current = nextX;
-    if (!hasInitialPositionRef.current) {
-      beadXRef.current = nextX;
-      velocityRef.current = 0;
-      renderMotion(nextX, 0);
-      hasInitialPositionRef.current = true;
-      return;
-    }
-    if (reducedMotion) {
-      beadXRef.current = nextX;
-      velocityRef.current = 0;
-      renderMotion(nextX, 0);
-      return;
-    }
-    wakeSpring();
-  }, [activeIndex, dockWidth, reducedMotion, renderMotion, tabs.length, wakeSpring]);
-
-  const dockPointFromEvent = useCallback((clientX: number) => {
-    const dock = dockRef.current;
-    if (!dock || !dockWidth) return null;
-    const rect = dock.getBoundingClientRect();
-    return clamp(clientX - rect.left, LIQUID_BEAD_RADIUS, dockWidth - LIQUID_BEAD_RADIUS);
-  }, [dockWidth]);
-
-  const handlePointerDown = useCallback((event: React.PointerEvent<HTMLElement>) => {
-    if (event.button !== 0 || !tabs.length) return;
-    const dock = dockRef.current;
-    const point = dockPointFromEvent(event.clientX);
-    if (!dock || point === null) return;
-    const rect = dock.getBoundingClientRect();
-    if (event.clientY < rect.top || event.clientY > rect.bottom) return;
-
-    pointerRef.current = { id: event.pointerId, startX: event.clientX, moved: false };
-    setDragging(true);
-    setDragIndex(dockIndexAt(point, dockWidth, tabs.length));
-    targetXRef.current = point;
-    if (reducedMotion) {
-      beadXRef.current = point;
-      velocityRef.current = 0;
-      renderMotion(point, 0);
-    } else {
-      wakeSpring();
-    }
-    event.currentTarget.setPointerCapture(event.pointerId);
-  }, [dockPointFromEvent, dockWidth, reducedMotion, renderMotion, tabs.length, wakeSpring]);
-
-  const handlePointerMove = useCallback((event: React.PointerEvent<HTMLElement>) => {
-    const pointer = pointerRef.current;
-    if (!pointer || pointer.id !== event.pointerId) return;
-    const point = dockPointFromEvent(event.clientX);
-    if (point === null) return;
-    if (Math.abs(event.clientX - pointer.startX) > 6) pointer.moved = true;
-    if (!pointer.moved) return;
-
-    event.preventDefault();
-    setDragIndex(dockIndexAt(point, dockWidth, tabs.length));
-    targetXRef.current = point;
-    if (reducedMotion) {
-      beadXRef.current = point;
-      velocityRef.current = 0;
-      renderMotion(point, 0);
-    } else {
-      wakeSpring();
-    }
-  }, [dockPointFromEvent, dockWidth, reducedMotion, renderMotion, tabs.length, wakeSpring]);
-
-  const finishPointer = useCallback((event: React.PointerEvent<HTMLElement>) => {
-    const pointer = pointerRef.current;
-    if (!pointer || pointer.id !== event.pointerId) return;
-    const point = dockPointFromEvent(event.clientX);
-    const selectedIndex = pointer.moved && point !== null
-      ? dockIndexAt(point, dockWidth, tabs.length)
-      : dragIndex ?? activeIndex;
-    if (pointer.moved && selectedIndex >= 0 && selectedIndex < tabs.length) {
-      event.preventDefault();
-      suppressClickRef.current = true;
-      const selectedTab = tabs[selectedIndex];
-      if (selectedTab.href) router.push(selectedTab.href);
-      else selectedTab.onClick?.();
-    }
-    pointerRef.current = null;
-    setDragging(false);
-    setDragIndex(null);
-  }, [activeIndex, dockPointFromEvent, dockWidth, dragIndex, router, tabs]);
-
-  const cancelPointer = useCallback((event: React.PointerEvent<HTMLElement>) => {
-    if (pointerRef.current?.id !== event.pointerId) return;
-    pointerRef.current = null;
-    setDragging(false);
-    setDragIndex(null);
-  }, []);
-
-  const handleItemClick = useCallback((event: React.MouseEvent<HTMLElement>, index: number) => {
-    if (suppressClickRef.current) {
-      event.preventDefault();
-      event.stopPropagation();
-      suppressClickRef.current = false;
-      return;
-    }
-    if (!dockWidth || !tabs.length) return;
-    targetXRef.current = dockCenter(index, dockWidth, tabs.length);
-    if (!reducedMotion) wakeSpring();
-  }, [dockWidth, reducedMotion, tabs.length, wakeSpring]);
-
-  const visualIndex = dragIndex ?? activeIndex;
-  const dockPath = dockWidth > 0 && tabs.length > 0
-    ? buildLiquidDockPath(dockWidth, LIQUID_DOCK_HEIGHT, beadXRef.current, velocityRef.current)
-    : "";
+  const beadX = dockWidth > 0 && tabs.length > 0 ? dockCenter(activeIndex, dockWidth, tabs.length) : 0;
 
   if (keyboardOpen) return null;
   if (!roleResolved) return null;
@@ -482,62 +262,25 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
     <nav
       aria-label="底部主選單"
       className="bottom-tab-bar fixed bottom-0 left-0 right-0 z-30 flex lg:hidden"
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={finishPointer}
-      onPointerCancel={cancelPointer}
       style={{
         height: "calc(76px + env(safe-area-inset-bottom))",
         boxSizing: "border-box",
         alignItems: "flex-start",
         justifyContent: "center",
         padding: "0 0.75rem max(0.5rem, env(safe-area-inset-bottom))",
-        touchAction: "none",
-        userSelect: "none",
       }}>
       <div
         ref={dockRef}
         className="bottom-tab-bar__dock relative flex h-[60px] w-full max-w-2xl overflow-visible"
-        style={{
-          isolation: "isolate",
-          cursor: dragging ? "grabbing" : "grab",
-        }}>
-        <svg
-          aria-hidden="true"
-          className="bottom-tab-bar__shape pointer-events-none absolute inset-0 h-full w-full overflow-visible"
-          viewBox={`0 0 ${Math.max(dockWidth, 1)} ${LIQUID_DOCK_HEIGHT}`}
-          preserveAspectRatio="none">
-          <path
-            ref={shapePathRef}
-            className="bottom-tab-bar__shape-fill"
-            d={dockPath}
-            strokeWidth="1" />
-          <path
-            ref={shapeHighlightRef}
-            className="bottom-tab-bar__shape-highlight"
-            d={dockPath}
-            strokeLinecap="round"
-            strokeWidth="1.5" />
-        </svg>
-
+        style={{ isolation: "isolate" }}>
         <span
-          ref={beadRef}
           aria-hidden="true"
           className="bottom-tab-bar__bead pointer-events-none absolute"
-          style={{
-            left: beadXRef.current,
-            top: 14,
-            width: LIQUID_BEAD_RADIUS * 2,
-            height: LIQUID_BEAD_RADIUS * 2,
-            opacity: dockWidth ? 1 : 0,
-            transform: `translate(-50%, -50%) scale(1, 1)`,
-            transformOrigin: "center",
-            willChange: "transform, left",
-          }} />
+          style={{ left: beadX, opacity: dockWidth ? 1 : 0 }} />
 
         {tabs.map((t, index) => {
           const active = t.match ? t.match(pathname) : false;
-          const visualActive = visualIndex === index;
+          const visualActive = activeIndex === index;
           const badge =
             t.badgeKey === "tasks" ? taskCount :
             t.badgeKey === "notifs" ? notifCount : 0;
@@ -569,7 +312,6 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
               key={t.label}
               href={t.href}
               className="bottom-tab-bar__link relative z-[2] flex min-h-[44px] flex-1"
-              onClick={(event) => handleItemClick(event, index)}
               aria-current={active ? "page" : undefined}
               aria-label={`${t.label}${badge > 0 ? `（${badge}）` : ""}`}>
               {inner}
@@ -580,10 +322,7 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
           <button
             key={t.label}
             type="button"
-            onClick={(event) => {
-              handleItemClick(event, index);
-              if (!event.defaultPrevented) t.onClick?.();
-            }}
+            onClick={() => t.onClick?.()}
             className="bottom-tab-bar__button relative z-[2] flex min-h-[44px] flex-1 border-0 bg-transparent p-0"
             aria-label={t.label}>
             {inner}
@@ -598,7 +337,7 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
 function navItemToTab(item: NavItem): Tab {
   return {
     href: item.href,
-    label: item.label.replace("系統", "").replace("專區", "").replace("訂購", ""),
+    label: MOBILE_LABELS[item.id] ?? item.label,
     iconKey: item.iconKey,
     match: (pathname) => item.end
       ? pathname === item.href

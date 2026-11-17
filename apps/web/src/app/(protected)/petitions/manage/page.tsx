@@ -437,13 +437,9 @@ export default function PetitionManagePage() {
       {showExternalIntake && can("petition:admin") && (
         <section
           className="card p-5 space-y-4"
-          style={{ borderColor: "var(--primary)", borderLeftWidth: "4px" }}
           aria-labelledby="external-petition-title">
           <div>
-            <p className="text-xs font-medium tracking-wide" style={{ color: "var(--primary-text)" }}>
-              其他管道收件
-            </p>
-            <h2 id="external-petition-title" className="text-lg font-semibold mt-1" style={{ color: "var(--text-primary)" }}>
+            <h2 id="external-petition-title" className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
               代收外部陳情
             </h2>
             <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
