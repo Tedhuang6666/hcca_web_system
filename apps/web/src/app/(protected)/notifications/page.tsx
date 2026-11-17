@@ -271,9 +271,6 @@ export default function NotificationsPage() {
               </span>
             )}
           </h1>
-          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            公文審核、系統通知與重要提醒
-          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
         <Link
@@ -359,7 +356,7 @@ export default function NotificationsPage() {
         <SmartEmptyState
           reason={unreadOnly || dateFrom || dateTo ? "filtered" : "none"}
           subject="通知"
-          message={unreadOnly ? "所有通知已讀完畢，做得好！" : undefined}
+          message={unreadOnly ? "沒有未讀通知" : undefined}
           onClearFilters={() => {
             setDateFrom("");
             setDateTo("");

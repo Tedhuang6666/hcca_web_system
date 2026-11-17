@@ -331,10 +331,7 @@ export default function EmailLogsPage() {
     <div className="mx-auto max-w-5xl space-y-5">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--primary)" }}>
-            EMAIL LOGS
-          </p>
-          <h1 className="mt-1 text-xl font-semibold">寄信紀錄</h1>
+          <h1 className="text-xl font-semibold">寄信紀錄</h1>
         </div>
         <div className="flex flex-wrap gap-2">
           <button

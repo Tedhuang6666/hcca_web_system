@@ -78,9 +78,6 @@ function SearchInner() {
         <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
           全域搜尋
         </h1>
-        <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-          一次搜尋公文、法規與公告
-        </p>
       </div>
 
       <form

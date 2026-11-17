@@ -125,12 +125,7 @@ export default function NewAnnouncementPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-5">
       <div className="flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">新增公告</h1>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            以 Markdown 撰寫公告內容
-          </p>
-        </div>
+        <h1 className="text-xl font-semibold">新增公告</h1>
         <Link href="/announcements" className="btn btn-ghost">取消</Link>
       </div>
 

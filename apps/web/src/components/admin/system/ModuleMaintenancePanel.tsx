@@ -156,7 +156,7 @@ export default function ModuleMaintenancePanel() {
           : "維護中（手動）";
 
   const severityLabel = (sev: string) =>
-    sev === "CRITICAL" ? "🔴 嚴重" : sev === "HIGH" ? "🟠 高" : "🟡 一般";
+    sev === "CRITICAL" ? "嚴重" : sev === "HIGH" ? "高" : "一般";
 
   const stateControls = (mod: ModuleStatus) => (
     <div

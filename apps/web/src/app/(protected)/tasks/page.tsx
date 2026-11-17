@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import {
   FileText, Scale, MessageSquare, CheckSquare, ShoppingCart,
   Megaphone, Inbox, AlertCircle, Clock, ChevronRight,
-  Gauge,
 } from "lucide-react";
 import {
   documentsApi,
@@ -252,9 +251,6 @@ export default function TasksPage() {
             <Inbox size={20} aria-hidden={true} style={{ color: "var(--primary)" }} />
             我的待辦
           </h1>
-          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            跨模組統一收集需要您動作的事項
-          </p>
         </div>
         {data && (
           <span className="text-3xl font-bold leading-none"
@@ -292,10 +288,6 @@ export default function TasksPage() {
         style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
         aria-label="智慧篩選"
       >
-        <div className="mb-2 flex items-center gap-2 text-xs font-medium" style={{ color: "var(--text-muted)" }}>
-          <Gauge size={13} aria-hidden={true} />
-          智慧排序會依期限、流程阻塞、影響範圍與角色責任計分
-        </div>
         <div className="flex gap-1 overflow-x-auto">
           {QUICK_FILTERS.map((filter) => {
             const active = quickFilter === filter.key;

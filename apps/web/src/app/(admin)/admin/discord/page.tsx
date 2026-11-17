@@ -363,10 +363,7 @@ export default function DiscordAdminPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-5">
       <header>
-        <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--primary)" }}>
-          DISCORD BOT
-        </p>
-        <h1 className="mt-1 text-xl font-semibold">Discord 平台機器人設定</h1>
+        <h1 className="text-xl font-semibold">Discord 平台機器人設定</h1>
       </header>
 
       <section className="card p-5">

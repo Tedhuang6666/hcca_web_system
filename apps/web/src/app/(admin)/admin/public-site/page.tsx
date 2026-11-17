@@ -1682,8 +1682,7 @@ export default function PublicSiteAdminPage() {
                   <Handshake size={19} aria-hidden />
                 </span>
                 <div>
-                  <p className="text-xs font-semibold tracking-[0.16em] text-[#e8c970]">PUBLIC PARTNERSHIP</p>
-                  <h2 className="mt-2 text-xl font-semibold">特約資訊</h2>
+                  <h2 className="text-xl font-semibold">特約資訊</h2>
                 </div>
               </div>
               <div className="shrink-0 rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-center">
@@ -1711,9 +1710,7 @@ export default function PublicSiteAdminPage() {
 
             <aside className="card space-y-4 p-5">
               <div>
-                <p className="text-xs font-semibold tracking-[0.14em] text-[var(--primary)]">LIVE STRUCTURE</p>
-                <h2 className="mt-2 font-semibold">流程預覽</h2>
-                <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">確認順序與標題層級後，再儲存公開頁。</p>
+                <h2 className="font-semibold">流程預覽</h2>
               </div>
               {specialAgreement.process.length === 0 ? (
                 <p className="rounded-lg bg-[var(--bg-elevated)] p-4 text-sm text-[var(--text-muted)]">尚未建立流程。</p>

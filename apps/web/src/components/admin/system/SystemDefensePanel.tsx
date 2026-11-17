@@ -18,7 +18,6 @@ import {
   RotateCcw,
   Save,
   Shield,
-  ShieldCheck,
   SlidersHorizontal,
   Trash2,
   Wrench,
@@ -402,10 +401,6 @@ export default function SystemDefensePanel() {
     <div>
       <header className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <div className="mb-2 inline-flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)]">
-            <ShieldCheck size={14} aria-hidden />
-            超級管理員控制台
-          </div>
           <h2 className="text-2xl font-bold text-[var(--text-primary)]">全站防護管理</h2>
           <p className="mt-1 text-sm text-[var(--text-secondary)]">
             每 {POLL_INTERVAL_MS / 1000} 秒更新；最後更新{" "}
@@ -852,7 +847,7 @@ function DeadLetterPanel() {
       </p>
       {items.length === 0 ? (
         <p className="py-6 text-center text-sm text-[var(--text-muted)]">
-          {loading ? "載入中…" : "目前沒有 Celery 失敗紀錄 🎉"}
+          {loading ? "載入中…" : "目前沒有背景工作失敗紀錄"}
         </p>
       ) : (
         <div className="space-y-2">

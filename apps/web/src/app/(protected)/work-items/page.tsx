@@ -203,9 +203,6 @@ export default function WorkItemsPage() {
           <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
             {filter === "open" ? "沒有進行中的工作" : "沒有工作項目"}
           </p>
-          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-            點右上角「新增工作」建立第一筆
-          </p>
         </div>
       ) : (
         <ul className="space-y-2">

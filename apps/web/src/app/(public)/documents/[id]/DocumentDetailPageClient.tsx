@@ -489,7 +489,6 @@ export default function DocumentDetailPageClient({
     return (
       <DetailPageLoading
         title="公文詳情載入中"
-        description="正在取得簽核、附件與版本紀錄。"
       />
     );
   }

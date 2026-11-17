@@ -9,7 +9,7 @@ import {
   Plus,
   RefreshCcw,
   Save,
-  ScrollText } from "lucide-react";
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
@@ -70,10 +70,6 @@ export default function PoliciesPage() {
   return (
     <main className="mx-auto max-w-6xl p-4 md:p-6">
       <header className="mb-4">
-        <div className="mb-2 inline-flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)]">
-          <ScrollText size={14} aria-hidden />
-          政策版本管理
-        </div>
         <h1 className="text-2xl font-bold text-[var(--text-primary)]">政策與個資請求</h1>
       </header>
 

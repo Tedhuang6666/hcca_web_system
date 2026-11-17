@@ -455,7 +455,6 @@ export default function RegulationDetailPageClient({
           </div>
           <DetailPageLoading
             title="法規詳情載入中"
-            description="正在準備條文、版本與修正紀錄。"
           />
         </div>
       );
@@ -464,7 +463,6 @@ export default function RegulationDetailPageClient({
       <div className="regulation-detail-loading">
         <DetailPageLoading
           title="法規詳情載入中"
-          description="正在準備條文、版本與修正紀錄。"
         />
       </div>
     );

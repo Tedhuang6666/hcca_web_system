@@ -177,7 +177,7 @@ function AccessDenied() {
         <span className="qr-access-icon" aria-hidden="true"><LockKeyhole size={23} /></span>
         <h1 id="qr-access-title">沒有經營工具權限</h1>
         <p>
-          這個工具只開放給被指派 <code>qr_code:manage</code> 的職位。請洽系統管理員加入對應權限組。
+          請洽系統管理員開啟權限。
         </p>
       </section>
     </main>

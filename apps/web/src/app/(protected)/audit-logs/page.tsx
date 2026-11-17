@@ -445,15 +445,9 @@ export default function AuditLogsPage() {
     <div className="mx-auto max-w-7xl space-y-5">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--primary)" }}>
-            AUDIT TRAIL
-          </p>
-          <h1 className="mt-1 text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
+          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
             稽核日誌
           </h1>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            查看所有操作軌跡
-          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <AnimatedDownloadButton

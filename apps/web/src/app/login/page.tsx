@@ -136,7 +136,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
                 className="text-3xl font-semibold tracking-[-0.025em] sm:text-4xl"
                 style={{ color: "var(--text-primary)" }}
               >
-                登入竹嶺班聯數位整合平台
+                登入
               </h1>
             </div>
 
@@ -200,8 +200,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
 
             <div className="my-7 flex items-center gap-4">
               <div className="h-px flex-1" style={{ background: "var(--border)" }} />
-              <span className="text-[11px] tracking-[0.12em]" style={{ color: "var(--text-muted)" }}>
-                已綁定帳號才使用
+              <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                或
               </span>
               <div className="h-px flex-1" style={{ background: "var(--border)" }} />
             </div>
@@ -230,9 +230,6 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
                 aria-hidden="true"
               />
             </a>
-            <p className="mt-3 text-center text-xs" style={{ color: "var(--text-muted)" }}>
-              尚未綁定帳號時，請改用 Google 登入。
-            </p>
 
             <PasskeyLogin nextPath={nextPath} />
 

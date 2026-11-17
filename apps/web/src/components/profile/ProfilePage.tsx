@@ -422,7 +422,7 @@ export default function ProfilePage() {
             <p className="text-sm" style={{ color: "var(--text-primary)" }}>
               {myClass
                 ? (myClass.label ?? `${myClass.academic_year} 學年度 ${myClass.class_code} 班`)
-                : "尚未歸班（由管理員依學號區間設定）"}
+                : "尚未歸班"}
             </p>
           </div>
           <div>
@@ -501,7 +501,7 @@ export default function ProfilePage() {
                 </div>
               )}
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                新 Email 驗證成功後，可使用該 Google 帳號登入同一個平台帳戶；若 Email 已屬其他帳號，驗證成功後會自動合併，資料衝突則交由管理員處理。
+                若此 Email 已屬於其他帳號，驗證後兩個帳號會合併。
               </p>
             </div>
           </div>
@@ -510,9 +510,6 @@ export default function ProfilePage() {
           <div style={{ borderTop: "1px solid var(--border)", paddingTop: "1rem" }}>
             <p className="text-xs font-semibold mb-2" style={{ color: "var(--text-muted)" }}>
               公文承辦人資訊顯示設定
-            </p>
-            <p className="text-xs mb-3" style={{ color: "var(--text-muted)" }}>
-              建立公文時可帶入承辦人 Email。
             </p>
             <div className="space-y-2">
               {[
@@ -633,8 +630,8 @@ export default function ProfilePage() {
           </h2>
           {isAdmin && (
             <div className="mb-3 rounded-md px-3 py-2 text-xs"
-              style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
-              {isOwner ? "系統擁有者" : "超級管理員"}：擁有全部系統權限（不受一般職位權限碼限制）
+              style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
+              {isOwner ? "系統擁有者" : "超級管理員"}：擁有全部系統權限
             </div>
           )}
           <div className="flex flex-wrap gap-1.5">

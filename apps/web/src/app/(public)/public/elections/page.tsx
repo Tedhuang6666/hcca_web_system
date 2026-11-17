@@ -17,19 +17,16 @@ type PublicElection = {
 const STATUS = {
   live: {
     label: "開票進行中",
-    description: "票數會自動更新，不需要重新整理頁面。",
     icon: Radio,
     className: "election-status election-status-live",
   },
   paused: {
     label: "暫停開票",
-    description: "現場暫停輸入，頁面保留最後一次公開結果。",
     icon: PauseCircle,
     className: "election-status election-status-paused",
   },
   closed: {
     label: "開票完成",
-    description: "開票程序已結束，可查看最終公開票數。",
     icon: CheckCircle2,
     className: "election-status election-status-closed",
   },
@@ -80,12 +77,9 @@ export default async function PublicElectionsPage() {
                   <h2 className="mt-4 text-xl font-semibold leading-snug sm:text-2xl">
                     {election.title}
                   </h2>
-                  <p className="mt-2 text-sm leading-6 text-[var(--public-secondary)]">
-                    {state.description}
-                  </p>
                   <p className="mt-3 text-xs text-[var(--public-muted)]">
                     <time dateTime={election.updated_at}>
-                      更新於 {new Date(election.updated_at).toLocaleString("zh-TW")}
+                      更新於 {new Date(election.updated_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}
                     </time>
                   </p>
                 </div>

@@ -110,10 +110,7 @@ export default function MFALoginPage() {
             }}>
             <ShieldCheck size={23} aria-hidden="true" />
           </div>
-          <p className="text-xs font-semibold tracking-[0.16em]" style={{ color: "var(--primary-text)" }}>
-            TWO-FACTOR AUTH
-          </p>
-          <h1 className="mt-1 text-xl font-bold" style={{ color: "var(--text-primary)" }}>
+          <h1 className="text-xl font-bold" style={{ color: "var(--text-primary)" }}>
             完成安全驗證
           </h1>
           <p className="mt-2 text-sm leading-6" style={{ color: "var(--text-muted)" }}>

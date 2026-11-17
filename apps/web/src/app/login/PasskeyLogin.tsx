@@ -70,7 +70,6 @@ export default function PasskeyLogin({ nextPath }: { nextPath: string }) {
         disabled={busy}
         onClick={handlePasskeyLogin}
       >
-        <span aria-hidden="true">🔐</span>
         {busy ? "生物辨識驗證中" : "使用指紋／臉部辨識快速登入"}
       </button>
     </>

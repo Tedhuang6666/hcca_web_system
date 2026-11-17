@@ -189,12 +189,7 @@ export default function SerialTemplatesPage() {
     <div className="max-w-4xl mx-auto space-y-5">
       {/* 頁首 */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold ">字號模板管理</h1>
-          <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>
-            管理公文字號格式，例如：嶺班活字第 1150000001 號
-          </p>
-        </div>
+        <h1 className="text-xl font-semibold">字號模板管理</h1>
         <div className="flex items-center gap-2">
           <label className="flex items-center gap-1.5 text-xs cursor-pointer" style={{ color: "var(--text-muted)" }}>
             <input type="checkbox" checked={activeOnly} onChange={e => setActiveOnly(e.target.checked)}

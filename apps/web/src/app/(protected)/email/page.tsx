@@ -1178,9 +1178,6 @@ function ComposeInner() {
   return (
     <div className="mx-auto max-w-6xl space-y-5">
       <header className="flex flex-col gap-1">
-        <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--primary)" }}>
-          EMAIL
-        </p>
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-xl font-semibold">寄送電子郵件</h1>
           <div className="flex flex-wrap gap-1">

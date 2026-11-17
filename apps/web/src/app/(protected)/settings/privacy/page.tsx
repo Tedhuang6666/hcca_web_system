@@ -108,10 +108,7 @@ export default function PrivacySettingsPage() {
     <div className="mx-auto max-w-5xl space-y-5">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--primary)" }}>
-            PRIVACY
-          </p>
-          <h1 className="mt-1 text-xl font-semibold">隱私與資料請求</h1>
+          <h1 className="text-xl font-semibold">隱私與資料請求</h1>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href="/legal/privacy" className="btn btn-ghost">

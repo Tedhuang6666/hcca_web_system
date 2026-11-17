@@ -1045,7 +1045,6 @@ export default function ClassOrdersPage() {
       <header className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
           <h1 className="break-words text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>班代工作</h1>
-          <p className="mt-2 text-sm" style={{ color: "var(--text-secondary)" }}>幫同學訂購，或登記已收到的款項。</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => void load()} className="btn btn-ghost min-h-11 min-w-11" aria-label="重新整理">
@@ -1074,7 +1073,7 @@ export default function ClassOrdersPage() {
         {(assistedItems.length > 0 || assistedOrderDrafts.length > 0 || orderProductId || editOrder) && <p className="text-sm" style={{ color: "var(--text-secondary)" }}>請先完成目前的代訂或修改，再切換活動。</p>}
         <p className="font-semibold">目前活動：{ledgerActivityLabel}</p>
       </section>}
-      {!activeLedgerKey && !loading && activityRows.length > 0 && <p role="status">請先選擇活動，再代訂、收款或查詢訂單。</p>}
+      {!activeLedgerKey && !loading && activityRows.length > 0 && <p role="status">尚未選擇活動</p>}
 
       {loadFailed && (
         <p className="rounded-md px-3 py-2 text-sm" role="alert"
@@ -1293,9 +1292,6 @@ export default function ClassOrdersPage() {
               className="mb-5 grid min-w-0 gap-3 rounded-md p-3"
               style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
               <legend className="px-1 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>一次套用給多位同學</legend>
-              <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-                勾選同學後，為每人訂購相同的商品、規格與數量。
-              </p>
               {membersLoading ? (
                 <p role="status" className="text-sm" style={{ color: "var(--text-muted)" }}>正在載入本班名冊...</p>
               ) : membersLoadFailed ? (
@@ -1407,7 +1403,7 @@ export default function ClassOrdersPage() {
               </div>
               {orderProductResults.length > 12 && (
                 <p role="status" className="text-xs" style={{ color: "var(--text-muted)" }}>
-                  共 {orderProductResults.length} 項可訂商品；可捲動列表瀏覽，或輸入關鍵字縮小範圍。
+                  共 {orderProductResults.length} 項可訂商品
                 </p>
               )}
               </>}
@@ -1743,7 +1739,6 @@ export default function ClassOrdersPage() {
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h2 id="seat-collection-heading" className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>登記收款</h2>
-              <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>依頁面上方的目前活動核對同學款項；收到錢後登記。</p>
             </div>
           </div>
           {ledgerActivities.length > 0 && <p className="text-base font-semibold">本次收款：{ledgerActivityLabel}</p>}

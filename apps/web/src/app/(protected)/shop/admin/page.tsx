@@ -551,7 +551,7 @@ function ProductFormModal({
           </Field>
           {fieldError("unitCost")}
           <p id="shop-product-cost-hint" className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>
-            僅供內部管理與銷售分析，購買者看不到。留空表示未設定；各規格共用此成本，修改後會重算歷史毛利。
+            購買者看不到；各規格共用此成本，修改後會重算歷史毛利。
           </p>
           {costState === "loading" && <p role="status">正在讀取商品成本…</p>}
           {costState === "error" && <p role="alert" className="text-sm" style={{ color: "var(--danger)" }}>
@@ -1493,7 +1493,6 @@ function StatsView() {
           <button type="button" className="btn btn-ghost min-h-11" disabled={loading} onClick={() => setRetryKey((value) => value + 1)}>重新整理</button>
         </div>
         <p className="text-sm" style={{ color: "var(--text-secondary)" }}>統計範圍：{scopeLabels.join(" · ")}</p>
-        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>交給班代的款項，需由班聯確認後才計入「班聯已確認」。</p>
         {optionsError && <div role="alert" className="text-sm" style={{ color: "var(--danger)" }}>
           篩選選項載入失敗。<button type="button" className="btn btn-ghost min-h-11" onClick={() => setRetryKey((value) => value + 1)}>重新載入選項</button>
         </div>}
@@ -1904,7 +1903,7 @@ export default function ShopAdminPage() {
   );
 
   const detailContent = !cat ? (
-    <div className="p-6 text-sm" style={{ color: "var(--text-muted)" }}>選擇商品即可編輯售價、上架狀態與規格。</div>
+    <div className="p-6 text-sm" style={{ color: "var(--text-muted)" }}>尚未選擇商品</div>
   ) : productId && !product ? (
     <div className="p-6 text-sm" style={{ color: "var(--text-muted)" }}>載入商品詳情中…</div>
   ) : product ? (
@@ -2081,7 +2080,7 @@ export default function ShopAdminPage() {
               </div>
               <div className="flex-1 overflow-y-auto">
                 {!cat ? (
-                  <p className="p-6 text-sm text-center" style={{ color: "var(--text-muted)" }}>先選擇活動，即可新增或管理商品。</p>
+                  <p className="p-6 text-sm text-center" style={{ color: "var(--text-muted)" }}>尚未選擇活動</p>
                 ) : (
                   <div className="divide-y" style={{ borderColor: "var(--border)" }}>
                     <section className="space-y-2 p-3">

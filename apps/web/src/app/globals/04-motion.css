@@ -1454,16 +1454,6 @@ input[type="radio"]:checked {
   color: var(--danger);
 }
 
-.dashboard-action-detail {
-  display: block;
-  overflow: hidden;
-  margin-top: 0.15rem;
-  color: var(--text-muted);
-  font-size: 0.72rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .dashboard-admin-strip {
   display: grid;
   grid-template-columns: minmax(180px, 0.34fr) minmax(0, 1fr);

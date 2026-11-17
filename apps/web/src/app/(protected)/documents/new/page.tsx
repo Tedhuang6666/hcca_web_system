@@ -152,10 +152,10 @@ function officialOrgFullName(org: OrgRead | null, orgs: readonly OrgRead[]): str
 }
 
 const DOCUMENT_STEPS: GuidedFormStepDefinition[] = [
-  { label: "基本資料", description: "先選擇組織與公文用途。" },
-  { label: "撰寫內容", description: "完成本次要傳達的重點。" },
-  { label: "對象與附件", description: "加入收件人、連結或檔案。" },
-  { label: "確認設定", description: "檢查字號、可見範圍與承辦資訊。" },
+  { label: "基本資料" },
+  { label: "撰寫內容" },
+  { label: "對象與附件" },
+  { label: "確認設定" },
 ];
 
 const CONTENT_COPY: Record<DocumentCategory, {
@@ -866,7 +866,7 @@ export default function NewDocumentPage() {
       <GuidedForm
         footerClassName="max-md:bottom-[calc(76px+env(safe-area-inset-bottom))]"
         steps={DOCUMENT_STEPS.map((step, index) => isAnnouncement && index === 2
-          ? { label: "附件", description: "加入連結或檔案。" }
+          ? { label: "附件" }
           : step)}
         activeStep={activeStep}
         onStepChange={setActiveStep}
@@ -924,9 +924,6 @@ export default function NewDocumentPage() {
                   ? { ...inputStyle, border: "1px solid var(--danger)" }
                   : inputStyle}
               />
-              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                預設為「{autoTitle || "發文組織＋公文類別"}」，可依需要修改。
-              </p>
               {showErr("title") && (
                 <p className="mt-1 text-xs" style={{ color: "var(--danger)" }}>{fieldError.title}</p>
               )}
@@ -1102,7 +1099,7 @@ export default function NewDocumentPage() {
             <div>
               <Label>
                 {copy.descriptionLabel}
-                <span className="ml-2 font-normal opacity-60 text-[10px]">
+                <span className="ml-2 hidden font-normal text-xs md:inline" style={{ color: "var(--text-muted)" }}>
                   Tab 降級 ／ Shift+Tab 升級 ／ Enter 續編
                 </span>
               </Label>
@@ -1405,9 +1402,6 @@ export default function NewDocumentPage() {
             {Object.keys(touched).length > 0 && hasErrors && (
               <p className="text-xs text-center" style={{ color: "var(--danger)" }}>請填寫所有必填欄位</p>
             )}
-            <p className="text-xs text-center" style={{ color: "var(--text-muted)" }}>
-              儲存後可在詳情頁設定審核人並送審
-            </p>
           </div>
 
           {/* 承辦人 */}

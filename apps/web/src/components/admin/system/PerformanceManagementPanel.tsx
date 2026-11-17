@@ -149,7 +149,7 @@ export default function PerformanceManagementPanel() {
         <div className="card flex min-h-[260px] flex-col items-center justify-center gap-3 p-8 text-center">
           <h2 className="text-lg font-semibold">無法查看數據分析</h2>
           <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-            需要 analytics:view 權限才能查看統計儀表板。
+            請洽系統管理員開啟權限。
           </p>
         </div>
       </div>

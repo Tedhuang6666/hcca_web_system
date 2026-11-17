@@ -1617,12 +1617,11 @@ export default function SurveyDetailClient({
         });
       }
       clearDraft();
-      toast.success(editingResponseId ? "答案已更新" : "填答成功，感謝您的參與！");
       setSubmitted(true);
     } catch (e) {
       flushDraft();
       if (e instanceof ApiError && e.status === 409) {
-        toast.error("您已填答過此問卷");
+        toast.error("你已填答過此問卷");
       } else {
         toast.error(apiErrorMessage(e, "提交失敗"));
       }
@@ -1842,9 +1841,6 @@ export default function SurveyDetailClient({
             </svg>
           </div>
           <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>你的回應已送出</h2>
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-            感謝你的填答。這份回應已成功提交至本次問卷。
-          </p>
           {survey.is_anonymous && (
             <p className="survey-response-receipt-note text-xs">此份填答不會與你的身分連結。</p>
           )}
@@ -1886,12 +1882,7 @@ export default function SurveyDetailClient({
                   : "你尚未填寫過此問卷，以下為問卷題目。"}
               </p>
             </section>
-          ) : (
-            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-              標示 <span className="font-semibold" style={{ color: "var(--danger)" }}>「必填」</span>
-              的題目須完成後才能送出。
-            </p>
-          )}
+          ) : null}
           {!isReadOnly && (!survey.is_anonymous || myResponses.length > 0) && (
             <section
               className="space-y-3 rounded-xl px-4 py-3"
@@ -1905,10 +1896,11 @@ export default function SurveyDetailClient({
                       <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
                         {editingResponseId ? "正在修改既有回答" : "正在填寫新的一份回答"}
                       </p>
-                      <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
-                        這份問卷允許多次提交，你可以新增回答，也可以修改自己的既有回答。
-                        {survey.is_anonymous && " 匿名回答僅能在這個瀏覽器中修改。"}
-                      </p>
+                      {survey.is_anonymous && (
+                        <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
+                          匿名回答僅能在這個瀏覽器中修改。
+                        </p>
+                      )}
                     </div>
                     {editingResponseId && (
                       <button type="button" onClick={addResponse} className="btn btn-ghost shrink-0 text-xs">
@@ -1940,7 +1932,7 @@ export default function SurveyDetailClient({
                     你已提交過這份問卷
                   </p>
                   <p className="mt-0.5 text-xs leading-5" style={{ color: "var(--text-muted)" }}>
-                    此問卷每人僅能提交一次。目前正在修改您前次的答案。
+                    此問卷每人僅能提交一次。目前正在修改你前次的答案。
                     {survey.is_anonymous && " 匿名回答僅能在這個瀏覽器中修改。"}
                   </p>
                 </div>
@@ -1959,15 +1951,12 @@ export default function SurveyDetailClient({
             <div className="survey-response-meter-track" aria-hidden="true">
               <span style={{ transform: `scaleX(${responseProgress})` }} />
             </div>
-            {answeredQuestionCount === questionCount && questionCount > 0 && (
-              <p>所有題目都已填答完成，可以送出了!</p>
-            )}
             <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
               {lastSavedAt
                 ? `已於 ${new Date(lastSavedAt).toLocaleTimeString("zh-TW", {
                   hour: "2-digit", minute: "2-digit", second: "2-digit",
                 })} 自動儲存到此裝置`
-                : "填答內容會自動儲存到裝置，不用擔心!"}
+                : "填答內容會自動儲存在此裝置"}
             </p>
           </aside>}
           <fieldset disabled={!isOpen} className="space-y-4 min-w-0">
@@ -2084,7 +2073,7 @@ export default function SurveyDetailClient({
           </div>}
           {!isReadOnly && survey.is_anonymous && (
             <p className="text-xs text-center" style={{ color: "var(--text-muted)" }}>
-              此為匿名問卷，您的身份不會公開
+              此為匿名問卷，你的身分不會公開
             </p>
           )}
         </form>

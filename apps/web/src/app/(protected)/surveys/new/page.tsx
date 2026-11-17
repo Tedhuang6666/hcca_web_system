@@ -53,10 +53,10 @@ const VALIDATION_RULES: { value: ValidationRule | ""; label: string }[] = [
 ];
 
 const SURVEY_STEPS: GuidedFormStepDefinition[] = [
-  { label: "基本資料", description: "說明這份問卷要蒐集什麼。" },
-  { label: "填答對象", description: "決定誰能看到與填寫問卷。" },
-  { label: "設計題目", description: "逐題加入內容，進階規則可稍後再調整。" },
-  { label: "確認發布", description: "檢查設定後儲存草稿或直接開放填答。" },
+  { label: "基本資料" },
+  { label: "填答對象" },
+  { label: "設計題目" },
+  { label: "確認發布" },
 ];
 
 type CondRule = { question_id: string; operator: string; value: string; connector: string };
