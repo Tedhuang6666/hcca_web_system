@@ -11,6 +11,7 @@ from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.audit import set_audit_actor
 from api.core.auth_cookies import access_token_from_cookies
 from api.core.config import settings
 from api.core.database import get_db
@@ -181,6 +182,7 @@ async def get_current_user(
 
     # 供 SecurityAuditMiddleware 在回應後記錄操作者；只放識別資料，不保留 ORM 物件。
     request.state.user = SimpleNamespace(id=user.id, email=user.email)
+    set_audit_actor(str(user.id), user.email)
     return user
 
 
