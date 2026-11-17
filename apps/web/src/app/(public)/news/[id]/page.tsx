@@ -83,7 +83,7 @@ export default async function PublicNewsDetailPage({
                 </span>
               )}
               <time dateTime={item.published_at ?? item.created_at}>
-                {new Date(item.published_at ?? item.created_at).toLocaleString("zh-TW")}
+                {new Date(item.published_at ?? item.created_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}
               </time>
             </div>
             <h1 className="text-3xl font-bold leading-tight">{item.title}</h1>

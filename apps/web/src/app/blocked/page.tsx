@@ -72,7 +72,7 @@ function BlockedContent() {
               <div className="mt-1 whitespace-pre-wrap text-sm font-medium">{reason}</div>
               <div className="mt-4 flex items-center gap-2 text-sm text-[var(--text-secondary)]">
                 <Clock size={15} aria-hidden />
-                {until ? `預計解除：${new Date(until * 1000).toLocaleString()}` : "封鎖期限：永久"}
+                {until ? `預計解除：${new Date(until * 1000).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}` : "封鎖期限：永久"}
               </div>
             </div>
 

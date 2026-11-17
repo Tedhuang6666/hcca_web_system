@@ -80,12 +80,10 @@ function EditableField({
             onKeyDown={e => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") setEditing(false); }}
             autoFocus
           />
-          <button onClick={handleSave} disabled={saving} className="btn btn-primary text-xs px-3 py-1.5"
-            style={{ minHeight: "auto" }}>
-            {saving ? "…" : "儲存"}
+          <button type="button" onClick={handleSave} disabled={saving} className="btn btn-primary">
+            {saving ? "儲存中…" : "儲存"}
           </button>
-          <button onClick={() => setEditing(false)} className="btn btn-ghost text-xs px-3 py-1.5"
-            style={{ minHeight: "auto" }}>
+          <button type="button" onClick={() => setEditing(false)} className="btn btn-ghost">
             取消
           </button>
         </div>
@@ -95,9 +93,10 @@ function EditableField({
             {value || placeholder || "—"}
           </p>
           <button
+            type="button"
             onClick={() => { setDraft(value); setEditing(true); }}
-            className="text-xs opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 rounded"
-            style={{ color: "var(--primary-text)" }}>
+            className="btn btn-ghost"
+            aria-label={`編輯${label}`}>
             編輯
           </button>
         </div>

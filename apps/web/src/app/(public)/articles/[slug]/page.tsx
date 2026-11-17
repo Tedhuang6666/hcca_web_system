@@ -84,7 +84,7 @@ export default async function ArticleDetailPage({ params }: { params: Promise<{ 
               <h1>{page.title}</h1>
               {!examScope && page.summary && <p className="public-article-detail-summary">{page.summary}</p>}
               <div className="public-article-meta">
-                <time dateTime={page.updated_at}>更新於 {new Date(page.updated_at).toLocaleDateString("zh-TW")}</time>
+                <time dateTime={page.updated_at}>更新於 {new Date(page.updated_at).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" })}</time>
                 <span aria-hidden="true">·</span>
                 <span><Clock3 size={14} aria-hidden /> 約 {readingTime} 分鐘閱讀</span>
               </div>

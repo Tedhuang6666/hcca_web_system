@@ -78,7 +78,7 @@ export default async function PublicPetitionDetailPage({ params }: PublicPetitio
             {item.title}
           </h1>
           <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>
-            公開於 {new Intl.DateTimeFormat("zh-TW", { dateStyle: "medium" }).format(new Date(item.published_at))}
+            公開於 {new Intl.DateTimeFormat("zh-TW", { dateStyle: "medium", timeZone: "Asia/Taipei" }).format(new Date(item.published_at))}
           </p>
         </header>
         <section className="card p-5 space-y-4">

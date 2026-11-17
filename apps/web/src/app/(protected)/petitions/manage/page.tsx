@@ -12,6 +12,7 @@ import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import PetitionAttachmentList from "@/components/petitions/PetitionAttachmentList";
 import { orgDisplayName } from "@/lib/orgs";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { PetitionPublicDiff } from "@/components/petitions/PetitionPublicConsent";
 import { PetitionConfidentialBlocked } from "@/components/petitions/PetitionConfidentialBlocked";
 import { PetitionConfidentialReasonEditor } from "@/components/petitions/PetitionConfidentialReasonEditor";
@@ -54,7 +55,15 @@ const PET_LIST_KEY = "petitions/manage/list:confidential-scope-v2";
 const PET_STATS_KEY = "petitions/manage/stats";
 const PET_ORGS_KEY = "petitions/manage/orgs";
 
+const ACTION_CONFIRM: Record<string, { title: string; description: string; confirmLabel: string; danger?: boolean }> = {
+  reject: { title: "駁回／不受理此案件？", description: "駁回原因會通知陳情人。", confirmLabel: "駁回", danger: true },
+  close: { title: "結案？", description: "陳情人會收到結案通知。", confirmLabel: "結案" },
+  reply: { title: "送出正式回覆並完成？", description: "回覆會通知陳情人，案件標示為完成。", confirmLabel: "送出回覆" },
+  transfer: { title: "轉派至其他機關？", description: "案件會移交給選定的機關。", confirmLabel: "確認轉派" },
+};
+
 export default function PetitionManagePage() {
+  const confirm = useConfirm();
   const [items, setItems] = useState<PetitionCaseListItem[]>(() => cacheGet<PetitionCaseListItem[]>(PET_LIST_KEY) ?? []);
   const [selected, setSelected] = useState<PetitionCaseOut | null>(null);
   const [stats, setStats] = useState<PetitionStatsOut | null>(() => cacheGet<PetitionStatsOut>(PET_STATS_KEY) ?? null);
@@ -330,6 +339,8 @@ export default function PetitionManagePage() {
 
   const run = async (action: string) => {
     if (!selected || busy) return;
+    const confirmation = ACTION_CONFIRM[action];
+    if (confirmation && !(await confirm(confirmation))) return;
     setBusy(true);
     try {
       let updated: PetitionCaseOut;

@@ -3,7 +3,6 @@
 import NumberInput from "@/components/ui/NumberInput";
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
@@ -1178,24 +1177,16 @@ function ComposeInner() {
   return (
     <div className="mx-auto max-w-6xl space-y-5">
       <header className="flex flex-col gap-1">
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold">寄送電子郵件</h1>
-          <div className="flex flex-wrap gap-1">
-            <Link href="/email/templates" className="btn btn-ghost btn-sm">範本</Link>
-            <Link href="/email/lists" className="btn btn-ghost btn-sm">名單</Link>
-            <Link href="/email/analytics" className="btn btn-ghost btn-sm">分析</Link>
-            <Link href="/email/logs" className="btn btn-ghost btn-sm">寄信紀錄</Link>
-          </div>
-        </div>
+        <h1 className="text-xl font-semibold">寄送電子郵件</h1>
         {activeDraftId && (
           <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-            雲端草稿，儲存後可跨裝置編輯。
+            正在編輯雲端草稿
           </p>
         )}
       </header>
 
       <nav className="card overflow-x-auto p-2" aria-label="寄信步驟">
-        <ol className="grid min-w-[760px] grid-cols-5 gap-1">
+        <ol className="grid grid-cols-5 gap-1">
           {COMPOSE_STEPS.map((step) => {
             const active = currentStep === step.number;
             const completed = currentStep > step.number;
@@ -1203,7 +1194,7 @@ function ComposeInner() {
               <li key={step.number}>
                 <button
                   type="button"
-                  className="w-full rounded-lg px-3 py-2 text-left transition-colors"
+                  className="min-h-11 w-full rounded-lg px-2 py-2 text-left transition-colors"
                   disabled={step.number > currentStep + 1}
                   style={{
                     background: active ? "var(--primary-dim)" : "transparent",
@@ -1214,10 +1205,8 @@ function ComposeInner() {
                   onClick={() => setCurrentStep(step.number)}
                 >
                   <span className="block text-xs font-semibold">
-                    {completed ? "完成" : `步驟 ${step.number}`} · {step.label}
-                  </span>
-                  <span className="mt-0.5 block text-[11px]" style={{ color: "var(--text-muted)" }}>
-                    {step.description}
+                    <span className="tabular-nums">{step.number}</span> {step.label}
+                    {completed && <span className="sr-only">（已完成）</span>}
                   </span>
                 </button>
               </li>
@@ -2381,14 +2370,14 @@ function ComposeInner() {
             </div>
             {lastSavedAt && (
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                ✓ 內容已自動暫存於本機，重新整理或關閉分頁也不會遺失
+                已暫存於此裝置
               </p>
             )}
           </section>
         </div>
       </div>
 
-      <div className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-20 flex items-center justify-between rounded-xl border p-3 shadow-lg backdrop-blur lg:bottom-3" style={{ background: "color-mix(in srgb, var(--bg-surface) 92%, transparent)", borderColor: "var(--border)" }}>
+      <div className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-20 flex items-center justify-between rounded-lg border p-3 lg:bottom-3" style={{ background: "var(--bg-surface)", borderColor: "var(--border-strong)" }}>
         <button
           type="button"
           className="btn btn-ghost btn-sm"
@@ -2405,9 +2394,9 @@ function ComposeInner() {
             {currentStep === 4 ? "完成檢查" : "下一步"}
           </button>
         ) : (
-          <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-            請在上方確認寄送方式
-          </span>
+          <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={handleSend}>
+            立即寄送
+          </button>
         )}
       </div>
 
