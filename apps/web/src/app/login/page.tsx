@@ -174,7 +174,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
               href={googleLoginHref}
               data-no-prefetch="true"
               data-full-navigation="true"
-              className="login-oauth group flex h-13 w-full cursor-pointer items-center justify-between rounded-xl px-4 text-sm font-semibold transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2"
+              className="login-oauth group flex h-13 w-full cursor-pointer items-center justify-between rounded-lg px-4 text-sm font-semibold transition-[border-color,background-color] duration-200 focus-visible:outline-2 focus-visible:outline-offset-2"
               style={{
                 background: "var(--primary)",
                 color: "var(--primary-fg)",
@@ -210,7 +210,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
               href={discordLoginHref}
               data-no-prefetch="true"
               data-full-navigation="true"
-              className="login-oauth group flex h-13 w-full cursor-pointer items-center justify-between rounded-xl px-4 text-sm font-semibold transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2"
+              className="login-oauth group flex h-13 w-full cursor-pointer items-center justify-between rounded-lg px-4 text-sm font-semibold transition-[border-color,background-color] duration-200 focus-visible:outline-2 focus-visible:outline-offset-2"
               style={{
                 background: "var(--bg-elevated)",
                 color: "var(--text-primary)",

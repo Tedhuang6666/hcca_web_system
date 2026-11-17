@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { startAuthentication } from "@simplewebauthn/browser";
-import { CheckCircle2, KeyRound, ShieldCheck } from "lucide-react";
+import { CheckCircle2, KeyRound } from "lucide-react";
 import { authApi, mfaApi, apiErrorMessage } from "@/lib/api";
 import { cacheCurrentUser } from "@/lib/auth-cache";
 import { safeNextPath } from "@/lib/safe-redirect";
@@ -99,17 +99,10 @@ export default function MFALoginPage() {
       style={{ background: "var(--bg-base)" }}
     >
       <main
-        className="w-full max-w-md animate-slide-in rounded-2xl p-6 sm:p-8"
-        style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", boxShadow: "var(--shadow-lg)" }}
+        className="w-full max-w-md rounded-lg p-6 sm:p-8"
+        style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
       >
         <div className="mb-8">
-          <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-xl"
-            style={{
-              background: "color-mix(in srgb, var(--primary) 12%, var(--bg-surface))",
-              color: "var(--primary-text)",
-            }}>
-            <ShieldCheck size={23} aria-hidden="true" />
-          </div>
           <h1 className="text-xl font-bold" style={{ color: "var(--text-primary)" }}>
             完成安全驗證
           </h1>
@@ -191,12 +184,6 @@ export default function MFALoginPage() {
 
         <button
           className="btn btn-primary mt-5 w-full"
-          style={{
-            background: "var(--primary)",
-            borderColor: "var(--primary)",
-            color: "var(--primary-fg)",
-            boxShadow: "0 4px 18px color-mix(in srgb, var(--primary) 24%, transparent)",
-          }}
           disabled={submitting || passkeySubmitting || !challenge || !codeComplete}
           onClick={() => void submit()}>
           {submitting ? "驗證中" : "完成登入"}

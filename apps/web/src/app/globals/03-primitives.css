@@ -65,41 +65,12 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 }
 
 .card-hover {
-  position: relative;
-  overflow: hidden;
   cursor: pointer;
-  transition:
-    box-shadow var(--transition),
-    border-color var(--transition),
-    transform var(--transition),
-    border-left-color var(--transition);
-  border-left: 2px solid transparent;
+  transition: background-color var(--transition), border-color var(--transition);
 }
 .card-hover:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
   border-color: var(--border-strong);
-  border-left-color: var(--primary);
-}
-.card-hover::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: -72%;
-  width: 42%;
-  height: 100%;
-  pointer-events: none;
-  transform: skewX(-18deg);
-  background: linear-gradient(
-    100deg,
-    transparent,
-    color-mix(in srgb, var(--bg-elevated) 62%, transparent),
-    transparent
-  );
-  opacity: 0;
-}
-.card-hover:hover::after {
-  animation: surface-sheen 760ms ease;
+  background: color-mix(in srgb, var(--bg-hover) 46%, var(--bg-surface));
 }
 
 .announcement-expired {
@@ -134,25 +105,6 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
     transform var(--transition);
   user-select: none;
   text-decoration: none;
-}
-.btn::after,
-.btn-sm::after,
-.btn-lg::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: -85%;
-  width: 46%;
-  height: 100%;
-  pointer-events: none;
-  transform: skewX(-20deg);
-  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.42), transparent);
-  opacity: 0;
-}
-.btn:hover:not(:disabled)::after,
-.btn-sm:hover:not(:disabled)::after,
-.btn-lg:hover:not(:disabled)::after {
-  animation: control-sheen 640ms ease;
 }
 .btn:active:not(:disabled) { transform: scale(0.97); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -1547,71 +1499,6 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
   }
 }
 
-/* ── 頁面頂端滾動進度條（JS 控制 width） ─────────────────────────────── */
-.scroll-progress-bar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  height: 2.5px;
-  width: 100%;
-  background: linear-gradient(90deg, #c9a84c 0%, #9b6dd1 100%);
-  z-index: 9999;
-  transform: scaleX(0);
-  transform-origin: left center;
-  transition: transform 0.1s linear;
-  border-radius: 0 2px 2px 0;
-  pointer-events: none;
-}
-
-/* ── 懸浮球（呼吸動畫，右下角） ──────────────────────────────────────── */
-.float-btn {
-  position: fixed;
-  right: 1.5rem;
-  bottom: 1.5rem;
-  width: 3rem;
-  height: 3rem;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #c9a84c 0%, #a0744a 50%, #8b5cf6 100%);
-  box-shadow: 0 4px 20px rgba(201,168,76,0.45);
-  cursor: pointer;
-  border: none;
-  color: #fff;
-  z-index: 500;
-  transition: box-shadow 0.2s ease, transform 0.2s ease;
-}
-.float-btn:hover {
-  animation-play-state: paused;
-  transform: scale(1.08);
-  box-shadow: 0 6px 28px rgba(201,168,76,0.55);
-}
-
-/* ── Hero 區塊輔助 ────────────────────────────────────────────────────── */
-.hero-bg {
-  background:
-    radial-gradient(ellipse 60% 40% at 50% 100%, rgba(201,168,76,0.18) 0%, transparent 70%),
-    linear-gradient(135deg, #0f1117 0%, #1a1d27 50%, #0f1117 100%);
-  position: relative;
-  overflow: hidden;
-}
-/* 點狀網格紋理 */
-.hero-bg::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image: radial-gradient(rgba(201,168,76,0.12) 1px, transparent 1px);
-  background-size: 24px 24px;
-  pointer-events: none;
-}
-
-/* ── 金色強調線 ───────────────────────────────────────────────────────── */
-.gold-line {
-  border-left: 3px solid var(--primary);
-  padding-left: 0.75rem;
-}
-
 /* ── 法規條文：唯讀展示行（LawArticleRow，用於詳細頁）──────────────────── */
 
 .law-row-shell {
@@ -1978,26 +1865,13 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
   [data-just-moved="true"] .law-tree-row { animation: none; }
 }
 
-
-
-
 /* 預設（auto / bottom）：手機由底部 sheet 滑入 */
-
-
 
 /* right：兩端固定，從右側滑入 */
 
-
-
 /* left：兩端固定，從左側滑入 */
 
-
-
-
-
-
 /* 減少動態時關閉滑入動畫 */
-
 
 /* ── 毛玻璃表面 ───────────────────────────────────────────────────────── */
 .glass {

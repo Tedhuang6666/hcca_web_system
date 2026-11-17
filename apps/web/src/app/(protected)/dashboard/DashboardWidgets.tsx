@@ -63,7 +63,6 @@ function WidgetCard({ widget, index }: { widget: DashboardWidget; index: number 
     <section
       aria-labelledby={`widget-${widget.key}`}
       className="dashboard-widget card overflow-hidden flex flex-col"
-      style={{ animationDelay: `${Math.min(index * 55, 330)}ms` }}
     >
       <header
         className="px-5 py-4 flex items-center justify-between gap-3"
@@ -95,20 +94,10 @@ function WidgetCard({ widget, index }: { widget: DashboardWidget; index: number 
               </p>
             )}
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
-              <span
-                className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
-                style={{
-                  color: severity.color,
-                  background: severity.bg,
-                  border: `1px solid ${severity.border}`,
-                }}
-              >
-                優先 {widget.priority_score}
-              </span>
               {widget.priority_reasons.slice(0, 1).map((reason) => (
                 <span
                   key={reason}
-                  className="rounded px-1.5 py-0.5 text-[10px]"
+                  className="rounded px-1.5 py-0.5 text-xs"
                   style={{ color: "var(--text-secondary)", background: "var(--bg-hover)" }}
                 >
                   {reason}

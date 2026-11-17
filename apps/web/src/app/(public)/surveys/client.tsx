@@ -1,5 +1,5 @@
 "use client";
-import { useState, type CSSProperties } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { ApiError } from "@/lib/api";
 import { surveysApi } from "@/lib/api/surveys";
@@ -174,7 +174,7 @@ export default function SurveysClient({
           key={`${tab}:${sortKey}:${search}`}
           className="survey-list-results space-y-3"
         >
-          {displayed.map((survey, index) => {
+          {displayed.map((survey) => {
             const cfg = STATUS_CFG[survey.status];
             const isOpen = survey.status === "open";
             return (
@@ -182,37 +182,23 @@ export default function SurveysClient({
                 key={survey.id}
                 href={`/surveys/${encodeURIComponent(survey.title)}`}
                 className="survey-list-card card card-hover flex items-center gap-4 px-5 py-4"
-                style={{
-                  textDecoration: "none",
-                  ["--survey-index" as string]: index,
-                } as CSSProperties}>
-
-                {/* 狀態圓點 */}
-                <div
-                  className="w-2 h-2 rounded-full flex-shrink-0"
-                  style={{ background: cfg.color, opacity: isOpen ? 1 : 0.4 }}
-                  aria-hidden="true" />
+                style={{ textDecoration: "none" }}>
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>
                       {survey.title}
                     </h3>
-                    {isOpen && (
-                      <span className="survey-live-indicator">
-                        正在收集
-                      </span>
-                    )}
                     {survey.is_anonymous && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded font-medium"
-                        style={{ background: "var(--info-dim)", color: "var(--info)" }}>
+                      <span className="text-xs px-1.5 py-0.5 rounded"
+                        style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
                         匿名
                       </span>
                     )}
                   </div>
                   <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
                     {survey.response_count} 份回應
-                    {survey.closes_at && ` · 截止 ${new Date(survey.closes_at).toLocaleDateString("zh-TW")}`}
+                    {survey.closes_at && ` · 截止 ${new Date(survey.closes_at).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" })}`}
                   </p>
                 </div>
 
@@ -223,7 +209,7 @@ export default function SurveysClient({
                 </span>
 
                 <span className="survey-list-card-route" aria-hidden="true">
-                  填答
+                  {isOpen ? "填答" : "查看"}
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                     strokeWidth="2" strokeLinecap="round">
                     <polyline points="9 18 15 12 9 6" />
