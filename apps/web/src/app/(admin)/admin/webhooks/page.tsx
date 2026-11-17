@@ -286,8 +286,8 @@ export default function WebhooksPage() {
                   className="border-b border-[var(--border)]"
                   style={{ opacity: s.is_active ? 1 : 0.5 }}>
                   <td className="px-3 py-2">{s.name}</td>
-                  <td className="px-3 py-2 break-all font-mono text-[10px]">{s.url}</td>
-                  <td className="px-3 py-2 font-mono text-[10px]">{s.events.join(", ")}</td>
+                  <td className="px-3 py-2 break-all font-mono text-xs">{s.url}</td>
+                  <td className="px-3 py-2 font-mono text-xs">{s.events.join(", ")}</td>
                   <td className="px-3 py-2 text-right">{s.max_retries}</td>
                   <td className="px-3 py-2 text-center">
                     <button
@@ -339,7 +339,7 @@ export default function WebhooksPage() {
             {deliveriesFor.items.length === 0 ? (
               <p className="text-sm text-[var(--text-muted)]">尚無投遞。</p>
             ) : (
-              <table className="w-full text-[11px]">
+              <table className="w-full text-xs">
                 <thead className="text-[var(--text-secondary)]">
                   <tr className="border-b border-[var(--border)]">
                     <th className="py-1 text-left">event</th>

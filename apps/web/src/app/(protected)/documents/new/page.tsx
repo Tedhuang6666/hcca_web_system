@@ -1151,7 +1151,7 @@ export default function NewDocumentPage() {
                   <li key={r.id}
                     className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg"
                     style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-                    <span className="badge text-[10px] flex-shrink-0"
+                    <span className="badge text-xs flex-shrink-0"
                       style={{ color: "var(--primary-text)", background: "var(--primary-dim)", borderColor: "var(--primary-dim)" }}>
                       {isNotice
                         ? { main: "受文者", attendee: "出席者", observer: "列席者", primary: "正本（出席）", copy: "副本" }[r.recipient_type] ?? r.recipient_type
@@ -1174,7 +1174,7 @@ export default function NewDocumentPage() {
                               }
                             : recipient
                         )))}
-                        className="min-h-11 rounded px-2 text-[10px]"
+                        className="min-h-11 rounded px-2 text-xs"
                         style={{
                           color: r.delivery_method === "email" ? "var(--primary-text)" : "var(--text-muted)",
                           background: r.delivery_method === "email" ? "var(--primary-dim)" : "var(--bg-surface)",
@@ -1249,7 +1249,7 @@ export default function NewDocumentPage() {
                     <span className="flex-1 truncate" style={{ color: "var(--text-primary)" }}>
                       {lnk.display_text || lnk.url}
                     </span>
-                    <span className="truncate max-w-40 text-[10px]" style={{ color: "var(--text-muted)" }}>{lnk.url}</span>
+                    <span className="truncate max-w-40 text-xs" style={{ color: "var(--text-muted)" }}>{lnk.url}</span>
                     <button onClick={() => setPendingLinks(p => p.filter(x => x.id !== lnk.id))}
                       className="flex min-h-11 min-w-11 flex-shrink-0 items-center justify-center transition-colors hover:text-red-500"
                       style={{ color: "var(--text-muted)" }}
@@ -1346,7 +1346,7 @@ export default function NewDocumentPage() {
                 </div>
                 <div className="rounded-xl px-4 py-3 text-center"
                   style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-                  <p className="text-[10px] mb-1" style={{ color: "var(--text-muted)" }}>發文後字號預覽</p>
+                  <p className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>發文後字號預覽</p>
                   <p className="text-sm font-mono font-bold" style={{ color: "var(--primary-text)" }}>
                     {selectedTemplate ? selectedTemplate.preview : "尚未設定正式字號"}
                   </p>

@@ -25,7 +25,7 @@
   margin: 0 0 1rem;
   color: var(--public-accent-text);
   font-size: 0.76rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.08em;
 }
 
@@ -147,7 +147,7 @@
   margin-top: 2rem;
   color: var(--public-accent-text);
   font-size: 0.88rem;
-  font-weight: 800;
+  font-weight: 700;
   text-underline-offset: 0.25em;
 }
 
@@ -311,7 +311,7 @@
   margin: 0;
   color: var(--public-text);
   font-size: clamp(2.25rem, 5.2vw, 4.25rem);
-  font-weight: 780;
+  font-weight: 700;
   letter-spacing: -0.035em;
   line-height: 1.1;
 }
@@ -377,7 +377,7 @@
   margin-bottom: 0.75rem;
   color: var(--public-text);
   font-size: 0.78rem;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .public-article-toc nav {
@@ -460,7 +460,7 @@
 
 .article-markdown strong {
   color: var(--public-text);
-  font-weight: 760;
+  font-weight: 700;
 }
 
 .article-markdown a {
@@ -637,7 +637,7 @@
   margin-bottom: 0.55rem;
   color: var(--public-secondary);
   font-size: 0.75rem;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .exam-scope-choice-row {
@@ -734,7 +734,7 @@
   border-bottom: 1px solid var(--public-border);
   color: var(--public-accent-text);
   font-size: 0.92rem;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .exam-scope-entries {
@@ -755,7 +755,7 @@
   margin: 0 0 0.75rem;
   color: var(--public-text);
   font-size: 1rem;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .exam-scope-entry .article-markdown {

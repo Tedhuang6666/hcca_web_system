@@ -124,7 +124,7 @@
 .article-editor-preview .article-markdown h1 { font-size: 1.6rem; }
 .article-editor-preview .article-markdown h2 { margin-top: 2rem; font-size: 1.35rem; }
 .article-editor-preview .article-markdown h3 { margin-top: 1.5rem; font-size: 1.1rem; }
-.article-editor-preview .article-markdown strong { color: var(--text-primary); font-weight: 750; }
+.article-editor-preview .article-markdown strong { color: var(--text-primary); font-weight: 700; }
 .article-editor-preview .article-markdown ul,
 .article-editor-preview .article-markdown ol { padding-left: 1.5rem; }
 .article-editor-preview .article-markdown a { color: var(--primary-text); text-underline-offset: 0.2em; }
@@ -245,7 +245,7 @@
   margin: 0;
   color: inherit;
   font-size: 1.08rem;
-  font-weight: 750;
+  font-weight: 700;
   line-height: 1.4;
   text-wrap: balance;
 }
@@ -697,7 +697,7 @@
 .animated-upload__name {
   overflow: hidden;
   font-size: 0.76rem;
-  font-weight: 650;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -893,7 +893,7 @@
   background: #F59E0B;
   color: #fff;
   font-size: 8px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1;
   transform: rotate(45deg);
 }
@@ -990,7 +990,7 @@
   padding: 0.35rem 0.65rem;
   color: var(--text-secondary);
   font-size: 0.75rem;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .partner-map-control-toggle svg {
@@ -1073,7 +1073,7 @@
   background: var(--bg-elevated);
   border-color: var(--border-strong);
   color: var(--text-primary);
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .partner-map-theme-dark .partner-map-mobile-controls,

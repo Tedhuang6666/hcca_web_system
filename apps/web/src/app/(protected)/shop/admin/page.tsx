@@ -1885,7 +1885,7 @@ export default function ShopAdminPage() {
         <Thumb url={item.image_url} size={34} />
         <span className="flex-1 min-w-0">
           <span className="block break-words text-sm font-medium">{item.name}</span>
-          <span className="block text-[11px] truncate" style={{ color: "var(--text-muted)" }}>
+          <span className="block text-xs truncate" style={{ color: "var(--text-muted)" }}>
             NT${item.price.toLocaleString()} · {STATUS_LABEL[item.status] ?? item.status} · {item.variant_groups.length} 組規格
           </span>
         </span>
@@ -2031,7 +2031,7 @@ export default function ShopAdminPage() {
               <div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom: "1px solid var(--border)" }}>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>活動</p>
-                  <p className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>{categories.length} 個活動</p>
+                  <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{categories.length} 個活動</p>
                 </div>
                 <MiniBtn tone="primary" onClick={() => setCatModal({ initial: null })}>新增活動</MiniBtn>
               </div>
@@ -2046,7 +2046,7 @@ export default function ShopAdminPage() {
                       <Thumb url={c.image_url} size={34} />
                       <span className="flex-1 min-w-0">
                         <span className="block text-sm font-medium truncate">{c.name}</span>
-                        <span className="block text-[11px] truncate" style={{ color: "var(--text-muted)" }}>
+                        <span className="block text-xs truncate" style={{ color: "var(--text-muted)" }}>
                           {c.description || "無描述"}
                         </span>
                       </span>

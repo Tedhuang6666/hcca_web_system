@@ -189,7 +189,7 @@ export default function Combobox({
                     <>
                       <p className="text-sm">{opt.label}</p>
                       {opt.description && (
-                        <p className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>
+                        <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
                           {opt.description}
                         </p>
                       )}

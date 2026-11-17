@@ -282,7 +282,7 @@ export default function DocumentDelegationsPage() {
                             {delegation.principal_user.name} → {delegation.delegate_user.name}
                           </span>
                           <span
-                            className="text-[11px] px-2 py-0.5 rounded-full"
+                            className="text-xs px-2 py-0.5 rounded-full"
                             style={{
                               color: delegation.is_active ? "var(--success)" : "var(--text-muted)",
                               background: delegation.is_active ? "var(--success-dim)" : "var(--bg-surface)",

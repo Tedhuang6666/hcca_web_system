@@ -100,7 +100,7 @@ export function OrganizationEmailRecipientSettings({
               <span className="text-xs font-medium" style={{ color: "var(--text-primary)" }}>
                 {recipient.name}
               </span>
-              <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+              <span className="text-xs" style={{ color: "var(--text-muted)" }}>
                 {selected.size ? `已選 ${selected.size} 個職位` : "未設定通知職位"}
               </span>
             </div>

@@ -743,7 +743,7 @@ export default function EditDocumentPage() {
                         ? { ...x, delivery_method: x.delivery_method === "email" ? "none" : "email" }
                         : x
                     )))}
-                    className="min-h-11 rounded px-2 text-[10px]"
+                    className="min-h-11 rounded px-2 text-xs"
                     style={{
                       color: r.delivery_method === "email" ? "var(--primary-text)" : "var(--text-muted)",
                       background: r.delivery_method === "email" ? "var(--primary-dim)" : "var(--bg-surface)",
@@ -859,7 +859,7 @@ export default function EditDocumentPage() {
                 </select>
                 <div className="rounded-lg px-3 py-2.5 text-center"
                   style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-strong)" }}>
-                  <p className="text-[10px] mb-1" style={{ color: "var(--text-muted)" }}>發文後字號預覽</p>
+                  <p className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>發文後字號預覽</p>
                   <p className="text-sm font-mono font-semibold" style={{ color: "var(--primary-text)" }}>
                     {selectedTemplate?.preview ?? "尚未設定正式字號"}
                   </p>

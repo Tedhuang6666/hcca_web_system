@@ -156,7 +156,7 @@ function MobileNavSlot({
       }}
     >
       <span
-        className="absolute left-2 top-2 text-[10px] font-semibold"
+        className="absolute left-2 top-2 text-xs font-semibold"
         style={{ color: selected ? "var(--primary-text)" : "var(--text-muted)" }}
       >
         {String(slotIndex + 1).padStart(2, "0")}
@@ -187,7 +187,7 @@ function EmptyMobileNavSlot({ slotIndex, onClick }: { slotIndex: number; onClick
       className="relative flex aspect-square flex-col items-center justify-center gap-2 rounded-xl border border-dashed p-3 text-center transition-colors"
       style={{ borderColor: "var(--border-strong)", color: "var(--text-muted)" }}
     >
-      <span className="absolute left-2 top-2 text-[10px] font-semibold">
+      <span className="absolute left-2 top-2 text-xs font-semibold">
         {String(slotIndex + 1).padStart(2, "0")}
       </span>
       <Plus size={22} aria-hidden={true} />
@@ -250,7 +250,7 @@ function MobileNavPicker({
               {isCurrent ? (
                 <Check size={16} aria-label="目前選取" style={{ color: "var(--primary-text)" }} />
               ) : selectedIndex >= 0 ? (
-                <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                <span className="text-xs" style={{ color: "var(--text-muted)" }}>
                   第 {selectedIndex + 1} 格
                 </span>
               ) : null}

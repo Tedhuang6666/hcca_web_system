@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
 import QRCode from "qrcode";
@@ -242,13 +241,8 @@ export default function SecuritySettingsPage() {
         </div>
       )}
 
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold">安全設定</h1>
-        </div>
-        <Link href="/settings/account" className="btn btn-ghost">
-          回帳號設定
-        </Link>
+      <header>
+        <h1 className="text-xl font-semibold">安全設定</h1>
       </header>
 
       <section className="card overflow-hidden">

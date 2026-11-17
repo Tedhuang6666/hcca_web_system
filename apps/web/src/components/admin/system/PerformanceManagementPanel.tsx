@@ -460,7 +460,7 @@ function ArticleAnalyticsSection({
               </p>
             ) : recentDays.map((item) => (
               <div key={item.date} className="flex min-w-0 flex-1 flex-col items-center gap-2">
-                <span className="text-[10px] font-medium tabular-nums" style={{ color: "var(--text-secondary)" }}>
+                <span className="text-xs font-medium tabular-nums" style={{ color: "var(--text-secondary)" }}>
                   {item.views}
                 </span>
                 <div
@@ -471,7 +471,7 @@ function ArticleAnalyticsSection({
                   }}
                   title={`${item.date}：${item.views} 次閱讀，${item.unique_visitors} 位訪客`}
                 />
-                <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+                <span className="text-xs" style={{ color: "var(--text-muted)" }}>
                   {item.date.slice(5)}
                 </span>
               </div>
@@ -540,13 +540,13 @@ function ArticleAnalyticsSection({
                     style={{ textDecoration: "none" }}
                   >
                     <p className="truncate text-sm font-medium">{item.title}</p>
-                    <p className="mt-0.5 truncate font-mono text-[11px]" style={{ color: "var(--text-muted)" }}>
+                    <p className="mt-0.5 truncate font-mono text-xs" style={{ color: "var(--text-muted)" }}>
                       /articles/{item.slug}
                     </p>
                   </Link>
                   <div className="shrink-0 text-right">
                     <p className="text-sm font-semibold tabular-nums">{number.format(item.views)} 次</p>
-                    <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                    <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                       {number.format(item.unique_visitors)} 位訪客
                     </p>
                   </div>
@@ -624,7 +624,7 @@ function ProductAnalyticsSection({
               <p className="self-center text-sm" style={{ color: "var(--text-muted)" }}>目前沒有帳號資料。</p>
             ) : recentDays.map((item) => (
               <div key={item.date} className="flex min-w-0 flex-1 flex-col items-center gap-2">
-                <span className="text-[10px] font-medium tabular-nums" style={{ color: "var(--text-secondary)" }}>
+                <span className="text-xs font-medium tabular-nums" style={{ color: "var(--text-secondary)" }}>
                   {item.count}
                 </span>
                 <div
@@ -635,7 +635,7 @@ function ProductAnalyticsSection({
                   }}
                   title={`${item.date}：${item.count} 個帳號`}
                 />
-                <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+                <span className="text-xs" style={{ color: "var(--text-muted)" }}>
                   {item.date.slice(5)}
                 </span>
               </div>
@@ -652,11 +652,11 @@ function ProductAnalyticsSection({
             <div className="flex gap-5 text-right">
               <div>
                 <p className="text-lg font-semibold tabular-nums">{number.format(data?.total_page_views ?? 0)}</p>
-                <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>總瀏覽</p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>總瀏覽</p>
               </div>
               <div>
                 <p className="text-lg font-semibold tabular-nums">{data?.active_pages ?? 0}</p>
-                <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>活躍頁面</p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>活躍頁面</p>
               </div>
             </div>
           </div>
@@ -667,7 +667,7 @@ function ProductAnalyticsSection({
                   <div className="flex items-center justify-between gap-3 text-sm">
                     <div className="min-w-0">
                       <p className="truncate font-medium">{item.label}</p>
-                      <p className="mt-0.5 truncate font-mono text-[11px]" style={{ color: "var(--text-muted)" }}>{item.path}</p>
+                      <p className="mt-0.5 truncate font-mono text-xs" style={{ color: "var(--text-muted)" }}>{item.path}</p>
                     </div>
                     <div className="flex shrink-0 items-baseline gap-3 text-right">
                       <span className="text-sm font-semibold tabular-nums">{number.format(item.views)}</span>
@@ -679,7 +679,7 @@ function ProductAnalyticsSection({
                   <div className="mt-2 h-1.5 overflow-hidden rounded-full" style={{ background: "var(--bg-hover)" }}>
                     <div className="h-full rounded-full" style={{ width: `${Math.max((item.views / maxViews) * 100, 3)}%`, background: "var(--primary)" }} />
                   </div>
-                  <p className="mt-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
+                  <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
                     {number.format(item.unique_visitors)} 位不重複使用者
                   </p>
                 </div>

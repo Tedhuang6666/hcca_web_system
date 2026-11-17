@@ -47,7 +47,7 @@ export default function OrgsPage() {
             <div className="flex items-center gap-2">
               <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{org.name}</p>
               {!org.is_active && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ color: "#f59e0b", border: "1px solid rgba(245,158,11,0.3)" }}>停用</span>
+                <span className="text-xs px-1.5 py-0.5 rounded" style={{ color: "#f59e0b", border: "1px solid rgba(245,158,11,0.3)" }}>停用</span>
               )}
             </div>
             {org.description && (

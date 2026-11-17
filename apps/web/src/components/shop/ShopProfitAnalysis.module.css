@@ -1,6 +1,6 @@
 .root { color: var(--text-primary); font-variant-numeric: tabular-nums; }
-.root h2 { font-size: 1.4rem; font-weight: 650; }
-.root h3 { font-size: 1.05rem; font-weight: 650; }
+.root h2 { font-size: 1.4rem; font-weight: 600; }
+.root h3 { font-size: 1.05rem; font-weight: 600; }
 .root p { font-size: .875rem; line-height: 1.7; }
 .root button, .root select, .root summary { min-height: 44px; }
 .root input, .root textarea { min-width: 0; width: 100%; font-size: 1rem; min-height: 44px; }
@@ -12,13 +12,13 @@
 .fields label { align-content: start; }
 .scope p { max-width: 65ch; color: var(--text-secondary); }
 .overview { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; padding-block: 2rem; margin-top: 1rem; border-block: 1px solid var(--border); }
-.balance strong { display: block; font-size: clamp(1.75rem, 3vw, 2.5rem); font-weight: 650; margin-block: .5rem; overflow-wrap: anywhere; }
+.balance strong { display: block; font-size: clamp(1.75rem, 3vw, 2.5rem); font-weight: 600; margin-block: .5rem; overflow-wrap: anywhere; }
 .balance p { max-width: 52ch; }
 .loss { color: var(--danger); }
 .accounts { display: grid; gap: .5rem; align-content: start; font-size: .875rem; }
 .accounts div { display: flex; justify-content: space-between; gap: 1rem; }
 .accounts dd { text-align: right; }
-.total { border-top: 1px solid var(--border); padding-top: .65rem; margin-top: .25rem; font-weight: 650; }
+.total { border-top: 1px solid var(--border); padding-top: .65rem; margin-top: .25rem; font-weight: 600; }
 .quantities { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1rem; padding-block: 1.25rem; border-bottom: 1px solid var(--border); }
 .quantities dt { font-size: .875rem; color: var(--text-secondary); }
 .quantities dd { font-size: 1.15rem; font-weight: 600; margin-top: .25rem; }

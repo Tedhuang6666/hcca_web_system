@@ -149,11 +149,11 @@ function NotificationCard({
         )}
         <div className="flex items-center gap-2 mt-1">
           <span
-            className="text-[10px] px-1.5 py-0.5 rounded"
+            className="text-xs px-1.5 py-0.5 rounded"
             style={{ color: meta.color, background: `color-mix(in srgb, ${meta.color} 9%, transparent)` }}>
             {meta.label}
           </span>
-          <span className="text-[10px]" style={{ color: "var(--text-disabled)" }}>
+          <span className="text-xs" style={{ color: "var(--text-disabled)" }}>
             {timeAgo(n.created_at, now)}
           </span>
         </div>

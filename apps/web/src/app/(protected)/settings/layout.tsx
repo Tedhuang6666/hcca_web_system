@@ -20,9 +20,6 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
   return (
     <div className="settings-page mx-auto max-w-6xl space-y-5">
       <header className="flex flex-col gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">帳號與設定</h1>
-        </div>
         <nav
           aria-label="設定分類"
           className="flex gap-1 overflow-x-auto rounded-lg p-1"

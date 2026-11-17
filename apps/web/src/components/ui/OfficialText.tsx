@@ -177,7 +177,7 @@ export function OfficialText({
                       <tr key={`${row.status}-${row.articleNo}-${rowIndex}`}>
                         <td>
                           <span
-                            className="inline-flex rounded px-1.5 py-0.5 text-[11px]"
+                            className="inline-flex rounded px-1.5 py-0.5 text-xs"
                             style={amendmentStatusStyle(row.status)}
                           >
                             {row.status}
@@ -197,7 +197,7 @@ export function OfficialText({
                   <article key={`${row.status}-${row.articleNo}-${rowIndex}`} className="official-amendment-card">
                     <div className="mb-2 flex flex-wrap items-center gap-2">
                       <span
-                        className="inline-flex rounded px-1.5 py-0.5 text-[11px]"
+                        className="inline-flex rounded px-1.5 py-0.5 text-xs"
                         style={amendmentStatusStyle(row.status)}
                       >
                         {row.status}

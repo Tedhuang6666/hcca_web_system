@@ -309,18 +309,18 @@ function FieldRow({
         <div className="flex items-center gap-2">
           <code className="text-xs font-medium text-[var(--text-primary)]">{field.key}</code>
           {field.is_secret && (
-            <span className="rounded bg-[var(--warning-dim)] px-1 py-0.5 text-[10px] font-medium text-[var(--warning)]">
+            <span className="rounded bg-[var(--warning-dim)] px-1 py-0.5 text-xs font-medium text-[var(--warning)]">
               密鑰
             </span>
           )}
           {dirty && (
-            <span className="rounded bg-[var(--primary-dim)] px-1 py-0.5 text-[10px] text-[var(--primary-text)]">
+            <span className="rounded bg-[var(--primary-dim)] px-1 py-0.5 text-xs text-[var(--primary-text)]">
               未儲存
             </span>
           )}
           {!field.in_file && (
             <span
-              className="rounded px-1 py-0.5 text-[10px] text-[var(--text-muted)]"
+              className="rounded px-1 py-0.5 text-xs text-[var(--text-muted)]"
               title="使用 schema 預設值，.env 內未設定">
               預設
             </span>
@@ -373,7 +373,7 @@ function FieldRow({
           </button>
         )}
         {field.is_secret && revealed && (
-          <span className="inline-flex items-center gap-1 text-[10px] text-[var(--warning)]" title="明文已顯示">
+          <span className="inline-flex items-center gap-1 text-xs text-[var(--warning)]" title="明文已顯示">
             <EyeOff size={12} aria-hidden />
             明文中
           </span>

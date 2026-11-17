@@ -189,7 +189,7 @@ export function LawArticleRow({
 
   const badgeChip = (
     <span
-      className="law-row-badge inline-flex flex-shrink-0 items-center justify-center px-2 py-0.5 rounded-md text-[11px] font-semibold tracking-wide"
+      className="law-row-badge inline-flex flex-shrink-0 items-center justify-center px-2 py-0.5 rounded-md text-xs font-semibold tracking-wide"
       style={{
         background: meta.badgeBg,
         color: meta.badgeColor,
@@ -211,7 +211,7 @@ export function LawArticleRow({
     <>
       {isDeleted && (
         <span
-          className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-normal"
+          className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-normal"
           style={{ color: "var(--danger)", background: "rgba(220,38,38,0.1)", textDecoration: "none" }}
         >
           已刪除
@@ -219,7 +219,7 @@ export function LawArticleRow({
       )}
       {isFrozen && !isDeleted && (
         <span
-          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-normal"
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-normal"
           style={{
             color: "#fb923c",
             background: "rgba(251,146,60,0.12)",
@@ -270,7 +270,7 @@ export function LawArticleRow({
             {statusChips}
             {isFrozen && !isDeleted && article.frozen_by && (
               <span
-                className="text-[10px]"
+                className="text-xs"
                 style={{ color: "#fb923c" }}
                 title={`凍結原因：${article.frozen_by}`}
               >

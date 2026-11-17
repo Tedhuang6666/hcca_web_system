@@ -93,7 +93,7 @@ function NavLink({ item, pathname, down }: { item: NavItem; pathname: string; do
       <span className="flex-1 truncate">{item.label}</span>
       {down && (
         <span
-          className="ml-1 flex-shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium"
+          className="ml-1 flex-shrink-0 rounded px-1.5 py-0.5 text-xs font-medium"
           style={{
             background: "var(--warning-dim)",
             color: "var(--warning)",
@@ -371,7 +371,7 @@ export default function Sidebar() {
               {BRANDING.orgShortName}
             </p>
             <p
-              className="text-[10px] leading-tight mt-0.5 tracking-widest font-medium"
+              className="text-xs leading-tight mt-0.5 tracking-widest font-medium"
               style={{ color: "var(--primary-text)" }}>
               {BRANDING.acronym}
             </p>
@@ -500,13 +500,13 @@ export default function Sidebar() {
                 style={{ color: "var(--sidebar-text-hover)" }}>
                 {userName}
               </p>
-              <p className="text-[11px] truncate mt-0.5" style={{ color: "var(--sidebar-text)" }}>
+              <p className="text-xs truncate mt-0.5" style={{ color: "var(--sidebar-text)" }}>
                 {userEmail || "個人設定"}
               </p>
             </div>
             {isAdmin && (
               <span
-                className="text-[10px] px-1.5 py-0.5 rounded font-medium flex-shrink-0"
+                className="text-xs px-1.5 py-0.5 rounded font-medium flex-shrink-0"
                 style={{
                   background: "var(--warning-dim)",
                   color: "var(--warning)",

@@ -67,7 +67,7 @@
   margin-top: 0.75rem;
   color: var(--public-text);
   font-size: clamp(1.8rem, 6vw, 2.6rem);
-  font-weight: 850;
+  font-weight: 700;
   line-height: 1.15;
 }
 

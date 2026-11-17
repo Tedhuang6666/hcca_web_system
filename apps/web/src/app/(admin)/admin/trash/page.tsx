@@ -137,12 +137,12 @@ export default function TrashPage() {
                   </td>
                   <td className="px-3 py-2">
                     <code>{r.entity_type}</code>
-                    <span className="ml-1 text-[10px] text-[var(--text-muted)]">
+                    <span className="ml-1 text-xs text-[var(--text-muted)]">
                       {r.entity_id.slice(0, 8)}
                     </span>
                   </td>
                   <td className="px-3 py-2">
-                    <code className="rounded bg-[var(--bg-base)] px-1 py-0.5 text-[10px]">
+                    <code className="rounded bg-[var(--bg-base)] px-1 py-0.5 text-xs">
                       {r.action}
                     </code>
                   </td>
@@ -197,12 +197,12 @@ export default function TrashPage() {
             </dl>
             <div className="mt-3">
               <div className="text-xs text-[var(--text-secondary)]">meta（提供給工程師還原時用）</div>
-              <pre className="mt-1 max-h-72 overflow-auto rounded bg-[var(--bg-base)] p-2 text-[10px] text-[var(--text-muted)]">
+              <pre className="mt-1 max-h-72 overflow-auto rounded bg-[var(--bg-base)] p-2 text-xs text-[var(--text-muted)]">
                 {JSON.stringify(selected.meta, null, 2)}
               </pre>
             </div>
             <div
-              className="mt-3 flex items-start gap-2 rounded-md border px-3 py-2 text-[11px]"
+              className="mt-3 flex items-start gap-2 rounded-md border px-3 py-2 text-xs"
               style={{
                 background: "var(--warning-dim)",
                 borderColor: "var(--warning-border)",

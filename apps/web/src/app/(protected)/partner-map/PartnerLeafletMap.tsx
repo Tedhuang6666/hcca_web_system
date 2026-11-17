@@ -345,7 +345,7 @@ export default function PartnerLeafletMap({
             <Popup>
               <div className="min-w-48">
                 <p className="text-sm font-semibold">{item.business_name}</p>
-                <p className="mt-1 flex items-center gap-1 text-[11px] font-medium" style={{ color: markerColor(item) }}>
+                <p className="mt-1 flex items-center gap-1 text-xs font-medium" style={{ color: markerColor(item) }}>
                   <span className="h-1.5 w-1.5 rounded-full" style={{ background: markerColor(item) }} aria-hidden="true" />
                   {markerLabel(item)}
                 </p>

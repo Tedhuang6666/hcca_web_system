@@ -392,7 +392,7 @@ export default function ProfilePage() {
               {user?.email ?? "—"}
             </p>
             {user?.is_superuser && (
-              <span className="inline-block mt-1 text-[10px] px-2 py-0.5 rounded font-medium"
+              <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded font-medium"
                 style={{ background: "var(--warning-dim)", color: "var(--warning)" }}>
                 管理員
               </span>
@@ -432,7 +432,7 @@ export default function ProfilePage() {
                   <p className="min-w-0 flex-1 break-all text-sm" style={{ color: "var(--text-primary)" }}>
                     {email}
                     {email === user?.email && (
-                      <span className="ml-2 text-[10px]" style={{ color: "var(--text-muted)" }}>
+                      <span className="ml-2 text-xs" style={{ color: "var(--text-muted)" }}>
                         主要
                       </span>
                     )}
@@ -441,7 +441,7 @@ export default function ProfilePage() {
                     <>
                       <button
                         type="button"
-                        className="btn btn-ghost shrink-0 px-2 py-1 text-[11px]"
+                        className="btn btn-ghost shrink-0 px-2 py-1 text-xs"
                         onClick={() => void setPrimaryEmail(email)}
                         disabled={emailBusy}
                       >
@@ -449,7 +449,7 @@ export default function ProfilePage() {
                       </button>
                       <button
                         type="button"
-                        className="btn btn-ghost shrink-0 px-2 py-1 text-[11px]"
+                        className="btn btn-ghost shrink-0 px-2 py-1 text-xs"
                         onClick={() => void unlinkEmail(email)}
                         disabled={emailBusy}
                       >

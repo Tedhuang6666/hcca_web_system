@@ -252,7 +252,7 @@ export default function AdminDashboardPage() {
                     <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
                       {action.label}
                     </p>
-                    <p className="text-[11px] mt-0.5 leading-snug" style={{ color: "var(--text-muted)" }}>
+                    <p className="text-xs mt-0.5 leading-snug" style={{ color: "var(--text-muted)" }}>
                       {action.desc}
                     </p>
                   </div>
@@ -285,7 +285,7 @@ export default function AdminDashboardPage() {
             {recentLogs.map((log) => (
               <li key={log.id} className="flex items-start gap-3 px-4 py-2.5">
                 <div
-                  className="mt-0.5 w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 text-[10px] font-semibold"
+                  className="mt-0.5 w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-semibold"
                   style={{
                     background: "var(--primary-dim)",
                     color: "var(--primary-text)",

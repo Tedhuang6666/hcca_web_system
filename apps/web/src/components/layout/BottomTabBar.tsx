@@ -300,7 +300,7 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
                   </span>
                 )}
               </span>
-              <span className="bottom-tab-bar__label text-[11px] font-medium">
+              <span className="bottom-tab-bar__label text-xs font-medium">
                 {t.label}
               </span>
           </div>

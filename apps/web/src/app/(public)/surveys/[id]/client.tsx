@@ -941,7 +941,7 @@ function OptionRespondents({
               <p className="text-xs font-medium" style={{ color: "var(--text-primary)" }}>
                 {respondent.display_name}
               </p>
-              <p className="mt-0.5 truncate text-[11px]" style={{ color: "var(--text-muted)" }}>
+              <p className="mt-0.5 truncate text-xs" style={{ color: "var(--text-muted)" }}>
                 {respondent.email}
               </p>
             </div>
