@@ -9,11 +9,22 @@ from __future__ import annotations
 import uuid
 import zipfile
 from collections.abc import Callable
+from datetime import UTC, datetime
 from io import BytesIO
 
+import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.config import settings
 from api.models.user import User
+
+
+@pytest.fixture(autouse=True)
+def _exports_in_tmp(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """測試匯出檔寫入暫存目錄，不在 repo 根目錄留下含個資的 zip。"""
+    monkeypatch.setattr(settings, "DB_BACKUP_DIR", str(tmp_path / "backups"))
 
 
 def _authed(factory: Callable[[User], AsyncClient], user: User) -> AsyncClient:
@@ -182,3 +193,99 @@ async def test_anonymize_without_permission_returns_403(
     )
 
     assert response.status_code == 403
+
+
+async def test_export_excludes_authentication_secrets(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    make_user: Callable[..., object],
+) -> None:
+    import json
+
+    target = await make_user(
+        email="export-secret@school.edu", google_sub="google-sub-1", mfa_secret="enc-secret"
+    )
+    ac = _authed(authed_client_factory, admin_user)
+    payload = (await ac.post(f"/admin/privacy/users/{target.id}/export")).json()
+    download = await ac.get(
+        "/admin/privacy/exports/download", params={"filename": payload["file_path"]}
+    )
+
+    with zipfile.ZipFile(BytesIO(download.content)) as archive:
+        users = json.loads(archive.read("users.json"))
+    assert users[0]["email"] == "export-secret@school.edu"
+    assert "mfa_secret" not in users[0]
+    assert "google_sub" not in users[0]
+
+
+def test_expired_exports_are_purged() -> None:
+    import os
+    import time
+
+    from api.services import privacy as privacy_svc
+
+    root = privacy_svc.exports_root()
+    old = root / f"export_{uuid.uuid4()}_20260101_000000.zip"
+    fresh = root / f"export_{uuid.uuid4()}_20261117_000000.zip"
+    old.write_bytes(b"old")
+    fresh.write_bytes(b"fresh")
+    two_days_ago = time.time() - 2 * 24 * 3600
+    os.utime(old, (two_days_ago, two_days_ago))
+
+    assert privacy_svc.purge_expired_exports() == 1
+    assert not old.exists()
+    assert fresh.exists()
+
+
+async def test_anonymize_removes_remaining_identifiers(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    make_user: Callable[..., object],
+    db_session: AsyncSession,
+) -> None:
+    from api.models.person import Person
+    from api.models.user_identity import UserIdentity
+
+    target = await make_user(
+        email="anon-full@school.edu", student_id="11599", google_sub="google-sub-anon"
+    )
+    db_session.add(
+        UserIdentity(
+            user_id=target.id,
+            provider="google",
+            external_id="google-sub-anon",
+            email="anon-full@school.edu",
+            display_name="真實姓名",
+            linked_at=datetime.now(UTC),
+        )
+    )
+    db_session.add(
+        Person(
+            user_id=target.id,
+            student_id="11599",
+            display_name="真實姓名",
+            legal_name="真實姓名",
+            email="a@b.c",
+        )
+    )
+    await db_session.flush()
+    ac = _authed(authed_client_factory, admin_user)
+    await ac.post(f"/admin/privacy/users/{target.id}/export")
+
+    response = await ac.post(
+        f"/admin/privacy/users/{target.id}/anonymize", json={"confirm_phrase": "假名化"}
+    )
+
+    assert response.status_code == 200
+    await db_session.refresh(target)
+    assert target.student_id is None and target.google_sub is None
+    assert (
+        await db_session.scalar(select(UserIdentity).where(UserIdentity.user_id == target.id))
+        is None
+    )
+    person = await db_session.scalar(select(Person).where(Person.user_id == target.id))
+    assert person is not None and person.legal_name is None and person.student_id is None
+    assert person.display_name != "真實姓名"
+    from api.services import privacy as privacy_svc
+
+    assert not list(privacy_svc.exports_root().glob(f"export_{target.id}_*.zip"))

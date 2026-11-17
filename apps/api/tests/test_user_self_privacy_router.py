@@ -9,9 +9,17 @@ import zipfile
 from collections.abc import Callable
 from io import BytesIO
 
+import pytest
 from httpx import AsyncClient
 
+from api.core.config import settings
 from api.models.user import User
+
+
+@pytest.fixture(autouse=True)
+def _exports_in_tmp(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """測試匯出檔寫入暫存目錄，不在 repo 根目錄留下含個資的 zip。"""
+    monkeypatch.setattr(settings, "DB_BACKUP_DIR", str(tmp_path / "backups"))
 
 
 async def test_self_export_requires_login(client: AsyncClient) -> None:
