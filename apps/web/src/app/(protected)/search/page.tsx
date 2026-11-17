@@ -12,7 +12,7 @@ import SmartEmptyState from "@/components/ui/SmartEmptyState";
 type Kind = "all" | "document" | "regulation" | "announcement";
 
 const KIND_META: Record<Exclude<Kind, "all">, { label: string; Icon: React.ComponentType<{ size: number; "aria-hidden"?: boolean }>; color: string }> = {
-  document:     { label: "公文", Icon: FileText,  color: "var(--primary)" },
+  document:     { label: "公文", Icon: FileText,  color: "var(--primary-text)" },
   regulation:   { label: "法規", Icon: Scale,     color: "var(--warning)" },
   announcement: { label: "公告", Icon: Megaphone, color: "var(--info, var(--primary))" },
 };
@@ -167,7 +167,7 @@ function SearchInner() {
                         {meta && (
                           <span
                             className="text-[10px] font-medium px-1.5 py-0.5 rounded"
-                            style={{ color, background: `${color}15`, border: `1px solid ${color}33` }}
+                            style={{ color, background: `color-mix(in srgb, ${color} 8%, transparent)`, border: `1px solid color-mix(in srgb, ${color} 20%, transparent)` }}
                           >
                             {meta.label}
                           </span>

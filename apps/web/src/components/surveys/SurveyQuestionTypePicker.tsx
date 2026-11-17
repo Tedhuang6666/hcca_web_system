@@ -189,7 +189,7 @@ export default function SurveyQuestionTypePicker({
             }}
             className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm hover:bg-[var(--bg-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--border-focus)]"
             style={{
-              color: selected ? "var(--primary)" : "var(--text-primary)",
+              color: selected ? "var(--primary-text)" : "var(--text-primary)",
               background: selected ? "var(--primary-dim)" : undefined,
             }}
           >

@@ -31,7 +31,7 @@ function FallbackWidgetIcon(p: IconProps) {
 }
 
 const SEVERITY_STYLES: Record<string, { color: string; bg: string; border: string }> = {
-  info: { color: "var(--primary)", bg: "var(--primary-dim)", border: "var(--info-border)" },
+  info: { color: "var(--primary-text)", bg: "var(--primary-dim)", border: "var(--info-border)" },
   warning: {
     color: "var(--warning)",
     bg: "var(--warning-dim)",
@@ -763,7 +763,7 @@ function EmptyState() {
         borderRadius: "var(--radius-lg)",
       }}>
       <ShieldCheck size={32} aria-hidden={true}
-        style={{ color: "var(--primary)", display: "inline-block", marginBottom: 12 }} />
+        style={{ color: "var(--primary-text)", display: "inline-block", marginBottom: 12 }} />
       <p className="text-sm font-semibold mb-4" style={{ color: "var(--text-primary)" }}>
         目前沒有待辦或新訊息
       </p>
@@ -775,7 +775,7 @@ function EmptyState() {
             className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
             style={{
               background: "var(--primary-dim)",
-              color: "var(--primary)",
+              color: "var(--primary-text)",
               border: "1px solid var(--border-strong)",
               textDecoration: "none",
             }}>

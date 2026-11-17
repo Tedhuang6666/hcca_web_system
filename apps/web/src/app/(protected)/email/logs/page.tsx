@@ -73,8 +73,8 @@ const RESEND_CONCURRENCY = 5;
 
 const STATUS_META: Record<EmailStatus, { label: string; color: string }> = {
   draft: { label: "草稿", color: "var(--text-muted)" },
-  scheduled: { label: "已排程", color: "var(--primary)" },
-  queued: { label: "寄送中", color: "var(--primary)" },
+  scheduled: { label: "已排程", color: "var(--primary-text)" },
+  queued: { label: "寄送中", color: "var(--primary-text)" },
   sent: { label: "已寄送", color: "var(--success)" },
   failed: { label: "失敗", color: "var(--danger)" },
   retrying: { label: "重試中", color: "var(--warning)" },
@@ -87,7 +87,7 @@ const RECIPIENT_STATUS_META: Record<
   EmailCampaignRecipientOut["status"],
   { label: string; color: string }
 > = {
-  queued: { label: "等待寄送", color: "var(--primary)" },
+  queued: { label: "等待寄送", color: "var(--primary-text)" },
   sent: { label: "寄送成功", color: "var(--success)" },
   failed: { label: "寄送失敗", color: "var(--danger)" },
   retrying: { label: "等待重試", color: "var(--warning)" },

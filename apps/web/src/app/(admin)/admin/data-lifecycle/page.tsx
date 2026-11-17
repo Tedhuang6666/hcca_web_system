@@ -215,7 +215,7 @@ export default function DataLifecyclePage() {
                     </h3>
                     <span
                       className="rounded px-1.5 py-0.5 text-[10px] font-medium"
-                      style={{ background: `${dangerColor}22`, color: dangerColor }}>
+                      style={{ background: `color-mix(in srgb, ${dangerColor} 13%, transparent)`, color: dangerColor }}>
                       {rule.danger_level === "safe"
                         ? "安全"
                         : rule.danger_level === "caution"

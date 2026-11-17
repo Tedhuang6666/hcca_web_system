@@ -97,7 +97,7 @@ function EditableField({
           <button
             onClick={() => { setDraft(value); setEditing(true); }}
             className="text-xs opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 rounded"
-            style={{ color: "var(--primary)" }}>
+            style={{ color: "var(--primary-text)" }}>
             編輯
           </button>
         </div>
@@ -300,7 +300,7 @@ export default function ProfilePage() {
               className="flex-1 rounded-md px-3 py-2 text-center text-xs font-medium"
               style={{
                 background: tab.key === "account" ? "var(--primary-dim)" : "transparent",
-                color: tab.key === "account" ? "var(--primary)" : "var(--text-muted)",
+                color: tab.key === "account" ? "var(--primary-text)" : "var(--text-muted)",
               }}>
               {tab.label}
             </span>
@@ -360,7 +360,7 @@ export default function ProfilePage() {
               className="flex-1 rounded-md px-3 py-2 text-xs font-medium transition-colors"
               style={{
                 background: active ? "var(--primary-dim)" : "transparent",
-                color: active ? "var(--primary)" : "var(--text-muted)",
+                color: active ? "var(--primary-text)" : "var(--text-muted)",
               }}>
               {tab.label}
             </button>
@@ -379,7 +379,7 @@ export default function ProfilePage() {
           ) : (
             <div
               className="w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold flex-shrink-0"
-              style={{ background: "var(--primary-dim)", color: "var(--primary)" }}
+              style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}
               aria-hidden="true">
               {initials}
             </div>
@@ -394,7 +394,7 @@ export default function ProfilePage() {
             </p>
             {user?.is_superuser && (
               <span className="inline-block mt-1 text-[10px] px-2 py-0.5 rounded font-medium"
-                style={{ background: "rgba(251,191,36,0.15)", color: "#fbbf24" }}>
+                style={{ background: "var(--warning-dim)", color: "var(--warning)" }}>
                 管理員
               </span>
             )}
@@ -570,7 +570,7 @@ export default function ProfilePage() {
             現職職位
             {activePositions.length > 0 && (
               <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full"
-                style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
+                style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
                 {activePositions.length}
               </span>
             )}

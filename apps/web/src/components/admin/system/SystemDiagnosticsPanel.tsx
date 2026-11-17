@@ -119,7 +119,7 @@ export default function SystemDiagnosticsPanel() {
     <div className="mx-auto max-w-4xl space-y-4">
       <header className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Activity className="text-[var(--primary)]" size={22} aria-hidden />
+          <Activity className="text-[var(--primary-text)]" size={22} aria-hidden />
           <h2 className="text-xl font-semibold text-[var(--text-primary)]">系統診斷</h2>
         </div>
         <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
@@ -176,7 +176,7 @@ export default function SystemDiagnosticsPanel() {
                     {version.github ? (
                       <>
                         <p className="mt-2 font-mono text-lg font-bold text-[var(--text-primary)]">{version.github.version ?? "版本計算中"}</p>
-                        <a href={version.github.url ?? undefined} target="_blank" rel="noreferrer" className="mt-2 block font-mono text-base font-semibold text-[var(--primary)] hover:underline">{version.github.short_sha}</a>
+                        <a href={version.github.url ?? undefined} target="_blank" rel="noreferrer" className="mt-2 block font-mono text-base font-semibold text-[var(--primary-text)] hover:underline">{version.github.short_sha}</a>
                         <p className="mt-2 line-clamp-2 text-xs text-[var(--text-secondary)]">{version.github.message}</p>
                         <p className="mt-1 text-xs text-[var(--text-secondary)]">推送時間：{version.github.pushed_at ? new Date(version.github.pushed_at).toLocaleString() : "—"}</p>
                       </>

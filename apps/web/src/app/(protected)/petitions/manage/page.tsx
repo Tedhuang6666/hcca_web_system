@@ -440,7 +440,7 @@ export default function PetitionManagePage() {
           style={{ borderColor: "var(--primary)", borderLeftWidth: "4px" }}
           aria-labelledby="external-petition-title">
           <div>
-            <p className="text-xs font-medium tracking-wide" style={{ color: "var(--primary)" }}>
+            <p className="text-xs font-medium tracking-wide" style={{ color: "var(--primary-text)" }}>
               其他管道收件
             </p>
             <h2 id="external-petition-title" className="text-lg font-semibold mt-1" style={{ color: "var(--text-primary)" }}>
@@ -935,7 +935,7 @@ export default function PetitionManagePage() {
                       <>
                         <div className="flex min-w-0 items-start justify-between gap-2">
                           <p className="min-w-0 break-words font-medium">{event.title}{event.updated_at !== event.created_at ? "（已編輯）" : ""}</p>
-                          {event.can_edit && <button className="text-xs" style={{ color: "var(--primary)" }} onClick={() => startEventEdit(event)}>編輯</button>}
+                          {event.can_edit && <button className="text-xs" style={{ color: "var(--primary-text)" }} onClick={() => startEventEdit(event)}>編輯</button>}
                         </div>
                         {event.content && <p className="whitespace-pre-wrap mt-1" style={{ color: "var(--text-muted)" }}>{event.content}</p>}
                         <p className="text-xs mt-1" style={{ color: "var(--text-disabled)" }}>{fmt(event.created_at)} · {event.visibility === "internal" ? "內部" : "公開"}</p>

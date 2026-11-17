@@ -644,12 +644,12 @@ export default function NewSurveyPage() {
             <div className="grid grid-cols-2 gap-3">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={isAnonymous} onChange={e => setIsAnonymous(e.target.checked)}
-                  className="accent-sky-400" />
+                  className="accent-[var(--primary)]" />
                 <span className="text-sm" style={{ color: "var(--text-secondary)" }}>匿名填答</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={allowMultiple} onChange={e => setAllowMultiple(e.target.checked)}
-                  className="accent-sky-400" />
+                  className="accent-[var(--primary)]" />
                 <span className="text-sm" style={{ color: "var(--text-secondary)" }}>允許重複填答</span>
               </label>
             </div>
@@ -688,7 +688,7 @@ export default function NewSurveyPage() {
                   type="checkbox"
                   checked={showAnnouncementPopup}
                   onChange={e => setShowAnnouncementPopup(e.target.checked)}
-                  className="accent-sky-400"
+                  className="accent-[var(--primary)]"
                 />
                 設為重要公告，進入系統時提示使用者
               </label>
@@ -765,7 +765,7 @@ export default function NewSurveyPage() {
                               on ? prev.filter(x => x !== org.id) : [...prev, org.id])}
                             className="text-xs px-2.5 py-1 rounded-full"
                             style={on
-                              ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
+                              ? { background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--border-strong)" }
                               : { background: "var(--bg-elevated)", color: "var(--text-muted)", border: "1px solid var(--border)" }}>
                             {org.name}
                           </button>
@@ -808,7 +808,7 @@ export default function NewSurveyPage() {
                       <span className="cursor-grab mt-0.5 flex-shrink-0" style={{ color: "var(--text-muted)" }} title="拖曳調整順序">
                         <GripVertical size={16} aria-hidden="true" />
                       </span>
-                      <span className="text-xs font-bold mt-0.5 w-5 flex-shrink-0" style={{ color: "var(--primary)" }}>
+                      <span className="text-xs font-bold mt-0.5 w-5 flex-shrink-0" style={{ color: "var(--primary-text)" }}>
                         Q{idx + 1}
                       </span>
                       <div className="flex-1 min-w-0">
@@ -924,7 +924,7 @@ export default function NewSurveyPage() {
               <label className="flex min-h-11 items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={newQ.is_required ?? true}
                   onChange={e => setNewQ(p => ({ ...p, is_required: e.target.checked }))}
-                  className="accent-sky-400" />
+                  className="accent-[var(--primary)]" />
                 <span className="text-sm" style={{ color: "var(--text-secondary)" }}>必填</span>
               </label>
             )}

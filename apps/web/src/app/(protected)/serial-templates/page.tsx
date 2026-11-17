@@ -193,7 +193,7 @@ export default function SerialTemplatesPage() {
         <div className="flex items-center gap-2">
           <label className="flex items-center gap-1.5 text-xs cursor-pointer" style={{ color: "var(--text-muted)" }}>
             <input type="checkbox" checked={activeOnly} onChange={e => setActiveOnly(e.target.checked)}
-              className="accent-blue-600" />
+              className="accent-[var(--primary)]" />
             僅顯示有效
           </label>
           <button onClick={() => setShowCreate(p => !p)}
@@ -264,7 +264,7 @@ export default function SerialTemplatesPage() {
                     type="checkbox"
                     checked={form.inherit_parent_prefix}
                     onChange={e => setForm(p => ({ ...p, inherit_parent_prefix: e.target.checked }))}
-                    className="accent-blue-600 w-4 h-4"
+                    className="accent-[var(--primary)] w-4 h-4"
                   />
                   <span className="text-sm">沿用上級組織前綴</span>
                 </label>
@@ -306,7 +306,7 @@ export default function SerialTemplatesPage() {
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={form.reset_on_new_year}
                   onChange={e => setForm(p => ({ ...p, reset_on_new_year: e.target.checked }))}
-                  className="accent-blue-600 w-4 h-4" />
+                  className="accent-[var(--primary)] w-4 h-4" />
                 <span className="text-sm">每年重置流水號</span>
               </label>
               <p className="text-[10px] mt-1 ml-6" style={{ color: "var(--text-muted)" }}>
@@ -320,7 +320,7 @@ export default function SerialTemplatesPage() {
                   type="checkbox"
                   checked={form.is_default}
                   onChange={e => setForm(p => ({ ...p, is_default: e.target.checked }))}
-                  className="accent-blue-600 w-4 h-4 mt-0.5"
+                  className="accent-[var(--primary)] w-4 h-4 mt-0.5"
                 />
                 <span className="text-sm">
                   設為一般公文預設模板
@@ -334,7 +334,7 @@ export default function SerialTemplatesPage() {
                   type="checkbox"
                   checked={form.is_default_president_publish}
                   onChange={e => setForm(p => ({ ...p, is_default_president_publish: e.target.checked }))}
-                  className="accent-blue-600 w-4 h-4 mt-0.5"
+                  className="accent-[var(--primary)] w-4 h-4 mt-0.5"
                 />
                 <span className="text-sm">
                   設為主席公布預設模板
@@ -476,7 +476,7 @@ function TemplateCard({
             </span>
             {t.is_default && (
               <span className="text-[10px] px-1.5 py-0.5 rounded"
-                style={{ color: "var(--primary)", background: "var(--primary-dim)" }}>
+                style={{ color: "var(--primary-text)", background: "var(--primary-dim)" }}>
                 一般預設
               </span>
             )}
@@ -495,7 +495,7 @@ function TemplateCard({
           </div>
 
           {t.preview && (
-            <p className="text-xs mt-0.5 font-mono" style={{ color: "var(--primary)" }}>
+            <p className="text-xs mt-0.5 font-mono" style={{ color: "var(--primary-text)" }}>
               預覽：{t.preview}
             </p>
           )}
@@ -517,7 +517,7 @@ function TemplateCard({
           {t.is_active && (
             <button onClick={() => setEditing(p => !p)}
               className="text-xs px-3 py-1.5 rounded-lg transition-colors"
-              style={{ color: "var(--primary)", border: "1px solid var(--border)" }}>
+              style={{ color: "var(--primary-text)", border: "1px solid var(--border)" }}>
               編輯
             </button>
           )}
@@ -567,7 +567,7 @@ function TemplateCard({
                 type="checkbox"
                 checked={editDefault}
                 onChange={e => setEditDefault(e.target.checked)}
-                className="accent-blue-600 w-4 h-4 mt-0.5"
+                className="accent-[var(--primary)] w-4 h-4 mt-0.5"
               />
               <span className="text-sm">
                 設為一般公文預設模板
@@ -582,7 +582,7 @@ function TemplateCard({
                 type="checkbox"
                 checked={editPresidentDefault}
                 onChange={e => setEditPresidentDefault(e.target.checked)}
-                className="accent-blue-600 w-4 h-4 mt-0.5"
+                className="accent-[var(--primary)] w-4 h-4 mt-0.5"
               />
               <span className="text-sm">
                 設為主席公布預設模板

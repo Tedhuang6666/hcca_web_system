@@ -363,7 +363,7 @@
 }
 
 .credential-usage__steps span {
-  color: var(--primary);
+  color: var(--primary-text);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.6875rem;
   font-weight: 700;
@@ -1167,7 +1167,7 @@
   word-break: break-word;
 }
 .official-smart-link {
-  color: var(--primary);
+  color: var(--primary-text);
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.18em;
@@ -1232,7 +1232,7 @@
 .survey-markdown ul { list-style: disc; }
 .survey-markdown ol { list-style: decimal; }
 .survey-markdown li + li { margin-top: 0.25rem; }
-.survey-markdown a { color: var(--primary); text-decoration: underline; text-underline-offset: 0.2em; }
+.survey-markdown a { color: var(--primary-text); text-decoration: underline; text-underline-offset: 0.2em; }
 .survey-markdown blockquote {
   border-left: 2px solid var(--border-strong);
   padding-left: 0.9rem;

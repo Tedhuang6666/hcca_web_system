@@ -318,7 +318,7 @@ const RichTextarea = forwardRef<RichTextareaHandle, RichTextareaProps>(function 
               }}
               className="w-7 h-7 rounded flex items-center justify-center text-xs transition-colors"
               style={active
-                ? { color: "var(--primary)", background: "var(--primary-dim)" }
+                ? { color: "var(--primary-text)", background: "var(--primary-dim)" }
                 : { color: "var(--text-muted)", background: "transparent" }}
             >
               <span className={[

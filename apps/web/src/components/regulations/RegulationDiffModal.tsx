@@ -69,14 +69,14 @@ export default function RegulationDiffModal({
             </span>
             <span
               className="flex-shrink-0 rounded-full px-2 py-0.5 text-xs"
-              style={{ background: "rgba(239,68,68,0.12)", color: "#f87171", border: "1px solid rgba(239,68,68,0.25)" }}
+              style={{ background: "var(--danger-dim)", color: "var(--danger)", border: "1px solid var(--danger-border)" }}
             >
               舊 {oldLabel}
             </span>
             <span className="text-xs" style={{ color: "var(--text-muted)" }}>→</span>
             <span
               className="flex-shrink-0 rounded-full px-2 py-0.5 text-xs"
-              style={{ background: "rgba(34,197,94,0.12)", color: "#4ade80", border: "1px solid rgba(34,197,94,0.25)" }}
+              style={{ background: "var(--success-dim)", color: "var(--success)", border: "1px solid var(--success-border)" }}
             >
               新 {newLabel}
             </span>
@@ -99,18 +99,18 @@ export default function RegulationDiffModal({
                   <div
                     key={index}
                     className="flex items-start px-3 py-px"
-                    style={{ background: isAdd ? "rgba(34,197,94,0.10)" : isRemove ? "rgba(239,68,68,0.10)" : "transparent" }}
+                    style={{ background: isAdd ? "var(--success-dim)" : isRemove ? "var(--danger-dim)" : "transparent" }}
                   >
                     <span
                       className="w-5 flex-shrink-0 select-none text-center font-bold"
-                      style={{ color: isAdd ? "#4ade80" : isRemove ? "#f87171" : "var(--text-disabled)" }}
+                      style={{ color: isAdd ? "var(--success)" : isRemove ? "var(--danger)" : "var(--text-disabled)" }}
                     >
                       {isAdd ? "+" : isRemove ? "−" : " "}
                     </span>
                     <span
                       className="flex-1 whitespace-pre-wrap break-all pl-1"
                       style={{
-                        color: isAdd ? "#86efac" : isRemove ? "#fca5a5" : "var(--text-secondary)",
+                        color: isAdd ? "var(--success)" : isRemove ? "var(--danger)" : "var(--text-secondary)",
                         textDecoration: isRemove ? "line-through" : "none",
                         opacity: row.type === "equal" ? 0.8 : 1,
                       }}
@@ -126,8 +126,8 @@ export default function RegulationDiffModal({
           className="flex flex-shrink-0 items-center gap-4 px-5 py-2 text-xs"
           style={{ borderTop: "1px solid var(--border)", background: "var(--bg-elevated)" }}
         >
-          <span style={{ color: "#4ade80" }}>＋ {addCount} 行新增</span>
-          <span style={{ color: "#f87171" }}>－ {removeCount} 行刪除</span>
+          <span style={{ color: "var(--success)" }}>＋ {addCount} 行新增</span>
+          <span style={{ color: "var(--danger)" }}>－ {removeCount} 行刪除</span>
           <span style={{ color: "var(--text-muted)" }}>
             {diffResult.filter((row) => row.type === "equal").length} 行不變
           </span>

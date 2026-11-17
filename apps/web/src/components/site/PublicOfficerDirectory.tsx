@@ -76,7 +76,7 @@ function OfficerCard({ officer, index = 0 }: { officer: PublicOfficerOut; index?
         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border"
         style={{
           background: isLeader ? "var(--primary)" : "var(--primary-dim)",
-          color: isLeader ? "var(--primary-text)" : "var(--primary)",
+          color: isLeader ? "var(--primary-text)" : "var(--primary-text)",
           borderColor: isLeader ? "var(--primary)" : "var(--border-strong)",
         }}
       >

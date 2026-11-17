@@ -238,7 +238,7 @@ function actionTone(action: string) {
   }
   return {
     background: "var(--primary-dim)",
-    color: "var(--primary)",
+    color: "var(--primary-text)",
     border: "1px solid var(--border-strong)",
   };
 }
@@ -299,7 +299,7 @@ function EmptyState({ loading }: { loading: boolean }) {
     <div className="card flex min-h-[260px] flex-col items-center justify-center gap-3 p-8 text-center">
       <div
         className="flex h-12 w-12 items-center justify-center rounded-full"
-        style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
+        style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
           strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M9 11l3 3L22 4" />
@@ -593,7 +593,7 @@ export default function AuditLogsPage() {
             {activeFilterCount > 0 && (
               <span
                 className="rounded-full px-2 py-1 text-xs font-medium"
-                style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
+                style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
                 {activeFilterCount} 個篩選
               </span>
             )}
@@ -690,7 +690,7 @@ export default function AuditLogsPage() {
         >
           <div className="space-y-4">
             <div>
-              <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--primary)" }}>
+              <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--primary-text)" }}>
                 {actionLabel(selectedLog.action)}
               </p>
               <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>

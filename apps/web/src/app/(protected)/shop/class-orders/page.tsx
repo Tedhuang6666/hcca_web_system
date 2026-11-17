@@ -1467,7 +1467,7 @@ export default function ClassOrdersPage() {
                             <span
                               className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 py-2 text-sm transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2"
                               style={selected
-                                ? { border: "1px solid var(--border-strong)", background: "var(--primary-dim)", color: "var(--primary)" }
+                                ? { border: "1px solid var(--border-strong)", background: "var(--primary-dim)", color: "var(--primary-text)" }
                                 : { border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
                               {option.value}
                               {option.price_delta !== 0 && (
@@ -1687,7 +1687,7 @@ export default function ClassOrdersPage() {
                             <button type="button" onClick={() => loadAssistedDraft(row)}
                               disabled={creating || hasCurrentComposerInput}
                               className="min-h-11 rounded-md px-2 text-xs disabled:opacity-50"
-                              style={{ border: "1px solid var(--border)", color: "var(--primary)" }}>載入編輯</button>
+                              style={{ border: "1px solid var(--border)", color: "var(--primary-text)" }}>載入編輯</button>
                             <button type="button" onClick={() => setAssistedOrderDrafts((drafts) => drafts.filter((draft) => draft.id !== row.id))}
                               disabled={creating} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md disabled:opacity-50"
                               style={{ border: "1px solid var(--border)", color: "var(--danger)" }}
@@ -2010,7 +2010,7 @@ export default function ClassOrdersPage() {
                   <article key={order.id} className="rounded-md p-3" style={{ border: "1px solid var(--border)" }}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <Link href={`/shop/orders/${order.id}?from=class`} className="block truncate text-xs font-mono font-medium hover:underline" style={{ color: "var(--primary)" }}>
+                        <Link href={`/shop/orders/${order.id}?from=class`} className="block truncate text-xs font-mono font-medium hover:underline" style={{ color: "var(--primary-text)" }}>
                           {order.serial_number}
                         </Link>
                         <p className="mt-1 truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{order.user_name ?? "未具名訂購人"}</p>
@@ -2052,7 +2052,7 @@ export default function ClassOrdersPage() {
                         <>
                           {!order.is_paid && !order.is_class_collected && (
                             <button type="button" onClick={() => openEdit(order)} className="min-h-11 rounded-md px-3 text-xs"
-                            style={{ border: "1px solid var(--border)", color: "var(--primary)" }}>修改</button>
+                            style={{ border: "1px solid var(--border)", color: "var(--primary-text)" }}>修改</button>
                           )}
                           <SeparateOrderButton order={order} onSeparated={() => { void load(); }} />
                           <button type="button" onClick={() => { setCancelTarget(order); setCancelReason(""); }} className="min-h-11 rounded-md px-3 text-xs"
@@ -2082,12 +2082,12 @@ export default function ClassOrdersPage() {
                             aria-label={`${selectedSet.has(order.id) ? "取消選取" : "選取"}${order.user_name ?? order.serial_number}`}
                             aria-pressed={selectedSet.has(order.id)}
                             className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md disabled:opacity-40"
-                            style={{ color: selectedSet.has(order.id) ? "var(--primary)" : "var(--text-muted)" }}>
+                            style={{ color: selectedSet.has(order.id) ? "var(--primary-text)" : "var(--text-muted)" }}>
                             {selectedSet.has(order.id) ? <CheckSquare size={16} /> : <Square size={16} />}
                           </button>
                         </td>
                         <td className="px-4 py-3">
-                          <Link href={`/shop/orders/${order.id}?from=class`} className="text-xs font-mono hover:underline" style={{ color: "var(--primary)" }}>
+                          <Link href={`/shop/orders/${order.id}?from=class`} className="text-xs font-mono hover:underline" style={{ color: "var(--primary-text)" }}>
                             {order.serial_number}
                           </Link>
                         </td>
@@ -2122,7 +2122,7 @@ export default function ClassOrdersPage() {
                               <>
                                 {!order.is_paid && !order.is_class_collected && (
                                   <button type="button" onClick={() => openEdit(order)} title="修改訂單"
-                                  className="rounded-md p-1 hover:opacity-70" style={{ color: "var(--primary)" }}>
+                                  className="rounded-md p-1 hover:opacity-70" style={{ color: "var(--primary-text)" }}>
                                   <Edit2 size={14} />
                                   </button>
                                 )}

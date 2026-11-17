@@ -1207,7 +1207,7 @@ function ComposeInner() {
                   disabled={step.number > currentStep + 1}
                   style={{
                     background: active ? "var(--primary-dim)" : "transparent",
-                    color: active ? "var(--primary)" : "var(--text-secondary)",
+                    color: active ? "var(--primary-text)" : "var(--text-secondary)",
                     border: `1px solid ${active ? "var(--primary)" : "transparent"}`,
                     opacity: step.number > currentStep + 1 ? 0.45 : 1,
                   }}
@@ -1253,7 +1253,7 @@ function ComposeInner() {
               </select>
             </div>
             <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--primary)" }}>
-              <label className="block text-xs font-semibold" style={{ color: "var(--primary)" }}>
+              <label className="block text-xs font-semibold" style={{ color: "var(--primary-text)" }}>
                 我的草稿
               </label>
               <select
@@ -1405,7 +1405,7 @@ function ComposeInner() {
                     className="rounded-full px-2.5 py-1 text-xs"
                     style={{
                       background: "var(--primary-dim)",
-                      color: "var(--primary)",
+                      color: "var(--primary-text)",
                       border: "1px solid var(--border)",
                     }}
                     onClick={() => insertVariable(variable.token)}
@@ -1523,7 +1523,7 @@ function ComposeInner() {
                   className="rounded-full px-2.5 py-1 text-xs"
                   style={{
                     background: "var(--primary-dim)",
-                    color: "var(--primary)",
+                    color: "var(--primary-text)",
                     border: "1px solid var(--border)",
                   }}
                   onClick={() => insertVariable(variable.token)}
@@ -1784,13 +1784,13 @@ function ComposeInner() {
                     <tr className="text-left text-xs" style={{ color: "var(--text-muted)" }}>
                       <th className="min-w-56 px-1">
                         電子郵件
-                        <code className="ml-2 font-normal" style={{ color: "var(--primary)" }}>
+                        <code className="ml-2 font-normal" style={{ color: "var(--primary-text)" }}>
                           {"{{ 電子郵件 }}"}
                         </code>
                       </th>
                       <th className="min-w-40 px-1">
                         姓名
-                        <code className="ml-2 font-normal" style={{ color: "var(--primary)" }}>
+                        <code className="ml-2 font-normal" style={{ color: "var(--primary-text)" }}>
                           {"{{ 姓名 }}"}
                         </code>
                       </th>
@@ -1814,7 +1814,7 @@ function ComposeInner() {
                               ×
                             </button>
                           </div>
-                          <code className="mt-1 block font-normal" style={{ color: "var(--primary)" }}>
+                          <code className="mt-1 block font-normal" style={{ color: "var(--primary-text)" }}>
                             {variable.key ? `{{ ${variable.key} }}` : "輸入名稱後自動產生"}
                           </code>
                         </th>

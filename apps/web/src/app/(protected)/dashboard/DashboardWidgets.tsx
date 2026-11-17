@@ -33,7 +33,7 @@ const WIDGET_ICONS: Record<string, React.ComponentType<IconProps>> = {
 
 const SEVERITY_STYLES: Record<string, { color: string; bg: string; border: string }> = {
   info: {
-    color: "var(--primary)",
+    color: "var(--primary-text)",
     bg: "var(--primary-dim)",
     border: "var(--info-border)",
   },

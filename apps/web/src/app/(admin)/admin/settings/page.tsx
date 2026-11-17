@@ -245,7 +245,7 @@ export default function SystemSettingsPage() {
                     {fields.length} 項
                   </span>
                   {dirtyInCat > 0 && (
-                    <span className="rounded bg-[var(--primary-dim)] px-1.5 py-0.5 text-xs text-[var(--primary)]">
+                    <span className="rounded bg-[var(--primary-dim)] px-1.5 py-0.5 text-xs text-[var(--primary-text)]">
                       未存 {dirtyInCat}
                     </span>
                   )}
@@ -314,7 +314,7 @@ function FieldRow({
             </span>
           )}
           {dirty && (
-            <span className="rounded bg-[var(--primary-dim)] px-1 py-0.5 text-[10px] text-[var(--primary)]">
+            <span className="rounded bg-[var(--primary-dim)] px-1 py-0.5 text-[10px] text-[var(--primary-text)]">
               未儲存
             </span>
           )}

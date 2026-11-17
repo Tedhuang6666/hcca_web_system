@@ -78,7 +78,7 @@ export default function RouteErrorState({
         </div>
         <div className="mt-5 flex items-center justify-between gap-3 rounded-lg px-3 py-2" style={{ background: "var(--bg-muted)" }}>
           <span className="text-xs" style={{ color: "var(--text-muted)" }}>錯誤編號：<code className="font-mono">{code}</code></span>
-          <button type="button" onClick={copyCode} className="inline-flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs font-medium" style={{ color: "var(--primary)" }}>
+          <button type="button" onClick={copyCode} className="inline-flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs font-medium" style={{ color: "var(--primary-text)" }}>
             {copied ? <Check size={14} aria-hidden={true} /> : <Copy size={14} aria-hidden={true} />}
             {copied ? "已複製" : "複製"}
           </button>

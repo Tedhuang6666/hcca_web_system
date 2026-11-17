@@ -313,7 +313,7 @@ function TabButton({
       onClick={onClick}
       style={{
         background: active ? "var(--primary-dim)" : "transparent",
-        color: active ? "var(--primary)" : "var(--text-muted)",
+        color: active ? "var(--primary-text)" : "var(--text-muted)",
       }}
     >
       {children}
@@ -384,7 +384,7 @@ function SortableNavRow({
           className="flex h-4 w-4 items-center justify-center rounded-full bg-white transition-transform"
           style={{ transform: visible ? "translateX(24px)" : "translateX(4px)" }}
         >
-          {visible && <Check size={10} aria-hidden={true} style={{ color: "var(--primary)" }} />}
+          {visible && <Check size={10} aria-hidden={true} style={{ color: "var(--primary-text)" }} />}
         </span>
       </button>
     </div>

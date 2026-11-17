@@ -46,7 +46,7 @@ const MODULE_LABEL: Record<TaskModule, string> = {
 };
 
 const SEVERITY_STYLES: Record<string, { color: string; bg: string; border: string; label: string }> = {
-  info:     { color: "var(--primary)", bg: "var(--primary-dim)", border: "var(--info-border)",    label: "一般" },
+  info:     { color: "var(--primary-text)", bg: "var(--primary-dim)", border: "var(--info-border)",    label: "一般" },
   warning:  { color: "var(--warning)", bg: "var(--warning-dim)", border: "var(--warning-border)", label: "提醒" },
   critical: { color: "var(--danger)",  bg: "var(--danger-dim)",  border: "var(--danger-border)",  label: "緊急" },
 };
@@ -248,7 +248,7 @@ export default function TasksPage() {
         <div>
           <h1 className="text-xl font-semibold flex items-center gap-2"
             style={{ color: "var(--text-primary)" }}>
-            <Inbox size={20} aria-hidden={true} style={{ color: "var(--primary)" }} />
+            <Inbox size={20} aria-hidden={true} style={{ color: "var(--primary-text)" }} />
             我的待辦
           </h1>
         </div>
@@ -300,7 +300,7 @@ export default function TasksPage() {
                 className="flex-shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium"
                 style={{
                   background: active ? "var(--primary-dim)" : "transparent",
-                  color: active ? "var(--primary)" : "var(--text-muted)",
+                  color: active ? "var(--primary-text)" : "var(--text-muted)",
                   border: active ? "1px solid var(--info-border)" : "1px solid var(--border)",
                 }}>
                 {filter.label}
@@ -326,7 +326,7 @@ export default function TasksPage() {
               className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5"
               style={{
                 background: active ? "var(--primary-dim)" : "transparent",
-                color: active ? "var(--primary)" : "var(--text-muted)",
+                color: active ? "var(--primary-text)" : "var(--text-muted)",
                 border: active ? "1px solid var(--info-border)" : "1px solid transparent",
               }}>
               <span>{m === "all" ? "全部" : MODULE_LABEL[m as TaskModule]}</span>
@@ -364,7 +364,7 @@ function WorkspaceMetric({
   const colors = {
     danger: { color: "var(--danger)", bg: "var(--danger-dim)", border: "var(--danger-border)" },
     neutral: { color: "var(--text-primary)", bg: "var(--bg-surface)", border: "var(--border)" },
-    info: { color: "var(--primary)", bg: "var(--primary-dim)", border: "var(--info-border)" },
+    info: { color: "var(--primary-text)", bg: "var(--primary-dim)", border: "var(--info-border)" },
     success: { color: "var(--success)", bg: "var(--success-dim)", border: "var(--success-border, var(--border))" },
   }[tone];
   return (

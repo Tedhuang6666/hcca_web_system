@@ -76,7 +76,7 @@ export default function DataSaverSettingsPage() {
               className="flex h-4 w-4 items-center justify-center rounded-full bg-white transition-transform"
               style={{ transform: enabled ? "translateX(24px)" : "translateX(4px)" }}
             >
-              {enabled && <Check size={10} aria-hidden={true} style={{ color: "var(--primary)" }} />}
+              {enabled && <Check size={10} aria-hidden={true} style={{ color: "var(--primary-text)" }} />}
             </span>
           </button>
         </div>

@@ -181,7 +181,7 @@ export default function Combobox({
                   className={`combobox-option w-full text-left px-3 py-2 transition-colors ${isActive ? "is-active" : ""} ${value === opt.value ? "is-selected" : ""}`}
                   style={{
                     background: isActive ? "var(--primary-dim)" : "transparent",
-                    color: value === opt.value ? "var(--primary)" : "var(--text-primary)",
+                    color: value === opt.value ? "var(--primary-text)" : "var(--text-primary)",
                     borderBottom: "1px solid var(--border)",
                   }}
                 >

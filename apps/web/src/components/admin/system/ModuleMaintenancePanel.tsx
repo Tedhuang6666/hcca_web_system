@@ -207,7 +207,7 @@ export default function ModuleMaintenancePanel() {
     <div className="mx-auto max-w-6xl space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <span className="grid h-10 w-10 place-items-center rounded-lg bg-[var(--primary-dim)] text-[var(--primary)]">
+          <span className="grid h-10 w-10 place-items-center rounded-lg bg-[var(--primary-dim)] text-[var(--primary-text)]">
             <Boxes size={20} aria-hidden />
           </span>
           <div>

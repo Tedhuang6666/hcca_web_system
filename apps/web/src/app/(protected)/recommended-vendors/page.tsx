@@ -28,7 +28,7 @@ function inspectionText(item: RecommendedVendorListItemWithHours | RecommendedVe
 
 function FilePreviewIcon({ kind }: { kind: "link" | "image" | "pdf" }) {
   const Icon = kind === "image" ? ImageIcon : kind === "pdf" ? FileText : Link2;
-  return <Icon size={22} style={{ color: "var(--primary)" }} aria-hidden="true" />;
+  return <Icon size={22} style={{ color: "var(--primary-text)" }} aria-hidden="true" />;
 }
 
 function menuHref(url: string | null): string {
@@ -110,7 +110,7 @@ function VendorDetail({ vendor, onClose }: { vendor: VendorDetail; onClose: () =
           <div className="mt-2 divide-y rounded-md border" style={{ borderColor: "var(--border)" }}>
             {vendor.products.map((product) => <div key={product.id} className="flex items-center justify-between gap-3 p-3 text-sm">
               <div><p className="font-medium" style={{ color: "var(--text-primary)" }}>{product.name}</p>{product.description && <p className="mt-1" style={{ color: "var(--text-muted)" }}>{product.description}</p>}</div>
-              {product.price_text && <span className="shrink-0 font-medium" style={{ color: "var(--primary)" }}>{product.price_text}</span>}
+              {product.price_text && <span className="shrink-0 font-medium" style={{ color: "var(--primary-text)" }}>{product.price_text}</span>}
             </div>)}
           </div>
         )}

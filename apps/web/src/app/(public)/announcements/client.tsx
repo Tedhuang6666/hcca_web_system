@@ -127,7 +127,7 @@ export default function AnnouncementsClient({
                     <div className="mb-2 flex flex-wrap items-center gap-2">
                       <StatusBadge item={item} />
                       {item.audience_type !== "all" && (
-                        <span className="badge" style={{ color: "var(--primary)", background: "var(--primary-dim)", borderColor: "var(--border-strong)" }}>
+                        <span className="badge" style={{ color: "var(--primary-text)", background: "var(--primary-dim)", borderColor: "var(--border-strong)" }}>
                           {AUDIENCE_LABEL[item.audience_type] ?? item.audience_type}
                         </span>
                       )}

@@ -475,7 +475,7 @@ details.public-nav-dropdown[open] > .public-nav-dropdown-panel {
   place-items: center;
   border-radius: 999px;
   background: color-mix(in srgb, var(--primary-dim) 76%, transparent);
-  color: var(--primary);
+  color: var(--primary-text);
 }
 
 .loading-state-compact .loading-orbit {
@@ -1439,7 +1439,7 @@ input[type="radio"]:checked {
 .dashboard-action-card.tone-primary .dashboard-action-icon {
   border-color: var(--info-border);
   background: var(--primary-dim);
-  color: var(--primary);
+  color: var(--primary-text);
 }
 
 .dashboard-action-card.tone-warning .dashboard-action-icon {

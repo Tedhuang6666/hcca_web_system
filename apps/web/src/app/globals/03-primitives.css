@@ -171,7 +171,7 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 
 .btn-secondary {
   background: transparent;
-  color: var(--primary);
+  color: var(--primary-text);
   border-color: var(--primary);
 }
 .btn-secondary:hover:not(:disabled) {
@@ -663,7 +663,7 @@ select.input-field {
 }
 
 .article-editor-preview .article-markdown a {
-  color: var(--primary);
+  color: var(--primary-text);
   text-decoration: underline;
   text-underline-offset: 0.22em;
 }
@@ -1156,7 +1156,7 @@ select.input-field {
 }
 .topbar-icon-btn:hover {
   background: var(--bg-hover);
-  color: var(--primary);
+  color: var(--primary-text);
   border-color: var(--primary);
 }
 
@@ -1421,7 +1421,7 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .regulation-detail-page .legal-text-reader .law-row-badge > a:hover,
 .regulation-detail-page .legal-text-reader .law-row-badge > a:focus-visible {
-  color: var(--primary) !important;
+  color: var(--primary-text) !important;
   text-decoration: underline;
   text-underline-offset: 0.2em;
 }

@@ -123,7 +123,7 @@ export default function PrivacySettingsPage() {
 
       <section className="card p-5">
         <div className="flex items-start gap-3">
-          <ShieldCheck size={20} aria-hidden style={{ color: "var(--primary)" }} />
+          <ShieldCheck size={20} aria-hidden style={{ color: "var(--primary-text)" }} />
           <div>
             <h2 className="text-sm font-semibold">你可以行使的資料權利</h2>
             <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
@@ -251,7 +251,7 @@ export default function PrivacySettingsPage() {
                     className="rounded-full px-2.5 py-1 text-xs font-medium"
                     style={{
                       background: "var(--primary-dim)",
-                      color: "var(--primary)",
+                      color: "var(--primary-text)",
                       border: "1px solid var(--warning-border)",
                     }}>
                     {STATUS_LABEL[item.status] ?? item.status}

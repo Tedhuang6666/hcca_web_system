@@ -776,7 +776,7 @@ function SortableOption({
       {option.image_url && <Thumb url={option.image_url} size={20} />}
       <span style={{ color: "var(--text-primary)" }}>{option.value}</span>
       {option.price_delta !== 0 && (
-        <span style={{ color: "var(--primary)" }}>
+        <span style={{ color: "var(--primary-text)" }}>
           {option.price_delta > 0 ? `+${option.price_delta}` : option.price_delta}
         </span>
       )}
@@ -874,7 +874,7 @@ function VariantOptionList({
             disabled={disabled}
             onClick={onAdd}
             className="min-h-11 rounded-lg px-2 text-xs disabled:opacity-45"
-            style={{ color: "var(--primary)", border: "1px dashed var(--border-strong)" }}
+            style={{ color: "var(--primary-text)", border: "1px dashed var(--border-strong)" }}
           >
             + 選項
           </button>
@@ -1880,7 +1880,7 @@ export default function ShopAdminPage() {
       <button type="button" onClick={() => selectProduct(item.id)}
         className="shop-admin-product-select flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg p-2 text-left"
         style={productId === item.id
-          ? { background: "var(--primary-dim)", color: "var(--primary)" }
+          ? { background: "var(--primary-dim)", color: "var(--primary-text)" }
           : { background: "var(--bg)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
         <Thumb url={item.image_url} size={34} />
         <span className="flex-1 min-w-0">
@@ -2041,7 +2041,7 @@ export default function ShopAdminPage() {
                     <button type="button" onClick={() => selectCategory(c)}
                       className="min-h-11 flex-1 min-w-0 flex items-center gap-2 p-2 rounded-lg text-left"
                       style={cat?.id === c.id
-                        ? { background: "var(--primary-dim)", color: "var(--primary)" }
+                        ? { background: "var(--primary-dim)", color: "var(--primary-text)" }
                         : { color: "var(--text-secondary)", opacity: c.is_active ? 1 : 0.6 }}>
                       <Thumb url={c.image_url} size={34} />
                       <span className="flex-1 min-w-0">
@@ -2099,7 +2099,7 @@ export default function ShopAdminPage() {
                       <div key={s.id}>
                         <div className="flex items-center gap-3 px-4 py-3" style={{ background: series?.id === s.id ? "var(--bg-elevated)" : undefined }}>
                           <button type="button" onClick={() => selectSeries(s)} className="flex-1 min-h-11 min-w-0 text-left">
-                            <p className="text-sm font-semibold truncate" style={{ color: series?.id === s.id ? "var(--primary)" : "var(--text-primary)" }}>{s.name}</p>
+                            <p className="text-sm font-semibold truncate" style={{ color: series?.id === s.id ? "var(--primary-text)" : "var(--text-primary)" }}>{s.name}</p>
                             <p className="text-xs truncate" style={{ color: "var(--text-muted)" }}>{s.description || "無描述"}</p>
                           </button>
                           <button type="button" className="btn btn-ghost min-h-11 px-3 text-xs lg:hidden"
@@ -2163,8 +2163,7 @@ export default function ShopAdminPage() {
               <button type="button" onClick={() => setClearOrdersOpen(false)} disabled={clearingOrders}
                 className="btn btn-ghost min-h-11 px-4 disabled:opacity-50">取消</button>
               <button type="button" onClick={() => void clearAllOrders()} disabled={clearingOrders}
-                className="btn min-h-11 px-4 disabled:opacity-50"
-                style={{ background: "#b83a30", color: "#fff", border: "none" }}>
+                className="btn btn-danger min-h-11 px-4 disabled:opacity-50">
                 {clearingOrders ? "清除中…" : "確認清除所有訂單"}
               </button>
             </div>

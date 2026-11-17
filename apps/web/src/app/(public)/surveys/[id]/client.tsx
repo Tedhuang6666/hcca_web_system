@@ -323,7 +323,7 @@ function RankingInput({
     <div className="space-y-3">
       <p className="text-xs" style={{ color: "var(--text-muted)" }}>
         請從下方點選並拖拉排序（最少 {minN} 項{maxN !== minN ? `、最多 ${maxN} 項` : ""}）
-        — 目前已選 <strong style={{ color: "var(--primary)" }}>{selected.length}</strong> 項
+        — 目前已選 <strong style={{ color: "var(--primary-text)" }}>{selected.length}</strong> 項
       </p>
 
       {selected.length > 0 && (
@@ -411,7 +411,7 @@ function SortableRankRow({ id, rank, label, disabled, onRemove }: {
         </svg>
       </button>
       <span className="text-xs font-bold w-6 text-center tabular-nums"
-        style={{ color: "var(--primary)" }}>{rank}</span>
+        style={{ color: "var(--primary-text)" }}>{rank}</span>
       <span className="text-sm flex-1" style={{ color: "var(--text-primary)" }}>{label}</span>
       <button
         type="button"
@@ -572,7 +572,7 @@ function QuestionInput({
                 checked={value.options[0] === opt}
                 onChange={() => onChange({ ...value, options: [opt] })}
                 disabled={disabled}
-                className="accent-sky-400"
+                className="accent-[var(--primary)]"
               />
               <span className="flex-1 text-sm" style={{ color: "var(--text-primary)" }}>{opt}</span>
             </label>
@@ -623,7 +623,7 @@ function QuestionInput({
                         checked={value.options[rowIndex] === column}
                         onChange={() => selectColumn(rowIndex, column)}
                         disabled={disabled}
-                        className="h-4 w-4 accent-sky-400"
+                        className="h-4 w-4 accent-[var(--primary)]"
                       />
                     </label>
                   </td>
@@ -707,7 +707,7 @@ function QuestionInput({
                   checked={checked}
                   onChange={() => toggle(opt)}
                   disabled={disabled || (!checked && !isExcl && limitReached)}
-                  className="accent-sky-400"
+                  className="accent-[var(--primary)]"
                 />
                 <span className="flex-1 text-sm" style={{ color: "var(--text-primary)" }}>{opt}</span>
                 {isExcl && (
@@ -796,7 +796,7 @@ function QuestionInput({
               <span
                 className="flex min-h-11 min-w-11 items-center justify-center rounded-xl px-3 text-sm font-semibold transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--border-focus)]"
                 style={current === n
-                  ? { background: "var(--primary)", color: "white", border: "none" }
+                  ? { background: "var(--primary)", color: "var(--primary-fg)", border: "none" }
                   : { background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
                 {n}
               </span>
@@ -922,7 +922,7 @@ function OptionRespondents({
         type="button"
         onClick={() => setOpen(value => !value)}
         className="text-xs font-medium transition-colors hover:underline"
-        style={{ color: "var(--primary)" }}
+        style={{ color: "var(--primary-text)" }}
         aria-expanded={open}
       >
         {open ? "收起填答者" : `查看 ${respondents.length} 位填答者`}
@@ -1201,7 +1201,7 @@ function StatsView({
                   onClick={() => setChartTypes(prev => ({ ...prev, [qs.question_id]: chart }))}
                   className="text-xs px-2 py-1 rounded-lg"
                   style={(chartTypes[qs.question_id] ?? qs.suggested_chart) === chart
-                    ? { color: "var(--primary)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }
+                    ? { color: "var(--primary-text)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }
                     : { color: "var(--text-muted)", border: "1px solid var(--border)" }}
                 >
                   {chart === "pie" ? "圓餅圖" : chart === "bar" ? "長條圖" : "列表"}
@@ -1246,7 +1246,7 @@ function StatsView({
           {/* 平均評分 */}
           {qs.average_rating != null && (
             <div className="flex items-baseline gap-2">
-              <p className="text-2xl font-bold" style={{ color: "var(--primary)" }}>
+              <p className="text-2xl font-bold" style={{ color: "var(--primary-text)" }}>
                 {qs.average_rating.toFixed(1)}
               </p>
               <span className="text-sm" style={{ color: "var(--text-muted)" }}>
@@ -1345,7 +1345,7 @@ function StatsView({
                 {pagedResponses.map(r => (
                   <div key={r.id} className="card p-4 space-y-3">
                     <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
-                      <span className="pt-0.5 text-xs font-semibold" style={{ color: "var(--primary)" }}>
+                      <span className="pt-0.5 text-xs font-semibold" style={{ color: "var(--primary-text)" }}>
                         #{responses.length - responses.indexOf(r)}
                       </span>
                       <div className="min-w-0">
@@ -1678,7 +1678,7 @@ export default function SurveyDetailClient({
   if (loading) {
     return (
       <div className="py-20 text-center" style={{ color: "var(--text-muted)" }}>
-        <Loader2 size={28} className="mx-auto mb-3 animate-spin" style={{ color: "var(--primary)" }} aria-label="載入中" />
+        <Loader2 size={28} className="mx-auto mb-3 animate-spin" style={{ color: "var(--primary-text)" }} aria-label="載入中" />
         <p className="text-sm">載入中…</p>
       </div>
     );
@@ -1764,7 +1764,7 @@ export default function SurveyDetailClient({
             <button
               onClick={() => setViewStats(v => !v)}
               className="btn btn-ghost text-xs"
-              style={viewStats ? { color: "var(--primary)" } : {}}>
+              style={viewStats ? { color: "var(--primary-text)" } : {}}>
               {viewStats ? "填答表單" : "查看統計"}
             </button>
           )}
@@ -1917,7 +1917,7 @@ export default function SurveyDetailClient({
                           onClick={() => editResponse(response)}
                           className="btn btn-ghost text-xs"
                           style={editingResponseId === response.id ? {
-                            color: "var(--primary)", borderColor: "var(--primary)",
+                            color: "var(--primary-text)", borderColor: "var(--primary)",
                           } : {}}
                         >
                           修改第 {myResponses.length - index} 份（{responseTimeLabel(response)}）
@@ -1980,7 +1980,7 @@ export default function SurveyDetailClient({
               <div className="flex items-start gap-2">
                 {!isDisplay && (
                   <span className="text-xs font-bold mt-0.5 flex-shrink-0"
-                    style={{ color: "var(--primary)" }}>Q{numberMap.get(q.id)}</span>
+                    style={{ color: "var(--primary-text)" }}>Q{numberMap.get(q.id)}</span>
                 )}
                 <div className="min-w-0 flex-1" style={{ color: "var(--text-primary)" }}>
                   <SurveyMarkdown
@@ -2054,7 +2054,7 @@ export default function SurveyDetailClient({
               type="checkbox"
               checked={emailCopy}
               onChange={e => setEmailCopy(e.target.checked)}
-              className="accent-sky-400"
+              className="accent-[var(--primary)]"
             />
             <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
               將回答副本寄送到我的電子郵件信箱

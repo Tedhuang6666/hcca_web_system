@@ -141,7 +141,7 @@ export default function MyBusinessesPage() {
   return (
     <main className="mx-auto max-w-5xl space-y-5">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div><Link href="/partner-map" className="mb-2 inline-flex items-center gap-1 text-xs hover:underline" style={{ color: "var(--primary)" }}><ArrowLeft size={13} aria-hidden="true" />返回店家地圖</Link><h1 className="flex items-center gap-2 text-xl font-semibold" style={{ color: "var(--text-primary)" }}><Store size={20} aria-hidden="true" />我的店家</h1><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>你可以更新公開店務資料；上架狀態與優惠審核仍由平台管理員維護。</p></div>
+        <div><Link href="/partner-map" className="mb-2 inline-flex items-center gap-1 text-xs hover:underline" style={{ color: "var(--primary-text)" }}><ArrowLeft size={13} aria-hidden="true" />返回店家地圖</Link><h1 className="flex items-center gap-2 text-xl font-semibold" style={{ color: "var(--text-primary)" }}><Store size={20} aria-hidden="true" />我的店家</h1><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>你可以更新公開店務資料；上架狀態與優惠審核仍由平台管理員維護。</p></div>
         <button type="button" className="btn btn-primary" disabled={saving || !business} onClick={() => void save()}><Save size={15} aria-hidden="true" />{saving ? "儲存中…" : "儲存變更"}</button>
       </header>
 

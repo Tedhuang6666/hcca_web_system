@@ -100,7 +100,7 @@ function Panel({
     >
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="grid h-8 w-8 place-items-center rounded-md bg-[var(--primary-dim)] text-[var(--primary)]">
+          <span className="grid h-8 w-8 place-items-center rounded-md bg-[var(--primary-dim)] text-[var(--primary-text)]">
             {icon}
           </span>
           <h2 className="truncate text-sm font-semibold text-[var(--text-primary)]">{title}</h2>
@@ -840,7 +840,7 @@ function DeadLetterPanel() {
       <p className="mb-3 text-xs text-[var(--text-muted)]">
         背景排程／worker 任務失敗時寫入 Redis；這裡只顯示 Celery 失敗，不包含 API 5xx。
         其他錯誤與慢查詢請前往{" "}
-        <Link href="/admin/system?tab=observability" className="font-medium text-[var(--primary)] underline underline-offset-2">
+        <Link href="/admin/system?tab=observability" className="font-medium text-[var(--primary-text)] underline underline-offset-2">
           系統可觀測性
         </Link>
         。

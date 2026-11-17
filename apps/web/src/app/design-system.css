@@ -572,7 +572,7 @@ nav[aria-label="底部主選單"] .bottom-tab-bar__item {
 }
 
 nav[aria-label="底部主選單"] .bottom-tab-bar__item[data-visual-active="true"] {
-  color: var(--primary);
+  color: var(--primary-text);
   font-weight: 700;
   transform: translateY(-1px);
 }

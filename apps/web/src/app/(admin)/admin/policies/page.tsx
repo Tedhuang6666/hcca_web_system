@@ -106,7 +106,7 @@ function TabButton({
         active ? "border-b-2" : "opacity-60 hover:opacity-100"
       }`}
       style={{
-        color: active ? "var(--primary)" : "var(--text-secondary)",
+        color: active ? "var(--primary-text)" : "var(--text-secondary)",
         borderBottomColor: active ? "var(--primary)" : "transparent",
       }}>
       {children}

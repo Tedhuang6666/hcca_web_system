@@ -262,7 +262,7 @@ export default function CredentialAuthorizationPanel() {
       <div className="space-y-4">
         <section className="card p-5" aria-labelledby="student-credential-settings-title">
           <div className="mb-4 flex items-start gap-3">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ color: "var(--primary)", background: "var(--primary-dim)" }}>
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ color: "var(--primary-text)", background: "var(--primary-dim)" }}>
               <ShieldCheck size={18} aria-hidden="true" />
             </span>
             <div>
@@ -318,7 +318,7 @@ export default function CredentialAuthorizationPanel() {
 
         <section className="card p-5">
           <div className="mb-5 flex items-start gap-3">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ color: "var(--primary)", background: "var(--primary-dim)" }}>
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ color: "var(--primary-text)", background: "var(--primary-dim)" }}>
               <ShieldCheck size={18} aria-hidden="true" />
             </span>
             <div>
@@ -345,7 +345,7 @@ export default function CredentialAuthorizationPanel() {
                     className="flex-1 rounded-md px-3 py-2 text-xs font-medium transition-colors"
                     style={{
                       background: bulkMode === isBulk ? "var(--primary-dim)" : "transparent",
-                      color: bulkMode === isBulk ? "var(--primary)" : "var(--text-secondary)",
+                      color: bulkMode === isBulk ? "var(--primary-text)" : "var(--text-secondary)",
                     }}
                     onClick={() => switchCreationMode(isBulk as boolean)}
                   >
@@ -434,7 +434,7 @@ export default function CredentialAuthorizationPanel() {
                           >
                             <span
                               className="grid h-8 w-8 shrink-0 place-items-center rounded-full"
-                              style={{ color: "var(--primary)", background: "var(--primary-dim)" }}
+                              style={{ color: "var(--primary-text)", background: "var(--primary-dim)" }}
                             >
                               <UserRound size={15} aria-hidden="true" />
                             </span>
@@ -446,7 +446,7 @@ export default function CredentialAuthorizationPanel() {
                                 {user.email}
                               </span>
                             </span>
-                            {form.email === user.email && <Check size={15} className="mt-1 shrink-0" style={{ color: "var(--primary)" }} aria-hidden="true" />}
+                            {form.email === user.email && <Check size={15} className="mt-1 shrink-0" style={{ color: "var(--primary-text)" }} aria-hidden="true" />}
                           </button>
                         ))
                       ) : (
@@ -474,7 +474,7 @@ export default function CredentialAuthorizationPanel() {
                     style={{
                       borderColor: form.identity_label === preset ? "var(--primary)" : "var(--border)",
                       background: form.identity_label === preset ? "var(--primary-dim)" : "transparent",
-                      color: form.identity_label === preset ? "var(--primary)" : "var(--text-secondary)",
+                      color: form.identity_label === preset ? "var(--primary-text)" : "var(--text-secondary)",
                     }}
                     onClick={() => setForm((current) => ({ ...current, identity_label: preset }))}
                   >
@@ -523,7 +523,7 @@ export default function CredentialAuthorizationPanel() {
 
         <section className="rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
           <div className="flex items-start gap-3">
-            <Mail size={16} className="mt-0.5 shrink-0" style={{ color: "var(--primary)" }} aria-hidden="true" />
+            <Mail size={16} className="mt-0.5 shrink-0" style={{ color: "var(--primary-text)" }} aria-hidden="true" />
             <p className="text-xs leading-5" style={{ color: "var(--text-muted)" }}>
               授權會套用在電子證件卡面；停用後，該帳號仍可依原本的校內資格使用證件，但不會再顯示這個特殊身份。
             </p>
@@ -565,7 +565,7 @@ export default function CredentialAuthorizationPanel() {
             {authorizations.map((authorization) => (
               <div key={authorization.id} className="flex flex-col gap-4 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: authorization.is_active ? "var(--border)" : "var(--border-strong)", opacity: authorization.is_active ? 1 : 0.68 }}>
                 <div className="flex min-w-0 items-start gap-3">
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full" style={{ color: authorization.is_active ? "var(--primary)" : "var(--text-muted)", background: authorization.is_active ? "var(--primary-dim)" : "var(--bg-elevated)" }}>
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full" style={{ color: authorization.is_active ? "var(--primary-text)" : "var(--text-muted)", background: authorization.is_active ? "var(--primary-dim)" : "var(--bg-elevated)" }}>
                     <UserRound size={17} aria-hidden="true" />
                   </span>
                   <div className="min-w-0">
