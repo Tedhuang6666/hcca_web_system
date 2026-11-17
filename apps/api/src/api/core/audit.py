@@ -61,7 +61,8 @@ class SecurityAuditMiddleware:
         if method not in {"POST", "PATCH", "PUT", "DELETE"}:
             return False
 
-        return any(path.startswith(prefix) for prefix in self.SENSITIVE_ENDPOINTS)
+        route_path = path.removeprefix("/api")
+        return any(route_path.startswith(prefix) for prefix in self.SENSITIVE_ENDPOINTS)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         method = str(scope.get("method", "GET")).upper()
