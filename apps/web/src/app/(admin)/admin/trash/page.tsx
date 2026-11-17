@@ -5,6 +5,7 @@ import { AlertTriangle, Info, Lock, RefreshCcw, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
+import Modal from "@/components/ui/Modal";
 import { trashApi, type TrashEntry, apiErrorMessage } from "@/lib/api";
 
 const DAYS_OPTIONS = [1, 3, 7, 14, 30, 90];
@@ -166,60 +167,50 @@ export default function TrashPage() {
       </section>
 
       {selected && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: "var(--bg-overlay)" }}
-          onClick={() => setSelected(null)}
-          role="dialog"
-          aria-modal="true">
-          <div
-            className="max-h-[80vh] w-full max-w-3xl overflow-auto rounded-lg border p-5 shadow-xl"
-            style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
-            onClick={(e) => e.stopPropagation()}>
-            <h3 className="mb-2 text-base font-semibold text-[var(--text-primary)]">
-              事件詳情
-            </h3>
-            <dl className="grid grid-cols-[6rem_1fr] gap-1 text-xs">
-              <dt className="text-[var(--text-secondary)]">時間</dt>
-              <dd>{new Date(selected.created_at).toLocaleString()}</dd>
-              <dt className="text-[var(--text-secondary)]">資源</dt>
-              <dd>
-                <code>{selected.entity_type}</code> · <code>{selected.entity_id}</code>
-              </dd>
-              <dt className="text-[var(--text-secondary)]">動作</dt>
-              <dd>
-                <code>{selected.action}</code>
-              </dd>
-              <dt className="text-[var(--text-secondary)]">操作者</dt>
-              <dd>{selected.actor_email ?? "—"}</dd>
-              <dt className="text-[var(--text-secondary)]">摘要</dt>
-              <dd>{selected.summary ?? "—"}</dd>
-            </dl>
-            <div className="mt-3">
-              <div className="text-xs text-[var(--text-secondary)]">meta（提供給工程師還原時用）</div>
-              <pre className="mt-1 max-h-72 overflow-auto rounded bg-[var(--bg-base)] p-2 text-xs text-[var(--text-muted)]">
-                {JSON.stringify(selected.meta, null, 2)}
-              </pre>
-            </div>
-            <div
-              className="mt-3 flex items-start gap-2 rounded-md border px-3 py-2 text-xs"
-              style={{
-                background: "var(--warning-dim)",
-                borderColor: "var(--warning-border)",
-                color: "var(--warning)",
-              }}>
-              <AlertTriangle size={12} aria-hidden className="mt-0.5 flex-shrink-0" />
-              <span>
-                還原請提供 entity_type、entity_id、meta 給工程師。
-              </span>
-            </div>
-            <div className="mt-3 flex justify-end gap-2">
-              <button type="button" className="btn btn-ghost" onClick={() => setSelected(null)}>
-                關閉
-              </button>
-            </div>
+        <Modal
+          title="事件詳情"
+          size="3xl"
+          onClose={() => setSelected(null)}
+          footer={
+            <button type="button" className="btn btn-ghost" onClick={() => setSelected(null)}>
+              關閉
+            </button>
+          }>
+          <dl className="grid grid-cols-[6rem_1fr] gap-1 text-xs">
+            <dt className="text-[var(--text-secondary)]">時間</dt>
+            <dd>{new Date(selected.created_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}</dd>
+            <dt className="text-[var(--text-secondary)]">資源</dt>
+            <dd>
+              <code>{selected.entity_type}</code> · <code>{selected.entity_id}</code>
+            </dd>
+            <dt className="text-[var(--text-secondary)]">動作</dt>
+            <dd>
+              <code>{selected.action}</code>
+            </dd>
+            <dt className="text-[var(--text-secondary)]">操作者</dt>
+            <dd>{selected.actor_email ?? "—"}</dd>
+            <dt className="text-[var(--text-secondary)]">摘要</dt>
+            <dd>{selected.summary ?? "—"}</dd>
+          </dl>
+          <div className="mt-3">
+            <div className="text-xs text-[var(--text-secondary)]">meta（提供給工程師還原時用）</div>
+            <pre className="mt-1 max-h-72 overflow-auto rounded bg-[var(--bg-base)] p-2 text-xs text-[var(--text-muted)]">
+              {JSON.stringify(selected.meta, null, 2)}
+            </pre>
           </div>
-        </div>
+          <div
+            className="mt-3 flex items-start gap-2 rounded-md border px-3 py-2 text-xs"
+            style={{
+              background: "var(--warning-dim)",
+              borderColor: "var(--warning-border)",
+              color: "var(--warning)",
+            }}>
+            <AlertTriangle size={12} aria-hidden className="mt-0.5 flex-shrink-0" />
+            <span>
+              還原請提供 entity_type、entity_id、meta 給工程師。
+            </span>
+          </div>
+        </Modal>
       )}
     </main>
   );

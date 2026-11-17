@@ -8,7 +8,7 @@ import SupplementOrders from "@/components/shop/SupplementOrders";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, CheckSquare, Edit2, Plus, RefreshCw, Search, Square, Trash2, X } from "lucide-react";
+import { CheckSquare, Edit2, Plus, RefreshCw, Search, Square, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { OrderStatusBadge } from "@/components/ui/StatusBadge";
@@ -2255,32 +2255,27 @@ export default function ClassOrdersPage() {
 
       {/* 取消訂單 Modal */}
       {cancelTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-xl p-6 shadow-xl" style={{ background: "var(--card-bg)" }}>
-            <div className="mb-4 flex items-start gap-3">
-              <AlertTriangle size={20} style={{ color: "#ef4444", marginTop: 2, flexShrink: 0 }} />
-              <div>
-                <h3 className="font-semibold" style={{ color: "var(--text-primary)" }}>確認取消訂單</h3>
-                <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-                  訂單 <span className="font-mono font-medium">{cancelTarget.serial_number}</span>（{cancelTarget.user_name}）
-                  取消後將退回庫存，無法復原。
-                </p>
-              </div>
-            </div>
-            <label className="mb-4 block text-sm">
-              <span className="mb-1 block" style={{ color: "var(--text-muted)" }}>取消原因（選填）</span>
-              <input className="input w-full" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} placeholder="填寫取消原因" />
-            </label>
-            <div className="flex gap-2 justify-end">
-              <button type="button" onClick={() => setCancelTarget(null)} className="btn btn-ghost">取消</button>
-              <button type="button" onClick={confirmCancel} disabled={busy === cancelTarget.id}
-                className="btn disabled:opacity-50"
-                style={{ background: "#ef4444", color: "white", border: "none" }}>
-                {busy === cancelTarget.id ? "取消中..." : "確認取消訂單"}
+        <Modal
+          title="確認取消訂單"
+          size="md"
+          onClose={() => setCancelTarget(null)}
+          footer={
+            <>
+              <button type="button" onClick={() => setCancelTarget(null)} className="btn btn-ghost">返回</button>
+              <button type="button" onClick={confirmCancel} disabled={busy === cancelTarget.id} className="btn btn-danger">
+                {busy === cancelTarget.id ? "取消中…" : "確認取消訂單"}
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }>
+          <p className="mb-4 text-sm" style={{ color: "var(--text-secondary)" }}>
+            訂單 <span className="font-mono font-semibold">{cancelTarget.serial_number}</span>（{cancelTarget.user_name}）
+            取消後將退回庫存，無法復原。
+          </p>
+          <label className="block text-sm">
+            <span className="mb-1 block" style={{ color: "var(--text-muted)" }}>取消原因（選填）</span>
+            <input className="input w-full" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} placeholder="填寫取消原因" />
+          </label>
+        </Modal>
       )}
     </main>
   );

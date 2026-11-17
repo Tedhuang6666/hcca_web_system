@@ -1,16 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  AlertTriangle,
-  Eye,
-  EyeOff,
-  KeyRound,
-  Lock,
-  RefreshCcw,
-  RotateCcw,
-  Save,
-} from "lucide-react";
+import Modal from "@/components/ui/Modal";
+import { AlertTriangle, Eye, EyeOff, Lock, RefreshCcw, RotateCcw, Save } from "lucide-react";
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
@@ -411,30 +403,12 @@ function MfaModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "var(--bg-overlay)" }}
-      onClick={onCancel}
-      role="dialog"
-      aria-modal="true">
-      <div
-        className="w-full max-w-md rounded-lg border p-5 shadow-xl"
-        style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
-        onClick={(e) => e.stopPropagation()}>
-        <div className="mb-3 flex items-center gap-2 text-[var(--text-primary)]">
-          <KeyRound size={18} aria-hidden />
-          <h2 className="text-base font-semibold">{title}</h2>
-        </div>
-        <p className="mb-3 text-sm text-[var(--text-secondary)]">{detail}</p>
-        <OtpInput
-          value={code}
-          onChange={setCode}
-          label="MFA TOTP 驗證碼"
-          autoFocus
-          disabled={busy}
-          onEnter={() => void submit()}
-        />
-        <div className="mt-4 flex justify-end gap-2">
+    <Modal
+      title={title}
+      size="md"
+      onClose={onCancel}
+      footer={
+        <>
           <button type="button" onClick={onCancel} className="btn btn-ghost" disabled={busy}>
             取消
           </button>
@@ -445,8 +419,17 @@ function MfaModal({
             className="btn btn-primary">
             {busy ? "驗證中…" : "確認"}
           </button>
-        </div>
-      </div>
-    </div>
+        </>
+      }>
+      <p className="mb-3 text-sm text-[var(--text-secondary)]">{detail}</p>
+      <OtpInput
+        value={code}
+        onChange={setCode}
+        label="兩步驟驗證碼"
+        autoFocus
+        disabled={busy}
+        onEnter={() => void submit()}
+      />
+    </Modal>
   );
 }

@@ -8,12 +8,12 @@ import {
   Lock,
   Play,
   RefreshCcw,
-  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
 import { usePrompt } from "@/components/ui/ConfirmDialog";
+import Modal from "@/components/ui/Modal";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import {
   lifecycleApi,
@@ -377,36 +377,22 @@ export default function DataLifecyclePage() {
       </section>
 
       {archivePreview && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: "var(--bg-overlay)" }}
-          onClick={() => setArchivePreview(null)}
-          role="dialog"
-          aria-modal="true">
-          <div
-            className="max-h-[80vh] w-full max-w-3xl overflow-auto rounded-lg border p-5 shadow-xl"
-            style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
-            onClick={(e) => e.stopPropagation()}>
-            <h3 className="mb-2 flex items-center gap-2 text-base font-semibold text-[var(--text-primary)]">
-              <Trash2 size={16} aria-hidden />
-              歸檔內容 · {archivePreview.path}
-            </h3>
-            <p className="mb-2 text-xs text-[var(--text-muted)]">
-              顯示前 {archivePreview.rows.length} 行（含 metadata header）
-            </p>
-            <pre className="rounded bg-[var(--bg-base)] p-2 text-xs text-[var(--text-muted)]">
-              {JSON.stringify(archivePreview.rows, null, 2)}
-            </pre>
-            <div className="mt-3 flex justify-end gap-2">
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => setArchivePreview(null)}>
-                關閉
-              </button>
-            </div>
-          </div>
-        </div>
+        <Modal
+          title={`歸檔內容 · ${archivePreview.path}`}
+          size="3xl"
+          onClose={() => setArchivePreview(null)}
+          footer={
+            <button type="button" className="btn btn-ghost" onClick={() => setArchivePreview(null)}>
+              關閉
+            </button>
+          }>
+          <p className="mb-2 text-xs text-[var(--text-muted)]">
+            顯示前 {archivePreview.rows.length} 行
+          </p>
+          <pre className="rounded bg-[var(--bg-base)] p-2 text-xs text-[var(--text-muted)]">
+            {JSON.stringify(archivePreview.rows, null, 2)}
+          </pre>
+        </Modal>
       )}
 
       <div
