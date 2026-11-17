@@ -87,7 +87,7 @@ export default async function PublicNewsDetailPage({
               </time>
             </div>
             <h1 className="text-3xl font-bold leading-tight">{item.title}</h1>
-            <p className="text-sm text-[var(--text-muted)]">公告人：{item.author_name || "未命名"}</p>
+            {item.author_name && <p className="text-sm text-[var(--text-muted)]">公告人：{item.author_name}</p>}
           </header>
           <div className="card p-5 md:p-7" data-reveal style={{ "--reveal-delay": "120ms" } as React.CSSProperties}>
             <AnnouncementMarkdown content={item.content} />

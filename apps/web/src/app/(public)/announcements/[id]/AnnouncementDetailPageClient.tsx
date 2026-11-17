@@ -141,9 +141,11 @@ export default function AnnouncementDetailPageClient({
             {item.link_label || "前往連結"}
           </a>
         )}
-        <div className="mt-8 border-t pt-4 text-sm" style={{ borderColor: "var(--border)", color: "var(--text-secondary)" }}>
-          公告人：{item.author_name || "未命名"}
-        </div>
+        {item.author_name && (
+          <div className="mt-8 border-t pt-4 text-sm" style={{ borderColor: "var(--border)", color: "var(--text-secondary)" }}>
+            公告人：{item.author_name}
+          </div>
+        )}
       </div>
     </article>
   );

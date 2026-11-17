@@ -73,10 +73,10 @@ function OfficerCard({ officer, index = 0 }: { officer: PublicOfficerOut; index?
       } as React.CSSProperties}
     >
       <div
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border"
+        className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border"
         style={{
           background: isLeader ? "var(--primary)" : "var(--primary-dim)",
-          color: isLeader ? "var(--primary-text)" : "var(--primary-text)",
+          color: isLeader ? "var(--primary-fg)" : "var(--primary-text)",
           borderColor: isLeader ? "var(--primary)" : "var(--border-strong)",
         }}
       >
