@@ -564,11 +564,23 @@ async def test_audit_middleware_records_authenticated_actor(
     import logging
 
     caplog.set_level(logging.INFO, logger="api.core.audit")
+    audit_logger = logging.getLogger("api.core.audit")
+    audit_records: list[logging.LogRecord] = []
+    audit_handler = logging.Handler()
+    audit_handler.emit = audit_records.append
+    audit_logger.addHandler(audit_handler)
     client = authed_client_factory(member_user)
 
-    await client.patch("/users/me", json={})
+    try:
+        await client.patch("/users/me", json={})
+    finally:
+        audit_logger.removeHandler(audit_handler)
 
-    records = [r for r in caplog.records if r.getMessage() == "Security audit: sensitive operation"]
+    records = [
+        r
+        for r in [*caplog.records, *audit_records]
+        if r.getMessage() == "Security audit: sensitive operation"
+    ]
     assert records, "敏感路徑應寫入稽核紀錄"
     assert records[-1].user_id == str(member_user.id)
     assert records[-1].user_email == member_user.email
