@@ -156,7 +156,7 @@ export default function RecommendedVendorsPage() {
   };
 
   return (
-    <main className="mx-auto max-w-6xl space-y-5">
+    <div className="mx-auto max-w-6xl space-y-5">
       <header className="workspace-header flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div><h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>推薦商家</h1><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>整理通過衛生檢驗、方便學生聯絡訂購的校園周邊商家。</p></div>
         <div className="flex gap-2" role="group" aria-label="檢視方式">
@@ -177,6 +177,6 @@ export default function RecommendedVendorsPage() {
           {selected && <VendorDetail vendor={selected} onClose={() => setSelected(null)} />}
         </div>
       )}
-    </main>
+    </div>
   );
 }

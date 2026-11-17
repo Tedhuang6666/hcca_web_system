@@ -131,7 +131,7 @@ export default function NavigationProfilesPage() {
   };
 
   return (
-    <main className="mx-auto max-w-7xl p-4 md:p-6">
+    <div className="mx-auto max-w-7xl p-4 md:p-6">
       <header className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <div className="mb-2 inline-flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)]">
@@ -197,7 +197,7 @@ export default function NavigationProfilesPage() {
           />
         </section>
       </div>
-    </main>
+    </div>
   );
 }
 

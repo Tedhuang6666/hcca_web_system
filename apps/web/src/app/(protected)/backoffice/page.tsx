@@ -160,7 +160,7 @@ export default function BackofficePage() {
   const otherTools = visibleTools.filter((tool) => !tool.workspace);
 
   return (
-    <main className="mx-auto max-w-6xl space-y-6 p-5 md:p-6">
+    <div className="mx-auto max-w-6xl space-y-6 p-5 md:p-6">
       <header>
         <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--primary)" }}>
           BACKOFFICE
@@ -195,6 +195,6 @@ export default function BackofficePage() {
           )}
         </div>
       )}
-    </main>
+    </div>
   );
 }

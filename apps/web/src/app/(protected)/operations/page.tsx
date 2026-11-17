@@ -65,7 +65,7 @@ export default function OperationsPage() {
   ));
 
   return (
-    <main className="mx-auto max-w-6xl space-y-6 p-5 md:p-6">
+    <div className="mx-auto max-w-6xl space-y-6 p-5 md:p-6">
       <header>
         <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--primary)" }}>
           OPERATIONS
@@ -98,6 +98,6 @@ export default function OperationsPage() {
           })}
         </section>
       )}
-    </main>
+    </div>
   );
 }

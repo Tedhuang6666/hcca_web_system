@@ -169,7 +169,7 @@ export default function TermRolloverPage() {
 
   if (!isAdmin) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
+      <div className="mx-auto max-w-3xl p-6">
         <section
           className="rounded-lg border p-8 text-center"
           style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}>
@@ -178,12 +178,12 @@ export default function TermRolloverPage() {
             需要超級管理員權限
           </h1>
         </section>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="mx-auto max-w-6xl p-4 md:p-6">
+    <div className="mx-auto max-w-6xl p-4 md:p-6">
       <header className="mb-5">
         <div className="mb-2 inline-flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)]">
           <CalendarRange size={14} aria-hidden />
@@ -383,6 +383,6 @@ export default function TermRolloverPage() {
           </span>
         </div>
       )}
-    </main>
+    </div>
   );
 }

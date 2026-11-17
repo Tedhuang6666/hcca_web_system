@@ -131,7 +131,7 @@ export default function PrivacyPage() {
 
   if (!isAdmin) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
+      <div className="mx-auto max-w-3xl p-6">
         <section
           className="rounded-lg border p-8 text-center"
           style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}>
@@ -140,12 +140,12 @@ export default function PrivacyPage() {
             需要超級管理員權限
           </h1>
         </section>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="mx-auto max-w-5xl p-4 md:p-6">
+    <div className="mx-auto max-w-5xl p-4 md:p-6">
       <header className="mb-5">
         <div className="mb-2 inline-flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)]">
           <FileLock2 size={14} aria-hidden />
@@ -349,6 +349,6 @@ export default function PrivacyPage() {
           下載動作均寫入 <code>/audit-logs</code>。假名化操作不可復原。
         </span>
       </div>
-    </main>
+    </div>
   );
 }

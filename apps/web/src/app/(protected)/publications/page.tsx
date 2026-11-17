@@ -33,7 +33,7 @@ export default function PublicationsPage() {
   };
 
   return (
-    <main className="mx-auto max-w-6xl space-y-6 p-6">
+    <div className="mx-auto max-w-6xl space-y-6 p-6">
       <header className="flex items-end justify-between gap-3">
         <div>
           <p className="text-sm" style={{ color: "var(--text-muted)" }}>發布中心</p>
@@ -59,6 +59,6 @@ export default function PublicationsPage() {
           </div>
         ))}
       </section>
-    </main>
+    </div>
   );
 }

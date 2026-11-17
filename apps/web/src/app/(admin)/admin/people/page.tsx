@@ -189,14 +189,14 @@ export default function PeopleAdminPage() {
   return (
     <div className="flex min-h-0 min-w-0 flex-col xl:h-full">
       <AdminWorkbenchTabs />
-      <main className="xl:min-h-0 xl:flex-1 xl:overflow-auto" aria-label="人員與使用者防護工作區">
+      <div className="xl:min-h-0 xl:flex-1 xl:overflow-auto" aria-label="人員與使用者防護工作區">
         <PeopleManagementEmbedProvider>
           {section === "people" && <PersonDirectoryPanel />}
           {section === "defense" && <UserAndFeatureActionsPanel />}
           {section === "organization" && <OrganizationPermissionPanel />}
           {section === "classes" && <ClassManagementPanel />}
         </PeopleManagementEmbedProvider>
-      </main>
+      </div>
     </div>
   );
 }

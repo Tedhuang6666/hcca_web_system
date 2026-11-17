@@ -407,12 +407,12 @@ export default function MerchandiseSubmissionsPageClient({
   };
   if (loading)
     return (
-      <main className="p-6">
+      <div className="p-6">
         <div
           className="h-36 animate-pulse rounded-xl"
           style={{ background: "var(--bg-elevated)" }}
         />
-      </main>
+      </div>
     );
   const canUpload = Boolean(
     selected &&
@@ -422,7 +422,7 @@ export default function MerchandiseSubmissionsPageClient({
       portal?.is_eligible_submitter,
   );
   return (
-    <main className="mx-auto w-full max-w-6xl space-y-6 px-4 py-6 sm:px-6 lg:py-8">
+    <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-6 sm:px-6 lg:py-8">
       <header
         className="flex flex-wrap items-end justify-between gap-4 border-b pb-6"
         style={{ borderColor: "var(--border)" }}
@@ -1129,6 +1129,6 @@ export default function MerchandiseSubmissionsPageClient({
           )}
         </div>
       )}
-    </main>
+    </div>
   );
 }

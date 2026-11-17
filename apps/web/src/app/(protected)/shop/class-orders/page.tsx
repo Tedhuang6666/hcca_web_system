@@ -1041,7 +1041,7 @@ export default function ClassOrdersPage() {
   };
 
   return (
-    <main className="shop-class-orders-page mx-auto min-w-0 w-full max-w-7xl space-y-5 px-4 py-5">
+    <div className="shop-class-orders-page mx-auto min-w-0 w-full max-w-7xl space-y-5 px-4 py-5">
       <header className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
           <h1 className="break-words text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>班代工作</h1>
@@ -2287,6 +2287,6 @@ export default function ClassOrdersPage() {
           </div>
         </div>
       )}
-    </main>
+    </div>
   );
 }

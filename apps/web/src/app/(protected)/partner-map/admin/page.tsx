@@ -640,7 +640,7 @@ export default function PartnerMapAdminPage() {
           </div>
         </aside>
 
-        <main className="space-y-4">
+        <div className="space-y-4">
           <section className="card overflow-hidden">
             <div className="flex items-start justify-between gap-4 border-b p-5" style={{ borderColor: "var(--border)" }}>
               <div>
@@ -870,7 +870,7 @@ export default function PartnerMapAdminPage() {
             </div>
           )}
           {selected && <BusinessAccountPanel businessId={selected.id} />}
-        </main>
+        </div>
       </div> : activeTab === "tags" ? (
         <section id="tags-panel" role="tabpanel" aria-label="標籤管理" className="card p-5">
           <div className="mb-5 flex items-start gap-3">

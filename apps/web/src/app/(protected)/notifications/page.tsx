@@ -106,7 +106,21 @@ function NotificationCard({
         border: "1px solid var(--border)",
         opacity: n.is_read ? 0.7 : 1,
       }}
-      onClick={() => { if (!n.is_read) onRead(n.id); }}>
+      onClick={() => { if (!n.is_read) onRead(n.id); }}
+      // 沒有連結時卡片本身就是「標為已讀」的操作，需要能用鍵盤觸發。
+      {...(!safeInternalLink && !n.is_read
+        ? {
+            role: "button",
+            tabIndex: 0,
+            "aria-label": `標為已讀：${n.title}`,
+            onKeyDown: (event: React.KeyboardEvent) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onRead(n.id);
+              }
+            },
+          }
+        : {})}>
 
       {/* 圖示 */}
       <div

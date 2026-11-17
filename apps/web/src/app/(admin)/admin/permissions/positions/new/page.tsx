@@ -189,7 +189,7 @@ export default function NewPositionPage() {
   return (
     <div className="min-h-full" style={{ background: "var(--bg-base)" }}>
       <AdminWorkbenchTabs />
-      <main className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6 lg:px-8">
+      <div className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6 lg:px-8">
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <Link
@@ -324,7 +324,7 @@ export default function NewPositionPage() {
             </div>
           </form>
         )}
-      </main>
+      </div>
     </div>
   );
 }

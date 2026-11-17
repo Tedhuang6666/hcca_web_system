@@ -105,7 +105,7 @@ export default function ReceivablesPage() {
     : 0;
 
   return (
-    <main className="receivables-page">
+    <div className="receivables-page">
       <Link href="/finance" className="receivables-page__back">
         <ArrowLeft size={15} aria-hidden="true" />返回財務作業桌
       </Link>
@@ -170,7 +170,7 @@ export default function ReceivablesPage() {
           </>
         )}
       </section>
-    </main>
+    </div>
   );
 }
 
