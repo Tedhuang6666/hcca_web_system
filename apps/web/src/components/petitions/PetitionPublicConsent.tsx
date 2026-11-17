@@ -35,16 +35,27 @@ export default function PetitionPublicConsent({
   item: PetitionCaseOut;
   onUpdated: (item: PetitionCaseOut) => void;
 }) {
-  const [title, setTitle] = useState(item.public_title || item.title);
-  const [content, setContent] = useState(item.public_content || item.content);
+  const draftTitle = item.public_title || item.title;
+  const draftContent = item.public_content || item.content;
+  const [title, setTitle] = useState(draftTitle);
+  const [content, setContent] = useState(draftContent);
+  const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     setTitle(item.public_title || item.title);
     setContent(item.public_content || item.content);
+    setEditing(false);
   }, [item]);
 
   if (item.public_status !== "pending_user") return null;
+
+  const changed = title.trim() !== draftTitle.trim() || content.trim() !== draftContent.trim();
+  const cancelEditing = () => {
+    setTitle(draftTitle);
+    setContent(draftContent);
+    setEditing(false);
+  };
 
   const respond = async (decision: "approve" | "approve_with_changes" | "reject") => {
     if (decision === "approve_with_changes" && (!title.trim() || !content.trim())) return;
@@ -71,25 +82,42 @@ export default function PetitionPublicConsent({
           承辦希望公開這件已結案陳情。公開後不會顯示您的姓名、Email、學號或其他聯絡資料。
         </p>
       </div>
-      <div className="space-y-2">
-        <p className="text-sm font-medium">公開草案差異</p>
-        <PetitionPublicDiff before={item.content} after={item.public_content || item.content} />
-      </div>
-      <div className="space-y-2">
-        <p className="text-sm font-medium">公開標題差異</p>
-        <PetitionPublicDiff before={item.title} after={item.public_title || item.title} />
-      </div>
-      <div className="space-y-2">
-        <label className="text-sm font-medium" htmlFor="public-title">公開標題（可修改）</label>
-        <input id="public-title" className="input w-full" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <label className="text-sm font-medium" htmlFor="public-content">公開內容（可修改）</label>
-        <textarea id="public-content" className="input w-full min-h-32" value={content} onChange={(e) => setContent(e.target.value)} />
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <button className="btn btn-primary" disabled={busy} onClick={() => respond("approve")}>同意公開</button>
-        <button className="btn btn-ghost" disabled={busy || !title.trim() || !content.trim()} onClick={() => respond("approve_with_changes")}>修改後同意</button>
-        <button className="btn btn-ghost" disabled={busy} onClick={() => respond("reject")}>拒絕公開</button>
-      </div>
+      {editing ? (
+        <>
+          <div className="space-y-2">
+            <label className="block text-sm font-semibold" htmlFor="public-title">公開標題</label>
+            <input id="public-title" className="input w-full" value={title} onChange={(e) => setTitle(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <label className="block text-sm font-semibold" htmlFor="public-content">公開內容</label>
+            <textarea id="public-content" className="input w-full min-h-32" value={content} onChange={(e) => setContent(e.target.value)} />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="btn btn-primary"
+              disabled={busy || !changed || !title.trim() || !content.trim()}
+              onClick={() => respond("approve_with_changes")}>
+              送出修改並同意
+            </button>
+            <button type="button" className="btn btn-ghost" disabled={busy} onClick={cancelEditing}>取消修改</button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold">公開標題</h3>
+            <PetitionPublicDiff before={item.title} after={draftTitle} />
+          </div>
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold">公開內容</h3>
+            <PetitionPublicDiff before={item.content} after={draftContent} />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="btn btn-primary" disabled={busy} onClick={() => respond("approve")}>同意公開</button>
+            <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => setEditing(true)}>修改內容</button>
+            <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => respond("reject")}>拒絕公開</button>
+          </div>
+        </>
+      )}
     </section>
   );
 }

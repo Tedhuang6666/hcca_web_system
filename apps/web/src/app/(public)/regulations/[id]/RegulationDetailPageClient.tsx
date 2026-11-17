@@ -467,7 +467,14 @@ export default function RegulationDetailPageClient({
       </div>
     );
   }
-  if (!reg) return <div className="py-20 text-center" style={{ color: "var(--danger)" }}>法規不存在或無法存取</div>;
+  if (!reg) {
+    return (
+      <div className="py-20 text-center space-y-4">
+        <p style={{ color: "var(--text-secondary)" }}>法規不存在或無法存取</p>
+        <Link href="/regulations" className="btn btn-secondary">返回自治法規</Link>
+      </div>
+    );
+  }
 
   const sortedRevisions = [...(reg.revisions ?? [])].sort(
     (a, b) => new Date(a.amended_at).getTime() - new Date(b.amended_at).getTime()
@@ -493,7 +500,6 @@ export default function RegulationDetailPageClient({
         </nav>
         <header className="regulation-detail-heading">
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
-            {!reg.is_active && <span style={{ color: "var(--danger)" }}>(失效) </span>}
             {reg.title}
           </h1>
           <div className="regulation-reading-meta">
@@ -539,8 +545,8 @@ export default function RegulationDetailPageClient({
 
         {/* ── 失效橫幅 ─────────────────────────────────────────────────────── */}
         {reg.is_repealed && (
-          <div className="rounded-xl px-4 py-3 flex items-start gap-3"
-            style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)" }}>
+          <div className="rounded-lg px-4 py-3 flex items-start gap-3"
+            style={{ background: "var(--danger-dim)", border: "1px solid var(--danger-border)" }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth="2" style={{ color: "var(--danger)", flexShrink: 0, marginTop: 2 }}>
               <circle cx="12" cy="12" r="10" />
@@ -560,8 +566,8 @@ export default function RegulationDetailPageClient({
         )}
 
         {!reg.is_active && !reg.is_repealed && (
-          <div className="rounded-xl px-4 py-3 flex items-center gap-3"
-            style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)" }}>
+          <div className="rounded-lg px-4 py-3 flex items-center gap-3"
+            style={{ background: "var(--danger-dim)", border: "1px solid var(--danger-border)" }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth="2" style={{ color: "var(--danger)", flexShrink: 0 }}>
               <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
@@ -575,8 +581,8 @@ export default function RegulationDetailPageClient({
 
         {/* ── 凍結橫幅 ─────────────────────────────────────────────────────── */}
         {reg.freeze_reason && (
-          <div className="rounded-xl px-4 py-3"
-            style={{ background: "rgba(251,146,60,0.08)", border: "1px solid rgba(251,146,60,0.3)" }}>
+          <div className="rounded-lg px-4 py-3"
+            style={{ background: "var(--warning-dim)", border: "1px solid var(--warning-border)" }}>
             <div className="flex items-start gap-3">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                 strokeWidth="2" style={{ color: "var(--warning)", flexShrink: 0, marginTop: 2 }}>
@@ -625,7 +631,7 @@ export default function RegulationDetailPageClient({
         {tab === "content" && (
           <div className="administrative-law-reader print-content">
             {reg.preface && (
-              <div className="mb-6 pb-5 border-b text-sm italic"
+              <div className="mb-6 pb-5 border-b text-sm leading-7"
                 style={{ color: "var(--text-muted)", borderColor: "var(--border)" }}>
                 {reg.preface}
               </div>
