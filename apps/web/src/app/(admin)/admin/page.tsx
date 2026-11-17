@@ -44,13 +44,13 @@ function StatCard({
   return (
     <Link href={href} style={{ textDecoration: "none" }}>
       <Panel className="p-4 flex flex-col gap-1 transition-colors hover:bg-[var(--bg-hover)]">
-        <div className="flex items-center gap-1.5 text-xs" style={{ color: warn && value ? "var(--error)" : "var(--text-muted)" }}>
+        <div className="flex items-center gap-1.5 text-xs" style={{ color: warn && value ? "var(--danger)" : "var(--text-muted)" }}>
           {icon}
           <span>{label}</span>
         </div>
         <p
           className="text-2xl font-semibold"
-          style={{ color: warn && value ? "var(--error)" : "var(--text-primary)" }}
+          style={{ color: warn && value ? "var(--danger)" : "var(--text-primary)" }}
         >
           {value === null ? "—" : value}
         </p>
@@ -91,17 +91,16 @@ type QuickAction = {
   href: string;
   icon: LucideIcon;
   label: string;
-  desc: string;
   requiredPermission?: string;
   requiredPermissions?: string[];
 };
 
 const QUICK_ACTIONS: QuickAction[] = [
-  { href: "/admin/people",       icon: Users,      label: "人員與組織", desc: "人員、帳號、停權、組織職位、權限與班級名冊" },
-  { href: "/admin/settings",     icon: Settings,   label: "系統設定",   desc: "全站設定與功能參數調整" },
-  { href: "/admin/system",       icon: Activity,   label: "系統營運",   desc: "防護、診斷、效能觀測與模組維護", requiredPermission: "admin:all" },
-  { href: "/admin/navigation-profiles", icon: SlidersHorizontal, label: "視角管理", desc: "管理角色視角與專屬導覽", requiredPermission: "admin:all" },
-  { href: "/audit-logs",         icon: ClipboardList, label: "稽核日誌", desc: "追蹤所有操作紀錄" },
+  { href: "/admin/people",       icon: Users,      label: "人員與組織" },
+  { href: "/admin/settings",     icon: Settings,   label: "系統設定" },
+  { href: "/admin/system",       icon: Activity,   label: "系統營運", requiredPermission: "admin:all" },
+  { href: "/admin/navigation-profiles", icon: SlidersHorizontal, label: "視角管理", requiredPermission: "admin:all" },
+  { href: "/audit-logs",         icon: ClipboardList, label: "稽核日誌" },
 ];
 
 /* ── 主頁面 ──────────────────────────────────────────────────────────────── */
@@ -188,17 +187,12 @@ export default function AdminDashboardPage() {
       )}
 
       {/* 標題 */}
-      <div>
-        <p className="text-xs font-semibold tracking-widest uppercase mb-1" style={{ color: "var(--primary-text)" }}>
-          管理後台
-        </p>
-        <h1 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
-          系統總覽
-        </h1>
-      </div>
+      <h1 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
+        系統總覽
+      </h1>
 
       {/* 快速統計 */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <StatCard
           href="/admin/people"
           icon={<Users size={13} />}
@@ -218,12 +212,6 @@ export default function AdminDashboardPage() {
           label="組織職位"
           value={loading ? null : positionCount}
         />
-        <StatCard
-          href="/audit-logs"
-          icon={<ClipboardList size={13} />}
-          label="最新紀錄"
-          value={loading ? null : recentLogs.length}
-        />
       </div>
 
       {/* 快速操作 */}
@@ -231,7 +219,7 @@ export default function AdminDashboardPage() {
         <h2 className="text-sm font-semibold mb-3" style={{ color: "var(--text-secondary)" }}>
           快速操作
         </h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
           {QUICK_ACTIONS.filter((action) => {
             if (isAdmin) return true;
             if (action.requiredPermission) return can(action.requiredPermission);
@@ -240,23 +228,14 @@ export default function AdminDashboardPage() {
           }).map((action) => {
             const Icon = action.icon;
             return (
-              <Link key={action.href} href={action.href} style={{ textDecoration: "none" }}>
-                <Panel className="p-3.5 flex flex-col gap-2 transition-colors hover:bg-[var(--bg-hover)] h-full">
-                  <div
-                    className="w-7 h-7 rounded flex items-center justify-center"
-                    style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}
-                  >
-                    <Icon size={15} />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-                      {action.label}
-                    </p>
-                    <p className="text-xs mt-0.5 leading-snug" style={{ color: "var(--text-muted)" }}>
-                      {action.desc}
-                    </p>
-                  </div>
-                </Panel>
+              <Link
+                key={action.href}
+                href={action.href}
+                className="flex min-h-11 items-center gap-2.5 rounded-md px-3.5 text-sm font-semibold transition-colors hover:bg-[var(--bg-hover)]"
+                style={{ border: "1px solid var(--border)", color: "var(--text-primary)", textDecoration: "none" }}
+              >
+                <Icon size={16} aria-hidden style={{ color: "var(--text-muted)" }} />
+                {action.label}
               </Link>
             );
           })}
