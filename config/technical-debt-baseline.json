@@ -110,7 +110,7 @@
       "any_annotations": 5
     },
     "apps/api/src/api/main.py": {
-      "lines_over_600": 217,
+      "lines_over_600": 219,
       "broad_except": 6
     },
     "apps/api/src/api/models/__init__.py": {

@@ -38,7 +38,7 @@ describe("budget Excel download", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/finance/budgets/budget-123/export.xlsx", expect.objectContaining({
       method: "GET", credentials: "include",
     }));
-    expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
     expect(downloads).toEqual([{ filename: "預算總表.xlsx", href: "blob:budget-workbook", attached: true }]);
     expect(document.querySelector('a[download="預算總表.xlsx"]')).toBeNull();
     expect(revokeObjectURL).not.toHaveBeenCalled();

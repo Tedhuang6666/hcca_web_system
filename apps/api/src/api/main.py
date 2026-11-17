@@ -294,7 +294,6 @@ def create_app() -> FastAPI:
     app.add_middleware(GZipMiddleware, minimum_size=500)
     # Prometheus metrics middleware（最外層、每筆 request 都會看到）
     app.add_middleware(PrometheusMetricsMiddleware)
-    app.add_middleware(SecurityAuditMiddleware)
     app.add_middleware(
         SimpleRateLimitMiddleware,
         enabled=settings.RATE_LIMIT_ENABLED,
@@ -364,6 +363,9 @@ def create_app() -> FastAPI:
         hsts_max_age=settings.SECURITY_HSTS_MAX_AGE_SECONDS,
         content_security_policy=settings.SECURITY_CSP,
     )
+    # 稽核需包住 CSRF、WAF 與路由，才能記錄被入口防護拒絕的敏感操作，
+    # 並在路由 dependency 回填 request.state.user 後取得操作者。
+    app.add_middleware(SecurityAuditMiddleware)
 
     # 模組健康端點：在 include_router 之前掛上，這樣每個模組會自帶
     # GET /{prefix}/__module_health__ 給斷路器的 half-open 探測使用。
