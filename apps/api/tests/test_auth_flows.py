@@ -572,7 +572,7 @@ async def test_audit_middleware_records_authenticated_actor(
     client = authed_client_factory(member_user)
 
     try:
-        await client.patch("/users/me", json={})
+        response = await client.patch("/users/me", json={})
     finally:
         audit_logger.removeHandler(audit_handler)
 
@@ -581,7 +581,7 @@ async def test_audit_middleware_records_authenticated_actor(
         for r in [*caplog.records, *audit_records]
         if r.getMessage() == "Security audit: sensitive operation"
     ]
-    assert records, "敏感路徑應寫入稽核紀錄"
+    assert records, f"敏感路徑應寫入稽核紀錄（status={response.status_code}）"
     assert records[-1].user_id == str(member_user.id)
     assert records[-1].user_email == member_user.email
 
