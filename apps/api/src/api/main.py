@@ -294,7 +294,6 @@ def create_app() -> FastAPI:
     app.add_middleware(GZipMiddleware, minimum_size=500)
     # Prometheus metrics middleware（最外層、每筆 request 都會看到）
     app.add_middleware(PrometheusMetricsMiddleware)
-    app.add_middleware(SecurityAuditMiddleware)
     app.add_middleware(
         SimpleRateLimitMiddleware,
         enabled=settings.RATE_LIMIT_ENABLED,
@@ -364,7 +363,6 @@ def create_app() -> FastAPI:
         hsts_max_age=settings.SECURITY_HSTS_MAX_AGE_SECONDS,
         content_security_policy=settings.SECURITY_CSP,
     )
-
     # 模組健康端點：在 include_router 之前掛上，這樣每個模組會自帶
     # GET /{prefix}/__module_health__ 給斷路器的 half-open 探測使用。
     attach_module_health(documents.router, module_id="documents")
@@ -660,6 +658,10 @@ def create_app() -> FastAPI:
                             await maybe_trip_module(module_id)
             except Exception:  # 模組健康計數失敗不可影響回應
                 logger.debug("module health hook failed", exc_info=True)
+
+    # 必須在 request-timing middleware 定義後加入，才能真正成為最外層，
+    # 並包住 CSRF、WAF、路由與其他 HTTP middleware。
+    app.add_middleware(SecurityAuditMiddleware)
 
     @app.exception_handler(StarletteHTTPException)
     async def _http_exception_handler(

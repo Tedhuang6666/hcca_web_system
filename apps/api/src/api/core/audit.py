@@ -3,12 +3,23 @@
 from __future__ import annotations
 
 import logging
+from contextvars import ContextVar
 from datetime import UTC, datetime
 from urllib.parse import parse_qsl
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 logger = logging.getLogger(__name__)
+logger.propagate = True
+_audit_actor: ContextVar[tuple[str, str] | None] = ContextVar("audit_actor", default=None)
+
+
+def set_audit_actor(user_id: str, user_email: str) -> None:
+    _audit_actor.set((user_id, user_email))
+
+
+def clear_audit_actor() -> None:
+    _audit_actor.set(None)
 
 
 def _client_ip(scope: Scope) -> str:
@@ -50,7 +61,8 @@ class SecurityAuditMiddleware:
         if method not in {"POST", "PATCH", "PUT", "DELETE"}:
             return False
 
-        return any(path.startswith(prefix) for prefix in self.SENSITIVE_ENDPOINTS)
+        route_path = path.removeprefix("/api")
+        return any(route_path.startswith(prefix) for prefix in self.SENSITIVE_ENDPOINTS)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         method = str(scope.get("method", "GET")).upper()
@@ -59,6 +71,7 @@ class SecurityAuditMiddleware:
             await self.app(scope, receive, send)
             return
 
+        state = scope.setdefault("state", {})
         client_ip = _client_ip(scope)
         status_code = 500
 
@@ -66,31 +79,38 @@ class SecurityAuditMiddleware:
             nonlocal status_code
             if message["type"] == "http.response.start":
                 status_code = message["status"]
+                actor = _audit_actor.get()
+                user = state.get("user")
+                user_id = (
+                    actor[0]
+                    if actor is not None
+                    else str(user.id)
+                    if user is not None
+                    else "anonymous"
+                )
+                user_email = (
+                    actor[1] if actor is not None else user.email if user is not None else "unknown"
+                )
+
+                # 記錄敏感操作（info level；失敗時 status_code >= 400 方升為 warning）
+                log_fn = logger.warning if status_code >= 400 else logger.info
+                log_fn(
+                    "Security audit: sensitive operation",
+                    extra={
+                        "timestamp": datetime.now(UTC).isoformat(),
+                        "method": method,
+                        "path": path,
+                        "user_id": user_id,
+                        "user_email": user_email,
+                        "client_ip": client_ip,
+                        "status_code": status_code,
+                        "query_params": _query_params(scope),
+                    },
+                )
+                clear_audit_actor()
             await send(message)
 
         await self.app(scope, receive, send_wrapper)
 
-        # 提取使用者資訊（若可用；由上游 auth middleware/dependency 寫入 scope["state"]）
-        state = scope.get("state") or {}
-        user = state.get("user")
-        user_id = str(user.id) if user is not None else "anonymous"
-        user_email = user.email if user is not None else "unknown"
 
-        # 記錄敏感操作（info level；失敗時 status_code >= 400 方升為 warning）
-        log_fn = logger.warning if status_code >= 400 else logger.info
-        log_fn(
-            "Security audit: sensitive operation",
-            extra={
-                "timestamp": datetime.now(UTC).isoformat(),
-                "method": method,
-                "path": path,
-                "user_id": user_id,
-                "user_email": user_email,
-                "client_ip": client_ip,
-                "status_code": status_code,
-                "query_params": _query_params(scope),
-            },
-        )
-
-
-__all__ = ["SecurityAuditMiddleware"]
+__all__ = ["SecurityAuditMiddleware", "set_audit_actor"]

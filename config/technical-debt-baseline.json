@@ -18,7 +18,7 @@
       "noqa": 1
     },
     "apps/api/src/api/core/config.py": {
-      "lines_over_600": 127
+      "lines_over_600": 125
     },
     "apps/api/src/api/core/database.py": {
       "commits": 1,
@@ -69,7 +69,7 @@
       "broad_except": 1
     },
     "apps/api/src/api/core/permission_codes.py": {
-      "lines_over_600": 344
+      "lines_over_600": 333
     },
     "apps/api/src/api/core/prometheus_metrics.py": {
       "broad_except": 2
@@ -89,6 +89,9 @@
     "apps/api/src/api/core/sentry.py": {
       "broad_except": 1,
       "any_annotations": 3
+    },
+    "apps/api/src/api/core/spreadsheet.py": {
+      "any_annotations": 6
     },
     "apps/api/src/api/core/structured_logging.py": {
       "any_annotations": 2
@@ -111,14 +114,11 @@
       "broad_except": 6
     },
     "apps/api/src/api/models/__init__.py": {
-      "noqa": 65
+      "noqa": 64
     },
     "apps/api/src/api/models/document.py": {
       "lines_over_600": 272,
       "any_annotations": 3
-    },
-    "apps/api/src/api/models/governance.py": {
-      "lines_over_600": 184
     },
     "apps/api/src/api/models/notification.py": {
       "any_annotations": 1
@@ -193,7 +193,7 @@
       "router_db_calls": 2
     },
     "apps/api/src/api/routers/auth.py": {
-      "lines_over_600": 303,
+      "lines_over_600": 314,
       "router_db_calls": 8,
       "commits": 5,
       "broad_except": 3
@@ -203,7 +203,7 @@
       "any_annotations": 1
     },
     "apps/api/src/api/routers/discord.py": {
-      "lines_over_600": 565,
+      "lines_over_600": 570,
       "router_db_calls": 28,
       "broad_except": 1
     },
@@ -326,9 +326,6 @@
     "apps/api/src/api/routers/school_class.py": {
       "lines_over_600": 95
     },
-    "apps/api/src/api/routers/seating.py": {
-      "router_db_calls": 7
-    },
     "apps/api/src/api/routers/shop_sheet.py": {
       "router_db_calls": 7
     },
@@ -372,7 +369,7 @@
       "commits": 3
     },
     "apps/api/src/api/routers/ws.py": {
-      "router_db_calls": 5,
+      "router_db_calls": 4,
       "broad_except": 2
     },
     "apps/api/src/api/schemas/discord_internal.py": {
@@ -382,21 +379,21 @@
       "lines_over_600": 307
     },
     "apps/api/src/api/schemas/finance.py": {
-      "lines_over_600": 214
-    },
-    "apps/api/src/api/schemas/governance.py": {
-      "lines_over_600": 38
+      "lines_over_600": 188
     },
     "apps/api/src/api/schemas/navigation_profile.py": {
       "any_annotations": 1
     },
     "apps/api/src/api/schemas/shop.py": {
-      "lines_over_600": 583
+      "lines_over_600": 573
     },
     "apps/api/src/api/schemas/survey.py": {
       "lines_over_600": 20,
       "type_ignore": 2,
       "any_annotations": 10
+    },
+    "apps/api/src/api/services/account_protection.py": {
+      "service_http_exception": 1
     },
     "apps/api/src/api/services/announcement.py": {
       "service_http_exception": 1,
@@ -416,7 +413,7 @@
     },
     "apps/api/src/api/services/backup_tasks.py": {
       "commits": 2,
-      "broad_except": 5,
+      "broad_except": 6,
       "type_ignore": 1,
       "noqa": 1
     },
@@ -446,7 +443,7 @@
       "noqa": 2
     },
     "apps/api/src/api/services/discord_bot.py": {
-      "lines_over_600": 351,
+      "lines_over_600": 356,
       "any_annotations": 11
     },
     "apps/api/src/api/services/discord_command_admin.py": {
@@ -501,10 +498,10 @@
       "type_ignore": 1
     },
     "apps/api/src/api/services/document/_access.py": {
-      "lines_over_600": 163
+      "lines_over_600": 172
     },
     "apps/api/src/api/services/document/_lifecycle.py": {
-      "lines_over_600": 497,
+      "lines_over_600": 501,
       "noqa": 1
     },
     "apps/api/src/api/services/document_reminder_tasks.py": {
@@ -523,7 +520,7 @@
       "noqa": 1
     },
     "apps/api/src/api/services/email_platform.py": {
-      "lines_over_600": 6,
+      "lines_over_600": 8,
       "service_http_exception": 1
     },
     "apps/api/src/api/services/email_tasks.py": {
@@ -545,7 +542,7 @@
       "service_http_exception": 1
     },
     "apps/api/src/api/services/finance_budget.py": {
-      "lines_over_600": 1344,
+      "lines_over_600": 1330,
       "broad_except": 1,
       "service_http_exception": 1
     },
@@ -569,7 +566,7 @@
       "noqa": 1
     },
     "apps/api/src/api/services/google_tasks_service.py": {
-      "broad_except": 5
+      "broad_except": 4
     },
     "apps/api/src/api/services/governance_ingest.py": {
       "broad_except": 2,
@@ -590,7 +587,7 @@
     },
     "apps/api/src/api/services/mail.py": {
       "commits": 3,
-      "broad_except": 3,
+      "broad_except": 2,
       "noqa": 1
     },
     "apps/api/src/api/services/merchandise_submission.py": {
@@ -620,13 +617,13 @@
       "commits": 2
     },
     "apps/api/src/api/services/official_print.py": {
-      "lines_over_600": 290
+      "lines_over_600": 183
     },
     "apps/api/src/api/services/official_print_document.py": {
       "lines_over_600": 89
     },
     "apps/api/src/api/services/outbox.py": {
-      "lines_over_600": 127,
+      "lines_over_600": 109,
       "commits": 2,
       "broad_except": 7,
       "any_annotations": 3
@@ -635,7 +632,7 @@
       "type_ignore": 1
     },
     "apps/api/src/api/services/partner_map.py": {
-      "lines_over_600": 63,
+      "lines_over_600": 53,
       "noqa": 8
     },
     "apps/api/src/api/services/passkey.py": {
@@ -650,7 +647,7 @@
       "lines_over_600": 378
     },
     "apps/api/src/api/services/petition.py": {
-      "lines_over_600": 568,
+      "lines_over_600": 604,
       "noqa": 1
     },
     "apps/api/src/api/services/privacy.py": {
@@ -668,18 +665,14 @@
       "broad_except": 2
     },
     "apps/api/src/api/services/regulation.py": {
-      "lines_over_600": 1168,
+      "lines_over_600": 319,
       "any_annotations": 2
     },
     "apps/api/src/api/services/regulation_consistency.py": {
       "any_annotations": 1
     },
     "apps/api/src/api/services/regulation_import.py": {
-      "lines_over_600": 537
-    },
-    "apps/api/src/api/services/regulation_publication.py": {
-      "broad_except": 1,
-      "service_http_exception": 1
+      "lines_over_600": 527
     },
     "apps/api/src/api/services/regulation_tasks.py": {
       "commits": 2,
@@ -691,7 +684,7 @@
       "any_annotations": 14
     },
     "apps/api/src/api/services/school_class.py": {
-      "lines_over_600": 1290,
+      "lines_over_600": 1272,
       "type_ignore": 1
     },
     "apps/api/src/api/services/school_directory_import.py": {
@@ -702,16 +695,12 @@
       "noqa": 1,
       "any_annotations": 16
     },
-    "apps/api/src/api/services/seating.py": {
-      "lines_over_600": 136,
-      "type_ignore": 1
-    },
     "apps/api/src/api/services/shop/_catalog.py": {
-      "lines_over_600": 152,
+      "lines_over_600": 136,
       "type_ignore": 2
     },
     "apps/api/src/api/services/shop/_orders.py": {
-      "lines_over_600": 1268,
+      "lines_over_600": 1282,
       "noqa": 15
     },
     "apps/api/src/api/services/shop/_promotions.py": {
@@ -724,8 +713,8 @@
       "broad_except": 1
     },
     "apps/api/src/api/services/shop_tasks.py": {
-      "commits": 3,
-      "broad_except": 6,
+      "commits": 2,
+      "broad_except": 4,
       "noqa": 3
     },
     "apps/api/src/api/services/site.py": {
@@ -736,7 +725,7 @@
       "type_ignore": 1
     },
     "apps/api/src/api/services/survey.py": {
-      "lines_over_600": 1013,
+      "lines_over_600": 1005,
       "noqa": 2
     },
     "apps/api/src/api/services/survey_tasks.py": {
@@ -745,7 +734,7 @@
       "noqa": 1
     },
     "apps/api/src/api/services/task_inbox.py": {
-      "lines_over_600": 117,
+      "lines_over_600": 109,
       "broad_except": 3
     },
     "apps/api/src/api/services/term_rollover.py": {
@@ -789,21 +778,21 @@
       "broad_except": 1
     },
     "apps/api/src/api/services/workflow.py": {
-      "lines_over_600": 32
+      "lines_over_600": 45
     },
     "apps/web/src/app/(admin)/admin/api-keys/page.tsx": {
       "inline_styles": 5
     },
     "apps/web/src/app/(admin)/admin/classes/page.tsx": {
-      "lines_over_600": 1260,
+      "lines_over_600": 1261,
       "inline_styles": 150
     },
     "apps/web/src/app/(admin)/admin/data-lifecycle/page.tsx": {
       "inline_styles": 7
     },
     "apps/web/src/app/(admin)/admin/discord/page.tsx": {
-      "lines_over_600": 299,
-      "inline_styles": 40
+      "lines_over_600": 296,
+      "inline_styles": 39
     },
     "apps/web/src/app/(admin)/admin/elections/[id]/count/page.tsx": {
       "inline_styles": 19
@@ -824,7 +813,7 @@
       "inline_styles": 22
     },
     "apps/web/src/app/(admin)/admin/people/page.tsx": {
-      "lines_over_600": 704,
+      "lines_over_600": 705,
       "inline_styles": 88
     },
     "apps/web/src/app/(admin)/admin/permissions/page.tsx": {
@@ -835,14 +824,14 @@
       "inline_styles": 36
     },
     "apps/web/src/app/(admin)/admin/policies/page.tsx": {
-      "lines_over_600": 106,
+      "lines_over_600": 102,
       "inline_styles": 11
     },
     "apps/web/src/app/(admin)/admin/privacy/page.tsx": {
       "inline_styles": 5
     },
     "apps/web/src/app/(admin)/admin/public-site/page.tsx": {
-      "lines_over_600": 1877,
+      "lines_over_600": 1874,
       "inline_styles": 28
     },
     "apps/web/src/app/(admin)/admin/reports/page.tsx": {
@@ -864,14 +853,14 @@
       "inline_styles": 3
     },
     "apps/web/src/app/(protected)/announcements/new/page.tsx": {
-      "inline_styles": 3
+      "inline_styles": 2
     },
     "apps/web/src/app/(protected)/audit-logs/page.tsx": {
-      "lines_over_600": 136,
-      "inline_styles": 36
+      "lines_over_600": 130,
+      "inline_styles": 34
     },
     "apps/web/src/app/(protected)/backoffice/page.tsx": {
-      "inline_styles": 6
+      "inline_styles": 5
     },
     "apps/web/src/app/(protected)/council-proposals/page.tsx": {
       "inline_styles": 17
@@ -880,11 +869,11 @@
       "inline_styles": 2
     },
     "apps/web/src/app/(protected)/dashboard/DashboardPageClient.tsx": {
-      "lines_over_600": 196,
-      "inline_styles": 29
+      "lines_over_600": 188,
+      "inline_styles": 28
     },
     "apps/web/src/app/(protected)/dashboard/DashboardWidgets.tsx": {
-      "inline_styles": 18
+      "inline_styles": 16
     },
     "apps/web/src/app/(protected)/document-templates/page.tsx": {
       "inline_styles": 30
@@ -897,25 +886,25 @@
       "inline_styles": 26
     },
     "apps/web/src/app/(protected)/documents/new/page.tsx": {
-      "lines_over_600": 873,
-      "inline_styles": 71
+      "lines_over_600": 867,
+      "inline_styles": 70
     },
     "apps/web/src/app/(protected)/email/analytics/page.tsx": {
-      "inline_styles": 3
+      "inline_styles": 2
     },
     "apps/web/src/app/(protected)/email/lists/page.tsx": {
-      "inline_styles": 4
+      "inline_styles": 3
     },
     "apps/web/src/app/(protected)/email/logs/page.tsx": {
       "lines_over_600": 117,
-      "inline_styles": 34
+      "inline_styles": 33
     },
     "apps/web/src/app/(protected)/email/page.tsx": {
-      "lines_over_600": 1846,
-      "inline_styles": 79
+      "lines_over_600": 1843,
+      "inline_styles": 78
     },
     "apps/web/src/app/(protected)/email/templates/page.tsx": {
-      "inline_styles": 3
+      "inline_styles": 2
     },
     "apps/web/src/app/(protected)/exam-papers/admin/page.tsx": {
       "inline_styles": 6
@@ -938,10 +927,10 @@
       "inline_styles": 62
     },
     "apps/web/src/app/(protected)/notifications/page.tsx": {
-      "inline_styles": 20
+      "inline_styles": 19
     },
     "apps/web/src/app/(protected)/operations/page.tsx": {
-      "inline_styles": 5
+      "inline_styles": 4
     },
     "apps/web/src/app/(protected)/orgs/[id]/page.tsx": {
       "inline_styles": 45
@@ -976,7 +965,7 @@
       "inline_styles": 16
     },
     "apps/web/src/app/(protected)/petitions/PetitionsPageClient.tsx": {
-      "inline_styles": 24
+      "inline_styles": 23
     },
     "apps/web/src/app/(protected)/petitions/[id]/page.tsx": {
       "inline_styles": 21
@@ -985,8 +974,8 @@
       "inline_styles": 9
     },
     "apps/web/src/app/(protected)/petitions/manage/page.tsx": {
-      "lines_over_600": 385,
-      "inline_styles": 54
+      "lines_over_600": 380,
+      "inline_styles": 53
     },
     "apps/web/src/app/(protected)/publications/new/page.tsx": {
       "inline_styles": 1
@@ -1013,51 +1002,45 @@
       "inline_styles": 11
     },
     "apps/web/src/app/(protected)/search/page.tsx": {
-      "inline_styles": 10
-    },
-    "apps/web/src/app/(protected)/seating/[zoneId]/page.tsx": {
-      "inline_styles": 26
-    },
-    "apps/web/src/app/(protected)/seating/admin/[productId]/page.tsx": {
-      "inline_styles": 22
-    },
-    "apps/web/src/app/(protected)/serial-templates/page.tsx": {
-      "lines_over_600": 21,
-      "inline_styles": 46
-    },
-    "apps/web/src/app/(protected)/settings/data-saver/page.tsx": {
       "inline_styles": 9
     },
+    "apps/web/src/app/(protected)/serial-templates/page.tsx": {
+      "lines_over_600": 17,
+      "inline_styles": 45
+    },
+    "apps/web/src/app/(protected)/settings/data-saver/page.tsx": {
+      "inline_styles": 4
+    },
     "apps/web/src/app/(protected)/settings/integrations/page.tsx": {
-      "inline_styles": 41
+      "inline_styles": 40
     },
     "apps/web/src/app/(protected)/settings/layout.tsx": {
-      "inline_styles": 3
+      "inline_styles": 2
     },
     "apps/web/src/app/(protected)/settings/navigation/page.tsx": {
-      "inline_styles": 15
+      "inline_styles": 13
     },
     "apps/web/src/app/(protected)/settings/notifications/page.tsx": {
-      "lines_over_600": 266,
-      "inline_styles": 30
+      "lines_over_600": 233,
+      "inline_styles": 28
     },
     "apps/web/src/app/(protected)/settings/privacy/page.tsx": {
-      "inline_styles": 20
+      "inline_styles": 19
     },
     "apps/web/src/app/(protected)/settings/security/page.tsx": {
-      "inline_styles": 38
+      "inline_styles": 36
     },
     "apps/web/src/app/(protected)/shop/admin/ShopPromotionPanel.tsx": {
-      "lines_over_600": 30,
+      "lines_over_600": 31,
       "inline_styles": 47
     },
     "apps/web/src/app/(protected)/shop/admin/page.tsx": {
-      "lines_over_600": 1659,
-      "inline_styles": 133
+      "lines_over_600": 1632,
+      "inline_styles": 128
     },
     "apps/web/src/app/(protected)/shop/class-orders/page.tsx": {
-      "lines_over_600": 1692,
-      "inline_styles": 188
+      "lines_over_600": 1687,
+      "inline_styles": 185
     },
     "apps/web/src/app/(protected)/shop/council-orders/page.tsx": {
       "lines_over_600": 945,
@@ -1071,7 +1054,7 @@
       "inline_styles": 7
     },
     "apps/web/src/app/(protected)/surveys/[id]/edit/page.tsx": {
-      "lines_over_600": 584,
+      "lines_over_600": 585,
       "inline_styles": 55
     },
     "apps/web/src/app/(protected)/surveys/new/page.tsx": {
@@ -1079,10 +1062,10 @@
       "inline_styles": 44
     },
     "apps/web/src/app/(protected)/tasks/page.tsx": {
-      "inline_styles": 28
+      "inline_styles": 26
     },
     "apps/web/src/app/(protected)/work-items/page.tsx": {
-      "inline_styles": 25
+      "inline_styles": 22
     },
     "apps/web/src/app/(public)/about/page.tsx": {
       "inline_styles": 2
@@ -1091,18 +1074,18 @@
       "inline_styles": 9
     },
     "apps/web/src/app/(public)/announcements/client.tsx": {
-      "inline_styles": 10
+      "inline_styles": 9
     },
     "apps/web/src/app/(public)/documents/[id]/DocumentDetailPageClient.tsx": {
-      "lines_over_600": 679,
+      "lines_over_600": 678,
       "inline_styles": 73
     },
     "apps/web/src/app/(public)/documents/[id]/PublicDocumentView.tsx": {
       "inline_styles": 6
     },
     "apps/web/src/app/(public)/documents/client.tsx": {
-      "lines_over_600": 861,
-      "inline_styles": 82
+      "lines_over_600": 858,
+      "inline_styles": 81
     },
     "apps/web/src/app/(public)/legal/layout.tsx": {
       "inline_styles": 4
@@ -1112,13 +1095,13 @@
     },
     "apps/web/src/app/(public)/partner-map/client.tsx": {
       "lines_over_600": 330,
-      "inline_styles": 93
+      "inline_styles": 94
     },
     "apps/web/src/app/(public)/petitions/[id]/[verificationCode]/page.tsx": {
       "inline_styles": 1
     },
     "apps/web/src/app/(public)/petitions/new/page.tsx": {
-      "inline_styles": 12
+      "inline_styles": 14
     },
     "apps/web/src/app/(public)/petitions/public/[id]/page.tsx": {
       "inline_styles": 7
@@ -1130,30 +1113,30 @@
       "inline_styles": 10
     },
     "apps/web/src/app/(public)/regulations/[id]/RegulationDetailPageClient.tsx": {
-      "lines_over_600": 253,
+      "lines_over_600": 251,
       "inline_styles": 34
     },
     "apps/web/src/app/(public)/shop/orders/[id]/page.tsx": {
-      "inline_styles": 13
+      "inline_styles": 5
     },
     "apps/web/src/app/(public)/surveys/[id]/client.tsx": {
-      "lines_over_600": 1497,
-      "inline_styles": 124
+      "lines_over_600": 1487,
+      "inline_styles": 121
     },
     "apps/web/src/app/(public)/surveys/client.tsx": {
-      "inline_styles": 14
+      "inline_styles": 13
     },
     "apps/web/src/app/auth/callback/page.tsx": {
       "inline_styles": 2
     },
     "apps/web/src/app/auth/mfa/page.tsx": {
-      "inline_styles": 18
+      "inline_styles": 15
     },
     "apps/web/src/app/login/PasskeyLogin.tsx": {
       "inline_styles": 4
     },
     "apps/web/src/app/login/page.tsx": {
-      "inline_styles": 20
+      "inline_styles": 19
     },
     "apps/web/src/app/not-found.tsx": {
       "inline_styles": 3
@@ -1212,7 +1195,7 @@
       "inline_styles": 91
     },
     "apps/web/src/components/admin/system/SystemDefensePanel.tsx": {
-      "lines_over_600": 415
+      "lines_over_600": 410
     },
     "apps/web/src/components/admin/system/SystemDiagnosticsPanel.tsx": {
       "inline_styles": 5
@@ -1263,7 +1246,7 @@
       "inline_styles": 12
     },
     "apps/web/src/components/elections/LiveElectionBoard.tsx": {
-      "lines_over_600": 86,
+      "lines_over_600": 89,
       "inline_styles": 10
     },
     "apps/web/src/components/email/RecipientPicker.tsx": {
@@ -1304,7 +1287,7 @@
       "inline_styles": 19
     },
     "apps/web/src/components/layout/Topbar.tsx": {
-      "lines_over_600": 16,
+      "lines_over_600": 19,
       "inline_styles": 44
     },
     "apps/web/src/components/legal/PolicyDocumentViewer.tsx": {
@@ -1326,8 +1309,8 @@
       "inline_styles": 3
     },
     "apps/web/src/components/profile/ProfilePage.tsx": {
-      "lines_over_600": 93,
-      "inline_styles": 56
+      "lines_over_600": 90,
+      "inline_styles": 55
     },
     "apps/web/src/components/profile/SessionManagement.tsx": {
       "inline_styles": 19
@@ -1346,10 +1329,6 @@
     },
     "apps/web/src/components/regulations/RegulationSyncPanel.tsx": {
       "inline_styles": 15
-    },
-    "apps/web/src/components/seating/SeatMapEditor.tsx": {
-      "lines_over_600": 663,
-      "inline_styles": 39
     },
     "apps/web/src/components/shop/ActivityOrderClosure.tsx": {
       "inline_styles": 8
@@ -1377,9 +1356,6 @@
     },
     "apps/web/src/components/shop/ProductThumbnail.tsx": {
       "inline_styles": 3
-    },
-    "apps/web/src/components/shop/ShopLookbook.tsx": {
-      "inline_styles": 1
     },
     "apps/web/src/components/shop/ShopNoteGroupsPanel.tsx": {
       "inline_styles": 9
@@ -1501,9 +1477,6 @@
     "apps/web/src/components/ui/RouteErrorState.tsx": {
       "inline_styles": 9
     },
-    "apps/web/src/components/ui/ScrollProgressBar.tsx": {
-      "inline_styles": 1
-    },
     "apps/web/src/components/ui/Skeleton.tsx": {
       "inline_styles": 1
     },
@@ -1535,7 +1508,7 @@
       "lines_over_600": 10
     },
     "apps/web/src/lib/types.ts": {
-      "lines_over_600": 1015
+      "lines_over_600": 977
     }
   }
 }
