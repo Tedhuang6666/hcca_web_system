@@ -41,6 +41,7 @@ import type {
   UserSummary,
 } from "@/lib/types";
 import { classTitle, roleHolderSummary } from "@/lib/classes-admin";
+import { confirmAction } from "@/components/ui/ConfirmDialog";
 
 type TabKey = "roles" | "members" | "roster" | "ranges";
 
@@ -1496,7 +1497,7 @@ function ClassWorkspace({
   };
 
   const deleteRosterEntry = async (id: string) => {
-    if (!confirm("確定要刪除此筆座號名冊資料？")) return;
+    if (!(await confirmAction({ title: "確定要刪除此筆座號名冊資料？", danger: true }))) return;
     try {
       await classApi.deleteRoster(classId, id);
       toast.success("名冊資料已刪除");
@@ -1732,7 +1733,7 @@ function ClassManagementPanel() {
   const runBulkAction = async (action: "activate" | "deactivate" | "delete") => {
     if (selectedClassIds.length === 0) return;
     const verb = action === "activate" ? "啟用" : action === "deactivate" ? "停用" : "刪除";
-    if (!confirm(`確定要${verb} ${selectedClassIds.length} 個班級？`)) return;
+    if (!(await confirmAction({ title: `確定要${verb} ${selectedClassIds.length} 個班級？`, danger: false }))) return;
     setBulkBusy(true);
     try {
       const result = await classApi.bulkAction(selectedClassIds, action);

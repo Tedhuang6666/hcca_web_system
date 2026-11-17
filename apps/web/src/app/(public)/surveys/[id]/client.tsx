@@ -44,6 +44,7 @@ import SurveyImageViewer from "@/components/surveys/SurveyImageViewer";
 import Combobox from "@/components/ui/Combobox";
 import type { ComboboxOption } from "@/components/ui/Combobox";
 import { SurveyMarkdown } from "@/components/surveys/SurveyMarkdown";
+import { confirmAction } from "@/components/ui/ConfirmDialog";
 
 const DISPLAY_TYPES = new Set(["section_text", "page_break", "image", "video"]);
 
@@ -1032,7 +1033,7 @@ function StatsView({
   }, [responsePageCount]);
 
   const deleteResponse = async (responseId: string) => {
-    if (!confirm("確定刪除這筆回應？刪除後無法復原。")) return;
+    if (!(await confirmAction({ title: "確定刪除這筆回應？刪除後無法復原。", danger: true }))) return;
     setDeletingResponseId(responseId);
     try {
       await surveysApi.deleteResponse(surveyId, responseId);
@@ -1046,7 +1047,7 @@ function StatsView({
   };
 
   const clearResponses = async () => {
-    if (!confirm("確定清除這份問卷的全部回應？所有答案都會永久刪除，且無法復原。")) return;
+    if (!(await confirmAction({ title: "確定清除這份問卷的全部回應？所有答案都會永久刪除，且無法復原。", danger: true }))) return;
     setClearingResponses(true);
     try {
       await surveysApi.clearResponses(surveyId);
@@ -1656,7 +1657,7 @@ export default function SurveyDetailClient({
   const toggleStatus = async () => {
     if (!survey) return;
     if (survey.status === "open") {
-      if (!confirm("確定關閉問卷？關閉後將不再接受新填答。")) return;
+      if (!(await confirmAction({ title: "確定關閉問卷？關閉後將不再接受新填答。", danger: true }))) return;
       setClosing(true);
       try {
         await surveysApi.close(id);

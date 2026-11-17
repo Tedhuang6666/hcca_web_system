@@ -4,6 +4,7 @@ import "./globals.css";
 import "./accessibility.css";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
+import AppToaster from "@/components/ui/AppToaster";
 import BarePageTransition from "@/components/layout/BarePageTransition";
 import ClientErrorReporter from "@/components/providers/ClientErrorReporter";
 import WebVitalsReporter from "@/components/providers/WebVitalsReporter";
@@ -122,6 +123,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <ThemeProvider>
           <ConfirmProvider>
             <BarePageTransition>{children}</BarePageTransition>
+            <AppToaster />
           </ConfirmProvider>
         </ThemeProvider>
       </body>

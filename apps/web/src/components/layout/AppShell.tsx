@@ -307,10 +307,30 @@ function AppShellContent({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
 
+  const [isDesktop, setIsDesktop] = useState(true);
+
   // 路由變更時自動關閉行動版側邊欄
   useEffect(() => {
     setSidebarOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 1024px)");
+    const update = () => setIsDesktop(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
+  // 行動版側欄開啟時可用 Esc 關閉
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSidebarOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [sidebarOpen]);
 
   if (isLoggedIn && !isReady) {
     return (
@@ -338,9 +358,9 @@ function AppShellContent({
         <a
           href="#main-content"
           className="fixed left-3 top-3 z-[200] -translate-y-20 rounded-md px-3 py-2 text-sm font-medium transition-transform focus:translate-y-0"
-          style={{ background: "var(--primary)", color: "#fff" }}
+          style={{ background: "var(--primary)", color: "var(--primary-fg)" }}
         >
-          跳至主要內容
+          跳到主要內容
         </a>
         {/* 平板與行動版側邊欄遮罩 */}
         {sidebarOpen && (
@@ -360,14 +380,17 @@ function AppShellContent({
             ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
             ${desktopSidebarOpen ? "lg:block lg:translate-x-0" : "lg:hidden"}
           `}
-          style={{ width: "var(--sidebar-w, 240px)" }}>
+          style={{ width: "var(--sidebar-w, 240px)" }}
+          // 收合時移出鍵盤與螢幕閱讀器的瀏覽順序，避免 Tab 經過看不見的連結。
+          inert={isDesktop ? !desktopSidebarOpen : !sidebarOpen}
+          aria-hidden={(isDesktop ? !desktopSidebarOpen : !sidebarOpen) || undefined}>
           <Sidebar />
         </div>
 
         {/* 主內容區 */}
         <div className="flex flex-col flex-1 overflow-hidden min-w-0">
           <ImportantAnnouncementBanner announcement={initialImportantAnnouncement} />
-          <Topbar onMenuClick={toggleSidebar} />
+          <Topbar onMenuClick={toggleSidebar} menuExpanded={isDesktop ? desktopSidebarOpen : sidebarOpen} />
           <main
             id="main-content"
             className="app-main min-w-0 flex-1 overflow-y-auto p-5 pb-[calc(5rem+env(safe-area-inset-bottom))] md:p-6 lg:pb-6"

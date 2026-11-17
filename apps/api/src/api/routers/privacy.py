@@ -27,6 +27,7 @@ from api.dependencies.permissions import require_permission
 from api.models.user import User
 from api.services import audit as audit_svc
 from api.services import privacy as svc
+from api.services.account_protection import protected_target
 
 router = APIRouter(prefix="/admin/privacy", tags=["管理員 / 個資處理"])
 
@@ -144,6 +145,7 @@ async def anonymize_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="confirm_phrase 必須為「假名化」字串",
         )
+    await protected_target(db, requester=requester, target_id=user_id, action_label="假名化")
     try:
         result = await svc.anonymize_user(db, user_id=user_id, requested_by_email=requester.email)
     except ValueError as exc:

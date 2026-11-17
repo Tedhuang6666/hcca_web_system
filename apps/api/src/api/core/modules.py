@@ -44,7 +44,6 @@ MODULES: dict[str, ModuleSpec] = {
     "line": ModuleSpec("LINE 通知", ("/line",)),
     "discord": ModuleSpec("Discord 機器人", ("/discord",)),
     "elections": ModuleSpec("選舉開票", ("/elections",)),
-    "seating": ModuleSpec("票務劃位", ("/seating",)),
     "finance": ModuleSpec("財務與收款", ("/finance", "/receivables")),
     "publications": ModuleSpec("發布中心", ("/publications",)),
     "email": ModuleSpec("電子郵件", ("/email",)),

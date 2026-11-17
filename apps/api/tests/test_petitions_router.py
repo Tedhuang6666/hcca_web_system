@@ -1638,3 +1638,37 @@ async def test_supplement_case_requires_authenticated_submitter(
     )
     assert ok.status_code == 200
     assert ok.json()["status"] == "in_progress"
+
+
+async def test_marking_confidential_redacts_earlier_notifications(
+    db_session, authed_client_factory, admin_user: User
+) -> None:
+    from api.models.notification import Notification
+    from api.services.petition import CONFIDENTIAL_NOTIFICATION_BODY
+
+    _, petition_type = await _make_org_and_type(db_session)
+    owner = await _bare_user(db_session)
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
+    sent = Notification(
+        user_id=owner.id,
+        type="petition_received",
+        title="已收到陳情",
+        body=f"陳情內容：\n{case_obj.content}",
+        related_id=case_obj.id,
+    )
+    unrelated = Notification(
+        user_id=owner.id, type="petition_received", title="其他案件", body="保留內容"
+    )
+    db_session.add_all([sent, unrelated])
+    await db_session.flush()
+
+    response = await authed_client_factory(admin_user).post(
+        f"/petitions/{case_obj.id}/confidential", json={"reason": "涉及個資"}
+    )
+
+    assert response.status_code == 200, response.text
+    await db_session.refresh(sent)
+    await db_session.refresh(unrelated)
+    assert sent.body == CONFIDENTIAL_NOTIFICATION_BODY
+    assert case_obj.content not in (sent.body or "")
+    assert unrelated.body == "保留內容"

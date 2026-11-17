@@ -211,6 +211,13 @@ def backup_database(self) -> dict:  # type: ignore[type-arg]
     except Exception:
         logger.exception("backup encryption/hash step failed; continuing with raw file")
 
+    degraded_reasons: list[str] = []
+    if settings.BACKUP_GPG_PASSPHRASE and not encrypted:
+        # 備份檔仍保留（避免連唯一的還原點都沒有），但不再默默記為成功。
+        degraded_reasons.append("備份未加密（gpg 不可用或加密失敗）")
+
+    s3_key = _upload_offsite(final_path, encrypted=encrypted, reasons=degraded_reasons)
+
     _write_backup_record_sync(
         kind="db",
         source_label=db,
@@ -218,19 +225,61 @@ def backup_database(self) -> dict:  # type: ignore[type-arg]
         size_bytes=final_path.stat().st_size if final_path.exists() else None,
         sha256_hex=sha256_hex,
         encrypted=encrypted,
+        s3_key=s3_key,
     )
 
     removed = _rotate_old_backups(backup_dir, settings.DB_BACKUP_RETENTION_DAYS)
-    record_backup_run("database", "success")
+    if degraded_reasons:
+        record_backup_run("database", "degraded")
+        _emit_backup_alert_sync(
+            title="⚠️ 資料庫備份完成但有異常",
+            body="；".join(degraded_reasons) + "。請查看受限 worker 記錄。",
+        )
+    else:
+        record_backup_run("database", "success")
     _ = proc  # silence linter
     return {
-        "status": "ok",
+        "status": "degraded" if degraded_reasons else "ok",
         "file": str(final_path),
         "size": final_path.stat().st_size if final_path.exists() else None,
         "encrypted": encrypted,
         "sha256": sha256_hex,
+        "s3_key": s3_key,
         "removed_old": removed,
+        "issues": degraded_reasons,
     }
+
+
+def _upload_offsite(path: Path, *, encrypted: bool, reasons: list[str]) -> str | None:
+    """把備份上傳到 BACKUP_S3_BUCKET（異地）；未設定 bucket 時略過。
+
+    只上傳已加密的檔案：異地儲存不在本系統的存取控制範圍內，明文個資不可離開主機。
+    失敗不拋出（本地備份已完成），改把原因加入 ``reasons`` 交由呼叫端告警。
+    """
+    bucket = settings.BACKUP_S3_BUCKET
+    if not bucket:
+        return None
+    if not encrypted:
+        reasons.append("未加密的備份不上傳異地")
+        return None
+    prefix = settings.BACKUP_S3_PREFIX.strip("/")
+    key = f"{prefix}/{path.name}" if prefix else path.name
+    try:
+        import boto3
+
+        client = boto3.client("s3", region_name=settings.BACKUP_S3_REGION)
+        client.upload_file(
+            str(path),
+            bucket,
+            key,
+            ExtraArgs={"ServerSideEncryption": "AES256"},
+        )
+    except Exception:
+        logger.exception("offsite backup upload failed bucket=%s", bucket)
+        reasons.append("異地備份上傳失敗")
+        return None
+    logger.info("offsite backup uploaded key=%s", key)
+    return key
 
 
 def _write_backup_record_sync(
@@ -241,6 +290,7 @@ def _write_backup_record_sync(
     size_bytes: int | None,
     sha256_hex: str | None,
     encrypted: bool,
+    s3_key: str | None = None,
 ) -> None:
     """寫入 BackupRecord 紀錄；失敗不阻斷主任務。"""
 
@@ -259,6 +309,7 @@ def _write_backup_record_sync(
                     size_bytes=size_bytes,
                     sha256_hex=sha256_hex,
                     encrypted=encrypted,
+                    s3_key=s3_key,
                     started_at=now,
                     completed_at=now,
                 )

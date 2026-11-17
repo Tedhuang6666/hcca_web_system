@@ -773,3 +773,58 @@ async def test_resend_webhook_valid_signature_processes_event(
 
     assert resp.status_code == 200
     assert resp.json()["processed"] is True
+
+
+@pytest.mark.asyncio
+async def test_download_attachment_of_another_sender_returns_404(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from datetime import timedelta
+
+    from api.core.clock import local_today
+    from api.models.org import Org, Permission, Position, UserPosition
+
+    owner = await _superuser(db_session)
+    other = await _superuser(db_session)
+    other.is_superuser = False
+    org = Org(name=f"mail-org-{uuid.uuid4().hex[:6]}")
+    db_session.add(org)
+    await db_session.flush()
+    position = Position(org_id=org.id, name="寄件人")
+    db_session.add(position)
+    await db_session.flush()
+    db_session.add(Permission(position_id=position.id, code="email:send"))
+    db_session.add(
+        UserPosition(
+            user_id=other.id,
+            position_id=position.id,
+            start_date=local_today() - timedelta(days=1),
+        )
+    )
+    await db_session.flush()
+    attachment = EmailAttachment(
+        uploaded_by_id=owner.id,
+        storage_key="email/attachments/private.pdf",
+        filename="private.pdf",
+        content_type="application/pdf",
+        file_size=10,
+        delivery_mode="attachment",
+    )
+    db_session.add(attachment)
+    await db_session.flush()
+    _override_user(other)
+
+    async def fake_download_url(row: object) -> str:
+        return "https://storage.example.org/private.pdf"
+
+    monkeypatch.setattr(
+        "api.routers.email_platform.platform_svc.attachment_download_url",
+        fake_download_url,
+    )
+
+    resp = await client.get(f"/email/attachments/{attachment.id}/download", follow_redirects=False)
+    own_upload = await client.get("/email/attachments/" + str(uuid.uuid4()) + "/download")
+
+    assert resp.status_code == 404
+    assert own_upload.status_code == 404
+    assert "location" not in resp.headers

@@ -401,8 +401,44 @@ async def set_confidential(
         raise ValueError("案件尚未綁定平台帳號，無法指定密件擁有者")
     case_obj.is_confidential = True
     case_obj.confidential_reason = reason.strip()
+    await _redact_sent_notifications(session, case_obj)
     await session.flush()
     return case_obj
+
+
+CONFIDENTIAL_NOTIFICATION_BODY = "此案件已改列密件，內容不再顯示於通知，請至案件頁查看。"
+
+
+async def _redact_sent_notifications(session: AsyncSession, case_obj: PetitionCase) -> None:
+    """改列密件時，把先前通知與尚未寄出的外部通知中的案件內容一併移除。
+
+    通知內容原本會附上陳情全文；改列密件只擋得住之後的通知，舊通知、
+    待寄外部信件仍會保留全文，因此在這裡回頭清除。
+    """
+    from sqlalchemy import update
+
+    from api.models.notification import Notification
+    from api.models.outbox import OutboxEvent, OutboxStatus
+
+    await session.execute(
+        update(Notification)
+        .where(
+            Notification.related_id == case_obj.id,
+            Notification.type.like("petition%"),
+        )
+        .values(body=CONFIDENTIAL_NOTIFICATION_BODY)
+    )
+    pending = await session.scalars(
+        select(OutboxEvent).where(
+            OutboxEvent.event_type == "petition.external_notify",
+            OutboxEvent.status == OutboxStatus.PENDING,
+        )
+    )
+    for event in pending:
+        payload = dict(event.payload or {})
+        if payload.get("related_id") == str(case_obj.id):
+            payload["body"] = CONFIDENTIAL_NOTIFICATION_BODY
+            event.payload = payload
 
 
 async def update_content(

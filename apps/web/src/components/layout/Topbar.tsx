@@ -23,6 +23,8 @@ import { OPEN_COMMAND_MENU_EVENT } from "./CommandMenu";
 
 interface TopbarProps {
   onMenuClick?: () => void;
+  /** 側邊選單目前是否展開，供 aria-expanded 使用。 */
+  menuExpanded?: boolean;
 }
 
 function MobileBreadcrumb({ items, fallbackTitle }: { items: Crumb[]; fallbackTitle: string }) {
@@ -62,7 +64,7 @@ function MobileBreadcrumb({ items, fallbackTitle }: { items: Crumb[]; fallbackTi
   );
 }
 
-export default function Topbar({ onMenuClick }: TopbarProps) {
+export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [userName, setUserName] = useState("");
@@ -209,7 +211,8 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
         <button
           onClick={onMenuClick}
           className="topbar-icon-btn"
-          aria-label="切換側邊選單">
+          aria-label="切換側邊選單"
+          aria-expanded={menuExpanded}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             strokeWidth="2" strokeLinecap="round" aria-hidden="true">
             <line x1="3" y1="6"  x2="21" y2="6" />

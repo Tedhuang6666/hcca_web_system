@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { CircleHelp, Pencil, TriangleAlert } from "lucide-react";
 import Modal from "./Modal";
 import styles from "./InteractionMotion.module.css";
@@ -29,6 +29,19 @@ interface ConfirmContextValue {
 }
 
 const ConfirmContext = createContext<ConfirmContextValue | null>(null);
+
+let activeConfirm: ((opts: ConfirmOptions) => Promise<boolean>) | null = null;
+
+/**
+ * 在事件處理函式中直接呼叫的站內確認框（不必先取得 hook）。
+ * 尚未掛載 ConfirmProvider（例如單元測試）時退回瀏覽器 confirm。
+ */
+export function confirmAction(opts: ConfirmOptions): Promise<boolean> {
+  if (activeConfirm) return activeConfirm(opts);
+  if (typeof window === "undefined") return Promise.resolve(false);
+  const detail = typeof opts.description === "string" ? opts.description : "";
+  return Promise.resolve(window.confirm([opts.title, detail].filter(Boolean).join("\n")));
+}
 
 interface ConfirmState extends ConfirmOptions {
   kind: "confirm";
@@ -68,6 +81,13 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
       setState({ ...opts, kind: "prompt", resolver: resolve });
     });
   }, []);
+
+  useEffect(() => {
+    activeConfirm = confirm;
+    return () => {
+      if (activeConfirm === confirm) activeConfirm = null;
+    };
+  }, [confirm]);
 
   const closeConfirm = (result: boolean) => {
     if (state?.kind === "confirm") {
@@ -150,7 +170,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                 />
               </label>
             )}
-            {state.kind === "confirm" && !state.description && "此動作無法復原，請再次確認。"}
+            {state.kind === "confirm" && !state.description && state.danger && "此動作無法復原，請再次確認。"}
           </div>
         </Modal>
       )}

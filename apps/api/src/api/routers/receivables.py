@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Awaitable
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -13,6 +14,7 @@ from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_permission
+from api.models.receivable import Receivable
 from api.models.user import User
 from api.schemas.receivable import (
     ReceivableCreate,
@@ -29,6 +31,18 @@ router = APIRouter(prefix="/receivables", tags=["收款對帳"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
+
+
+async def _apply(operation: Awaitable[Receivable]) -> Receivable:
+    """把應收款狀態／金額錯誤轉成 409／422，交易由 get_db 回滾。"""
+    try:
+        return await operation
+    except receivable_svc.ReceivableStateError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except receivable_svc.ReceivableAmountError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
 
 
 @router.get(
@@ -113,7 +127,7 @@ async def update_receivable(
     item = await receivable_svc.get_receivable(db, receivable_id)
     if item is None:
         raise HTTPException(status_code=404, detail="應收款不存在")
-    item = await receivable_svc.update_receivable(db, item, body)
+    item = await _apply(receivable_svc.update_receivable(db, item, body))
     await audit_svc.record(
         db,
         entity_type="receivable",
@@ -142,8 +156,10 @@ async def mark_paid(
     item = await receivable_svc.get_receivable(db, receivable_id)
     if item is None:
         raise HTTPException(status_code=404, detail="應收款不存在")
-    item = await receivable_svc.mark_paid(
-        db, item, actor_id=current_user.id, paid_amount=body.paid_amount, note=body.note
+    item = await _apply(
+        receivable_svc.mark_paid(
+            db, item, actor_id=current_user.id, paid_amount=body.paid_amount, note=body.note
+        )
     )
     await audit_svc.record(
         db,
@@ -172,12 +188,14 @@ async def refund(
     item = await receivable_svc.get_receivable(db, receivable_id)
     if item is None:
         raise HTTPException(status_code=404, detail="應收款不存在")
-    item = await receivable_svc.refund(
-        db,
-        item,
-        actor_id=current_user.id,
-        refunded_amount=body.refunded_amount,
-        note=body.note,
+    item = await _apply(
+        receivable_svc.refund(
+            db,
+            item,
+            actor_id=current_user.id,
+            refunded_amount=body.refunded_amount,
+            note=body.note,
+        )
     )
     await audit_svc.record(
         db,

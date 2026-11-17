@@ -667,13 +667,13 @@ async def _process_claimed_event(event_id: uuid.UUID, owner: str) -> None:
             event.locked_by = None
             await db.commit()
             record_outbox_delivery(event.event_type, "processed")
-        except SQLAlchemyError:
-            # DB transaction 失敗時保留 lease，待逾時後由下一個 worker 接手。
-            await db.rollback()
-            raise
         except Exception as exc:
+            # 資料庫錯誤也計入重試次數：原本直接拋出、retry_count 不增加，
+            # 同一個壞事件會在每次 lease 逾時後無限重試，永遠不會進入 DEAD。
             event_type = event.event_type
             retry_count = event.retry_count + 1
+            # SQL 錯誤訊息可能帶參數值（含個資），只記錄類型。
+            error_text = type(exc).__name__ if isinstance(exc, SQLAlchemyError) else str(exc)
             await db.rollback()
             async with task_session() as update_db:
                 current = await update_db.scalar(
@@ -686,7 +686,7 @@ async def _process_claimed_event(event_id: uuid.UUID, owner: str) -> None:
                 if current is None:
                     return
                 current.retry_count = retry_count
-                current.last_error = str(exc)
+                current.last_error = error_text
                 current.locked_until = None
                 current.locked_by = None
                 if retry_count >= _MAX_RETRY:

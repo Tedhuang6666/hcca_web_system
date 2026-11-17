@@ -9656,213 +9656,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/seating/assign": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 管理員代為劃位（依到場順序） */
-        post: operations["admin_assign_seating_assign_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/seating/assignments/{assignment_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** 釋放劃位（管理） */
-        delete: operations["release_assignment_seating_assignments__assignment_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/seating/orders/{order_id}/assignments": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 某訂單的劃位結果 */
-        get: operations["order_assignments_seating_orders__order_id__assignments_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/seating/products/{product_id}/zones": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 列出票種的場次（含座位統計） */
-        get: operations["list_zones_seating_products__product_id__zones_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/seating/select": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 確認劃位（自助） */
-        post: operations["select_seats_seating_select_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/seating/zones": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 新增場次（座位圖） */
-        post: operations["create_zone_seating_zones_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/seating/zones/{zone_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 場次完整內容（座位 + 時段） */
-        get: operations["get_zone_seating_zones__zone_id__get"];
-        put?: never;
-        post?: never;
-        /** 刪除場次 */
-        delete: operations["delete_zone_seating_zones__zone_id__delete"];
-        options?: never;
-        head?: never;
-        /** 更新場次設定 */
-        patch: operations["update_zone_seating_zones__zone_id__patch"];
-        trace?: never;
-    };
-    "/seating/zones/{zone_id}/assignments": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 場次的劃位清單（管理） */
-        get: operations["list_zone_assignments_seating_zones__zone_id__assignments_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/seating/zones/{zone_id}/hold": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 保留座位（暫時鎖） */
-        post: operations["hold_seating_zones__zone_id__hold_post"];
-        /** 釋放本人在此場次的保留 */
-        delete: operations["release_hold_seating_zones__zone_id__hold_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/seating/zones/{zone_id}/map": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 選位畫面（座位即時狀態 + 本人額度與資格） */
-        get: operations["seat_map_seating_zones__zone_id__map_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/seating/zones/{zone_id}/seats": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** 儲存座位圖（覆蓋座位集合） */
-        put: operations["replace_seats_seating_zones__zone_id__seats_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/seating/zones/{zone_id}/waves": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** 儲存分批開放時段 */
-        put: operations["replace_waves_seating_zones__zone_id__waves_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/shop/activities": {
         parameters: {
             query?: never;
@@ -10256,7 +10049,7 @@ export interface paths {
         post?: never;
         /**
          * 清除全部商品訂購資料
-         * @description 僅限商品管理者。刪除所有商品訂單與訂單明細，清除相關應收款及尚未寄出的確認通知，並回補仍占用的有限庫存與優惠使用次數；商品目錄和稽核紀錄保留。
+         * @description 僅限商品管理者。刪除所有商品訂單與訂單明細，清除相關應收款及尚未寄出的確認通知，並回補仍占用的有限庫存與優惠使用次數；商品目錄和稽核紀錄保留。仍有已收款訂單時拒絕執行（409），避免一併刪除金流紀錄。
          */
         delete: operations["clear_all_order_data_shop_orders_delete"];
         options?: never;
@@ -12819,19 +12612,6 @@ export interface components {
              */
             start_date?: string;
         };
-        /**
-         * AdminAssignRequest
-         * @description 管理員代為劃位（admin_assign 模式，依到場順序）。
-         */
-        AdminAssignRequest: {
-            /**
-             * Order Id
-             * Format: uuid
-             */
-            order_id: string;
-            /** Seat Ids */
-            seat_ids: string[];
-        };
         /** AdminAssistedOrderCreate */
         AdminAssistedOrderCreate: {
             /**
@@ -13407,6 +13187,34 @@ export interface components {
          * @enum {string}
          */
         ArticleType: "volume" | "chapter" | "section" | "article" | "paragraph" | "subparagraph" | "item" | "special_clause";
+        /** AssignmentOut */
+        AssignmentOut: {
+            /** End Date */
+            end_date: string | null;
+            /** Org Name */
+            org_name: string;
+            /**
+             * Position Id
+             * Format: uuid
+             */
+            position_id: string;
+            /** Position Name */
+            position_name: string;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /** User Email */
+            user_email: string | null;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /** Warning */
+            warning: string | null;
+        };
         /** AttachmentLinkCreate */
         AttachmentLinkCreate: {
             /** Display Text */
@@ -14521,6 +14329,11 @@ export interface components {
             percentage: number;
             /** Rank */
             rank: number;
+            /**
+             * Tied At Cutoff
+             * @default false
+             */
+            tied_at_cutoff: boolean;
             /** Votes */
             votes: number;
         };
@@ -14606,17 +14419,10 @@ export interface components {
             purchase_group?: string | null;
             /** Purchase Restriction */
             purchase_restriction?: string | null;
-            /**
-             * Requires Seating
-             * @default false
-             */
-            requires_seating: boolean;
             /** Sale End */
             sale_end?: string | null;
             /** Sale Start */
             sale_start?: string | null;
-            /** Seating Mode */
-            seating_mode?: string | null;
             status: components["schemas"]["ProductStatus"];
             /** Stock Quantity */
             stock_quantity: number;
@@ -17784,7 +17590,7 @@ export interface components {
         /** DryRunOut */
         DryRunOut: {
             /** New Assignments */
-            new_assignments: components["schemas"]["api__routers__term_rollover__AssignmentOut"][];
+            new_assignments: components["schemas"]["AssignmentOut"][];
             /**
              * New Term Start
              * Format: date
@@ -20194,34 +20000,6 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
-        };
-        /** HoldOut */
-        HoldOut: {
-            /** Expires At */
-            expires_at?: string | null;
-            /**
-             * Rejected Seat Ids
-             * @default []
-             */
-            rejected_seat_ids: string[];
-            /**
-             * Seat Ids
-             * @default []
-             */
-            seat_ids: string[];
-            /**
-             * Zone Id
-             * Format: uuid
-             */
-            zone_id: string;
-        };
-        /**
-         * HoldRequest
-         * @description 選位 → 取得 / 更新本人在此場次的保留鎖（以送出的 seat_ids 為準）。
-         */
-        HoldRequest: {
-            /** Seat Ids */
-            seat_ids?: string[];
         };
         /** ImageUploadOut */
         ImageUploadOut: {
@@ -25416,12 +25194,6 @@ export interface components {
             price: number;
             purchase_rules?: components["schemas"]["ProductPurchaseRules"];
             /**
-             * Requires Seating
-             * @description 是否為需劃位票種
-             * @default false
-             */
-            requires_seating: boolean;
-            /**
              * Sale End
              * @description 單品截止時間；留空沿用活動結單時間
              */
@@ -25431,11 +25203,6 @@ export interface components {
              * @description 開售時間
              */
             sale_start?: string | null;
-            /**
-             * Seating Mode
-             * @description 劃位時機：at_purchase / scheduled / admin_assign
-             */
-            seating_mode?: string | null;
             /**
              * Series Id
              * @description 所屬系列 ID；可留空直接放在主題下
@@ -25547,17 +25314,10 @@ export interface components {
             purchase_restriction?: string | null;
             /** Remaining Quantity For User */
             remaining_quantity_for_user?: number | null;
-            /**
-             * Requires Seating
-             * @default false
-             */
-            requires_seating: boolean;
             /** Sale End */
             sale_end: string | null;
             /** Sale Start */
             sale_start: string | null;
-            /** Seating Mode */
-            seating_mode?: string | null;
             /** Series Id */
             series_id: string | null;
             size_chart?: components["schemas"]["ProductSizeChart"] | null;
@@ -25805,14 +25565,10 @@ export interface components {
             price?: number | null;
             /** @description 完整替換購買資格；未提供則保留，null 清除限制 */
             purchase_rules?: components["schemas"]["ProductPurchaseRules"] | null;
-            /** Requires Seating */
-            requires_seating?: boolean | null;
             /** Sale End */
             sale_end?: string | null;
             /** Sale Start */
             sale_start?: string | null;
-            /** Seating Mode */
-            seating_mode?: string | null;
             /** Series Id */
             series_id?: string | null;
             /** @description 尺寸表；建立商品與尺寸規格後設定，未提供保留，null 清除 */
@@ -29239,183 +28995,6 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /**
-         * SeatAssignmentStatus
-         * @enum {string}
-         */
-        SeatAssignmentStatus: "active" | "released";
-        /**
-         * SeatInput
-         * @description 座位圖編輯器送出的單一座位（含 id 則視為更新，無 id 則新增）。
-         */
-        SeatInput: {
-            /** Block */
-            block?: string | null;
-            /** Id */
-            id?: string | null;
-            /**
-             * Label
-             * @description 座位代號，如 A12
-             */
-            label: string;
-            /**
-             * Price Delta
-             * @default 0
-             */
-            price_delta: number;
-            /** Row Label */
-            row_label?: string | null;
-            /**
-             * Seat Type
-             * @default normal
-             */
-            seat_type: string;
-            /** @default available */
-            status: components["schemas"]["SeatStatus"];
-            /**
-             * X
-             * @default 0
-             */
-            x: number;
-            /**
-             * Y
-             * @default 0
-             */
-            y: number;
-        };
-        /**
-         * SeatMapOut
-         * @description 使用者選位畫面：場次 + 座位即時狀態 + 本人可劃額度與資格。
-         */
-        SeatMapOut: {
-            /**
-             * Can Select Now
-             * @default true
-             */
-            can_select_now: boolean;
-            /** Hold Expires At */
-            hold_expires_at?: string | null;
-            /** Hold Minutes */
-            hold_minutes: number;
-            /**
-             * Layout
-             * @default {}
-             */
-            layout: {
-                [key: string]: unknown;
-            };
-            /** Name */
-            name: string;
-            /** Next Open At */
-            next_open_at?: string | null;
-            /**
-             * Product Id
-             * Format: uuid
-             */
-            product_id: string;
-            /**
-             * Remaining Quota
-             * @default 0
-             */
-            remaining_quota: number;
-            /**
-             * Seats
-             * @default []
-             */
-            seats: components["schemas"]["SeatState"][];
-            /** Starts At */
-            starts_at?: string | null;
-            /**
-             * Zone Id
-             * Format: uuid
-             */
-            zone_id: string;
-        };
-        /** SeatOut */
-        SeatOut: {
-            /** Block */
-            block?: string | null;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Label */
-            label: string;
-            /** Price Delta */
-            price_delta: number;
-            /** Row Label */
-            row_label?: string | null;
-            /** Seat Type */
-            seat_type: string;
-            status: components["schemas"]["SeatStatus"];
-            /** X */
-            x: number;
-            /** Y */
-            y: number;
-            /**
-             * Zone Id
-             * Format: uuid
-             */
-            zone_id: string;
-        };
-        /**
-         * SeatSelectRequest
-         * @description 確認劃位：將保留中的座位寫成正式劃位，綁定某張訂單。
-         */
-        SeatSelectRequest: {
-            /**
-             * Order Id
-             * Format: uuid
-             */
-            order_id: string;
-            /** Seat Ids */
-            seat_ids: string[];
-        };
-        /**
-         * SeatState
-         * @description 使用者選位畫面用：每個座位的即時狀態。
-         */
-        SeatState: {
-            /** Block */
-            block?: string | null;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Label */
-            label: string;
-            /** Price Delta */
-            price_delta: number;
-            /** Row Label */
-            row_label?: string | null;
-            /** Seat Type */
-            seat_type: string;
-            /** State */
-            state: string;
-            /** X */
-            x: number;
-            /** Y */
-            y: number;
-        };
-        /**
-         * SeatStatus
-         * @enum {string}
-         */
-        SeatStatus: "available" | "disabled" | "blocked";
-        /**
-         * SeatsReplace
-         * @description 以編輯器目前的座位集合覆蓋整張座位圖（保留已存在的 id）。
-         */
-        SeatsReplace: {
-            /** Layout */
-            layout?: {
-                [key: string]: unknown;
-            } | null;
-            /** Seats */
-            seats?: components["schemas"]["SeatInput"][];
-        };
         /** SecurityEventOut */
         SecurityEventOut: {
             /** Action */
@@ -32498,58 +32077,6 @@ export interface components {
             /** Reverses Event Id */
             reverses_event_id: string | null;
         };
-        /** WaveInput */
-        WaveInput: {
-            /**
-             * Audience
-             * @description 對象條件（targeting 結構）；空=所有人
-             */
-            audience?: {
-                [key: string]: unknown;
-            };
-            /** Id */
-            id?: string | null;
-            /** Name */
-            name: string;
-            /**
-             * Sort Order
-             * @default 0
-             */
-            sort_order: number;
-            /** Starts At */
-            starts_at?: string | null;
-        };
-        /** WaveOut */
-        WaveOut: {
-            /**
-             * Audience
-             * @default {}
-             */
-            audience: {
-                [key: string]: unknown;
-            };
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Name */
-            name: string;
-            /** Sort Order */
-            sort_order: number;
-            /** Starts At */
-            starts_at?: string | null;
-            /**
-             * Zone Id
-             * Format: uuid
-             */
-            zone_id: string;
-        };
-        /** WavesReplace */
-        WavesReplace: {
-            /** Waves */
-            waves?: components["schemas"]["WaveInput"][];
-        };
         /** WebPushConfigOut */
         WebPushConfigOut: {
             /** Enabled */
@@ -32993,136 +32520,6 @@ export interface components {
             /** User Id */
             user_id: string;
         };
-        /** ZoneCreate */
-        ZoneCreate: {
-            /** Description */
-            description?: string | null;
-            /**
-             * Hold Minutes
-             * @default 10
-             */
-            hold_minutes: number;
-            /** Layout */
-            layout?: {
-                [key: string]: unknown;
-            };
-            /** Name */
-            name: string;
-            /**
-             * Product Id
-             * Format: uuid
-             */
-            product_id: string;
-            /** Seating Opens At */
-            seating_opens_at?: string | null;
-            /**
-             * Sort Order
-             * @default 0
-             */
-            sort_order: number;
-            /** Starts At */
-            starts_at?: string | null;
-        };
-        /**
-         * ZoneListItem
-         * @description 場次列表精簡項（含座位統計）。
-         */
-        ZoneListItem: {
-            /**
-             * Assigned Count
-             * @default 0
-             */
-            assigned_count: number;
-            /**
-             * Available Count
-             * @default 0
-             */
-            available_count: number;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Name */
-            name: string;
-            /**
-             * Product Id
-             * Format: uuid
-             */
-            product_id: string;
-            /**
-             * Seat Count
-             * @default 0
-             */
-            seat_count: number;
-            /** Seating Opens At */
-            seating_opens_at?: string | null;
-            /** Sort Order */
-            sort_order: number;
-            /** Starts At */
-            starts_at?: string | null;
-        };
-        /** ZoneOut */
-        ZoneOut: {
-            /** Description */
-            description?: string | null;
-            /** Hold Minutes */
-            hold_minutes: number;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Layout
-             * @default {}
-             */
-            layout: {
-                [key: string]: unknown;
-            };
-            /** Name */
-            name: string;
-            /**
-             * Product Id
-             * Format: uuid
-             */
-            product_id: string;
-            /** Seating Opens At */
-            seating_opens_at?: string | null;
-            /**
-             * Seats
-             * @default []
-             */
-            seats: components["schemas"]["SeatOut"][];
-            /** Sort Order */
-            sort_order: number;
-            /** Starts At */
-            starts_at?: string | null;
-            /**
-             * Waves
-             * @default []
-             */
-            waves: components["schemas"]["WaveOut"][];
-        };
-        /** ZoneUpdate */
-        ZoneUpdate: {
-            /** Description */
-            description?: string | null;
-            /** Hold Minutes */
-            hold_minutes?: number | null;
-            /** Layout */
-            layout?: {
-                [key: string]: unknown;
-            } | null;
-            /** Name */
-            name?: string | null;
-            /** Seating Opens At */
-            seating_opens_at?: string | null;
-            /** Sort Order */
-            sort_order?: number | null;
-            /** Starts At */
-            starts_at?: string | null;
-        };
         /** _RegDiffOut */
         _RegDiffOut: {
             /** From Version */
@@ -33215,34 +32612,6 @@ export interface components {
             /** Started At */
             started_at: string;
         };
-        /** AssignmentOut */
-        api__routers__term_rollover__AssignmentOut: {
-            /** End Date */
-            end_date: string | null;
-            /** Org Name */
-            org_name: string;
-            /**
-             * Position Id
-             * Format: uuid
-             */
-            position_id: string;
-            /** Position Name */
-            position_name: string;
-            /**
-             * Start Date
-             * Format: date
-             */
-            start_date: string;
-            /** User Email */
-            user_email: string | null;
-            /**
-             * User Id
-             * Format: uuid
-             */
-            user_id: string;
-            /** Warning */
-            warning: string | null;
-        };
         /** ExecuteBody */
         api__routers__term_rollover__ExecuteBody: {
             /** Confirm Phrase */
@@ -33308,50 +32677,6 @@ export interface components {
             remark?: string | null;
             /** Weight */
             weight?: number | null;
-        };
-        /** AssignmentOut */
-        api__schemas__seating__AssignmentOut: {
-            /** Assigned By Id */
-            assigned_by_id?: string | null;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Order Id
-             * Format: uuid
-             */
-            order_id: string;
-            /** Order Item Id */
-            order_item_id?: string | null;
-            /**
-             * Seat Id
-             * Format: uuid
-             */
-            seat_id: string;
-            /** Seat Label */
-            seat_label?: string | null;
-            status: components["schemas"]["SeatAssignmentStatus"];
-            /**
-             * User Id
-             * Format: uuid
-             */
-            user_id: string;
-            /** User Name */
-            user_name?: string | null;
-            /**
-             * Zone Id
-             * Format: uuid
-             */
-            zone_id: string;
-            /** Zone Name */
-            zone_name?: string | null;
         };
     };
     responses: never;
@@ -54418,489 +53743,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SearchIndexOut"];
-                };
-            };
-        };
-    };
-    admin_assign_seating_assign_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AdminAssignRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["api__schemas__seating__AssignmentOut"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    release_assignment_seating_assignments__assignment_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                assignment_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    order_assignments_seating_orders__order_id__assignments_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                order_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["api__schemas__seating__AssignmentOut"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_zones_seating_products__product_id__zones_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                product_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ZoneListItem"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    select_seats_seating_select_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SeatSelectRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["api__schemas__seating__AssignmentOut"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_zone_seating_zones_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ZoneCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ZoneOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_zone_seating_zones__zone_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                zone_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ZoneOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_zone_seating_zones__zone_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                zone_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_zone_seating_zones__zone_id__patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                zone_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ZoneUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ZoneOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_zone_assignments_seating_zones__zone_id__assignments_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                zone_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["api__schemas__seating__AssignmentOut"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    hold_seating_zones__zone_id__hold_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                zone_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["HoldRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HoldOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    release_hold_seating_zones__zone_id__hold_delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                zone_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    seat_map_seating_zones__zone_id__map_get: {
-        parameters: {
-            query?: {
-                order_id?: string | null;
-            };
-            header?: never;
-            path: {
-                zone_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SeatMapOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    replace_seats_seating_zones__zone_id__seats_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                zone_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SeatsReplace"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ZoneOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    replace_waves_seating_zones__zone_id__waves_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                zone_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WavesReplace"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ZoneOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -3,19 +3,20 @@
 # ==============================================================================
 FROM python:3.12-slim@sha256:a39549e211a16149edf74e5fdc9ef03a6767e46cd987c5048b6659b6c9904c94 AS builder
 
-# 安裝 uv
-COPY --from=ghcr.io/astral-sh/uv:0.7.13@sha256:6c1e19020ec221986a210027040044a5df8de762eb36d5240e382bc41d7a9043 /uv /uvx /usr/local/bin/
+# 安裝 uv（版本需能讀取 workspace 的 uv.lock 格式；與 CI／本機維持同一版本）
+COPY --from=ghcr.io/astral-sh/uv:0.12.5@sha256:e85be844203885286c60ffad8a858d48afb6c5a5c237ca0e67f12e74b8f174b1 /uv /uvx /usr/local/bin/
 
 WORKDIR /build
 
-# 僅複製依賴定義檔（利用 Docker 層快取）
+# 僅複製依賴定義檔與 lock（利用 Docker 層快取）
 COPY apps/api/pyproject.toml apps/api/
 COPY libs/shared/pyproject.toml libs/shared/
-COPY pyproject.toml ./
+COPY pyproject.toml uv.lock ./
 
-# 安裝所有依賴到 /build/.venv（不包含開發工具）
+# 依 uv.lock 安裝正式依賴到 /build/.venv（不包含開發工具）。
+# --locked：lock 與 pyproject 不一致時直接失敗，確保映像與 CI 測試、pip-audit 是同一組版本。
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --project apps/api --no-dev --no-editable --no-install-project
+    uv sync --project apps/api --locked --no-dev --no-editable --no-install-project
 
 # ==============================================================================
 # Stage 2: runtime — 最小化生產映像檔

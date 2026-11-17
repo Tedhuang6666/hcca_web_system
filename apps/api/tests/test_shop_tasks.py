@@ -43,22 +43,6 @@ def test_notify_class_cadres_on_deadline_retries_on_failure() -> None:
         notify_class_cadres_on_deadline()
 
 
-def test_cleanup_expired_seat_holds_returns_removed_count() -> None:
-    with patch(
-        "api.services.shop_tasks.asyncio.run",
-        side_effect=lambda coro: _close_coro(coro, 7),
-    ):
-        result = cleanup_expired_seat_holds()
-    assert result == {"removed": 7}
-
-
-def test_cleanup_expired_seat_holds_retries_on_failure() -> None:
-    with (
-        patch.object(cleanup_expired_seat_holds, "retry", side_effect=Exception("retry called")),
-        patch(
-            "api.services.shop_tasks.asyncio.run",
-            side_effect=lambda coro: _close_coro(coro, exc=RuntimeError("db down")),
-        ),
-        pytest.raises(Exception, match="retry called"),
-    ):
-        cleanup_expired_seat_holds()
+def test_retired_seat_hold_cleanup_is_a_noop() -> None:
+    """劃位功能已移除；保留的同名任務只負責消化部署前排入的舊訊息。"""
+    assert cleanup_expired_seat_holds() == {"removed": 0}

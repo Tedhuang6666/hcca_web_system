@@ -5,8 +5,7 @@ import ProductCardOffers from "./ProductCardOffers";
 
 const product: CatalogProductOut = {
   id: "shirt", name: "衣服", price: 300, status: "active", image_url: null,
-  stock_quantity: 50, purchase_allowed: true, is_unlimited: true, has_variants: true, requires_seating: false,
-  has_option_surcharge: true, seating_mode: null, sale_start: null, sale_end: null,
+  stock_quantity: 50, purchase_allowed: true, is_unlimited: true, has_variants: true,  has_option_surcharge: true, sale_start: null, sale_end: null,
 };
 const pants = { ...product, id: "pants", name: "褲子", price: 500 };
 const promotion: ShopPromotionPublicOut = { gift_quantity: 1,

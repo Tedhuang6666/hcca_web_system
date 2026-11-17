@@ -16,6 +16,7 @@ import type {
 import BusinessHoursEditor from "../../partner-map/BusinessHoursEditor";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import type { BusinessHours, RecommendedVendorOutWithHours } from "@/lib/partner-map-types";
+import { confirmAction } from "@/components/ui/ConfirmDialog";
 
 type VendorForm = {
   name: string; summary: string; description: string; category_id: string; address: string;
@@ -208,7 +209,7 @@ export default function RecommendedVendorsAdminPage() {
           <VendorFormPanel form={form} categories={categories} selected={selected} saving={saving} update={update} onSave={save} />
           {selected && <MenuPanel selected={selected} menuTitle={menuTitle} menuUrl={menuUrl} setMenuTitle={setMenuTitle} setMenuUrl={setMenuUrl} addMenuLink={addMenuLink} removeMenu={removeMenu} onUploaded={(menu) => { setSelected((current) => current ? { ...current, menus: [...current.menus, menu] } : current); toast.success("菜單檔案已上傳"); }} />}
           {selected && <ProductPanel selected={selected} productForm={productForm} setProductForm={setProductForm} addProduct={addProduct} saveProduct={saveProduct} removeProduct={removeProduct} />}
-          {selected && selected.status !== "archived" && <div className="flex justify-end"><button type="button" className="btn btn-secondary" onClick={async () => { if (!confirm("確定封存這間推薦商家？")) return; await recommendedVendorsApi.archive(selected.id); setSelected(null); setForm(emptyForm); await load(); toast.success("已封存商家"); }}><Archive size={15} aria-hidden="true" />封存商家</button></div>}
+          {selected && selected.status !== "archived" && <div className="flex justify-end"><button type="button" className="btn btn-secondary" onClick={async () => { if (!(await confirmAction({ title: "確定封存這間推薦商家？", danger: true }))) return; await recommendedVendorsApi.archive(selected.id); setSelected(null); setForm(emptyForm); await load(); toast.success("已封存商家"); }}><Archive size={15} aria-hidden="true" />封存商家</button></div>}
         </section>
       </div>
     </main>

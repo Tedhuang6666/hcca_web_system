@@ -374,3 +374,29 @@ async def test_disable_mfa_with_wrong_code_returns_400(
     response = await ac.request("DELETE", "/auth/mfa/disable", json={"code": "000000"})
 
     assert response.status_code == 400
+
+
+async def test_disable_and_regenerate_share_the_mfa_lockout(
+    authed_client_factory: Callable[[User], AsyncClient],
+    member_user: User,
+    db_session: AsyncSession,
+) -> None:
+    """被盜 session 不能拿停用 2FA／重產備用碼端點無限次嘗試 TOTP。"""
+    setup = await mfa_svc.setup_mfa(db_session, member_user)
+    await mfa_svc.confirm_mfa(db_session, member_user, pyotp.TOTP(setup["secret"]).now())
+    ac = _authed(authed_client_factory, member_user)
+
+    statuses = []
+    for _ in range(10):
+        response = await ac.request("DELETE", "/auth/mfa/disable", json={"code": "000000"})
+        statuses.append(response.status_code)
+        if response.status_code == 429:
+            break
+    regenerate = await ac.post(
+        "/auth/mfa/backup-codes/regenerate", json={"code": pyotp.TOTP(setup["secret"]).now()}
+    )
+
+    assert 429 in statuses
+    assert regenerate.status_code == 429
+    await db_session.refresh(member_user)
+    assert member_user.mfa_enabled is True

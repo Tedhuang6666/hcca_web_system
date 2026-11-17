@@ -35,7 +35,11 @@ async def public_election_websocket(websocket: WebSocket, election_id: uuid.UUID
         from api.models.election import Election
 
         election = await db.scalar(
-            select(Election).where(Election.id == election_id, Election.is_public.is_(True))
+            select(Election).where(
+                Election.id == election_id,
+                Election.is_public.is_(True),
+                Election.status != "draft",
+            )
         )
     if election is None:
         await websocket.close(code=4004, reason="找不到此公開選舉")
@@ -247,15 +251,6 @@ async def _assert_room_access(room: str, user_id: str) -> None:
             )
             if not is_member:
                 raise PermissionError("無權加入此組織房間")
-            return
-
-        if room.startswith("seat-zone:"):
-            from api.models.seating import SeatingZone
-
-            zone_id = uuid.UUID(room.split(":", 1)[1])
-            exists = await db.scalar(select(SeatingZone.id).where(SeatingZone.id == zone_id))
-            if not exists:
-                raise PermissionError("找不到此劃位場次")
             return
 
         if room == "shop:orders":

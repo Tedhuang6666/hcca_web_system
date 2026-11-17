@@ -12,6 +12,7 @@ import type {
   ShopDiscountType,
   ShopPromotionOut,
 } from "@/lib/types";
+import { confirmAction } from "@/components/ui/ConfirmDialog";
 
 type PromotionForm = {
   target_category_ids: string[];
@@ -267,7 +268,7 @@ export default function ShopPromotionPanel() {
   };
 
   const deletePromotion = async (promotion: ShopPromotionOut) => {
-    if (!window.confirm(`確定刪除「${promotion.name}」？此操作無法復原。`)) return;
+    if (!(await confirmAction({ title: `確定刪除「${promotion.name}」？此操作無法復原。`, danger: true }))) return;
     setDeletingPromotionId(promotion.id);
     try {
       await shopApi.deletePromotion(promotion.id);

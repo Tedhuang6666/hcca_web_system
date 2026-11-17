@@ -95,8 +95,6 @@ const ALIAS_MAP = {
   NotificationPreferences: "NotificationPreferencesOut",
   // Defense
   DefenseRule: "DefenseRuleOut",
-  // Seating
-  SeatBookingOut: "api__schemas__seating__AssignmentOut",
 };
 
 // 驗證別名目標確實存在於 schema 清單中

@@ -24,7 +24,7 @@
   /* 邊框（淡土黃） */
   --border:         #e8e2d6;
   --border-strong:  #d5cfc4;
-  --border-focus:   #c9a84c;
+  --border-focus:   #856518; /* 淺底焦點框需 ≥3:1；金色 #c9a84c 僅約 2:1 */
 
   /* 主色：霧面金 */
   --primary:        #c9a84c;
@@ -36,10 +36,10 @@
   --primary-text:   #856518;
 
   /* 語意色 */
-  --success:        #3d8b5e;
+  --success:        #20724d; /* 與登入區一致；作為狀態文字在淺底達 AA */
   --success-dim:    #f0faf5;
   --success-border: #a7d4bb;
-  --warning:        #c9a84c;
+  --warning:        #856518; /* 金色 #c9a84c 作狀態文字僅約 2.1:1 */
   --warning-dim:    #faf4e4;
   --warning-border: #e8d49c;
   --danger:         #b83a30; /* WCAG AA：作為文字色於 --bg-base 上達 5.4:1，白字於按鈕上 5.7:1 */
@@ -48,6 +48,12 @@
   --info:           #4a72b8;
   --info-dim:       #eff4ff;
   --info-border:    #b8ccf0;
+
+  /* 舊元件曾使用的別名，統一指向現行 token；未定義時錯誤文字會失去顏色。 */
+  --bg-muted:       var(--bg-hover);
+  --error:          var(--danger);
+  --text-danger:    var(--danger);
+  --surface-hover:  var(--bg-hover);
 
   /* 標籤彩虹色（低飽和度） */
   --tag-blue-bg:    #dbeafe; --tag-blue-fg:    #1e4b9c; --tag-blue-border:   #bfdbfe;

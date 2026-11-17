@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from api.core.clock import local_today
+from api.core.permission_codes import PermissionCode
 from api.models.org import Org, Permission, Position, UserPosition
 
 
@@ -300,3 +301,26 @@ async def get_user_org_ids(
         .distinct()
     )
     return list(result.scalars().all())
+
+
+async def user_has_permission(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    permission_code: str,
+) -> bool:
+    """快速檢查使用者是否擁有特定權限碼（全域）"""
+    codes = await get_user_permission_codes(db, user_id)
+    return permission_code in codes
+
+
+async def is_privileged_account(
+    db: AsyncSession, *, user_id: uuid.UUID, is_superuser: bool
+) -> bool:
+    """superuser 或持有 admin:all 的帳號。
+
+    這類帳號不可經 Discord／LINE 免密碼連結登入：連結 token 只要被轉傳或
+    bot 金鑰外洩，就等同取得整個系統的管理權限。
+    """
+    if is_superuser:
+        return True
+    return PermissionCode.ADMIN_ALL in await get_user_permission_codes(db, user_id)

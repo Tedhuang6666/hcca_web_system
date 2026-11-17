@@ -201,9 +201,12 @@
         }
       }
 
+      // 後端要求此標頭；跨站網頁無法讓瀏覽器在未經預檢的情況下帶上。
+      const API_HEADERS = { "X-Env-Manager": "1" };
+
       async function loadEnv() {
         setStatus("正在讀取設定...");
-        const response = await fetch("/api/env");
+        const response = await fetch("/api/env", { headers: API_HEADERS });
         const data = await response.json();
         state.fields = data.fields;
         pathsEl.textContent = `正在編輯：${data.envPath}`;
@@ -218,7 +221,7 @@
         for (const field of state.fields) values[field.key] = field.value;
         const response = await fetch("/api/env", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { ...API_HEADERS, "Content-Type": "application/json" },
           body: JSON.stringify({ values }),
         });
         if (!response.ok) {
@@ -234,7 +237,7 @@
 
       async function generateExample() {
         setStatus("正在產生範例檔...");
-        const response = await fetch("/api/example", { method: "POST" });
+        const response = await fetch("/api/example", { method: "POST", headers: API_HEADERS });
         const result = await response.json();
         setStatus(`已產生範例檔：${result.path}`, "ok");
       }
@@ -252,7 +255,7 @@
         };
         const response = await fetch("/api/schema/fields", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { ...API_HEADERS, "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
         if (!response.ok) {

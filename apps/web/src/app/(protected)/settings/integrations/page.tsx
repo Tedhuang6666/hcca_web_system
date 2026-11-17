@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { discordApi, googleTasksApi, lineApi, type GoogleTasksStatus } from "@/lib/api";
 import type { DiscordBindingOut, LineBindingOut, LineLinkCodeOut } from "@/lib/types";
+import { confirmAction } from "@/components/ui/ConfirmDialog";
 
 export default function IntegrationsPage() {
   const [status, setStatus] = useState<GoogleTasksStatus | null>(null);
@@ -62,7 +63,7 @@ export default function IntegrationsPage() {
   }
 
   async function handleDisconnect() {
-    if (!confirm("確定要解除 Google Tasks 連結？未來的工作項目將不再同步。")) return;
+    if (!(await confirmAction({ title: "確定要解除 Google Tasks 連結？未來的工作項目將不再同步。", danger: true }))) return;
     setDisconnecting(true);
     try {
       await googleTasksApi.disconnect();

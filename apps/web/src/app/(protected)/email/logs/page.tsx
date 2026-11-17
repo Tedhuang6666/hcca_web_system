@@ -20,6 +20,7 @@ import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import SmartEmptyState from "@/components/ui/SmartEmptyState";
 import Modal from "@/components/ui/Modal";
 import { useOrgOptions } from "@/components/ui/targeting";
+import { confirmAction } from "@/components/ui/ConfirmDialog";
 
 /** 從訊息詳情重建預覽用 payload，呼叫 /email/preview 取得與實寄一致的品牌 HTML。 */
 function detailToPreviewPayload(d: EmailMessageDetailOut): EmailComposePayload {
@@ -210,9 +211,11 @@ export default function EmailLogsPage() {
         return;
       }
       if (
-        !confirm(
-          `找到近三天內 ${messages.length} 封你可重新寄送、仍有未送達收件人的郵件。確定批次重新寄送？已送達者不會重寄；仍在處理中的郵件也會重新排入，原佇列若仍運作可能造成重複寄送。`,
-        )
+        !(await confirmAction({
+          title: `批次重新寄送 ${messages.length} 封郵件？`,
+          description: "近三天內仍有未送達收件人的郵件會重新寄出，已送達者不會重寄。仍在處理中的郵件也會重新排入，原佇列若仍運作可能造成重複寄送。",
+          confirmLabel: "重新寄送",
+        }))
       ) {
         return;
       }
@@ -311,7 +314,7 @@ export default function EmailLogsPage() {
   };
 
   const removeMessage = async (id: string, scheduled: boolean) => {
-    if (!confirm(scheduled ? "確定取消這封預約郵件？" : "確定刪除這封草稿？")) return;
+    if (!(await confirmAction({ title: scheduled ? "確定取消這封預約郵件？" : "確定刪除這封草稿？", danger: true }))) return;
     setBusyId(id);
     try {
       await emailApi.deleteMessage(id);

@@ -1,5 +1,9 @@
 """劃位系統 ORM 模型 - 場次(座位圖) / 座位 / 劃位結果 / 暫時保留鎖 / 分批開放時段
 
+已退役：劃位的 API、服務與前端頁面已移除。這些模型只為了與既有資料表保持一致
+（`alembic check` 與訂單／商品的外鍵關聯）。移除資料表需另建 migration，並在
+正式環境備份後經維護者核准才能套用。
+
 設計概念（與商品系統整合）：
     Activity → ProductCategory(activity_id) → ProductSeries → Product(票種)
         └─ SeatingZone(場次，含座位圖)

@@ -591,7 +591,12 @@ export default function LiveElectionBoard({
                             <Crown size={12} aria-hidden /> {isClosed ? "當選" : "暫居當選"}
                           </span>
                         )}
-                        {!candidate.is_elected && leader && index === 0 && !isClosed && (
+                        {candidate.tied_at_cutoff && (
+                          <span className="inline-flex items-center rounded-full border border-amber-300/60 bg-amber-300/15 px-2.5 py-1 text-[11px] font-bold text-amber-100">
+                            同票待決
+                          </span>
+                        )}
+                        {!candidate.is_elected && !candidate.tied_at_cutoff && leader && index === 0 && !isClosed && (
                           <span className="inline-flex items-center gap-1 rounded-full bg-[#e8c970] px-2.5 py-1 text-[11px] font-bold text-[#173654]">
                             <Crown size={12} aria-hidden /> 目前領先
                           </span>

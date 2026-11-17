@@ -488,6 +488,14 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
 
     user_info = token_data.get("userinfo") or await google.userinfo(token=token_data)
 
+    # 與 One Tap 相同：未驗證的 email 聲明不得用來比對或併入既有帳號。
+    if user_info.get("email_verified") not in (True, "true"):
+        logger.warning(
+            "Google OAuth callback rejected unverified email", extra={"client_ip": client_ip}
+        )
+        error_qs = urlencode({"error": "Google 信箱尚未驗證，無法登入"})
+        return RedirectResponse(url=f"{frontend_origin}/login?{error_qs}")
+
     google_sub: str = user_info["sub"]
     email: str = user_info["email"].strip().lower()
     display_name: str = user_info.get("name", email.split("@")[0])
@@ -891,6 +899,9 @@ async def logout(
                 await user_session_svc.revoke(db, session, reason="logout")
     await db.commit()
     _delete_auth_cookies(response)
+    # 清掉 OAuth／MFA 暫存（state、mfa_challenge、mfa_reauth_until 等），
+    # 避免共用瀏覽器的下一位使用者沿用前一位的步驟驗證狀態。
+    request.session.clear()
 
     _ph = get_posthog_client()
     if _ph and access_cookie:

@@ -450,6 +450,12 @@ async def get_live_summary(
     active_candidates = [candidate for candidate in election.candidates if candidate.is_active]
     ranked = sorted(active_candidates, key=lambda c: (-totals[c.id], c.number))
     rank_by_id = {candidate.id: index for index, candidate in enumerate(ranked)}
+    # 席次邊界同票時不得以號次默默決定當選；標記同票，交由選委會依法規處理。
+    tied_at_cutoff: set[uuid.UUID] = set()
+    if 0 < election.seats < len(ranked):
+        cutoff_votes = totals[ranked[election.seats - 1].id]
+        if cutoff_votes > 0 and totals[ranked[election.seats].id] == cutoff_votes:
+            tied_at_cutoff = {c.id for c in ranked if totals[c.id] == cutoff_votes}
 
     def _meets_threshold(votes: int) -> bool:
         if votes <= 0:
@@ -496,9 +502,11 @@ async def get_live_summary(
                 meets_threshold=_meets_threshold(totals[candidate.id]),
                 is_elected=(
                     turnout_met
+                    and candidate.id not in tied_at_cutoff
                     and rank_by_id[candidate.id] < election.seats
                     and _meets_threshold(totals[candidate.id])
                 ),
+                tied_at_cutoff=candidate.id in tied_at_cutoff,
             )
             for candidate in election.candidates
             if candidate.is_active

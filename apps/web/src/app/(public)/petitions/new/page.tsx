@@ -23,6 +23,9 @@ export default function NewPetitionPage() {
   const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState<PetitionCreatedOut | null>(null);
+  const [failedUploads, setFailedUploads] = useState<string[]>([]);
+  const [submitError, setSubmitError] = useState("");
+  const [typesError, setTypesError] = useState("");
   const [accountName, setAccountName] = useState("");
   const [accountEmail, setAccountEmail] = useState("");
   const [authState, setAuthState] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
@@ -46,7 +49,7 @@ export default function NewPetitionPage() {
         setTypes(items);
         if (items[0]) setTypeId(items[0].id);
       })
-      .catch(() => toast.error("無法載入陳情類型"));
+      .catch(() => setTypesError("無法載入陳情類型，請重新整理頁面後再試。"));
     return () => { cancelled = true; };
   }, []);
 
@@ -75,30 +78,41 @@ export default function NewPetitionPage() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (authState !== "authenticated") return;
+    if (authState !== "authenticated" || submitting) return;
     setSubmitting(true);
+    setSubmitError("");
+    let result: PetitionCreatedOut;
     try {
-      const result = await petitionsApi.create({
+      result = await petitionsApi.create({
         type_id: typeId,
         title,
         content,
       });
-      for (const file of files) {
-        await petitionsApi.uploadAttachment(result.id, file);
-      }
-      clearDraft();
-      setCreated(result);
-      toast.success("陳情案件已送出");
     } catch (err) {
       flushDraft();
+      setSubmitting(false);
       if (err instanceof ApiError && err.status === 401) {
         window.location.assign("/login?next=%2Fpetitions%2Fnew");
         return;
       }
-      toast.error(err instanceof ApiError ? err.message : "送件失敗");
-    } finally {
-      setSubmitting(false);
+      setSubmitError(err instanceof ApiError ? err.message : "送件失敗，請稍後再試。");
+      return;
     }
+    // 案件已建立：先清草稿並顯示收件結果，附件失敗不得讓使用者以為沒送出而重送。
+    clearDraft();
+    const failed: string[] = [];
+    for (const file of files) {
+      try {
+        await petitionsApi.uploadAttachment(result.id, file);
+      } catch {
+        failed.push(file.name);
+      }
+    }
+    setFailedUploads(failed);
+    setCreated(result);
+    setSubmitting(false);
+    if (failed.length) toast.warning(`案件已送出，但有 ${failed.length} 個附件未上傳成功`);
+    else toast.success("陳情案件已送出");
   };
 
   if (created) {
@@ -124,6 +138,11 @@ export default function NewPetitionPage() {
             </div>
           </div>
           <p className="text-sm" style={{ color: "var(--text-muted)" }}>{created.status_public_message}</p>
+          {failedUploads.length > 0 && (
+            <div role="alert" className="rounded-lg p-3 text-sm" style={{ background: "var(--danger-dim)", color: "var(--danger)", border: "1px solid var(--danger)" }}>
+              以下附件未上傳成功，請到案件頁重新上傳：{failedUploads.join("、")}
+            </div>
+          )}
           <div className="flex gap-2 flex-wrap">
             <Link className="btn btn-primary" href={`/petitions/${created.id}`}>查看案件進度</Link>
             <Link className="btn btn-ghost" href="/petitions">回我的案件</Link>
@@ -183,8 +202,15 @@ export default function NewPetitionPage() {
             {types.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
         </label>
-        <input className="input w-full" placeholder="標題" value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={200} />
-        <textarea className="input w-full min-h-52" placeholder="請描述事實、期待處理方式與相關時間地點" value={content} onChange={(e) => setContent(e.target.value)} required />
+        {typesError && <p role="alert" className="text-sm" style={{ color: "var(--danger)" }}>{typesError}</p>}
+        <label className="block">
+          <span className="text-sm font-medium">標題</span>
+          <input className="input w-full mt-1" value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={200} />
+        </label>
+        <label className="block">
+          <span className="text-sm font-medium">陳情內容</span>
+          <textarea className="input w-full min-h-52 mt-1" placeholder="請描述事實、期待處理方式與相關時間地點" value={content} onChange={(e) => setContent(e.target.value)} required />
+        </label>
         <AnimatedFileUpload
           accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
           multiple
@@ -194,6 +220,7 @@ export default function NewPetitionPage() {
           onFiles={(selected) => setFiles((current) => [...current, ...selected].slice(0, 10))}
           onRemove={(removed) => setFiles((current) => current.filter((file) => file !== removed))}
         />
+        {submitError && <p role="alert" className="text-sm" style={{ color: "var(--danger)" }}>{submitError}</p>}
         <div className="flex justify-end gap-2">
           <Link className="btn btn-ghost" href="/petitions">取消</Link>
           <button

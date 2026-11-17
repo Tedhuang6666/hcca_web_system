@@ -206,6 +206,19 @@ async def test_open_from_discord_valid_token_sets_cookies(
     assert settings.ACCESS_TOKEN_COOKIE_NAME in response.cookies
 
 
+async def test_open_from_discord_refuses_privileged_account(
+    client: AsyncClient, admin_user: User
+) -> None:
+    url = await discord_bot_svc.create_open_url(admin_user.id, "/admin/system")
+    token = url.rsplit("token=", 1)[-1]
+
+    response = await client.get("/discord/open", params={"token": token})
+
+    assert response.status_code in (302, 307)
+    assert "/login?next=%2Fadmin%2Fsystem" in response.headers["location"]
+    assert settings.ACCESS_TOKEN_COOKIE_NAME not in response.cookies
+
+
 # ── 管理端點：guild-configs / health / sync-all / test-message ────────────────
 
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
@@ -24,6 +24,7 @@ from api.schemas.workflow import (
 )
 from api.services import audit as audit_svc
 from api.services import workflow as workflow_svc
+from api.services.permission import get_user_permission_codes
 
 router = APIRouter(prefix="/workflows", tags=["跨模組工作流"])
 
@@ -41,6 +42,24 @@ WorkflowManagerDep = Depends(
 async def _instance_or_404(db: AsyncSession, instance_id: uuid.UUID) -> WorkflowInstance:
     instance = await workflow_svc.get_instance(db, instance_id)
     return or_404(instance, "工作流不存在")
+
+
+# 修改工作流必須持有該來源模組的管理權限；議會管理者不能推進司法案件，反之亦然。
+_SOURCE_MANAGE_PERMISSION: dict[str, str] = {
+    "judicial_petition": PermissionCode.JUDICIAL_PETITION_MANAGE,
+    "council_proposal": PermissionCode.COUNCIL_PROPOSAL_MANAGE,
+}
+
+
+async def _require_source_manager(db: AsyncSession, user: User, instance: WorkflowInstance) -> None:
+    required = _SOURCE_MANAGE_PERMISSION.get(instance.source_type)
+    if required is None or user.is_superuser:
+        return
+    codes = await get_user_permission_codes(db, user.id)
+    if required not in codes and PermissionCode.ADMIN_ALL not in codes:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="沒有此工作流來源的管理權限"
+        )
 
 
 @router.get(
@@ -93,15 +112,21 @@ async def transition_workflow_instance(
     user: CurrentUser,
 ) -> WorkflowInstance:
     instance = await _instance_or_404(db, instance_id)
-    updated = await workflow_svc.transition_instance(
-        db,
-        instance,
-        status=payload.status,
-        actor_id=user.id,
-        actor_email=user.email,
-        note=payload.note,
-        payload=payload.payload,
-    )
+    await _require_source_manager(db, user, instance)
+    try:
+        updated = await workflow_svc.transition_instance(
+            db,
+            instance,
+            status=payload.status,
+            actor_id=user.id,
+            actor_email=user.email,
+            note=payload.note,
+            payload=payload.payload,
+        )
+    except workflow_svc.WorkflowTransitionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
     await audit_svc.record(
         db,
         entity_type="workflow_instance",
@@ -141,6 +166,7 @@ async def create_workflow_link(
     user: CurrentUser,
 ) -> WorkflowLinkOut:
     instance = await _instance_or_404(db, instance_id)
+    await _require_source_manager(db, user, instance)
     link = await workflow_svc.add_link(db, instance, data=payload, created_by_id=user.id)
     await audit_svc.record(
         db,

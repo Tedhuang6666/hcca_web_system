@@ -4,6 +4,7 @@ import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 import { Check, Copy, History, Lock, Monitor, Smartphone, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { electionsApi } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
 import type {
@@ -53,6 +54,7 @@ export default function ElectionCountPage({ params }: { params: Promise<{ id: st
   const [logOpen, setLogOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const confirm = useConfirm();
 
   const reload = useCallback(async () => {
     const [detail, live, history] = await Promise.all([
@@ -107,6 +109,30 @@ export default function ElectionCountPage({ params }: { params: Promise<{ id: st
     setManualValues((values) => ({ ...values, [key]: "" }));
     setManualFor(null);
     void addVote(candidateId, delta, kind);
+  }
+
+  async function changeElectionStatus(status: ElectionStatus, label: string) {
+    if (status === "closed" && summary) {
+      const ok = await confirm({
+        title: "結束開票？",
+        description: `結束後票數封存，無法再記票或撤銷。目前已計 ${summary.total_votes} 票（有效 ${summary.valid_votes}、廢票 ${summary.invalid_votes}）。`,
+        confirmLabel: "結束開票",
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    await run(() => electionsApi.updateStatus(id, status), label);
+  }
+
+  async function reverseEvent(event: VoteEventOut) {
+    const ok = await confirm({
+      title: "撤銷這筆記票？",
+      description: `${event.candidate_name ?? "廢票"} ${event.delta > 0 ? "+" : ""}${event.delta}（${event.ballot_box_name}）。撤銷會新增一筆反向紀錄。`,
+      confirmLabel: "撤銷",
+      danger: true,
+    });
+    if (!ok) return;
+    await run(() => electionsApi.reverseEvent(id, event.id), "已撤銷操作");
   }
 
   async function copyShareLink() {
@@ -176,12 +202,12 @@ export default function ElectionCountPage({ params }: { params: Promise<{ id: st
         +1
       </button>
       <div className="grid grid-cols-4 gap-1.5">
-        <button disabled={busy} className="btn btn-secondary btn-sm" onClick={() => addVote(candidateId, -1, kind)}>-1</button>
-        <button disabled={busy} className="btn btn-secondary btn-sm" onClick={() => addVote(candidateId, 5, kind)}>+5</button>
-        <button disabled={busy} className="btn btn-secondary btn-sm" onClick={() => addVote(candidateId, 10, kind)}>+10</button>
+        <button disabled={busy} className="btn btn-secondary min-h-11" onClick={() => addVote(candidateId, -1, kind)}>-1</button>
+        <button disabled={busy} className="btn btn-secondary min-h-11" onClick={() => addVote(candidateId, 5, kind)}>+5</button>
+        <button disabled={busy} className="btn btn-secondary min-h-11" onClick={() => addVote(candidateId, 10, kind)}>+10</button>
         <button
           disabled={busy}
-          className="btn btn-ghost btn-sm"
+          className="btn btn-ghost min-h-11"
           aria-label="手動輸入票數"
           onClick={() => setManualFor((current) => (current === manualKey ? null : manualKey))}
         >
@@ -244,7 +270,12 @@ export default function ElectionCountPage({ params }: { params: Promise<{ id: st
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-1.5">
           {electionActions.map((item) => (
-            <button key={item.status} disabled={busy} className="btn btn-primary btn-sm" onClick={() => run(() => electionsApi.updateStatus(id, item.status), item.label)}>
+            <button
+              key={item.status}
+              disabled={busy}
+              className={`btn btn-sm ${item.status === "closed" ? "btn-danger" : "btn-primary"}`}
+              onClick={() => void changeElectionStatus(item.status, item.label)}
+            >
               {item.label}
             </button>
           ))}
@@ -387,7 +418,7 @@ export default function ElectionCountPage({ params }: { params: Promise<{ id: st
                       </span>
                     </span>
                     {!event.reverses_event_id && (
-                      <button className="inline-flex items-center gap-1 text-xs underline" disabled={busy} onClick={() => run(() => electionsApi.reverseEvent(id, event.id), "已撤銷操作")}>
+                      <button className="inline-flex items-center gap-1 text-xs underline" disabled={busy} onClick={() => void reverseEvent(event)}>
                         <Undo2 size={12} /> 撤銷
                       </button>
                     )}

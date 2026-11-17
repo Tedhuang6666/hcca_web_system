@@ -25,6 +25,7 @@ from api.schemas.raffle import (
     RafflePrizeOut,
     RaffleStatusUpdate,
 )
+from api.services import audit as audit_svc
 from api.services import raffle as raffle_service
 
 router = APIRouter(prefix="/raffles", tags=["抽獎活動"])
@@ -163,6 +164,15 @@ async def admin_list(db: DbDep, _user: AdminUser) -> list[RaffleAdminOut]:
 async def admin_create(body: RaffleActivate, db: DbDep, user: AdminUser) -> RaffleAdminOut:
     try:
         event = await raffle_service.create_event(db, body, user)
+        await audit_svc.record(
+            db,
+            entity_type="raffle_event",
+            entity_id=str(event.id),
+            action="raffle.create",
+            actor_id=str(user.id),
+            actor_email=user.email,
+            summary="建立抽獎活動",
+        )
         await db.commit()
         return RaffleAdminOut(**_event_out(event).model_dump(), recent_draws=[])
     except Exception as exc:
@@ -176,7 +186,7 @@ async def admin_create(body: RaffleActivate, db: DbDep, user: AdminUser) -> Raff
     dependencies=[Depends(require_permission("admin:all"))],
 )
 async def admin_update(
-    event_id: uuid.UUID, body: RaffleStatusUpdate, db: DbDep, _user: AdminUser
+    event_id: uuid.UUID, body: RaffleStatusUpdate, db: DbDep, user: AdminUser
 ) -> RaffleAdminOut:
     try:
         event = await raffle_service.update_event(
@@ -185,6 +195,16 @@ async def admin_update(
             RaffleStatus(body.status) if body.status else None,
             body.reserve_released,
             body.prizes,
+        )
+        await audit_svc.record(
+            db,
+            entity_type="raffle_event",
+            entity_id=str(event_id),
+            action="raffle.update",
+            actor_id=str(user.id),
+            actor_email=user.email,
+            meta=body.model_dump(mode="json", exclude_unset=True),
+            summary="更新抽獎活動狀態或獎項",
         )
         await db.commit()
         event = await raffle_service.get_event(db, event.id)
@@ -204,9 +224,20 @@ async def admin_update(
     response_model=RaffleAdminOut,
     dependencies=[Depends(require_permission("admin:all"))],
 )
-async def admin_reset(event_id: uuid.UUID, db: DbDep, _user: AdminUser) -> RaffleAdminOut:
+async def admin_reset(event_id: uuid.UUID, db: DbDep, user: AdminUser) -> RaffleAdminOut:
     try:
         event = await raffle_service.reset_event(db, event_id)
+        previous_draws = event.__dict__.get("reset_snapshot", [])
+        await audit_svc.record(
+            db,
+            entity_type="raffle_event",
+            entity_id=str(event_id),
+            action="raffle.reset",
+            actor_id=str(user.id),
+            actor_email=user.email,
+            meta={"previous_draws": previous_draws},
+            summary=f"重設抽獎活動（清除 {len(previous_draws)} 筆抽獎紀錄）",
+        )
         await db.commit()
         event = await raffle_service.get_event(db, event.id)
         return RaffleAdminOut(

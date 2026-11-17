@@ -16,7 +16,6 @@ from api.models.activity import Activity, ActivityStatus
 from api.models.outbox import OutboxEvent, OutboxStatus
 from api.models.receivable import Receivable, ReceivableSource
 from api.models.school_class import SchoolClass
-from api.models.seating import SeatAssignment, SeatAssignmentStatus
 from api.models.shop import (
     Cart,
     CartItem,
@@ -854,6 +853,23 @@ async def clear_all_orders(
     """清除商品訂單及其衍生資料，並回補訂單占用的庫存與優惠次數。"""
     clearing_tests = order_ids is not None
     if order_ids is None:
+        # 一次清除全部時，不得連同已收款的訂單、應收款與班級收款帳一起硬刪；
+        # 這些是金流紀錄，需先完成退款或個別處理。
+        collected = await session.scalar(
+            select(func.count())
+            .select_from(Order)
+            .where(
+                Order.test_product_id.is_(None),
+                or_(
+                    Order.is_paid.is_(True),
+                    Order.is_class_collected.is_(True),
+                    Order.is_class_balance.is_(True),
+                    Order.received_amount > 0,
+                ),
+            )
+        )
+        if collected:
+            raise ValueError(f"仍有 {collected} 筆已收款訂單，不能一次清除全部訂購資料")
         order_ids = list((await session.scalars(select(Order.id))).all())
     if not order_ids:
         return 0
@@ -1415,7 +1431,6 @@ async def update_order_item_quantity(
             if (
                 await product_purchase_restriction(session, product, None)
                 or product.max_quantity_per_user is not None
-                or product.requires_seating
             ):
                 raise ValueError("此商品有限購或身分限制，需人工確認")
         else:
@@ -1436,18 +1451,6 @@ async def update_order_item_quantity(
                 product_quantity + delta,
                 excluding_order_id=order.id,
             )
-
-    if quantity < item.quantity:
-        assigned_seats = await session.scalar(
-            select(func.count())
-            .select_from(SeatAssignment)
-            .where(
-                SeatAssignment.order_item_id == item.id,
-                SeatAssignment.status == SeatAssignmentStatus.ACTIVE,
-            )
-        )
-        if (assigned_seats or 0) > quantity:
-            raise ValueError("此品項已有劃位，請先解除多餘座位再調整數量")
 
     if delta and not product.is_unlimited:
         product.stock_quantity -= delta
@@ -1573,6 +1576,8 @@ async def set_order_paid(
     )
     if order.assistance_scope == "council_gift":
         raise ValueError("贈送訂單免付款，無須登記收款")
+    if order.status not in (OrderStatus.PENDING, OrderStatus.CONFIRMED):
+        raise ValueError("訂單已取消或退款，不能變更收款狀態")
     from api.services.shop._collection_ledger import record_class_collection
 
     record_class_collection(
@@ -1598,6 +1603,22 @@ async def set_order_paid(
     await receivable_svc.sync_shop_order(session, order)
     await session.flush()
     logger.info("訂單繳費狀態 serial=%s is_paid=%s by=%s", order.serial_number, is_paid, actor_id)
+    return order
+
+
+async def mark_order_refunded(session: AsyncSession, order_id: uuid.UUID) -> Order | None:
+    """應收款全額退款後，把訂單轉為已退款並釋放優惠使用次數。
+
+    庫存系統已退役，因此不回補庫存；收款金額由呼叫端（應收款退款）先行回寫。
+    """
+    await session.execute(select(Order.id).where(Order.id == order_id).with_for_update())
+    order = await get_order(session, order_id)
+    if order is None or order.status in (OrderStatus.CANCELLED, OrderStatus.REFUNDED):
+        return order
+    order.status = OrderStatus.REFUNDED
+    await _sync_order_promotions(session, order, ())
+    await session.flush()
+    logger.info("訂單全額退款 serial=%s", order.serial_number)
     return order
 
 

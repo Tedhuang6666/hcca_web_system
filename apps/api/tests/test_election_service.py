@@ -169,3 +169,65 @@ async def test_locked_ballot_box_rejects_new_events(db_session: AsyncSession) ->
             ),
             user.id,
         )
+
+
+async def test_tie_at_seat_cutoff_is_flagged_instead_of_resolved_by_number(
+    db_session: AsyncSession,
+) -> None:
+    user, election = await _create_live_election(db_session)
+    box = election.ballot_boxes[0]
+    for candidate in election.candidates:
+        await election_svc.add_vote_event(
+            db_session,
+            election.id,
+            VoteEventCreate(ballot_box_id=box.id, candidate_id=candidate.id, delta=10),
+            user.id,
+        )
+
+    summary = await election_svc.get_live_summary(db_session, election.id)
+
+    assert summary is not None
+    assert election.seats == 1
+    assert all(candidate.tied_at_cutoff for candidate in summary.candidates)
+    assert not any(candidate.is_elected for candidate in summary.candidates)
+
+
+async def test_clear_leader_is_not_flagged_as_tie(db_session: AsyncSession) -> None:
+    user, election = await _create_live_election(db_session)
+    box = election.ballot_boxes[0]
+    first, second = election.candidates
+    for candidate, votes in ((first, 12), (second, 10)):
+        await election_svc.add_vote_event(
+            db_session,
+            election.id,
+            VoteEventCreate(ballot_box_id=box.id, candidate_id=candidate.id, delta=votes),
+            user.id,
+        )
+
+    summary = await election_svc.get_live_summary(db_session, election.id)
+
+    assert summary is not None
+    assert not any(candidate.tied_at_cutoff for candidate in summary.candidates)
+
+
+async def test_public_live_summary_hides_draft_elections(db_session: AsyncSession, client) -> None:
+    user = User(email="draft-owner@example.com", display_name="選委", is_active=True)
+    db_session.add(user)
+    await db_session.commit()
+    draft = await election_svc.create_election(
+        db_session,
+        ElectionCreate(
+            title="尚未公布的選舉",
+            candidates=[CandidateCreate(name="候選人 A", number=1)],
+            ballot_boxes=[BallotBoxCreate(name="票匭", expected_total_votes=10)],
+        ),
+        user.id,
+    )
+    assert draft.status == ElectionStatus.DRAFT.value
+
+    response = await client.get(f"/elections/public/{draft.id}/live")
+    await election_svc.set_election_status(db_session, draft.id, ElectionStatus.LIVE)
+    live = await client.get(f"/elections/public/{draft.id}/live")
+
+    assert response.status_code == 404
+    assert live.status_code == 200

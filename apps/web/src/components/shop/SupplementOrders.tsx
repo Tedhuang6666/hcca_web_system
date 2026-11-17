@@ -5,6 +5,7 @@ import { apiErrorMessage, shopApi } from "@/lib/api";
 import { money } from "@/lib/shop-class-orders";
 import { orderScopeKey } from "@/lib/shop-order-scope";
 import type { OrderListItem, SchoolClassListItem } from "@/lib/types";
+import { confirmAction } from "@/components/ui/ConfirmDialog";
 
 const balanceKey = (order: OrderListItem) => `${order.supplement_class_id}:${orderScopeKey(order)}`;
 const outstanding = (order: OrderListItem) => order.is_paid ? 0 : Math.max(0, order.total_price - (order.received_amount ?? 0));
@@ -107,7 +108,7 @@ export default function SupplementOrders({ canCollect = false, canRejoin = false
   }
 
   async function rejoin(order: OrderListItem) {
-    if (busyRef.current || !window.confirm(`確定將 ${order.serial_number} 併回原班訂單？班代收款紀錄會保留，班聯繳款仍維持未確認。`)) return;
+    if (busyRef.current || !(await confirmAction({ title: `確定將 ${order.serial_number} 併回原班訂單？班代收款紀錄會保留，班聯繳款仍維持未確認。`, danger: false }))) return;
     busyRef.current = true;
     setBusy(order.id);
     setError("");
@@ -154,7 +155,7 @@ export default function SupplementOrders({ canCollect = false, canRejoin = false
             <div className="flex flex-wrap gap-2">
               <button type="button" className="btn btn-secondary min-h-11" disabled={busy !== null} onClick={() => void download(order)}>下載班級收據</button>
               {due > 0 && canCollect && <button type="button" className="btn btn-secondary min-h-11" disabled={busy !== null}
-                onClick={() => { if (window.confirm(`確認已收到${label}的尾款 ${money(due)}？`)) void act(order); }}>
+                onClick={async () => { if ((await confirmAction({ title: `確認已收到${label}的尾款 ${money(due)}？`, danger: false }))) void act(order); }}>
                 {busy === order.id ? "處理中…" : `收齊尾款 ${money(due)}`}
               </button>}
             </div>

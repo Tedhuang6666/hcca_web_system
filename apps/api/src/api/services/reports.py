@@ -21,6 +21,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.clock import local_today
+from api.core.spreadsheet import safe_mapping
 
 logger = logging.getLogger(__name__)
 
@@ -401,5 +402,7 @@ def to_csv(rows: list[dict[str, Any]]) -> bytes:
     writer = csv.DictWriter(buf, fieldnames=fieldnames)
     writer.writeheader()
     for r in rows:
-        writer.writerow({k: ("" if r.get(k) is None else r.get(k)) for k in fieldnames})
+        writer.writerow(
+            safe_mapping({k: ("" if r.get(k) is None else r.get(k)) for k in fieldnames})
+        )
     return buf.getvalue().encode("utf-8-sig")  # BOM 讓 Excel 正確開啟中文

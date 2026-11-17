@@ -22,6 +22,7 @@ import {
   SurveyGridColumnsEditor,
   SurveyGridRowsEditor,
 } from "@/components/surveys/SurveyQuestionFields";
+import { confirmAction } from "@/components/ui/ConfirmDialog";
 
 const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: "text", label: "簡答（單行）" },
@@ -762,7 +763,7 @@ export default function EditSurveyPage() {
   }, []);
 
   const deleteQuestion = async (questionId: string) => {
-    if (!confirm("確定刪除此題？該題已有的回答也會一併移除。")) return;
+    if (!(await confirmAction({ title: "確定刪除此題？該題已有的回答也會一併移除。", danger: true }))) return;
     setBusy(true);
     try {
       await surveysApi.deleteQuestion(questionId);

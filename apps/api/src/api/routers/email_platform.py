@@ -275,6 +275,11 @@ async def download_attachment(
     row = await db.get(EmailAttachment, attachment_id)
     if row is None:
         raise HTTPException(status_code=404, detail="附件不存在")
+    if row.uploaded_by_id != user.id and not user.is_superuser:
+        codes = await get_user_permission_codes(db, user.id)
+        if PermissionCode.EMAIL_VIEW_LOGS not in codes:
+            # 與撤銷相同的擁有者規則；不洩漏他人附件是否存在。
+            raise HTTPException(status_code=404, detail="附件不存在")
     url = await platform_svc.attachment_download_url(row)
     return RedirectResponse(url)
 

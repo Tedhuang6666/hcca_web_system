@@ -275,10 +275,6 @@ class ProductCreate(BaseModel):
     )
     sale_start: datetime | None = Field(None, description="開售時間")
     sale_end: datetime | None = Field(None, description="單品截止時間；留空沿用活動結單時間")
-    requires_seating: bool = Field(False, description="是否為需劃位票種")
-    seating_mode: str | None = Field(
-        None, description="劃位時機：at_purchase / scheduled / admin_assign"
-    )
     variant_groups: list[ProductVariantGroupCreate] = Field(default_factory=list)
     media: list[ProductMediaCreate] = Field(default_factory=list, max_length=20)
 
@@ -352,8 +348,6 @@ class ProductUpdate(BaseModel):
     )
     sale_start: datetime | None = None
     sale_end: datetime | None = None
-    requires_seating: bool | None = None
-    seating_mode: str | None = None
     media: list[ProductMediaCreate] | None = Field(None, max_length=20)
     size_chart: ProductSizeChart | None = Field(
         None, description="尺寸表；建立商品與尺寸規格後設定，未提供保留，null 清除"
@@ -394,8 +388,6 @@ class ProductOut(BaseModel):
     sale_start: datetime | None
     sale_end: datetime | None
     effective_sale_end: datetime | None = None
-    requires_seating: bool = False
-    seating_mode: str | None = None
     created_at: datetime
     updated_at: datetime
     variant_groups: list[ProductVariantGroupOut] = []
@@ -423,8 +415,6 @@ class CatalogProductOut(BaseModel):
     effective_sale_end: datetime | None = None
     has_variants: bool = False
     has_option_surcharge: bool = False
-    requires_seating: bool = False
-    seating_mode: str | None = None
 
 
 class CatalogSeriesOut(BaseModel):

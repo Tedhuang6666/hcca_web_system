@@ -423,6 +423,10 @@ async def submit_document(
         raise ValueError(f"公文 {doc.serial_number} 非草稿狀態，無法送審")
     if not approver_ids:
         raise ValueError("送審至少需要一位審核人")
+    if doc.created_by in approver_ids:
+        raise ValueError("起案人不能擔任自己公文的審核人")
+    if len(set(approver_ids)) != len(approver_ids):
+        raise ValueError("審核人不可重複")
 
     now = datetime.now(UTC)
     doc.status = DocumentStatus.PENDING

@@ -46,6 +46,7 @@ import type {
   PositionSummary,
   SchoolClassListItem,
 } from "@/lib/types";
+import { confirmAction } from "@/components/ui/ConfirmDialog";
 
 const STATUS_LABEL: Record<PersonStatus, string> = {
   active: "在校",
@@ -923,7 +924,7 @@ function AffiliationRow({
     const message = isClassMembership
       ? `確定轉出「${item.class_label ?? "本班"}」？本班座號名冊及幹部任命會一併結束，歷史歸屬會保留。`
       : `確定結束「${item.title ?? KIND_LABEL[item.kind]}」？`;
-    if (!confirm(message)) return;
+    if (!(await confirmAction({ title: message, danger: false }))) return;
     setEnding(true);
     try {
       if (isClassMembership && item.class_id) {

@@ -77,7 +77,6 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("/tasks/__module_health__", "GET"),
     ("/petitions/__module_health__", "GET"),
     ("/regulations/__module_health__", "GET"),
-    ("/seating/__module_health__", "GET"),
     ("/shop/__module_health__", "GET"),
     ("/surveys/__module_health__", "GET"),
     # 認證流程

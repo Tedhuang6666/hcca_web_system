@@ -6,12 +6,11 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, or_, select, text
+from sqlalchemy import or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
 from api.core.clock import now_local
-from api.models.seating import SeatHold, SeatingZone
 from api.models.shop import (
     Order,
     OrderItem,
@@ -240,8 +239,6 @@ async def list_products(
             Product.created_by,
             Product.sale_start,
             Product.sale_end,
-            Product.requires_seating,
-            Product.seating_mode,
             Product.created_at,
             Product.updated_at,
         ),
@@ -307,8 +304,6 @@ async def create_product(
         created_by=created_by,
         sale_start=data.sale_start,
         sale_end=data.sale_end,
-        requires_seating=data.requires_seating,
-        seating_mode=data.seating_mode,
         status=ProductStatus.DRAFT,
         media=[
             ProductMedia(
@@ -447,13 +442,6 @@ async def activate_product(session: AsyncSession, product: Product) -> Product:
             )
         )
         await clear_all_orders(session, order_ids=order_ids)
-        await session.execute(
-            delete(SeatHold).where(
-                SeatHold.zone_id.in_(
-                    select(SeatingZone.id).where(SeatingZone.product_id == product.id)
-                )
-            )
-        )
     product.status = ProductStatus.ACTIVE
     await session.flush()
     return product
@@ -682,8 +670,6 @@ async def build_catalog_tree(
                 ),
                 has_variants=len(product.variant_groups) > 0,
                 has_option_surcharge=product.id in products_with_option_surcharge,
-                requires_seating=product.requires_seating,
-                seating_mode=product.seating_mode,
             )
             for product in sorted(category.products, key=lambda item: item.created_at)
             if product.series_id is None
@@ -714,8 +700,6 @@ async def build_catalog_tree(
                     ),
                     has_variants=len(p.variant_groups) > 0,
                     has_option_surcharge=p.id in products_with_option_surcharge,
-                    requires_seating=p.requires_seating,
-                    seating_mode=p.seating_mode,
                 )
                 for p in sorted(series.products, key=lambda x: x.created_at)
                 if p.status in visible and (buyer is not None or not has_purchase_qualifications(p))

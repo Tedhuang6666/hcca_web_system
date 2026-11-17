@@ -21,6 +21,7 @@ from api.services.discord_bot import (
     create_open_url,
     enqueue_all_role_sync,
     enqueue_role_sync,
+    plain_frontend_url,
 )
 from api.services.discord_command_common import (
     DiscordCommandError,
@@ -30,6 +31,7 @@ from api.services.discord_command_common import (
 )
 from api.services.permission import (
     active_tenure_filter,
+    is_privileged_account,
 )
 from api.services.task_inbox import build_task_inbox
 
@@ -152,6 +154,9 @@ async def handle(
         path = str(arguments["path"])
         if not path.startswith("/"):
             raise DiscordCommandError("path 必須以 / 開頭。")
+        if await is_privileged_account(db, user_id=user.id, is_superuser=user.is_superuser):
+            # 管理帳號只給一般站內網址，必須正常登入；bot 金鑰外洩時不能換到管理 session。
+            return {"url": plain_frontend_url(path)}
         return {"url": await create_open_url(user.id, path)}
 
     return None

@@ -9,7 +9,6 @@ export * from "./api/documents";
 export * from "./api/shop";
 export * from "./api/shop-sheet";
 export * from "./api/merchandise-submissions";
-export * from "./api/seating";
 export * from "./api/partner-map";
 export * from "./api/partner-applications";
 export * from "./api/recommended-vendors";

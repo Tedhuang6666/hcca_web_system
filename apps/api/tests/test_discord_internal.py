@@ -166,3 +166,51 @@ async def test_inventory_update_uses_bot_scope(client, db_session, monkeypatch):
 
     assert response.status_code == 204
     set_mock.assert_awaited_once()
+
+
+async def _linked_user(db_session, *, email: str, discord_user_id: str, **fields) -> User:
+    user = User(email=email, display_name="綁定成員", is_active=True, is_verified=True, **fields)
+    db_session.add(user)
+    await db_session.flush()
+    db_session.add(
+        DiscordAccountLink(user_id=user.id, discord_user_id=discord_user_id, is_active=True)
+    )
+    await db_session.flush()
+    await db_session.commit()
+    return user
+
+
+async def _shortlink(client, raw_key: str, discord_user_id: str) -> str:
+    response = await client.post(
+        "/internal/discord/commands/shortlink",
+        headers={"X-API-Key": raw_key},
+        json={
+            "discord_user_id": discord_user_id,
+            "interaction_id": "1",
+            "guild_id": "111",
+            "arguments": {"path": "/admin/system"},
+        },
+    )
+    assert response.status_code == 200
+    return response.json()["data"]["url"]
+
+
+async def test_shortlink_for_member_returns_open_link(client, db_session):
+    raw_key = await _bot_key(db_session)
+    await _linked_user(db_session, email="member-link@example.com", discord_user_id="2001")
+
+    url = await _shortlink(client, raw_key, "2001")
+
+    assert "/discord/open?token=" in url
+
+
+async def test_shortlink_never_issues_login_link_for_superuser(client, db_session):
+    raw_key = await _bot_key(db_session)
+    await _linked_user(
+        db_session, email="owner-link@example.com", discord_user_id="2002", is_superuser=True
+    )
+
+    url = await _shortlink(client, raw_key, "2002")
+
+    assert "token=" not in url
+    assert url.endswith("/admin/system")

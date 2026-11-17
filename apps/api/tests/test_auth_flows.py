@@ -16,6 +16,7 @@ from unittest.mock import AsyncMock
 import pytest
 from authlib.integrations.base_client import MismatchingStateError
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.config import settings
@@ -454,6 +455,39 @@ async def test_google_callback_retries_over_https_origin(
     assert response.headers["location"].startswith("https://hcca.tw/auth/google/login?")
 
 
+async def test_google_callback_rejects_unverified_email(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import api.routers.auth as auth_module
+
+    existing = User(email="owner@school.edu", display_name="既有帳號", is_active=True)
+    db_session.add(existing)
+    await db_session.flush()
+    monkeypatch.setattr(
+        auth_module.google,
+        "authorize_access_token",
+        AsyncMock(
+            return_value={
+                "userinfo": {
+                    "sub": "attacker-sub",
+                    "email": "owner@school.edu",
+                    "email_verified": False,
+                }
+            }
+        ),
+    )
+
+    response = await client.get("/auth/google/callback?code=c&state=s", follow_redirects=False)
+
+    assert response.status_code in (302, 307)
+    assert "/login?error=" in response.headers["location"]
+    assert settings.ACCESS_TOKEN_COOKIE_NAME not in response.cookies
+    identity = await db_session.scalar(
+        select(UserIdentity).where(UserIdentity.external_id == "attacker-sub")
+    )
+    assert identity is None
+
+
 async def test_discord_login_returns_503_when_not_configured(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -490,3 +524,84 @@ def test_decode_token_roundtrip_sanity() -> None:
     payload = decode_token(token)
     assert payload["sub"] == "sanity-check-subject"
     assert payload["type"] == "access"
+
+
+async def test_logout_clears_oauth_session_state(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """登出後不得保留 OAuth state／MFA 暫存，避免共用瀏覽器沿用前一位的狀態。"""
+    import api.routers.auth as auth_module
+
+    async def fake_redirect(request, redirect_uri, **kwargs):
+        request.session["oauth_marker"] = "previous-user"
+        from fastapi.responses import RedirectResponse
+
+        return RedirectResponse("https://accounts.google.com/o/oauth2/auth")
+
+    monkeypatch.setattr(auth_module.google, "authorize_redirect", fake_redirect)
+    login = await client.get("/auth/google/login", follow_redirects=False)
+    cookie_name = settings.SESSION_COOKIE_NAME
+    assert any(h.startswith(f"{cookie_name}=") for h in login.headers.get_list("set-cookie"))
+
+    response = await client.post("/auth/logout")
+
+    cleared = [
+        h for h in response.headers.get_list("set-cookie") if h.startswith(f"{cookie_name}=")
+    ]
+    assert cleared, "logout 應覆寫 session cookie"
+    assert (
+        "null" in cleared[0]
+        or "Max-Age=0" in cleared[0]
+        or "expires=Thu, 01 Jan 1970" in cleared[0]
+    )
+
+
+async def test_audit_middleware_records_authenticated_actor(
+    member_user: User,
+    authed_client_factory: Callable[[User], AsyncClient],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    import logging
+
+    caplog.set_level(logging.INFO, logger="api.core.audit")
+    client = authed_client_factory(member_user)
+
+    await client.patch("/users/me", json={})
+
+    records = [r for r in caplog.records if r.getMessage() == "Security audit: sensitive operation"]
+    assert records, "敏感路徑應寫入稽核紀錄"
+    assert records[-1].user_id == str(member_user.id)
+    assert records[-1].user_email == member_user.email
+
+
+async def test_admin_ip_whitelist_applies_to_every_superuser_request(
+    make_user: Callable[..., Any],
+    member_user: User,
+    authed_client_factory: Callable[[User], AsyncClient],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """不論以哪種方式取得 session，白名單外 IP 的超級管理員請求都要被拒。"""
+    superuser = await make_user(is_superuser=True, mfa_enabled=True)
+    monkeypatch.setattr(settings, "ADMIN_IP_WHITELIST", ["10.9.8.7"])
+
+    blocked = await authed_client_factory(superuser).get("/auth/me")
+    member = await authed_client_factory(member_user).get("/auth/me")
+    monkeypatch.setattr(settings, "ADMIN_IP_WHITELIST", ["10.9.8.7", "127.0.0.1"])
+    allowed = await authed_client_factory(superuser).get("/auth/me")
+
+    assert blocked.status_code == 403
+    assert member.status_code == 200
+    assert allowed.status_code == 200
+
+
+async def test_security_headers_present_on_csrf_rejection() -> None:
+    """提早被 middleware 拒絕的回應也要帶安全標頭。"""
+    from httpx import ASGITransport
+
+    from api.main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as raw:
+        response = await raw.post("/receivables", json={})
+
+    assert response.status_code == 403
+    assert response.headers.get("x-content-type-options") == "nosniff"
