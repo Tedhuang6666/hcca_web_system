@@ -181,7 +181,7 @@ function StatusBadge({ label, tone = "neutral" }: { label: string; tone?: "neutr
     warning: { color: "var(--warning)", background: "var(--warning-dim)" },
     danger: { color: "var(--danger)", background: "var(--danger-dim)" },
   }[tone];
-  return <span className="rounded-full px-2 py-1 text-[11px] font-medium" style={colors}>{label}</span>;
+  return <span className="rounded-full px-2 py-1 text-xs font-medium" style={colors}>{label}</span>;
 }
 
 function ToggleRow({
@@ -652,7 +652,7 @@ function AccountDetail({
               <p>職位：{user.positions.length} 個</p>
               <p>有效權限：{user.is_superuser ? "超管（全部權限）" : `${user.effective_permissions.length} 個`}</p>
             </div>
-            <div className="mt-3 flex flex-wrap gap-1.5">{user.positions.slice(0, 6).map((position) => <span key={position.user_position_id ?? position.id} className="rounded-full px-2 py-1 text-[11px]" style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>{position.name}</span>)}</div>
+            <div className="mt-3 flex flex-wrap gap-1.5">{user.positions.slice(0, 6).map((position) => <span key={position.user_position_id ?? position.id} className="rounded-full px-2 py-1 text-xs" style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>{position.name}</span>)}</div>
             <Link href="/admin/people?section=organization" className="mt-4 inline-flex min-h-11 items-center gap-1 text-xs font-medium" style={{ color: "var(--primary-text)" }}>前往組織與職位管理<ChevronRight size={14} /></Link>
           </Section>
         </aside>

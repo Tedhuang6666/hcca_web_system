@@ -304,7 +304,7 @@ export default function CredentialAuthorizationPanel() {
           </div>
           <p
             id="student-credential-prefixes-help"
-            className="mt-2 text-[11px] leading-5"
+            className="mt-2 text-xs leading-5"
             style={{ color: "var(--text-muted)" }}
           >
             可用逗號分隔多個前三碼。學生信箱須是 g0 加完整學號，例如 g0410xxx；空白時只停用一般學生證件資格。
@@ -368,7 +368,7 @@ export default function CredentialAuthorizationPanel() {
                   value={form.email}
                   onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
                 />
-                <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                <span className="text-xs" style={{ color: "var(--text-muted)" }}>
                   最多 5000 個不同 Email；已存在授權的帳號會自動跳過，不影響其他新增。
                 </span>
               </label>
@@ -457,7 +457,7 @@ export default function CredentialAuthorizationPanel() {
                     </div>
                   )}
                 </div>
-                <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                <span className="text-xs" style={{ color: "var(--text-muted)" }}>
                   可搜尋姓名或 Email 選取使用者；帳號尚未登入也可以先建立授權。
                 </span>
               </label>
@@ -571,7 +571,7 @@ export default function CredentialAuthorizationPanel() {
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{authorization.identity_label}</p>
-                      <span className="rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ color: authorization.is_active ? "var(--success)" : "var(--text-muted)", background: authorization.is_active ? "var(--success-dim)" : "var(--bg-elevated)" }}>
+                      <span className="rounded-full px-2 py-0.5 text-xs font-medium" style={{ color: authorization.is_active ? "var(--success)" : "var(--text-muted)", background: authorization.is_active ? "var(--success-dim)" : "var(--bg-elevated)" }}>
                         {authorization.is_active ? "啟用中" : "已停用"}
                       </span>
                     </div>

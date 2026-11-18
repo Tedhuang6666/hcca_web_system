@@ -483,16 +483,16 @@ function PersonDirectoryPanel() {
                         {person.student_id ?? "無學號"} · {person.email ?? "未填 Email"}
                       </p>
                     </div>
-                    <span className="shrink-0 whitespace-nowrap rounded px-2 py-0.5 text-[11px]" style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+                    <span className="shrink-0 whitespace-nowrap rounded px-2 py-0.5 text-xs" style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
                       {STATUS_LABEL[person.status]}
                     </span>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {person.class_labels.slice(0, 2).map((label) => (
-                      <span key={label} className="rounded px-1.5 py-0.5 text-[11px]" style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}>{label}</span>
+                      <span key={label} className="rounded px-1.5 py-0.5 text-xs" style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}>{label}</span>
                     ))}
                     {person.role_titles.slice(0, 2).map((label) => (
-                      <span key={label} className="rounded px-1.5 py-0.5 text-[11px]" style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>{label}</span>
+                      <span key={label} className="rounded px-1.5 py-0.5 text-xs" style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>{label}</span>
                     ))}
                   </div>
                 </button>
@@ -947,11 +947,11 @@ function AffiliationRow({
           <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
             {item.title ?? item.position_name ?? item.role_key ?? KIND_LABEL[item.kind]}
           </p>
-          <span className="rounded px-1.5 py-0.5 text-[11px]" style={{ background: `color-mix(in srgb, ${color} 9%, transparent)`, color }}>
+          <span className="rounded px-1.5 py-0.5 text-xs" style={{ background: `color-mix(in srgb, ${color} 9%, transparent)`, color }}>
             {KIND_LABEL[item.kind]}
           </span>
           {item.status === "pending_user" && (
-            <span className="rounded px-1.5 py-0.5 text-[11px]" style={{ color: "var(--warning)", background: "var(--warning-dim)" }}>
+            <span className="rounded px-1.5 py-0.5 text-xs" style={{ color: "var(--warning)", background: "var(--warning-dim)" }}>
               待連帳號
             </span>
           )}

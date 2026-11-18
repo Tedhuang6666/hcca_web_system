@@ -119,7 +119,7 @@ export default function ReportsPage() {
                 <p className="text-sm text-[var(--text-muted)]">無資料。</p>
               ) : (
                 <div className="overflow-auto">
-                  <table className="w-full text-[11px]">
+                  <table className="w-full text-xs">
                     <thead className="text-[var(--text-secondary)]">
                       <tr className="border-b border-[var(--border)]">
                         {columns.map((c) => (

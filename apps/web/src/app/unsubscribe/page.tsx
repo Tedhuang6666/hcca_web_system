@@ -38,7 +38,7 @@ function UnsubscribeInner() {
           <BrandEmblem size={40} />
           <div>
             <p className="text-sm font-semibold text-white">新竹高中班聯會數位整合系統</p>
-            <p className="text-[10px] font-medium tracking-widest" style={{ color: "#c9a84c" }}>
+            <p className="text-xs font-medium tracking-widest" style={{ color: "#c9a84c" }}>
               新竹高中班聯會
             </p>
           </div>

@@ -180,7 +180,7 @@ export default function OrgDetailPage() {
                         <div className="flex flex-wrap gap-1 ml-3.5">
                           {pos.permission_codes.map(code => (
                             <span key={code}
-                              className="text-[10px] px-1.5 py-0.5 rounded font-mono"
+                              className="text-xs px-1.5 py-0.5 rounded font-mono"
                               style={{ background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--primary-dim)" }}>
                               {code}
                             </span>
@@ -241,13 +241,13 @@ export default function OrgDetailPage() {
                             {u.display_name}
                           </span>
                           {!u.is_active && (
-                            <span className="text-[10px] px-1 py-0.5 rounded"
+                            <span className="text-xs px-1 py-0.5 rounded"
                               style={{ color: "#f87171", background: "rgba(248,113,113,0.1)" }}>停用</span>
                           )}
                         </div>
                         <div className="flex flex-wrap gap-1 mt-0.5">
                           {myPositions.map(p => (
-                            <span key={p.id} className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+                            <span key={p.id} className="text-xs" style={{ color: "var(--text-muted)" }}>
                               {p.name}
                             </span>
                           ))}
@@ -275,11 +275,11 @@ export default function OrgDetailPage() {
 
             {parent ? (
               <div>
-                <p className="text-[10px] mb-1" style={{ color: "var(--text-disabled)" }}>上層組織</p>
+                <p className="text-xs mb-1" style={{ color: "var(--text-disabled)" }}>上層組織</p>
                 <Link href={`/orgs/${parent.id}`}
                   className="flex items-center gap-2 px-3 py-2 rounded-xl transition-colors hover:bg-white/5"
                   style={{ border: "1px solid var(--border)", textDecoration: "none" }}>
-                  <div className="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+                  <div className="w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold flex-shrink-0"
                     style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
                     {parent.name.charAt(0)}
                   </div>
@@ -292,7 +292,7 @@ export default function OrgDetailPage() {
 
             {children.length > 0 && (
               <div>
-                <p className="text-[10px] mb-1.5" style={{ color: "var(--text-disabled)" }}>
+                <p className="text-xs mb-1.5" style={{ color: "var(--text-disabled)" }}>
                   下層組織（{children.length}）
                 </p>
                 <div className="space-y-1">
@@ -300,7 +300,7 @@ export default function OrgDetailPage() {
                     <Link key={c.id} href={`/orgs/${c.id}`}
                       className="flex items-center gap-2 px-3 py-1.5 rounded-xl transition-colors hover:bg-white/5"
                       style={{ border: "1px solid var(--border)", textDecoration: "none" }}>
-                      <div className="w-5 h-5 rounded-md flex items-center justify-center text-[9px] font-bold flex-shrink-0"
+                      <div className="w-5 h-5 rounded-md flex items-center justify-center text-xs font-bold flex-shrink-0"
                         style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
                         {c.name.charAt(0)}
                       </div>

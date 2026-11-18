@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Check, CircleAlert, FileText, ShieldCheck } from "lucide-react";
+import { Check, CircleAlert, FileText, ShieldCheck } from "lucide-react";
 
 import { fetchPublicBudget } from "@/lib/publicSeoFetch";
 import { pageMetadata } from "@/lib/seo";
@@ -51,7 +50,6 @@ export default async function PublicBudgetDetailPage({ params, searchParams }: P
 
   return (
     <div className="public-budget-detail">
-      <Link href="/public/budgets" className="public-budget-detail__back"><ArrowLeft size={15} aria-hidden="true" />返回財務總覽</Link>
       <header className="public-budget-detail__header">
         <div>
           <span>{budget.period_name}</span>

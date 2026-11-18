@@ -80,12 +80,10 @@ function EditableField({
             onKeyDown={e => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") setEditing(false); }}
             autoFocus
           />
-          <button onClick={handleSave} disabled={saving} className="btn btn-primary text-xs px-3 py-1.5"
-            style={{ minHeight: "auto" }}>
-            {saving ? "…" : "儲存"}
+          <button type="button" onClick={handleSave} disabled={saving} className="btn btn-primary">
+            {saving ? "儲存中…" : "儲存"}
           </button>
-          <button onClick={() => setEditing(false)} className="btn btn-ghost text-xs px-3 py-1.5"
-            style={{ minHeight: "auto" }}>
+          <button type="button" onClick={() => setEditing(false)} className="btn btn-ghost">
             取消
           </button>
         </div>
@@ -95,9 +93,10 @@ function EditableField({
             {value || placeholder || "—"}
           </p>
           <button
+            type="button"
             onClick={() => { setDraft(value); setEditing(true); }}
-            className="text-xs opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 rounded"
-            style={{ color: "var(--primary-text)" }}>
+            className="btn btn-ghost"
+            aria-label={`編輯${label}`}>
             編輯
           </button>
         </div>
@@ -393,7 +392,7 @@ export default function ProfilePage() {
               {user?.email ?? "—"}
             </p>
             {user?.is_superuser && (
-              <span className="inline-block mt-1 text-[10px] px-2 py-0.5 rounded font-medium"
+              <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded font-medium"
                 style={{ background: "var(--warning-dim)", color: "var(--warning)" }}>
                 管理員
               </span>
@@ -433,7 +432,7 @@ export default function ProfilePage() {
                   <p className="min-w-0 flex-1 break-all text-sm" style={{ color: "var(--text-primary)" }}>
                     {email}
                     {email === user?.email && (
-                      <span className="ml-2 text-[10px]" style={{ color: "var(--text-muted)" }}>
+                      <span className="ml-2 text-xs" style={{ color: "var(--text-muted)" }}>
                         主要
                       </span>
                     )}
@@ -442,7 +441,7 @@ export default function ProfilePage() {
                     <>
                       <button
                         type="button"
-                        className="btn btn-ghost shrink-0 px-2 py-1 text-[11px]"
+                        className="btn btn-ghost shrink-0 px-2 py-1 text-xs"
                         onClick={() => void setPrimaryEmail(email)}
                         disabled={emailBusy}
                       >
@@ -450,7 +449,7 @@ export default function ProfilePage() {
                       </button>
                       <button
                         type="button"
-                        className="btn btn-ghost shrink-0 px-2 py-1 text-[11px]"
+                        className="btn btn-ghost shrink-0 px-2 py-1 text-xs"
                         onClick={() => void unlinkEmail(email)}
                         disabled={emailBusy}
                       >

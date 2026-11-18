@@ -232,7 +232,7 @@ export default function TermRolloverPage() {
             value={assignmentsText}
             onChange={(e) => setAssignmentsText(e.target.value)}
             rows={10}
-            className="input font-mono text-[11px]"
+            className="input font-mono text-xs"
             spellCheck={false}
           />
         </label>
@@ -307,7 +307,7 @@ export default function TermRolloverPage() {
             <summary className="cursor-pointer text-xs text-[var(--text-secondary)]">
               將結束的任期（{dryRunResult.terminations.length}）
             </summary>
-            <table className="mt-2 w-full text-[11px]">
+            <table className="mt-2 w-full text-xs">
               <thead className="text-[var(--text-secondary)]">
                 <tr className="border-b border-[var(--border)]">
                   <th className="py-1 text-left">使用者</th>
@@ -335,7 +335,7 @@ export default function TermRolloverPage() {
             <summary className="cursor-pointer text-xs text-[var(--text-secondary)]">
               將新增的任期（{dryRunResult.new_assignments.length}）
             </summary>
-            <table className="mt-2 w-full text-[11px]">
+            <table className="mt-2 w-full text-xs">
               <thead className="text-[var(--text-secondary)]">
                 <tr className="border-b border-[var(--border)]">
                   <th className="py-1 text-left">使用者</th>

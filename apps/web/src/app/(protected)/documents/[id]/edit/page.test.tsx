@@ -52,7 +52,7 @@ describe("更改公文字號後儲存", () => {
     await act(async () => { await state.onlineSave?.(); });
     expect(state.update).toHaveBeenLastCalledWith(document.id, expect.objectContaining({ serial_number: "新字第1150000002號", autosave: true, summary: "既有摘要" }));
     expect(state.recipients).toHaveBeenLastCalledWith(document.id, []);
-    fireEvent.click(screen.getByRole("button", { name: "儲存變更" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "儲存變更" })[0]);
     await waitFor(() => expect(state.push).toHaveBeenCalledWith(`/documents/${document.id}`));
     expect(state.update).toHaveBeenLastCalledWith(document.id, expect.objectContaining({ autosave: false }));
     expect(state.get).toHaveBeenCalledTimes(1);

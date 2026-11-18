@@ -191,7 +191,7 @@ function FlagRow({ flag, onChange }: { flag: FeatureFlagOut; onChange: () => voi
         <div>
           <code className="text-sm font-semibold text-[var(--text-primary)]">{flag.key}</code>
           {flag.archived_at && (
-            <span className="ml-2 rounded bg-[var(--text-muted)] px-1 py-0.5 text-[10px] text-white">
+            <span className="ml-2 rounded bg-[var(--text-muted)] px-1 py-0.5 text-xs text-white">
               ARCHIVED
             </span>
           )}
@@ -245,7 +245,7 @@ function FlagRow({ flag, onChange }: { flag: FeatureFlagOut; onChange: () => voi
             rows={3}
             value={users}
             onChange={(e) => setUsers(e.target.value)}
-            className="input font-mono text-[11px]"
+            className="input font-mono text-xs"
           />
         </label>
         <label className="flex flex-col gap-1 text-xs">
@@ -255,7 +255,7 @@ function FlagRow({ flag, onChange }: { flag: FeatureFlagOut; onChange: () => voi
             value={perms}
             onChange={(e) => setPerms(e.target.value)}
             placeholder="例：admin:all"
-            className="input font-mono text-[11px]"
+            className="input font-mono text-xs"
           />
         </label>
       </div>

@@ -38,11 +38,7 @@ function StatusBadge({ item }: { item: AnnouncementListItem }) {
       </span>
     );
   }
-  return (
-    <span className="badge" style={{ color: "var(--success)", background: "var(--success-dim)", borderColor: "var(--success-border)" }}>
-      已發布
-    </span>
-  );
+  return null;
 }
 
 export default function AnnouncementsClient({
@@ -51,16 +47,9 @@ export default function AnnouncementsClient({
   initialItems?: AnnouncementListItem[];
 }) {
   const [showDrafts, setShowDrafts] = useState(false);
-  const { can, canAny } = usePermissions();
+  const { can } = usePermissions();
   const canCreate = can("announcement:create");
   const canListDrafts = can("announcement:create");
-  const canManage = canAny(
-    "announcement:create",
-    "announcement:edit",
-    "announcement:publish",
-    "announcement:set_urgent",
-    "announcement:media_manage",
-  );
 
   const [items, loading] = useFetch(
     () => {
@@ -140,15 +129,12 @@ export default function AnnouncementsClient({
                     <h2 className={`text-base font-semibold leading-snug${expired ? " text-[var(--text-muted)]" : ""}`}>
                       {item.title}
                     </h2>
-                    <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
-                      公告人：{item.author_name || "未命名"}
-                    </p>
+                    {item.author_name && (
+                      <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+                        公告人：{item.author_name}
+                      </p>
+                    )}
                   </div>
-                  {canManage && (
-                    <span className="btn btn-sm btn-ghost self-start">
-                      管理
-                    </span>
-                  )}
                 </div>
               </Link>
             );

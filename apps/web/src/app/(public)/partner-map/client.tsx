@@ -698,10 +698,10 @@ export default function PartnerMapClient({
                     <button type="button" key={business.id} onClick={() => openBusiness(business.id)} className="w-full rounded-lg border p-2 text-left transition-colors hover:border-[var(--primary)]" style={{ borderColor: "var(--border)", background: "var(--bg)" }}>
                       <div className="flex items-center justify-between gap-2">
                         <p className="truncate text-xs font-semibold" style={{ color: "var(--text-primary)" }}>{business.name}</p>
-                        <span className="shrink-0 text-[11px]" style={{ color: "var(--primary-text)" }}>查看詳情 →</span>
+                        <span className="shrink-0 text-xs" style={{ color: "var(--primary-text)" }}>查看詳情 →</span>
                       </div>
-                      <p className="mt-1 line-clamp-2 text-[11px]" style={{ color: "var(--text-muted)" }}>{business.summary || business.category || "合作聯絡窗口"}</p>
-                      {business.active_offer_count > 0 && <p className="mt-1 text-[11px]" style={{ color: "var(--primary-text)" }}>有 {business.active_offer_count} 筆優惠</p>}
+                      <p className="mt-1 line-clamp-2 text-xs" style={{ color: "var(--text-muted)" }}>{business.summary || business.category || "合作聯絡窗口"}</p>
+                      {business.active_offer_count > 0 && <p className="mt-1 text-xs" style={{ color: "var(--primary-text)" }}>有 {business.active_offer_count} 筆優惠</p>}
                     </button>
                   ))}
                 </div>
@@ -732,19 +732,19 @@ export default function PartnerMapClient({
                       )}
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{item.business_name}</p>
-                        <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>
+                        <p className="mt-0.5 flex items-center gap-1 text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
                           <span className="h-1.5 w-1.5 rounded-full" style={{ background: markerColor(item) }} aria-hidden="true" />
                           {markerLabel(item)}
                         </p>
                         {(item.business_hours_text || formatBusinessHours(item.business_hours)) && (
-                          <p className="mt-0.5 flex items-center gap-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
+                          <p className="mt-0.5 flex items-center gap-1 text-xs" style={{ color: "var(--text-muted)" }}>
                             <Clock size={11} aria-hidden="true" /> {item.business_hours_text || formatBusinessHours(item.business_hours)}
                           </p>
                         )}
                         <p className="mt-1 line-clamp-2 text-xs" style={{ color: "var(--text-muted)" }}>{item.address}</p>
                       </div>
                       {item.has_active_offer && (
-                        <span className="shrink-0 rounded-full px-2 py-1 text-[11px]" style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
+                        <span className="shrink-0 rounded-full px-2 py-1 text-xs" style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
                           {item.has_discount_offer ? "★ 折扣" : "優惠"}
                         </span>
                       )}
@@ -761,11 +761,11 @@ export default function PartnerMapClient({
           <div className="partner-map-mobile-controls absolute left-2.5 right-2.5 top-2.5 z-[500] rounded-lg border p-3 lg:hidden">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="flex items-center gap-2"><h1 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>店家地圖</h1>{myBusinesses.length > 0 && <Link href="/partner-map/my-businesses" className="text-[11px] font-medium" style={{ color: "var(--primary-text)" }}>我的店家</Link>}</div>
-                <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>特約與推薦商家</p>
+                <div className="flex items-center gap-2"><h1 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>店家地圖</h1>{myBusinesses.length > 0 && <Link href="/partner-map/my-businesses" className="text-xs font-medium" style={{ color: "var(--primary-text)" }}>我的店家</Link>}</div>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>特約與推薦商家</p>
               </div>
               <div className="flex items-center gap-2">
-                <span className="partner-map-count-pill rounded-full px-2 py-1 text-[11px]">
+                <span className="partner-map-count-pill rounded-full px-2 py-1 text-xs">
                   {filteredItems.length} 點位
                 </span>
                 <button
@@ -831,9 +831,9 @@ export default function PartnerMapClient({
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>沒有地點的特約</p>
-                    <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-muted)" }}>線上合作夥伴也在這裡</p>
+                    <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>線上合作夥伴也在這裡</p>
                   </div>
-                  <span className="rounded-full px-2 py-1 text-[11px] font-medium" style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
+                  <span className="rounded-full px-2 py-1 text-xs font-medium" style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
                     {contactBusinesses.length} 家
                   </span>
                 </div>
@@ -842,7 +842,7 @@ export default function PartnerMapClient({
                     <button type="button" key={business.id} onClick={() => openBusiness(business.id)} className="min-w-[72vw] rounded-lg border p-3 text-left" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
                       <div className="flex items-center justify-between gap-2">
                         <p className="truncate text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{business.name}</p>
-                        <span className="shrink-0 text-[11px]" style={{ color: "var(--primary-text)" }}>查看 →</span>
+                        <span className="shrink-0 text-xs" style={{ color: "var(--primary-text)" }}>查看 →</span>
                       </div>
                       <p className="mt-1 line-clamp-2 text-xs" style={{ color: "var(--text-secondary)" }}>{business.summary || business.category || "可線上聯絡"}</p>
                     </button>
@@ -883,13 +883,13 @@ export default function PartnerMapClient({
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{item.business_name}</p>
                     {(item.business_hours_text || formatBusinessHours(item.business_hours)) && (
-                      <p className="mt-0.5 flex items-center gap-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
+                      <p className="mt-0.5 flex items-center gap-1 text-xs" style={{ color: "var(--text-muted)" }}>
                         <Clock size={11} aria-hidden="true" /> {item.business_hours_text || formatBusinessHours(item.business_hours)}
                       </p>
                     )}
                     <p className="mt-1 line-clamp-2 text-xs" style={{ color: "var(--text-muted)" }}>{item.address}</p>
                   </div>
-                  <span className="flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium" style={{ background: "var(--bg-elevated)", borderColor: markerColor(item), color: "var(--text-secondary)" }}>
+                  <span className="flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-xs font-medium" style={{ background: "var(--bg-elevated)", borderColor: markerColor(item), color: "var(--text-secondary)" }}>
                     <span className="h-1.5 w-1.5 rounded-full" style={{ background: markerColor(item) }} aria-hidden="true" />
                     {markerLabel(item)}
                   </span>

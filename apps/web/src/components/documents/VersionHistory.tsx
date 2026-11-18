@@ -27,7 +27,7 @@ export function VersionHistory({ revisions }: { revisions: RevisionOut[] }) {
           版本歷程
         </h2>
         <span
-          className="badge text-[10px]"
+          className="badge text-xs"
           style={{ color: "var(--primary-text)", background: "var(--primary-dim)", borderColor: "var(--primary-dim)" }}>
           {revisions.length}
         </span>

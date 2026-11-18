@@ -76,7 +76,7 @@ function VitalCard({ name, value }: { name: string; value: number | undefined })
     <div className="border-t pt-3" style={{ borderColor: "var(--border)" }}>
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>{VITAL_LABELS[name]}</p>
-        <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold" style={tone}>
+        <span className="rounded px-1.5 py-0.5 text-xs font-semibold" style={tone}>
           {ratingFor(name, value) === "good" ? "良好" : ratingFor(name, value) === "poor" ? "需處理" : "可改善"}
         </span>
       </div>

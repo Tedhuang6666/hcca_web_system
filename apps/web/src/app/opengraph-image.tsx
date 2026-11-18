@@ -66,13 +66,13 @@ export default async function Image() {
             />
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <div style={{ fontSize: 38, fontWeight: 800 }}>{BRANDING.orgShortName}</div>
+            <div style={{ fontSize: 38, fontWeight: 700 }}>{BRANDING.orgShortName}</div>
             <div style={{ fontSize: 22, color: "#d9e8f7" }}>{BRANDING.englishName}</div>
           </div>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-          <div style={{ fontSize: 62, fontWeight: 900, lineHeight: 1.15 }}>
+          <div style={{ fontSize: 62, fontWeight: 700, lineHeight: 1.15 }}>
             {BRANDING.slogan}
           </div>
           <div style={{ fontSize: 28, color: "#cbd5e1", lineHeight: 1.45 }}>

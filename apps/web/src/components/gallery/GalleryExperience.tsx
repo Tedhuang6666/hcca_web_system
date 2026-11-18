@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useRef, useState, type CSSProperties } from "react";
+import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ArrowLeft, ArrowUpRight } from "lucide-react";
 import { galleryDate, type GalleryPhoto, type PublicActivityAlbum } from "@/lib/public-activity-albums";
 import ActivityImage from "./ActivityImage";
@@ -26,12 +26,14 @@ function albumItems(album: PublicActivityAlbum): GalleryItem[] {
   }));
 }
 
-export default function GalleryExperience({ albums, detail = false, initialEvent = "", initialPhoto = "", unavailable = false }: {
+export default function GalleryExperience({ albums, detail = false, initialEvent = "", initialPhoto = "", unavailable = false, filters }: {
   albums: PublicActivityAlbum[];
   detail?: boolean;
   initialEvent?: string;
   initialPhoto?: string;
   unavailable?: boolean;
+  /** 額外篩選控制，與活動選單放在同一列。 */
+  filters?: ReactNode;
 }) {
   const [selected, setSelected] = useState(albums.some((album) => album.id === initialEvent) ? initialEvent : "");
   const [failedSources, setFailedSources] = useState<string[]>([]);
@@ -99,6 +101,7 @@ export default function GalleryExperience({ albums, detail = false, initialEvent
             {albums.map((entry) => <option key={entry.id} value={entry.id}>{entry.title}</option>)}
           </select>
         </label>}
+        {filters}
         <span>{items.length} 張照片</span>
       </div>}
     </header>

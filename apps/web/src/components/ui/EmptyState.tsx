@@ -5,6 +5,7 @@ interface EmptyStateProps {
   icon?: React.ReactNode;
   title: string;
   description?: string;
+  headingLevel?: "h1" | "h2" | "p";
   action?: {
     label: string;
     href?: string;
@@ -12,7 +13,8 @@ interface EmptyStateProps {
   };
 }
 
-export function EmptyState({ icon, title, description, action }: EmptyStateProps) {
+export function EmptyState({ icon, title, description, headingLevel = "p", action }: EmptyStateProps) {
+  const Heading = headingLevel;
   return (
     <div className="empty-state py-20 text-center flex flex-col items-center gap-3">
       {icon && (
@@ -20,11 +22,11 @@ export function EmptyState({ icon, title, description, action }: EmptyStateProps
           {icon}
         </div>
       )}
-      <p className="empty-state-title text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+      <Heading className="empty-state-title text-base font-semibold" style={{ color: "var(--text-primary)" }}>
         {title}
-      </p>
+      </Heading>
       {description && (
-        <p className="empty-state-description text-xs max-w-xs" style={{ color: "var(--text-muted)" }}>
+        <p className="empty-state-description text-sm max-w-sm" style={{ color: "var(--text-muted)" }}>
           {description}
         </p>
       )}

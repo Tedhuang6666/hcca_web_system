@@ -295,7 +295,7 @@ export default function DocumentTemplatesPage() {
                   套用後可修改並另存。
                 </p>
               </div>
-              <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>共 {DOCUMENT_TEMPLATE_PRESETS.length} 組</span>
+              <span className="text-xs" style={{ color: "var(--text-muted)" }}>共 {DOCUMENT_TEMPLATE_PRESETS.length} 組</span>
             </div>
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
               {DOCUMENT_TEMPLATE_PRESETS.map((preset) => (
@@ -307,7 +307,7 @@ export default function DocumentTemplatesPage() {
                   onClick={() => applyPreset(preset)}
                 >
                   <span className="block text-xs font-semibold">{preset.name}</span>
-                  <span className="mt-1 block text-[11px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
+                  <span className="mt-1 block text-xs leading-relaxed" style={{ color: "var(--text-muted)" }}>
                     {preset.description}
                   </span>
                 </button>
@@ -353,14 +353,14 @@ export default function DocumentTemplatesPage() {
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <h2 className="font-semibold">{item.name}</h2>
-                        <span className="badge text-[10px]">
+                        <span className="badge text-xs">
                           {CATEGORY_OPTIONS.find((cat) => cat.value === item.category)?.label ?? item.category}
                         </span>
-                        <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+                        <span className="text-xs" style={{ color: "var(--text-muted)" }}>
                           v{item.version}
                         </span>
                         {!item.is_active && (
-                          <span className="text-[10px]" style={{ color: "var(--danger)" }}>已停用</span>
+                          <span className="text-xs" style={{ color: "var(--danger)" }}>已停用</span>
                         )}
                       </div>
                       <p className="mt-1 line-clamp-2 text-sm" style={{ color: "var(--text-secondary)" }}>
@@ -567,7 +567,7 @@ export default function DocumentTemplatesPage() {
               <option value="publicly_open">公開（未登入可見）</option>
             </select>
             {selectedOrg && (
-              <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                 所屬組織：{selectedOrg.name}
               </p>
             )}

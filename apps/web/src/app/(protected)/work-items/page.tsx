@@ -276,7 +276,7 @@ function WorkRow({
         <div className="flex items-center gap-2 mt-1 flex-wrap">
           {due && (
             <span
-              className="text-[11px] flex items-center gap-1"
+              className="text-xs flex items-center gap-1"
               style={{ color: isOverdue ? "var(--danger)" : "var(--text-muted)" }}
             >
               <Clock size={11} aria-hidden={true} />
@@ -285,7 +285,7 @@ function WorkRow({
           )}
           {item.google_task_id && (
             <span
-              className="text-[11px] px-1.5 py-0.5 rounded"
+              className="text-xs px-1.5 py-0.5 rounded"
               style={{
                 background: "var(--tag-blue-bg)",
                 color: "var(--tag-blue-fg)",

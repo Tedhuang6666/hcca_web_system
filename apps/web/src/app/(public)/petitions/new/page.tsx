@@ -120,9 +120,6 @@ export default function NewPetitionPage() {
           <div className="petition-receipt-heading">
             <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>案件已送出</h1>
           </div>
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-            可從「我的案件」查看進度。
-          </p>
           <div className="petition-receipt-codes">
             <div className="petition-receipt-code rounded-lg p-4" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>案號</p>

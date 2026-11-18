@@ -1,16 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  AlertTriangle,
-  Eye,
-  EyeOff,
-  KeyRound,
-  Lock,
-  RefreshCcw,
-  RotateCcw,
-  Save,
-} from "lucide-react";
+import Modal from "@/components/ui/Modal";
+import { AlertTriangle, Eye, EyeOff, Lock, RefreshCcw, RotateCcw, Save } from "lucide-react";
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
@@ -309,18 +301,18 @@ function FieldRow({
         <div className="flex items-center gap-2">
           <code className="text-xs font-medium text-[var(--text-primary)]">{field.key}</code>
           {field.is_secret && (
-            <span className="rounded bg-[var(--warning-dim)] px-1 py-0.5 text-[10px] font-medium text-[var(--warning)]">
+            <span className="rounded bg-[var(--warning-dim)] px-1 py-0.5 text-xs font-medium text-[var(--warning)]">
               密鑰
             </span>
           )}
           {dirty && (
-            <span className="rounded bg-[var(--primary-dim)] px-1 py-0.5 text-[10px] text-[var(--primary-text)]">
+            <span className="rounded bg-[var(--primary-dim)] px-1 py-0.5 text-xs text-[var(--primary-text)]">
               未儲存
             </span>
           )}
           {!field.in_file && (
             <span
-              className="rounded px-1 py-0.5 text-[10px] text-[var(--text-muted)]"
+              className="rounded px-1 py-0.5 text-xs text-[var(--text-muted)]"
               title="使用 schema 預設值，.env 內未設定">
               預設
             </span>
@@ -373,7 +365,7 @@ function FieldRow({
           </button>
         )}
         {field.is_secret && revealed && (
-          <span className="inline-flex items-center gap-1 text-[10px] text-[var(--warning)]" title="明文已顯示">
+          <span className="inline-flex items-center gap-1 text-xs text-[var(--warning)]" title="明文已顯示">
             <EyeOff size={12} aria-hidden />
             明文中
           </span>
@@ -411,30 +403,12 @@ function MfaModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "var(--bg-overlay)" }}
-      onClick={onCancel}
-      role="dialog"
-      aria-modal="true">
-      <div
-        className="w-full max-w-md rounded-lg border p-5 shadow-xl"
-        style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
-        onClick={(e) => e.stopPropagation()}>
-        <div className="mb-3 flex items-center gap-2 text-[var(--text-primary)]">
-          <KeyRound size={18} aria-hidden />
-          <h2 className="text-base font-semibold">{title}</h2>
-        </div>
-        <p className="mb-3 text-sm text-[var(--text-secondary)]">{detail}</p>
-        <OtpInput
-          value={code}
-          onChange={setCode}
-          label="MFA TOTP 驗證碼"
-          autoFocus
-          disabled={busy}
-          onEnter={() => void submit()}
-        />
-        <div className="mt-4 flex justify-end gap-2">
+    <Modal
+      title={title}
+      size="md"
+      onClose={onCancel}
+      footer={
+        <>
           <button type="button" onClick={onCancel} className="btn btn-ghost" disabled={busy}>
             取消
           </button>
@@ -445,8 +419,17 @@ function MfaModal({
             className="btn btn-primary">
             {busy ? "驗證中…" : "確認"}
           </button>
-        </div>
-      </div>
-    </div>
+        </>
+      }>
+      <p className="mb-3 text-sm text-[var(--text-secondary)]">{detail}</p>
+      <OtpInput
+        value={code}
+        onChange={setCode}
+        label="兩步驟驗證碼"
+        autoFocus
+        disabled={busy}
+        onEnter={() => void submit()}
+      />
+    </Modal>
   );
 }

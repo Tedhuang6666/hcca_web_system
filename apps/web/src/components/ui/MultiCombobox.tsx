@@ -194,7 +194,7 @@ export default function MultiCombobox({
               >
                 <p className="text-sm">{opt.label}</p>
                 {opt.description && (
-                  <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-muted)" }}>
+                  <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
                     {opt.description}
                   </p>
                 )}

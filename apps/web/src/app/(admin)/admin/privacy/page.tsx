@@ -182,7 +182,7 @@ export default function PrivacyPage() {
             假名化（不可逆）
           </button>
         </div>
-        <p className="mt-2 text-[11px] text-[var(--text-muted)]">
+        <p className="mt-2 text-xs text-[var(--text-muted)]">
           UUID 從 <code>/admin/permissions</code> 中找對應使用者的「ID」欄位複製。
         </p>
         {lastExport && (
@@ -219,7 +219,7 @@ export default function PrivacyPage() {
             <tbody>
               {exports.map((f) => (
                 <tr key={f.filename} className="border-b border-[var(--border)]">
-                  <td className="px-3 py-2 font-mono text-[10px]">{f.filename}</td>
+                  <td className="px-3 py-2 font-mono text-xs">{f.filename}</td>
                   <td className="px-3 py-2 text-right">{fmtSize(f.size_bytes)}</td>
                   <td className="px-3 py-2 text-right">
                     {new Date(f.modified_at).toLocaleString()}
@@ -261,10 +261,10 @@ export default function PrivacyPage() {
                     <p className="text-sm font-semibold text-[var(--text-primary)]">
                       {item.subject}
                     </p>
-                    <p className="mt-1 font-mono text-[11px] text-[var(--text-muted)]">
+                    <p className="mt-1 font-mono text-xs text-[var(--text-muted)]">
                       user={item.user_id} · type={item.request_type} · status={item.status}
                     </p>
-                    <p className="mt-1 text-[11px] text-[var(--text-muted)]">
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">
                       IP {item.submitted_ip_address ?? "—"} · UA{" "}
                       <span className="break-all">{item.submitted_user_agent ?? "—"}</span>
                     </p>

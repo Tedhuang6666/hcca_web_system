@@ -8,12 +8,12 @@ import {
   Lock,
   Play,
   RefreshCcw,
-  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
 import { usePrompt } from "@/components/ui/ConfirmDialog";
+import Modal from "@/components/ui/Modal";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import {
   lifecycleApi,
@@ -214,7 +214,7 @@ export default function DataLifecyclePage() {
                       {rule.label}
                     </h3>
                     <span
-                      className="rounded px-1.5 py-0.5 text-[10px] font-medium"
+                      className="rounded px-1.5 py-0.5 text-xs font-medium"
                       style={{ background: `color-mix(in srgb, ${dangerColor} 13%, transparent)`, color: dangerColor }}>
                       {rule.danger_level === "safe"
                         ? "安全"
@@ -222,11 +222,11 @@ export default function DataLifecyclePage() {
                           ? "注意"
                           : "高危"}
                     </span>
-                    <code className="text-[10px] text-[var(--text-muted)]">{rule.id}</code>
+                    <code className="text-xs text-[var(--text-muted)]">{rule.id}</code>
                   </div>
                   <p className="mt-1 text-xs text-[var(--text-muted)]">{rule.description}</p>
                   {rule.extra_filter && (
-                    <p className="mt-1 text-[11px] text-[var(--text-muted)]">
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">
                       條件：{rule.extra_filter}
                     </p>
                   )}
@@ -236,7 +236,7 @@ export default function DataLifecyclePage() {
                   <div className="text-2xl font-bold text-[var(--text-primary)]">
                     {rule.matched_count < 0 ? "讀取失敗" : rule.matched_count.toLocaleString()}
                   </div>
-                  <div className="text-[10px] text-[var(--text-muted)]">
+                  <div className="text-xs text-[var(--text-muted)]">
                     預設保留 {rule.default_retention_days} 天
                   </div>
                 </div>
@@ -314,7 +314,7 @@ export default function DataLifecyclePage() {
                       <summary className="cursor-pointer text-[var(--text-secondary)]">
                         前 {preview.sample.length} 筆 sample（點開展開）
                       </summary>
-                      <pre className="mt-2 max-h-64 overflow-auto rounded bg-[var(--bg-surface)] p-2 text-[10px] text-[var(--text-muted)]">
+                      <pre className="mt-2 max-h-64 overflow-auto rounded bg-[var(--bg-surface)] p-2 text-xs text-[var(--text-muted)]">
                         {JSON.stringify(preview.sample, null, 2)}
                       </pre>
                     </details>
@@ -352,7 +352,7 @@ export default function DataLifecyclePage() {
             <tbody>
               {archives.map((a) => (
                 <tr key={a.path} className="border-b border-[var(--border)]">
-                  <td className="py-2 font-mono text-[10px]">{a.path}</td>
+                  <td className="py-2 font-mono text-xs">{a.path}</td>
                   <td className="py-2 text-right">{fmtSize(a.size_bytes)}</td>
                   <td className="py-2 text-right">{new Date(a.modified_at).toLocaleString()}</td>
                   <td className="py-2 text-right">
@@ -377,36 +377,22 @@ export default function DataLifecyclePage() {
       </section>
 
       {archivePreview && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: "var(--bg-overlay)" }}
-          onClick={() => setArchivePreview(null)}
-          role="dialog"
-          aria-modal="true">
-          <div
-            className="max-h-[80vh] w-full max-w-3xl overflow-auto rounded-lg border p-5 shadow-xl"
-            style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
-            onClick={(e) => e.stopPropagation()}>
-            <h3 className="mb-2 flex items-center gap-2 text-base font-semibold text-[var(--text-primary)]">
-              <Trash2 size={16} aria-hidden />
-              歸檔內容 · {archivePreview.path}
-            </h3>
-            <p className="mb-2 text-xs text-[var(--text-muted)]">
-              顯示前 {archivePreview.rows.length} 行（含 metadata header）
-            </p>
-            <pre className="rounded bg-[var(--bg-base)] p-2 text-[10px] text-[var(--text-muted)]">
-              {JSON.stringify(archivePreview.rows, null, 2)}
-            </pre>
-            <div className="mt-3 flex justify-end gap-2">
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => setArchivePreview(null)}>
-                關閉
-              </button>
-            </div>
-          </div>
-        </div>
+        <Modal
+          title={`歸檔內容 · ${archivePreview.path}`}
+          size="3xl"
+          onClose={() => setArchivePreview(null)}
+          footer={
+            <button type="button" className="btn btn-ghost" onClick={() => setArchivePreview(null)}>
+              關閉
+            </button>
+          }>
+          <p className="mb-2 text-xs text-[var(--text-muted)]">
+            顯示前 {archivePreview.rows.length} 行
+          </p>
+          <pre className="rounded bg-[var(--bg-base)] p-2 text-xs text-[var(--text-muted)]">
+            {JSON.stringify(archivePreview.rows, null, 2)}
+          </pre>
+        </Modal>
       )}
 
       <div

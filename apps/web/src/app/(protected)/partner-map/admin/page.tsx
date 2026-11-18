@@ -88,7 +88,7 @@ function PartnerIconPicker({
 }) {
   return (
     <div className="grid gap-2">
-      <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>圖示</span>
+      <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>圖示</span>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6" role="radiogroup" aria-label="圖示選擇">
         {PARTNER_ICON_OPTIONS.map(({ key, label, icon: Icon }) => {
           const selected = value === key;
@@ -587,7 +587,7 @@ export default function PartnerMapAdminPage() {
                   }}>
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate text-sm font-medium">{business.name}</span>
-                    <span className="rounded px-1.5 py-0.5 text-[11px]" style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
+                    <span className="rounded px-1.5 py-0.5 text-xs" style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
                     {statusLabels[business.status as PartnerBusinessStatus] ?? business.status}
                   </span>
                 </div>
@@ -883,11 +883,11 @@ export default function PartnerMapAdminPage() {
           </div>
           <div className="grid gap-4 rounded-lg border p-4 md:grid-cols-[minmax(0,1fr)_96px_auto]" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
             <label className="grid min-w-0 gap-1">
-              <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>分類名稱</span>
+              <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>分類名稱</span>
               <input value={tagName} onChange={(event) => setTagName(event.target.value)} className="input h-9" placeholder="例如：制服、飲料、文具" />
             </label>
             <label className="grid min-w-0 gap-1">
-              <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>顏色</span>
+              <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>顏色</span>
               <input value={tagColor} onChange={(event) => setTagColor(event.target.value)} className="h-9 w-full rounded border bg-transparent p-1" style={{ borderColor: "var(--border)" }} type="color" aria-label="分類顏色" />
             </label>
             <button className="btn btn-ghost w-full self-end md:w-auto" onClick={createTag} aria-label="新增標籤">
@@ -917,19 +917,19 @@ export default function PartnerMapAdminPage() {
                   </div>
                   <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_96px_80px_96px]">
                     <label className="grid min-w-0 gap-1">
-                      <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>標籤名稱</span>
+                      <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>標籤名稱</span>
                       <input className="input h-9" value={draft.name} onChange={(event) => setTagDrafts((current) => ({ ...current, [tag.id]: { ...draft, name: event.target.value } }))} />
                     </label>
                     <label className="grid min-w-0 gap-1">
-                      <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>顏色</span>
+                      <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>顏色</span>
                       <input className="h-9 w-full rounded border bg-transparent p-1" style={{ borderColor: "var(--border)" }} type="color" value={draft.color} onChange={(event) => setTagDrafts((current) => ({ ...current, [tag.id]: { ...draft, color: event.target.value } }))} aria-label={`${tag.name} 顏色`} />
                     </label>
                     <label className="grid min-w-0 gap-1">
-                      <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>排序</span>
+                      <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>排序</span>
                       <NumberInput className="input h-9" type="number" value={draft.sort_order} onChange={(event) => setTagDrafts((current) => ({ ...current, [tag.id]: { ...draft, sort_order: Number(event.target.value) } }))} />
                     </label>
                     <label className="grid min-w-0 gap-1">
-                      <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>狀態</span>
+                      <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>狀態</span>
                       <button className="btn btn-ghost h-9 justify-start px-2 text-xs" onClick={() => setTagDrafts((current) => ({ ...current, [tag.id]: { ...draft, is_active: !draft.is_active } }))} aria-label="切換啟用">
                         <span className="h-2 w-2 rounded-full" style={{ background: draft.is_active ? "var(--success)" : "var(--text-muted)" }} />
                         {draft.is_active ? "啟用中" : "已停用"}
