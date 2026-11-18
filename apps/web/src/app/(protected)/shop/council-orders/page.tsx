@@ -172,6 +172,10 @@ export default function CouncilOrdersPage() {
   const [cancelBusy, setCancelBusy] = useState(false);
   const [cancelError, setCancelError] = useState("");
   const [cancelResult, setCancelResult] = useState("");
+  const [recalcSelected, setRecalcSelected] = useState<Set<string>>(new Set());
+  const [recalcBusy, setRecalcBusy] = useState(false);
+  const [recalcResult, setRecalcResult] = useState("");
+  const [recalcError, setRecalcError] = useState("");
   const [quantityTarget, setQuantityTarget] = useState<OrderListItem | null>(null);
   const [quantityDrafts, setQuantityDrafts] = useState<Record<string, number>>({});
   const [quantityBusy, setQuantityBusy] = useState<string | null>(null);
@@ -180,7 +184,7 @@ export default function CouncilOrdersPage() {
   const [reminderBusy, setReminderBusy] = useState<"orders" | "class_reps" | null>(null);
   const [reminderError, setReminderError] = useState("");
   const [reminderStatus, setReminderStatus] = useState("");
-  const mutationBusy = paymentBusy !== null || cancelBusy || quantityBusy !== null || assistedBusy;
+  const mutationBusy = paymentBusy !== null || cancelBusy || quantityBusy !== null || assistedBusy || recalcBusy;
   const canCreateBatchReminders = canViewClassPaymentReport
     && (hasAdminPermission || permissions.has("email:send_bulk"));
 
@@ -613,6 +617,25 @@ export default function CouncilOrdersPage() {
       setCancelError(apiErrorMessage(e, "取消失敗，請稍後再試。"));
     } finally {
       setCancelBusy(false);
+    }
+  };
+
+  const recalculateSelected = async () => {
+    if (recalcBusy || recalcSelected.size === 0) return;
+    setRecalcBusy(true);
+    setRecalcError("");
+    setRecalcResult("");
+    try {
+      const result = await shopApi.recalculateOrderPromotions([...recalcSelected]);
+      const skipped = result.results.filter((row) => row.status === "skipped");
+      setRecalcResult(`重算完成：${result.updated} 筆已更新、${result.unchanged} 筆無變動`
+        + (skipped.length ? `、${skipped.length} 筆略過（${skipped.map((row) => `${row.serial_number || "不存在"}：${row.reason}`).join("；")}）` : "。"));
+      setRecalcSelected(new Set());
+      await Promise.all([loadOrders(), loadSummary()]);
+    } catch (e) {
+      setRecalcError(apiErrorMessage(e, "重算失敗，請稍後再試。"));
+    } finally {
+      setRecalcBusy(false);
     }
   };
 
@@ -1373,6 +1396,17 @@ export default function CouncilOrdersPage() {
         <section>
           {cancelResult && <p role="status" className="mb-3 text-sm">{cancelResult}</p>}
           {quantityResult && <p role="status" className="mb-3 text-sm">{quantityResult}</p>}
+          {recalcResult && <p role="status" className="mb-3 text-sm">{recalcResult}</p>}
+          {recalcError && <p role="alert" className="mb-3 text-sm" style={{ color: "var(--danger, #dc2626)" }}>{recalcError}</p>}
+          {canConfirmClassPayment && (
+            <div className="mb-3 flex flex-wrap items-center gap-3">
+              <button type="button" className="btn btn-ghost min-h-11 whitespace-nowrap"
+                disabled={loading || mutationBusy || recalcSelected.size === 0}
+                onClick={() => void recalculateSelected()}>
+                {recalcBusy ? "重算中…" : `重算所選訂單優惠（${recalcSelected.size}）`}
+              </button>
+            </div>
+          )}
           {canCreateBatchReminders && (
             <div className="mb-3 flex flex-col gap-3 rounded-lg p-4 sm:flex-row sm:items-center sm:justify-between"
               style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
@@ -1401,6 +1435,11 @@ export default function CouncilOrdersPage() {
                   <table className="shop-mobile-table w-full min-w-[700px] text-sm">
                     <thead>
                       <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                        {canConfirmClassPayment && <th scope="col" className="px-4 py-3 text-left">
+                          <input type="checkbox" className="h-5 w-5" aria-label="選取目前列表全部訂單"
+                            checked={visibleOrders.length > 0 && visibleOrders.every((row) => recalcSelected.has(row.id))}
+                            onChange={(event) => setRecalcSelected(event.target.checked ? new Set(visibleOrders.map((row) => row.id)) : new Set())} />
+                        </th>}
                         {["訂單編號", "訂購人", "班級／處室", "狀態", "金額", "班聯收款", "建立時間"].map((h) => (
                           <th key={h} className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "var(--text-muted)" }}>{h}</th>
                         ))}
@@ -1411,6 +1450,15 @@ export default function CouncilOrdersPage() {
                       {visibleOrders.map((order, idx) => (
                         <Fragment key={order.id}>
                           <tr style={idx < visibleOrders.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}>
+                            {canConfirmClassPayment && <td data-label="選取" className="px-4 py-3">
+                              <input type="checkbox" className="h-5 w-5" aria-label={`選取訂單 ${order.serial_number}`}
+                                checked={recalcSelected.has(order.id)}
+                                onChange={(event) => setRecalcSelected((current) => {
+                                  const next = new Set(current);
+                                  if (event.target.checked) next.add(order.id); else next.delete(order.id);
+                                  return next;
+                                })} />
+                            </td>}
                             <td className="px-4 py-3">
                               <Link href={`/shop/orders/${order.id}?from=council`} className="text-sm underline" style={{ color: "var(--primary-text)" }}>{order.serial_number}</Link>
                             </td>
@@ -1464,7 +1512,7 @@ export default function CouncilOrdersPage() {
                           </tr>
                           {quantityTarget?.id === order.id && (
                             <tr id={`quantity-editor-${order.id}`} style={{ borderBottom: "1px solid var(--border)" }}>
-                              <td colSpan={canConfirmClassPayment ? 8 : 7} className="px-4 py-4" style={{ background: "var(--bg-elevated)" }}>
+                              <td colSpan={canConfirmClassPayment ? 9 : 7} className="px-4 py-4" style={{ background: "var(--bg-elevated)" }}>
                                 <fieldset className="space-y-3">
                                   <legend className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
                                     調整 {order.user_name ?? "訂購人"} 的訂購數量

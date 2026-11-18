@@ -17,6 +17,7 @@ from api.routers.shop._common import (
     DbDep,
     _get_order_or_404,
     _queue_order_confirmation,
+    _require_shop_manager,
 )
 from api.schemas.shop import (
     ClassCollectionUpdate,
@@ -26,6 +27,9 @@ from api.schemas.shop import (
     OrderCancelRequest,
     OrderOut,
     OrderPaymentUpdate,
+    OrderRecalculateItem,
+    OrderRecalculateOut,
+    OrderRecalculateRequest,
 )
 from api.services import activity as activity_svc
 from api.services import audit as audit_svc
@@ -35,8 +39,47 @@ from api.services.permission import get_user_permission_codes
 from api.services.shop import _delegation as delegation_svc
 from api.services.shop import _lookups as lookups_svc
 from api.services.shop._events import queue_order_updated
+from api.services.shop._promotion_orders import recalculate_orders
 
 router = APIRouter()
+
+
+@router.post(
+    "/orders/recalculate-promotions",
+    response_model=OrderRecalculateOut,
+    summary="手動重算指定訂單的優惠",
+)
+async def recalculate_order_promotions(
+    payload: OrderRecalculateRequest, session: DbDep, current_user: CurrentUser
+) -> OrderRecalculateOut:
+    orders = [await shop_svc.get_order(session, order_id) for order_id in payload.order_ids]
+    for order in orders:
+        if order is not None:
+            await _require_shop_manager(session, current_user, shop_svc._order_activity_id(order))
+    results = await recalculate_orders(session, payload.order_ids)
+    for row in results:
+        if row.status != "updated":
+            continue
+        await audit_svc.record(
+            session,
+            entity_type="order",
+            entity_id=str(row.order_id),
+            action="shop.order_recalculate",
+            actor_id=str(current_user.id),
+            actor_email=current_user.email,
+            meta={"old_total": row.old_total, "new_total": row.new_total},
+            summary=f"手動重算訂單「{row.serial_number}」優惠",
+        )
+        refreshed = await shop_svc.get_order(session, row.order_id)
+        if refreshed is not None:
+            await queue_order_updated(session, refreshed)
+    items = [OrderRecalculateItem(**vars(row)) for row in results]
+    return OrderRecalculateOut(
+        results=items,
+        updated=sum(row.status == "updated" for row in items),
+        unchanged=sum(row.status == "unchanged" for row in items),
+        skipped=sum(row.status == "skipped" for row in items),
+    )
 
 
 @router.get("/orders/{order_id}", response_model=OrderOut, summary="取得訂單詳情")
