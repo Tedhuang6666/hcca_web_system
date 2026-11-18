@@ -3,6 +3,7 @@
 import NumberInput from "@/components/ui/NumberInput";
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
