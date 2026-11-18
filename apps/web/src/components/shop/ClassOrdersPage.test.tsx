@@ -696,7 +696,7 @@ describe("班代工作流程", () => {
 
     const variantSearch = await screen.findByRole("searchbox", { name: "搜尋顏色" });
     expect(variantSearch).toHaveAttribute("placeholder", "搜尋顏色（30 個規格）");
-    fireEvent.change(variantSearch, { target: { value: "色票30" } });
+    await userEvent.setup().type(variantSearch, "色票30");
     const colorOptions = within(screen.getByRole("group", { name: "顏色" }));
     fireEvent.click(await colorOptions.findByRole("radio", { name: "色票30" }));
 
