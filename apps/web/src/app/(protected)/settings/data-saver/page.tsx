@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, RotateCcw } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import { toast } from "sonner";
+import Toggle from "@/components/ui/Toggle";
 import {
   lowDataPreferenceLabel,
   readLowDataMode,
@@ -63,22 +64,7 @@ export default function DataSaverSettingsPage() {
               目前狀態：{statusLabel}
             </p>
           </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={enabled}
-            aria-label="減少背景流量"
-            onClick={toggle}
-            className="inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors"
-            style={{ background: enabled ? "var(--primary)" : "var(--border-strong)" }}
-          >
-            <span
-              className="flex h-4 w-4 items-center justify-center rounded-full bg-white transition-transform"
-              style={{ transform: enabled ? "translateX(24px)" : "translateX(4px)" }}
-            >
-              {enabled && <Check size={10} aria-hidden={true} style={{ color: "var(--primary-text)" }} />}
-            </span>
-          </button>
+          <Toggle checked={enabled} onChange={toggle} ariaLabel="減少背景流量" />
         </div>
       </section>
     </div>

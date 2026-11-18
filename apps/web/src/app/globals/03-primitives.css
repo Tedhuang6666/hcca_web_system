@@ -1407,7 +1407,8 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 
 .regulation-detail-page .legal-text-reader .law-row:hover .law-row-copy-link,
-.regulation-detail-page .legal-text-reader .law-row:focus-within .law-row-copy-link {
+.regulation-detail-page .legal-text-reader .law-row:focus-within .law-row-copy-link,
+.regulation-detail-page .legal-text-reader .law-row-copy-link:is([data-copy-state="copied"], [data-copy-state="failed"]) {
   border-color: var(--border) !important;
   background: var(--bg-elevated) !important;
   opacity: 1 !important;

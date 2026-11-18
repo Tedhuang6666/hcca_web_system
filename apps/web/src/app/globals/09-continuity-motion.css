@@ -53,8 +53,9 @@
   background: var(--sidebar-active-border);
 }
 
-/* 模組分頁：底部指示線改由單一標記在分頁之間移動 */
-.module-tab-link.is-active::after {
+/* 模組分頁與頁內分頁（TabBar）：底部指示線改由單一標記在分頁之間移動。
+   只在分頁裡真的有金線時才關掉舊指示線，避免沒接上金線的分頁失去選取狀態。 */
+.module-tab-link.is-active:has(> .module-tab-mark)::after {
   content: none;
 }
 
