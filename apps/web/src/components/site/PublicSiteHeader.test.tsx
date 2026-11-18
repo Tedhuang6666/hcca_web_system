@@ -110,6 +110,44 @@ describe("公開網站手機導覽", () => {
     expect(within(screen.getByRole("dialog")).getByRole("searchbox")).toHaveValue("");
   });
 
+  it("unfurls from the menu button and folds back into it before unmounting", async () => {
+    const finishes: Array<() => void> = [];
+    const animate = vi.fn(() => ({
+      finished: new Promise<void>((resolve) => finishes.push(resolve)),
+      cancel: vi.fn(),
+    }));
+    Object.defineProperty(HTMLElement.prototype, "animate", {
+      configurable: true,
+      writable: true,
+      value: animate,
+    });
+    try {
+      render(<PublicSiteHeader />);
+      const trigger = screen.getByRole("button", { name: "開啟導覽" });
+      vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue({
+        x: 340, y: 12, left: 340, top: 12, width: 44, height: 44, right: 384, bottom: 56,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      fireEvent.click(trigger);
+      const dialog = screen.getByRole("dialog", { name: "公開網站導覽" });
+      const reveal = animate.mock.calls[0] as unknown as [PropertyIndexedKeyframes];
+      expect(reveal[0].clipPath).toEqual(["circle(0px at 362px 34px)", expect.stringMatching(/^circle\(/)]);
+
+      fireEvent.click(within(dialog).getByRole("button", { name: "關閉導覽" }));
+      expect(dialog).toHaveAttribute("data-closing", "true");
+      expect(screen.getByRole("dialog")).toBe(dialog);
+      const fold = animate.mock.calls.at(-1) as unknown as [PropertyIndexedKeyframes];
+      expect((fold[0].clipPath as string[]).at(-1)).toBe("circle(0px at 362px 34px)");
+
+      await act(async () => finishes.at(-1)?.());
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(trigger).toHaveFocus();
+    } finally {
+      delete (HTMLElement.prototype as { animate?: unknown }).animate;
+    }
+  });
+
   it("releases the mobile menu when resizing to the desktop layout", () => {
     const { unmount } = openMenu();
     const listener = state.desktop.addEventListener.mock.calls.find(([event]) => event === "change")?.[1];
