@@ -557,18 +557,20 @@ async def test_logout_clears_oauth_session_state(
 
 
 async def test_audit_middleware_records_authenticated_actor(
-    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import logging
     from types import SimpleNamespace
+    from unittest.mock import Mock
     from uuid import uuid4
 
     from starlette.types import Message, Receive, Scope, Send
 
     from api.core.audit import SecurityAuditMiddleware
+    from api.core.audit import logger as audit_logger
     from api.main import app
 
-    caplog.set_level(logging.INFO, logger="api.core.audit")
+    log_info = Mock()
+    monkeypatch.setattr(audit_logger, "info", log_info)
     assert any(item.cls is SecurityAuditMiddleware for item in app.user_middleware)
 
     user = SimpleNamespace(id=uuid4(), email="member@school.edu")
@@ -596,10 +598,11 @@ async def test_audit_middleware_records_authenticated_actor(
 
     await SecurityAuditMiddleware(endpoint)(scope, receive, send)
 
-    records = [r for r in caplog.records if r.getMessage() == "Security audit: sensitive operation"]
-    assert records, "敏感路徑應寫入稽核紀錄"
-    assert records[-1].user_id == str(user.id)
-    assert records[-1].user_email == user.email
+    log_info.assert_called_once()
+    assert log_info.call_args is not None
+    assert log_info.call_args.args == ("Security audit: sensitive operation",)
+    assert log_info.call_args.kwargs["extra"]["user_id"] == str(user.id)
+    assert log_info.call_args.kwargs["extra"]["user_email"] == user.email
     assert any(message["type"] == "http.response.start" for message in messages)
 
 
