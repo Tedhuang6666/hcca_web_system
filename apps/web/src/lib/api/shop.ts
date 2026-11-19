@@ -14,6 +14,7 @@ import type {
   ActivityOut, CatalogCategoryOut, ClassPaymentOut, ClassPaymentReportItemOut, CloseStatusOut, OrderListItem, OrderOut, OrderQuantityRow, OrderSummaryOut, ProductCategoryOut, ProductOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut, ShopClassRepresentativeRecipientOut, ShopClassSummaryOut, ShopOrderCloseOut, ShopOrdersClearOut, ShopPromotionCreate, ShopPromotionOut, ShopPromotionPreviewOut, ShopPromotionPublicOut, ShopPromotionUpdate,
 } from "../types";
 import { authFetch, BASE, get, post, put, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
+import type { OrderRecalculateOut } from "../api-bridge";
 import type { ProductPurchaseRules, ProductPurchasePermissionOut } from "../types";
 import type { ProductPurchaseGroupOptionOut } from "../types";
 import type { ShopTargetLookupRequest, ShopTargetOut } from "../types";
@@ -201,6 +202,8 @@ export const shopApi = {
   listOrderRecipients: (classId: string) => get<ClassMemberOut[]>(`/shop/orders/recipients/${classId}`),
   createAdminAssistedOrder: (body: AdminAssistedOrderCreate) => post<OrderOut[]>("/shop/orders/assisted", body),
   listSupplementOrders: (offset = 0) => get<OrderListItem[]>(`/shop/orders/supplements?limit=500&offset=${offset}`),
+  recalculateOrderPromotions: (orderIds: string[]) =>
+    post<OrderRecalculateOut>("/shop/orders/recalculate-promotions", { order_ids: orderIds }),
   separateOrder: (id: string) => post<OrderOut>(`/shop/orders/${id}/separate`),
   rejoinSupplementOrder: (id: string) => post<OrderOut>(`/shop/orders/${id}/rejoin-class`),
   downloadSupplementReceipt: async (id: string) => {
