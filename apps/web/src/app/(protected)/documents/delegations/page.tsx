@@ -157,9 +157,6 @@ export default function DocumentDelegationsPage() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>公文簽核代理設定</h1>
-          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            代理適用於送審中及代理期間新送審的公文。
-          </p>
         </div>
         <div className="flex items-center gap-2">
           <button
