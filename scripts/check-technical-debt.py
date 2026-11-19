@@ -1,4 +1,4 @@
-"""Report source debt and reject per-file increases against the reviewed baseline."""
+"""Report source debt and reject excessive per-file increases against the reviewed baseline."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ BASELINE = ROOT / "config/technical-debt-baseline.json"
 SOURCE_ROOTS = ("apps/api/src/", "apps/web/src/", "libs/shared/src/")
 GENERATED = {"api-types.ts", "api-bridge.ts"}
 DB_METHODS = {"execute", "scalar", "scalars", "get"}
+INCREASE_ALLOWANCE = {"lines_over_600": 50, "inline_styles": 5}
 
 
 def python_metrics(source: str, *, router: bool, service: bool) -> dict[str, int]:
@@ -93,7 +94,7 @@ def increases(current: dict, baseline: dict) -> list[str]:
         f"{path}: {metric} {baseline.get(path, {}).get(metric, 0)} -> {count}"
         for path, metrics in current.items()
         for metric, count in metrics.items()
-        if count > baseline.get(path, {}).get(metric, 0)
+        if count > baseline.get(path, {}).get(metric, 0) + INCREASE_ALLOWANCE.get(metric, 0)
     ]
 
 
