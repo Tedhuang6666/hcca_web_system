@@ -66,6 +66,7 @@ import { clearStoredDraft, useDraftAutosave } from "@/hooks/useDraftAutosave";
 import { getSystemInfoMarkdown } from "@/lib/systemInfoMarkdown";
 import {
   PUBLIC_NAV_GROUP_META,
+  PUBLIC_NAV_GROUP_ORDER,
   PUBLIC_NAV_ITEMS,
   type PublicNavGroupId,
   type PublicNavOverride,
@@ -126,7 +127,7 @@ function isEmptyPageDraft(draft: typeof EMPTY_PAGE_DRAFT) {
 }
 
 /** 後台導覽列分頁的群組顯示順序。 */
-const NAV_GROUP_ORDER: PublicNavGroupId[] = ["primary", "info", "data", "participation"];
+const NAV_GROUP_ORDER: PublicNavGroupId[] = PUBLIC_NAV_GROUP_ORDER;
 
 const emptySettings: PublicSiteSettingsOut = {
   id: "",
@@ -1910,7 +1911,7 @@ export default function PublicSiteAdminPage() {
               <div>
                 <h2 className="font-semibold">公開站導覽列</h2>
                 <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--text-muted)]">
-                  主要導覽顯示於頂列，其餘收進「所有公開服務」。
+                  「主要入口」直接顯示在頁首，「公開資料」與「關於」各收成一個下拉選單。
                 </p>
               </div>
               <div className="flex shrink-0 gap-2">

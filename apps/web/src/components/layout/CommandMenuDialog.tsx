@@ -17,9 +17,9 @@ import { NAV_ID_TO_MODULE } from "@/lib/modules";
 import NavIcon from "./NavIcon";
 
 const ACTION_GROUPS = [
-  { heading: "現在要處理", ids: ["dashboard", "tasks", "workItems", "announcements"] },
+  { heading: "工作", ids: ["dashboard", "tasks", "workItems", "announcements"] },
   {
-    heading: "治理事務",
+    heading: "治理與公開",
     ids: ["documents", "regulations", "councilProposals", "petitions", "judicialPetitions"],
   },
   { heading: "校園服務", ids: ["surveys", "shop", "partnerMap", "recommendedVendors", "examPapers"] },
@@ -149,24 +149,18 @@ export default function CommandMenuDialog({ query, setQuery, onClose }: {
           boxShadow: "0 14px 32px rgba(0,0,0,0.28)",
         }}
         onMouseDown={(event) => event.stopPropagation()}
+        label="搜尋功能或資料"
       >
-        <div className="px-4 pt-4 pb-3" style={{ borderBottom: "1px solid var(--border)" }}>
-          <h2 className="text-base font-semibold">所有功能</h2>
-          <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
-            依工作類型選擇，或直接搜尋功能名稱
-          </p>
-        </div>
-        <div
-          className="mx-4 mt-3 flex items-center gap-2 rounded-md px-3"
-          style={{ background: "var(--bg-muted)", border: "1px solid var(--border)" }}
-        >
+        {/* 對話框只有這一個輸入欄且自動聚焦；以底線顏色表示焦點，避免外框被圓角裁切。 */}
+        <div className="command-menu-search flex items-center gap-2 px-4">
           <Search size={17} aria-hidden={true} style={{ color: "var(--text-muted)" }} />
           <Command.Input
             autoFocus
             value={query}
             onValueChange={setQuery}
-            placeholder="搜尋功能，例如公文、問卷或學餐"
-            className="h-11 flex-1 bg-transparent text-sm outline-none"
+            placeholder="搜尋功能、公文、法規或公告"
+            aria-label="搜尋功能或資料"
+            className="h-14 flex-1 bg-transparent text-sm"
             style={{ color: "var(--text-primary)" }}
           />
         </div>
@@ -208,10 +202,7 @@ export default function CommandMenuDialog({ query, setQuery, onClose }: {
                   onSelect={() => go(item.href)}
                   className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm"
                 >
-                  <span
-                    className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md"
-                    style={{ background: "var(--bg-muted)", color: "var(--text-muted)" }}
-                  >
+                  <span className="flex flex-shrink-0" style={{ color: "var(--text-muted)" }}>
                     <NavIcon iconKey={item.iconKey} size={16} />
                   </span>
                   <span>{item.label}</span>

@@ -99,7 +99,7 @@ export default function HomeContent({
           <Link href="/news">全部公告<ArrowRight size={16} aria-hidden /></Link>
         </div>
         <div className="campus-news-layout">
-          <div className={`campus-news-content${featuredAnnouncement && latestAnnouncements.length > 0 ? " has-news-list" : ""}`}>
+          <div className="campus-news-content">
             {featuredAnnouncement && (
               <article className="campus-news-lead">
                 <div className="campus-meta">
@@ -130,11 +130,11 @@ export default function HomeContent({
             ) : announcementsAvailable && !featuredAnnouncement && <p className="campus-empty">目前沒有新公告</p>}
             {!announcementsAvailable && <PublicLoadFailure message="無法取得最新公告" />}
           </div>
-          <aside className="campus-participation" aria-label="校園參與">
+          <aside className="campus-participation" aria-label="開放中的問卷">
             {openSurveys.slice(0, 2).map((survey) => (
               <Link key={survey.id} href={`/surveys/${encodeURIComponent(survey.title)}`} className="campus-survey">
                 <span className="campus-meta">
-                  {survey.closes_at ? `填答至 ${formatDate(survey.closes_at)}` : "開放填答"}
+                  {survey.closes_at ? `問卷・填答至 ${formatDate(survey.closes_at)}` : "問卷・開放填答"}
                 </span>
                 <strong>{survey.title}</strong><ArrowRight size={18} aria-hidden />
               </Link>

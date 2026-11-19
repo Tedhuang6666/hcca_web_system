@@ -70,7 +70,7 @@ describe("公開網站手機導覽", () => {
     expect(menu.getByRole("link", { name: "法規查詢" })).toBeVisible();
     fireEvent.change(search, { target: { value: "沒有這個服務" } });
     expect(menu.getByRole("status")).toHaveTextContent("0 項結果");
-    expect(menu.getByText("找不到相符服務；請改用其他關鍵字。")).toBeVisible();
+    expect(menu.getByText("找不到相符頁面，換個關鍵字試試。")).toBeVisible();
     fireEvent.change(search, { target: { value: "" } });
     expect(menu.getByRole("link", { name: "最新公告" })).toBeVisible();
   });
@@ -84,7 +84,7 @@ describe("公開網站手機導覽", () => {
     } });
     expect(menu.queryByRole("link", { name: "商品訂購" })).not.toBeInTheDocument();
     expect(menu.queryByRole("link", { name: "法規查詢" })).not.toBeInTheDocument();
-    expect(menu.getByRole("link", { name: "公開資料" })).toBeVisible();
+    expect(menu.getByRole("link", { name: "公開資料庫" })).toBeVisible();
     fireEvent.change(menu.getByRole("searchbox"), { target: { value: "商品" } });
     expect(menu.getByRole("status")).toHaveTextContent("0 項結果");
   });
@@ -120,5 +120,33 @@ describe("公開網站手機導覽", () => {
     unmount();
     expect(state.desktop.removeEventListener).toHaveBeenCalledWith("change", listener);
     expect(document.body.style.overflow).not.toBe("hidden");
+  });
+});
+
+describe("公開網站桌機導覽", () => {
+  it("groups secondary pages into two short menus without a search panel", () => {
+    render(<PublicSiteHeader navPages={[
+      { id: "guide", slug: "新生指南", title: "新生指南", nav_label: "", page_kind: "article" },
+      { id: "faq", slug: "faq", title: "常見問題", nav_label: "", page_kind: "page" },
+    ]} />);
+    const nav = screen.getByRole("navigation", { name: "公開網站導覽" });
+    const topLinks = within(nav).getAllByRole("link").filter((link) => !link.closest("details"));
+    expect(topLinks.map((link) => link.textContent)).toEqual(["最新公告", "商品訂購", "文章專欄"]);
+    const menus = nav.querySelectorAll("details");
+    expect([...menus].map((menu) => menu.querySelector("summary")?.textContent)).toEqual(["公開資料", "關於"]);
+    expect(within(menus[0] as HTMLElement).getByRole("link", { name: "法規查詢" })).toHaveAttribute("aria-current", "page");
+    expect(within(menus[1] as HTMLElement).getByRole("link", { name: "常見問題" })).toHaveAttribute("href", "/pages/faq");
+    expect(within(nav).queryByRole("link", { name: "新生指南" })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole("searchbox")).not.toBeInTheDocument();
+  });
+
+  it("closes an open menu with Escape and returns focus to its toggle", () => {
+    render(<PublicSiteHeader />);
+    const nav = screen.getByRole("navigation", { name: "公開網站導覽" });
+    const menu = nav.querySelector("details") as HTMLDetailsElement;
+    menu.open = true;
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(menu.open).toBe(false);
+    expect(menu.querySelector("summary")).toHaveFocus();
   });
 });
