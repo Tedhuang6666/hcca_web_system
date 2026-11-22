@@ -165,3 +165,11 @@ docs/*
 .agents/skills/*
 !.agents/skills/hcca-maintenance/
 !.agents/skills/hcca-maintenance/SKILL.md
+# Shared skill source is in .agents/skills; Claude loads the same directory through this link.
+!.agents/skills/prod-host-operations/
+!.agents/skills/prod-host-operations/SKILL.md
+!.claude/
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/prod-host-operations
