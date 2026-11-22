@@ -90,7 +90,7 @@ _CSS_DANGER_PATTERNS: tuple[re.Pattern[str], ...] = (
         r"<\s*/?\s*(?:style|script|iframe|svg|img|object|embed|link|meta)\b[^>]*>?",
         re.I,
     ),
-    re.compile(r"<!--|-->"),
+    re.compile(r"<!--|--!?>"),
     re.compile(r"@import\b[^;]*;?", re.I),
     re.compile(r"expression\s*\(", re.I),
     re.compile(r"(?:javascript|vbscript|behavior|-moz-binding)\s*:", re.I),
