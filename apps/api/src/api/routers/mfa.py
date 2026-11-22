@@ -44,16 +44,19 @@ _MFA_REAUTH_USER_ID_KEY = "mfa_reauth_user_id"
 _MFA_REAUTH_UNTIL_KEY = "mfa_reauth_until"
 
 
-def _mark_mfa_reauthenticated(session: dict[str, Any], user: User) -> None:
-    session[_MFA_REAUTH_USER_ID_KEY] = str(user.id)
-    session[_MFA_REAUTH_UNTIL_KEY] = time.time() + _MFA_REAUTH_WINDOW_SECONDS
+def _mark_mfa_reauthenticated(reauth_state: dict[str, object], user: User) -> None:
+    reauth_state[_MFA_REAUTH_USER_ID_KEY] = str(user.id)
+    reauth_state[_MFA_REAUTH_UNTIL_KEY] = time.time() + _MFA_REAUTH_WINDOW_SECONDS
 
 
-def _has_recent_mfa_reauth(session: dict[str, Any], user: User) -> bool:
-    if session.get(_MFA_REAUTH_USER_ID_KEY) != str(user.id):
+def _has_recent_mfa_reauth(reauth_state: dict[str, object], user: User) -> bool:
+    if reauth_state.get(_MFA_REAUTH_USER_ID_KEY) != str(user.id):
+        return False
+    raw_expiry = reauth_state.get(_MFA_REAUTH_UNTIL_KEY, 0)
+    if not isinstance(raw_expiry, (str, int, float)):
         return False
     try:
-        expires_at = float(session.get(_MFA_REAUTH_UNTIL_KEY, 0))
+        expires_at = float(raw_expiry)
     except (OverflowError, TypeError, ValueError):
         return False
     now = time.time()
