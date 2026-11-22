@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("public homepage exposes primary navigation", async ({ page }) => {
   const response = await page.goto("/");
+  expect(response?.status(), "/ should load successfully").toBe(200);
   const csp = response?.headers()["content-security-policy"] ?? "";
   expect(csp).toMatch(/script-src[^;]*nonce-/);
 
@@ -43,6 +44,7 @@ test("login page exposes OAuth entry points", async ({ page }) => {
   });
 
   const response = await page.goto("/login");
+  expect(response?.status(), "/login should load successfully").toBe(200);
   const csp = response?.headers()["content-security-policy"] ?? "";
   expect(csp).toMatch(/script-src[^;]*nonce-/);
   expect(csp).not.toMatch(/script-src[^;]*unsafe-inline/);

@@ -7,11 +7,16 @@
  * 執行前提：E2E_AUTH_STORAGE 指向帶有有效 session 的 Playwright storage-state 檔。
  */
 
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+async function assertRouteAvailable(page: Page, path: string) {
+  const response = await page.goto(path);
+  expect(response?.status(), `${path} should load successfully`).toBe(200);
+}
 
 test.describe("商品登記流程", () => {
   test("商品頁可正常載入，顯示商品或空狀態", async ({ page }) => {
-    await page.goto("/shop");
+    await assertRouteAvailable(page, "/shop");
 
     await expect(page).not.toHaveURL(/\/login/);
     await expect(page.locator("body")).not.toContainText("Internal Server Error");
@@ -21,7 +26,7 @@ test.describe("商品登記流程", () => {
   });
 
   test("商品詳情顯示登記資訊且可用鍵盤關閉", async ({ page }) => {
-    await page.goto("/shop");
+    await assertRouteAvailable(page, "/shop");
     await expect(page).not.toHaveURL(/\/login/);
 
     const firstProduct = page.locator("[aria-label^='查看商品：']").first();
@@ -46,7 +51,7 @@ test.describe("商品登記流程", () => {
   });
 
   test("舊購物車連結導向現行商品登記頁", async ({ page }) => {
-    await page.goto("/shop/cart");
+    await assertRouteAvailable(page, "/shop/cart");
 
     await expect(page).not.toHaveURL(/\/login/);
     await expect(page).toHaveURL(/\/shop\/?$/);
@@ -54,14 +59,14 @@ test.describe("商品登記流程", () => {
   });
 
   test("班級訂購頁面可正常載入", async ({ page }) => {
-    await page.goto("/shop/class-orders");
+    await assertRouteAvailable(page, "/shop/class-orders");
 
     await expect(page).not.toHaveURL(/\/login/);
     await expect(page.locator("body")).not.toContainText("Internal Server Error");
   });
 
   test("我的訂單頁可正常載入", async ({ page }) => {
-    await page.goto("/shop/orders");
+    await assertRouteAvailable(page, "/shop/orders");
 
     await expect(page).not.toHaveURL(/\/login/);
     await expect(page.locator("body")).not.toContainText("Internal Server Error");

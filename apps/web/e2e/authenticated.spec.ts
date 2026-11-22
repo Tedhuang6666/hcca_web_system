@@ -10,7 +10,8 @@ const workflows = [
 
 for (const workflow of workflows) {
   test(`${workflow.name} authenticated smoke`, async ({ page }) => {
-    await page.goto(workflow.path);
+    const response = await page.goto(workflow.path);
+    expect(response?.status(), `${workflow.path} should load successfully`).toBe(200);
 
     await expect(page).not.toHaveURL(/\/login(?:\?|$)/);
     await expect(page.locator("body")).not.toContainText("Internal Server Error");

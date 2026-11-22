@@ -24,6 +24,11 @@ async function selectE2eOrg(page: Page) {
   await expect(orgSelect).not.toHaveValue("");
 }
 
+async function assertRouteAvailable(page: Page, path: string) {
+  const response = await page.goto(path);
+  expect(response?.status(), `${path} should load successfully`).toBe(200);
+}
+
 async function saveDraft(page: Page) {
   const createResponse = page.waitForResponse(
     (response) => response.url().endsWith("/documents")
@@ -37,7 +42,7 @@ async function saveDraft(page: Page) {
 
 test.describe("公文建立流程", () => {
   test("可進入公文新建頁並看到必要欄位", async ({ page }) => {
-    await page.goto("/documents/new");
+    await assertRouteAvailable(page, "/documents/new");
 
     // 確認沒有被導回登入頁
     await expect(page).not.toHaveURL(/\/login(?:\?|$)/);
@@ -53,7 +58,7 @@ test.describe("公文建立流程", () => {
   });
 
   test("填寫公文表單並建立草稿，確認跳轉到詳情頁", async ({ page }) => {
-    await page.goto("/documents/new");
+    await assertRouteAvailable(page, "/documents/new");
     await expect(page).not.toHaveURL(/\/login/);
 
     const subjectInput = page
@@ -89,7 +94,7 @@ test.describe("公文建立流程", () => {
 
   test("公文詳情頁顯示簽核面板", async ({ page }) => {
     // 先建立一份公文，取得它的 URL
-    await page.goto("/documents/new");
+    await assertRouteAvailable(page, "/documents/new");
     await expect(page).not.toHaveURL(/\/login/);
 
     const titleField = page.locator(
@@ -99,7 +104,7 @@ test.describe("公文建立流程", () => {
     const canCreate = await titleField.isVisible({ timeout: 5_000 }).catch(() => false);
     if (!canCreate) {
       // 改從列表取第一份已有公文
-      await page.goto("/documents");
+      await assertRouteAvailable(page, "/documents");
       const firstDocLink = page.locator("a[href^='/documents/']").first();
       const hasDoc = await firstDocLink.isVisible({ timeout: 5_000 }).catch(() => false);
       if (!hasDoc) {
@@ -137,7 +142,7 @@ test.describe("公文建立流程", () => {
 
 test.describe("公文列表與搜尋", () => {
   test("公文列表頁可正常載入並顯示欄位", async ({ page }) => {
-    await page.goto("/documents");
+    await assertRouteAvailable(page, "/documents");
 
     await expect(page).not.toHaveURL(/\/login/);
     await expect(page.locator("body")).not.toContainText("Internal Server Error");
