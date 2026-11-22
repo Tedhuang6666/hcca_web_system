@@ -84,7 +84,7 @@ elif "up" in command and "api-green" in command:
     def test_failed_target_reuses_previous_containers_and_scheduler_image(self):
         result, commands, slot = self.deploy("20261117040000 (head)", fail_target=True)
         self.assertEqual(result.returncode, 1)
-        self.assertIn("已自動 rollback", result.stderr)
+        self.assertIn("已恢復舊 slot", result.stderr)
         self.assertEqual(slot, "blue")
         self.assertIn(
             ["hcca-api:candidate", "start", "api-blue-container", "web-blue-container"],
