@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 import httpx
 
@@ -24,6 +25,7 @@ class DriveFile:
     name: str
     mime_type: str
     repealed: bool = False
+    modified_time: datetime | None = None
 
 
 class RegulationDriveClient:
@@ -61,7 +63,7 @@ class RegulationDriveClient:
             while True:
                 params = {
                     "q": f"'{current}' in parents and trashed = false",
-                    "fields": "nextPageToken,incompleteSearch,files(id,name,mimeType)",
+                    "fields": "nextPageToken,incompleteSearch,files(id,name,mimeType,modifiedTime)",
                     "pageSize": "1000",
                     "supportsAllDrives": "true",
                     "includeItemsFromAllDrives": "true",
@@ -82,6 +84,21 @@ class RegulationDriveClient:
                     file_id, name, mime = entry["id"], entry["name"], entry["mimeType"]
                     if not _ID_RE.fullmatch(file_id):
                         raise DriveReadError("Drive 回傳無效檔案 ID")
+                    raw_modified_time = entry.get("modifiedTime")
+                    try:
+                        modified_time = (
+                            datetime.fromisoformat(raw_modified_time.replace("Z", "+00:00"))
+                            if raw_modified_time
+                            else None
+                        )
+                    except (AttributeError, ValueError) as exc:
+                        raise DriveReadError("Drive 回傳無效檔案修改時間") from exc
+                    if modified_time is not None:
+                        modified_time = (
+                            modified_time.replace(tzinfo=UTC)
+                            if modified_time.tzinfo is None
+                            else modified_time.astimezone(UTC)
+                        )
                     if mime == "application/vnd.google-apps.folder":
                         if "提案" not in name:
                             folders.append((file_id, repealed or "廢止" in name))
@@ -90,7 +107,7 @@ class RegulationDriveClient:
                         DOCX_MIME,
                         "application/vnd.google-apps.document",
                     } and not name.lstrip().startswith(("~$", "!!")):
-                        files[file_id] = DriveFile(file_id, name, mime, repealed)
+                        files[file_id] = DriveFile(file_id, name, mime, repealed, modified_time)
                     if len(files) > 500:
                         raise DriveReadError("來源超過 500 份文件，本次不更新法規")
                 page_token = payload.get("nextPageToken", "")

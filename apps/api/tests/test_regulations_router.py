@@ -19,6 +19,7 @@ from api.models.regulation import (
     RegulationRevision,
     RegulationWorkflowStatus,
 )
+from api.models.regulation_sync import RegulationSyncSource
 from api.models.user import User
 
 pytestmark = pytest.mark.asyncio
@@ -140,6 +141,75 @@ async def test_get_published_regulation_anonymous_returns_200(
 
     assert resp.status_code == 200, resp.text
     assert resp.json()["id"] == str(reg.id)
+
+
+async def test_print_regulation_redirects_to_synced_drive_pdf(
+    db_session: AsyncSession, client, make_user
+) -> None:
+    org = await _make_org(db_session)
+    creator = await make_user(email="drive-pdf-owner@school.edu")
+    reg = await _make_regulation(
+        db_session,
+        org,
+        creator,
+        title="雲端來源法規",
+        workflow_status=RegulationWorkflowStatus.PUBLISHED,
+        published_at=datetime.now(UTC),
+    )
+    source = RegulationSyncSource(
+        org_id=org.id,
+        created_by=creator.id,
+        folder_id="abcdefghijk",
+        frequency="daily",
+        manifest={
+            "oldsource1234": {
+                "regulation_id": str(reg.id),
+                "pdf_file_id": "stale-pdf12345",
+                "pdf_modified_time": "2025-01-01T00:00:00+00:00",
+            },
+            "sourcefile1234": {
+                "regulation_id": str(reg.id),
+                "pdf_file_id": "currentpdf1234",
+                "pdf_modified_time": "2026-11-16T00:00:00+00:00",
+            },
+        },
+        last_report={},
+    )
+    db_session.add(source)
+    await db_session.flush()
+
+    resp = await client.get(f"/regulations/{reg.id}/print", follow_redirects=False)
+
+    assert resp.status_code == 307
+    assert resp.headers["location"] == (
+        "https://drive.google.com/uc?export=download&id=currentpdf1234"
+    )
+
+    source.manifest = {"sourcefile1234": {"regulation_id": str(reg.id)}}
+    source.last_report = {
+        "items": [
+            {
+                "file_id": "sourcefile1234",
+                "filename": "雲端來源法規.docx",
+                "title": "雲端來源法規",
+                "status": "unchanged",
+                "detail": "條號、正文及沿革一致",
+            },
+            {
+                "file_id": "legacy-pdf1234",
+                "filename": "雲端來源法規.pdf",
+                "title": "雲端來源法規",
+                "status": "skipped",
+                "detail": "同名版本",
+            },
+        ]
+    }
+    await db_session.flush()
+
+    legacy_resp = await client.get(f"/regulations/{reg.id}/print", follow_redirects=False)
+
+    assert legacy_resp.status_code == 307
+    assert legacy_resp.headers["location"].endswith("id=legacy-pdf1234")
 
 
 async def test_list_regulations_anonymous_excludes_drafts(

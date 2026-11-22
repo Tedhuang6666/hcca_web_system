@@ -126,6 +126,111 @@ async def test_sync_repairs_same_date_preserves_ids_history_and_is_idempotent(
     assert reg.version == old_version + 1
 
 
+async def test_sync_prefers_latest_drive_file_and_maps_latest_pdf(
+    db_session, make_user, monkeypatch
+):
+    user = await make_user(is_superuser=True)
+    source = await _source(db_session, user)
+    reg = await reg_svc.import_regulation_document(
+        db_session,
+        data=_draft(body="系統舊版。"),
+        category="ordinance",
+        org_id=source.org_id,
+        created_by=user.id,
+        publish_immediately=True,
+    )
+    older_word = DriveFile(
+        "olderword123",
+        "測試條例.docx",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        modified_time=datetime(2026, 11, 15, tzinfo=UTC),
+    )
+    newer_pdf = DriveFile(
+        "newerpdf1234",
+        "測試條例.pdf",
+        "application/pdf",
+        modified_time=datetime(2026, 11, 16, tzinfo=UTC),
+    )
+
+    class Drive:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            pass
+
+        async def list_files(self, _):
+            return [older_word, newer_pdf]
+
+        async def download(self, file):
+            content = "Word 舊版。" if file == older_word else "雲端新版。"
+            return content.encode(), file.name
+
+    monkeypatch.setattr(sync, "RegulationDriveClient", Drive)
+    monkeypatch.setattr(
+        sync,
+        "parse_regulation_document",
+        lambda raw, _filename: _draft(body=raw.decode()),
+    )
+
+    report = await sync.synchronize_source(db_session, source.id)
+
+    assert report is not None
+    assert report.items[0].file_id == newer_pdf.id
+    assert report.items[0].status == "updated"
+    assert "雲端新版" in reg.content
+    assert source.manifest[newer_pdf.id]["regulation_id"] == str(reg.id)
+    assert source.manifest[newer_pdf.id]["pdf_file_id"] == newer_pdf.id
+    assert source.manifest[newer_pdf.id]["pdf_modified_time"] == "2026-11-16T00:00:00+00:00"
+
+
+async def test_sync_maps_unparseable_pdf_for_existing_regulation_download(
+    db_session, make_user, monkeypatch
+):
+    user = await make_user(is_superuser=True)
+    source = await _source(db_session, user)
+    reg = await reg_svc.import_regulation_document(
+        db_session,
+        data=_draft(),
+        category="ordinance",
+        org_id=source.org_id,
+        created_by=user.id,
+        publish_immediately=True,
+    )
+    scanned_pdf = DriveFile(
+        "scannedpdf123",
+        "測試條例.pdf",
+        "application/pdf",
+        modified_time=datetime(2026, 11, 16, tzinfo=UTC),
+    )
+
+    class Drive:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            pass
+
+        async def list_files(self, _):
+            return [scanned_pdf]
+
+        async def download(self, file):
+            return b"scanned PDF", file.name
+
+    def fail_parse(*_):
+        raise ValueError("掃描檔需 OCR")
+
+    monkeypatch.setattr(sync, "RegulationDriveClient", Drive)
+    monkeypatch.setattr(sync, "parse_regulation_document", fail_parse)
+
+    report = await sync.synchronize_source(db_session, source.id)
+
+    assert report is not None
+    assert report.items[0].status == "skipped"
+    assert source.manifest[scanned_pdf.id]["regulation_id"] == str(reg.id)
+    assert source.manifest[scanned_pdf.id]["pdf_file_id"] == scanned_pdf.id
+
+
 async def test_sync_rejects_older_source_without_creating_duplicate(db_session, make_user):
     user = await make_user(is_superuser=True)
     source = await _source(db_session, user)

@@ -34,6 +34,8 @@ from api.services.regulation_import import (
     split_history_events,
 )
 
+_DRIVE_FILE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{10,200}$")
+
 
 def next_sync(frequency: str, now: datetime) -> datetime | None:
     if frequency == "manual":
@@ -43,6 +45,75 @@ def next_sync(frequency: str, now: datetime) -> datetime | None:
 
 def normalized_title(title: str) -> str:
     return re.sub(r"[\s\u3000]+", "", title)
+
+
+async def get_regulation_pdf_file_id(session: AsyncSession, regulation: Regulation) -> str | None:
+    """取得同步來源 manifest 中法規對應的 Drive PDF；舊 manifest 僅在唯一候選時回退。"""
+    source = (
+        await session.execute(
+            select(RegulationSyncSource).where(RegulationSyncSource.org_id == regulation.org_id)
+        )
+    ).scalar_one_or_none()
+    if source is None:
+        return None
+
+    regulation_id = str(regulation.id)
+    linked_ids: set[str] = set()
+    mapped_pdfs: list[tuple[datetime, str]] = []
+    for file_id, entry in source.manifest.items():
+        if not isinstance(entry, dict) or entry.get("regulation_id") != regulation_id:
+            continue
+        linked_ids.add(file_id)
+        pdf_file_id = entry.get("pdf_file_id")
+        if isinstance(pdf_file_id, str) and _DRIVE_FILE_ID_RE.fullmatch(pdf_file_id):
+            raw_modified_time = entry.get("pdf_modified_time")
+            try:
+                modified_time = (
+                    datetime.fromisoformat(raw_modified_time.replace("Z", "+00:00"))
+                    if isinstance(raw_modified_time, str)
+                    else datetime.min.replace(tzinfo=UTC)
+                )
+            except ValueError:
+                modified_time = datetime.min.replace(tzinfo=UTC)
+            if modified_time.tzinfo is None:
+                modified_time = modified_time.replace(tzinfo=UTC)
+            else:
+                modified_time = modified_time.astimezone(UTC)
+            mapped_pdfs.append((modified_time, pdf_file_id))
+    if mapped_pdfs:
+        return max(mapped_pdfs, key=lambda item: item[0])[1]
+
+    if not isinstance(source.last_report, dict):
+        return None
+    report_items = source.last_report.get("items", [])
+    if not isinstance(report_items, list):
+        return None
+    linked_items = [
+        item
+        for item in report_items
+        if isinstance(item, dict) and item.get("file_id") in linked_ids
+    ]
+    title = next(
+        (item.get("title") for item in linked_items if isinstance(item.get("title"), str)),
+        regulation.title,
+    )
+    target_title = normalized_title(title)
+    pdf_candidates = []
+    for item in report_items:
+        if not isinstance(item, dict):
+            continue
+        filename = item.get("filename")
+        file_id = item.get("file_id")
+        if not isinstance(filename, str) or not filename.casefold().endswith(".pdf"):
+            continue
+        item_title = item.get("title")
+        if not isinstance(item_title, str):
+            item_title = re.sub(r"\.pdf$", "", filename, flags=re.I)
+        if normalized_title(item_title) == target_title and isinstance(file_id, str):
+            pdf_candidates.append(file_id)
+    if len(pdf_candidates) == 1 and _DRIVE_FILE_ID_RE.fullmatch(pdf_candidates[0]):
+        return pdf_candidates[0]
+    return None
 
 
 def latest_date(history: str | None) -> datetime | None:
@@ -307,7 +378,8 @@ async def synchronize_source(
             or not (actor.is_superuser or "regulation:admin" in codes)
         ):
             raise ValueError("設定者已無此組織的法規管理權限，請由現任管理員重新儲存來源")
-        groups: dict[str, list] = defaultdict(list)
+        groups: dict[str, list[tuple[DriveFile, ImportedRegulationDraft]]] = defaultdict(list)
+        pdf_candidates: dict[str, tuple[DriveFile, ImportedRegulationDraft | None]] = {}
         failed_titles: set[str] = set()
         async with RegulationDriveClient() as drive:
             # 完整列出所有來源才開始更新；重疊的父子資料夾以檔案 ID 去重。
@@ -319,19 +391,77 @@ async def synchronize_source(
                     raise ValueError("來源合計超過 500 份文件，本次不更新法規")
             files = list(by_id.values())
             for file in files:
+                filename_title = normalized_title(
+                    re.sub(r"\.(pdf|docx)$", "", file.name, flags=re.I)
+                )
+                is_pdf = file.mime_type == "application/pdf"
+                if is_pdf:
+                    pdf_candidates[file.id] = (file, None)
                 try:
                     raw, filename = await drive.download(file)
-                    draft = await asyncio.to_thread(parse_regulation_document, raw, filename)
-                    groups[normalized_title(draft.title)].append((file, draft))
                 except ValueError as exc:
-                    failed_titles.add(
-                        normalized_title(re.sub(r"\.(pdf|docx)$", "", file.name, flags=re.I))
-                    )
+                    if not is_pdf:
+                        failed_titles.add(filename_title)
                     report.items.append(
                         RegulationSyncItemOut(
                             filename=file.name, file_id=file.id, status="error", detail=str(exc)
                         )
                     )
+                    continue
+                try:
+                    draft = await asyncio.to_thread(parse_regulation_document, raw, filename)
+                except ValueError as exc:
+                    if is_pdf:
+                        report.items.append(
+                            RegulationSyncItemOut(
+                                filename=file.name,
+                                file_id=file.id,
+                                status="skipped",
+                                detail=f"PDF 無法抽取文字，保留雲端 PDF 下載：{exc}",
+                            )
+                        )
+                    else:
+                        failed_titles.add(filename_title)
+                        report.items.append(
+                            RegulationSyncItemOut(
+                                filename=file.name,
+                                file_id=file.id,
+                                status="error",
+                                detail=str(exc),
+                            )
+                        )
+                    continue
+                title = normalized_title(draft.title)
+                groups[title].append((file, draft))
+                if is_pdf:
+                    pdf_candidates[file.id] = (file, draft)
+
+        pdfs_by_title: dict[str, list[tuple[DriveFile, ImportedRegulationDraft | None]]] = (
+            defaultdict(list)
+        )
+        for file, draft in pdf_candidates.values():
+            title = (
+                normalized_title(draft.title)
+                if draft
+                else normalized_title(re.sub(r"\.pdf$", "", file.name, flags=re.I))
+            )
+            pdfs_by_title[title].append((file, draft))
+
+        existing_regulations = (
+            (
+                await session.execute(
+                    reg_svc._reg_query_with_relations().where(
+                        Regulation.org_id == source.org_id,
+                        Regulation.workflow_status.in_(
+                            [RegulationWorkflowStatus.PUBLISHED, RegulationWorkflowStatus.ARCHIVED]
+                        ),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        mapped_titles: set[str] = set()
         for title, variants in groups.items():
             if title in failed_titles:
                 for file, draft in variants:
@@ -345,24 +475,91 @@ async def synchronize_source(
                         )
                     )
                 continue
-            # 有現行來源時不以歷史廢止檔覆蓋；法律沿革優先，同日以 Word 精準抽取。
+            # 有現行來源時不以歷史廢止檔覆蓋；Drive 修改時間優先，沿革日期與 Word 作為後續排序。
             current = [pair for pair in variants if not pair[0].repealed]
             pool = current or variants
+            matching_regulations = [
+                reg
+                for reg in existing_regulations
+                if normalized_title(reg.title) == title and reg.is_repealed == pool[0][0].repealed
+            ]
+            if len(matching_regulations) == 1:
+                existing_date = latest_date(matching_regulations[0].legislative_history)
+                if existing_date is not None:
+                    non_older = [
+                        pair
+                        for pair in pool
+                        if matches(matching_regulations[0], pair[1], pair[0].repealed)
+                        or (
+                            (incoming_date := latest_date(pair[1].legislative_history)) is not None
+                            and incoming_date >= existing_date
+                        )
+                    ]
+                    if non_older:
+                        pool = non_older
             pool.sort(
                 key=lambda pair: (
+                    pair[0].modified_time or datetime.min.replace(tzinfo=UTC),
                     latest_date(pair[1].legislative_history) or datetime.min.replace(tzinfo=UTC),
                     pair[0].mime_type in {DOCX_MIME, "application/vnd.google-apps.document"},
                 ),
                 reverse=True,
             )
             file, draft = pool[0]
+            pdf_pool = [
+                pair for pair in pdfs_by_title.get(title, []) if pair[0].repealed == file.repealed
+            ]
+            incoming_date = latest_date(draft.legislative_history)
+            if incoming_date is not None:
+                pdf_pool = [
+                    pair
+                    for pair in pdf_pool
+                    if pair[1] is None
+                    or latest_date(pair[1].legislative_history) is None
+                    or latest_date(pair[1].legislative_history) >= incoming_date
+                ]
+            pdf_pool.sort(
+                key=lambda pair: (
+                    pair[0].modified_time or datetime.min.replace(tzinfo=UTC),
+                    latest_date(pair[1].legislative_history)
+                    if pair[1] and latest_date(pair[1].legislative_history)
+                    else datetime.min.replace(tzinfo=UTC),
+                ),
+                reverse=True,
+            )
+            pdf_file = pdf_pool[0][0] if pdf_pool else None
             try:
                 async with session.begin_nested():
                     item = await apply_document(session, source, file, draft)
                 if item.regulation_id:
+                    regulation_id = str(item.regulation_id)
+                    mapped_titles.add(title)
+                    manifest = {
+                        key: value
+                        for key, value in source.manifest.items()
+                        if not isinstance(value, dict)
+                        or value.get("regulation_id") != regulation_id
+                    }
+                    manifest_item = {
+                        "regulation_id": regulation_id,
+                        "source_file_name": file.name,
+                        "source_modified_time": file.modified_time.isoformat()
+                        if file.modified_time
+                        else None,
+                    }
+                    if pdf_file:
+                        manifest_item.update(
+                            {
+                                "pdf_file_id": pdf_file.id,
+                                "pdf_file_name": pdf_file.name,
+                                "pdf_modified_time": pdf_file.modified_time.isoformat()
+                                if pdf_file.modified_time
+                                else None,
+                            }
+                        )
                     source.manifest = {
-                        **source.manifest,
-                        file.id: {"regulation_id": str(item.regulation_id)},
+                        **manifest,
+                        file.id: manifest_item,
                     }
                 report.items.append(item)
             except ValueError as exc:
@@ -383,9 +580,71 @@ async def synchronize_source(
                             title=other_draft.title,
                             file_id=other.id,
                             status="skipped",
-                            detail=f"同名版本，採用 {file.name}（依沿革日期，日期相同優先 Word）",
+                            detail=f"同名版本，採用 {file.name}（依 Drive 修改時間、沿革日期排序）",
                         )
                     )
+
+        unmapped_pdf_titles = set(pdfs_by_title) - mapped_titles
+        if unmapped_pdf_titles:
+            for title in unmapped_pdf_titles:
+                title_regulations = [
+                    reg for reg in existing_regulations if normalized_title(reg.title) == title
+                ]
+                for repealed in {pair[0].repealed for pair in pdfs_by_title[title]}:
+                    candidates = [reg for reg in title_regulations if reg.is_repealed == repealed]
+                    if len(candidates) != 1:
+                        continue
+                    regulation = candidates[0]
+                    pdf_pool = [
+                        pair for pair in pdfs_by_title[title] if pair[0].repealed == repealed
+                    ]
+                    existing_date = latest_date(regulation.legislative_history)
+                    if existing_date is not None:
+                        pdf_pool = [
+                            pair
+                            for pair in pdf_pool
+                            if pair[1] is None
+                            or latest_date(pair[1].legislative_history) is None
+                            or latest_date(pair[1].legislative_history) >= existing_date
+                        ]
+                    if not pdf_pool:
+                        continue
+                    pdf_pool.sort(
+                        key=lambda pair: (
+                            pair[0].modified_time or datetime.min.replace(tzinfo=UTC),
+                            latest_date(pair[1].legislative_history)
+                            if pair[1] and latest_date(pair[1].legislative_history)
+                            else datetime.min.replace(tzinfo=UTC),
+                        ),
+                        reverse=True,
+                    )
+                    pdf_file = pdf_pool[0][0]
+                    regulation_id = str(regulation.id)
+                    manifest = dict(source.manifest)
+                    manifest_key = next(
+                        (
+                            key
+                            for key, value in manifest.items()
+                            if isinstance(value, dict)
+                            and value.get("regulation_id") == regulation_id
+                        ),
+                        pdf_file.id,
+                    )
+                    manifest_item = dict(manifest.get(manifest_key, {}))
+                    manifest_item.update(
+                        {
+                            "regulation_id": regulation_id,
+                            "pdf_file_id": pdf_file.id,
+                            "pdf_file_name": pdf_file.name,
+                            "pdf_modified_time": pdf_file.modified_time.isoformat()
+                            if pdf_file.modified_time
+                            else None,
+                        }
+                    )
+                    if manifest_key == pdf_file.id and not manifest_item.get("source_file_name"):
+                        manifest_item["source_file_name"] = pdf_file.name
+                    manifest[manifest_key] = manifest_item
+                    source.manifest = manifest
         if not any(item.status == "error" for item in report.items):
             source.last_synced_at = now
     except ValueError as exc:

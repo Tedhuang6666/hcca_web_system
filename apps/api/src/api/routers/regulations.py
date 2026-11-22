@@ -13,7 +13,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import Response
+from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,6 +45,7 @@ from api.services import audit as audit_svc
 from api.services import context as context_svc
 from api.services import regulation as reg_svc
 from api.services.permission import get_user_permission_codes_for_org
+from api.services.regulation_sync import get_regulation_pdf_file_id
 
 logger = logging.getLogger(__name__)
 
@@ -470,13 +471,14 @@ async def regulation_diff(
     "/{reg_id}/print",
     response_class=Response,
     summary="下載法規 PDF",
+    responses={307: {"description": "重新導向至同步來源中的 Google Drive PDF"}},
 )
 async def print_regulation(
     reg_id: str,
     session: DbDep,
     _user: OptionalUser,
 ) -> Response:
-    """直接產生並下載法規彙編格式 PDF。"""
+    """下載同步來源中的 PDF；尚無來源 PDF 時產生法規彙編格式 PDF。"""
     from api.services.official_print import render_print_pdf, render_regulation_print_html
 
     reg = await _get_reg_or_404(reg_id, session)
@@ -484,6 +486,13 @@ async def print_regulation(
     # 未登入只能看已發布的
     if reg.published_at is None and _user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此法規")
+
+    pdf_file_id = await get_regulation_pdf_file_id(session, reg)
+    if pdf_file_id:
+        return RedirectResponse(
+            url=f"https://drive.google.com/uc?export=download&id={quote(pdf_file_id, safe='')}",
+            status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+        )
 
     html_content = render_regulation_print_html(reg)
     pdf_bytes = await run_in_threadpool(render_print_pdf, html_content)

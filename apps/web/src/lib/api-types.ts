@@ -9504,7 +9504,7 @@ export interface paths {
         };
         /**
          * 下載法規 PDF
-         * @description 直接產生並下載法規彙編格式 PDF。
+         * @description 下載同步來源中的 PDF；尚無來源 PDF 時產生法規彙編格式 PDF。
          */
         get: operations["print_regulation_regulations__reg_id__print_get"];
         put?: never;
@@ -53511,6 +53511,13 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 重新導向至同步來源中的 Google Drive PDF */
+            307: {
                 headers: {
                     [name: string]: unknown;
                 };

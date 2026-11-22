@@ -24,7 +24,12 @@ async def test_drive_lists_all_pages_and_skips_proposals(monkeypatch):
                 200,
                 json={
                     "files": [
-                        {"id": "archivedfile1", "name": "舊法.pdf", "mimeType": "application/pdf"}
+                        {
+                            "id": "archivedfile1",
+                            "name": "舊法.pdf",
+                            "mimeType": "application/pdf",
+                            "modifiedTime": "2026-11-16T09:11:16.000Z",
+                        }
                     ]
                 },
             )
@@ -56,8 +61,10 @@ async def test_drive_lists_all_pages_and_skips_proposals(monkeypatch):
         files = await drive.list_files("sourcefolder1")
     assert [file.id for file in files] == ["archivedfile1"]
     assert files[0].repealed
+    assert files[0].modified_time.isoformat() == "2026-11-16T09:11:16+00:00"
     assert len(calls) == 3
     assert calls[1].url.params["pageToken"] == "next-page"
+    assert "modifiedTime" in calls[0].url.params["fields"]
 
 
 @pytest.mark.parametrize("payload", [{"incompleteSearch": True}, {"files": []}])
