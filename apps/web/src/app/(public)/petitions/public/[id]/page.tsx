@@ -5,7 +5,8 @@ import { BRANDING } from "@/lib/branding";
 import { fetchPublicPetition } from "@/lib/publicSeoFetch";
 import { contentOgImagePath } from "@/lib/social-metadata";
 import { breadcrumbJsonLd, organizationJsonLd } from "@/lib/structured-data";
-import { absoluteUrl, excerpt, JsonLd, pageMetadata } from "@/lib/seo";
+import { absoluteUrl, excerpt, pageMetadata } from "@/lib/seo";
+import { JsonLd } from "@/lib/seo-jsonld";
 
 type PublicPetitionPageProps = {
   params: Promise<{ id: string }>;

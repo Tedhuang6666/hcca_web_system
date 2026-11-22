@@ -29,7 +29,8 @@ function fmtSize(bytes: number): string {
 }
 
 export default function PrivacyPage() {
-  const { isAdmin } = usePermissions();
+  const { can } = usePermissions();
+  const canHandlePrivacy = can("system:privacy");
   const prompt = usePrompt();
   const [userId, setUserId] = useState("");
   const [busy, setBusy] = useState(false);
@@ -56,11 +57,11 @@ export default function PrivacyPage() {
   }, []);
 
   useEffect(() => {
-    if (isAdmin) {
+    if (canHandlePrivacy) {
       void loadExports();
       void loadRequests();
     }
-  }, [isAdmin, loadExports, loadRequests]);
+  }, [canHandlePrivacy, loadExports, loadRequests]);
 
   const onExport = async () => {
     const uid = userId.trim();
@@ -129,7 +130,7 @@ export default function PrivacyPage() {
     }
   };
 
-  if (!isAdmin) {
+  if (!canHandlePrivacy) {
     return (
       <div className="mx-auto max-w-3xl p-6">
         <section
@@ -137,7 +138,7 @@ export default function PrivacyPage() {
           style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}>
           <Lock className="mx-auto mb-3 text-[var(--danger)]" size={32} aria-hidden />
           <h1 className="text-xl font-semibold text-[var(--text-primary)]">
-            需要超級管理員權限
+            需要個資處理權限
           </h1>
         </section>
       </div>

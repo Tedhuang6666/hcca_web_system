@@ -3,7 +3,8 @@ import type { Metadata } from "next";
 import { BRANDING } from "@/lib/branding";
 import { contentOgImagePath } from "@/lib/social-metadata";
 import { breadcrumbJsonLd, organizationJsonLd } from "@/lib/structured-data";
-import { JsonLd, absoluteUrl, excerpt, pageMetadata } from "@/lib/seo";
+import { absoluteUrl, excerpt, pageMetadata } from "@/lib/seo";
+import { JsonLd } from "@/lib/seo-jsonld";
 import { fetchPublicJson } from "@/lib/serverFetch";
 import type { AnnouncementOut } from "@/lib/types";
 
