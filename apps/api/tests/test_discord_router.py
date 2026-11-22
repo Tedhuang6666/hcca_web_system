@@ -8,6 +8,7 @@ enqueue_role_sync 等一律走 outbox（DB 寫入即完成），無外部即時�
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -204,6 +205,19 @@ async def test_open_from_discord_valid_token_sets_cookies(
     assert response.status_code in (302, 307)
     assert response.headers["location"].endswith("/dashboard")
     assert settings.ACCESS_TOKEN_COOKIE_NAME in response.cookies
+
+
+async def test_open_from_discord_token_cannot_be_consumed_concurrently(
+    member_user: User,
+) -> None:
+    url = await discord_bot_svc.create_open_url(member_user.id, "/dashboard")
+    token = url.rsplit("token=", 1)[-1]
+
+    results = await asyncio.gather(*(discord_bot_svc.consume_open_token(token) for _ in range(8)))
+
+    successful = [result for result in results if result is not None]
+    assert len(successful) == 1
+    assert successful[0] == (member_user.id, "/dashboard")
 
 
 async def test_open_from_discord_refuses_privileged_account(
