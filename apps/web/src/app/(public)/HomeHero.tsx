@@ -49,18 +49,22 @@ export default async function HomeHero({ bundle }: { bundle: PublicSiteBundleOut
             </h1>
             {subtitle && <p>{subtitle}</p>}
           </div>
-            {activity && photos.length > 0 && (
-              <Link href={"/gallery/" + activity.id} className="campus-hero-activity" aria-label={activity.title + "活動紀錄與攝影集"}>
-                <span className="campus-hero-photo">
-                  <ActivityImage photos={photos} sizes="100vw" preload />
-                </span>
-                <span className="campus-hero-activity-caption">
-                  <span className="campus-event-meta">{activity.date && <time dateTime={activity.date}>{galleryDate(activity.date)}</time>}</span>
-                  <strong className="campus-event-title">{activity.title}</strong>
-                  <span className="campus-event-link">活動紀錄 / 攝影集<ArrowRight size={20} aria-hidden /></span>
-                </span>
-              </Link>
-            )}
+          {activity && photos.length > 0 && (
+            <Link href={"/gallery/" + activity.id} className="campus-hero-activity" aria-label={activity.title + "活動紀錄與攝影集"}>
+              <span className="campus-hero-photo">
+                <ActivityImage photos={photos} sizes="(min-width: 1232px) 1200px, 100vw" preload />
+              </span>
+              <span className="campus-hero-activity-caption">
+                {activity.date && (
+                  <span className="campus-event-meta">
+                    <time dateTime={activity.date}>{galleryDate(activity.date)}</time>
+                  </span>
+                )}
+                <strong className="campus-event-title">{activity.title}</strong>
+                <span className="campus-event-link">活動紀錄 / 攝影集<ArrowRight size={18} aria-hidden /></span>
+              </span>
+            </Link>
+          )}
         </HomeHeroScene>
       </section>
     </>

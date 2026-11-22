@@ -2,7 +2,7 @@
 version: 1
 slug: "apps-web-src-app-public-page-tsx"
 primary_target: "apps/web/src/app/(public)/page.tsx"
-related_targets: ["apps/web/src/app/(public)/HomeHero.tsx","apps/web/src/app/(public)/HomeHeroScene.tsx","apps/web/src/app/(public)/HomeContent.tsx","apps/web/src/app/(public)/public-home.css"]
+related_targets: ["apps/web/src/app/(public)/HomeHero.tsx","apps/web/src/app/(public)/HomeContent.tsx","apps/web/src/app/(public)/public-home.css"]
 ---
 
 # 首頁：正在發生的校園生活
