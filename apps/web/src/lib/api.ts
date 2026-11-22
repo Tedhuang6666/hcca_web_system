@@ -25,7 +25,6 @@ export * from "./api/discord";
 export * from "./api/work-items";
 export * from "./api/google-tasks";
 export * from "./api/orgs";
-export * from "./api/receivables";
 export * from "./api/finance";
 export * from "./api/publications";
 export * from "./api/admin";

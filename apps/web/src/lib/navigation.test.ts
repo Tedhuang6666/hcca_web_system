@@ -22,13 +22,14 @@ describe("navigation visibility", () => {
 
     expect(allIds).not.toContain("operations");
     expect(allIds).not.toContain("moduleBackoffice");
+    expect(NAV_ITEMS.some((item) => item.href === "/finance/receivables")).toBe(false);
     expect(managementSection?.items.map((item) => item.id)).toEqual(expect.arrayContaining([
       "publications",
       "email",
       "shopAdmin",
       "councilOrders",
       "classOrders",
-      "receivables",
+      "finance",
       "petitionsManage",
       "peopleAdmin",
     ]));

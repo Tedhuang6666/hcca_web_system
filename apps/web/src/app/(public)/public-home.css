@@ -26,16 +26,6 @@
 .public-home-hero { overflow: clip; }
 .campus-hero-stage { position: relative; padding-block: 1.25rem 0; }
 .campus-hero-composition { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
-.campus-edition {
-  grid-column: 1 / -1;
-  border-top: var(--home-rule);
-  padding-top: 0.625rem;
-  margin-bottom: 1.25rem;
-  color: var(--public-accent-text);
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-}
 .campus-masthead-copy { position: relative; z-index: 1; display: flex; grid-column: 1 / -1; align-items: end; justify-content: space-between; gap: 1rem; min-width: 0; padding-bottom: 1.5rem; }
 .campus-masthead h1 { max-width: 12ch; margin: 0; color: var(--public-text); font-size: clamp(2.25rem, 10.5vw, 2.75rem); font-weight: 700; line-height: 1.08; letter-spacing: -0.03em; overflow-wrap: anywhere; text-wrap: balance; }
 .campus-masthead h1.campus-title-single-line { max-width: none; overflow-wrap: normal; white-space: nowrap; }
@@ -86,7 +76,6 @@
 
 @media (min-width: 768px) {
   .campus-hero-stage { padding-top: 2rem; }
-  .campus-edition { margin-bottom: 2rem; padding-top: 0.75rem; }
   .campus-masthead-copy { padding-bottom: 2.5rem; }
   .campus-masthead h1 { font-size: clamp(3.5rem, 5.6vw, 5rem); }
   .campus-masthead p { max-width: 16em; margin-bottom: 0.5rem; text-align: right; }
@@ -147,7 +136,17 @@
 .campus-news-lead { padding-top: 0.5rem; }
 .campus-news-lead .campus-meta { display: flex; align-items: center; gap: 1rem; }
 .campus-status { color: var(--public-accent-text); font-weight: 700; }
-.campus-news-lead h3 { max-width: 22ch; margin: 0.875rem 0 0; font-size: clamp(1.5rem, 2.6vw, 2.25rem); font-weight: 700; line-height: 1.4; letter-spacing: -0.015em; text-wrap: balance; }
+.campus-news-lead h3 {
+  margin: 0.875rem 0 0;
+  font-size: clamp(1.5rem, 2.6vw, 2.25rem);
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: -0.015em;
+  line-break: strict;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
 .campus-news-lead h3 a { color: inherit; text-decoration: none; }
 .campus-news-lead h3 a:hover { color: var(--public-accent-text); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 0.2em; }
 .campus-news-list { margin: 0; padding: 0; border-top: var(--home-hairline); list-style: none; }

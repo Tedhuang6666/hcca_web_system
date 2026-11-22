@@ -42,7 +42,6 @@ export default async function HomeHero({ bundle }: { bundle: PublicSiteBundleOut
       )}
       <section className="public-home-hero" aria-labelledby="campus-title">
         <HomeHeroScene>
-          <div className="campus-edition" aria-hidden="true">{BRANDING.acronym}</div>
           <div className="campus-masthead-copy">
             <h1 id="campus-title" className={title === BRANDING.orgShortName ? "campus-title-single-line" : undefined}>
               {title}

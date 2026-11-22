@@ -54,6 +54,11 @@ const nextConfig: NextConfig = {
         destination: "/admin/system?tab=observability",
         permanent: false,
       },
+      {
+        source: "/finance/receivables",
+        destination: "/finance",
+        permanent: true,
+      },
     ];
   },
   async headers() {

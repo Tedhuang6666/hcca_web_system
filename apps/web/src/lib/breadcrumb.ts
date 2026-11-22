@@ -39,7 +39,6 @@ const SEGMENT_LABELS: Record<string, string> = {
   credential: "電子證件",
   "exam-papers": "段考題庫",
   finance: "預算與收支",
-  receivables: "班級／校商收款",
   publications: "發布中心",
   backoffice: "模組後台",
   "recommended-vendors": "推薦商家",

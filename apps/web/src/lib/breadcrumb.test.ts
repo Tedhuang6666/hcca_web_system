@@ -19,7 +19,7 @@ describe("breadcrumbs", () => {
   it("names every navigable page in Chinese rather than echoing the URL", () => {
     const paths = [
       "/work-items", "/backoffice", "/council-proposals", "/judicial-petitions", "/credential",
-      "/exam-papers/admin", "/finance/receivables", "/publications", "/qr-code",
+      "/exam-papers/admin", "/finance", "/publications", "/qr-code",
       "/recommended-vendors/admin", "/merchandise-submissions/admin", "/admin/term-rollover",
       "/admin/public-site", "/settings/privacy", "/email/lists", "/shop/cart",
     ];

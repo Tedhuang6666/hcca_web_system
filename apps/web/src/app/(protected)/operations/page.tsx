@@ -1,6 +1,6 @@
 "use client";
 
-import { Mail, Megaphone, ReceiptText, Settings, Store, Wallet } from "lucide-react";
+import { Mail, Megaphone, Settings, Store, Wallet } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import ToolLinkList from "@/components/layout/ToolLinkList";
 
@@ -22,12 +22,6 @@ const TOOLS = [
     icon: Settings,
     label: "公開網站設定",
     perms: ["site:manage"],
-  },
-  {
-    href: "/finance/receivables",
-    icon: ReceiptText,
-    label: "收款對帳",
-    prefixes: ["finance:"],
   },
   {
     href: "/finance",
