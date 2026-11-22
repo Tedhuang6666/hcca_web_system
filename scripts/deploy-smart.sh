@@ -292,7 +292,7 @@ echo "  commit:       $release_sha"
 echo "  remote:       $ssh_user@$host:$deploy_dir"
 echo "  strategy:     bluegreen"
 echo "  workers:      $with_workers"
-echo "  migration:    $([[ "$skip_migrate" == "1" ]] && echo skip || echo maintenance+upgrade)"
+echo "  migration:    $migration_mode (auto uses the production database revision)"
 echo "  keep old:     $keep_old"
 
 if [[ "$dry_run" == "1" ]]; then
@@ -303,7 +303,8 @@ fi
 printf -v remote_args ' %q' \
   "$deploy_dir" "$branch" "$release_sha" "$remote_name" "$maintenance_mode" \
   "$skip_migrate" "$with_workers" "$keep_old" "$drain_seconds" \
-  "$health_wait_seconds" "$image_wait_seconds" "$require_gpg_verify" "$health_report_required"
+  "$health_wait_seconds" "$image_wait_seconds" "$require_gpg_verify" "$health_report_required" \
+  "$migration_mode"
 
 echo "▶ 連線遠端並執行精確 SHA 部署"
 ssh \
@@ -329,6 +330,7 @@ health_wait_seconds="${10}"
 image_wait_seconds="${11}"
 require_gpg_verify="${12}"
 health_report_required="${13}"
+migration_mode="${14}"
 
 cd -- "$deploy_dir"
 [[ -d .git ]] || { echo "❌ 遠端不是 Git 工作樹：$deploy_dir" >&2; exit 1; }
@@ -371,13 +373,14 @@ export SKIP_GIT=1
 export WITH_WORKERS="$with_workers"
 export MAINTENANCE_MODE="$maintenance_mode"
 export SKIP_MIGRATE="$skip_migrate"
+export DEPLOY_MIGRATION_MODE="$migration_mode"
 export KEEP_OLD="$keep_old"
 export DRAIN_SECONDS="$drain_seconds"
 export HEALTH_WAIT_SECONDS="$health_wait_seconds"
 export GHCR_IMAGE_WAIT_SECONDS="$image_wait_seconds"
 export DEPLOY_STRATEGY=bluegreen
 
-./scripts/prod-pull-deploy.sh
+./scripts/prod-pull-deploy.sh </dev/null
 
 if [[ "$health_report_required" == "1" ]]; then
   ./scripts/prod-health-report.sh .env.production docker-compose.bluegreen.yml
