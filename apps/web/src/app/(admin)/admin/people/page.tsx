@@ -204,7 +204,9 @@ export default function PeopleAdminPage() {
 function PersonDirectoryPanel() {
   const { can, isAdmin } = usePermissions();
   const allowed = isAdmin || can("admin:all") || can("admin:users") || can("class:manage") || can("org:manage_members");
+  const canManageMasterData = isAdmin || can("admin:all") || can("admin:users");
   const canAssignClass = isAdmin || can("admin:all") || can("class:manage");
+  const canManageOrgAffiliations = canManageMasterData || can("org:manage_members");
   const canManageAccounts = isAdmin || can("admin:all");
   const [directoryView, setDirectoryView] = useState<"people" | "accounts">("people");
   const [accountId, setAccountId] = useState<string | null>(null);
@@ -217,7 +219,7 @@ function PersonDirectoryPanel() {
   const [detail, setDetail] = useState<PersonDetailOut | null>(null);
   const [classes, setClasses] = useState<SchoolClassListItem[]>([]);
   const [orgs, setOrgs] = useState<OrgRead[]>([]);
-  const [positions, setPositions] = useState<PositionSummary[]>([]);
+  const [positions, setPositions] = useState<Pick<PositionSummary, "id" | "name" | "org_id" | "org_name">[]>([]);
   const [users, setUsers] = useState<AdminUserDetail[]>([]);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<PersonStatus | "">("");
@@ -234,16 +236,43 @@ function PersonDirectoryPanel() {
   const loadReference = useCallback(async () => {
     setUsersLoading(true);
     try {
+      const scope = await withFallback(peopleApi.accessScope(), {
+        is_global: false,
+        org_ids: [],
+        class_ids: [],
+        classes: [],
+      });
+      const scopedClasses = scope.is_global
+        ? classApi.list({ is_active: "true" })
+        : Promise.resolve(scope.classes ?? []);
+      const scopedOrgs = scope.is_global
+        ? orgsApi.list({ active_only: true })
+        : Promise.all((scope.org_ids ?? []).map((orgId) => orgsApi.get(orgId)));
+      const scopedPositions = scope.is_global
+        ? adminApi.listPositions()
+        : Promise.all((scope.org_ids ?? []).map((orgId) => orgsApi.listPositions(orgId))).then((rows) => rows.flat());
       const [classRows, orgRows, positionRows, userRows] = await Promise.all([
-        withFallback(classApi.list({ is_active: "true" }), []),
-        withFallback(orgsApi.list({ active_only: true }), []),
-        withFallback(adminApi.listPositions(), []),
-        withFallback(adminApi.listUsers({ limit: 200 }), []),
+        withFallback(scopedClasses, []),
+        withFallback(scopedOrgs, []),
+        withFallback(scopedPositions, []),
+        scope.is_global ? withFallback(adminApi.listUsers({ limit: 200 }), []) : Promise.resolve([]),
       ]);
+      const allowedOrgIds = new Set(scope.org_ids ?? []);
+      const orgNames = new Map(orgRows.map((item) => [item.id, item.name]));
       setClasses(classRows);
       setOrgs(orgRows);
-      setPositions(positionRows);
-      setUsers(userRows);
+      setPositions(
+        positionRows
+          .filter((item) => scope.is_global || allowedOrgIds.has(item.org_id))
+          .map((item) => ({
+            ...item,
+            org_name:
+              "org_name" in item && typeof item.org_name === "string"
+                ? item.org_name
+                : (orgNames.get(item.org_id) ?? ""),
+          })),
+      );
+      setUsers(scope.is_global ? userRows : []);
     } finally {
       setUsersLoading(false);
     }
@@ -269,7 +298,7 @@ function PersonDirectoryPanel() {
           class_id: classId || undefined,
         }));
       } catch (error) {
-        toast.error(errorMessage(error, "載入全站人員統計失敗"));
+        toast.error(errorMessage(error, "載入人員統計失敗"));
       }
     } catch (error) {
       toast.error(errorMessage(error, "載入人員清單失敗"));
@@ -351,12 +380,16 @@ function PersonDirectoryPanel() {
           </IconButton>
           {directoryView === "people" && (
             <>
-              <IconButton onClick={() => setShowImport(true)} tone="primary">
-                <Upload size={14} /> 匯入名冊
-              </IconButton>
-              <IconButton onClick={() => setShowCreate(true)} tone="primary">
-                <Plus size={14} /> 新增人員
-              </IconButton>
+              {(canManageMasterData || (canAssignClass && classes.length > 0)) && (
+                <IconButton onClick={() => setShowImport(true)} tone="primary">
+                  <Upload size={14} /> 匯入名冊
+                </IconButton>
+              )}
+              {canManageMasterData && (
+                <IconButton onClick={() => setShowCreate(true)} tone="primary">
+                  <Plus size={14} /> 新增人員
+                </IconButton>
+              )}
             </>
           )}
         </div>
@@ -548,6 +581,7 @@ function PersonDirectoryPanel() {
               classes={classes}
               users={users}
               canAssignClass={canAssignClass}
+              canManageMasterData={canManageMasterData}
               canManageAccounts={canManageAccounts}
               onChanged={refreshAll}
               onAssign={() => setShowAffiliation(true)}
@@ -576,6 +610,7 @@ function PersonDirectoryPanel() {
       {showImport && (
         <ImportRosterDialog
           classes={classes}
+          classRequired={!canManageMasterData}
           onClose={() => setShowImport(false)}
           onDone={async () => {
             setShowImport(false);
@@ -589,6 +624,8 @@ function PersonDirectoryPanel() {
           classes={classes}
           orgs={orgs}
           positions={positions}
+          canAssignClass={canAssignClass}
+          canManageOrgAffiliations={canManageOrgAffiliations}
           onClose={() => setShowAffiliation(false)}
           onDone={async () => {
             setShowAffiliation(false);
@@ -638,6 +675,7 @@ function PersonDetailPanel({
   classes,
   users,
   canAssignClass,
+  canManageMasterData,
   canManageAccounts,
   onChanged,
   onAssign,
@@ -647,6 +685,7 @@ function PersonDetailPanel({
   classes: SchoolClassListItem[];
   users: AdminUserDetail[];
   canAssignClass: boolean;
+  canManageMasterData: boolean;
   canManageAccounts: boolean;
   onChanged: () => Promise<void>;
   onAssign: () => void;
@@ -751,7 +790,7 @@ function PersonDetailPanel({
             {person.email && <p className="mt-1 break-all text-xs" style={{ color: "var(--text-muted)" }}>{person.email}</p>}
           </div>
           <div className="flex flex-wrap gap-2">
-            {person.user_id && active.some((item) => item.status === "pending_user") && <IconButton onClick={syncPending}>
+            {canManageAccounts && person.user_id && active.some((item) => item.status === "pending_user") && <IconButton onClick={syncPending}>
               <BadgeCheck size={14} /> 同步待生效
             </IconButton>}
             <IconButton onClick={onAssign} tone="primary">
@@ -760,9 +799,9 @@ function PersonDetailPanel({
           </div>
         </div>
 
-        <details className="mt-4 border-t" style={{ borderColor: "var(--border)" }}>
+        {canManageMasterData && <details className="mt-4 border-t" style={{ borderColor: "var(--border)" }}>
           <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium" style={{ color: "var(--text-secondary)" }}>編輯基本資料</summary>
-        <div className={styles.personForm}>
+          <div className={styles.personForm}>
           <label className="text-xs" style={{ color: "var(--text-muted)" }}>
             顯示姓名
             <TextInput className="mt-1" value={edit.display_name} onChange={(event) => setEdit({ ...edit, display_name: event.target.value })} />
@@ -807,8 +846,8 @@ function PersonDetailPanel({
               <ShieldCheck size={14} /> 儲存
             </IconButton>
           </div>
-        </div>
-        </details>
+          </div>
+        </details>}
       </div>
 
       <div className="min-w-0 space-y-4 p-4 sm:p-5 xl:min-h-0 xl:flex-1 xl:overflow-y-auto">
@@ -918,7 +957,10 @@ function AffiliationRow({
   const { can, isAdmin } = usePermissions();
   const [ending, setEnding] = useState(false);
   const isClassMembership = item.kind === "class_member" && Boolean(item.class_id);
-  const canTransferClass = isAdmin || can("class:manage");
+  const canManageAll = isAdmin || can("admin:all") || can("admin:users");
+  const canManageClassAffiliation = canManageAll || can("class:manage");
+  const canManageOrgAffiliation = canManageAll || can("org:manage_members");
+  const canEndAffiliation = item.class_id ? canManageClassAffiliation : canManageOrgAffiliation;
   const end = async () => {
     if (ending) return;
     const message = isClassMembership
@@ -964,7 +1006,7 @@ function AffiliationRow({
           {item.synced_user_position_id ? " · 已同步 RBAC" : ""}
         </p>
       </div>
-      {!muted && (!isClassMembership || canTransferClass) && (
+      {!muted && canEndAffiliation && (!isClassMembership || canManageClassAffiliation) && (
         <div className="flex min-h-[44px] items-center justify-end">
           <IconButton onClick={end} tone="danger" disabled={ending}>
             <X size={14} /> {ending ? "處理中…" : isClassMembership ? "轉出分班" : "結束"}
@@ -1054,10 +1096,12 @@ function CreatePersonDialog({
 
 function ImportRosterDialog({
   classes,
+  classRequired,
   onClose,
   onDone,
 }: {
   classes: SchoolClassListItem[];
+  classRequired: boolean;
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -1086,6 +1130,10 @@ function ImportRosterDialog({
       toast.error("沒有可匯入的資料");
       return;
     }
+    if (classRequired && !classId) {
+      toast.error("請選擇班級");
+      return;
+    }
     try {
       const result = await peopleApi.importRoster(rows);
       toast.success(`匯入 ${result.total} 筆，建立 ${result.people_created} 人，新增 ${result.affiliations_created} 筆分班`);
@@ -1096,12 +1144,12 @@ function ImportRosterDialog({
   };
 
   return (
-    <Dialog title="匯入全體學生 / 分班名單" onClose={onClose} maxWidth="max-w-3xl">
+    <Dialog title="匯入名冊" onClose={onClose} maxWidth="max-w-3xl">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <label className="text-xs" style={{ color: "var(--text-muted)" }}>
           指定班級
           <SelectInput className="mt-1" value={classId} onChange={(event) => setClassId(event.target.value)}>
-            <option value="">只建立學生主檔</option>
+            {!classRequired && <option value="">只建立學生主檔</option>}
             {classes.map((item) => (
               <option key={item.id} value={item.id}>{classLabel(item)}</option>
             ))}
@@ -1131,13 +1179,17 @@ function AffiliationDialog({
   classes,
   orgs,
   positions,
+  canAssignClass,
+  canManageOrgAffiliations,
   onClose,
   onDone,
 }: {
   person: PersonDetailOut;
   classes: SchoolClassListItem[];
   orgs: OrgRead[];
-  positions: PositionSummary[];
+  positions: Pick<PositionSummary, "id" | "name" | "org_id" | "org_name">[];
+  canAssignClass: boolean;
+  canManageOrgAffiliations: boolean;
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -1186,7 +1238,11 @@ function AffiliationDialog({
     <Dialog title={`新增 ${person.display_name} 的身分`} onClose={onClose}>
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-          {(Object.keys(KIND_LABEL) as PersonAffiliationKind[]).map((item) => (
+          {(Object.keys(KIND_LABEL) as PersonAffiliationKind[])
+            .filter((item) =>
+              item === "org_position" ? canManageOrgAffiliations : canAssignClass,
+            )
+            .map((item) => (
             <button
               key={item}
               type="button"
@@ -1196,7 +1252,7 @@ function AffiliationDialog({
             >
               {KIND_LABEL[item]}
             </button>
-          ))}
+            ))}
         </div>
         {(kind === "class_member" || kind === "class_role") && (
           <label className="text-xs" style={{ color: "var(--text-muted)" }}>

@@ -513,6 +513,7 @@ export type {
   PersonDetailOut,
   PersonListItem,
   PersonOut,
+  PeopleAccessScopeOut,
   PersonRosterImport,
   PersonRosterImportResult,
   PersonRosterImportRow,

@@ -7700,6 +7700,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/people/access-scope": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 取得目前人員管理範圍 */
+        get: operations["read_people_access_scope_people_access_scope_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/people/affiliations": {
         parameters: {
             query?: never;
@@ -7759,7 +7776,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 取得全站帳號與人員統計 */
+        /** 取得範圍內帳號與人員統計 */
         get: operations["get_people_stats_people_stats_get"];
         put?: never;
         post?: never;
@@ -23480,6 +23497,35 @@ export interface components {
             title: string;
             /** Version */
             version: string;
+        };
+        /** PeopleAccessClassOut */
+        PeopleAccessClassOut: {
+            /** Academic Year */
+            academic_year: number;
+            /** Class Code */
+            class_code: string;
+            /** Grade */
+            grade: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Label */
+            label: string | null;
+        };
+        /** PeopleAccessScopeOut */
+        PeopleAccessScopeOut: {
+            /** Class Ids */
+            class_ids?: string[] | null;
+            /** Classes */
+            classes?: components["schemas"]["PeopleAccessClassOut"][];
+            /** Is Global */
+            is_global: boolean;
+            /** Org Ids */
+            org_ids?: string[] | null;
         };
         /** PeriodCreate */
         PeriodCreate: {
@@ -49484,6 +49530,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_people_access_scope_people_access_scope_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PeopleAccessScopeOut"];
                 };
             };
         };

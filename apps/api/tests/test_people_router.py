@@ -9,7 +9,9 @@ from datetime import date, timedelta
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.models.org import Org, Position, UserPosition
+from api.core.clock import local_today
+from api.core.permission_codes import PermissionCode
+from api.models.org import Org, Permission, Position, UserPosition
 from api.models.person import (
     Person,
     PersonAffiliation,
@@ -35,6 +37,239 @@ async def _make_person(db_session: AsyncSession, **overrides) -> Person:
     return person
 
 
+async def _make_people_manager(
+    db_session: AsyncSession, permission_code: PermissionCode
+) -> tuple[User, Org]:
+    user = User(
+        email=f"manager-{uuid.uuid4().hex[:8]}@school.edu",
+        display_name="範圍管理者",
+        is_active=True,
+        is_verified=True,
+    )
+    org = Org(name=f"範圍組織-{uuid.uuid4().hex[:6]}")
+    db_session.add_all([user, org])
+    await db_session.flush()
+    position = Position(org_id=org.id, name="範圍管理職位")
+    db_session.add(position)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            Permission(position_id=position.id, code=permission_code.value),
+            UserPosition(user_id=user.id, position_id=position.id, start_date=local_today()),
+        ]
+    )
+    await db_session.flush()
+    return user, org
+
+
+async def _add_org_affiliation(
+    db_session: AsyncSession, person: Person, org: Org
+) -> PersonAffiliation:
+    affiliation = PersonAffiliation(
+        person_id=person.id,
+        kind=PersonAffiliationKind.ORG_POSITION,
+        org_id=org.id,
+        title="組織成員",
+        start_date=local_today(),
+        status=PersonAffiliationStatus.ACTIVE,
+        source=PersonAffiliationSource.MANUAL,
+    )
+    db_session.add(affiliation)
+    await db_session.flush()
+    return affiliation
+
+
+async def test_org_member_manager_only_sees_people_in_managed_org(
+    authed_client_factory: Callable[[User], AsyncClient],
+    db_session: AsyncSession,
+) -> None:
+    manager, managed_org = await _make_people_manager(db_session, PermissionCode.ORG_MANAGE_MEMBERS)
+    outside_org = Org(name=f"外部組織-{uuid.uuid4().hex[:6]}")
+    db_session.add(outside_org)
+    await db_session.flush()
+
+    visible = await _make_person(
+        db_session,
+        student_id=f"S{uuid.uuid4().hex[:8]}",
+        display_name="範圍內人員",
+        legal_name="範圍內本名",
+        email="inside@example.edu",
+    )
+    hidden = await _make_person(
+        db_session,
+        student_id=f"S{uuid.uuid4().hex[:8]}",
+        display_name="範圍外人員",
+        legal_name="範圍外本名",
+        email="outside@example.edu",
+    )
+    managed_class = SchoolClass(
+        academic_year=115,
+        class_code="103",
+        label="組織範圍班級",
+        created_by=manager.id,
+        org_id=managed_org.id,
+    )
+    db_session.add(managed_class)
+    await db_session.flush()
+    await _add_org_affiliation(db_session, visible, managed_org)
+    await _add_org_affiliation(db_session, visible, outside_org)
+    await _add_org_affiliation(db_session, hidden, outside_org)
+    db_session.add(
+        PersonAffiliation(
+            person_id=visible.id,
+            kind=PersonAffiliationKind.CLASS_MEMBER,
+            class_id=managed_class.id,
+            org_id=managed_org.id,
+            start_date=local_today(),
+            status=PersonAffiliationStatus.ACTIVE,
+            source=PersonAffiliationSource.MANUAL,
+        )
+    )
+    await db_session.flush()
+
+    client = authed_client_factory(manager)
+    scope = await client.get("/people/access-scope")
+    assert scope.status_code == 200
+    assert scope.json()["is_global"] is False
+    assert scope.json()["org_ids"] == [str(managed_org.id)]
+    assert scope.json()["class_ids"] == [str(managed_class.id)]
+
+    response = await client.get("/people")
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()] == [str(visible.id)]
+    assert "範圍外本名" not in response.text
+
+    stats = await client.get("/people/stats")
+    assert stats.status_code == 200
+    assert stats.json()["people_count"] == 1
+    assert stats.json()["matched_people_count"] == 1
+
+    detail = await client.get(f"/people/{visible.id}")
+    assert detail.status_code == 200
+    assert {item["org_id"] for item in detail.json()["affiliations"]} == {str(managed_org.id)}
+    assert (await client.get(f"/people/{hidden.id}")).status_code == 404
+    assert (
+        await client.patch(f"/people/{visible.id}", json={"legal_name": "不應可改"})
+    ).status_code == 403
+    assert (await client.post("/people", json={"display_name": "未歸屬人員"})).status_code == 403
+    assert (
+        await client.post(
+            "/people/affiliations",
+            json={
+                "person_id": str(visible.id),
+                "kind": "class_member",
+                "class_id": str(managed_class.id),
+            },
+        )
+    ).status_code == 404
+
+
+async def test_class_manager_import_is_limited_to_managed_class_and_preserves_shared_person_data(
+    authed_client_factory: Callable[[User], AsyncClient],
+    db_session: AsyncSession,
+) -> None:
+    manager, managed_org = await _make_people_manager(db_session, PermissionCode.CLASS_MANAGE)
+    outside_org = Org(name=f"其他班級組織-{uuid.uuid4().hex[:6]}")
+    db_session.add(outside_org)
+    await db_session.flush()
+    managed_class = SchoolClass(
+        academic_year=115,
+        class_code="101",
+        label="管理範圍班級",
+        created_by=manager.id,
+        org_id=managed_org.id,
+    )
+    outside_class = SchoolClass(
+        academic_year=115,
+        class_code="102",
+        label="其他班級",
+        created_by=manager.id,
+        org_id=outside_org.id,
+    )
+    db_session.add_all([managed_class, outside_class])
+    await db_session.flush()
+
+    org_member = await _make_person(
+        db_session,
+        student_id="SCOPE115ORG",
+        display_name="只屬於組織的成員",
+        legal_name="不應顯示本名",
+        email="org-only@example.edu",
+    )
+    await _add_org_affiliation(db_session, org_member, managed_org)
+    existing = await _make_person(
+        db_session,
+        student_id="SCOPE11501",
+        display_name="既有姓名",
+        email="old@example.edu",
+        note="既有備註",
+    )
+    db_session.add(
+        PersonAffiliation(
+            person_id=existing.id,
+            kind=PersonAffiliationKind.CLASS_MEMBER,
+            class_id=managed_class.id,
+            org_id=managed_org.id,
+            start_date=local_today(),
+            status=PersonAffiliationStatus.ACTIVE,
+            source=PersonAffiliationSource.MANUAL,
+        )
+    )
+    await db_session.flush()
+    client = authed_client_factory(manager)
+    scope = await client.get("/people/access-scope")
+    assert scope.status_code == 200
+    assert scope.json()["class_ids"] == [str(managed_class.id)]
+    assert scope.json()["org_ids"] == [str(managed_org.id)]
+
+    people = await client.get("/people")
+    assert people.status_code == 200
+    assert [item["id"] for item in people.json()] == [str(existing.id)]
+    assert "不應顯示本名" not in people.text
+    assert (await client.get(f"/people/{org_member.id}")).status_code == 404
+
+    outside_import = await client.post(
+        "/people/import-roster",
+        json={
+            "rows": [
+                {
+                    "student_id": "SCOPE11502",
+                    "display_name": "外班學生",
+                    "class_id": str(outside_class.id),
+                }
+            ]
+        },
+    )
+    assert outside_import.status_code == 403
+
+    scoped_import = await client.post(
+        "/people/import-roster",
+        json={
+            "rows": [
+                {
+                    "student_id": "SCOPE11501",
+                    "display_name": "匯入檔新姓名",
+                    "email": "new@example.edu",
+                    "note": "匯入檔備註",
+                    "class_id": str(managed_class.id),
+                },
+                {
+                    "student_id": "SCOPE11503",
+                    "display_name": "新班級學生",
+                    "class_id": str(managed_class.id),
+                },
+            ]
+        },
+    )
+    assert scoped_import.status_code == 200
+    assert scoped_import.json()["people_created"] == 1
+    assert scoped_import.json()["people_updated"] == 0
+    await db_session.refresh(existing)
+    assert existing.display_name == "既有姓名"
+    assert existing.email == "old@example.edu"
+    assert existing.note == "既有備註"
+
+
 async def test_list_people_requires_login(client: AsyncClient) -> None:
     response = await client.get("/people")
     assert response.status_code == 401
@@ -45,6 +280,13 @@ async def test_list_people_requires_permission(
 ) -> None:
     ac = authed_client_factory(member_user)
     response = await ac.get("/people")
+    assert response.status_code == 403
+
+
+async def test_people_access_scope_requires_permission(
+    authed_client_factory: Callable[[User], AsyncClient], member_user: User
+) -> None:
+    response = await authed_client_factory(member_user).get("/people/access-scope")
     assert response.status_code == 403
 
 

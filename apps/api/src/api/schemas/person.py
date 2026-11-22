@@ -153,6 +153,24 @@ class PersonDirectoryStats(BaseModel):
     matched_people_count: int
 
 
+class PeopleAccessClassOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    academic_year: int
+    class_code: str
+    grade: int
+    label: str | None
+    is_active: bool
+
+
+class PeopleAccessScopeOut(BaseModel):
+    is_global: bool
+    org_ids: list[uuid.UUID] | None = None
+    class_ids: list[uuid.UUID] | None = None
+    classes: list[PeopleAccessClassOut] = Field(default_factory=list)
+
+
 __all__ = [
     "PersonAffiliationCreate",
     "PersonAffiliationOut",
@@ -161,6 +179,8 @@ __all__ = [
     "PersonDetailOut",
     "PersonListItem",
     "PersonOut",
+    "PeopleAccessClassOut",
+    "PeopleAccessScopeOut",
     "PersonRosterImport",
     "PersonRosterImportResult",
     "PersonUpdate",

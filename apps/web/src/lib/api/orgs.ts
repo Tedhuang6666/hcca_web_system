@@ -1,11 +1,14 @@
 import type {
   OrgRead,
+  PositionSummary,
 } from "../types";
 import { get, patch } from "./core";
 
 // ── 組織（公開端點）───────────────────────────────────────────────────────────
 
 export type { OrgRead } from "../types";
+
+export type OrgPositionOption = Pick<PositionSummary, "id" | "name" | "org_id">;
 
 export const orgsApi = {
   list: (params?: { active_only?: boolean; exclude_class_orgs?: boolean }) => {
@@ -16,6 +19,7 @@ export const orgsApi = {
     return get<OrgRead[]>(`/orgs${qs ? `?${qs}` : ""}`);
   },
   get: (id: string) => get<OrgRead>(`/orgs/${id}`),
+  listPositions: (id: string) => get<OrgPositionOption[]>(`/orgs/${id}/positions`),
   /** 取得組織樹（巢狀結構） */
   tree: () => get<(OrgRead & { children: OrgRead[] })[]>("/orgs/tree"),
   /** 取得當前使用者有 document:create 或 document:draft 權限的組織列表（RBAC 過濾） */

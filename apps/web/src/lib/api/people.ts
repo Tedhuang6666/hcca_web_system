@@ -1,11 +1,12 @@
 import type {
-  PersonAffiliationCreate, PersonAffiliationOut, PersonAffiliationUpdate, PersonCreate, PersonDetailOut, PersonDirectoryStats, PersonListItem, PersonOut, PersonRosterImportResult, PersonUpdate,
+  PeopleAccessScopeOut, PersonAffiliationCreate, PersonAffiliationOut, PersonAffiliationUpdate, PersonCreate, PersonDetailOut, PersonDirectoryStats, PersonListItem, PersonOut, PersonRosterImportResult, PersonUpdate,
 } from "../types";
 import { get, post, patch, del } from "./core";
 
 // ── 人員與身分總表 ────────────────────────────────────────────────────────────
 
 export const peopleApi = {
+  accessScope: () => get<PeopleAccessScopeOut>("/people/access-scope"),
   list: (params?: {
     keyword?: string;
     class_id?: string;
