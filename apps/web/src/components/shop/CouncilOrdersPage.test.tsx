@@ -10,7 +10,7 @@ const api = vi.hoisted(() => ({
   listSupplementOrders: vi.fn(),
   listOrderRecipients: vi.fn(),
   listOrders: vi.fn(), getCloseStatus: vi.fn(), closeCategory: vi.fn(), reopenCategory: vi.fn(), setClassPaid: vi.fn(),
-  cancelOrder: vi.fn(), updateOrderItemQuantity: vi.fn(), downloadClassReceipt: vi.fn(), downloadClassReceipts: vi.fn(), downloadChangedOrderReceipts: vi.fn(),
+  cancelOrder: vi.fn(), recalculateOrderPromotions: vi.fn(), updateOrderItemQuantity: vi.fn(), downloadClassReceipt: vi.fn(), downloadClassReceipts: vi.fn(), downloadChangedOrderReceipts: vi.fn(),
 }));
 const access = vi.hoisted(() => ({ isAdmin: true, permissions: new Set<string>() }));
 const notifications = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
@@ -452,6 +452,31 @@ describe("全校收款與訂單", () => {
     ]);
     expect(draft.recipient_variables[0].variables.order_details).toContain("ORD-002");
     expect(navigation.push).toHaveBeenCalledWith("/email?draft=reminder-draft-id");
+  });
+
+  it("recalculates promotions for the selected orders and reports skipped ones", async () => {
+    api.listOrders.mockResolvedValue([
+      { ...order, id: "order-1", serial_number: "ORD-001" },
+      { ...order, id: "order-2", serial_number: "ORD-002" },
+    ]);
+    api.recalculateOrderPromotions.mockResolvedValue({
+      updated: 1, unchanged: 0, skipped: 1,
+      results: [
+        { order_id: "order-1", serial_number: "ORD-001", status: "updated", reason: null, old_total: 300, new_total: 250 },
+        { order_id: "order-2", serial_number: "ORD-002", status: "skipped", reason: "訂單已收款", old_total: 200, new_total: 200 },
+      ],
+    });
+    await openPage();
+    fireEvent.click(screen.getByRole("button", { name: "查看待繳訂購人" }));
+    await screen.findByText("ORD-001");
+    const recalc = screen.getByRole("button", { name: /重算所選訂單優惠/ });
+    expect(recalc).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox", { name: "選取訂單 ORD-001" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "選取訂單 ORD-002" }));
+    fireEvent.click(screen.getByRole("button", { name: "重算所選訂單優惠（2）" }));
+
+    await waitFor(() => expect(api.recalculateOrderPromotions).toHaveBeenCalledWith(["order-1", "order-2"]));
+    expect(await screen.findByText(/1 筆已更新.*ORD-002：訂單已收款/)).toBeVisible();
   });
 
   it("creates personalized reminders for representatives of unpaid classes", async () => {

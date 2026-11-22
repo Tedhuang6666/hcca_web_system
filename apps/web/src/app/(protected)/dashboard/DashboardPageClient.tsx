@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   FileText, ListChecks, Scale, Megaphone, MessageSquare,
-  CheckSquare, ChevronRight, Plus, Loader2, Clock, ArrowUpRight,
+  CheckSquare, ChevronRight, Plus, Loader2, Clock,
   ShoppingCart, ShieldCheck,
   Settings, Users, Bell, Search, PenLine, Send, Wrench, AlertCircle,
 } from "lucide-react";
@@ -21,6 +21,7 @@ import { cacheGet, cacheSet } from "@/lib/api-cache";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useRecentItems } from "@/hooks/useRecentItems";
 import { resolveNavigationProfile, type NavigationProfile } from "@/lib/navigation-profile";
+import { OPEN_COMMAND_MENU_EVENT } from "@/components/layout/CommandMenu";
 
 const DashboardWidgets = dynamic(() => import("./DashboardWidgets"), { ssr: false });
 
@@ -65,6 +66,18 @@ const TASK_ICONS: Record<TaskModule, React.ComponentType<IconProps>> = {
 };
 
 const EMPTY_PERMISSIONS = new Set<string>();
+/** 已在「優先處理」列出的事項，不再以摘要重複顯示。 */
+const TASK_DUPLICATE_WIDGETS = new Set(["doc_pending_my_approval", "regulation_review", "regulation_publish"]);
+
+function uniqueActions(actions: DashboardAction[]): DashboardAction[] {
+  const seen = new Set<string>();
+  return actions.filter((action) => {
+    const key = action.href.split("?")[0];
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
 function formatDate(s?: string | null) {
   if (!s) return "";
@@ -102,28 +115,6 @@ function formatTaskDue(s?: string | null) {
   if (diffDays === 1) return "明天";
   if (diffDays <= 7) return `${diffDays} 天內`;
   return `${due.month}/${due.day}`;
-}
-
-function SkeletonCard() {
-  return (
-    <div
-      className="rounded-lg p-5 animate-pulse"
-      style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
-      aria-hidden="true"
-    >
-      <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-lg" style={{ background: "var(--bg-hover)" }} />
-        <div className="flex-1">
-          <div className="h-3 w-24 rounded mb-2" style={{ background: "var(--bg-hover)" }} />
-          <div className="h-2 w-32 rounded" style={{ background: "var(--bg-hover)" }} />
-        </div>
-      </div>
-      <div className="mt-4 space-y-2">
-        <div className="h-3 w-full rounded" style={{ background: "var(--bg-hover)" }} />
-        <div className="h-3 w-4/5 rounded" style={{ background: "var(--bg-hover)" }} />
-      </div>
-    </div>
-  );
 }
 
 export type DashboardPageInitialData = {
@@ -269,8 +260,12 @@ export default function DashboardPageClient({
     () => resolveNavigationProfile(permissions, isAdmin),
     [isAdmin, permissions],
   );
-  const hasAny = widgets.length > 0;
-  const visibleItems = widgets.reduce((sum, widget) => sum + widget.items.length, 0);
+  // 與待辦重複的摘要不再顯示第二次；其餘有內容的摘要集中在「與我有關」。
+  const personalWidgets = widgets.filter((widget) => (
+    widget.key !== "announcements_recent"
+    && widget.items.length > 0
+    && !(hasTaskAccess && TASK_DUPLICATE_WIDGETS.has(widget.key))
+  ));
   const priorityTasks = (tasks?.items ?? [])
     .filter((task) => {
       if (task.module === "document") return can("document:approve");
@@ -288,166 +283,134 @@ export default function DashboardPageClient({
       .slice(0, 3),
     [announcements],
   );
-  const urgentCount = (tasks?.items ?? []).filter((task) => task.severity === "critical").length;
   const isOperator = isAdmin || permissions.size > 0 || layoutHint !== "student";
-  const dashboardContent = getDashboardContent(profile, can, canAny, isOperator);
-  const primaryAction = !hasTaskAccess && dashboardContent.primaryAction.href === "/tasks"
-    ? { href: "/announcements", label: "查看公告", icon: Bell }
-    : dashboardContent.primaryAction;
-  const quickActions = hasTaskAccess
-    ? dashboardContent.quickActions
-    : dashboardContent.quickActions.filter((action) => action.href !== "/tasks");
-  const serviceActions = hasTaskAccess
-    ? dashboardContent.services
-    : dashboardContent.services.filter((action) => action.href !== "/tasks");
-  const adminActions = getAdminActions(can, canAny, isAdmin);
+  const primaryAction = getPrimaryAction(profile, can, hasTaskAccess);
+  const showTaskPanel = hasTaskAccess || priorityTasks.length > 0;
+  // 一組常用功能：同一個入口只出現一次，主要操作與待辦面板已有的入口不重複。
+  const shortcuts = uniqueActions([
+    ...getQuickActions(profile, can, canAny, isOperator),
+    ...getAdminActions(can, canAny, isAdmin),
+    ...getServiceActions(profile, can),
+  ]).filter((action) => (
+    action.href !== primaryAction?.href
+    && action.href !== "/search"
+    && !(action.href === "/tasks" && (showTaskPanel || !hasTaskAccess))
+  )).slice(0, 8);
 
   return (
     <div className="dashboard-page max-w-7xl mx-auto space-y-5">
-      {/* 頁首 */}
       <section className="dashboard-hero">
         <div className="dashboard-hero-content">
-          <div className="min-w-0">
-            <div className="dashboard-heading-row">
-              <h1 className="dashboard-title">
-                {greeting}，{userName || "使用者"}
-              </h1>
-            </div>
-          </div>
-          <div className="dashboard-hero-actions">
-            {urgentCount > 0 && <p className="dashboard-updated">{urgentCount} 件需要優先處理</p>}
-            <Link href={primaryAction.href} className="dashboard-primary-action">
-              <primaryAction.icon size={14} aria-hidden={true} />
-              {primaryAction.label}
-              <ArrowUpRight size={14} aria-hidden={true} />
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {profile === "student" && widgets.some((widget) => widget.key !== "announcements_recent") && (
-        <section className="dashboard-personal-progress" aria-labelledby="dashboard-progress-title">
-          <div className="dashboard-section-heading">
-            <h2 id="dashboard-progress-title">與我有關</h2>
-          </div>
-          <DashboardWidgets widgets={widgets.filter((widget) => widget.key !== "announcements_recent")} />
-        </section>
-      )}
-
-      <section className="dashboard-focus-grid" aria-label="今日重點">
-        {(hasTaskAccess || priorityTasks.length > 0) && (
-        <div className="dashboard-focus-main">
-          <div className="dashboard-section-heading">
-            <h2>優先處理</h2>
-            {hasTaskAccess && (
-              <Link href="/tasks" className="dashboard-text-link">
-                全部待辦 <ChevronRight size={14} aria-hidden={true} />
+          <h1 className="dashboard-title min-w-0">
+            {greeting}，{userName || "使用者"}
+          </h1>
+          {primaryAction && (
+            <div className="dashboard-hero-actions">
+              <Link href={primaryAction.href} className="dashboard-primary-action">
+                <primaryAction.icon size={14} aria-hidden={true} />
+                {primaryAction.label}
               </Link>
-            )}
-          </div>
-          {priorityLoading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 3 }).map((_, i) => <TaskSkeleton key={i} />)}
-            </div>
-          ) : priorityTasks.length > 0 ? (
-            <ul className="space-y-2">
-              {priorityTasks.map((task) => <PriorityTaskRow key={task.id} task={task} />)}
-            </ul>
-          ) : (
-            <div className="dashboard-quiet-state">
-              <ShieldCheck size={24} aria-hidden={true} />
-              <div>
-                <p>目前沒有需要立即處理的事項</p>
-              </div>
             </div>
           )}
         </div>
-        )}
+      </section>
 
-        <aside className="dashboard-actions-panel" aria-label={dashboardContent.actionHeading}>
+      <div className="dashboard-focus-grid">
+        <div className="dashboard-main-column">
+          {showTaskPanel && (
+            <section className="dashboard-focus-main" aria-labelledby="dashboard-tasks-title">
+              <div className="dashboard-section-heading">
+                <h2 id="dashboard-tasks-title">優先處理</h2>
+                {hasTaskAccess && (
+                  <Link href="/tasks" className="dashboard-text-link">
+                    全部待辦 <ChevronRight size={14} aria-hidden={true} />
+                  </Link>
+                )}
+              </div>
+              {priorityLoading ? (
+                <div className="space-y-2">
+                  {Array.from({ length: 3 }).map((_, i) => <TaskSkeleton key={i} />)}
+                </div>
+              ) : priorityTasks.length > 0 ? (
+                <ul className="space-y-2">
+                  {priorityTasks.map((task) => <PriorityTaskRow key={task.id} task={task} />)}
+                </ul>
+              ) : (
+                <p className="dashboard-quiet-state">
+                  <ShieldCheck size={20} aria-hidden={true} />
+                  目前沒有需要立即處理的事項
+                </p>
+              )}
+            </section>
+          )}
+
+          {personalWidgets.length > 0 && (
+            <section className="dashboard-personal-progress" aria-labelledby="dashboard-progress-title">
+              <div className="dashboard-section-heading">
+                <h2 id="dashboard-progress-title">與我有關</h2>
+              </div>
+              <DashboardWidgets widgets={personalWidgets} />
+            </section>
+          )}
+
+          {latestAnnouncements.length > 0 && (
+            <section className="dashboard-focus-main dashboard-announcements-panel" aria-labelledby="dashboard-announcements-title">
+              <div className="dashboard-section-heading">
+                <h2 id="dashboard-announcements-title">最新公告</h2>
+                <Link href="/announcements" className="dashboard-text-link">
+                  查看全部 <ChevronRight size={14} aria-hidden={true} />
+                </Link>
+              </div>
+              <ul className="dashboard-announcement-list">
+                {latestAnnouncements.map((announcement) => (
+                  <li key={announcement.id}>
+                    <Link href={`/announcements/${announcement.id}`} className="dashboard-announcement-row">
+                      {announcement.is_urgent && (
+                        <span
+                          className="dashboard-announcement-badge"
+                          style={{ color: "var(--warning)", background: "var(--warning-dim)" }}
+                        >
+                          重要
+                        </span>
+                      )}
+                      <span className="dashboard-announcement-title">{announcement.title}</span>
+                      <time className="dashboard-announcement-date" dateTime={announcement.published_at ?? announcement.created_at}>
+                        {formatDate(announcement.published_at ?? announcement.created_at)}
+                      </time>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </div>
+
+        <nav className="dashboard-actions-panel" aria-labelledby="dashboard-shortcuts-title">
           <div className="dashboard-section-heading">
-            <h2>{dashboardContent.actionHeading}</h2>
+            <h2 id="dashboard-shortcuts-title">常用功能</h2>
           </div>
           <div className="dashboard-action-list">
-            {quickActions.slice(0, 3).map((action) => (
+            {shortcuts.map((action) => (
               <QuickActionCard key={action.href} action={action} />
             ))}
           </div>
-          <Link href="/search" className="dashboard-text-link mt-3 justify-end">
-            找其他服務 <ChevronRight size={14} aria-hidden={true} />
-          </Link>
-        </aside>
-      </section>
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event(OPEN_COMMAND_MENU_EVENT))}
+            className="dashboard-text-link mt-3"
+          >
+            <Search size={14} aria-hidden={true} />
+            搜尋其他功能
+          </button>
+        </nav>
+      </div>
 
-      {latestAnnouncements.length > 0 && (
-        <section className="dashboard-focus-main dashboard-announcements-panel" aria-labelledby="dashboard-announcements-title">
-          <div className="dashboard-section-heading">
-            <h2 id="dashboard-announcements-title">最新公告</h2>
-            <Link href="/announcements" className="dashboard-text-link">
-              查看全部 <ChevronRight size={14} aria-hidden={true} />
-            </Link>
-          </div>
-          <ul className="dashboard-announcement-list">
-            {latestAnnouncements.map((announcement) => (
-              <li key={announcement.id}>
-                <Link href={`/announcements/${announcement.id}`} className="dashboard-announcement-row">
-                  <span
-                    className="dashboard-announcement-badge"
-                    style={announcement.is_urgent
-                      ? { color: "var(--warning)", background: "var(--warning-dim)" }
-                      : { color: "var(--primary-text)", background: "var(--primary-dim)" }}
-                  >
-                    {announcement.is_urgent ? "重要" : "公告"}
-                  </span>
-                  <span className="dashboard-announcement-title">{announcement.title}</span>
-                  <time className="dashboard-announcement-date" dateTime={announcement.published_at ?? announcement.created_at}>
-                    {formatDate(announcement.published_at ?? announcement.created_at)}
-                  </time>
-                  <ChevronRight size={15} aria-hidden={true} style={{ color: "var(--text-disabled)" }} />
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      <details className="rounded-lg p-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
-          <span>
-            <span className="block text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-              {dashboardContent.serviceTitle}
-            </span>
-          </span>
-          <ChevronRight size={16} aria-hidden={true} style={{ color: "var(--text-muted)" }} />
-        </summary>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {serviceActions.map((action) => <QuickActionCard key={action.href} action={action} />)}
-        </div>
-      </details>
-
-      {adminActions.length > 0 && (
-        <details className="dashboard-admin-strip">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
-            <span>
-              <span className="block text-sm font-semibold">管理員常用操作</span>
-            </span>
-            <ChevronRight size={16} aria-hidden={true} />
-          </summary>
-          <div className="dashboard-admin-actions">
-            {adminActions.map((action) => (
-              <QuickActionCard key={action.href} action={action} compact />
-            ))}
-          </div>
-        </details>
-      )}
-
-      {/* 最近開啟：個人化捷徑，少翻選單 */}
       {recents.length > 0 && (
-        <section className="dashboard-recents-panel" aria-label="最近開啟">
-          <span className="dashboard-recents-label flex items-center gap-1 text-xs" style={{ color: "var(--text-muted)" }}>
+        <section className="dashboard-recents-panel" aria-labelledby="dashboard-recents-title">
+          <h2 id="dashboard-recents-title" className="dashboard-recents-label flex items-center gap-1 text-xs" style={{ color: "var(--text-muted)" }}>
             <Clock size={12} aria-hidden={true} />
             最近開啟
-          </span>
+          </h2>
           <div className="dashboard-recents-list">
             {recents.map((item) => (
               <Link
@@ -462,34 +425,11 @@ export default function DashboardPageClient({
         </section>
       )}
 
-      {profile !== "student" && (
-        <details className="rounded-lg p-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
-            <span>
-              <span className="block text-sm font-semibold" style={{ color: "var(--text-primary)" }}>跨模組動態</span>
-              <span className="mt-0.5 block text-xs" style={{ color: "var(--text-muted)" }}>
-                {widgets.length} 個摘要 · {visibleItems} 筆項目
-              </span>
-            </span>
-            <ChevronRight size={16} aria-hidden={true} style={{ color: "var(--text-muted)" }} />
-          </summary>
-          <div className="mt-4">
-            {secondaryLoading ? (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)}
-              </div>
-            ) : hasAny ? (
-              <DashboardWidgets widgets={widgets} />
-            ) : <EmptyState />}
-          </div>
-        </details>
-      )}
-
       {secondaryLoading && (
-        <p className="flex items-center justify-center gap-2 text-xs"
+        <p className="flex items-center justify-center gap-2 text-xs" role="status"
           style={{ color: "var(--text-muted)" }}>
           <Loader2 size={12} className="animate-spin" aria-hidden={true} />
-          載入儀表板…
+          載入中…
         </p>
       )}
     </div>
@@ -503,90 +443,29 @@ type DashboardAction = {
   tone?: "primary" | "warning" | "danger" | "neutral";
 };
 
-type DashboardContent = {
-  emptySubtitle: string;
-  busySubtitle: string;
-  actionHeading: string;
-  primaryAction: DashboardAction;
-  quickActions: DashboardAction[];
-  serviceTitle: string;
-  services: DashboardAction[];
-};
-
-function getDashboardContent(
-  profile: NavigationProfile,
-  can: (code: string) => boolean,
-  canAny: (...codes: string[]) => boolean,
-  isOperator: boolean,
-): DashboardContent {
-  const primaryAction = getPrimaryAction(profile, can, isOperator);
-  return {
-    default: {
-      busySubtitle: "待辦已依優先順序排列。",
-      emptySubtitle: "目前沒有急迫待辦。",
-      actionHeading: "常用操作",
-      primaryAction,
-      quickActions: getQuickActions(profile, can, canAny, isOperator),
-      serviceTitle: "常用治理入口",
-      services: getServiceActions("default", can, canAny),
-    },
-    student: {
-      busySubtitle: "待填寫與待確認事項已排在最前面。",
-      emptySubtitle: "目前沒有急迫事項。",
-      actionHeading: "常用服務",
-      primaryAction,
-      quickActions: getQuickActions(profile, can, canAny, isOperator),
-      serviceTitle: "你常用的校園服務",
-      services: getServiceActions("student", can, canAny),
-    },
-    teacher: {
-      busySubtitle: "班級、問卷與通知待辦已集中在這裡。",
-      emptySubtitle: "目前沒有急迫事項。",
-      actionHeading: "班級與教學服務",
-      primaryAction,
-      quickActions: getQuickActions(profile, can, canAny, isOperator),
-      serviceTitle: "師長常用工具",
-      services: getServiceActions("teacher", can, canAny),
-    },
-    vendor: {
-      busySubtitle: "合作資料與待處理事項已集中在這裡。",
-      emptySubtitle: "目前沒有急迫事項。",
-      actionHeading: "商家與合作事項",
-      primaryAction,
-      quickActions: getQuickActions(profile, can, canAny, isOperator),
-      serviceTitle: "合作夥伴服務",
-      services: getServiceActions("vendor", can, canAny),
-    },
-  }[profile];
-}
-
 function getPrimaryAction(
   profile: NavigationProfile,
   can: (code: string) => boolean,
-  isOperator: boolean,
-): DashboardAction {
+  hasTaskAccess: boolean,
+): DashboardAction | null {
+  // 只有真正要「做」的事才放主要按鈕；單純前往清單的入口留在常用功能。
   if (can("class:shop_collect") && !can("shop:manage")) {
     return { href: "/shop/class-orders", label: "班代代訂與收款", icon: ListChecks };
   }
   if (profile === "vendor") {
     return { href: "/partner-map/admin", label: "管理特約資訊", icon: ShoppingCart };
   }
-  if (profile === "teacher") {
-    if (!can("class:shop_collect")) {
-      return { href: "/surveys", label: "查看問卷", icon: PenLine };
-    }
-    return { href: "/shop/class-orders", label: "班級收單", icon: ListChecks };
-  }
+  if (profile === "teacher") return null;
   if (can("document:draft")) {
     return { href: "/documents/new", label: "新增公文", icon: Plus };
   }
   if (can("announcement:create")) {
     return { href: "/publications", label: "發布公告", icon: Send };
   }
-  if (isOperator) {
+  if (hasTaskAccess) {
     return { href: "/tasks", label: "查看待辦", icon: ListChecks };
   }
-  return { href: "/partner-map", label: "查看特約", icon: Search };
+  return null;
 }
 
 function getQuickActions(
@@ -595,11 +474,11 @@ function getQuickActions(
   canAny: (...codes: string[]) => boolean,
   isOperator: boolean,
 ): DashboardAction[] {
-  if (profile !== "default") return getServiceActions(profile, can, canAny).slice(0, 6);
+  if (profile !== "default") return getServiceActions(profile, can).slice(0, 6);
 
   const actions: DashboardAction[] = [
     { href: "/tasks", label: "我的待辦", icon: ListChecks, tone: "primary" },
-    { href: "/announcements", label: "最新公告", icon: Bell },
+    { href: "/announcements", label: "校內公告", icon: Bell },
     { href: "/surveys", label: "問卷專區", icon: PenLine },
     { href: "/shop", label: "商品訂購", icon: ShoppingCart },
     { href: "/search", label: "全站搜尋", icon: Search },
@@ -614,27 +493,26 @@ function getQuickActions(
 function getServiceActions(
   profile: NavigationProfile,
   can: (code: string) => boolean,
-  canAny: (...codes: string[]) => boolean,
 ): DashboardAction[] {
   const commonStudent: DashboardAction[] = [
-    { href: "/announcements", label: "看最新公告", icon: Bell },
-    { href: "/surveys", label: "填寫問卷", icon: PenLine },
+    { href: "/announcements", label: "校內公告", icon: Bell },
+    { href: "/surveys", label: "問卷專區", icon: PenLine },
     { href: "/petitions/new", label: "我要陳情", icon: MessageSquare },
-    { href: "/shop", label: "購買商品票券", icon: ShoppingCart },
-    { href: "/partner-map", label: "找特約商家", icon: Search },
+    { href: "/shop", label: "商品訂購", icon: ShoppingCart },
+    { href: "/partner-map", label: "特約地圖", icon: Search },
   ];
 
   if (profile === "student") return commonStudent;
   if (profile === "teacher") {
     const teacherActions: DashboardAction[] = [
-      { href: "/announcements", label: "看校內公告", icon: Bell },
-      { href: "/surveys", label: "問卷與回覆", icon: PenLine },
+      { href: "/announcements", label: "校內公告", icon: Bell },
+      { href: "/surveys", label: "問卷專區", icon: PenLine },
       { href: "/exam-papers", label: "段考題庫", icon: FileText },
     ];
     if (can("class:shop_collect")) {
       teacherActions.splice(1, 0, {
         href: "/shop/class-orders",
-        label: "班級收單",
+        label: "班級收款與代訂",
         icon: ListChecks,
       });
     }
@@ -642,18 +520,18 @@ function getServiceActions(
   }
   if (profile === "vendor") {
     return [
-      { href: "/partner-map/admin", label: "管理特約內容", icon: ShoppingCart },
-      { href: "/partner-map", label: "查看公開頁面", icon: Search },
-      { href: "/tasks", label: "處理待辦", icon: ListChecks },
-      { href: "/announcements", label: "合作公告", icon: Bell },
+      { href: "/partner-map/admin", label: "特約管理", icon: ShoppingCart },
+      { href: "/partner-map", label: "特約地圖", icon: Search },
+      { href: "/tasks", label: "我的待辦", icon: ListChecks },
+      { href: "/announcements", label: "校內公告", icon: Bell },
       { href: "/settings", label: "帳號設定", icon: Settings },
     ];
   }
   const actions: DashboardAction[] = [
     { href: "/tasks", label: "我的待辦", icon: ListChecks, tone: "primary" },
-    { href: "/documents", label: "公文作業", icon: FileText },
-    { href: "/regulations", label: "法規資料庫", icon: Scale },
-    { href: "/announcements", label: "發布與公告", icon: Megaphone },
+    { href: "/documents", label: "公文系統", icon: FileText },
+    { href: "/regulations", label: "法規查詢", icon: Scale },
+    { href: "/announcements", label: "校內公告", icon: Megaphone },
     { href: "/search", label: "全站搜尋", icon: Search },
   ];
   return actions.slice(0, 6);
@@ -664,16 +542,17 @@ function getAdminActions(
   canAny: (...codes: string[]) => boolean,
   isAdmin: boolean,
 ): DashboardAction[] {
+  // 名稱與側欄一致，同一個目的地不出現兩種叫法。
   const actions: DashboardAction[] = [];
-  if (isAdmin || can("admin:users")) {
-    actions.push({ href: "/admin", label: "管理後台", icon: Settings });
-    actions.push({ href: "/admin/people", label: "人員管理", icon: Users });
-  }
   if (canAny("announcement:create", "email:*")) {
     actions.push({ href: "/publications", label: "發布中心", icon: Megaphone });
   }
   if (can("shop:manage")) {
-    actions.push({ href: "/shop/admin", label: "商品後台", icon: ShoppingCart });
+    actions.push({ href: "/shop/admin", label: "商品設定", icon: ShoppingCart });
+  }
+  if (isAdmin || can("admin:users")) {
+    actions.push({ href: "/admin/people", label: "人員與組織", icon: Users });
+    actions.push({ href: "/admin", label: "系統總覽", icon: Settings });
   }
   if (isAdmin || can("admin:all")) {
     actions.push({ href: "/admin/system?tab=modules", label: "模組維護", icon: Wrench });
@@ -744,45 +623,6 @@ function TaskSkeleton() {
         <span className="block h-3 w-2/3 rounded" style={{ background: "var(--bg-hover)" }} />
         <span className="block h-2 w-1/2 rounded" style={{ background: "var(--bg-hover)" }} />
       </span>
-    </div>
-  );
-}
-
-function EmptyState() {
-  const links = [
-    { href: "/announcements", label: "看公告" },
-    { href: "/regulations", label: "查法規" },
-    { href: "/shop", label: "商品訂購" },
-    { href: "/surveys", label: "問卷" },
-  ];
-  return (
-    <div className="card p-8 text-center"
-      style={{
-        background: "var(--bg-surface)",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius-lg)",
-      }}>
-      <ShieldCheck size={32} aria-hidden={true}
-        style={{ color: "var(--primary-text)", display: "inline-block", marginBottom: 12 }} />
-      <p className="text-sm font-semibold mb-4" style={{ color: "var(--text-primary)" }}>
-        目前沒有待辦或新訊息
-      </p>
-      <div className="flex flex-wrap gap-2 justify-center">
-        {links.map((l) => (
-          <Link
-            key={l.href}
-            href={l.href}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-            style={{
-              background: "var(--primary-dim)",
-              color: "var(--primary-text)",
-              border: "1px solid var(--border-strong)",
-              textDecoration: "none",
-            }}>
-            {l.label}
-          </Link>
-        ))}
-      </div>
     </div>
   );
 }

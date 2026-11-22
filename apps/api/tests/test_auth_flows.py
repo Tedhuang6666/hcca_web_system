@@ -557,21 +557,63 @@ async def test_logout_clears_oauth_session_state(
 
 
 async def test_audit_middleware_records_authenticated_actor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    from uuid import uuid4
+
+    from starlette.types import Message, Receive, Scope, Send
+
+    from api.core.audit import SecurityAuditMiddleware
+    from api.core.audit import logger as audit_logger
+    from api.main import app
+
+    log_info = Mock()
+    monkeypatch.setattr(audit_logger, "info", log_info)
+    assert any(item.cls is SecurityAuditMiddleware for item in app.user_middleware)
+
+    user = SimpleNamespace(id=uuid4(), email="member@school.edu")
+
+    async def endpoint(scope: Scope, receive: Receive, send: Send) -> None:
+        scope["state"]["user"] = user
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b""})
+
+    scope = {
+        "type": "http",
+        "method": "PATCH",
+        "path": "/users/me",
+        "query_string": b"",
+        "client": ("127.0.0.1", 12345),
+        "state": {},
+    }
+    messages: list[Message] = []
+
+    async def receive() -> Message:
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message: Message) -> None:
+        messages.append(message)
+
+    await SecurityAuditMiddleware(endpoint)(scope, receive, send)
+
+    log_info.assert_called_once()
+    assert log_info.call_args is not None
+    assert log_info.call_args.args == ("Security audit: sensitive operation",)
+    assert log_info.call_args.kwargs["extra"]["user_id"] == str(user.id)
+    assert log_info.call_args.kwargs["extra"]["user_email"] == user.email
+    assert any(message["type"] == "http.response.start" for message in messages)
+
+
+async def test_authenticated_profile_patch_succeeds(
     member_user: User,
     authed_client_factory: Callable[[User], AsyncClient],
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    import logging
-
-    caplog.set_level(logging.INFO, logger="api.core.audit")
     client = authed_client_factory(member_user)
+    response = await client.patch("/users/me", json={})
 
-    await client.patch("/users/me", json={})
-
-    records = [r for r in caplog.records if r.getMessage() == "Security audit: sensitive operation"]
-    assert records, "敏感路徑應寫入稽核紀錄"
-    assert records[-1].user_id == str(member_user.id)
-    assert records[-1].user_email == member_user.email
+    assert response.status_code == 200
 
 
 async def test_admin_ip_whitelist_applies_to_every_superuser_request(

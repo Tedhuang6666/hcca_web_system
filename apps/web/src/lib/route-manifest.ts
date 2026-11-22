@@ -8,7 +8,7 @@ export const MODULE_MANIFEST = {
   councilProposals: { label: "議會提案", routePrefixes: ["/council-proposals"], navIds: ["councilProposals"], navigationGroup: "治理事務" },
   judicialPetitions: { label: "評議訴訟", routePrefixes: ["/judicial-petitions"], navIds: ["judicialPetitions"], navigationGroup: "治理事務" },
   announcements: { label: "校內公告", routePrefixes: ["/announcements"], navIds: ["announcements"], navigationGroup: "發布與營運" },
-  shop: { label: "商品訂購", routePrefixes: ["/shop"], navIds: ["shop", "shopAdmin"], navigationGroup: "校園服務" },
+  shop: { label: "商品訂購", routePrefixes: ["/shop"], navIds: ["shop", "shopAdmin", "councilOrders", "classOrders"], navigationGroup: "校園服務" },
   merchandiseSubmissions: { label: "校商投稿", routePrefixes: ["/merchandise-submissions"], navIds: ["merchandiseSubmissions", "merchandiseSubmissionsAdmin"], navigationGroup: "校園服務" },
   surveys: { label: "問卷系統", routePrefixes: ["/surveys"], navIds: ["surveys"], navigationGroup: "校園服務" },
   petitions: { label: "陳情中心", routePrefixes: ["/petitions"], navIds: ["petitions", "petitionsManage"], navigationGroup: "治理事務" },

@@ -17,7 +17,13 @@ import { useLowDataMode } from "@/hooks/useLowDataMode";
 import { useInboxCountsContext } from "@/contexts/InboxCountsContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { clearAuthCache } from "@/lib/auth-cache";
-import { getBreadcrumbs, getCompactCrumbs, getPageTitle } from "@/lib/breadcrumb";
+import {
+  APP_HOME_CRUMB,
+  PUBLIC_HOME_CRUMB,
+  getBreadcrumbs,
+  getCompactCrumbs,
+  getPageTitle,
+} from "@/lib/breadcrumb";
 import type { Crumb } from "@/lib/breadcrumb";
 import { OPEN_COMMAND_MENU_EVENT } from "./CommandMenu";
 
@@ -29,8 +35,10 @@ interface TopbarProps {
 
 function MobileBreadcrumb({ items, fallbackTitle }: { items: Crumb[]; fallbackTitle: string }) {
   const current = items[items.length - 1]?.label ?? fallbackTitle;
-  const parent = items.length > 1 ? items[items.length - 2] : undefined;
-  const showParent = parent && parent.label !== "首頁";
+  // 起點（平台首頁／首頁）不重複顯示在手機標題前。
+  const candidate = items.length > 2 ? items[items.length - 2] : undefined;
+  const parent = candidate && candidate.label !== "…" ? candidate : undefined;
+  const showParent = parent !== undefined;
 
   return (
     <nav
@@ -38,7 +46,7 @@ function MobileBreadcrumb({ items, fallbackTitle }: { items: Crumb[]; fallbackTi
       className="topbar-mobile-title-content min-w-0 overflow-hidden">
       {showParent && (
         <span className="topbar-mobile-parent max-w-[40%] truncate">
-          {parent.label}
+          {parent?.label}
         </span>
       )}
       {showParent && (
@@ -91,9 +99,10 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const bellRef = useRef<HTMLDivElement>(null);
 
-  const crumbs = useMemo(() => getBreadcrumbs(pathname), [pathname]);
+  const crumbRoot = isLoggedIn ? APP_HOME_CRUMB : PUBLIC_HOME_CRUMB;
+  const crumbs = useMemo(() => getBreadcrumbs(pathname, crumbRoot), [crumbRoot, pathname]);
   const compactCrumbs = useMemo(() => getCompactCrumbs(crumbs), [crumbs]);
-  const pageTitle = useMemo(() => getPageTitle(pathname), [pathname]);
+  const pageTitle = useMemo(() => getPageTitle(pathname, crumbRoot), [crumbRoot, pathname]);
   const parentHref = crumbs.length >= 2 ? crumbs[crumbs.length - 2]?.href : undefined;
   const showBack = crumbs.length > 2;  // 至少有 首頁 / X / Y 時才顯示
 

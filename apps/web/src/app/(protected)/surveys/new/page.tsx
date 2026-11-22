@@ -600,7 +600,6 @@ export default function NewSurveyPage() {
         </Link>
         <div>
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>新增問卷</h1>
-          <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>建立草稿後可開放填答</p>
         </div>
       </div>
 

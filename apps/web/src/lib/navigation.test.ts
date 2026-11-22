@@ -15,12 +15,23 @@ import {
 } from "./navigation";
 
 describe("navigation visibility", () => {
-  it("groups the operations center under the management back office", () => {
+  it("links management tools directly instead of routing through hub pages", () => {
     const sections = NAV_DEF.filter(isSection);
-    const managementSection = sections.find((section) => section.heading === "管理後台");
+    const managementSection = sections.find((section) => section.id === "manage");
+    const allIds = navItemsFromEntries(NAV_DEF).map((item) => item.id);
 
-    expect(sections.map((section) => section.heading)).not.toContain("營運管理");
-    expect(managementSection?.items.map((item) => item.id)).toContain("operations");
+    expect(allIds).not.toContain("operations");
+    expect(allIds).not.toContain("moduleBackoffice");
+    expect(managementSection?.items.map((item) => item.id)).toEqual(expect.arrayContaining([
+      "publications",
+      "email",
+      "shopAdmin",
+      "councilOrders",
+      "classOrders",
+      "receivables",
+      "petitionsManage",
+      "peopleAdmin",
+    ]));
   });
 
   it("keeps private services out of the logged-out fallback", () => {
@@ -82,22 +93,24 @@ describe("navigation visibility", () => {
     expect(ids).toEqual(["publicPetition"]);
   });
 
-  it("routes operations permissions through the operations center", () => {
+  it("shows each management tool only to people holding its permission", () => {
     const defaultIds = navItemsFromEntries(NAVIGATION_PROFILES.default.desktopSections)
       .map((item) => item.id);
     const adminItem = NAV_ITEMS.find((item) => item.id === "merchandiseSubmissionsAdmin");
-    const operationsItem = NAV_ITEMS.find((item) => item.id === "operations");
+    const financeItem = NAV_ITEMS.find((item) => item.id === "finance");
     const systemOperationsItem = NAV_ITEMS.find((item) => item.id === "systemOperations");
     const merchandisePermissions = new Set(["merchandise_submission:manage"]);
-
-    expect(defaultIds).not.toContain("merchandiseSubmissionsAdmin");
-    expect(defaultIds).not.toContain("analytics");
-    expect(isNavItemVisible(operationsItem!, {
-      can: (permission) => merchandisePermissions.has(permission),
-      hasPrefix: (prefix) =>
+    const visibility = {
+      can: (permission: string) => merchandisePermissions.has(permission),
+      hasPrefix: (prefix: string) =>
         [...merchandisePermissions].some((permission) => permission.startsWith(prefix)),
       isAdmin: false,
-    })).toBe(true);
+    };
+
+    expect(defaultIds).toContain("merchandiseSubmissionsAdmin");
+    expect(defaultIds).not.toContain("analytics");
+    expect(isNavItemVisible(adminItem!, visibility)).toBe(true);
+    expect(isNavItemVisible(financeItem!, visibility)).toBe(false);
     expect(systemOperationsItem?.perms).toContain("analytics:view");
     expect(adminItem?.perms).toEqual(expect.arrayContaining([
       "merchandise_submission:view",

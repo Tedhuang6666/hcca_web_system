@@ -673,3 +673,55 @@ async def test_author_discount_and_bundles_choose_lower_price_across_order_lifec
         author.id: 75,
         gift.id: 750,
     }
+
+
+async def test_manual_recalculation_repairs_stale_totals_and_skips_paid_orders(
+    db_session, topic_shop
+):
+    from api.services.shop._promotion_orders import recalculate_orders
+
+    manager, buyer, activity, categories, products = topic_shop
+    shirt, jacket = products[:2]
+    shirt.price, jacket.price = 300, 750
+    await db_session.flush()
+    await shop_svc.create_promotion(
+        db_session,
+        created_by=manager.id,
+        data=ShopPromotionCreate(
+            name="外套棉T套餐",
+            target_product_ids=[shirt.id, jacket.id],
+            discount_type="bundle_price",
+            discount_value=1000,
+            target_category_ids=[row.id for row in categories[:2]],
+        ),
+    )
+    order = (
+        await shop_svc.create_direct_order(
+            db_session,
+            user_id=buyer.id,
+            class_id=None,
+            data=ClassOrderUpsert(
+                user_id=buyer.id,
+                items=[
+                    OrderItemCreate(product_id=shirt.id, quantity=1),
+                    OrderItemCreate(product_id=jacket.id, quantity=1),
+                ],
+            ),
+        )
+    )[0]
+    assert (order.discount_amount, order.total_price) == (50, 1000)
+
+    order.discount_amount, order.total_price = 0, order.subtotal_price
+    await db_session.flush()
+    [fixed] = await recalculate_orders(db_session, [order.id])
+    assert (fixed.status, fixed.old_total, fixed.new_total) == ("updated", 1050, 1000)
+
+    [again] = await recalculate_orders(db_session, [order.id])
+    assert again.status == "unchanged"
+
+    order.is_paid = True
+    await db_session.flush()
+    [paid] = await recalculate_orders(db_session, [order.id])
+    assert paid.status == "skipped"
+    missing = await recalculate_orders(db_session, [uuid.uuid4()])
+    assert [row.status for row in missing] == ["skipped"]

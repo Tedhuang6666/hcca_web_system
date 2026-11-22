@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy import or_, select
@@ -62,6 +63,80 @@ async def _save_allocations(
     order.total_price = max(0, order.subtotal_price - order.discount_amount)
     await receivable_svc.sync_shop_order(session, order)
     await session.flush()
+
+
+async def _reprice_order(
+    session: AsyncSession,
+    order: Order,
+    *,
+    automatic_promotions: list[ShopPromotion],
+    categories: dict[uuid.UUID, uuid.UUID | None],
+    now: datetime,
+) -> bool:
+    """依目前有效優惠重新擇優並寫回訂單；回傳折抵是否有變動。"""
+    previous = {row.promotion_id: row.discount_amount for row in order.applied_promotions}
+    current_ids = set(previous)
+    if order.promotion_id is not None:
+        current_ids.add(order.promotion_id)
+    # 保留先前兌換的優惠碼（含過期碼），但與套組重複的商品仍須排除。
+    coupons = [
+        PromotionAllocation(row.promotion, row.discount_amount)
+        for row in order.applied_promotions
+        if row.promotion.code
+    ]
+    if not previous and order.promotion_id is not None and order.promotion_code:
+        coupon = await session.get(ShopPromotion, order.promotion_id)
+        if coupon is not None:
+            coupons.append(PromotionAllocation(coupon, order.discount_amount))
+
+    subtotals = _promotion_product_subtotals(order.items)
+    quantities = _promotion_product_quantities(order.items)
+    # 優惠碼折抵額依目前品項重算，不沿用舊快照。
+    coupons = [
+        PromotionAllocation(
+            row.promotion,
+            _discount_amount(
+                row.promotion, order.subtotal_price, subtotals, quantities, categories
+            ),
+        )
+        for row in coupons
+    ]
+    allocations = list(
+        _allocate_promotions(
+            [
+                *[PromotionResult(row.promotion, row.discount_amount) for row in coupons],
+                *_automatic_promotion_results(
+                    automatic_promotions,
+                    user_id=order.user_id,
+                    student_id=order.user.student_id if order.user else None,
+                    subtotal=order.subtotal_price,
+                    now=now,
+                    categories=categories,
+                    product_subtotals=subtotals,
+                    product_quantities=quantities,
+                    activity_id=_order_activity_id(order),
+                    current_ids=current_ids,
+                ),
+            ],
+            order.subtotal_price,
+            product_subtotals=subtotals,
+            product_quantities=quantities,
+            product_category_ids=categories,
+        )
+    )
+    selected = {row.promotion.id: row.discount_amount for row in allocations}
+    discount = sum(selected.values())
+    totals_match = order.discount_amount == discount and order.total_price == max(
+        0, order.subtotal_price - discount
+    )
+    if selected == previous and totals_match:
+        await snapshot_order_gifts(
+            session, order, tuple(allocations), product_category_ids=categories
+        )
+        return False
+
+    await _save_allocations(session, order, allocations)
+    return True
 
 
 async def refresh_promotion_orders(
@@ -129,51 +204,107 @@ async def refresh_promotion_orders(
         )
 
     for order in orders:
-        previous = {row.promotion_id: row.discount_amount for row in order.applied_promotions}
-        current_ids = set(previous)
-        if order.promotion_id is not None:
-            current_ids.add(order.promotion_id)
-        # 保留先前兌換的優惠碼（含過期碼），但與套組重複的商品仍須排除。
-        coupons = [
-            PromotionAllocation(row.promotion, row.discount_amount)
-            for row in order.applied_promotions
-            if row.promotion.code
-        ]
-        if not previous and order.promotion_id is not None and order.promotion_code:
-            coupon = await session.get(ShopPromotion, order.promotion_id)
-            if coupon is not None:
-                coupons.append(PromotionAllocation(coupon, order.discount_amount))
+        await _reprice_order(
+            session,
+            order,
+            automatic_promotions=automatic_promotions,
+            categories=categories,
+            now=now,
+        )
 
-        subtotals = _promotion_product_subtotals(order.items)
-        quantities = _promotion_product_quantities(order.items)
-        allocations = list(
-            _allocate_promotions(
-                [
-                    *[PromotionResult(row.promotion, row.discount_amount) for row in coupons],
-                    *_automatic_promotion_results(
-                        automatic_promotions,
-                        user_id=order.user_id,
-                        student_id=order.user.student_id if order.user else None,
-                        subtotal=order.subtotal_price,
-                        now=now,
-                        categories=categories,
-                        product_subtotals=subtotals,
-                        product_quantities=quantities,
-                        activity_id=_order_activity_id(order),
-                        current_ids=current_ids,
+
+@dataclass(frozen=True)
+class OrderRecalculation:
+    order_id: uuid.UUID
+    serial_number: str
+    status: str  # updated / unchanged / skipped
+    reason: str | None
+    old_total: int
+    new_total: int
+
+
+async def recalculate_orders(
+    session: AsyncSession, order_ids: list[uuid.UUID]
+) -> list[OrderRecalculation]:
+    """手動重算指定訂單的優惠；已收款、已結束或班級已代收的訂單略過。"""
+    unique_ids = list(dict.fromkeys(order_ids))
+    orders = list(
+        await session.scalars(
+            _order_detail_query()
+            .where(Order.id.in_(unique_ids))
+            .order_by(Order.created_at, Order.id)
+            .with_for_update()
+        )
+    )
+    found = {order.id for order in orders}
+    results = [
+        OrderRecalculation(order_id, "", "skipped", "找不到此訂單", 0, 0)
+        for order_id in unique_ids
+        if order_id not in found
+    ]
+    eligible: list[Order] = []
+    for order in orders:
+        reason = None
+        if order.status not in (OrderStatus.PENDING, OrderStatus.CONFIRMED):
+            reason = "訂單已取消、退款或完成，無法重算"
+        elif order.test_product_id is not None:
+            reason = "測試訂單不重算"
+        elif order.is_paid:
+            reason = "訂單已收款，請先處理收款再重算"
+        elif order.is_class_collected:
+            reason = "班級已代收款，請先取消代收再重算"
+        if reason:
+            results.append(
+                OrderRecalculation(
+                    order.id,
+                    order.serial_number,
+                    "skipped",
+                    reason,
+                    order.total_price,
+                    order.total_price,
+                )
+            )
+        else:
+            eligible.append(order)
+    if eligible:
+        categories = await product_topic_ids(
+            session, {item.product_id for order in eligible for item in order.items}
+        )
+        now = datetime.now(UTC)
+        activity_ids = {_order_activity_id(order) for order in eligible}
+        automatic_promotions = list(
+            await session.scalars(
+                select(ShopPromotion)
+                .where(
+                    ShopPromotion.code.is_(None),
+                    ShopPromotion.is_active.is_(True),
+                    or_(
+                        ShopPromotion.activity_id.in_(activity_ids - {None}),
+                        ShopPromotion.activity_id.is_(None) if None in activity_ids else False,
+                        ShopPromotion.target_category_ids.is_not(None),
                     ),
-                ],
-                order.subtotal_price,
-                product_subtotals=subtotals,
-                product_quantities=quantities,
-                product_category_ids=categories,
+                )
+                .order_by(ShopPromotion.id)
+                .with_for_update()
             )
         )
-        selected = {row.promotion.id: row.discount_amount for row in allocations}
-        if selected == previous:
-            await snapshot_order_gifts(
-                session, order, tuple(allocations), product_category_ids=categories
+        for order in eligible:
+            old_total = order.total_price
+            changed = await _reprice_order(
+                session,
+                order,
+                automatic_promotions=automatic_promotions,
+                categories=categories,
+                now=now,
             )
-            continue
-
-        await _save_allocations(session, order, allocations)
+            results.append(
+                OrderRecalculation(
+                    order.id,
+                    order.serial_number,
+                    "updated" if changed else "unchanged",
+                    None,
+                    old_total,
+                    order.total_price,
+                )
+            )
+    return results

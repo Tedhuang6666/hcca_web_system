@@ -55,7 +55,7 @@ it("失敗保留輸入，重試儲存以尺寸 ID 綁定，空白尺寸不送出
   fireEvent.click(screen.getByRole("button", { name: "儲存尺寸表" }));
   const alert = await screen.findByRole("alert");
   expect(alert).toHaveTextContent("尺寸表尚未儲存");
-  expect(alert).toHaveFocus();
+  await waitFor(() => expect(alert).toHaveFocus());
   expect(screen.getByRole("textbox", { name: "M 衣長（cm）" })).toHaveValue("69");
   fireEvent.click(screen.getByRole("button", { name: "儲存尺寸表" }));
   await waitFor(() => expect(changed).toHaveBeenCalledOnce());

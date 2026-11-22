@@ -250,7 +250,7 @@ jobs:
       - name: Audit frontend production dependencies
         run: |
           npm ci --prefix apps/web
-          npm audit --prefix apps/web --omit=dev --audit-level=high
+          node scripts/npm-audit-gate.mjs
 
   performance-smoke:
     name: k6 Public API Smoke
