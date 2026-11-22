@@ -193,16 +193,6 @@ class MergePreview(BaseModel):
     conflicts: list[MergeConflict]
 
 
-class AssignPositionsRequest(BaseModel):
-    """指派/替換使用者的所有職位"""
-
-    assignments: list[dict] = Field(
-        ...,
-        description="[{position_id, start_date, end_date?}, ...]",
-        examples=[[{"position_id": "uuid", "start_date": "2026-01-01"}]],
-    )
-
-
 class AddSinglePosition(BaseModel):
     position_id: uuid.UUID
     start_date: date = Field(default_factory=date.today)

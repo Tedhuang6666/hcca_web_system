@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BookOpenCheck, ListFilter, RotateCcw } from "lucide-react";
+import { ListFilter, RotateCcw } from "lucide-react";
 
 import { usersApi } from "@/lib/api/users";
 import {
