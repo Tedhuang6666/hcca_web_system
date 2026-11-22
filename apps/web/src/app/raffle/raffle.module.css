@@ -71,7 +71,7 @@
 
 .brandCopy small {
   color: rgba(245, 239, 228, 0.62);
-  font-size: 0.67rem;
+  font-size: 0.75rem;
 }
 
 .headerRight {
@@ -85,7 +85,7 @@
   align-items: center;
   gap: 0.42rem;
   color: #86d6a3;
-  font-size: 0.74rem;
+  font-size: 0.75rem;
   font-weight: 800;
 }
 
@@ -103,7 +103,7 @@
   align-items: center;
   gap: 0.35rem;
   color: rgba(245, 239, 228, 0.68);
-  font-size: 0.74rem;
+  font-size: 0.75rem;
   transition: color 180ms ease;
 }
 
@@ -169,7 +169,7 @@
   border-bottom: 1px solid var(--line);
   padding: 0 2.2rem;
   color: var(--muted);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 900;
   letter-spacing: 0.13em;
 }
@@ -287,7 +287,7 @@
   gap: 0.4rem;
   margin: 1rem 0 0;
   color: var(--muted);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   line-height: 1.5;
   text-align: center;
 }
@@ -298,7 +298,7 @@
   border-bottom: 1px solid var(--line);
   padding: 0.3rem 0 1rem;
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 800;
 }
 
@@ -312,7 +312,7 @@
   padding: 1.5rem 0 1.2rem;
 }
 
-.drawHeadline span { color: var(--gold-dark); font-size: 0.74rem; font-weight: 900; }
+.drawHeadline span { color: var(--gold-dark); font-size: 0.75rem; font-weight: 900; }
 
 .drawHeadline strong {
   color: var(--ink);
@@ -484,7 +484,7 @@
   right: 0;
   left: 0;
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 850;
 }
 
@@ -531,7 +531,7 @@
   background: rgba(16, 42, 67, 0.06);
 }
 
-.resultTicket span { color: var(--muted); font-size: 0.64rem; }
+.resultTicket span { color: var(--muted); font-size: 0.75rem; }
 .resultTicket strong { color: var(--ink); font-size: 2rem; font-weight: 950; letter-spacing: 0.05em; }
 
 .nextActions { position: relative; z-index: 1; width: min(100%, 19rem); margin-top: 1.4rem; }
@@ -561,7 +561,7 @@
   border: 0;
   color: var(--muted);
   background: transparent;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   cursor: pointer;
 }
 
@@ -587,7 +587,7 @@
   gap: 1rem;
   padding: 0 0 1.2rem;
   color: rgba(245, 239, 228, 0.46);
-  font-size: 0.66rem;
+  font-size: 0.75rem;
 }
 
 .primaryButton:focus-visible,
@@ -630,7 +630,7 @@
   .footer { width: min(100% - 1.5rem, 84rem); }
   .header { min-height: 70px; }
   .brandCopy small { display: none; }
-  .backLink { font-size: 0.7rem; }
+  .backLink { font-size: 0.75rem; }
   .stageCard { min-height: calc(100svh - 135px); }
   .stageTopline { min-height: 3.8rem; padding-inline: 1.2rem; }
   .gate,
@@ -645,8 +645,8 @@
 
 @media (max-width: 420px) {
   .headerRight { gap: 0.65rem; }
-  .status { font-size: 0.66rem; }
-  .stageTopline { font-size: 0.62rem; }
+  .status { font-size: 0.75rem; }
+  .stageTopline { font-size: 0.75rem; }
   .resultPanel h2 { font-size: clamp(2.35rem, 12vw, 4rem); }
   .resultTicket { min-width: 14rem; }
 }

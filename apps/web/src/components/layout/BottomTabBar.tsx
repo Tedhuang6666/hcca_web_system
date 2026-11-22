@@ -294,7 +294,7 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
                 {t.iconKey ? <NavIcon iconKey={t.iconKey} size={22} /> : Icon?.({ size: 22, "aria-hidden": true })}
                 {badge > 0 && (
                   <span
-                    className="bottom-tab-bar__badge absolute -top-1 -right-2 min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center text-[9px] font-bold"
+                    className="bottom-tab-bar__badge absolute -top-1 -right-2 min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center text-xs font-bold"
                     aria-hidden="true">
                     {badge > 99 ? "99+" : badge}
                   </span>

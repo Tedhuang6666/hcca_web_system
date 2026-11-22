@@ -304,7 +304,7 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
             {(unreadCount + visibleTaskCount) > 0 && (
               <span
                 key={unreadCount + visibleTaskCount}
-                className="notification-badge absolute -top-1 -right-1 min-w-[1rem] h-4 rounded-full flex items-center justify-center text-[10px] font-bold px-1"
+                className="notification-badge absolute -top-1 -right-1 min-w-[1rem] h-4 rounded-full flex items-center justify-center text-xs font-bold px-1"
                 style={{ background: "var(--danger)", color: "#fff" }}
                 aria-hidden="true">
                 {(unreadCount + visibleTaskCount) > 99 ? "99+" : (unreadCount + visibleTaskCount)}

@@ -104,7 +104,7 @@
 .archive-photo-caption { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; height: 40px; padding-block: 10px; color: #39352f; font-size: 0.75rem; line-height: 20px; }
 .archive-photo-caption > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .archive-photo-caption > span:first-child { min-width: 0; flex: 1; }
-.archive-photo-caption .archive-photo-credit { min-width: 0; max-width: 100%; margin-left: auto; text-align: right; font-size: 0.6875rem; }
+.archive-photo-caption .archive-photo-credit { min-width: 0; max-width: 100%; margin-left: auto; text-align: right; font-size: 0.75rem; }
 @container (max-width: 180px) {
   .archive-photo-caption:has(.archive-photo-credit) > span:first-child { display: none; }
 }

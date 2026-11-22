@@ -21,15 +21,15 @@
   input, select, textarea { font-size: 16px !important; }
   .page-header { flex-direction: column; align-items: flex-start; }
   .page-header > *:last-child { width: 100%; }
-  .table-header th { padding: 0.5rem 0.625rem; font-size: 0.625rem; }
+  .table-header th { padding: 0.5rem 0.625rem; font-size: 0.75rem; }
   .table-row td { padding: 0.625rem 0.625rem; font-size: 0.8125rem; }
   .float-btn { right: 1rem; bottom: 1rem; }
 }
 
 /* ── 超小屏（< 480px）──────────────────────────────────────────────────── */
 @media (max-width: 479px) {
-  body { font-size: 0.875rem; }
-  .badge { font-size: 0.625rem; padding: 0.15em 0.45em; }
+  body { font-size: 1rem; }
+  .badge { font-size: 0.75rem; padding: 0.15em 0.45em; }
   :root { --sidebar-w: 200px; }
 }
 

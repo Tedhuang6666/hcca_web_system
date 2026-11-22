@@ -385,7 +385,7 @@ export default function LiveElectionBoard({
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           {!single && (
-                            <span className="rounded-full bg-[#e8c970] px-2 py-0.5 text-[11px] font-bold text-[#173654]">
+                            <span className="rounded-full bg-[#e8c970] px-2 py-0.5 text-xs font-bold text-[#173654]">
                               第 {winner.rank} 名
                             </span>
                           )}
@@ -577,29 +577,29 @@ export default function LiveElectionBoard({
                           )}
                         </div>
                         {candidate.is_elected && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[#e8c970] px-2.5 py-1 text-[11px] font-bold text-[#173654]">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[#e8c970] px-2.5 py-1 text-xs font-bold text-[#173654]">
                             <Crown size={12} aria-hidden /> {isClosed ? "當選" : "暫居當選"}
                           </span>
                         )}
                         {candidate.tied_at_cutoff && (
-                          <span className="inline-flex items-center rounded-full border border-amber-300/60 bg-amber-300/15 px-2.5 py-1 text-[11px] font-bold text-amber-100">
+                          <span className="inline-flex items-center rounded-full border border-amber-300/60 bg-amber-300/15 px-2.5 py-1 text-xs font-bold text-amber-100">
                             同票待決
                           </span>
                         )}
                         {!candidate.is_elected && !candidate.tied_at_cutoff && leader && index === 0 && !isClosed && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[#e8c970] px-2.5 py-1 text-[11px] font-bold text-[#173654]">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[#e8c970] px-2.5 py-1 text-xs font-bold text-[#173654]">
                             <Crown size={12} aria-hidden /> 目前領先
                           </span>
                         )}
                         {summary.vote_threshold_pct !== null &&
                           candidate.votes > 0 &&
                           !candidate.meets_threshold && (
-                            <span className="inline-flex items-center rounded-full border border-rose-400/40 bg-rose-400/10 px-2.5 py-1 text-[11px] font-bold text-rose-200">
+                            <span className="inline-flex items-center rounded-full border border-rose-400/40 bg-rose-400/10 px-2.5 py-1 text-xs font-bold text-rose-200">
                               未達門檻
                             </span>
                           )}
                         {surging && summary.status !== "closed" && (
-                          <span className="live-overtake-badge inline-flex items-center rounded-full bg-emerald-400/90 px-2.5 py-1 text-[11px] font-bold text-[#062b1c]">
+                          <span className="live-overtake-badge inline-flex items-center rounded-full bg-emerald-400/90 px-2.5 py-1 text-xs font-bold text-[#062b1c]">
                             ↑ 超前
                           </span>
                         )}

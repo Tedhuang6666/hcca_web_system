@@ -378,7 +378,7 @@
 .shop-public-activity-heading p {
   margin: 0.3rem 0 0;
   color: var(--public-muted);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   line-height: 1.45;
 }
 
@@ -427,7 +427,7 @@
 
 .shop-public-category-count {
   color: inherit;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 600;
   opacity: 0.75;
 }
@@ -467,7 +467,7 @@
 
 .shop-public-series-filter-wrap > span {
   color: var(--public-muted);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 700;
 }
 
@@ -702,7 +702,7 @@
   background: var(--public-surface);
   padding: 0.35rem 0.65rem;
   color: var(--public-text);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 700;
   box-shadow: 0 3px 12px rgb(0 0 0 / 0.12);
 }
@@ -742,7 +742,7 @@
 
 .shop-public-product-price small {
   color: var(--public-muted);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 500;
 }
 
@@ -1088,7 +1088,7 @@
 
 .shop-public-product-deadline {
   color: var(--public-muted);
-  font-size: 0.74rem;
+  font-size: 0.75rem;
 }
 
 .shop-public-context,
@@ -1257,7 +1257,7 @@
 
 .shop-product-closed-times dt {
   color: var(--public-muted);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
 }
 
 .shop-product-closed-times dd {
@@ -2085,13 +2085,13 @@
   gap: 0.35rem 0.75rem;
   margin: 0.35rem 0 0;
   color: var(--text-muted);
-  font-size: 0.73rem;
+  font-size: 0.75rem;
 }
 
 .shop-order-row-collection {
   margin-top: 0.55rem;
   color: var(--text-secondary);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   line-height: 1.45;
 }
 
@@ -2190,7 +2190,7 @@
 
 .shop-order-detail-total dt {
   color: var(--text-muted);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
 }
 
 .shop-order-detail-total dd {
@@ -2224,7 +2224,7 @@
 
 .shop-order-payment-grid dt {
   color: var(--text-muted);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
 }
 
 .shop-order-payment-grid dd {
@@ -2296,7 +2296,7 @@
   gap: 0.35rem;
   margin-top: 0.4rem;
   color: var(--primary-text);
-  font-size: 0.74rem;
+  font-size: 0.75rem;
   font-weight: 700;
   text-decoration: none;
 }
@@ -2661,7 +2661,7 @@
 }
 .shop-delegation-registration li > div span {
   color: var(--public-secondary);
-  font-size: 0.74rem;
+  font-size: 0.75rem;
   overflow-wrap: anywhere;
 }
 .shop-delegation-registration li > strong {

@@ -13,8 +13,8 @@ html {
 body {
   background-color: var(--bg-base);
   color: var(--text-primary);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  font-size: 0.9375rem;
+  font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-size: 1rem;
   line-height: 1.7;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -895,7 +895,7 @@ select.input-field {
   gap: 0.3rem;
   padding: 0.2em 0.6em;
   border-radius: 6px;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 500;
   letter-spacing: 0.04em;
   line-height: 1;
@@ -913,7 +913,7 @@ select.input-field {
 
 /* ── 標籤彩虹色系 ─────────────────────────────────────────────────────── */
 .tag { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.18em 0.65em;
-  border-radius: 99px; font-size: 0.6875rem; font-weight: 500; letter-spacing: 0.04em;
+  border-radius: 99px; font-size: 0.75rem; font-weight: 500; letter-spacing: 0.04em;
   line-height: 1; border: 1px solid transparent; white-space: nowrap; }
 .tag-blue   { background: var(--tag-blue-bg);   color: var(--tag-blue-fg);   border-color: var(--tag-blue-border); }
 .tag-orange { background: var(--tag-orange-bg); color: var(--tag-orange-fg); border-color: var(--tag-orange-border); }
@@ -971,7 +971,7 @@ select.input-field {
 .table-header th {
   padding: 0.625rem 1rem;
   text-align: left;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -1078,7 +1078,7 @@ select.input-field {
 }
 
 .sidebar-section-label {
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0;
@@ -1533,7 +1533,7 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
   display: inline-block;
   padding: 0 0.25rem;
   min-width: 1.4em;
-  font-size: 10px;
+  font-size: 0.75rem;
   font-family: ui-monospace, monospace;
   border: 1px solid var(--border-strong);
   border-bottom-width: 2px;
@@ -1555,7 +1555,7 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
   display: flex;
   flex-wrap: wrap;
   gap: 0.2rem 0.85rem;
-  font-size: 11px;
+  font-size: 0.75rem;
   color: var(--text-muted);
   padding-bottom: 0.15rem;
 }
@@ -1636,7 +1636,7 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
   padding: 0.1rem 0.45rem;
   border-radius: 5px;
   border: 1px solid;
-  font-size: 11px;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.02em;
   white-space: nowrap;
@@ -1682,7 +1682,7 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
 /* 異動狀態小標 */
 .law-status {
   flex: 0 0 auto;
-  font-size: 10px;
+  font-size: 0.75rem;
   padding: 0.05rem 0.35rem;
   border-radius: 4px;
   white-space: nowrap;
@@ -1825,7 +1825,7 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
 .law-menu-ic {
   width: 1.2em;
   text-align: center;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   opacity: 0.7;
 }
 .law-menu-sep {

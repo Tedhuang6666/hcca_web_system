@@ -960,7 +960,7 @@ input[type="radio"]:checked {
   padding: 0.3rem 0.55rem;
   background: color-mix(in srgb, var(--primary-dim) 82%, transparent);
   color: var(--primary-text);
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   font-weight: 700;
 }
 
@@ -1005,7 +1005,7 @@ input[type="radio"]:checked {
   padding: 0.2rem 0.42rem;
   background: var(--success);
   color: #fff;
-  font-size: 0.55rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.12em;
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--success) 15%, transparent);
@@ -1067,7 +1067,7 @@ input[type="radio"]:checked {
 .dashboard-updated {
   margin-left: auto;
   color: var(--text-muted);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
 }
 
 .dashboard-primary-action {
@@ -1137,7 +1137,7 @@ input[type="radio"]:checked {
 
 .dashboard-eyebrow {
   color: var(--text-muted);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.08em;
 }
@@ -1179,7 +1179,7 @@ input[type="radio"]:checked {
   flex: 0 0 auto;
   border-radius: 0.4rem;
   padding: 0.25rem 0.45rem;
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 700;
 }
 
@@ -1195,12 +1195,12 @@ input[type="radio"]:checked {
 .dashboard-announcement-date {
   flex: 0 0 auto;
   color: var(--text-muted);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
 }
 
 .dashboard-mini-meta {
   color: var(--text-muted);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
 }
 
 .dashboard-task-row {
@@ -1251,7 +1251,7 @@ input[type="radio"]:checked {
   gap: 0.4rem;
   margin-top: 0.15rem;
   color: var(--text-muted);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
 }
 
 .dashboard-task-recommend {
@@ -1259,7 +1259,7 @@ input[type="radio"]:checked {
   overflow: hidden;
   margin-top: 0.3rem;
   color: var(--text-secondary);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1272,7 +1272,7 @@ input[type="radio"]:checked {
   border-radius: 999px;
   padding: 0.25rem 0.5rem;
   background: var(--bg-hover);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 700;
 }
 

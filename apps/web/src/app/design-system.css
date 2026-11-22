@@ -362,7 +362,7 @@ textarea:focus {
 
 .table-header th {
   color: var(--text-secondary);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   letter-spacing: 0.02em;
   text-transform: none;
 }
@@ -434,7 +434,7 @@ textarea:focus {
   padding: 0.0625rem 0.3125rem;
   color: var(--text-muted);
   font-family: inherit;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   line-height: 1.4;
 }
 
@@ -452,7 +452,7 @@ textarea:focus {
 
 .sidebar-section-label {
   color: var(--sidebar-section-label);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.035em;
 }
@@ -596,7 +596,7 @@ nav[aria-label="底部主選單"] .bottom-tab-bar__label {
   color: inherit;
   line-height: 1.2;
   white-space: nowrap;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
 }
 
 nav[aria-label="底部主選單"] .bottom-tab-bar__badge {
@@ -655,7 +655,7 @@ nav[aria-label="底部主選單"] .bottom-tab-bar__badge {
 
 .dashboard-kicker {
   color: var(--text-muted);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.01em;
 }
@@ -955,7 +955,7 @@ nav[aria-label="底部主選單"] .bottom-tab-bar__badge {
   background: var(--bg-hover);
   padding: 0.5rem 1rem;
   color: var(--text-muted);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 600;
 }
 

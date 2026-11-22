@@ -194,7 +194,7 @@ export default function OrgDetailPage() {
                             <span key={u.id}
                               className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg"
                               style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
-                              <span className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0"
+                              <span className="w-4 h-4 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
                                 style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
                                 {u.display_name.charAt(0)}
                               </span>

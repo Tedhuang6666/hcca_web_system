@@ -499,7 +499,7 @@
   margin-bottom: 0.5rem;
   padding: 0 0.5rem;
   color: var(--public-muted);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.08em;
 }
@@ -552,7 +552,7 @@
   padding: 0.12rem 0.6rem;
   background: rgba(52, 211, 153, 0.14);
   color: #6ee7b7;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -603,7 +603,7 @@
   padding: 0.1rem 0.55rem;
   background: rgba(248, 243, 229, 0.12);
   color: #f4ead0;
-  font-size: 0.74rem;
+  font-size: 0.75rem;
   font-weight: 700;
   white-space: nowrap;
 }

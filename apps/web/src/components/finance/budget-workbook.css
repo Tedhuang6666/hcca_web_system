@@ -11,13 +11,13 @@
 .budget-workbook__legend .is-income, .budget-workbook__income { background: #d9ead3; color: #254921; }
 .budget-workbook__legend .is-expense, .budget-workbook__expense { background: #f4cccc; color: #722a2a; }
 .budget-workbook__new-row { background: #fff1e1; color: #452b16; }
-.budget-workbook__new-label { display: inline-block; margin-inline-start: .4rem; font-size: .65rem; white-space: nowrap; }
+.budget-workbook__new-label { display: inline-block; margin-inline-start: .4rem; font-size: 0.75rem; white-space: nowrap; }
 .budget-workbook__scroll { overflow-x: auto; max-width: 100%; }
 .budget-workbook table { width: 100%; min-width: 1120px; border-collapse: collapse; font-size: .8rem; }
 .budget-workbook td:first-child { min-width: 7rem; }
 .budget-workbook th[scope="row"] { min-width: 10rem; }
 .budget-workbook th, .budget-workbook td { padding: .75rem; border-bottom: 1px solid var(--border); text-align: start; vertical-align: top; }
-.budget-workbook thead { color: var(--text-secondary); font-size: .72rem; }
+.budget-workbook thead { color: var(--text-secondary); font-size: 0.75rem; }
 .budget-workbook td:nth-child(3), .budget-workbook td:nth-child(4), .budget-workbook td:nth-child(5), .budget-workbook td:nth-child(6) { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .budget-workbook td:nth-child(7) { min-width: 10rem; overflow-wrap: anywhere; }
 .budget-workbook__income small, .budget-workbook__expense small { display: block; margin-bottom: .2rem; }
@@ -56,7 +56,7 @@
   .budget-workbook tbody { border-bottom: 1px solid var(--border); padding-block: .75rem; }
   .budget-workbook tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; padding: .5rem; }
   .budget-workbook th, .budget-workbook td { display: block; min-width: 0; padding: .3rem; border: 0; }
-  .budget-workbook td::before, .budget-workbook th::before { display: block; margin-bottom: .25rem; color: inherit; font-size: .7rem; font-weight: 400; content: attr(data-label); }
+  .budget-workbook td::before, .budget-workbook th::before { display: block; margin-bottom: .25rem; color: inherit; font-size: 0.75rem; font-weight: 400; content: attr(data-label); }
   .budget-workbook td:nth-child(7), .budget-workbook td:nth-child(8), .budget-workbook th { grid-column: 1 / -1; }
   .budget-workbook td:nth-child(7) { min-width: 0; }
   .budget-workbook__editor-row { display: block !important; }

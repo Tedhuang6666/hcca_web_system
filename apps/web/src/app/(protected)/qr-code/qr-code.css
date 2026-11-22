@@ -121,7 +121,7 @@
 .qr-status-chip {
   gap: 0.3rem;
   color: var(--success);
-  font-size: 0.74rem;
+  font-size: 0.75rem;
   font-weight: 700;
 }
 
@@ -182,7 +182,7 @@
   gap: 0.75rem;
   color: var(--text-muted);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.69rem;
+  font-size: 0.75rem;
 }
 
 .qr-preview-actions {
@@ -254,7 +254,7 @@
 .qr-warning {
   gap: 0.4rem;
   color: var(--text-muted);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   line-height: 1.5;
 }
 
@@ -292,7 +292,7 @@
 .qr-level-button small,
 .qr-toggle-copy small {
   color: var(--text-muted);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 500;
 }
 
@@ -335,7 +335,7 @@
   border-radius: 0.45rem;
   padding: 0.4rem 0.6rem;
   color: var(--primary-text);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 700;
 }
 
@@ -403,7 +403,7 @@
   display: grid;
   gap: 0.35rem;
   color: var(--text-secondary);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 700;
 }
 
@@ -429,7 +429,7 @@
   flex: 1 1 auto;
   padding: 0.48rem 0.55rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
 }
 
 .qr-color-presets {
@@ -452,7 +452,7 @@
   color: var(--text-secondary);
   padding: 0.3rem 0.1rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.56rem;
+  font-size: 0.75rem;
   font-weight: 700;
   transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease;
 }
@@ -487,7 +487,7 @@
   background: var(--bg-surface);
   color: var(--text-secondary);
   padding: 0.3rem 0.38rem;
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 700;
   transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease;
 }
@@ -509,7 +509,7 @@
   display: grid;
   gap: 0.55rem;
   color: var(--text-secondary);
-  font-size: 0.74rem;
+  font-size: 0.75rem;
   font-weight: 700;
 }
 
@@ -520,7 +520,7 @@
 .qr-range-control b {
   color: var(--primary-text);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.68rem;
+  font-size: 0.75rem;
 }
 
 .qr-range-control input[type="range"] {
@@ -606,7 +606,7 @@
   gap: 0.4rem;
   margin-top: 0.65rem;
   color: var(--text-muted);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   line-height: 1.5;
 }
 
@@ -625,7 +625,7 @@
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   text-decoration: underline;
   text-underline-offset: 0.15em;
 }
@@ -911,7 +911,7 @@
 .short-link-label small,
 .short-link-field > small {
   color: var(--text-muted);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 500;
   line-height: 1.5;
 }
@@ -1075,7 +1075,7 @@
   border: 1px solid transparent;
   border-radius: 999px;
   padding: 0.15rem 0.45rem;
-  font-size: 0.64rem;
+  font-size: 0.75rem;
   font-weight: 700;
 }
 
@@ -1115,7 +1115,7 @@
   gap: 0.4rem;
   margin-top: 0.32rem;
   color: var(--text-secondary);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
@@ -1136,7 +1136,7 @@
 .short-link-actions .qr-button {
   min-height: 2.75rem;
   padding-inline: 0.65rem;
-  font-size: 0.73rem;
+  font-size: 0.75rem;
 }
 
 .short-links-empty {
