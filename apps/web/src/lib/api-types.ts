@@ -28281,8 +28281,6 @@ export interface components {
             org_id: string;
             /** Preface */
             preface: string | null;
-            /** Proposal Metadata */
-            proposal_metadata?: string | null;
             /** Published At */
             published_at: string | null;
             /** Published Document Id */
@@ -28357,13 +28355,6 @@ export interface components {
              * @enum {string}
              */
             amended_at_precision: "date" | "month" | "year" | "unknown";
-            /**
-             * Amended By
-             * Format: uuid
-             */
-            amended_by: string;
-            /** Amended By Name */
-            amended_by_name?: string | null;
             /** Amended Year */
             amended_year?: number | null;
             /** Article Snapshot */
@@ -28373,19 +28364,12 @@ export interface components {
             /** Content Snapshot */
             content_snapshot: string;
             /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
              * Id
              * Format: uuid
              */
             id: string;
             /** Is Total Amendment */
             is_total_amendment: boolean;
-            /** Proposal Metadata Snapshot */
-            proposal_metadata_snapshot?: string | null;
             /** Published Document Id */
             published_document_id?: string | null;
             /** Published Document Summary */

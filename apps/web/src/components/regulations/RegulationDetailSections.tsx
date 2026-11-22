@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import type {
   ArticleType,
@@ -12,7 +12,6 @@ import {
   buildArticleDisplayRows as buildDisplayRowsFn,
 } from "@/lib/regulationStructure";
 import { formatRevisionDate } from "@/lib/regulationHistory";
-import { administrativeDate } from "@/lib/administrative";
 
 import { LawArticleRow } from "./LawArticleRow";
 
@@ -21,20 +20,6 @@ export type Tab = "content" | "history" | "revisions";
 export function isTab(value: string | null): value is Tab {
   return value === "content" || value === "history" || value === "revisions";
 }
-
-type ProposalChangeCard = {
-  status: string;
-  text: string;
-  note: string;
-};
-
-type ParsedProposalSnapshot = {
-  title: string | null;
-  rationale: string | null;
-  changes: ProposalChangeCard[];
-  extras: Array<{ label: string; content: string }>;
-  raw: string;
-};
 
 type ArticleDisplayRow = {
   article: RegulationArticleOut;
@@ -49,50 +34,6 @@ type RevisionSnapshotArticle = {
   content: string | null;
   legal_number?: string | null;
 };
-
-function parseProposalSnapshot(raw: string): ParsedProposalSnapshot {
-  const snapshot: ParsedProposalSnapshot = {
-    title: null,
-    rationale: null,
-    changes: [],
-    extras: [],
-    raw,
-  };
-  const blocks = raw.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
-
-  for (const block of blocks) {
-    if (block.startsWith("提案標題：")) {
-      snapshot.title = block.replace(/^提案標題：/, "").trim() || null;
-      continue;
-    }
-    if (block.startsWith("修正說明與理由：")) {
-      snapshot.rationale = block.replace(/^修正說明與理由：/, "").trim() || null;
-      continue;
-    }
-    if (block.startsWith("修正條文整理：")) {
-      const body = block.replace(/^修正條文整理：/, "").trim();
-      const changeBlocks = body.split(/\n{2,}/).map((item) => item.trim()).filter(Boolean);
-      for (const item of changeBlocks) {
-        const [firstLine, ...restLines] = item.split("\n");
-        const statusMatch = firstLine.match(/^([^：]+)：(.+)$/);
-        const noteLine = restLines.find((line) => line.startsWith("說明：")) ?? "";
-        snapshot.changes.push({
-          status: statusMatch?.[1]?.trim() ?? "修正",
-          text: statusMatch?.[2]?.trim() ?? firstLine.trim(),
-          note: noteLine.replace(/^說明：/, "").trim(),
-        });
-      }
-      continue;
-    }
-    const [label, ...contentParts] = block.split("：");
-    snapshot.extras.push({
-      label: contentParts.length > 0 ? label.trim() : "補充說明",
-      content: contentParts.length > 0 ? contentParts.join("：").trim() : block,
-    });
-  }
-
-  return snapshot;
-}
 
 export function buildArticleDisplayRows(
   articles: RegulationArticleOut[],
@@ -109,26 +50,6 @@ function parseRevisionArticleSnapshot(snapshot: string | null | undefined): Revi
   } catch {
     return [];
   }
-}
-
-function findSnapshotArticleTarget(
-  change: ProposalChangeCard,
-  articles: RevisionSnapshotArticle[],
-): string | null {
-  const legalNumberMatch = change.text.match(/第\s*([0-9]+(?:-[0-9]+)?)\s*條/);
-  if (legalNumberMatch) {
-    const matched = articles.find((article) => article.legal_number === legalNumberMatch[1]);
-    if (matched) return matched.id;
-  }
-
-  const normalized = change.text.replace(/^[^：]+：/, "").trim();
-  if (!normalized) return null;
-  const needle = normalized.slice(0, 30);
-  const matched = articles.find((article) => {
-    const haystack = `${article.title ?? ""} ${article.content ?? ""}`.trim();
-    return haystack.includes(needle);
-  });
-  return matched?.id ?? null;
 }
 
 export const PROSE = "prose max-w-none";
@@ -185,31 +106,11 @@ export function RevisionCard({
   onDiff: (a: RegulationRevisionOut, b: RegulationRevisionOut | null) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [showProposal, setShowProposal] = useState(false);
-  const [highlightedSnapshotId, setHighlightedSnapshotId] = useState<string | null>(null);
   const isLatest = !currentRev || rev.id === currentRev.id;
-  const proposalNote = rev.proposal_metadata_snapshot?.trim() || "";
-  const parsedProposal = useMemo(() => parseProposalSnapshot(proposalNote), [proposalNote]);
   const snapshotArticles = useMemo(
     () => parseRevisionArticleSnapshot(rev.article_snapshot),
     [rev.article_snapshot],
   );
-
-  const jumpToSnapshotArticle = useCallback((change: ProposalChangeCard) => {
-    const targetId = findSnapshotArticleTarget(change, snapshotArticles);
-    setExpanded(true);
-    setShowProposal(false);
-    setHighlightedSnapshotId(targetId);
-    if (!targetId) return;
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        document.getElementById(`revision-snapshot-${rev.id}-${targetId}`)?.scrollIntoView({
-          behavior: "smooth",
-          block: "center",
-        });
-      });
-    });
-  }, [rev.id, snapshotArticles]);
 
   return (
     <div className="card p-4">
@@ -236,7 +137,6 @@ export function RevisionCard({
           </div>
           <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
             {formatRevisionDate(rev)}
-            <br />系統收錄者：{rev.amended_by_name ?? "未載明"}（{administrativeDate(rev.created_at)}收錄）
           </p>
           {rev.published_document_id && (
             <div className="mt-1 flex flex-col items-start gap-0.5 text-xs">
@@ -254,24 +154,6 @@ export function RevisionCard({
               )}
             </div>
           )}
-          <div className="mt-2 space-y-1 text-xs">
-            <p style={{ color: "var(--text-muted)" }}>修正摘要</p>
-            <p style={{ color: "var(--text-secondary)" }}>{rev.change_brief || "未留存"}</p>
-            <p style={{ color: "var(--text-muted)" }}>提案內容</p>
-            {proposalNote ? (
-              <button
-                onClick={() => setShowProposal(true)}
-                className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg hover:opacity-80"
-                style={{ color: "var(--primary-text)", border: "1px solid var(--border-strong)", background: "var(--primary-dim)" }}
-              >
-                查看當時提案內容
-              </button>
-            ) : (
-              <p className="whitespace-pre-wrap" style={{ color: "var(--text-secondary)" }}>
-                此版本未留存提案說明
-              </p>
-            )}
-          </div>
           {rev.resolution_link && (
             <a href={rev.resolution_link} target="_blank" rel="noopener noreferrer"
               className="mt-1.5 inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded transition-opacity hover:opacity-80"
@@ -319,18 +201,16 @@ export function RevisionCard({
               : article.legal_number
                 ? `${article.legal_number} ${ARTICLE_TYPE_LABEL[article.article_type] ?? article.article_type}`
                 : `${ARTICLE_TYPE_LABEL[article.article_type] ?? article.article_type} ${article.title ?? ""}`.trim();
-            const isHighlighted = highlightedSnapshotId === article.id;
             return (
               <article
                 key={article.id}
-                id={`revision-snapshot-${rev.id}-${article.id}`}
-                className="rounded-xl p-3 transition-colors"
+                className="rounded-xl p-3"
                 style={{
-                  border: `1px solid ${isHighlighted ? "var(--border-strong)" : "var(--border)"}`,
-                  background: isHighlighted ? "var(--primary-dim)" : "var(--bg-elevated)",
+                  border: "1px solid var(--border)",
+                  background: "var(--bg-elevated)",
                 }}
               >
-                <p className="text-xs font-semibold mb-1" style={{ color: isHighlighted ? "var(--primary-text)" : "var(--text-primary)" }}>
+                <p className="text-xs font-semibold mb-1" style={{ color: "var(--text-primary)" }}>
                   {label}
                 </p>
                 {article.title && article.article_type !== "article" && (
@@ -349,149 +229,6 @@ export function RevisionCard({
               {rev.content_snapshot}
             </pre>
           )}
-        </div>
-      )}
-      {showProposal && (
-        <div
-          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center"
-          style={{ background: "var(--bg-overlay)" }}
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="absolute inset-0" onClick={() => setShowProposal(false)} aria-hidden="true" />
-          <div
-            className="relative rounded-2xl overflow-hidden flex flex-col"
-            style={{
-              width: "min(880px, 96vw)",
-              maxHeight: "88vh",
-              background: "var(--bg-surface)",
-              border: "1px solid var(--border)",
-              boxShadow: "var(--shadow-xl)",
-            }}
-          >
-            <div className="flex items-center justify-between px-5 py-3"
-              style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
-              <div>
-                <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                  v{rev.version} 提案內容
-                </p>
-                <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-                  {formatRevisionDate(rev)}
-                  <br />系統收錄者：{rev.amended_by_name ?? "未載明"}（{administrativeDate(rev.created_at)}收錄）
-                </p>
-              </div>
-              <button onClick={() => setShowProposal(false)} className="topbar-icon-btn" aria-label="關閉">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
-                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
-            <div className="p-5 overflow-auto">
-              <div className="space-y-4">
-                {parsedProposal.title && (
-                  <section className="rounded-xl p-4" style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
-                    <p className="text-xs font-semibold mb-2" style={{ color: "var(--text-muted)" }}>提案標題</p>
-                    <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{parsedProposal.title}</p>
-                  </section>
-                )}
-
-                {parsedProposal.rationale && (
-                  <section className="rounded-xl p-4" style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
-                    <p className="text-xs font-semibold mb-2" style={{ color: "var(--text-muted)" }}>修正說明與理由</p>
-                    <p className="whitespace-pre-wrap text-sm leading-7" style={{ color: "var(--text-secondary)" }}>
-                      {parsedProposal.rationale}
-                    </p>
-                  </section>
-                )}
-
-                {parsedProposal.changes.length > 0 && (
-                  <section className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>逐條修正理由</p>
-                      <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                        共 {parsedProposal.changes.length} 筆
-                      </span>
-                    </div>
-                    <div className="space-y-3">
-                      {parsedProposal.changes.map((change, index) => (
-                        <article
-                          key={`${change.status}-${change.text}-${index}`}
-                          className="rounded-xl p-4"
-                          style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}
-                        >
-                          <div className="flex items-center gap-2 flex-wrap mb-2">
-                            <span
-                              className="text-xs px-2 py-0.5 rounded-full"
-                              style={{
-                                color: change.status === "新增"
-                                  ? "var(--success)"
-                                  : change.status === "刪除"
-                                    ? "var(--danger)"
-                                    : "var(--primary-text)",
-                                background: change.status === "新增"
-                                  ? "var(--success-dim)"
-                                  : change.status === "刪除"
-                                    ? "rgba(220,38,38,0.1)"
-                                    : "var(--primary-dim)",
-                                border: "1px solid var(--border-strong)",
-                              }}
-                            >
-                              {change.status}
-                            </span>
-                            <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-                              {change.text}
-                            </p>
-                          </div>
-                          <p className="text-xs whitespace-pre-wrap leading-6" style={{ color: "var(--text-secondary)" }}>
-                            {change.note || "未另填個別修正理由"}
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => jumpToSnapshotArticle(change)}
-                            className="mt-3 inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg hover:opacity-80"
-                            style={{ color: "var(--primary-text)", border: "1px solid var(--border-strong)", background: "var(--primary-dim)" }}
-                          >
-                            跳到當時條文
-                          </button>
-                        </article>
-                      ))}
-                    </div>
-                  </section>
-                )}
-
-                {parsedProposal.extras.length > 0 && (
-                  <section className="grid gap-3">
-                    {parsedProposal.extras.map((extra, index) => (
-                      <article
-                        key={`${extra.label}-${index}`}
-                        className="rounded-xl p-4"
-                        style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}
-                      >
-                        <p className="text-xs font-semibold mb-2" style={{ color: "var(--text-muted)" }}>{extra.label}</p>
-                        <p className="whitespace-pre-wrap text-sm leading-6" style={{ color: "var(--text-secondary)" }}>
-                          {extra.content}
-                        </p>
-                      </article>
-                    ))}
-                  </section>
-                )}
-
-                {!parsedProposal.title && !parsedProposal.rationale && parsedProposal.changes.length === 0 && parsedProposal.extras.length === 0 && (
-                  <pre
-                    className="whitespace-pre-wrap text-xs leading-6 rounded-xl p-4"
-                    style={{
-                      color: "var(--text-secondary)",
-                      fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-                      border: "1px solid var(--border)",
-                      background: "var(--bg-elevated)",
-                    }}
-                  >
-                    {parsedProposal.raw}
-                  </pre>
-                )}
-              </div>
-            </div>
-          </div>
         </div>
       )}
     </div>

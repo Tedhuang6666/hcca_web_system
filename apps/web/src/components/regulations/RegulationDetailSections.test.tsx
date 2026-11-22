@@ -3,20 +3,20 @@ import { describe, expect, it } from "vitest";
 import type { RegulationRevisionOut } from "@/lib/types";
 import { RevisionCard } from "./RegulationDetailSections";
 
-describe("歷史沿革的系統收錄者", () => {
-  it("明確區別收錄人員與來源修訂機關，不以 UUID 代替未知姓名", () => {
+describe("法規修訂歷程", () => {
+  it("只顯示修訂摘要，不顯示已移除的收錄者或提案資料", () => {
     const revision: RegulationRevisionOut = {
       id: "revision-1", regulation_id: "regulation-1", version: 1,
-      change_brief: "108.9.4 學生議會秘書處修訂", is_total_amendment: false,
-      content_snapshot: "", resolution_link: null, amended_at: "2019-09-04T00:00:00Z", amended_at_precision: "date",
-      amended_by: "system-uploader-uuid", amended_by_name: "測試收錄人員",
-      created_at: "2026-11-13T00:00:00Z",
+      change_brief: "114 學年度第二學期第四次學生議會修訂", is_total_amendment: false,
+      content_snapshot: "", article_snapshot: null, resolution_link: null,
+      amended_at: "2025-01-01T00:00:00Z", amended_at_precision: "year", amended_year: 114,
     };
-    const view = render(<RevisionCard rev={revision} prevRev={null} currentRev={revision} onDiff={() => {}} />);
-    expect(screen.getByText(/系統收錄者：測試收錄人員（115.11.13收錄）/)).toBeInTheDocument();
-    expect(screen.getAllByText(revision.change_brief).length).toBeGreaterThan(0);
-    view.rerender(<RevisionCard rev={{ ...revision, amended_by_name: null }} prevRev={null} currentRev={revision} onDiff={() => {}} />);
-    expect(screen.getByText(/系統收錄者：未載明/)).toBeInTheDocument();
-    expect(screen.queryByText(/system-uploader-uuid/)).not.toBeInTheDocument();
+    render(<RevisionCard rev={revision} prevRev={null} currentRev={revision} onDiff={() => {}} />);
+
+    expect(screen.getByText(revision.change_brief)).toBeInTheDocument();
+    expect(screen.queryByText(/系統收錄者/)).not.toBeInTheDocument();
+    expect(screen.queryByText("修正摘要")).not.toBeInTheDocument();
+    expect(screen.queryByText("提案內容")).not.toBeInTheDocument();
+    expect(screen.queryByText("此版本未留存提案說明")).not.toBeInTheDocument();
   });
 });

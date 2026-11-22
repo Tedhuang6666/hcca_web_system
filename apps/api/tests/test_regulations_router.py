@@ -254,6 +254,14 @@ async def test_public_regulation_detail_includes_linked_document_summary(
     assert body["version"] == 1
     assert body["revisions"][0]["published_document_id"] == str(document.id)
     assert body["revisions"][0]["published_document_summary"] == "這是公布公文摘要"
+    assert "proposal_metadata" not in body
+    assert "is_imported_from_file" not in body
+    assert not {
+        "proposal_metadata_snapshot",
+        "amended_by",
+        "amended_by_name",
+        "created_at",
+    }.intersection(body["revisions"][0])
 
 
 async def test_get_article_tree_returns_nested_structure(

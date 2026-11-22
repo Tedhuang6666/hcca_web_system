@@ -162,8 +162,10 @@ class Regulation(Base, TimestampMixin):
     legislative_history: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 法源依據
     legal_basis: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # 提案/決議資訊
-    proposal_metadata: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 標記由檔案匯入的既有法規，避免與已移除的提案資料共用欄位。
+    is_imported_from_file: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
 
     org_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -285,8 +287,6 @@ class RegulationRevision(Base, TimestampMixin):
     content_snapshot: Mapped[str] = mapped_column(Text, nullable=False, default="")
     # 結構化條文快照（JSON 字串）
     article_snapshot: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
-    # 提案內容快照（逐條修正理由、提案說明等）
-    proposal_metadata_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 相關決議連結（JSON 字串，以逗號分隔多個 URL）
     resolution_link: Mapped[str | None] = mapped_column(Text, nullable=True)
     amended_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

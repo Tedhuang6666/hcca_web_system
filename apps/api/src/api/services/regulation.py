@@ -49,7 +49,6 @@ def _reg_query_with_relations():
         selectinload(Regulation.org),
         selectinload(Regulation.creator),
         selectinload(Regulation.articles),
-        selectinload(Regulation.revisions).selectinload(RegulationRevision.amender),
         selectinload(Regulation.revisions).selectinload(RegulationRevision.published_document),
         selectinload(Regulation.workflow_logs),
     )
@@ -60,7 +59,6 @@ def _reg_query_for_public_detail():
     return select(Regulation).options(
         selectinload(Regulation.creator),
         selectinload(Regulation.articles),
-        selectinload(Regulation.revisions).selectinload(RegulationRevision.amender),
         selectinload(Regulation.revisions).selectinload(RegulationRevision.published_document),
         selectinload(Regulation.workflow_logs),
     )
@@ -74,14 +72,9 @@ def _reg_query_for_detail():
 def _attach_display_names(regs: list[Regulation]) -> list[Regulation]:
     for reg in regs:
         creator = reg.__dict__.get("creator")
-        imported_from_file = (reg.proposal_metadata or "").startswith("__file_import__")
         reg.__dict__["created_by_name"] = (
-            "不詳" if imported_from_file else getattr(creator, "display_name", None)
+            "不詳" if reg.is_imported_from_file else getattr(creator, "display_name", None)
         )
-        revisions = reg.__dict__.get("revisions") or []
-        for rev in revisions:
-            amender = rev.__dict__.get("amender")
-            rev.__dict__["amended_by_name"] = getattr(amender, "display_name", None)
     return regs
 
 
@@ -458,7 +451,7 @@ async def create_regulation_from_import(
         content=data.content,
         preface=data.preface,
         legislative_history=data.legislative_history,
-        proposal_metadata="__file_import__",
+        is_imported_from_file=True,
         org_id=org_id,
         created_by=created_by,
         version=1,
@@ -578,7 +571,6 @@ async def _update_existing_regulation_from_import(
                 is_total_amendment=is_latest,
                 content_snapshot=data.content if is_latest else "",
                 article_snapshot=article_snapshot if is_latest else "[]",
-                proposal_metadata_snapshot=reg.proposal_metadata,
                 amended_at=info[0],
                 amended_at_precision=info[1],
                 amended_year=info[2],
@@ -717,7 +709,6 @@ async def publish_imported_regulation(
                     is_total_amendment=version == 1 or is_latest,
                     content_snapshot=content_snapshot if is_latest else "",
                     article_snapshot=article_snapshot if is_latest else "[]",
-                    proposal_metadata_snapshot=reg.proposal_metadata if is_latest else None,
                     amended_at=amended_at,
                     amended_at_precision=history_info[version - 1][1],
                     amended_year=history_info[version - 1][2],
@@ -735,7 +726,6 @@ async def publish_imported_regulation(
                 is_total_amendment=True,
                 content_snapshot=content_snapshot,
                 article_snapshot=article_snapshot,
-                proposal_metadata_snapshot=reg.proposal_metadata,
                 amended_at=now,
                 amended_by=published_by,
             )
@@ -785,7 +775,6 @@ async def publish_regulation(
             is_total_amendment=data.is_total_amendment,
             content_snapshot=reg.content,
             article_snapshot=_article_snapshot_json(reg.articles),
-            proposal_metadata_snapshot=reg.proposal_metadata,
             resolution_link=data.resolution_link,
             amended_at=now,
             amended_by=published_by,

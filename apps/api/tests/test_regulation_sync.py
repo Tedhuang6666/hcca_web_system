@@ -111,6 +111,7 @@ async def test_sync_repairs_same_date_preserves_ids_history_and_is_idempotent(
         created_by=user.id,
         publish_immediately=True,
     )
+    assert reg.is_imported_from_file is True
     old_id = next(a.id for a in reg.articles if a.legal_number == "4")
     old_version = reg.version
     file = DriveFile("abcdefghijk", "測試條例.docx", "docx")

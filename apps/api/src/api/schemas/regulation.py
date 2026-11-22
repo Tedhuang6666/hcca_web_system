@@ -84,16 +84,12 @@ class RegulationRevisionOut(BaseModel):
     is_total_amendment: bool
     content_snapshot: str
     article_snapshot: str | None = None
-    proposal_metadata_snapshot: str | None = None
     resolution_link: str | None
     amended_at: datetime
     amended_at_precision: Literal["date", "month", "year", "unknown"] = "date"
     amended_year: int | None = None
     published_document_id: uuid.UUID | None = None
     published_document_summary: str | None = None
-    amended_by: uuid.UUID
-    amended_by_name: str | None = None
-    created_at: datetime
 
 
 # ── 法規主體 ─────────────────────────────────────────────────────────────────
@@ -118,7 +114,6 @@ class RegulationOut(BaseModel):
     effective_date: datetime | None = None
     legislative_history: str | None = None
     legal_basis: str | None = None
-    proposal_metadata: str | None = None
     org_id: uuid.UUID
     created_by: uuid.UUID
     created_by_name: str | None = None

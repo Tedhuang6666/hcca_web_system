@@ -132,7 +132,6 @@ def _snapshot(reg: Regulation, actor: uuid.UUID, brief: str, when: datetime) -> 
         is_total_amendment=True,
         content_snapshot=reg.content or "",
         article_snapshot=reg_svc._article_snapshot_json(reg.articles),
-        proposal_metadata_snapshot=reg.proposal_metadata,
         amended_at=when,
         amended_by=actor,
     )
