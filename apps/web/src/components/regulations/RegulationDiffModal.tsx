@@ -1,9 +1,32 @@
 "use client";
 
 import { useMemo } from "react";
-import { diffLines } from "diff";
 
 import type { RegulationRevisionOut } from "@/lib/types";
+import { buildRegulationDiffRows, type RegulationDiffSegment } from "./regulationDiff";
+
+function DiffSegment({ segment }: { segment: RegulationDiffSegment }) {
+  const type = /^\s+$/u.test(segment.text) ? "equal" : segment.type;
+  return (
+    <span
+      style={{
+        color: type === "add"
+          ? "var(--success)"
+          : type === "remove"
+            ? "var(--danger)"
+            : "var(--text-secondary)",
+        textDecoration: type === "remove" ? "line-through" : "none",
+        background: type === "add"
+          ? "var(--success-dim)"
+          : type === "remove"
+            ? "var(--danger-dim)"
+            : "transparent",
+      }}
+    >
+      {segment.text}
+    </span>
+  );
+}
 
 export default function RegulationDiffModal({
   revA,
@@ -22,19 +45,7 @@ export default function RegulationDiffModal({
     : "目前版本（無快照）";
 
   const diffResult = useMemo(() => {
-    const changes = diffLines(oldText, newText, { ignoreWhitespace: false });
-    const rows: Array<{ type: "add" | "remove" | "equal"; text: string }> = [];
-    for (const change of changes) {
-      const lines = change.value.split("\n");
-      if (lines[lines.length - 1] === "") lines.pop();
-      for (const line of lines) {
-        rows.push({
-          type: change.added ? "add" : change.removed ? "remove" : "equal",
-          text: line,
-        });
-      }
-    }
-    return rows;
+    return buildRegulationDiffRows(oldText, newText);
   }, [oldText, newText]);
 
   const addCount = diffResult.filter((row) => row.type === "add").length;
@@ -60,28 +71,28 @@ export default function RegulationDiffModal({
         }}
       >
         <div
-          className="flex flex-shrink-0 items-center justify-between px-5 py-3"
+          className="flex flex-shrink-0 items-start justify-between px-5 py-3 sm:items-center"
           style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-elevated)" }}
         >
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <span id="regulation-diff-title" className="flex-shrink-0 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+            <span id="regulation-diff-title" className="shrink-0 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
               版本比對
             </span>
             <span
-              className="flex-shrink-0 rounded-full px-2 py-0.5 text-xs"
+              className="min-w-0 max-w-full whitespace-normal break-words rounded-full px-2 py-0.5 text-xs"
               style={{ background: "var(--danger-dim)", color: "var(--danger)", border: "1px solid var(--danger-border)" }}
             >
               舊 {oldLabel}
             </span>
-            <span className="text-xs" style={{ color: "var(--text-muted)" }}>→</span>
+            <span className="shrink-0 text-xs" style={{ color: "var(--text-muted)" }}>→</span>
             <span
-              className="flex-shrink-0 rounded-full px-2 py-0.5 text-xs"
+              className="min-w-0 max-w-full whitespace-normal break-words rounded-full px-2 py-0.5 text-xs"
               style={{ background: "var(--success-dim)", color: "var(--success)", border: "1px solid var(--success-border)" }}
             >
               新 {newLabel}
             </span>
           </div>
-          <button onClick={onClose} className="topbar-icon-btn ml-3 flex-shrink-0" aria-label="關閉">
+          <button onClick={onClose} className="topbar-icon-btn ml-3 mt-1 flex-shrink-0 sm:mt-0" aria-label="關閉">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
@@ -99,7 +110,15 @@ export default function RegulationDiffModal({
                   <div
                     key={index}
                     className="flex items-start px-3 py-px"
-                    style={{ background: isAdd ? "var(--success-dim)" : isRemove ? "var(--danger-dim)" : "transparent" }}
+                    style={{
+                      background: row.segments
+                        ? "transparent"
+                        : isAdd
+                          ? "var(--success-dim)"
+                          : isRemove
+                            ? "var(--danger-dim)"
+                            : "transparent",
+                    }}
                   >
                     <span
                       className="w-5 flex-shrink-0 select-none text-center font-bold"
@@ -110,12 +129,19 @@ export default function RegulationDiffModal({
                     <span
                       className="flex-1 whitespace-pre-wrap break-all pl-1"
                       style={{
-                        color: isAdd ? "var(--success)" : isRemove ? "var(--danger)" : "var(--text-secondary)",
-                        textDecoration: isRemove ? "line-through" : "none",
+                        color: isAdd
+                          ? "var(--success)"
+                          : isRemove
+                            ? "var(--danger)"
+                            : "var(--text-secondary)",
                         opacity: row.type === "equal" ? 0.8 : 1,
                       }}
                     >
-                      {row.text || " "}
+                      {row.segments?.length
+                        ? row.segments.map((segment, segmentIndex) => (
+                            <DiffSegment key={segmentIndex} segment={segment} />
+                          ))
+                        : row.text || " "}
                     </span>
                   </div>
                 );
