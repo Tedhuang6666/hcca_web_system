@@ -108,12 +108,11 @@ const UserPicker = memo(function UserPicker({
         value={search}
         onChange={e => setSearch(e.target.value)}
         placeholder="搜尋姓名或 Email..."
-        className="w-full bg-transparent  text-xs px-2 py-1.5 rounded outline-none"
-        style={{ border: "1px solid var(--border)" }}
+        className="w-full bg-transparent text-xs px-2 py-1.5 rounded outline-none border! border-border!"
       />
       <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
         {filtered.length === 0 && (
-          <p className="text-xs text-center py-3" style={{ color: "var(--text-muted)" }}>無符合的使用者</p>
+          <p className="text-xs text-center py-3 text-fg-muted!">無符合的使用者</p>
         )}
         {filtered.map(u => {
           const selected = selectedIds.includes(u.id);
@@ -134,15 +133,15 @@ const UserPicker = memo(function UserPicker({
               </span>
               <div className="flex-1 min-w-0">
                 <p className=" truncate">{u.display_name}</p>
-                <p className="truncate" style={{ color: "var(--text-muted)" }}>{u.email}</p>
+                <p className="truncate text-fg-muted!">{u.email}</p>
               </div>
-              {selected && <span style={{ color: "var(--primary-text)" }}>✓</span>}
+              {selected && <span className="text-accent-text!">✓</span>}
             </button>
           );
         })}
       </div>
       {selectedIds.length > 0 && (
-        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+        <p className="text-xs text-fg-muted!">
           已選 {selectedIds.length} 位，按選取順序作為簽核層級
         </p>
       )}
@@ -468,12 +467,12 @@ export default function DocumentDetailPageClient({
   if (forbidden) return (
     <div className="flex flex-col items-center justify-center h-64 gap-3 text-center">
       <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-        strokeWidth="1.5" strokeLinecap="round" style={{ color: "var(--text-muted)" }}>
+        strokeWidth="1.5" strokeLinecap="round"  className="text-fg-muted!">
         <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
         <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
       </svg>
-      <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>此公文為機密文件</p>
-      <p className="text-xs" style={{ color: "var(--text-muted)" }}>您目前的權限無法瀏覽此公文內容</p>
+      <p className="text-sm font-medium text-fg-primary!">此公文為機密文件</p>
+      <p className="text-xs text-fg-muted!">您目前的權限無法瀏覽此公文內容</p>
     </div>
   );
   if (!doc) return <div className="text-center text-red-400 mt-20">公文不存在或無權限查看</div>;
@@ -544,7 +543,7 @@ export default function DocumentDetailPageClient({
         <div className="flex min-w-0 flex-1 items-start gap-3">
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
-              <span className="text-sm break-all" style={{ color: "var(--primary-text)" }}>
+              <span className="text-sm break-all text-accent-text!">
                 {doc.serial_number}
               </span>
               <div className="flex flex-wrap items-center gap-2">
@@ -559,21 +558,21 @@ export default function DocumentDetailPageClient({
           <div className="document-workspace-action-buttons">
           <div className="document-workspace-reading-tools" role="group" aria-label="閱讀工具">
           {/* 縮放控制 */}
-          <div className="document-workspace-zoom-control rounded-lg overflow-hidden"
-            style={{ border: "1px solid var(--border)" }}>
+          <div className="document-workspace-zoom-control rounded-lg overflow-hidden border! border-border!"
+            >
             <button onClick={() => setZoom(z => Math.max(70, z - 10))}
-              className="px-2 py-1.5 text-xs transition-colors hover:opacity-80"
-              style={{ color: "var(--text-muted)" }} title="縮小" aria-label="縮小公文">
+              className="px-2 py-1.5 text-xs transition-colors hover:opacity-80 text-fg-muted!"
+               title="縮小" aria-label="縮小公文">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                 strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
                 <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
                 <line x1="8" y1="11" x2="14" y2="11" />
               </svg>
             </button>
-            <span className="text-xs px-1 select-none" style={{ color: "var(--text-muted)" }}>{zoom}%</span>
+            <span className="text-xs px-1 select-none text-fg-muted!">{zoom}%</span>
             <button onClick={() => setZoom(z => Math.min(150, z + 10))}
-              className="px-2 py-1.5 text-xs transition-colors hover:opacity-80"
-              style={{ color: "var(--text-muted)" }} title="放大" aria-label="放大公文">
+              className="px-2 py-1.5 text-xs transition-colors hover:opacity-80 text-fg-muted!"
+               title="放大" aria-label="放大公文">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                 strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
                 <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -641,8 +640,8 @@ export default function DocumentDetailPageClient({
           {/* 直接發文（需 document:issue_direct 權限） */}
           {isDraft && isCreator && can("document:issue_direct") && !submitMode && (
             <button onClick={handleIssueDirect}
-              className="btn document-detail-direct-issue-action text-sm gap-1.5"
-              style={{ background: "var(--success-dim)", color: "var(--success)", border: "1px solid var(--success)" }}>
+              className="btn document-detail-direct-issue-action text-sm gap-1.5 bg-success-soft! text-success! border! border-success!"
+              >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
                 <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
               </svg>
@@ -705,20 +704,18 @@ export default function DocumentDetailPageClient({
           </div>
           {/* 官式公文列印；製作者與管理員可選正本、副本或影本。 */}
           <div
-            className="document-detail-print-tools flex min-h-9 items-stretch overflow-hidden rounded-lg max-sm:min-h-11"
+            className="document-detail-print-tools flex min-h-9 items-stretch overflow-hidden rounded-lg max-sm:min-h-11 border! border-border-strong!"
             role="group"
             aria-label="列印公文"
-            style={{ border: "1px solid var(--border-strong)" }}
           >
           {canChoosePrintVariant && (
-            <label className="relative flex items-center" style={{ background: "var(--bg-elevated)" }}>
+            <label className="relative flex items-center bg-elevated!">
               <span className="sr-only">下載版本</span>
               <select
                 aria-label="下載版本"
                 value={downloadVariant}
                 onChange={(event) => setDownloadVariant(event.target.value as RecipientDownloadVariant)}
-                className="h-full min-w-[5.25rem] appearance-auto bg-transparent px-2.5 pr-7 text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset"
-                style={{ color: "var(--text-primary)", borderColor: "transparent" }}
+                className="h-full min-w-[5.25rem] appearance-auto bg-transparent px-2.5 pr-7 text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset text-fg-primary! border-transparent!"
               >
                 <option value="primary">正本</option>
                 <option value="duplicate">副本</option>
@@ -744,12 +741,8 @@ export default function DocumentDetailPageClient({
                 toast.error(`列印失敗${error instanceof Error && error.message ? `：${error.message}` : ""}`);
               }
             }}
-            className="px-4 py-2 text-sm font-medium inline-flex items-center justify-center gap-1.5 transition-colors hover:brightness-110"
-            style={{
-              background: "var(--primary-dim)",
-              color: "var(--primary-text)",
-              borderLeft: canChoosePrintVariant ? "1px solid var(--border-strong)" : undefined,
-            }}
+            className="px-4 py-2 text-sm font-medium inline-flex items-center justify-center gap-1.5 transition-colors hover:brightness-110 bg-accent-soft! text-accent-text!"
+            style={{ borderLeft: canChoosePrintVariant ? "1px solid var(--border-strong)" : undefined }}
           >列印公文</button>
           </div>
           </div>
@@ -762,14 +755,14 @@ export default function DocumentDetailPageClient({
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold ">設定審核人（按順序選取）</h2>
             <button onClick={() => { setSubmitMode(false); setApproverIds([]); }}
-              className="text-xs px-3 py-1 rounded" style={{ color: "var(--text-muted)" }}>
+              className="text-xs px-3 py-1 rounded text-fg-muted!" >
               取消
             </button>
           </div>
           <UserPicker selectedIds={approverIds} onChange={setApproverIds} />
           <button onClick={handleSubmit} disabled={!approverIds.length}
-            className="w-full py-2.5 rounded-lg text-sm font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-90 disabled:opacity-40"
-            style={{ background: "var(--warning-dim)", color: "var(--warning)", border: "1px solid var(--warning-border)" }}>
+            className="w-full py-2.5 rounded-lg text-sm font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-90 disabled:opacity-40 bg-warning-soft! text-warning! border! border-warning-border!"
+            >
             確認送審（{approverIds.length} 位審核人）
           </button>
         </div>
@@ -780,11 +773,11 @@ export default function DocumentDetailPageClient({
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 id="dispatch-title" className="text-sm font-semibold">指定派送</h2>
-              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              <p className="mt-1 text-xs text-fg-muted!">
                 會新增一筆副本派送紀錄，並立即寄出含公文 PDF 的 Email；不會重寄原本的受文者。
               </p>
             </div>
-            <button type="button" onClick={() => setDispatchOpen(false)} className="text-xs" style={{ color: "var(--text-muted)" }}>
+            <button type="button" onClick={() => setDispatchOpen(false)} className="text-xs text-fg-muted!" >
               取消
             </button>
           </div>
@@ -814,44 +807,41 @@ export default function DocumentDetailPageClient({
 
           {dispatchMode === "user" ? (
             <label className="block space-y-1.5">
-              <span className="text-xs" style={{ color: "var(--text-secondary)" }}>選擇使用者</span>
+              <span className="text-xs text-fg-secondary!">選擇使用者</span>
               <select
                 value={dispatchUserId}
                 onChange={(event) => setDispatchUserId(event.target.value)}
                 disabled={!allUsersLoaded}
-                className="w-full rounded bg-transparent px-3 py-2 text-sm outline-none disabled:opacity-50"
-                style={{ border: "1px solid var(--border)" }}
+                className="w-full rounded bg-transparent px-3 py-2 text-sm outline-none disabled:opacity-50 border! border-border!"
               >
                 <option value="">{allUsersLoaded ? "請選擇使用者" : "正在載入使用者…"}</option>
                 {allUsers.map((user) => (
                   <option key={user.id} value={user.id}>{user.display_name}（{user.email}）</option>
                 ))}
               </select>
-              <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+              <span className="text-xs text-fg-muted!">
                 對方會收到 Email，並取得這份公文的查閱權限。
               </span>
             </label>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block space-y-1.5">
-                <span className="text-xs" style={{ color: "var(--text-secondary)" }}>收件 Email</span>
+                <span className="text-xs text-fg-secondary!">收件 Email</span>
                 <input
                   type="email"
                   value={dispatchEmail}
                   onChange={(event) => setDispatchEmail(event.target.value)}
                   placeholder="name@example.com"
-                  className="w-full rounded bg-transparent px-3 py-2 text-sm outline-none"
-                  style={{ border: "1px solid var(--border)" }}
+                  className="w-full rounded bg-transparent px-3 py-2 text-sm outline-none border! border-border!"
                 />
               </label>
               <label className="block space-y-1.5">
-                <span className="text-xs" style={{ color: "var(--text-secondary)" }}>收件者名稱（選填）</span>
+                <span className="text-xs text-fg-secondary!">收件者名稱（選填）</span>
                 <input
                   value={dispatchName}
                   onChange={(event) => setDispatchName(event.target.value)}
                   placeholder="例如：校長室"
-                  className="w-full rounded bg-transparent px-3 py-2 text-sm outline-none"
-                  style={{ border: "1px solid var(--border)" }}
+                  className="w-full rounded bg-transparent px-3 py-2 text-sm outline-none border! border-border!"
                 />
               </label>
             </div>
@@ -899,14 +889,13 @@ export default function DocumentDetailPageClient({
 
           {doc.regulation_id && (
             <div
-              className="card p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-              style={{ borderColor: "var(--border-strong)" }}
+              className="card p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-border-strong!"
             >
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+                <p className="text-xs font-semibold uppercase tracking-wider text-fg-muted!">
                   關聯法規
                 </p>
-                <p className="text-sm mt-1" style={{ color: "var(--text-primary)" }}>
+                <p className="text-sm mt-1 text-fg-primary!">
                   此公文是法規公布或處理流程的一部分
                 </p>
               </div>
@@ -937,7 +926,7 @@ export default function DocumentDetailPageClient({
           {canManageVisibility && (
             <div className="card flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
-                <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                <p className="text-sm font-semibold text-fg-primary!">
                   公文可見度
                 </p>
               </div>
@@ -947,8 +936,7 @@ export default function DocumentDetailPageClient({
                   value={visibilityValue}
                   onChange={event => setVisibilityValue(event.target.value as DocumentVisibility)}
                   disabled={visibilityBusy}
-                  className="min-h-10 min-w-0 flex-1 rounded-lg bg-transparent px-3 text-sm outline-none focus-visible:ring-2 sm:min-w-40 sm:flex-none"
-                  style={{ border: "1px solid var(--border-strong)", color: "var(--text-primary)" }}
+                  className="min-h-10 min-w-0 flex-1 rounded-lg bg-transparent px-3 text-sm outline-none focus-visible:ring-2 sm:min-w-40 sm:flex-none border! border-border-strong! text-fg-primary!"
                 >
                   {VISIBILITY_OPTIONS.map(option => (
                     <option key={option.value} value={option.value}>
@@ -973,21 +961,21 @@ export default function DocumentDetailPageClient({
               <dl className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-3">
                 {docInfoRows.map(([k, v]) => (
                   <div key={k}>
-                    <dt style={{ color: "var(--text-muted)" }}>{k}</dt>
-                    <dd className="mt-0.5" style={{ color: "var(--text-primary)" }}>{v}</dd>
+                    <dt className="text-fg-muted!">{k}</dt>
+                    <dd className="mt-0.5 text-fg-primary!">{v}</dd>
                   </div>
                 ))}
               </dl>
               {doc.handler_email && (
-                <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+                <p className="mt-2 text-xs text-fg-muted!">
                   聯絡：{doc.handler_email}
                 </p>
               )}
               {doc.category !== "announcement" && doc.recipients.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+                <div className="mt-3 flex flex-wrap gap-2 border-t pt-3 border-border!">
                   {doc.recipients.map(r => (
-                    <span key={r.id} className="text-xs px-2.5 py-1 rounded-full"
-                      style={{ color: "var(--primary-text)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }}>
+                    <span key={r.id} className="text-xs px-2.5 py-1 rounded-full text-accent-text! bg-accent-soft! border! border-border-strong!"
+                      >
                       {{ main: "受文者", primary: "正本", copy: "副本", attendee: "出席者", observer: "列席者" }[r.recipient_type]} {r.name}
                     </span>
                   ))}
@@ -1000,7 +988,7 @@ export default function DocumentDetailPageClient({
           {showAttachments && (
           <div className="card p-4">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-fg-muted!">
                 附件 {doc.attachments.length > 0 && `(${doc.attachments.length})`}
               </h2>
               {isDraft && (
@@ -1015,7 +1003,7 @@ export default function DocumentDetailPageClient({
               )}
             </div>
             {doc.attachments.length === 0
-              ? <p className="text-xs" style={{ color: "var(--text-muted)" }}>尚無附件</p>
+              ? <p className="text-xs text-fg-muted!">尚無附件</p>
               : (
                 <>
                 <ul className="space-y-2">
@@ -1031,35 +1019,35 @@ export default function DocumentDetailPageClient({
                     const fileUrl = documentsApi.attachmentDownloadUrl(id, a.id);
                     const previewUrl = documentsApi.attachmentPreviewUrl(id, a.id);
                     return (
-                      <li key={a.id} className="rounded overflow-hidden"
-                        style={{ border: "1px solid var(--border)" }}>
-                        <div className="flex items-center justify-between text-xs px-3 py-2"
-                          style={{ background: "var(--bg-elevated)" }}>
+                      <li key={a.id} className="rounded overflow-hidden border! border-border!"
+                        >
+                        <div className="flex items-center justify-between text-xs px-3 py-2 bg-elevated!"
+                          >
                           <div className="flex items-center gap-2 min-w-0">
                             {isLink ? (
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                 strokeWidth="2" strokeLinecap="round" aria-hidden="true"
-                                style={{ color: "var(--primary-text)", flexShrink: 0 }}>
+                                 className="text-accent-text! shrink-0!">
                                 <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
                                 <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
                               </svg>
                             ) : (
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                 strokeWidth="2" strokeLinecap="round" aria-hidden="true"
-                                style={{ color: "var(--text-muted)", flexShrink: 0 }}>
+                                 className="text-fg-muted! shrink-0!">
                                 <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
                               </svg>
                             )}
                             {isLink ? (
                               <a href={a.link_url!} target="_blank" rel="noopener noreferrer"
-                                className="truncate hover:underline" style={{ color: "var(--primary-text)" }}>
+                                className="truncate hover:underline text-accent-text!" >
                                 {a.display_name || a.filename}
                               </a>
                             ) : (
-                              <span className="truncate" style={{ color: "var(--text-primary)" }}>{a.display_name || a.filename}</span>
+                              <span className="truncate text-fg-primary!">{a.display_name || a.filename}</span>
                             )}
                             {!isLink && a.file_size != null && (
-                              <span className="flex-shrink-0" style={{ color: "var(--text-muted)" }}>{fmtSize(a.file_size)}</span>
+                              <span className="flex-shrink-0 text-fg-muted!">{fmtSize(a.file_size)}</span>
                             )}
                           </div>
                           <div className="flex items-center gap-3 flex-shrink-0">
@@ -1067,8 +1055,7 @@ export default function DocumentDetailPageClient({
                               <AnimatedDownloadButton
                                 href={fileUrl}
                                 filename={a.display_name || a.filename}
-                                className="text-xs hover:underline"
-                                style={{ color: "var(--primary-text)" }}
+                                className="text-xs hover:underline text-accent-text!"
                                 label="下載" />
                             )}
                             {isDraft && (
@@ -1077,15 +1064,15 @@ export default function DocumentDetailPageClient({
                                   setEditingAttachmentId(a.id);
                                   setEditingAttachmentName(a.display_name || a.filename);
                                 }}
-                                className="transition-colors hover:opacity-80"
-                                style={{ color: "var(--text-muted)" }}>
+                                className="transition-colors hover:opacity-80 text-fg-muted!"
+                                >
                                 改名
                               </button>
                             )}
                             {isDraft && (
                               <button onClick={() => deleteAttachment(a.id)}
-                                className="transition-colors hover:text-red-500"
-                                style={{ color: "var(--text-muted)" }}>刪除</button>
+                                className="transition-colors hover:text-red-500 text-fg-muted!"
+                                >刪除</button>
                             )}
                           </div>
                         </div>
@@ -1095,40 +1082,35 @@ export default function DocumentDetailPageClient({
                             height={1000}
                             unoptimized
                             sizes="(max-width: 768px) 100vw, 768px"
-                            className="w-full object-contain"
-                            style={{
-                              maxHeight: doc.attachments.length <= 2 ? "520px" : "320px",
-                              background: "var(--bg-surface)",
-                            }} />
+                            className="w-full object-contain bg-surface!"
+                            style={{ maxHeight: doc.attachments.length <= 2 ? "520px" : "320px" }} />
                         )}
                         {isPdf && (
                           <object data={previewUrl} type="application/pdf"
-                            className="w-full" style={{ height: "420px", display: "block" }}>
-                            <p className="text-xs p-3" style={{ color: "var(--text-muted)" }}>
+                            className="w-full block!" style={{ height: "420px" }}>
+                            <p className="text-xs p-3 text-fg-muted!">
                               瀏覽器不支援 PDF 預覽，請{" "}
                               <AnimatedDownloadButton
                                 href={fileUrl}
                                 filename={a.display_name || a.filename}
-                                className="text-xs underline"
-                                style={{ color: "var(--primary-text)" }}
+                                className="text-xs underline text-accent-text!"
                                 label="下載查看" />。
                             </p>
                           </object>
                         )}
                         {isDraft && editingAttachmentId === a.id && (
-                          <div className="px-3 py-2 flex items-center gap-2" style={{ borderTop: "1px solid var(--border)" }}>
+                          <div className="px-3 py-2 flex items-center gap-2 border-t! border-t-border!">
                             <input
                               value={editingAttachmentName}
                               onChange={e => setEditingAttachmentName(e.target.value)}
-                              className="flex-1 text-xs outline-none rounded px-2 py-1.5"
-                              style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
+                              className="flex-1 text-xs outline-none rounded px-2 py-1.5 bg-surface! border! border-border! text-fg-primary!"
                             />
-                            <button onClick={() => setEditingAttachmentId(null)} className="text-xs px-2 py-1 rounded"
-                              style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}>
+                            <button onClick={() => setEditingAttachmentId(null)} className="text-xs px-2 py-1 rounded text-fg-muted! border! border-border!"
+                              >
                               取消
                             </button>
-                            <button onClick={() => renameAttachment(a.id)} className="text-xs px-2 py-1 rounded"
-                              style={{ background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--border-strong)" }}>
+                            <button onClick={() => renameAttachment(a.id)} className="text-xs px-2 py-1 rounded bg-accent-soft! text-accent-text! border! border-border-strong!"
+                              >
                               儲存
                             </button>
                           </div>
@@ -1141,8 +1123,8 @@ export default function DocumentDetailPageClient({
                   <div className="mt-3 flex justify-center">
                     <button
                       onClick={() => setShowAllAttachments(v => !v)}
-                      className="text-xs px-3 py-1.5 rounded transition-opacity hover:opacity-80"
-                      style={{ color: "var(--primary-text)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }}>
+                      className="text-xs px-3 py-1.5 rounded transition-opacity hover:opacity-80 text-accent-text! bg-accent-soft! border! border-border-strong!"
+                      >
                       {showAllAttachments ? "收合附件" : `顯示全部附件（${doc.attachments.length}）`}
                     </button>
                   </div>
@@ -1151,20 +1133,20 @@ export default function DocumentDetailPageClient({
               )}
             {/* 草稿模式：新增連結附件 */}
             {isDraft && (
-              <div className="mt-3 pt-3 flex flex-wrap gap-2" style={{ borderTop: "1px dashed var(--border)" }}>
+              <div className="mt-3 pt-3 flex flex-wrap gap-2 border-t! border-dashed! border-t-border!">
                 <input placeholder="連結網址 https://…" value={newLinkUrl}
                   onChange={e => setNewLinkUrl(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter") addLink(); }}
-                  className="text-xs outline-none rounded px-2 py-1.5 flex-[2] min-w-32"
-                  style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+                  className="text-xs outline-none rounded px-2 py-1.5 flex-[2] min-w-32 bg-elevated! border! border-border! text-fg-primary!"
+                   />
                 <input placeholder="顯示名稱（選填）" value={newLinkText}
                   onChange={e => setNewLinkText(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter") addLink(); }}
-                  className="text-xs outline-none rounded px-2 py-1.5 flex-1 min-w-24"
-                  style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+                  className="text-xs outline-none rounded px-2 py-1.5 flex-1 min-w-24 bg-elevated! border! border-border! text-fg-primary!"
+                   />
                 <button onClick={addLink} disabled={addingLink || !newLinkUrl.trim()}
-                  className="text-xs px-3 py-1.5 rounded transition-opacity hover:opacity-80 disabled:opacity-40 flex-shrink-0"
-                  style={{ background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--border-strong)" }}>
+                  className="text-xs px-3 py-1.5 rounded transition-opacity hover:opacity-80 disabled:opacity-40 flex-shrink-0 bg-accent-soft! text-accent-text! border! border-border-strong!"
+                  >
                   {addingLink ? "新增中…" : "＋ 新增連結"}
                 </button>
               </div>
@@ -1193,23 +1175,23 @@ export default function DocumentDetailPageClient({
 
             return previews.map(p => (
               <div key={p.key} className="card p-4">
-                <h2 className="text-xs font-semibold uppercase tracking-wider mb-3"
-                  style={{ color: "var(--text-muted)" }}>
+                <h2 className="text-xs font-semibold uppercase tracking-wider mb-3 text-fg-muted!"
+                  >
                   {p.label}
                 </h2>
                 <iframe
                   src={p.src}
                   title={p.label}
-                  className="w-full rounded"
-                  style={{ height: "600px", border: "1px solid var(--border)" }}
+                  className="w-full rounded border! border-border!"
+                  style={{ height: "600px" }}
                   sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
                   referrerPolicy="strict-origin-when-cross-origin"
                   allow="autoplay; fullscreen"
                   allowFullScreen
                 />
-                <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+                <p className="mt-2 text-xs text-fg-muted!">
                   若預覽空白，請確認檔案分享權限為「知道連結的任何人可檢視」，或{" "}
-                  <a href={p.sourceUrl} target="_blank" rel="noreferrer" className="underline" style={{ color: "var(--primary-text)" }}>
+                  <a href={p.sourceUrl} target="_blank" rel="noreferrer" className="underline text-accent-text!">
                     在 Google Drive 開啟
                   </a>。
                 </p>

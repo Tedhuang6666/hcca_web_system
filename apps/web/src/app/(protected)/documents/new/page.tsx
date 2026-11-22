@@ -86,8 +86,8 @@ type LinkDraftInput = {
 function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="card p-5 space-y-4">
-      <h3 className="text-xs font-semibold uppercase tracking-widest"
-        style={{ color: "var(--text-muted)" }}>
+      <h3 className="text-xs font-semibold uppercase tracking-widest text-fg-muted!"
+        >
         {title}
       </h3>
       {children}
@@ -97,8 +97,8 @@ function FormSection({ title, children }: { title: string; children: React.React
 
 function Label({ children, required }: { children: React.ReactNode; required?: boolean }) {
   return (
-    <label className="text-xs font-medium block mb-1.5" style={{ color: "var(--text-secondary)" }}>
-      {children}{required && <span style={{ color: "var(--danger)" }} aria-hidden="true"> *</span>}
+    <label className="text-xs font-medium block mb-1.5 text-fg-secondary!">
+      {children}{required && <span  aria-hidden="true" className="text-danger!"> *</span>}
     </label>
   );
 }
@@ -859,7 +859,7 @@ export default function NewDocumentPage() {
           </svg>
         </Link>
         <div>
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>新增公文</h1>
+          <h1 className="text-xl font-semibold text-fg-primary!">新增公文</h1>
         </div>
       </div>
 
@@ -900,7 +900,7 @@ export default function NewDocumentPage() {
                   {orgs.map(o => <option key={o.id} value={o.id}>{orgDisplayName(o, orgs)}</option>)}
                 </select>
                 {showErr("org") && (
-                  <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>{fieldError.org}</p>
+                  <p className="text-xs mt-1 text-danger!">{fieldError.org}</p>
                 )}
               </div>
               <div>
@@ -925,7 +925,7 @@ export default function NewDocumentPage() {
                   : inputStyle}
               />
               {showErr("title") && (
-                <p className="mt-1 text-xs" style={{ color: "var(--danger)" }}>{fieldError.title}</p>
+                <p className="mt-1 text-xs text-danger!">{fieldError.title}</p>
               )}
             </div>
 
@@ -965,7 +965,7 @@ export default function NewDocumentPage() {
                     <option value="manual_approval">經核准後解密</option>
                   </select>
                   {showErr("declassification") && (
-                    <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>
+                    <p className="text-xs mt-1 text-danger!">
                       {fieldError.declassification}
                     </p>
                   )}
@@ -987,8 +987,8 @@ export default function NewDocumentPage() {
               <Label>列表摘要（可選）</Label>
               <input value={summary} onChange={e => setSummary(e.target.value)} maxLength={500}
                 placeholder="主旨為空或過於相同時，提供列表辨識用摘要"
-                className="w-full bg-transparent text-sm outline-none border-b pb-1"
-                style={{ borderColor: "var(--border)" }} />
+                className="w-full bg-transparent text-sm outline-none border-b pb-1 border-border!"
+                 />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div><Label>機關郵遞區號</Label><input value={issuerPostalCode} onChange={(e) => setIssuerPostalCode(e.target.value)} style={inputStyle} /></div>
@@ -1010,7 +1010,7 @@ export default function NewDocumentPage() {
                         ? { ...inputStyle, border: "1px solid var(--danger)" }
                         : inputStyle} />
                     {showErr("meetingPurpose") && (
-                      <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>{fieldError.meetingPurpose}</p>
+                      <p className="text-xs mt-1 text-danger!">{fieldError.meetingPurpose}</p>
                     )}
                   </div>
                 )}
@@ -1021,7 +1021,7 @@ export default function NewDocumentPage() {
                     onBlur={() => markTouched("meetingTime")}
                     style={showErr("meetingTime") ? { ...inputStyle, border: "1px solid var(--danger)" } : inputStyle} />
                   {showErr("meetingTime") && (
-                    <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>{fieldError.meetingTime}</p>
+                    <p className="text-xs mt-1 text-danger!">{fieldError.meetingTime}</p>
                   )}
                 </div>
                 <div>
@@ -1031,7 +1031,7 @@ export default function NewDocumentPage() {
                     placeholder="例：班聯會辦公室"
                     style={showErr("meetingLocation") ? { ...inputStyle, border: "1px solid var(--danger)" } : inputStyle} />
                   {showErr("meetingLocation") && (
-                    <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>{fieldError.meetingLocation}</p>
+                    <p className="text-xs mt-1 text-danger!">{fieldError.meetingLocation}</p>
                   )}
                 </div>
                 <div className="sm:col-span-2">
@@ -1041,7 +1041,7 @@ export default function NewDocumentPage() {
                     placeholder="例：黃主席丞廷"
                     style={showErr("recordChairperson") ? { ...inputStyle, border: "1px solid var(--danger)" } : inputStyle} />
                   {showErr("recordChairperson") && (
-                    <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>{fieldError.recordChairperson}</p>
+                    <p className="text-xs mt-1 text-danger!">{fieldError.recordChairperson}</p>
                   )}
                 </div>
               </div>
@@ -1081,7 +1081,7 @@ export default function NewDocumentPage() {
                       }}
                 />
                 {showErr("subject") && (
-                  <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>{fieldError.subject}</p>
+                  <p className="text-xs mt-1 text-danger!">{fieldError.subject}</p>
                 )}
               </div>
             )}
@@ -1099,7 +1099,7 @@ export default function NewDocumentPage() {
             <div>
               <Label>
                 {copy.descriptionLabel}
-                <span className="ml-2 hidden font-normal text-xs md:inline" style={{ color: "var(--text-muted)" }}>
+                <span className="ml-2 hidden font-normal text-xs md:inline text-fg-muted!">
                   Tab 降級 ／ Shift+Tab 升級 ／ Enter 續編
                 </span>
               </Label>
@@ -1111,7 +1111,7 @@ export default function NewDocumentPage() {
                 placeholder={copy.descriptionPlaceholder}
               />
               {showErr("recordDiscussion") && (
-                <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>{fieldError.recordDiscussion}</p>
+                <p className="text-xs mt-1 text-danger!">{fieldError.recordDiscussion}</p>
               )}
             </div>
             {copy.actionLabel && (
@@ -1125,7 +1125,7 @@ export default function NewDocumentPage() {
                   placeholder={copy.actionPlaceholder}
                 />
                 {showErr("recordDecision") && (
-                  <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>{fieldError.recordDecision}</p>
+                  <p className="text-xs mt-1 text-danger!">{fieldError.recordDecision}</p>
                 )}
               </div>
             )}
@@ -1149,19 +1149,19 @@ export default function NewDocumentPage() {
               <ul className="space-y-1.5">
                 {recipients.map((r) => (
                   <li key={r.id}
-                    className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg"
-                    style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-                    <span className="badge text-xs flex-shrink-0"
-                      style={{ color: "var(--primary-text)", background: "var(--primary-dim)", borderColor: "var(--primary-dim)" }}>
+                    className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg bg-elevated! border! border-border!"
+                    >
+                    <span className="badge text-xs flex-shrink-0 text-accent-text! bg-accent-soft! border-accent-soft!"
+                      >
                       {isNotice
                         ? { main: "受文者", attendee: "出席者", observer: "列席者", primary: "正本（出席）", copy: "副本" }[r.recipient_type] ?? r.recipient_type
                         : isRecord
                           ? { main: "出席者", attendee: "出席者", observer: "列席者", primary: "出席者", copy: "副本" }[r.recipient_type] ?? r.recipient_type
                           : { main: "受文者", primary: "正本", copy: "副本", attendee: "出席者", observer: "列席者" }[r.recipient_type] ?? r.recipient_type}
                     </span>
-                    <span className="flex-1 truncate" style={{ color: "var(--text-primary)" }}>{r.name}</span>
+                    <span className="flex-1 truncate text-fg-primary!">{r.name}</span>
                     {r.email && (
-                      <span className="truncate max-w-32" style={{ color: "var(--text-muted)" }}>{r.email}</span>
+                      <span className="truncate max-w-32 text-fg-muted!">{r.email}</span>
                     )}
                     {r.email && (
                       <button
@@ -1174,20 +1174,15 @@ export default function NewDocumentPage() {
                               }
                             : recipient
                         )))}
-                        className="min-h-11 rounded px-2 text-xs"
-                        style={{
-                          color: r.delivery_method === "email" ? "var(--primary-text)" : "var(--text-muted)",
-                          background: r.delivery_method === "email" ? "var(--primary-dim)" : "var(--bg-surface)",
-                          border: "1px solid var(--border)",
-                        }}
+                        className="min-h-11 rounded px-2 text-xs border! border-border!"
+                        style={{ color: r.delivery_method === "email" ? "var(--primary-text)" : "var(--text-muted)", background: r.delivery_method === "email" ? "var(--primary-dim)" : "var(--bg-surface)" }}
                         aria-pressed={r.delivery_method === "email"}
                       >
                         {r.delivery_method === "email" ? "Email 通知中" : "通知 Email"}
                       </button>
                     )}
                     <button type="button" onClick={() => setRecipients((p) => p.filter((x) => x.id !== r.id))}
-                      className="flex min-h-11 min-w-11 flex-shrink-0 items-center justify-center transition-colors hover:text-red-500"
-                      style={{ color: "var(--text-muted)" }}
+                      className="flex min-h-11 min-w-11 flex-shrink-0 items-center justify-center transition-colors hover:text-red-500 text-fg-muted!"
                       aria-label={`移除收件人 ${r.name}`}>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                         strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
@@ -1210,7 +1205,7 @@ export default function NewDocumentPage() {
               classes={classes}
             />
             {(showErr("meetingNoticeAttendees") || showErr("recordAttendees")) && (
-              <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>
+              <p className="text-xs mt-1 text-danger!">
                 {fieldError.meetingNoticeAttendees || fieldError.recordAttendees}
               </p>
             )}
@@ -1239,20 +1234,19 @@ export default function NewDocumentPage() {
             {pendingLinks.length > 0 && (
               <ul className="space-y-1.5">
                 {pendingLinks.map(lnk => (
-                  <li key={lnk.id} className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg"
-                    style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+                  <li key={lnk.id} className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg bg-elevated! border! border-border!"
+                    >
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                      strokeWidth="2" strokeLinecap="round" style={{ color: "var(--primary-text)", flexShrink: 0 }}>
+                      strokeWidth="2" strokeLinecap="round"  className="text-accent-text! shrink-0!">
                       <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
                       <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
                     </svg>
-                    <span className="flex-1 truncate" style={{ color: "var(--text-primary)" }}>
+                    <span className="flex-1 truncate text-fg-primary!">
                       {lnk.display_text || lnk.url}
                     </span>
-                    <span className="truncate max-w-40 text-xs" style={{ color: "var(--text-muted)" }}>{lnk.url}</span>
+                    <span className="truncate max-w-40 text-xs text-fg-muted!">{lnk.url}</span>
                     <button onClick={() => setPendingLinks(p => p.filter(x => x.id !== lnk.id))}
-                      className="flex min-h-11 min-w-11 flex-shrink-0 items-center justify-center transition-colors hover:text-red-500"
-                      style={{ color: "var(--text-muted)" }}
+                      className="flex min-h-11 min-w-11 flex-shrink-0 items-center justify-center transition-colors hover:text-red-500 text-fg-muted!"
                       aria-label={`移除連結 ${lnk.display_text || lnk.url}`}>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                         strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
@@ -1294,12 +1288,12 @@ export default function NewDocumentPage() {
               {pendingFiles.length > 0 && (
                 <ul className="mt-2 space-y-1.5">
                   {pendingFiles.map((file, idx) => (
-                    <li key={`${file.name}-${idx}`} className="flex items-center justify-between text-xs px-3 py-2 rounded-lg"
-                      style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-                      <span className="truncate" style={{ color: "var(--text-primary)" }}>{file.name}</span>
+                    <li key={`${file.name}-${idx}`} className="flex items-center justify-between text-xs px-3 py-2 rounded-lg bg-elevated! border! border-border!"
+                      >
+                      <span className="truncate text-fg-primary!">{file.name}</span>
                       <button type="button" onClick={() => setPendingFiles(prev => prev.filter((_, i) => i !== idx))}
-                        className="min-h-11 px-2"
-                        style={{ color: "var(--danger)" }}>
+                        className="min-h-11 px-2 text-danger!"
+                        >
                         移除
                       </button>
                     </li>
@@ -1317,9 +1311,9 @@ export default function NewDocumentPage() {
           {/* 字號模板 */}
           <FormSection title="字號設定">
             {!selectedOrgId ? (
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>請先選擇發文組織</p>
+              <p className="text-xs text-fg-muted!">請先選擇發文組織</p>
             ) : templates.length === 0 ? (
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>此組織目前無可用字號模板</p>
+              <p className="text-xs text-fg-muted!">此組織目前無可用字號模板</p>
             ) : (
               <>
                 <div>
@@ -1341,13 +1335,13 @@ export default function NewDocumentPage() {
                     ))}
                   </select>
                   {showErr("serialTemplate") && (
-                    <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>{fieldError.serialTemplate}</p>
+                    <p className="text-xs mt-1 text-danger!">{fieldError.serialTemplate}</p>
                   )}
                 </div>
-                <div className="rounded-xl px-4 py-3 text-center"
-                  style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-                  <p className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>發文後字號預覽</p>
-                  <p className="text-sm font-mono font-bold" style={{ color: "var(--primary-text)" }}>
+                <div className="rounded-xl px-4 py-3 text-center bg-elevated! border! border-border!"
+                  >
+                  <p className="text-xs mb-1 text-fg-muted!">發文後字號預覽</p>
+                  <p className="text-sm font-mono font-bold text-accent-text!">
                     {selectedTemplate ? selectedTemplate.preview : "尚未設定正式字號"}
                   </p>
                 </div>
@@ -1368,8 +1362,8 @@ export default function NewDocumentPage() {
           </FormSection>
 
           <div className="card p-4 space-y-2" aria-label="儲存前檢查">
-            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>儲存前檢查</h3>
-            <dl className="space-y-1 text-xs" style={{ color: "var(--text-secondary)" }}>
+            <h3 className="text-sm font-semibold text-fg-primary!">儲存前檢查</h3>
+            <dl className="space-y-1 text-xs text-fg-secondary!">
               <div className="flex items-center justify-between gap-3">
                 <dt>組織</dt><dd className="truncate font-medium">{selectedOrg?.name || "尚未選擇"}</dd>
               </div>
@@ -1389,7 +1383,7 @@ export default function NewDocumentPage() {
                 }</dd>
               </div>
             </dl>
-            <p className="pt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            <p className="pt-1 text-xs text-fg-muted!">
               儲存後會前往詳情頁設定審核人並送審。
             </p>
           </div>
@@ -1400,7 +1394,7 @@ export default function NewDocumentPage() {
               {saving ? "儲存中…" : "儲存草稿"}
             </button>
             {Object.keys(touched).length > 0 && hasErrors && (
-              <p className="text-xs text-center" style={{ color: "var(--danger)" }}>請填寫所有必填欄位</p>
+              <p className="text-xs text-center text-danger!">請填寫所有必填欄位</p>
             )}
           </div>
 
@@ -1416,7 +1410,7 @@ export default function NewDocumentPage() {
               },
             ].map(({ label, value, setter, ph }) => (
               <div key={label} className="flex items-center gap-3">
-                <span className="text-xs w-12 flex-shrink-0 font-medium" style={{ color: "var(--text-muted)" }}>
+                <span className="text-xs w-12 flex-shrink-0 font-medium text-fg-muted!">
                   {label}
                 </span>
                 <input value={value} onChange={(e) => setter(e.target.value)} placeholder={ph}
@@ -1425,7 +1419,7 @@ export default function NewDocumentPage() {
             ))}
             {/* Email + 顯示切換 */}
             <div className="flex items-center gap-3">
-              <span className="text-xs w-12 flex-shrink-0 font-medium" style={{ color: "var(--text-muted)" }}>
+              <span className="text-xs w-12 flex-shrink-0 font-medium text-fg-muted!">
                 Email
               </span>
                 <input value={handlerEmail} onChange={(e) => setHandlerEmail(e.target.value)}
@@ -1436,7 +1430,7 @@ export default function NewDocumentPage() {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <span className="text-xs w-12 flex-shrink-0 font-medium" style={{ color: "var(--text-muted)" }}>
+              <span className="text-xs w-12 flex-shrink-0 font-medium text-fg-muted!">
                 電話
               </span>
               <input value={handlerPhone} onChange={(e) => setHandlerPhone(e.target.value)}

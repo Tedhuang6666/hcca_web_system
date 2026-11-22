@@ -1191,7 +1191,7 @@ function ComposeInner() {
           </div>
         </div>
         {activeDraftId && (
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+          <p className="text-xs text-fg-muted!">
             正在編輯雲端草稿
           </p>
         )}
@@ -1227,12 +1227,12 @@ function ComposeInner() {
         </ol>
       </nav>
 
-      <div className={`grid gap-5 ${currentStep >= 3 ? "lg:grid-cols-2" : ""}`}>
+      <div className={`grid gap-5 ${currentStep>= 3 ? "lg:grid-cols-2" : ""}`}>
         {/* ── 編輯區 ─────────────────────────────────────────── */}
         <div className="min-w-0 space-y-4">
           <section className={`card space-y-3 p-4 ${currentStep === 1 ? "" : "hidden"}`}>
             <div>
-              <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+              <label className="mb-1 block text-xs font-medium text-fg-muted!">
                 情境預設
               </label>
               <select
@@ -1253,8 +1253,8 @@ function ComposeInner() {
                 ))}
               </select>
             </div>
-            <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--primary)" }}>
-              <label className="block text-xs font-semibold" style={{ color: "var(--primary-text)" }}>
+            <div className="space-y-2 rounded-lg border p-3 border-accent!">
+              <label className="block text-xs font-semibold text-accent-text!">
                 我的草稿
               </label>
               <select
@@ -1273,12 +1273,12 @@ function ComposeInner() {
                   </option>
                 ))}
               </select>
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+              <p className="text-xs text-fg-muted!">
                 草稿依帳號同步，選擇後會載入原本的內容與收件資料。
               </p>
             </div>
             <div className="space-y-2">
-              <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+              <label className="mb-1 block text-xs font-medium text-fg-muted!">
                 平台範本
               </label>
               <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
@@ -1302,7 +1302,7 @@ function ComposeInner() {
               </div>
             </div>
             <div className="space-y-2">
-              <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+              <label className="mb-1 block text-xs font-medium text-fg-muted!">
                 套用過去郵件格式
               </label>
               <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
@@ -1337,7 +1337,7 @@ function ComposeInner() {
               </div>
             </div>
             <div className="space-y-2">
-              <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+              <label className="mb-1 block text-xs font-medium text-fg-muted!">
                 舊版瀏覽器範本
               </label>
               <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
@@ -1367,8 +1367,8 @@ function ComposeInner() {
               </div>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
-                信件主旨 <span style={{ color: "var(--danger)" }}>*</span>
+              <label className="mb-1 block text-xs font-medium text-fg-muted!">
+                信件主旨 <span className="text-danger!">*</span>
               </label>
               <input
                 ref={subjectRef}
@@ -1381,7 +1381,7 @@ function ComposeInner() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+              <label className="mb-1 block text-xs font-medium text-fg-muted!">
                 主標題
               </label>
               <input
@@ -1394,8 +1394,8 @@ function ComposeInner() {
                 placeholder="顯示於信件內容最上方的大標題"
               />
             </div>
-            <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+            <div className="space-y-2 rounded-lg border p-3 border-border!">
+              <p className="text-xs text-fg-muted!">
                 先點選主旨或主標題中的插入位置，再點選欄位。
               </p>
               <div className="flex flex-wrap gap-1.5">
@@ -1403,12 +1403,7 @@ function ComposeInner() {
                   <button
                     key={variable.token}
                     type="button"
-                    className="rounded-full px-2.5 py-1 text-xs"
-                    style={{
-                      background: "var(--primary-dim)",
-                      color: "var(--primary-text)",
-                      border: "1px solid var(--border)",
-                    }}
+                    className="rounded-full px-2.5 py-1 text-xs bg-accent-soft! text-accent-text! border! border-border!"
                     onClick={() => insertVariable(variable.token)}
                   >
                     + {variable.label}
@@ -1418,12 +1413,7 @@ function ComposeInner() {
                   <button
                     key={variable.key}
                     type="button"
-                    className="rounded-full px-2.5 py-1 text-xs"
-                    style={{
-                      background: "var(--bg-elevated)",
-                      color: "var(--text-secondary)",
-                      border: "1px solid var(--border)",
-                    }}
+                    className="rounded-full px-2.5 py-1 text-xs bg-elevated! text-fg-secondary! border! border-border!"
                     onClick={() => insertVariable(`{{ ${variable.key} }}`)}
                   >
                     + {variable.label || variable.key}
@@ -1432,7 +1422,7 @@ function ComposeInner() {
               </div>
             </div>
             <div className="space-y-2">
-              <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+              <label className="mb-1 block text-xs font-medium text-fg-muted!">
                 信件主圖
               </label>
               <div className="grid gap-2">
@@ -1476,7 +1466,7 @@ function ComposeInner() {
               </button>
             </div>
             {cardRows.length === 0 ? (
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+              <p className="text-xs text-fg-muted!">
                 例如：時間、地點、狀態。
               </p>
             ) : (
@@ -1512,7 +1502,7 @@ function ComposeInner() {
           <section className={`card space-y-2 p-4 ${currentStep === 3 ? "" : "hidden"}`}>
             <div>
               <h2 className="text-sm font-semibold">內文</h2>
-              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              <p className="mt-1 text-xs text-fg-muted!">
                 點選下方欄位即可插入目前游標位置。
               </p>
             </div>
@@ -1521,12 +1511,7 @@ function ComposeInner() {
                 <button
                   key={variable.token}
                   type="button"
-                  className="rounded-full px-2.5 py-1 text-xs"
-                  style={{
-                    background: "var(--primary-dim)",
-                    color: "var(--primary-text)",
-                    border: "1px solid var(--border)",
-                  }}
+                  className="rounded-full px-2.5 py-1 text-xs bg-accent-soft! text-accent-text! border! border-border!"
                   onClick={() => insertVariable(variable.token)}
                 >
                   + {variable.label}
@@ -1536,12 +1521,7 @@ function ComposeInner() {
                 <button
                   key={variable.key}
                   type="button"
-                  className="rounded-full px-2.5 py-1 text-xs"
-                  style={{
-                    background: "var(--bg-elevated)",
-                    color: "var(--text-secondary)",
-                    border: "1px solid var(--border)",
-                  }}
+                  className="rounded-full px-2.5 py-1 text-xs bg-elevated! text-fg-secondary! border! border-border!"
                   onClick={() => insertVariable(`{{ ${variable.key} }}`)}
                 >
                   + {variable.label || variable.key}
@@ -1558,11 +1538,11 @@ function ComposeInner() {
                 paragraphSpacing={paragraphSpacing}
               />
             </div>
-            <div className="space-y-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+            <div className="space-y-2 border-t pt-3 border-border!">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h3 className="text-xs font-semibold">在內文後加入內容</h3>
-                  <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
+                  <p className="mt-0.5 text-xs text-fg-muted!">
                     適合插入獨立圖片、補充段落或視覺分隔線。
                   </p>
                 </div>
@@ -1581,11 +1561,10 @@ function ComposeInner() {
               {blocks.map((block, index) => (
                 <div
                   key={index}
-                  className="space-y-2 rounded-lg border p-2"
-                  style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}
+                  className="space-y-2 rounded-lg border p-2 border-border! bg-elevated!"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
+                    <span className="text-xs font-semibold text-fg-muted!">
                       {block.type === "text" ? "補充文字" : block.type === "image" ? "圖片" : "分隔線"}
                     </span>
                     <div className="flex gap-1">
@@ -1627,7 +1606,7 @@ function ComposeInner() {
                     </div>
                   )}
                   {block.type === "divider" && (
-                    <div className="border-t" style={{ borderColor: "var(--border-strong)" }} />
+                    <div className="border-t border-border-strong!"  />
                   )}
                 </div>
               ))}
@@ -1640,7 +1619,7 @@ function ComposeInner() {
             </summary>
             <div className="mt-4 space-y-4">
               <div>
-                <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                <label className="mb-1 block text-xs font-medium text-fg-muted!">
                   收件匣預覽文字
                 </label>
                 <input
@@ -1658,12 +1637,11 @@ function ComposeInner() {
                   ["內容背景", contentBackgroundColor, setContentBackgroundColor],
                 ].map(([label, value, setter]) => (
                   <label key={String(label)} className="text-xs">
-                    <span className="mb-1 block" style={{ color: "var(--text-muted)" }}>{String(label)}</span>
+                    <span className="mb-1 block text-fg-muted!">{String(label)}</span>
                     <span className="flex items-center gap-2">
                       <input
                         type="color"
-                        className="h-10 w-12 cursor-pointer rounded border p-1"
-                        style={{ borderColor: "var(--border)" }}
+                        className="h-10 w-12 cursor-pointer rounded border p-1 border-border!"
                         value={String(value)}
                         onChange={(event) => (setter as (value: string) => void)(event.target.value)}
                       />
@@ -1679,7 +1657,7 @@ function ComposeInner() {
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="text-xs">
-                  <span className="mb-1 block" style={{ color: "var(--text-muted)" }}>
+                  <span className="mb-1 block text-fg-muted!">
                     段內行距
                   </span>
                   <NumberInput
@@ -1695,7 +1673,7 @@ function ComposeInner() {
                   />
                 </label>
                 <label className="text-xs">
-                  <span className="mb-1 block" style={{ color: "var(--text-muted)" }}>
+                  <span className="mb-1 block text-fg-muted!">
                     段落間距（px）
                   </span>
                   <NumberInput
@@ -1712,7 +1690,7 @@ function ComposeInner() {
                 </label>
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                <label className="mb-1 block text-xs font-medium text-fg-muted!">
                   自訂頁尾文字
                 </label>
                 <textarea
@@ -1753,11 +1731,11 @@ function ComposeInner() {
               onUpdateRecipientVariable={updateRecipientVar}
               onRemoveRecipientRow={removeRecipientRow}
             />
-            <div className="space-y-3 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
+            <div className="space-y-3 rounded-lg border p-3 border-border!">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <h3 className="text-xs font-semibold">條件式佔位符</h3>
-                  <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                  <p className="mt-1 text-xs text-fg-muted!">
                     依收件資料自動填入欄位；後面的規則優先。
                   </p>
                 </div>
@@ -1771,12 +1749,12 @@ function ComposeInner() {
                 </button>
               </div>
               {definedVariables.length === 0 && (
-                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                <p className="text-xs text-fg-muted!">
                   請先新增至少兩個自訂欄位，例如「第一志願」和「面試時間」。
                 </p>
               )}
               {conditionalRules.length === 0 && definedVariables.length > 0 && (
-                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                <p className="text-xs text-fg-muted!">
                   尚未設定條件
                 </p>
               )}
@@ -1787,11 +1765,10 @@ function ComposeInner() {
                 return (
                   <div
                     key={index}
-                    className="space-y-2 rounded-lg p-3"
-                    style={{ background: "var(--bg-elevated)" }}
+                    className="space-y-2 rounded-lg p-3 bg-elevated!"
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
+                      <span className="text-xs font-semibold text-fg-muted!">
                         條件 {index + 1}
                       </span>
                       <button
@@ -1844,7 +1821,7 @@ function ComposeInner() {
                           onChange={(event) => updateConditionalRule(index, { condition_value: event.target.value })}
                         />
                       ) : (
-                        <span className="text-xs" style={{ color: "var(--text-muted)" }}>不需要填寫比對內容</span>
+                        <span className="text-xs text-fg-muted!">不需要填寫比對內容</span>
                       )}
                     </div>
                     <div className="grid items-center gap-2 lg:grid-cols-[auto_minmax(9rem,1fr)_minmax(0,1.2fr)]">
@@ -1884,7 +1861,7 @@ function ComposeInner() {
             </div>
             {buttons.length === 0 ? null : (
               buttons.map((btn, i) => (
-                <div key={i} className="space-y-2 rounded-lg p-2" style={{ background: "var(--bg-elevated)" }}>
+                <div key={i} className="space-y-2 rounded-lg p-2 bg-elevated!">
                   <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_8rem]">
                     <input
                       className="input min-w-0"
@@ -1935,9 +1912,9 @@ function ComposeInner() {
             </div>
             {blocks.length === 0 ? null : (
               blocks.map((blk, i) => (
-                <div key={i} className="space-y-2 rounded-lg p-2" style={{ background: "var(--bg-elevated)" }}>
+                <div key={i} className="space-y-2 rounded-lg p-2 bg-elevated!">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
+                    <span className="text-xs font-semibold text-fg-muted!">
                       {blk.type === "text" ? "文字段落" : blk.type === "image" ? "圖片" : "分隔線"}
                     </span>
                     <div className="flex gap-1">
@@ -1990,7 +1967,7 @@ function ComposeInner() {
                     </div>
                   )}
                   {blk.type === "divider" && (
-                    <div className="border-t" style={{ borderColor: "var(--border-strong)" }} />
+                    <div className="border-t border-border-strong!"  />
                   )}
                 </div>
               ))
@@ -2021,7 +1998,7 @@ function ComposeInner() {
               </button>
             </div>
             <RecipientPicker value={recipients} onChange={setRecipients} disabled={busy} />
-            <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+            <p className="text-xs text-fg-muted!">
               {count === null
                 ? importedRecipientCount > 0
                   ? `已從表格匯入 ${importedRecipientCount} 人`
@@ -2035,7 +2012,7 @@ function ComposeInner() {
             <div className="flex items-center justify-between gap-2">
               <div>
                 <h2 className="text-sm font-semibold">附件</h2>
-                <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                <p className="mt-1 text-xs text-fg-muted!">
                   小檔直接附加；較大檔案自動改為限時安全下載連結。
                 </p>
               </div>
@@ -2051,7 +2028,7 @@ function ComposeInner() {
         </div>
 
         {/* ── 預覽與動作 ─────────────────────────────────────── */}
-        <div className={`min-w-0 space-y-4 ${currentStep >= 3 ? "" : "hidden"}`}>
+        <div className={`min-w-0 space-y-4 ${currentStep>= 3 ? "" : "hidden"}`}>
           <EmailLivePreview
             recipientRows={recipientRows}
             previewRecipientIndex={previewRecipientIndex}
@@ -2062,7 +2039,7 @@ function ComposeInner() {
             subject={subject}
           />
 
-          <section className={`card space-y-3 p-4 ${currentStep >= 4 ? "" : "hidden"}`}>
+          <section className={`card space-y-3 p-4 ${currentStep>= 4 ? "" : "hidden"}`}>
             <div className="grid gap-2 sm:grid-cols-2">
               <label className="flex items-center gap-2 text-xs">
                 <input type="checkbox" checked={trackOpens} onChange={(e) => setTrackOpens(e.target.checked)} />
@@ -2097,7 +2074,7 @@ function ComposeInner() {
                                     <li key={`${recipient.source}-${recipient.name ?? "unnamed"}-${index}`} className="py-1.5">
                                       <p>
                                         <span className="break-words font-medium">{recipient.name?.trim() || "未提供姓名"}</span>
-                                        <span style={{ color: "var(--text-muted)" }}>
+                                        <span className="text-fg-muted!">
                                           {recipient.source === "account" ? " · 系統帳號" : " · 名單資料"}
                                           {recipient.student_id ? ` · 學號 ${recipient.student_id}` : ""}
                                         </span>
@@ -2106,7 +2083,7 @@ function ComposeInner() {
                                         <dl className="mt-1 grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-x-2 gap-y-1 pl-2">
                                           {Object.entries(recipient.variables ?? {}).map(([key, value]) => (
                                             <div key={key} className="contents">
-                                              <dt className="min-w-0 break-words" style={{ color: "var(--text-muted)" }}>{key}</dt>
+                                              <dt className="min-w-0 break-words text-fg-muted!">{key}</dt>
                                               <dd className="min-w-0 whitespace-pre-wrap break-words">{value || "（空白）"}</dd>
                                             </div>
                                           ))}
@@ -2116,7 +2093,7 @@ function ComposeInner() {
                                   ))}
                                 </ul>
                               ) : (
-                                <p className="mt-1" style={{ color: "var(--text-muted)" }}>
+                                <p className="mt-1 text-fg-muted!">
                                   目前沒有可顯示的收件明細。
                                 </p>
                               )}
@@ -2127,11 +2104,11 @@ function ComposeInner() {
                   </div>
                 )}
                 {preflightResult.suppressed_emails.length > 0 && <p>已排除退訂／退信：{preflightResult.suppressed_emails.length}</p>}
-                {preflightResult.missing_variables.length > 0 && <p style={{ color: "var(--danger)" }}>缺少必要欄位：{preflightResult.missing_variables.length}</p>}
+                {preflightResult.missing_variables.length > 0 && <p className="text-danger!">缺少必要欄位：{preflightResult.missing_variables.length}</p>}
               </div>
             )}
             {currentStep === 5 && <div>
-              <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+              <label className="mb-1 block text-xs font-medium text-fg-muted!">
                 預約寄送時間（選填）
               </label>
               <input
@@ -2195,7 +2172,7 @@ function ComposeInner() {
               </button>}
             </div>
             {lastSavedAt && (
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+              <p className="text-xs text-fg-muted!">
                 已暫存於此裝置
               </p>
             )}
@@ -2203,7 +2180,7 @@ function ComposeInner() {
         </div>
       </div>
 
-      <div className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-20 flex items-center justify-between rounded-lg border p-3 lg:bottom-3" style={{ background: "var(--bg-surface)", borderColor: "var(--border-strong)" }}>
+      <div className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-20 flex items-center justify-between rounded-lg border p-3 lg:bottom-3 bg-surface! border-border-strong!">
         <button
           type="button"
           className="btn btn-ghost btn-sm"
@@ -2212,7 +2189,7 @@ function ComposeInner() {
         >
           上一步
         </button>
-        <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+        <span className="text-xs text-fg-muted!">
           {COMPOSE_STEPS[currentStep - 1].label}
         </span>
         {currentStep < 5 ? (
@@ -2228,11 +2205,11 @@ function ComposeInner() {
 
       {confirmOpen && (
         <Modal title="確認大量寄送" onClose={() => setConfirmOpen(false)} size="md">
-          <p className="text-sm" style={{ color: "var(--text-primary)" }}>
+          <p className="text-sm text-fg-primary!">
             這封信將寄送給 <strong>{preflightResult?.unique_count ?? estimatedRecipientCount}</strong> 位收件人，
             共 {preflightResult?.estimated_batches ?? 1} 批，確定要立即送出嗎？
           </p>
-          <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+          <p className="mt-2 text-xs text-fg-muted!">
             開信追蹤：{trackOpens ? "開啟" : "關閉"} · 點擊追蹤：{trackClicks ? "開啟" : "關閉"} · 附件 {attachments.length} 個
           </p>
           <div className="mt-5 flex justify-end gap-2">

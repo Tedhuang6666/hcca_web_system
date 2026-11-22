@@ -70,7 +70,7 @@ function EditableField({
 
   return (
     <div>
-      <p className="text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>{label}</p>
+      <p className="text-xs font-medium mb-1 text-fg-muted!">{label}</p>
       {editing ? (
         <div className="flex items-center gap-2">
           <input
@@ -286,13 +286,12 @@ export default function ProfilePage() {
     return (
       <div className="space-y-5 max-w-2xl mx-auto">
         <div>
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
+          <h1 className="text-xl font-semibold text-fg-primary!">
             {pathname === "/settings/account" ? "帳號與個人資料" : "個人資料"}
           </h1>
         </div>
         <div
-          className="flex gap-1 rounded-lg border p-1"
-          style={{ borderColor: "var(--border)", background: "var(--bg-surface)" }}
+          className="flex gap-1 rounded-lg border p-1 border-border! bg-surface!"
           aria-hidden="true">
           {PROFILE_TABS.map((tab) => (
             <span
@@ -315,15 +314,15 @@ export default function ProfilePage() {
     return (
       <div className="space-y-5 max-w-2xl mx-auto">
         <div>
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
+          <h1 className="text-xl font-semibold text-fg-primary!">
             {pathname === "/settings/account" ? "帳號與個人資料" : "個人資料"}
           </h1>
         </div>
         <section className="card p-6 text-center">
-          <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+          <p className="text-sm font-medium text-fg-primary!">
             個人資料載入失敗
           </p>
-          <p className="mt-2 text-sm" style={{ color: "var(--text-muted)" }}>
+          <p className="mt-2 text-sm text-fg-muted!">
             {loadError || "目前無法取得帳號資料，請稍後再試。"}
           </p>
           <button className="btn btn-primary mt-4" onClick={() => window.location.reload()}>
@@ -338,14 +337,13 @@ export default function ProfilePage() {
     <div className="space-y-6 max-w-2xl mx-auto">
       {/* 頁首 */}
       <div>
-        <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
+        <h1 className="text-xl font-semibold text-fg-primary!">
           {pathname === "/settings/account" ? "帳號與個人資料" : "個人資料"}
         </h1>
       </div>
 
       <div
-        className="flex gap-1 rounded-lg border p-1"
-        style={{ borderColor: "var(--border)", background: "var(--bg-surface)" }}
+        className="flex gap-1 rounded-lg border p-1 border-border! bg-surface!"
         role="tablist"
         aria-label="個人資料頁籤">
         {PROFILE_TABS.map((tab) => {
@@ -378,31 +376,30 @@ export default function ProfilePage() {
               className="w-14 h-14 rounded-full object-cover flex-shrink-0" />
           ) : (
             <div
-              className="w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold flex-shrink-0"
-              style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}
+              className="w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold flex-shrink-0 bg-accent-soft! text-accent-text!"
               aria-hidden="true">
               {initials}
             </div>
           )}
           <div className="min-w-0">
-            <h2 id="profile-heading" className="text-base font-semibold truncate"
-              style={{ color: "var(--text-primary)" }}>
+            <h2 id="profile-heading" className="text-base font-semibold truncate text-fg-primary!"
+              >
               {user?.display_name ?? "—"}
             </h2>
-            <p className="text-sm truncate" style={{ color: "var(--text-muted)" }}>
+            <p className="text-sm truncate text-fg-muted!">
               {user?.email ?? "—"}
             </p>
             {user?.is_superuser && (
-              <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded font-medium"
-                style={{ background: "var(--warning-dim)", color: "var(--warning)" }}>
+              <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded font-medium bg-warning-soft! text-warning!"
+                >
                 管理員
               </span>
             )}
           </div>
         </div>
 
-        <div style={{ borderTop: "1px solid var(--border)", paddingTop: "1.25rem" }}
-          className="space-y-4">
+        <div
+          className="space-y-4 border-t! border-t-border! pt-5!">
           <EditableField
             label="顯示名稱"
             value={user?.display_name ?? ""}
@@ -418,22 +415,22 @@ export default function ProfilePage() {
             onSave={saveStudentId}
           />
           <div>
-            <p className="text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>目前班級</p>
-            <p className="text-sm" style={{ color: "var(--text-primary)" }}>
+            <p className="text-xs font-medium mb-1 text-fg-muted!">目前班級</p>
+            <p className="text-sm text-fg-primary!">
               {myClass
                 ? (myClass.label ?? `${myClass.academic_year} 學年度 ${myClass.class_code} 班`)
                 : "尚未歸班"}
             </p>
           </div>
           <div>
-            <p className="text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>電子郵件</p>
+            <p className="text-xs font-medium mb-1 text-fg-muted!">電子郵件</p>
             <div className="space-y-1">
               {(linkedEmails.length > 0 ? linkedEmails : [user?.email ?? "—"]).map((email) => (
                 <div key={email} className="flex items-center gap-2">
-                  <p className="min-w-0 flex-1 break-all text-sm" style={{ color: "var(--text-primary)" }}>
+                  <p className="min-w-0 flex-1 break-all text-sm text-fg-primary!">
                     {email}
                     {email === user?.email && (
-                      <span className="ml-2 text-xs" style={{ color: "var(--text-muted)" }}>
+                      <span className="ml-2 text-xs text-fg-muted!">
                         主要
                       </span>
                     )}
@@ -500,15 +497,15 @@ export default function ProfilePage() {
                   </button>
                 </div>
               )}
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+              <p className="text-xs text-fg-muted!">
                 若此 Email 已屬於其他帳號，驗證後兩個帳號會合併。
               </p>
             </div>
           </div>
 
           {/* 公文承辦人顯示設定 */}
-          <div style={{ borderTop: "1px solid var(--border)", paddingTop: "1rem" }}>
-            <p className="text-xs font-semibold mb-2" style={{ color: "var(--text-muted)" }}>
+          <div className="border-t! border-t-border! pt-4!">
+            <p className="text-xs font-semibold mb-2 text-fg-muted!">
               公文承辦人資訊顯示設定
             </p>
             <div className="space-y-2">
@@ -524,17 +521,17 @@ export default function ProfilePage() {
             </div>
           </div>
           <div>
-            <p className="text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>帳號狀態</p>
+            <p className="text-xs font-medium mb-1 text-fg-muted!">帳號狀態</p>
             <div className="flex items-center gap-2">
               <span className={`w-2 h-2 rounded-full`}
                 style={{ background: user?.is_active ? "var(--success)" : "var(--danger)" }}
                 aria-hidden="true" />
-              <span className="text-sm" style={{ color: "var(--text-primary)" }}>
+              <span className="text-sm text-fg-primary!">
                 {user?.is_active ? "正常" : "已停用"}
               </span>
               {user?.is_verified && (
-                <span className="text-xs px-1.5 py-0.5 rounded"
-                  style={{ background: "var(--success-dim)", color: "var(--success)" }}>
+                <span className="text-xs px-1.5 py-0.5 rounded bg-success-soft! text-success!"
+                  >
                   已驗證
                 </span>
               )}
@@ -547,20 +544,20 @@ export default function ProfilePage() {
 
       {/* 現職職位 */}
       {activeTab === "positions" && <section className="card overflow-hidden" aria-labelledby="positions-heading">
-        <div className="px-5 py-4" style={{ borderBottom: "1px solid var(--border)" }}>
-          <h2 id="positions-heading" className="text-sm font-semibold"
-            style={{ color: "var(--text-primary)" }}>
+        <div className="px-5 py-4 border-b! border-b-border!">
+          <h2 id="positions-heading" className="text-sm font-semibold text-fg-primary!"
+            >
             現職職位
             {activePositions.length > 0 && (
-              <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full"
-                style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
+              <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-accent-soft! text-accent-text!"
+                >
                 {activePositions.length}
               </span>
             )}
           </h2>
         </div>
         {activePositions.length === 0 ? (
-          <p className="px-5 py-8 text-sm text-center" style={{ color: "var(--text-muted)" }}>
+          <p className="px-5 py-8 text-sm text-center text-fg-muted!">
             目前無在任職位
           </p>
         ) : (
@@ -571,7 +568,7 @@ export default function ProfilePage() {
               ["系統職位", activeSystemPositions],
             ].filter(([, list]) => (list as UserPositionRead[]).length > 0).map(([label, list]) => (
               <div key={label as string}>
-                <p className="px-5 pt-4 pb-2 text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
+                <p className="px-5 pt-4 pb-2 text-xs font-semibold text-fg-muted!">
                   {label as string}
                 </p>
                 <ul aria-label={`${label as string}列表`}>
@@ -580,19 +577,19 @@ export default function ProfilePage() {
                       className="px-5 py-3.5 flex items-center justify-between gap-3"
                       style={idx < (list as UserPositionRead[]).length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}>
                       <div>
-                        <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+                        <p className="text-sm font-medium text-fg-primary!">
                           {p.position_name || p.position_id.slice(0, 8) + "…"}
                         </p>
                         {p.position_org_name && (
-                          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                          <p className="text-xs text-fg-muted!">
                             {p.position_org_name}
                           </p>
                         )}
-                        <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+                        <p className="text-xs mt-0.5 text-fg-muted!">
                           自 {p.start_date}{p.end_date ? ` 至 ${p.end_date}` : " 起（無限期）"}
                         </p>
                       </div>
-                      <span className="badge" style={{ color: "var(--success)", background: "var(--success-dim)", borderColor: "var(--success)" }}>
+                      <span className="badge text-success! bg-success-soft! border-success!">
                         在任中
                       </span>
                     </li>
@@ -607,20 +604,20 @@ export default function ProfilePage() {
       {/* 有效權限 */}
       {activeTab === "permissions" && (hasFullSystemAccess || permissionCodes.length > 0) && (
         <section className="card p-5" aria-labelledby="perms-heading">
-          <h2 id="perms-heading" className="text-sm font-semibold mb-3"
-            style={{ color: "var(--text-primary)" }}>
+          <h2 id="perms-heading" className="text-sm font-semibold mb-3 text-fg-primary!"
+            >
             有效權限
           </h2>
           {isAdmin && (
-            <div className="mb-3 rounded-md px-3 py-2 text-xs"
-              style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
+            <div className="mb-3 rounded-md px-3 py-2 text-xs bg-accent-soft! text-accent-text!"
+              >
               {isOwner ? "系統擁有者" : "超級管理員"}：擁有全部系統權限
             </div>
           )}
           <div className="flex flex-wrap gap-1.5">
             {permissionCodes.map(code => (
-              <span key={code} className="text-xs px-2 py-1 rounded font-mono"
-                style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
+              <span key={code} className="text-xs px-2 py-1 rounded font-mono bg-elevated! text-fg-secondary! border! border-border!"
+                >
                 {PERMISSION_LABELS[code] ?? code}
               </span>
             ))}
@@ -629,7 +626,7 @@ export default function ProfilePage() {
       )}
       {activeTab === "permissions" && !hasFullSystemAccess && permissionCodes.length === 0 && (
         <section className="card p-6 text-center">
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+          <p className="text-sm text-fg-muted!">
             目前沒有可顯示的有效權限。
           </p>
         </section>
@@ -638,9 +635,9 @@ export default function ProfilePage() {
       {/* 歷史職位（折疊） */}
       {activeTab === "positions" && pastPositions.length > 0 && (
         <section className="card overflow-hidden" aria-labelledby="past-positions-heading">
-          <div className="px-5 py-4" style={{ borderBottom: "1px solid var(--border)" }}>
-            <h2 id="past-positions-heading" className="text-sm font-semibold"
-              style={{ color: "var(--text-muted)" }}>
+          <div className="px-5 py-4 border-b! border-b-border!">
+            <h2 id="past-positions-heading" className="text-sm font-semibold text-fg-muted!"
+              >
               歷史職位（{pastPositions.length} 筆）
             </h2>
           </div>
@@ -650,17 +647,17 @@ export default function ProfilePage() {
                 className="px-5 py-3 flex items-center justify-between gap-3"
                 style={idx < pastPositions.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}>
                 <div>
-                  <p className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
+                  <p className="text-sm font-medium text-fg-secondary!">
                     {p.position_name || p.position_id.slice(0, 8) + "…"}
                   </p>
                   {p.position_org_name && (
-                    <p className="text-xs" style={{ color: "var(--text-muted)" }}>{p.position_org_name}</p>
+                    <p className="text-xs text-fg-muted!">{p.position_org_name}</p>
                   )}
-                  <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+                  <p className="text-xs mt-0.5 text-fg-muted!">
                     {POSITION_CATEGORY_LABEL[p.position_category]} · {p.start_date} 至 {p.end_date}
                   </p>
                 </div>
-                <span className="badge" style={{ color: "var(--text-muted)", background: "var(--bg-elevated)", borderColor: "var(--border)" }}>
+                <span className="badge text-fg-muted! bg-elevated! border-border!">
                   已卸任
                 </span>
               </li>

@@ -123,14 +123,13 @@ function UploadBox({
         }}
       />
         {disabled && (
-          <p className="mt-3 text-xs" style={{ color: "var(--danger)" }}>
+          <p className="mt-3 text-xs text-danger!">
             目前無法上傳，請確認投稿時間與校務信箱限制。
           </p>
         )}
       {files.length > 0 && (
         <ul
-          className="divide-y rounded-lg border"
-          style={{ borderColor: "var(--border)" }}
+          className="divide-y rounded-lg border border-border!"
         >
           {files.map((file) => (
             <li key={file.storage_key} className="flex items-center gap-3 p-3">
@@ -139,8 +138,7 @@ function UploadBox({
                   href={uploadUrl(file.url)}
                   target="_blank"
                   rel="noreferrer"
-                  className="shrink-0 overflow-hidden rounded border"
-                  style={{ borderColor: "var(--border)" }}
+                  className="shrink-0 overflow-hidden rounded border border-border!"
                   aria-label={`預覽 ${file.filename}`}
                 >
                   {/* Uploaded files use runtime storage URLs, so Next image optimization cannot be applied. */}
@@ -152,7 +150,7 @@ function UploadBox({
                   />
                 </a>
               ) : (
-                <FileText size={18} style={{ color: "var(--primary-text)" }} />
+                <FileText size={18}   className="text-accent-text!"/>
               )}
               <input
                 value={file.filename}
@@ -169,8 +167,7 @@ function UploadBox({
                 aria-label="投稿檔案名稱"
               />
               <span
-                className="shrink-0 text-xs"
-                style={{ color: "var(--text-muted)" }}
+                className="shrink-0 text-xs text-fg-muted!"
               >
                 {(file.file_size / 1024 / 1024).toFixed(1)} MB
               </span>
@@ -204,11 +201,10 @@ function TemplateGallery({
   if (!item.template_images.length) return null;
   return (
     <section
-      className="rounded-xl border p-5 sm:p-6"
-      style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
+      className="rounded-xl border p-5 sm:p-6 bg-surface! border-border!"
     >
       <h2 className="text-lg font-semibold">設計範本</h2>
-      <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
+      <p className="mt-1 text-sm text-fg-secondary!">
         請依範本完成設計；可開啟原圖檢視細節或下載。
       </p>
       <div className="mt-5 grid gap-5 lg:grid-cols-2">
@@ -218,8 +214,7 @@ function TemplateGallery({
             href={uploadUrl(template.url)}
             target="_blank"
             rel="noreferrer"
-            className="group overflow-hidden rounded-lg border p-3"
-            style={{ borderColor: "var(--border)" }}
+            className="group overflow-hidden rounded-lg border p-3 border-border!"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -227,8 +222,7 @@ function TemplateGallery({
               alt={`${template.label} 範本`}
               loading="lazy"
               decoding="async"
-              className="max-h-[34rem] w-full object-contain"
-              style={{ background: "var(--bg-elevated)" }}
+              className="max-h-[34rem] w-full object-contain bg-elevated!"
             />
             <span className="mt-3 flex items-center justify-between gap-2 text-sm font-semibold">
               {template.label}
@@ -409,8 +403,7 @@ export default function MerchandiseSubmissionsPageClient({
     return (
       <div className="p-6">
         <div
-          className="h-36 animate-pulse rounded-xl"
-          style={{ background: "var(--bg-elevated)" }}
+          className="h-36 animate-pulse rounded-xl bg-elevated!"
         />
       </div>
     );
@@ -424,20 +417,17 @@ export default function MerchandiseSubmissionsPageClient({
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-6 sm:px-6 lg:py-8">
       <header
-        className="flex flex-wrap items-end justify-between gap-4 border-b pb-6"
-        style={{ borderColor: "var(--border)" }}
+        className="flex flex-wrap items-end justify-between gap-4 border-b pb-6 border-border!"
       >
         <div>
           <p
-            className="text-sm font-semibold"
-            style={{ color: "var(--primary-text)" }}
+            className="text-sm font-semibold text-accent-text!"
           >
             校慶商品設計徵集
           </p>
           <h1 className="mt-1 text-2xl font-bold tracking-tight">校商投稿</h1>
           <p
-            className="mt-2 text-sm"
-            style={{ color: "var(--text-secondary)" }}
+            className="mt-2 text-sm text-fg-secondary!"
           >
             依規格上傳圖稿、儲存草稿並送出審核。
           </p>
@@ -454,19 +444,13 @@ export default function MerchandiseSubmissionsPageClient({
       {portal?.settings.require_school_email &&
         !portal.is_eligible_submitter && (
           <p
-            className="rounded-lg border px-4 py-3 text-sm"
-            style={{
-              background: "var(--danger-dim)",
-              borderColor: "var(--danger-border)",
-              color: "var(--danger)",
-            }}
+            className="rounded-lg border px-4 py-3 text-sm bg-danger-soft! border-danger-border! text-danger!"
           >
             本次校商投稿僅限使用校務信箱登入的帳號。
           </p>
         )}
       <nav
-        className="flex border-b"
-        style={{ borderColor: "var(--border)" }}
+        className="flex border-b border-border!"
         aria-label="校商投稿頁籤"
       >
         <button
@@ -505,25 +489,19 @@ export default function MerchandiseSubmissionsPageClient({
         >
           {mineLoading ? (
             <div
-              className="h-40 animate-pulse rounded-xl"
-              style={{ background: "var(--bg-elevated)" }}
+              className="h-40 animate-pulse rounded-xl bg-elevated!"
             />
           ) : submissions.length ? (
             submissions.map((submission) => (
               <article
                 key={submission.id}
-                className="rounded-xl border p-5"
-                style={{
-                  background: "var(--bg-surface)",
-                  borderColor: "var(--border)",
-                }}
+                className="rounded-xl border p-5 bg-surface! border-border!"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h2 className="font-semibold">{submission.item_name}</h2>
                     <p
-                      className="mt-1 flex items-center gap-1 text-xs"
-                      style={{ color: "var(--text-muted)" }}
+                      className="mt-1 flex items-center gap-1 text-xs text-fg-muted!"
                     >
                       <Clock3 size={12} />
                       {new Intl.DateTimeFormat("zh-TW", {
@@ -537,19 +515,14 @@ export default function MerchandiseSubmissionsPageClient({
                     </p>
                   </div>
                   <span
-                    className="rounded px-2 py-1 text-xs font-semibold"
-                    style={{
-                      background: "var(--primary-dim)",
-                      color: "var(--primary-text)",
-                    }}
+                    className="rounded px-2 py-1 text-xs font-semibold bg-accent-soft! text-accent-text!"
                   >
                     {statusLabel[submission.status]}
                   </span>
                 </div>
                 {submission.review_note && (
                   <p
-                    className="mt-3 rounded-lg p-3 text-sm"
-                    style={{ background: "var(--bg-elevated)" }}
+                    className="mt-3 rounded-lg p-3 text-sm bg-elevated!"
                   >
                     {submission.review_note}
                   </p>
@@ -558,17 +531,12 @@ export default function MerchandiseSubmissionsPageClient({
                   submission.voting_survey_id && submission.voting_survey_status === "open" ? (
                     <Link
                       href={`/surveys/${submission.voting_survey_id}`}
-                      className="btn mt-3 min-h-10"
-                      style={{
-                        background: "var(--primary)",
-                        color: "var(--primary-fg)",
-                        border: "none",
-                      }}
+                      className="btn mt-3 min-h-10 bg-accent! text-accent-foreground! border-0!"
                     >
                       前往全校投票
                     </Link>
                   ) : (
-                    <p className="mt-3 text-sm" style={{ color: "var(--text-muted)" }}>
+                    <p className="mt-3 text-sm text-fg-muted!">
                       投票問卷準備中，待管理員確認發布後開放填答。
                     </p>
                   )
@@ -580,8 +548,7 @@ export default function MerchandiseSubmissionsPageClient({
                       href={uploadUrl(file.url)}
                       target="_blank"
                       rel="noreferrer"
-                      className="overflow-hidden rounded-lg border p-2 text-xs"
-                      style={{ borderColor: "var(--border)" }}
+                      className="overflow-hidden rounded-lg border p-2 text-xs border-border!"
                     >
                       {isPreviewableImage(file) ? (
                         /* eslint-disable-next-line @next/next/no-img-element */
@@ -592,8 +559,7 @@ export default function MerchandiseSubmissionsPageClient({
                         />
                       ) : (
                         <div
-                          className="flex aspect-square items-center justify-center rounded"
-                          style={{ background: "var(--bg-elevated)" }}
+                          className="flex aspect-square items-center justify-center rounded bg-elevated!"
                         >
                           <FileText size={28} />
                         </div>
@@ -609,12 +575,7 @@ export default function MerchandiseSubmissionsPageClient({
                     <button
                       type="button"
                       onClick={() => edit(submission)}
-                      className="btn min-h-10"
-                      style={{
-                        background: "var(--primary)",
-                        color: "var(--primary-fg)",
-                        border: "none",
-                      }}
+                      className="btn min-h-10 bg-accent! text-accent-foreground! border-0!"
                     >
                       <Pencil size={14} />
                       編輯投稿
@@ -624,8 +585,7 @@ export default function MerchandiseSubmissionsPageClient({
                       data-performance-action="校商投稿／刪除投稿"
                       onClick={() => void remove(submission)}
                       disabled={deletingId === submission.id}
-                      className="btn btn-ghost min-h-10"
-                      style={{ color: "var(--danger)" }}
+                      className="btn btn-ghost min-h-10 text-danger!"
                     >
                       {deletingId === submission.id ? (
                         <LoaderCircle className="animate-spin" size={14} />
@@ -640,8 +600,7 @@ export default function MerchandiseSubmissionsPageClient({
             ))
           ) : (
             <p
-              className="py-16 text-center text-sm"
-              style={{ color: "var(--text-muted)" }}
+              className="py-16 text-center text-sm text-fg-muted!"
             >
               尚未送出任何投稿。
             </p>
@@ -650,11 +609,7 @@ export default function MerchandiseSubmissionsPageClient({
       ) : (
         <div className="space-y-6">
           <nav
-            className="grid grid-cols-3 gap-1 rounded-xl border p-1 sm:gap-2 sm:p-2"
-            style={{
-              background: "var(--bg-elevated)",
-              borderColor: "var(--border)",
-            }}
+            className="grid grid-cols-3 gap-1 rounded-xl border p-1 sm:gap-2 sm:p-2 bg-elevated! border-border!"
             aria-label="投稿步驟"
           >
             {([
@@ -673,12 +628,8 @@ export default function MerchandiseSubmissionsPageClient({
                   aria-selected={isActive}
                   disabled={isDisabled || (value === "item" && Boolean(editingId))}
                   onClick={() => setStep(value)}
-                  className="min-h-16 rounded-lg px-2 py-2 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
-                  style={{
-                    background: isActive ? "var(--bg-surface)" : "transparent",
-                    boxShadow: isActive ? "0 1px 3px rgba(15, 23, 42, 0.12)" : "none",
-                    outlineColor: "var(--primary)",
-                  }}
+                  className="min-h-16 rounded-lg px-2 py-2 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4 outline-accent!"
+                  style={{ background: isActive ? "var(--bg-surface)" : "transparent", boxShadow: isActive ? "0 1px 3px rgba(15, 23, 42, 0.12)" : "none" }}
                 >
                   <span className="flex items-center gap-2">
                     <span
@@ -693,8 +644,7 @@ export default function MerchandiseSubmissionsPageClient({
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-semibold">{label}</span>
                       <span
-                        className="mt-0.5 hidden truncate text-xs sm:block"
-                        style={{ color: "var(--text-muted)" }}
+                        className="mt-0.5 hidden truncate text-xs sm:block text-fg-muted!"
                       >
                         {description}
                       </span>
@@ -708,11 +658,7 @@ export default function MerchandiseSubmissionsPageClient({
             <>
           {portal?.settings.submission_intro && (
             <section
-              className="rounded-xl border p-5 sm:p-6"
-              style={{
-                background: "var(--bg-surface)",
-                borderColor: "var(--border)",
-              }}
+              className="rounded-xl border p-5 sm:p-6 bg-surface! border-border!"
             >
               <h2 className="text-lg font-semibold">投稿前言與說明</h2>
               <div className="mt-4 text-sm leading-6 text-[var(--text-secondary)]">
@@ -722,20 +668,15 @@ export default function MerchandiseSubmissionsPageClient({
           )}
           {portal?.settings.closes_at && (
             <section
-              className="flex items-start gap-3 rounded-xl border p-4 sm:p-5"
-              style={{
-                background: "var(--primary-dim)",
-                borderColor: "var(--border-strong)",
-              }}
+              className="flex items-start gap-3 rounded-xl border p-4 sm:p-5 bg-accent-soft! border-border-strong!"
             >
               <Clock3
                 size={20}
-                className="mt-0.5 shrink-0"
-                style={{ color: "var(--primary-text)" }}
+                className="mt-0.5 shrink-0 text-accent-text!"
               />
               <div>
                 <h2 className="font-semibold">全站預設截止時間</h2>
-                <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
+                <p className="mt-1 text-sm text-fg-secondary!">
                   請於 {formatDeadline(portal.settings.closes_at)} 前送出投稿；若品項有個別
                   設定，請以品項卡片標示的時間為準。
                 </p>
@@ -743,17 +684,12 @@ export default function MerchandiseSubmissionsPageClient({
             </section>
           )}
           <section
-            className="rounded-xl border p-5 sm:p-6"
-            style={{
-              background: "var(--primary-dim)",
-              borderColor: "var(--border-strong)",
-            }}
+            className="rounded-xl border p-5 sm:p-6 bg-accent-soft! border-border-strong!"
           >
             <div className="flex items-start gap-3">
               <CheckCircle2
                 size={20}
-                className="mt-0.5 shrink-0"
-                style={{ color: "var(--primary-text)" }}
+                className="mt-0.5 shrink-0 text-accent-text!"
               />
               <div>
                 <h2 className="font-semibold">準備好開始投稿了嗎？</h2>
@@ -774,22 +710,14 @@ export default function MerchandiseSubmissionsPageClient({
             <>
               {step === "item" && (
               <section
-                className="rounded-xl border p-5 sm:p-6"
-                style={{
-                  background: "var(--bg-surface)",
-                  borderColor: "var(--border)",
-                }}
+                className="rounded-xl border p-5 sm:p-6 bg-surface! border-border!"
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="text-lg font-semibold">選擇要投稿的商品</h2>
                       <span
-                        className="rounded px-2 py-1 text-xs font-semibold"
-                        style={{
-                          background: "var(--primary-dim)",
-                          color: "var(--primary-text)",
-                        }}
+                        className="rounded px-2 py-1 text-xs font-semibold bg-accent-soft! text-accent-text!"
                       >
                         第 2 步，共 3 步
                       </span>
@@ -810,36 +738,28 @@ export default function MerchandiseSubmissionsPageClient({
                           aria-pressed={selectedId === item.id}
                           disabled={Boolean(editingId)}
                           onClick={() => choose(item.id)}
-                          className="relative flex min-h-0 items-center gap-3 rounded-lg border p-3 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60 sm:block sm:min-h-36 sm:rounded-xl sm:p-4"
-                          style={{
-                            background:
+                          className="relative flex min-h-0 items-center gap-3 rounded-lg border p-3 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60 sm:block sm:min-h-36 sm:rounded-xl sm:p-4 outline-accent!"
+                          style={{ background:
                               selectedId === item.id
                                 ? "var(--primary-dim)"
-                                : "var(--bg-elevated)",
-                            borderColor:
+                                : "var(--bg-elevated)", borderColor:
                               selectedId === item.id
                                 ? "var(--primary)"
-                                : "var(--border)",
-                            outlineColor: "var(--primary)",
-                          }}
+                                : "var(--border)" }}
                         >
                           <span
-                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg sm:h-10 sm:w-10"
-                            style={{
-                              background:
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg sm:h-10 sm:w-10 text-accent-text!"
+                            style={{ background:
                                 selectedId === item.id
                                   ? "var(--bg-surface)"
-                                  : "var(--primary-dim)",
-                              color: "var(--primary-text)",
-                            }}
+                                  : "var(--primary-dim)" }}
                           >
                             <Package size={20} />
                           </span>
                           {selectedId === item.id && (
                             <CheckCircle2
                               size={20}
-                              className="absolute right-3 top-3 sm:right-4 sm:top-4"
-                              style={{ color: "var(--primary-text)" }}
+                              className="absolute right-3 top-3 sm:right-4 sm:top-4 text-accent-text!"
                               aria-label="已選擇"
                             />
                           )}
@@ -848,8 +768,7 @@ export default function MerchandiseSubmissionsPageClient({
                               {item.name}
                             </span>
                             <span
-                              className="mt-1 hidden truncate text-sm sm:block"
-                              style={{ color: "var(--text-secondary)" }}
+                              className="mt-1 hidden truncate text-sm sm:block text-fg-secondary!"
                             >
                               {excerpt(item.description, "") ||
                                 (item.specification
@@ -872,8 +791,7 @@ export default function MerchandiseSubmissionsPageClient({
                               </span>
                               {item.effective_closes_at && (
                                 <span
-                                  className="flex items-center gap-1 text-xs font-medium"
-                                  style={{ color: "var(--text-secondary)" }}
+                                  className="flex items-center gap-1 text-xs font-medium text-fg-secondary!"
                                 >
                                   <Clock3 size={13} />
                                   截止 {formatDeadline(item.effective_closes_at)}
@@ -881,8 +799,7 @@ export default function MerchandiseSubmissionsPageClient({
                               )}
                               {hasItemDetails(item) && (
                                 <span
-                                  className="flex items-center gap-1 text-xs font-medium"
-                                  style={{ color: "var(--primary-text)" }}
+                                  className="flex items-center gap-1 text-xs font-medium text-accent-text!"
                                 >
                                   <FileText size={13} />
                                   有規格與範本
@@ -894,7 +811,7 @@ export default function MerchandiseSubmissionsPageClient({
                       ))}
                 </div>
                 <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+                  <p className="text-sm text-fg-muted!">
                     {selected ? `目前選擇：${selected.name}` : "尚未選擇商品"}
                   </p>
                   <button
@@ -918,11 +835,7 @@ export default function MerchandiseSubmissionsPageClient({
                 >
                   {selected.description && (
                     <section
-                      className="rounded-xl border p-5 sm:p-6"
-                      style={{
-                        background: "var(--bg-surface)",
-                        borderColor: "var(--border)",
-                      }}
+                      className="rounded-xl border p-5 sm:p-6 bg-surface! border-border!"
                     >
                       <h2 className="text-lg font-semibold">品項資訊</h2>
                       <div className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">
@@ -932,11 +845,7 @@ export default function MerchandiseSubmissionsPageClient({
                   )}
                   {selected.specification && (
                     <section
-                      className="rounded-xl border p-5 sm:p-6"
-                      style={{
-                        background: "var(--bg-surface)",
-                        borderColor: "var(--border)",
-                      }}
+                      className="rounded-xl border p-5 sm:p-6 bg-surface! border-border!"
                     >
                       <h2 className="text-lg font-semibold">品項規格</h2>
                       <div className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">
@@ -949,21 +858,17 @@ export default function MerchandiseSubmissionsPageClient({
               )}
               {selected && (
                 <section
-                  className="rounded-xl border p-5 sm:p-6"
-                  style={{
-                    background: "var(--bg-surface)",
-                    borderColor: "var(--border)",
-                  }}
+                  className="rounded-xl border p-5 sm:p-6 bg-surface! border-border!"
                 >
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div>
-                      <p className="text-sm font-semibold" style={{ color: "var(--primary-text)" }}>
+                      <p className="text-sm font-semibold text-accent-text!">
                         第 3 步，共 3 步
                       </p>
                       <h2 className="mt-1 text-lg font-semibold">
                         {editingId ? "編輯圖稿與投稿資料" : "投稿詳情與圖稿"}
                       </h2>
-                      <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
+                      <p className="mt-1 text-sm text-fg-secondary!">
                         {selected.name} · 先看規格，再上傳檔案與填寫資料
                       </p>
                     </div>
@@ -985,13 +890,8 @@ export default function MerchandiseSubmissionsPageClient({
                       ) : (
                         <button
                           type="button"
-                          className="btn btn-secondary min-h-11 w-full border-2 font-semibold sm:w-auto"
+                          className="btn btn-secondary min-h-11 w-full border-2 font-semibold sm:w-auto bg-accent-soft! border-accent! text-accent-text!"
                           onClick={() => setStep("item")}
-                          style={{
-                            background: "var(--primary-dim)",
-                            borderColor: "var(--primary)",
-                            color: "var(--primary-text)",
-                          }}
                         >
                           <ArrowLeftRight size={16} />
                           更換品項
@@ -1001,8 +901,7 @@ export default function MerchandiseSubmissionsPageClient({
                   </div>
                   {selected.effective_closes_at && (
                     <p
-                      className="mt-3 flex items-center gap-1.5 text-sm font-medium"
-                      style={{ color: "var(--primary-text)" }}
+                      className="mt-3 flex items-center gap-1.5 text-sm font-medium text-accent-text!"
                     >
                       <Clock3 size={15} />
                       投稿截止時間：{formatDeadline(selected.effective_closes_at)}
@@ -1022,7 +921,7 @@ export default function MerchandiseSubmissionsPageClient({
                         <span className="text-sm font-medium">
                           {field.label}
                           {field.required && (
-                            <span style={{ color: "var(--danger)" }}> *</span>
+                            <span className="text-danger!"> *</span>
                           )}
                         </span>
                         {field.field_type === "textarea" ? (
@@ -1054,8 +953,7 @@ export default function MerchandiseSubmissionsPageClient({
                         )}
                         {field.help_text && (
                           <span
-                            className="mt-1 block text-xs"
-                            style={{ color: "var(--text-muted)" }}
+                            className="mt-1 block text-xs text-fg-muted!"
                           >
                             {field.help_text}
                           </span>
@@ -1076,14 +974,9 @@ export default function MerchandiseSubmissionsPageClient({
                     <button
                       type="button"
                       data-performance-action="校商投稿／送出投稿"
-                      className="btn min-h-11 w-full sm:w-auto"
+                      className="btn min-h-11 w-full sm:w-auto bg-accent! text-accent-foreground! border-0!"
                       disabled={saving || !canUpload}
                       onClick={() => void save(true)}
-                      style={{
-                        background: "var(--primary)",
-                        color: "var(--primary-fg)",
-                        border: "none",
-                      }}
                     >
                       {saving ? (
                         <LoaderCircle className="animate-spin" size={16} />
@@ -1100,27 +993,17 @@ export default function MerchandiseSubmissionsPageClient({
             </>
           ) : (
             <section
-              className="rounded-xl border p-8 text-center"
-              style={{
-                background: "var(--bg-surface)",
-                borderColor: "var(--border)",
-              }}
+              className="rounded-xl border p-8 text-center bg-surface! border-border!"
             >
               <Package
                 size={30}
-                className="mx-auto"
-                style={{ color: "var(--text-muted)" }}
+                className="mx-auto text-fg-muted!"
               />
               <h2 className="mt-4 font-semibold">目前尚未建立投稿品項</h2>
               {canManageSubmissions && (
                 <Link
                   href="/merchandise-submissions/admin"
-                  className="btn mt-5 inline-flex min-h-10"
-                  style={{
-                    background: "var(--primary)",
-                    color: "var(--primary-fg)",
-                    border: "none",
-                  }}
+                  className="btn mt-5 inline-flex min-h-10 bg-accent! text-accent-foreground! border-0!"
                 >
                   前往建立投稿品項
                 </Link>

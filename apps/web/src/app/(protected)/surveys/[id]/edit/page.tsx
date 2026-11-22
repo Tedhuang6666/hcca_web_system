@@ -57,7 +57,7 @@ type CondRule = { question_id: string; operator: string; value: string; connecto
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
-    <label className="text-xs font-medium block mb-1" style={{ color: "var(--text-secondary)" }}>
+    <label className="text-xs font-medium block mb-1 text-fg-secondary!">
       {children}
     </label>
   );
@@ -314,7 +314,7 @@ function QuestionRow({
       onDrop={onDrop}
     >
       <div className="flex items-center gap-2">
-        <span className="cursor-grab shrink-0" style={{ color: "var(--text-muted)" }} title="拖曳調整順序">
+        <span className="cursor-grab shrink-0 text-fg-muted!"  title="拖曳調整順序">
           <GripVertical size={17} aria-hidden="true" />
         </span>
         <button
@@ -324,11 +324,11 @@ function QuestionRow({
           aria-expanded={isActive}
           aria-label={`編輯第 ${index + 1} 題`}
         >
-          <span className="shrink-0 text-xs font-bold px-2 py-0.5 rounded"
-            style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
+          <span className="shrink-0 text-xs font-bold px-2 py-0.5 rounded bg-accent-soft! text-accent-text!"
+            >
             第 {index + 1} 題
           </span>
-          <span className="truncate text-sm" style={{ color: "var(--text-primary)" }}>
+          <span className="truncate text-sm text-fg-primary!">
             {q.question_text || typeLabel(questionType)}
           </span>
         </button>
@@ -344,7 +344,7 @@ function QuestionRow({
               strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
           </button>
           <button type="button" onClick={() => onDelete(q.id)} disabled={busy}
-            className="topbar-icon-btn" aria-label="刪除題目" style={{ color: "var(--danger)" }}>
+            className="topbar-icon-btn text-danger!" aria-label="刪除題目" >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
               <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -355,8 +355,7 @@ function QuestionRow({
 
       {isActive && <>
       <div
-        className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs"
-        style={{ background: "var(--bg-elevated)" }}
+        className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs bg-elevated!"
         role="status"
         aria-live="polite"
       >
@@ -366,7 +365,7 @@ function QuestionRow({
           {saveStatus === "saved" && "修改會自動儲存"}
           {saveStatus === "error" && `尚未儲存：${saveError}`}
         </span>
-        <span style={{ color: "var(--text-muted)" }}>停止輸入約 1 秒後即會儲存</span>
+        <span className="text-fg-muted!">停止輸入約 1 秒後即會儲存</span>
       </div>
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]">
         <div>
@@ -403,7 +402,7 @@ function QuestionRow({
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="checkbox" checked={required} onChange={e => setRequired(e.target.checked)}
             className="accent-[var(--primary)]" />
-          <span className="text-sm" style={{ color: "var(--text-secondary)" }}>必填</span>
+          <span className="text-sm text-fg-secondary!">必填</span>
         </label>
       )}
 
@@ -429,7 +428,7 @@ function QuestionRow({
       )}
 
       {isMultiple && (
-        <div className="rounded-xl p-3 space-y-2" style={{ background: "var(--bg-elevated)" }}>
+        <div className="rounded-xl p-3 space-y-2 bg-elevated!">
           <div>
             <Label>最多可選項數（選填）</Label>
             <input
@@ -442,35 +441,35 @@ function QuestionRow({
               className="input"
             />
           </div>
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+          <p className="text-xs text-fg-muted!">
             留空表示不限
           </p>
         </div>
       )}
 
       {isMultiple && parsedOptions.length > 0 && (
-        <div className="rounded-xl p-3 space-y-2" style={{ background: "var(--bg-elevated)" }}>
-          <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+        <div className="rounded-xl p-3 space-y-2 bg-elevated!">
+          <p className="text-xs font-medium text-fg-secondary!">
             選項額外設定（選填）
           </p>
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+          <p className="text-xs text-fg-muted!">
             <strong>互斥</strong>：勾選此項時自動清空其他項目（如「以上皆非」）。
             <br />
             <strong>其他</strong>：勾選此項時顯示文字輸入框，可由填答者自由輸入。
           </p>
           <div className="space-y-1">
             {parsedOptions.map(opt => (
-              <div key={opt} className="flex items-center gap-2 px-2 py-1.5 rounded-lg"
-                style={{ background: "var(--bg-surface)" }}>
-                <span className="text-sm flex-1 truncate" style={{ color: "var(--text-primary)" }}>{opt}</span>
-                <label className="flex items-center gap-1 text-xs cursor-pointer"
-                  style={{ color: "var(--text-muted)" }}>
+              <div key={opt} className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-surface!"
+                >
+                <span className="text-sm flex-1 truncate text-fg-primary!">{opt}</span>
+                <label className="flex items-center gap-1 text-xs cursor-pointer text-fg-muted!"
+                  >
                   <input type="checkbox" checked={exclusiveOpts.includes(opt)}
                     onChange={() => toggleExclusive(opt)} className="accent-[var(--primary)]" />
                   互斥
                 </label>
-                <label className="flex items-center gap-1 text-xs cursor-pointer"
-                  style={{ color: "var(--text-muted)" }}>
+                <label className="flex items-center gap-1 text-xs cursor-pointer text-fg-muted!"
+                  >
                   <input type="checkbox" checked={otherOpts.includes(opt)}
                     onChange={() => toggleOther(opt)} className="accent-[var(--primary)]" />
                   其他
@@ -493,7 +492,7 @@ function QuestionRow({
             <NumberInput type="number" min={1} max={Math.max(1, parsedOptions.length)} value={maxValue}
               onChange={e => setMaxValue(parseInt(e.target.value) || 1)} className="input" />
           </div>
-          <p className="col-span-2 text-xs" style={{ color: "var(--text-muted)" }}>
+          <p className="col-span-2 text-xs text-fg-muted!">
             填答者需從上述選項中挑選並排序（最少 {Math.max(1, minValue)}、最多 {Math.min(parsedOptions.length || maxValue, maxValue)} 項）。
           </p>
         </div>
@@ -565,15 +564,15 @@ function QuestionRow({
       )}
 
       {/* 顯示條件 */}
-      <div className="rounded-xl p-3 space-y-2" style={{ background: "var(--bg-elevated)" }}>
-        <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+      <div className="rounded-xl p-3 space-y-2 bg-elevated!">
+        <p className="text-xs font-medium text-fg-secondary!">
           顯示條件（選填，由上到下依序判斷）
         </p>
         {rules.length === 0 && (
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>無條件，一律顯示此題。</p>
+          <p className="text-xs text-fg-muted!">無條件，一律顯示此題。</p>
         )}
         {rules.map((r, i) => (
-          <div key={i} className="space-y-1.5 rounded-lg p-2" style={{ background: "var(--bg-surface)" }}>
+          <div key={i} className="space-y-1.5 rounded-lg p-2 bg-surface!">
             {i > 0 && (
               <div className="flex gap-1">
                 {(["and", "or"] as const).map(c => (
@@ -628,8 +627,8 @@ function QuestionRow({
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                     strokeWidth="3" strokeLinecap="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
                 </button>
-                <button type="button" onClick={() => removeRule(i)} className="topbar-icon-btn"
-                  aria-label="刪除條件" style={{ color: "var(--danger)" }}>
+                <button type="button" onClick={() => removeRule(i)} className="topbar-icon-btn text-danger!"
+                  aria-label="刪除條件" >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                     strokeWidth="3" strokeLinecap="round" aria-hidden="true">
                     <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -870,21 +869,21 @@ export default function EditSurveyPage() {
 
   if (loading) {
     return (
-      <div className="py-20 text-center" style={{ color: "var(--text-muted)" }}>
-        <Loader2 size={28} className="mx-auto mb-3 animate-spin" style={{ color: "var(--primary-text)" }} aria-label="載入中" />
+      <div className="py-20 text-center text-fg-muted!">
+        <Loader2 size={28} className="mx-auto mb-3 animate-spin text-accent-text!"  aria-label="載入中" />
         <p className="text-sm">載入中…</p>
       </div>
     );
   }
   if (!survey) {
-    return <div className="py-20 text-center text-sm" style={{ color: "var(--text-muted)" }}>問卷不存在</div>;
+    return <div className="py-20 text-center text-sm text-fg-muted!">問卷不存在</div>;
   }
   if (!can("survey:manage")) {
-    return <div className="py-20 text-center text-sm" style={{ color: "var(--text-muted)" }}>您沒有編輯問卷的權限</div>;
+    return <div className="py-20 text-center text-sm text-fg-muted!">您沒有編輯問卷的權限</div>;
   }
   if (survey.status === "closed" || survey.status === "archived") {
     return (
-      <div className="max-w-2xl mx-auto py-20 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+      <div className="max-w-2xl mx-auto py-20 text-center text-sm text-fg-muted!">
         已截止或封存的問卷無法編輯。
         <div className="mt-3">
           <Link href={`/surveys/${encodeURIComponent(survey.id)}`} className="btn btn-ghost">返回問卷</Link>
@@ -910,8 +909,8 @@ export default function EditSurveyPage() {
           </svg>
         </Link>
         <div>
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>編輯問卷</h1>
-          <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>
+          <h1 className="text-xl font-semibold text-fg-primary!">編輯問卷</h1>
+          <p className="text-sm mt-0.5 text-fg-muted!">
             {survey.status === "open" ? "問卷開放中，調整會即時生效" : "草稿編輯"}
           </p>
         </div>
@@ -919,7 +918,7 @@ export default function EditSurveyPage() {
 
       {/* 基本資料 */}
       <div className="card p-5 space-y-3">
-        <h3 className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>基本資料</h3>
+        <h3 className="text-xs font-semibold uppercase tracking-widest text-fg-muted!">基本資料</h3>
         <div>
           <Label>問卷標題</Label>
           <input value={title} onChange={e => setTitle(e.target.value)} className="input" />
@@ -937,12 +936,12 @@ export default function EditSurveyPage() {
           <input type="datetime-local" value={closesAt} onChange={e => setClosesAt(e.target.value)}
             className="input" style={{ colorScheme: "dark" }} />
         </div>
-        <div className="rounded-xl p-3 space-y-3" style={{ background: "var(--bg-elevated)" }}>
+        <div className="rounded-xl p-3 space-y-3 bg-elevated!">
           <div>
-            <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+            <p className="text-xs font-medium text-fg-secondary!">
               公告設定（選填）
             </p>
-            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            <p className="mt-1 text-xs text-fg-muted!">
               儲存後同步至公告。
             </p>
           </div>
@@ -955,7 +954,7 @@ export default function EditSurveyPage() {
               className="input"
             />
           </div>
-          <label className="flex items-center gap-2 cursor-pointer text-sm" style={{ color: "var(--text-secondary)" }}>
+          <label className="flex items-center gap-2 cursor-pointer text-sm text-fg-secondary!">
             <input
               type="checkbox"
               checked={showAnnouncementPopup}
@@ -977,12 +976,12 @@ export default function EditSurveyPage() {
         </div>
 
         {/* 開放對象 */}
-        <div className="rounded-xl p-3 space-y-2.5" style={{ background: "var(--bg-elevated)" }}>
-          <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>開放對象</p>
+        <div className="rounded-xl p-3 space-y-2.5 bg-elevated!">
+          <p className="text-xs font-medium text-fg-secondary!">開放對象</p>
           <div>
             <label htmlFor="survey-access-mode"
-              className="text-xs font-medium block mb-1.5"
-              style={{ color: "var(--text-secondary)" }}>
+              className="text-xs font-medium block mb-1.5 text-fg-secondary!"
+              >
               問卷的填答方式
             </label>
             <select
@@ -996,8 +995,8 @@ export default function EditSurveyPage() {
               <option value="link">僅限連結填答（不公開）</option>
               <option value="public">公開填答（列入公開列表）</option>
             </select>
-            <p id="survey-access-description" className="text-xs mt-1.5"
-              style={{ color: "var(--text-muted)" }}>
+            <p id="survey-access-description" className="text-xs mt-1.5 text-fg-muted!"
+              >
               {accessMode === "link"
                 ? "不列於公開列表，持有連結者仍可填答。"
                 : accessMode === "public"
@@ -1007,7 +1006,7 @@ export default function EditSurveyPage() {
           </div>
           {accessMode === "members" && (
             <>
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+              <p className="text-xs text-fg-muted!">
                 須符合所選年級；其餘資格條件符合任一項即可。
               </p>
               <SurveyGradeSelector value={allowedGrades} onChange={setAllowedGrades} />
@@ -1050,10 +1049,10 @@ export default function EditSurveyPage() {
 
       {/* 題目列表 */}
       <div className="space-y-3">
-        <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+        <h3 className="text-sm font-semibold text-fg-primary!">
           題目（{survey.questions.length}）
         </h3>
-        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+        <p className="text-xs text-fg-muted!">
           點題目卡片即可編輯；可拖曳卡片或使用箭頭調整順序。
         </p>
         {survey.questions.map((q, idx) => (
@@ -1082,7 +1081,7 @@ export default function EditSurveyPage() {
 
       {/* 新增題目 */}
       <div className="card p-5 space-y-3">
-        <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>新增題目</h3>
+        <h3 className="text-sm font-semibold text-fg-primary!">新增題目</h3>
         <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]">
           <div>
             <Label>題型</Label>
@@ -1117,7 +1116,7 @@ export default function EditSurveyPage() {
           <label className="flex min-h-11 items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={newRequired} onChange={event => setNewRequired(event.target.checked)}
               className="accent-[var(--primary)]" />
-            <span className="text-sm" style={{ color: "var(--text-secondary)" }}>必填</span>
+            <span className="text-sm text-fg-secondary!">必填</span>
           </label>
         )}
         {needsOptions && (

@@ -562,17 +562,17 @@ export default function EditDocumentPage() {
       <div className="flex items-center gap-3">
         <Link href={`/documents/${documentId}`}
           aria-label="返回公文"
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-[var(--bg-hover)]"
-          style={{ border: "1px solid var(--border)" }}>
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-[var(--bg-hover)] border! border-border!"
+          >
           <ArrowLeft size={18} aria-hidden />
         </Link>
         <div>
           <h1 className="text-xl font-semibold">編輯公文</h1>
-          <p className="text-sm font-mono" style={{ color: "var(--primary-text)" }}>
+          <p className="text-sm font-mono text-accent-text!">
             {doc.serial_number || "（草稿，尚未發文）"}
           </p>
           {lastSavedAt && (
-            <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+            <p className="text-xs mt-1 text-fg-muted!">
               本機草稿已自動保存：{new Date(lastSavedAt).toLocaleTimeString("zh-TW")}
             </p>
           )}
@@ -593,25 +593,25 @@ export default function EditDocumentPage() {
         <div className="lg:col-span-2 space-y-4">
           {/* 基本資訊 */}
           <div className="card p-4 space-y-3">
-            <h3 className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>基本資訊</h3>
+            <h3 className="text-xs font-semibold text-fg-muted!">基本資訊</h3>
             <div>
-              <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>公文字號</label>
+              <label className="text-xs mb-1 block text-fg-muted!">公文字號</label>
               <input value={serialNumber} onChange={e => setSerialNumber(e.target.value)}
                 placeholder="輸入公文字號..." maxLength={30}
                 className="w-full bg-transparent text-sm outline-none border-b pb-1" />
             </div>
             <div>
-              <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>公文標題 *</label>
+              <label className="text-xs mb-1 block text-fg-muted!">公文標題 *</label>
               <input value={title} onChange={e => setTitle(e.target.value)} placeholder="輸入公文標題..."
-                className="w-full bg-transparent  text-sm outline-none border-b pb-1"
-                style={{ borderColor: "var(--border)" }} />
+                className="w-full bg-transparent text-sm outline-none border-b pb-1 border-border!"
+                 />
             </div>
             <div>
-              <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>列表摘要（可選）</label>
+              <label className="text-xs mb-1 block text-fg-muted!">列表摘要（可選）</label>
               <input value={summary} onChange={e => setSummary(e.target.value)} maxLength={500}
                 placeholder="主旨為空或過於相同時，提供列表辨識用摘要..."
-                className="w-full bg-transparent text-sm outline-none border-b pb-1"
-                style={{ borderColor: "var(--border)" }} />
+                className="w-full bg-transparent text-sm outline-none border-b pb-1 border-border!"
+                 />
             </div>
             <div className="grid grid-cols-3 gap-3">
               {[
@@ -623,7 +623,7 @@ export default function EditDocumentPage() {
                   options: CATEGORY_OPTIONS },
               ].map(({ label, value, setter, options }) => (
                 <div key={label}>
-                  <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>{label}</label>
+                  <label className="text-xs mb-1 block text-fg-muted!">{label}</label>
                   <select value={value} onChange={e => setter(e.target.value)}
                     className="w-full  text-xs outline-none rounded px-2 py-1.5" style={selectStyle}>
                     {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -634,7 +634,7 @@ export default function EditDocumentPage() {
             {classification !== "normal" && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>解密條件 *</label>
+                  <label className="text-xs mb-1 block text-fg-muted!">解密條件 *</label>
                   <select value={declassificationCondition} onChange={e => setDeclassificationCondition(e.target.value as typeof declassificationCondition)}
                     className="w-full text-xs outline-none rounded px-2 py-1.5" style={selectStyle}>
                     <option value="none">請選擇</option>
@@ -643,7 +643,7 @@ export default function EditDocumentPage() {
                   </select>
                 </div>
                 {declassificationCondition === "auto_at_date" && <div>
-                  <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>保密期限訖日 *</label>
+                  <label className="text-xs mb-1 block text-fg-muted!">保密期限訖日 *</label>
                   <input type="date" value={confidentialityExpiresAt} onChange={e => setConfidentialityExpiresAt(e.target.value)}
                     className="w-full text-xs outline-none rounded px-2 py-1.5" style={inputStyle} />
                 </div>}
@@ -657,7 +657,7 @@ export default function EditDocumentPage() {
 
           {(isNotice || isRecord) && (
             <div className="card p-4 space-y-3">
-              <h3 className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
+              <h3 className="text-xs font-semibold text-fg-muted!">
                 {isRecord ? "紀錄資訊" : "開會資訊"}
               </h3>
                 {isNotice && (
@@ -680,12 +680,12 @@ export default function EditDocumentPage() {
 
           {/* 公文內容 */}
           <div className="card p-4 space-y-3">
-            <h3 className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
+            <h3 className="text-xs font-semibold text-fg-muted!">
               {contentLabels.title}
             </h3>
             {contentLabels.subject && (
               <div>
-                <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>{contentLabels.subject}</label>
+                <label className="text-xs mb-1 block text-fg-muted!">{contentLabels.subject}</label>
                 <SmartTextarea value={subject} onChange={setSubject} rows={2}
                   placeholder="一句話概述目的，結尾用「請 鑒核」等語。"
                   wrap="soft"
@@ -699,12 +699,12 @@ export default function EditDocumentPage() {
             )}
             {category === "announcement" && (
               <div>
-                <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>依據</label>
+                <label className="text-xs mb-1 block text-fg-muted!">依據</label>
                 <GongwenEditor value={basis} onChange={setBasis} minRows={3} placeholder="依據法規、會議決議或相關文件。" />
               </div>
             )}
             <div>
-              <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>
+              <label className="text-xs mb-1 block text-fg-muted!">
                 {contentLabels.desc}
               </label>
               <GongwenEditor value={docDescription} onChange={setDocDescription} minRows={5}
@@ -714,7 +714,7 @@ export default function EditDocumentPage() {
             </div>
             {contentLabels.action && (
               <div>
-                <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>{contentLabels.action}</label>
+                <label className="text-xs mb-1 block text-fg-muted!">{contentLabels.action}</label>
                 <GongwenEditor value={actionRequired} onChange={setActionRequired} minRows={3}
                   placeholder="具體請求事項或行動方案..." />
               </div>
@@ -724,17 +724,17 @@ export default function EditDocumentPage() {
           {/* 受文者；令僅在既有特殊指定對象時保留管理入口 */}
           {category !== "announcement" && (!isDecree || recipients.length > 0) && (
           <div className="card p-4 space-y-3">
-            <h3 className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
+            <h3 className="text-xs font-semibold text-fg-muted!">
               {isDecree ? "特殊指定對象（選填）" : "受文者"}
             </h3>
             {recipients.map(r => (
-              <div key={r.id} className="flex items-center gap-2 text-xs px-3 py-2 rounded"
-                style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-                <span className="px-1.5 py-0.5 rounded" style={{ color: "var(--primary-text)", background: "var(--primary-dim)" }}>
+              <div key={r.id} className="flex items-center gap-2 text-xs px-3 py-2 rounded bg-elevated! border! border-border!"
+                >
+                <span className="px-1.5 py-0.5 rounded text-accent-text! bg-accent-soft!">
                   {{ main: "受文者", primary: "正本", copy: "副本", attendee: "出席者", observer: "列席者" }[r.recipient_type]}
                 </span>
                 <span className=" flex-1">{r.name}</span>
-                {r.email && <span className="truncate max-w-40" style={{ color: "var(--text-muted)" }}>{r.email}</span>}
+                {r.email && <span className="truncate max-w-40 text-fg-muted!">{r.email}</span>}
                 {r.email && (
                   <button
                     type="button"
@@ -743,12 +743,8 @@ export default function EditDocumentPage() {
                         ? { ...x, delivery_method: x.delivery_method === "email" ? "none" : "email" }
                         : x
                     )))}
-                    className="min-h-11 rounded px-2 text-xs"
-                    style={{
-                      color: r.delivery_method === "email" ? "var(--primary-text)" : "var(--text-muted)",
-                      background: r.delivery_method === "email" ? "var(--primary-dim)" : "var(--bg-surface)",
-                      border: "1px solid var(--border)",
-                    }}
+                    className="min-h-11 rounded px-2 text-xs border! border-border!"
+                    style={{ color: r.delivery_method === "email" ? "var(--primary-text)" : "var(--text-muted)", background: r.delivery_method === "email" ? "var(--primary-dim)" : "var(--bg-surface)" }}
                     aria-pressed={r.delivery_method === "email"}
                   >
                     {r.delivery_method === "email" ? "Email 通知中" : "通知 Email"}
@@ -776,8 +772,8 @@ export default function EditDocumentPage() {
               <input placeholder="Email（選填）" value={newRecipient.email}
                 onChange={e => setNewRecipient(p => ({ ...p, email: e.target.value }))}
                 className="flex-1 bg-transparent  text-xs px-2 py-1.5 rounded outline-none" style={inputStyle} />
-              <button onClick={addRecipient} className="text-xs px-3 py-1.5 rounded"
-                style={{ background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--border-strong)" }}>
+              <button onClick={addRecipient} className="text-xs px-3 py-1.5 rounded bg-accent-soft! text-accent-text! border! border-border-strong!"
+                >
                 ＋ 新增
               </button>
             </div>
@@ -800,12 +796,12 @@ export default function EditDocumentPage() {
 
           {/* 附件管理 */}
           <div className="card p-4 space-y-3">
-            <h3 className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>附件</h3>
+            <h3 className="text-xs font-semibold text-fg-muted!">附件</h3>
             {doc.attachments.length > 0 && (
               <ul className="space-y-2">
                 {doc.attachments.map(a => (
-                  <li key={a.id} className="flex flex-wrap items-center gap-2 text-xs px-3 py-2 rounded"
-                    style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+                  <li key={a.id} className="flex flex-wrap items-center gap-2 text-xs px-3 py-2 rounded bg-elevated! border! border-border!"
+                    >
                     <div className="min-w-0 flex-1 break-words">
                       <span>{a.display_name || a.filename}（{a.quantity ?? 1}份）</span>
                     </div>
@@ -842,14 +838,14 @@ export default function EditDocumentPage() {
         <div className="space-y-4">
           {/* 字號模板 */}
           <div className="card p-4 space-y-3">
-            <h3 className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>字號設定</h3>
+            <h3 className="text-xs font-semibold text-fg-muted!">字號設定</h3>
             {templates.length === 0 ? (
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>無可用字號模板</p>
+              <p className="text-xs text-fg-muted!">無可用字號模板</p>
             ) : (
               <>
                 <select value={selectedTemplateId} onChange={e => setSelectedTemplateId(e.target.value)}
-                  className="w-full  text-xs outline-none rounded px-2 py-1.5"
-                  style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+                  className="w-full text-xs outline-none rounded px-2 py-1.5 bg-elevated! border! border-border!"
+                  >
                   <option value="">── 使用通用格式 ──</option>
                   {templates.map(t => (
                     <option key={t.id} value={t.id}>
@@ -857,10 +853,10 @@ export default function EditDocumentPage() {
                     </option>
                   ))}
                 </select>
-                <div className="rounded-lg px-3 py-2.5 text-center"
-                  style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-strong)" }}>
-                  <p className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>發文後字號預覽</p>
-                  <p className="text-sm font-mono font-semibold" style={{ color: "var(--primary-text)" }}>
+                <div className="rounded-lg px-3 py-2.5 text-center bg-elevated! border! border-border-strong!"
+                  >
+                  <p className="text-xs mb-1 text-fg-muted!">發文後字號預覽</p>
+                  <p className="text-sm font-mono font-semibold text-accent-text!">
                     {selectedTemplate?.preview ?? "尚未設定正式字號"}
                   </p>
                 </div>
@@ -870,7 +866,7 @@ export default function EditDocumentPage() {
 
           {/* 承辦人資訊 */}
           <div className="card p-4 space-y-3">
-            <h3 className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>承辦人資訊</h3>
+            <h3 className="text-xs font-semibold text-fg-muted!">承辦人資訊</h3>
             {[
               { label: "姓名", value: handlerName, setter: setHandlerName, ph: "承辦人姓名" },
               {
@@ -883,7 +879,7 @@ export default function EditDocumentPage() {
               { label: "電話", value: handlerPhone, setter: setHandlerPhone, ph: "聯絡電話" },
             ].map(({ label, value, setter, ph }) => (
               <div key={label} className="flex items-center gap-2">
-                <span className="text-xs w-10 flex-shrink-0" style={{ color: "var(--text-muted)" }}>{label}</span>
+                <span className="text-xs w-10 flex-shrink-0 text-fg-muted!">{label}</span>
                 <input value={value} onChange={e => setter(e.target.value)} placeholder={ph}
                   className="flex-1 bg-transparent  text-xs px-2 py-1 rounded outline-none" style={inputStyle} />
               </div>
@@ -892,12 +888,12 @@ export default function EditDocumentPage() {
 
           {/* 限辦日期 */}
           <div className="card p-4">
-            <label className="text-xs mb-2 block" style={{ color: "var(--text-muted)" }}>限辦日期</label>
+            <label className="text-xs mb-2 block text-fg-muted!">限辦日期</label>
             <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
               className="w-full bg-transparent  text-xs px-2 py-1.5 rounded outline-none" style={inputStyle} />
           </div>
           <div className="card p-4 space-y-3">
-            <h3 className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>檔案管理欄位</h3>
+            <h3 className="text-xs font-semibold text-fg-muted!">檔案管理欄位</h3>
             <input value={fileNumber} onChange={e => setFileNumber(e.target.value)} placeholder="檔號" className="w-full text-xs px-2 py-1.5 rounded outline-none" style={inputStyle} />
             <input value={classificationNumber} onChange={e => setClassificationNumber(e.target.value)} placeholder="分類號" className="w-full text-xs px-2 py-1.5 rounded outline-none" style={inputStyle} />
             <input value={retentionPeriod} onChange={e => setRetentionPeriod(e.target.value)} placeholder="保存年限，例如：5年" className="w-full text-xs px-2 py-1.5 rounded outline-none" style={inputStyle} />
@@ -907,9 +903,9 @@ export default function EditDocumentPage() {
 
           {/* 修訂備注 + 儲存 */}
           <div className="card p-4 space-y-3">
-            <h3 className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>儲存</h3>
+            <h3 className="text-xs font-semibold text-fg-muted!">儲存</h3>
             <div>
-              <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>修訂備注（選填）</label>
+              <label className="text-xs mb-1 block text-fg-muted!">修訂備注（選填）</label>
               <input value={changeNote} onChange={e => setChangeNote(e.target.value)}
                 placeholder="說明本次修改原因..."
                 className="w-full bg-transparent  text-xs px-2 py-1.5 rounded outline-none" style={inputStyle} />
@@ -921,8 +917,8 @@ export default function EditDocumentPage() {
         </div>
       </div>
       <div
-        className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-20 flex justify-end rounded-lg border p-3 md:hidden"
-        style={{ background: "var(--bg-surface)", borderColor: "var(--border-strong)" }}>
+        className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-20 flex justify-end rounded-lg border p-3 md:hidden bg-surface! border-border-strong!"
+        >
         <button type="button" onClick={save} disabled={saving} className="btn btn-primary">
           {saving ? "儲存中…" : "儲存變更"}
         </button>

@@ -165,9 +165,9 @@ function Section({
           : "1px solid var(--border)",
       }}
     >
-      <summary className="min-h-12 cursor-pointer p-4 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{title}</summary>
+      <summary className="min-h-12 cursor-pointer p-4 text-sm font-semibold text-fg-primary!">{title}</summary>
       <div className="min-w-0 px-4 pb-4">
-        {description && <p className="mb-4 text-xs leading-5" style={{ color: "var(--text-muted)" }}>{description}</p>}
+        {description && <p className="mb-4 text-xs leading-5 text-fg-muted!">{description}</p>}
         {children}
       </div>
     </details>
@@ -198,8 +198,8 @@ function ToggleRow({
   return (
     <label className="flex min-h-12 cursor-pointer items-center justify-between gap-4 rounded-lg px-3 py-2 transition-colors hover:bg-[var(--bg-hover)]">
       <span className="min-w-0">
-        <span className="block text-sm" style={{ color: "var(--text-primary)" }}>{label}</span>
-        <span className="mt-0.5 block text-xs leading-5" style={{ color: "var(--text-muted)" }}>{hint}</span>
+        <span className="block text-sm text-fg-primary!">{label}</span>
+        <span className="mt-0.5 block text-xs leading-5 text-fg-muted!">{hint}</span>
       </span>
       <input
         type="checkbox"
@@ -252,8 +252,8 @@ export function AccountDetailPanel({
       {confirm && (
         <Modal title={confirm.title} onClose={() => setConfirm(null)}>
           <div className="space-y-5">
-            <div className="flex gap-3 rounded-lg p-3 text-sm leading-6" style={{ background: "var(--warning-dim)", color: "var(--text-secondary)" }}>
-              <AlertTriangle size={18} className="mt-1 shrink-0" style={{ color: "var(--warning)" }} />
+            <div className="flex gap-3 rounded-lg p-3 text-sm leading-6 bg-warning-soft! text-fg-secondary!">
+              <AlertTriangle size={18} className="mt-1 shrink-0 text-warning!"  />
               <p>{confirm.body}</p>
             </div>
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -454,17 +454,17 @@ function AccountDetail({
 
   return (
     <div className={styles.root}>
-      <header className="flex min-w-0 flex-col gap-4 border-b pb-5" style={{ borderColor: "var(--border)" }}>
+      <header className="flex min-w-0 flex-col gap-4 border-b pb-5 border-border!">
         <div className="flex min-w-0 items-start gap-3">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full" style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}><UserRound size={22} /></div>
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-accent-soft! text-accent-text!"><UserRound size={22} /></div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="break-words text-xl font-semibold" style={{ color: "var(--text-primary)" }}>{user.display_name}</h2>
+              <h2 className="break-words text-xl font-semibold text-fg-primary!">{user.display_name}</h2>
               {user.is_active ? <StatusBadge label="啟用中" tone="success" /> : <StatusBadge label="已停用" tone="danger" />}
               {user.is_verified && <StatusBadge label="已驗證" tone="success" />}
             </div>
-            <p className="mt-1 break-all text-sm" style={{ color: "var(--text-secondary)" }}>{user.email}</p>
-            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>建立於 {new Date(user.created_at).toLocaleDateString("zh-TW")}</p>
+            <p className="mt-1 break-all text-sm text-fg-secondary!">{user.email}</p>
+            <p className="mt-1 text-xs text-fg-muted!">建立於 {new Date(user.created_at).toLocaleDateString("zh-TW")}</p>
           </div>
         </div>
         <div className="flex flex-wrap gap-2 sm:justify-end">
@@ -476,11 +476,11 @@ function AccountDetail({
         <div className="space-y-4">
           <Section defaultOpen title="基本資料與帳號設定" description="主要登入 Email 僅供識別，帳號歸戶請使用「連結登入身分」。">
             <div className={styles.twoColumns}>
-              <label className="text-xs" style={{ color: "var(--text-muted)" }}>顯示姓名<TextInput className="mt-1" value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></label>
-              <label className="text-xs" style={{ color: "var(--text-muted)" }}>學號<TextInput className="mt-1" value={studentId} onChange={(event) => setStudentId(event.target.value)} placeholder="留白可清除" /></label>
-              <label className="text-xs" style={{ color: "var(--text-muted)" }}>介面主題<SelectInput className="mt-1" value={theme} onChange={(event) => setTheme(event.target.value as AdminUserDetail["ui_theme"])}><option value="auto">跟隨系統</option><option value="light">淺色</option><option value="dark">深色</option></SelectInput></label>
+              <label className="text-xs text-fg-muted!">顯示姓名<TextInput className="mt-1" value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></label>
+              <label className="text-xs text-fg-muted!">學號<TextInput className="mt-1" value={studentId} onChange={(event) => setStudentId(event.target.value)} placeholder="留白可清除" /></label>
+              <label className="text-xs text-fg-muted!">介面主題<SelectInput className="mt-1" value={theme} onChange={(event) => setTheme(event.target.value as AdminUserDetail["ui_theme"])}><option value="auto">跟隨系統</option><option value="light">淺色</option><option value="dark">深色</option></SelectInput></label>
             </div>
-            <div className="mt-3 grid gap-1 rounded-lg" style={{ background: "var(--bg-elevated)" }}>
+            <div className="mt-3 grid gap-1 rounded-lg bg-elevated!">
               <ToggleRow label="Email 已驗證" hint="調整外部帳號的信任狀態；請確認來源後再變更。" checked={isVerified} onChange={setIsVerified} />
               <ToggleRow label="允許對外顯示 Email" hint="影響公開人員資料與承辦人資訊的 Email 顯示。" checked={showEmail} onChange={setShowEmail} />
             </div>
@@ -495,16 +495,16 @@ function AccountDetail({
 
           <Section title="班級與座號" description="查看目前及歷史名冊資料，並在此快速新增班級或調整座號。">
             {user.class_roster.length === 0 ? (
-              <p className="text-sm" style={{ color: "var(--text-muted)" }}>尚無班級座號名冊資料。</p>
+              <p className="text-sm text-fg-muted!">尚無班級座號名冊資料。</p>
             ) : (
               <div className="space-y-2">
                 {user.class_roster.map((entry) => (
-                  <div key={`${entry.class_id}-${entry.student_id}-${entry.seat_number}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2.5" style={{ background: "var(--bg-elevated)" }}>
+                  <div key={`${entry.class_id}-${entry.student_id}-${entry.seat_number}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2.5 bg-elevated!">
                     <div className="min-w-0">
-                      <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+                      <p className="text-sm font-medium text-fg-primary!">
                         {rosterClassLabel(entry)}
                       </p>
-                      <p className="mt-1 break-all text-xs" style={{ color: "var(--text-muted)" }}>
+                      <p className="mt-1 break-all text-xs text-fg-muted!">
                         {entry.academic_year} 學年度 · 學號 {entry.student_id}
                       </p>
                     </div>
@@ -516,9 +516,9 @@ function AccountDetail({
               </div>
             )}
             {canManageClasses && (
-              <div className="mt-4 space-y-3 border-t pt-4" style={{ borderColor: "var(--border)" }}>
+              <div className="mt-4 space-y-3 border-t pt-4 border-border!">
                 <div className={styles.rosterForm}>
-                  <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  <label className="text-xs text-fg-muted!">
                     班級
                     <SelectInput
                       className="mt-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
@@ -541,7 +541,7 @@ function AccountDetail({
                       ))}
                     </SelectInput>
                   </label>
-                  <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  <label className="text-xs text-fg-muted!">
                     座號
                     <SelectInput
                       className="mt-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
@@ -573,31 +573,31 @@ function AccountDetail({
                   </Button>
                 </div>
                 {classes.length === 0 && (
-                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>目前沒有啟用中的班級可選。</p>
+                  <p className="text-xs text-fg-muted!">目前沒有啟用中的班級可選。</p>
                 )}
                 {rosterEntriesLoading && (
-                  <p className="text-xs" role="status" style={{ color: "var(--text-muted)" }}>正在載入座號名冊…</p>
+                  <p className="text-xs text-fg-muted!" role="status">正在載入座號名冊…</p>
                 )}
                 {rosterEntriesError && (
-                  <p className="text-xs" role="alert" style={{ color: "var(--danger)" }}>
+                  <p className="text-xs text-danger!" role="alert">
                     無法讀取該班名冊，請重新選擇班級或重新整理頁面。
                   </p>
                 )}
                 {!user.student_id && !matchingRosterEntry && (
-                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  <p className="text-xs text-fg-muted!">
                     新增名冊需要學號；請先在基本資料儲存學號。
                   </p>
                 )}
               </div>
             )}
-            <Link href="/admin/people?section=classes" className="mt-3 inline-flex min-h-11 items-center gap-1 text-xs font-medium" style={{ color: "var(--primary-text)" }}>
+            <Link href="/admin/people?section=classes" className="mt-3 inline-flex min-h-11 items-center gap-1 text-xs font-medium text-accent-text!">
               管理班級名冊與座號<ChevronRight size={14} />
             </Link>
           </Section>
 
           <Section title="登入身分與帳號連結" description="所有已連結的 Email 都可以登入同一個主要帳戶；連結前請確認信箱確實屬於此人。">
             <div className="space-y-2">
-              {user.linked_emails.map((email, index) => <div key={email} className="flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm" style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}><Mail size={15} style={{ color: "var(--text-muted)" }} /><span className="min-w-0 flex-1 break-all">{email}</span>{index === 0 && <StatusBadge label="主要" tone="success" />}</div>)}
+              {user.linked_emails.map((email, index) => <div key={email} className="flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm bg-elevated! text-fg-secondary!"><Mail size={15}   className="text-fg-muted!"/><span className="min-w-0 flex-1 break-all">{email}</span>{index === 0 && <StatusBadge label="主要" tone="success" />}</div>)}
             </div>
             <div className={styles.emailForm}>
               <TextInput value={emailAlias} onChange={(event) => setEmailAlias(event.target.value)} placeholder="name@gmail.com，可用逗號分隔多筆" />
@@ -607,16 +607,16 @@ function AccountDetail({
 
           <Section title="通知偏好" description="調整通知管道後，按上方「儲存設定」套用。">
             <div className={`${styles.twoColumns} mb-4`}>
-              <label className="text-xs" style={{ color: "var(--text-muted)" }}>Email 摘要頻率<SelectInput className="mt-1" value={digest} onChange={(event) => setDigest(event.target.value as typeof digest)}><option value="off">關閉摘要</option><option value="daily">每日摘要</option><option value="weekly">每週摘要</option></SelectInput></label>
-              <div className="text-xs" style={{ color: "var(--text-muted)" }}>已靜音模組<div className="mt-1 flex min-h-11 flex-wrap items-center gap-1.5 rounded-lg px-3" style={{ border: "1px solid var(--border)" }}>{Object.entries(MODULE_LABELS).map(([key, label]) => <button type="button" key={key} onClick={() => setMutedModules((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key])} aria-pressed={mutedModules.includes(key)} aria-label={`${label}通知靜音`} className="min-h-11 rounded-lg px-2 py-1 text-xs" style={{ background: mutedModules.includes(key) ? "var(--warning-dim)" : "var(--bg-elevated)", color: mutedModules.includes(key) ? "var(--warning)" : "var(--text-muted)" }}>{label}</button>)}</div></div>
+              <label className="text-xs text-fg-muted!">Email 摘要頻率<SelectInput className="mt-1" value={digest} onChange={(event) => setDigest(event.target.value as typeof digest)}><option value="off">關閉摘要</option><option value="daily">每日摘要</option><option value="weekly">每週摘要</option></SelectInput></label>
+              <div className="text-xs text-fg-muted!">已靜音模組<div className="mt-1 flex min-h-11 flex-wrap items-center gap-1.5 rounded-lg px-3 border! border-border!">{Object.entries(MODULE_LABELS).map(([key, label]) => <button type="button" key={key} onClick={() => setMutedModules((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key])} aria-pressed={mutedModules.includes(key)} aria-label={`${label}通知靜音`} className="min-h-11 rounded-lg px-2 py-1 text-xs" style={{ background: mutedModules.includes(key) ? "var(--warning-dim)" : "var(--bg-elevated)", color: mutedModules.includes(key) ? "var(--warning)" : "var(--text-muted)" }}>{label}</button>)}</div></div>
             </div>
-            <div className="divide-y" style={{ borderColor: "var(--border)" }}>
+            <div className="divide-y border-border!">
               {Object.entries(preferences).map(([type, channels]) => (
-                <fieldset key={type} className="min-w-0 py-3" style={{ borderColor: "var(--border)" }}>
-                  <legend className="float-left mb-2 w-full break-words text-sm font-medium" style={{ color: "var(--text-primary)" }}>{NOTIFICATION_LABELS[type] ?? type}</legend>
+                <fieldset key={type} className="min-w-0 py-3 border-border!">
+                  <legend className="float-left mb-2 w-full break-words text-sm font-medium text-fg-primary!">{NOTIFICATION_LABELS[type] ?? type}</legend>
                   <div className={styles.channels}>
                     {([ ["inapp", "站內"], ["email", "Email"], ["line", "LINE"], ["discord", "Discord"] ] as const).map(([channel, label]) => (
-                      <label key={channel} className="flex min-h-11 min-w-0 cursor-pointer items-center gap-2 text-xs" style={{ color: "var(--text-secondary)" }}>
+                      <label key={channel} className="flex min-h-11 min-w-0 cursor-pointer items-center gap-2 text-xs text-fg-secondary!">
                         <input type="checkbox" checked={channels[channel]} onChange={(event) => updatePreference(type, channel, event.target.checked)} className="h-5 w-5 shrink-0 accent-[var(--primary)]" aria-label={`${NOTIFICATION_LABELS[type] ?? type} ${label}`} />
                         {label}
                       </label>
@@ -638,22 +638,22 @@ function AccountDetail({
           <Section title="安全維護" description="這些操作會影響登入或驗證狀態，系統會寫入稽核日誌。">
             <div className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-sm" style={{ color: "var(--text-primary)" }}>超級管理員權限</p>
+                <p className="text-sm text-fg-primary!">超級管理員權限</p>
                 <Button onClick={toggleSuperuser} tone="warning" disabled={user.is_owner && user.is_superuser}><KeyRound size={15} />{user.is_superuser ? "取消超管" : "設定超管"}</Button>
               </div>
-              <div className="flex items-start gap-3"><ShieldCheck size={17} className="mt-0.5" style={{ color: user.mfa_enabled ? "var(--success)" : "var(--text-muted)" }} /><div className="min-w-0 flex-1"><p className="text-sm" style={{ color: "var(--text-primary)" }}>兩步驟驗證</p><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{user.mfa_enabled ? "TOTP 已啟用" : "目前未啟用"}</p><Button onClick={clearMfa} tone="danger" disabled={!user.mfa_enabled} className="mt-2 w-full"><ShieldAlert size={15} />清除 2FA</Button></div></div>
-              <div className="flex items-start gap-3 border-t pt-3" style={{ borderColor: "var(--border)" }}><LogOut size={17} className="mt-0.5" style={{ color: "var(--warning)" }} /><div className="min-w-0 flex-1"><p className="text-sm" style={{ color: "var(--text-primary)" }}>全部登入工作階段</p><p className="mt-1 text-xs leading-5" style={{ color: "var(--text-muted)" }}>撤銷目前所有裝置的登入憑證，使用者需重新登入。</p><Button onClick={revokeSessions} tone="warning" className="mt-2 w-full"><LogOut size={15} />清除全部登入</Button></div></div>
+              <div className="flex items-start gap-3"><ShieldCheck size={17} className="mt-0.5" style={{ color: user.mfa_enabled ? "var(--success)" : "var(--text-muted)" }} /><div className="min-w-0 flex-1"><p className="text-sm text-fg-primary!">兩步驟驗證</p><p className="mt-1 text-xs text-fg-muted!">{user.mfa_enabled ? "TOTP 已啟用" : "目前未啟用"}</p><Button onClick={clearMfa} tone="danger" disabled={!user.mfa_enabled} className="mt-2 w-full"><ShieldAlert size={15} />清除 2FA</Button></div></div>
+              <div className="flex items-start gap-3 border-t pt-3 border-border!"><LogOut size={17} className="mt-0.5 text-warning!"  /><div className="min-w-0 flex-1"><p className="text-sm text-fg-primary!">全部登入工作階段</p><p className="mt-1 text-xs leading-5 text-fg-muted!">撤銷目前所有裝置的登入憑證，使用者需重新登入。</p><Button onClick={revokeSessions} tone="warning" className="mt-2 w-full"><LogOut size={15} />清除全部登入</Button></div></div>
             </div>
           </Section>
 
           <Section title="目前身分與權限">
-            <div className="space-y-2 text-xs" style={{ color: "var(--text-secondary)" }}>
+            <div className="space-y-2 text-xs text-fg-secondary!">
               <p>學號：{user.student_id ?? "未設定"}</p>
               <p>職位：{user.positions.length} 個</p>
               <p>有效權限：{user.is_superuser ? "超管（全部權限）" : `${user.effective_permissions.length} 個`}</p>
             </div>
-            <div className="mt-3 flex flex-wrap gap-1.5">{user.positions.slice(0, 6).map((position) => <span key={position.user_position_id ?? position.id} className="rounded-full px-2 py-1 text-xs" style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>{position.name}</span>)}</div>
-            <Link href="/admin/people?section=organization" className="mt-4 inline-flex min-h-11 items-center gap-1 text-xs font-medium" style={{ color: "var(--primary-text)" }}>前往組織與職位管理<ChevronRight size={14} /></Link>
+            <div className="mt-3 flex flex-wrap gap-1.5">{user.positions.slice(0, 6).map((position) => <span key={position.user_position_id ?? position.id} className="rounded-full px-2 py-1 text-xs bg-accent-soft! text-accent-text!">{position.name}</span>)}</div>
+            <Link href="/admin/people?section=organization" className="mt-4 inline-flex min-h-11 items-center gap-1 text-xs font-medium text-accent-text!">前往組織與職位管理<ChevronRight size={14} /></Link>
           </Section>
         </aside>
       </div>

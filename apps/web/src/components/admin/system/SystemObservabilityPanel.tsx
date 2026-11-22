@@ -285,17 +285,17 @@ export default function SystemObservabilityPanel() {
   }
 
   return <div className="space-y-6">
-    <header className="flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-end sm:justify-between" style={{ borderColor: "var(--border)" }}>
+    <header className="flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-end sm:justify-between border-border!">
       <div><h2 className="text-2xl font-semibold sm:text-3xl">系統可觀測性</h2></div>
       <div className="flex flex-col items-stretch gap-2 sm:items-end">
         <div className="flex flex-wrap gap-2">
-          <button type="button" className="inline-flex min-h-11 items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors hover:bg-[var(--bg-hover)] disabled:cursor-wait disabled:opacity-60" style={{ borderColor: "var(--border-strong)", color: "var(--text-primary)" }} onClick={() => { setRefreshing(true); setRefreshKey((value) => value + 1); }} disabled={loading || refreshing}><RefreshCw size={16} aria-hidden="true" className={refreshing ? "animate-spin" : undefined} />{loading || refreshing ? "讀取中…" : "重新整理"}</button>
-          <button type="button" className="inline-flex min-h-11 items-center gap-2 rounded-md px-3 text-sm font-semibold transition-opacity hover:opacity-85 disabled:cursor-wait disabled:opacity-60" style={{ background: "var(--primary)", color: "var(--primary-text)" }} onClick={collectPsi} disabled={collecting} aria-busy={collecting}>{collecting ? <LoaderCircle size={16} aria-hidden="true" className="animate-spin" /> : <Gauge size={16} aria-hidden="true" />}{collecting ? "PSI 採集中…" : "立即採集 PSI"}</button>
+          <button type="button" className="inline-flex min-h-11 items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors hover:bg-[var(--bg-hover)] disabled:cursor-wait disabled:opacity-60 border-border-strong! text-fg-primary!"  onClick={() => { setRefreshing(true); setRefreshKey((value) => value + 1); }} disabled={loading || refreshing}><RefreshCw size={16} aria-hidden="true" className={refreshing ? "animate-spin" : undefined} />{loading || refreshing ? "讀取中…" : "重新整理"}</button>
+          <button type="button" className="inline-flex min-h-11 items-center gap-2 rounded-md px-3 text-sm font-semibold transition-opacity hover:opacity-85 disabled:cursor-wait disabled:opacity-60 bg-accent! text-accent-text!"  onClick={collectPsi} disabled={collecting} aria-busy={collecting}>{collecting ? <LoaderCircle size={16} aria-hidden="true" className="animate-spin" /> : <Gauge size={16} aria-hidden="true" />}{collecting ? "PSI 採集中…" : "立即採集 PSI"}</button>
         </div>
         {collectionNotice && <p role="status" className="text-right text-xs" style={{ color: collectionNotice.tone === "success" ? "var(--success)" : collectionNotice.tone === "warning" ? "var(--warning)" : "var(--error)" }}>{collectionNotice.message}</p>}
       </div>
     </header>
-    <nav className="flex gap-1 overflow-x-auto border-b" style={{ borderColor: "var(--border)" }} aria-label="觀測分頁">
+    <nav className="flex gap-1 overflow-x-auto border-b border-border!"  aria-label="觀測分頁">
       {tabs.map((item) => <button key={item.id} type="button" onClick={() => { setTabData(null); setTabError(null); setTab(item.id); }} aria-current={tab === item.id ? "page" : undefined} className="min-h-11 shrink-0 border-b-2 px-3 text-sm font-medium transition-colors" style={{ borderColor: tab === item.id ? "var(--primary)" : "transparent", color: tab === item.id ? "var(--text-primary)" : "var(--text-muted)" }}>{item.label}</button>)}
     </nav>
     {overviewError && <InlineError message={overviewError} />}
@@ -320,13 +320,13 @@ function OverviewPanel({ data, loading, onInspect }: { data: Overview | null; lo
       <SummaryMetric label="最近 mobile 平均" value={formatNumber(data.synthetic.mobile_performance)} detail={`LCP ${formatNumber(data.synthetic.mobile_lcp_ms, " ms")}`} tone={scoreColor(data.synthetic.mobile_performance)} />
       <SummaryMetric label="登入後達標" value={data.authenticated_coverage.passing} detail={`已測 ${data.authenticated_coverage.monitored}／失敗 ${data.authenticated_coverage.errors}／待測 ${data.authenticated_coverage.pending}`} tone={data.authenticated_coverage.errors || data.authenticated_coverage.needs_attention ? "var(--warning)" : "var(--success)"} />
     </section>
-    <section><div className="mb-3 flex items-end justify-between gap-3"><div><h2 className="text-base font-semibold">服務狀態</h2><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>這些狀態來自本次 API 請求的即時探測。</p></div><span className="text-xs" style={{ color: "var(--text-muted)" }}>版本 {data.latest_release.commit_sha?.slice(0, 8) ?? "—"}</span></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{data.system_health.map((item) => <div key={item.name} className="rounded-md border p-4" style={{ borderColor: "var(--border)" }}><div className="flex items-center gap-2 text-sm"><span aria-hidden="true" style={{ color: item.healthy ? "var(--success)" : "var(--error)" }}>●</span>{item.name}</div><strong className="mt-2 block">{item.healthy ? "正常" : "異常"}</strong></div>)}</div></section>
+    <section><div className="mb-3 flex items-end justify-between gap-3"><div><h2 className="text-base font-semibold">服務狀態</h2><p className="mt-1 text-sm text-fg-muted!">這些狀態來自本次 API 請求的即時探測。</p></div><span className="text-xs text-fg-muted!">版本 {data.latest_release.commit_sha?.slice(0, 8) ?? "—"}</span></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{data.system_health.map((item) => <div key={item.name} className="rounded-md border p-4 border-border!"><div className="flex items-center gap-2 text-sm"><span aria-hidden="true" style={{ color: item.healthy ? "var(--success)" : "var(--error)" }}>●</span>{item.name}</div><strong className="mt-2 block">{item.healthy ? "正常" : "異常"}</strong></div>)}</div></section>
     <PageTable pages={data.pages} threshold={data.coverage.threshold} onInspect={onInspect} />
   </div>;
 }
 
 function PageTable({ pages, threshold, onInspect }: { pages: PageScore[]; threshold: number; onInspect: (url: string) => void }) {
-  return <section className="space-y-3"><div><h2 className="text-base font-semibold">全部已發現頁面</h2><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>來源包含 sitemap、關鍵路由與真實使用者 RUM；公開 Lighthouse 與登入後 Lighthouse 分開執行，兩者都必須同時達到 mobile 與 desktop {threshold} 分。</p></div>{pages.length === 0 ? <EmptyState title="尚未發現頁面" detail="請確認 sitemap.xml 或第一方 RUM 可由部署端讀取。" /> : <div className="overflow-x-auto rounded-md border" style={{ borderColor: "var(--border)" }}><table className="w-full min-w-[1120px] text-left text-sm"><thead style={{ background: "var(--bg-surface)" }}><tr className="border-b" style={{ borderColor: "var(--border)" }}><th className="px-4 py-3 font-medium">頁面</th><th className="px-4 py-3 font-medium">來源</th><th className="px-4 py-3 font-medium">公開 M / D</th><th className="px-4 py-3 font-medium">登入後 M / D</th><th className="px-4 py-3 font-medium">公開 LCP / TBT</th><th className="px-4 py-3 font-medium">狀態</th><th className="px-4 py-3"><span className="sr-only">操作</span></th></tr></thead><tbody>{pages.map((page) => <tr key={page.url} className="border-b last:border-0" style={{ borderColor: "var(--border)" }}><td className="max-w-[22rem] px-4 py-3"><div className="truncate font-medium" title={page.url}>{page.path}</div><div className="mt-1 truncate text-xs" style={{ color: "var(--text-muted)" }}>{page.url}</div></td><td className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>{page.source === "rum" ? "RUM／使用者" : page.source === "synthetic" ? "公開 Lighthouse" : page.source === "psi" ? "PSI" : "關鍵路由"}</td><td className="px-4 py-3"><Score value={page.mobile?.score} /> <span style={{ color: "var(--text-muted)" }}>/</span> <Score value={page.desktop?.score} /></td><td className="px-4 py-3"><Score value={page.authenticated_mobile?.score} /> <span style={{ color: "var(--text-muted)" }}>/</span> <Score value={page.authenticated_desktop?.score} /></td><td className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>{page.mobile ? `${formatNumber(page.mobile.metrics.lcp_ms, " ms")} / ${formatNumber(page.mobile.metrics.tbt_ms, " ms")}` : "—"}</td><td className="space-y-1 px-4 py-3"><StatusPill status={page.status} source={page.source} />{page.authenticated_status && <div><span className="text-xs" style={{ color: "var(--text-muted)" }}>登入後：</span><StatusPill status={page.authenticated_status} /></div>}</td><td className="px-4 py-3 text-right"><button type="button" className="min-h-11 rounded-md px-2 text-xs font-semibold hover:bg-[var(--bg-hover)]" style={{ color: "var(--primary-text)" }} onClick={() => onInspect(page.url)}>查看詳情</button></td></tr>)}</tbody></table></div>}</section>;
+  return <section className="space-y-3"><div><h2 className="text-base font-semibold">全部已發現頁面</h2><p className="mt-1 text-sm text-fg-muted!">來源包含 sitemap、關鍵路由與真實使用者 RUM；公開 Lighthouse 與登入後 Lighthouse 分開執行，兩者都必須同時達到 mobile 與 desktop {threshold} 分。</p></div>{pages.length === 0 ? <EmptyState title="尚未發現頁面" detail="請確認 sitemap.xml 或第一方 RUM 可由部署端讀取。" /> : <div className="overflow-x-auto rounded-md border border-border!"><table className="w-full min-w-[1120px] text-left text-sm"><thead className="bg-surface!"><tr className="border-b border-border!"><th className="px-4 py-3 font-medium">頁面</th><th className="px-4 py-3 font-medium">來源</th><th className="px-4 py-3 font-medium">公開 M / D</th><th className="px-4 py-3 font-medium">登入後 M / D</th><th className="px-4 py-3 font-medium">公開 LCP / TBT</th><th className="px-4 py-3 font-medium">狀態</th><th className="px-4 py-3"><span className="sr-only">操作</span></th></tr></thead><tbody>{pages.map((page) => <tr key={page.url} className="border-b last:border-0 border-border!"><td className="max-w-[22rem] px-4 py-3"><div className="truncate font-medium" title={page.url}>{page.path}</div><div className="mt-1 truncate text-xs text-fg-muted!">{page.url}</div></td><td className="px-4 py-3 text-xs text-fg-secondary!">{page.source === "rum" ? "RUM／使用者" : page.source === "synthetic" ? "公開 Lighthouse" : page.source === "psi" ? "PSI" : "關鍵路由"}</td><td className="px-4 py-3"><Score value={page.mobile?.score} /> <span className="text-fg-muted!">/</span> <Score value={page.desktop?.score} /></td><td className="px-4 py-3"><Score value={page.authenticated_mobile?.score} /> <span className="text-fg-muted!">/</span> <Score value={page.authenticated_desktop?.score} /></td><td className="px-4 py-3 text-xs text-fg-secondary!">{page.mobile ? `${formatNumber(page.mobile.metrics.lcp_ms, " ms")} / ${formatNumber(page.mobile.metrics.tbt_ms, " ms")}` : "—"}</td><td className="space-y-1 px-4 py-3"><StatusPill status={page.status} source={page.source} />{page.authenticated_status && <div><span className="text-xs text-fg-muted!">登入後：</span><StatusPill status={page.authenticated_status} /></div>}</td><td className="px-4 py-3 text-right"><button type="button" className="min-h-11 rounded-md px-2 text-xs font-semibold hover:bg-[var(--bg-hover)] text-accent-text!"  onClick={() => onInspect(page.url)}>查看詳情</button></td></tr>)}</tbody></table></div>}</section>;
 }
 
 function budgetColor(status: BudgetStatus | undefined) {
@@ -375,16 +375,15 @@ function ErrorsPanel({ data }: { data: ErrorsData }) {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-base font-semibold">可追蹤事故</h2>
-          <p className="mt-1 max-w-3xl text-sm" style={{ color: "var(--text-muted)" }}>
+          <p className="mt-1 max-w-3xl text-sm text-fg-muted!">
             每筆會保留出現次數、版本、追蹤 ID 與事件歷程；已解除且持續未再發生的議題會自動結案。
           </p>
-          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+          <p className="mt-1 text-xs text-fg-muted!">
             上方統計涵蓋全部紀錄；下方依最近更新排序，最多顯示 200 筆。
           </p>
         </div>
         <AnimatedDownloadButton
-          className="min-h-11 rounded-md border px-3 text-sm font-semibold hover:bg-[var(--bg-hover)]"
-          style={{ borderColor: "var(--border-strong)", color: "var(--text-primary)" }}
+          className="min-h-11 rounded-md border px-3 text-sm font-semibold hover:bg-[var(--bg-hover)] border-border-strong! text-fg-primary!"
           request={() => authFetch(apiUrl("/admin/system/observability/errors/export.csv"), { credentials: "include" })}
           filename={`incident_report_${new Date().toISOString().slice(0, 10)}.csv`}
           label="下載錯誤報表 CSV"
@@ -392,25 +391,25 @@ function ErrorsPanel({ data }: { data: ErrorsData }) {
           errorLabel="重試下載" />
       </div>
       {incidents.length === 0 ? <EmptyState title="目前沒有可追蹤事故" /> : (
-        <div className="divide-y rounded-md border" style={{ borderColor: "var(--border)" }}>
+        <div className="divide-y rounded-md border border-border!">
           {incidents.map((incident) => <article key={incident.id} className="grid gap-3 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="min-w-0 break-words font-medium">{incident.title}</h3>
                 <span className="rounded-full border px-2 py-0.5 text-xs font-semibold" style={{ borderColor: incidentTone(incident.status), color: incidentTone(incident.status) }}>{incidentStatusLabel(incident.status)}</span>
-                <span className="rounded-full border px-2 py-0.5 text-xs font-semibold" style={{ borderColor: "var(--border-strong)", color: "var(--text-secondary)" }}>{incident.severity}</span>
+                <span className="rounded-full border px-2 py-0.5 text-xs font-semibold border-border-strong! text-fg-secondary!">{incident.severity}</span>
               </div>
-              {incident.summary && <p className="mt-1 break-words text-sm" style={{ color: "var(--text-secondary)" }}>{incident.summary}</p>}
-              <dl className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              {incident.summary && <p className="mt-1 break-words text-sm text-fg-secondary!">{incident.summary}</p>}
+              <dl className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-fg-muted!">
                 <div><dt className="sr-only">服務</dt><dd>{incident.service} · {incident.environment}</dd></div>
                 <div><dt className="sr-only">出現次數</dt><dd>{incident.occurrence_count} 次 · 最近 {formatDate(incident.last_seen_at)}</dd></div>
                 {incident.release_version && <div><dt className="sr-only">版本</dt><dd className="font-mono">版本 {incident.release_version}</dd></div>}
                 {incident.request_id && <div><dt className="sr-only">請求 ID</dt><dd className="font-mono">req {incident.request_id}</dd></div>}
                 {incident.trace_id && <div><dt className="sr-only">追蹤 ID</dt><dd className="font-mono">trace {incident.trace_id}</dd></div>}
               </dl>
-              {incident.status === "resolved" && incident.resolution_note && <p className="mt-2 text-xs" style={{ color: "var(--success)" }}>{incident.resolution_note}</p>}
+              {incident.status === "resolved" && incident.resolution_note && <p className="mt-2 text-xs text-success!">{incident.resolution_note}</p>}
             </div>
-            <div className="text-xs lg:text-right" style={{ color: "var(--text-muted)" }}>
+            <div className="text-xs lg:text-right text-fg-muted!">
               <div>首次 {formatDate(incident.first_seen_at)}</div>
               {incident.resolved_at && <div className="mt-1">結案 {formatDate(incident.resolved_at)}</div>}
             </div>
@@ -420,7 +419,7 @@ function ErrorsPanel({ data }: { data: ErrorsData }) {
     </section>
 
     <SystemRecentErrorsPanel initialItems={data.top_exceptions} />
-    <DataList title="慢查詢" empty="目前沒有超過門檻的慢查詢" items={data.slow_transactions} render={(item) => <div><div className="font-mono text-xs">{item.template}</div><div className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>最高 {formatNumber(item.max_ms, " ms")} · {item.occurrences} 次 · {item.paths?.[0]?.path || "—"}</div></div>} />
+    <DataList title="慢查詢" empty="目前沒有超過門檻的慢查詢" items={data.slow_transactions} render={(item) => <div><div className="font-mono text-xs">{item.template}</div><div className="mt-1 text-xs text-fg-muted!">最高 {formatNumber(item.max_ms, " ms")} · {item.occurrences} 次 · {item.paths?.[0]?.path || "—"}</div></div>} />
   </div>;
 }
 
@@ -435,12 +434,12 @@ function RealUsersPanel({ data, windowHours, onWindowHoursChange }: { data: Real
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="font-semibold">真實使用者監測</h2>
-            <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>{data.message}</p>
+            <p className="mt-1 text-sm text-fg-secondary!">{data.message}</p>
           </div>
           <div className="flex items-center gap-3">
-            <label className="flex items-center gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
+            <label className="flex items-center gap-2 text-xs text-fg-muted!">
               時間區間
-              <select className="min-h-9 rounded-md border bg-transparent px-2 text-sm" style={{ borderColor: "var(--border-strong)", color: "var(--text-primary)" }} value={windowHours} onChange={(event) => onWindowHoursChange(Number(event.target.value))}>
+              <select className="min-h-9 rounded-md border bg-transparent px-2 text-sm border-border-strong! text-fg-primary!"  value={windowHours} onChange={(event) => onWindowHoursChange(Number(event.target.value))}>
                 <option value={1}>近 1 小時</option>
                 <option value={24}>近 24 小時</option>
                 <option value={168}>近 7 天</option>
@@ -449,7 +448,7 @@ function RealUsersPanel({ data, windowHours, onWindowHoursChange }: { data: Real
             <StatusPill status={data.data_available ? "pass" : "pending"} />
           </div>
         </div>
-        <p className="mt-3 text-xs" style={{ color: "var(--text-muted)" }}>
+        <p className="mt-3 text-xs text-fg-muted!">
           互動回饋 ≤100 ms／INP p75 ≤200 ms；API p95：簡單 GET ≤300 ms、CRUD ≤500 ms、重型操作 ≤2 s。
         </p>
       </section>
@@ -462,12 +461,12 @@ function RealUsersPanel({ data, windowHours, onWindowHoursChange }: { data: Real
       <section className="space-y-3">
         <div>
           <h2 className="text-base font-semibold">所有已造訪路由</h2>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>公開、登入與未來新增頁面會在首次造訪後自動出現；不收集訪客身份。</p>
+          <p className="mt-1 text-sm text-fg-muted!">公開、登入與未來新增頁面會在首次造訪後自動出現；不收集訪客身份。</p>
         </div>
         {routes.length === 0 ? <EmptyState title="尚無第一方 RUM 樣本" /> : (
-          <div className="overflow-x-auto rounded-md border" style={{ borderColor: "var(--border)" }}>
+          <div className="overflow-x-auto rounded-md border border-border!">
             <table className="w-full min-w-[1380px] text-left text-sm">
-              <thead><tr className="border-b" style={{ borderColor: "var(--border)" }}>
+              <thead><tr className="border-b border-border!">
                 <th className="px-4 py-3">路由</th><th className="px-4 py-3">裝置／狀態</th><th className="px-4 py-3">版本</th><th className="px-4 py-3">瀏覽</th><th className="px-4 py-3">Web Vitals p50 / p75 / p95 / p99</th>
                 <th className="px-4 py-3">互動回饋 / 完成 p75</th><th className="px-4 py-3">API p50 / p75 / p95 / p99</th><th className="px-4 py-3">瀏覽器執行效能</th><th className="px-4 py-3">錯誤</th>
               </tr></thead>
@@ -476,10 +475,10 @@ function RealUsersPanel({ data, windowHours, onWindowHoursChange }: { data: Real
                 const completionStatus = budgetStatus(route.interaction_completion_p75_ms, 500, 2_000);
                 const api = route.api_latency_p95_ms_by_kind ?? {};
                 const webVitals = route.web_vitals ?? {};
-                  return <tr key={`${route.path}:${route.device_class}:${route.auth_state}:${route.release}`} className="border-b last:border-0" style={{ borderColor: "var(--border)" }}>
+                  return <tr key={`${route.path}:${route.device_class}:${route.auth_state}:${route.release}`} className="border-b last:border-0 border-border!">
                   <td className="px-4 py-3 font-medium">{route.path}</td>
-                  <td className="px-4 py-3 text-xs"><div>{route.device_class ?? "—"}</div><div style={{ color: "var(--text-muted)" }}>{route.auth_state ?? "—"}</div></td>
-                  <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--text-muted)" }}>{route.release ?? "—"}</td>
+                  <td className="px-4 py-3 text-xs"><div>{route.device_class ?? "—"}</div><div className="text-fg-muted!">{route.auth_state ?? "—"}</div></td>
+                  <td className="px-4 py-3 font-mono text-xs text-fg-muted!">{route.release ?? "—"}</td>
                   <td className="px-4 py-3">{route.pageviews}</td>
                   <td className="px-4 py-3 font-mono text-xs leading-5"><div>LCP {formatNumber(webVitals.lcp_p50, " ms")} / {formatNumber(webVitals.lcp_p75, " ms")} / {formatNumber(webVitals.lcp_p95, " ms")} / {formatNumber(webVitals.lcp_p99, " ms")}</div><div>INP {formatNumber(webVitals.inp_p50, " ms")} / {formatNumber(webVitals.inp_p75, " ms")} / {formatNumber(webVitals.inp_p95, " ms")} / {formatNumber(webVitals.inp_p99, " ms")}</div><div>FCP {formatNumber(webVitals.fcp_p50, " ms")} / {formatNumber(webVitals.fcp_p75, " ms")} / {formatNumber(webVitals.fcp_p95, " ms")} / {formatNumber(webVitals.fcp_p99, " ms")}</div><div>CLS {formatNumber(webVitals.cls_p50)} / {formatNumber(webVitals.cls_p75)} / {formatNumber(webVitals.cls_p95)} / {formatNumber(webVitals.cls_p99)}</div><div>TTFB {formatNumber(route.navigation_ttfb_percentiles_ms?.p50_ms, " ms")} / {formatNumber(route.navigation_ttfb_percentiles_ms?.p75_ms, " ms")} / {formatNumber(route.navigation_ttfb_percentiles_ms?.p95_ms, " ms")} / {formatNumber(route.navigation_ttfb_percentiles_ms?.p99_ms, " ms")}</div></td>
                   <td className="px-4 py-3 text-xs"><div style={{ color: budgetColor(feedbackStatus) }}>{formatNumber(route.interaction_feedback_p75_ms, " ms")} <span className="text-xs">回饋</span></div><div style={{ color: budgetColor(completionStatus) }}>{formatNumber(route.interaction_completion_p75_ms, " ms")} <span className="text-xs">完成</span></div></td>
@@ -492,7 +491,7 @@ function RealUsersPanel({ data, windowHours, onWindowHoursChange }: { data: Real
           </div>
         )}
       </section>
-      {routeInteractions.length > 0 && <section className="space-y-3"><div><h2 className="text-base font-semibold">具名操作</h2><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>按鈕、表單與導覽操作會量測按下後首次視覺回饋，以及對應 API 完成時間。</p></div><div className="grid gap-3 md:grid-cols-2">{routeInteractions.slice(0, 40).map(({ route, interaction }) => <div key={`${route.path}:${route.device_class}:${route.auth_state}:${route.release}:${interaction.name}`} className="rounded-md border p-4" style={{ borderColor: "var(--border)" }}><div className="flex items-center justify-between gap-3"><span className="truncate text-sm font-medium">{interaction.name}</span><span className="text-xs" style={{ color: "var(--text-muted)" }}>{route.path} · {route.device_class} · {route.auth_state}</span></div><div className="mt-2 grid grid-cols-2 gap-3 text-xs"><div style={{ color: budgetColor(interaction.feedback_status) }}>回饋 {formatNumber(interaction.feedback_p75_ms, " ms")}</div><div style={{ color: budgetColor(interaction.completion_status) }}>完成 {formatNumber(interaction.completion_p75_ms, " ms")}</div></div></div>)}</div></section>}
+      {routeInteractions.length > 0 && <section className="space-y-3"><div><h2 className="text-base font-semibold">具名操作</h2><p className="mt-1 text-sm text-fg-muted!">按鈕、表單與導覽操作會量測按下後首次視覺回饋，以及對應 API 完成時間。</p></div><div className="grid gap-3 md:grid-cols-2">{routeInteractions.slice(0, 40).map(({ route, interaction }) => <div key={`${route.path}:${route.device_class}:${route.auth_state}:${route.release}:${interaction.name}`} className="rounded-md border p-4 border-border!"><div className="flex items-center justify-between gap-3"><span className="truncate text-sm font-medium">{interaction.name}</span><span className="text-xs text-fg-muted!">{route.path} · {route.device_class} · {route.auth_state}</span></div><div className="mt-2 grid grid-cols-2 gap-3 text-xs"><div style={{ color: budgetColor(interaction.feedback_status) }}>回饋 {formatNumber(interaction.feedback_p75_ms, " ms")}</div><div style={{ color: budgetColor(interaction.completion_status) }}>完成 {formatNumber(interaction.completion_p75_ms, " ms")}</div></div></div>)}</div></section>}
     </div>
   );
 }
@@ -507,33 +506,33 @@ function PerformancePanel({ data, page }: { data: PerformanceData; page: PageSco
     ["登入後 Mobile", selected.authenticated_mobile],
     ["登入後 Desktop", selected.authenticated_desktop],
   ].filter((entry): entry is [string, ModeScore] => Boolean(entry[1])) : [];
-  return <div className="space-y-6"><section className="flex flex-col gap-2 border-b pb-4 sm:flex-row sm:items-end sm:justify-between" style={{ borderColor: "var(--border)" }}><div><h2 className="text-base font-semibold">頁面效能詳情</h2><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>{data.url || page?.url || "—"}</p></div><span className="text-xs" style={{ color: "var(--text-muted)" }}>公開 PSI、登入後 Lighthouse 與 CrUX 分開呈現</span></section><div className="grid gap-3 sm:grid-cols-2">{modes.map(([label, mode]) => <div key={`${label}-${mode.tested_at}`} className="rounded-md border p-4" style={{ borderColor: "var(--border)" }}><div className="flex items-center justify-between"><span className="text-sm font-medium">{label}</span><Score value={mode.score} /></div><dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs"><Metric label="LCP" value={formatNumber(mode.metrics.lcp_ms, " ms")} /><Metric label="INP" value={formatNumber(mode.metrics.inp_ms, " ms")} /><Metric label="TBT" value={formatNumber(mode.metrics.tbt_ms, " ms")} /><Metric label="CLS" value={formatNumber(mode.metrics.cls)} /></dl><p className="mt-3 text-xs" style={{ color: "var(--text-muted)" }}>測試於 {formatDate(mode.tested_at)}</p></div>)}</div>{modes.length === 0 && <EmptyState title="尚無效能結果" detail="先執行公開 PSI 或等待 authenticated performance workflow 回報。" />}<section className="rounded-md border p-5" style={{ borderColor: "var(--border)" }}><h2 className="font-semibold">CrUX 近 28 天</h2>{data.crux.error ? <p className="mt-3 text-sm" style={{ color: "var(--error)" }}>資料讀取失敗：{data.crux.error}</p> : <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Metric label="LCP p75" value={formatNumber(data.crux.lcp_p75?.at(-1), " ms")} /><Metric label="INP p75" value={formatNumber(data.crux.inp_p75?.at(-1), " ms")} /><Metric label="CLS p75" value={formatNumber(data.crux.cls_p75?.at(-1))} /><Metric label="TTFB p75" value={formatNumber(data.crux.ttfb_p75?.at(-1), " ms")} /></div>}</section></div>;
+  return <div className="space-y-6"><section className="flex flex-col gap-2 border-b pb-4 sm:flex-row sm:items-end sm:justify-between border-border!"><div><h2 className="text-base font-semibold">頁面效能詳情</h2><p className="mt-1 text-sm text-fg-muted!">{data.url || page?.url || "—"}</p></div><span className="text-xs text-fg-muted!">公開 PSI、登入後 Lighthouse 與 CrUX 分開呈現</span></section><div className="grid gap-3 sm:grid-cols-2">{modes.map(([label, mode]) => <div key={`${label}-${mode.tested_at}`} className="rounded-md border p-4 border-border!"><div className="flex items-center justify-between"><span className="text-sm font-medium">{label}</span><Score value={mode.score} /></div><dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs"><Metric label="LCP" value={formatNumber(mode.metrics.lcp_ms, " ms")} /><Metric label="INP" value={formatNumber(mode.metrics.inp_ms, " ms")} /><Metric label="TBT" value={formatNumber(mode.metrics.tbt_ms, " ms")} /><Metric label="CLS" value={formatNumber(mode.metrics.cls)} /></dl><p className="mt-3 text-xs text-fg-muted!">測試於 {formatDate(mode.tested_at)}</p></div>)}</div>{modes.length === 0 && <EmptyState title="尚無效能結果" detail="先執行公開 PSI 或等待 authenticated performance workflow 回報。" />}<section className="rounded-md border p-5 border-border!"><h2 className="font-semibold">CrUX 近 28 天</h2>{data.crux.error ? <p className="mt-3 text-sm text-danger!">資料讀取失敗：{data.crux.error}</p> : <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Metric label="LCP p75" value={formatNumber(data.crux.lcp_p75?.at(-1), " ms")} /><Metric label="INP p75" value={formatNumber(data.crux.inp_p75?.at(-1), " ms")} /><Metric label="CLS p75" value={formatNumber(data.crux.cls_p75?.at(-1))} /><Metric label="TTFB p75" value={formatNumber(data.crux.ttfb_p75?.at(-1), " ms")} /></div>}</section></div>;
 }
 
 function ReleasesPanel({ data }: { data: Release[] }) {
-  return <section className="space-y-3"><div><h2 className="text-base font-semibold">部署版本</h2><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>每次採集會關聯部署 commit，方便定位分數回退。</p></div>{data.length === 0 ? <EmptyState title="尚無部署紀錄" detail="完成一次部署或建立 release 後會顯示於此。" /> : <div className="overflow-x-auto rounded-md border" style={{ borderColor: "var(--border)" }}><table className="w-full min-w-[640px] text-left text-sm"><thead><tr className="border-b" style={{ borderColor: "var(--border)" }}><th className="px-4 py-3">版本</th><th className="px-4 py-3">環境</th><th className="px-4 py-3">部署時間</th></tr></thead><tbody>{data.map((item) => <tr key={`${item.release}-${item.deployed_at}`} className="border-b last:border-0" style={{ borderColor: "var(--border)" }}><td className="px-4 py-3"><div className="font-medium">{item.release}</div><div className="mt-1 font-mono text-xs" style={{ color: "var(--text-muted)" }}>{item.commit_sha}</div></td><td className="px-4 py-3">{item.environment}</td><td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>{formatDate(item.deployed_at)}</td></tr>)}</tbody></table></div>}</section>;
+  return <section className="space-y-3"><div><h2 className="text-base font-semibold">部署版本</h2><p className="mt-1 text-sm text-fg-muted!">每次採集會關聯部署 commit，方便定位分數回退。</p></div>{data.length === 0 ? <EmptyState title="尚無部署紀錄" detail="完成一次部署或建立 release 後會顯示於此。" /> : <div className="overflow-x-auto rounded-md border border-border!"><table className="w-full min-w-[640px] text-left text-sm"><thead><tr className="border-b border-border!"><th className="px-4 py-3">版本</th><th className="px-4 py-3">環境</th><th className="px-4 py-3">部署時間</th></tr></thead><tbody>{data.map((item) => <tr key={`${item.release}-${item.deployed_at}`} className="border-b last:border-0 border-border!"><td className="px-4 py-3"><div className="font-medium">{item.release}</div><div className="mt-1 font-mono text-xs text-fg-muted!">{item.commit_sha}</div></td><td className="px-4 py-3">{item.environment}</td><td className="px-4 py-3 text-fg-secondary!">{formatDate(item.deployed_at)}</td></tr>)}</tbody></table></div>}</section>;
 }
 
 function SummaryMetric({ label, value, detail, tone }: { label: string; value: string | number; detail: string; tone?: string }) {
-  return <div className="rounded-md border p-4" style={{ borderColor: "var(--border)" }}><div className="text-xs" style={{ color: "var(--text-muted)" }}>{label}</div><div className="mt-2 text-2xl font-semibold" style={{ color: tone ?? "var(--text-primary)" }}>{value}</div><div className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{detail}</div></div>;
+  return <div className="rounded-md border p-4 border-border!"><div className="text-xs text-fg-muted!">{label}</div><div className="mt-2 text-2xl font-semibold" style={{ color: tone ?? "var(--text-primary)" }}>{value}</div><div className="mt-1 text-xs text-fg-muted!">{detail}</div></div>;
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
-  return <div><dt style={{ color: "var(--text-muted)" }}>{label}</dt><dd className="mt-0.5 font-medium">{value}</dd></div>;
+  return <div><dt className="text-fg-muted!">{label}</dt><dd className="mt-0.5 font-medium">{value}</dd></div>;
 }
 
 function DataList<T>({ title, empty, items, render }: { title: string; empty: string; items: T[]; render: (item: T) => ReactNode }) {
-  return <section className="space-y-3"><h2 className="text-base font-semibold">{title}</h2>{items.length === 0 ? <EmptyState title={empty} detail="服務目前沒有回報可顯示的項目。" /> : <div className="divide-y rounded-md border" style={{ borderColor: "var(--border)" }}>{items.map((item, index) => <div key={index} className="p-4">{render(item)}</div>)}</div>}</section>;
+  return <section className="space-y-3"><h2 className="text-base font-semibold">{title}</h2>{items.length === 0 ? <EmptyState title={empty} detail="服務目前沒有回報可顯示的項目。" /> : <div className="divide-y rounded-md border border-border!">{items.map((item, index) => <div key={index} className="p-4">{render(item)}</div>)}</div>}</section>;
 }
 
 function LoadingState() {
-  return <div className="space-y-4" aria-label="載入中"><div className="h-24 animate-pulse rounded-md" style={{ background: "var(--bg-surface)" }} /><div className="h-48 animate-pulse rounded-md" style={{ background: "var(--bg-surface)" }} /></div>;
+  return <div className="space-y-4" aria-label="載入中"><div className="h-24 animate-pulse rounded-md bg-surface!"  /><div className="h-48 animate-pulse rounded-md bg-surface!"  /></div>;
 }
 
 function EmptyState({ title, detail }: { title: string; detail?: string }) {
-  return <div className="rounded-md border p-8 text-center" style={{ borderColor: "var(--border)" }}><h2 className="font-medium">{title}</h2>{detail && <p className="mx-auto mt-2 max-w-xl text-sm" style={{ color: "var(--text-muted)" }}>{detail}</p>}</div>;
+  return <div className="rounded-md border p-8 text-center border-border!"><h2 className="font-medium">{title}</h2>{detail && <p className="mx-auto mt-2 max-w-xl text-sm text-fg-muted!">{detail}</p>}</div>;
 }
 
 function InlineError({ message }: { message: string }) {
-  return <div role="alert" className="rounded-md border p-4 text-sm" style={{ borderColor: "var(--danger-border)", background: "var(--danger-dim)", color: "var(--error)" }}>{message}</div>;
+  return <div role="alert" className="rounded-md border p-4 text-sm border-danger-border! bg-danger-soft! text-danger!">{message}</div>;
 }

@@ -51,35 +51,34 @@ export function ClassList({
   };
 
   return (
-    <section className="rounded-md" style={{ border: "1px solid var(--border)" }}>
-      <div className="p-4" style={{ borderBottom: "1px solid var(--border)" }}>
+    <section className="rounded-md border! border-border!">
+      <div className="p-4 border-b! border-b-border!">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+          <h2 className="text-sm font-semibold text-fg-primary!">
             班級清單
           </h2>
-          <span className="text-xs" style={{ color: "var(--text-muted)" }}>{classes.length} 班</span>
+          <span className="text-xs text-fg-muted!">{classes.length} 班</span>
         </div>
-        <div className="mt-3 flex items-center gap-2 rounded-md px-3 py-2"
-          style={{ border: "1px solid var(--border)" }}>
-          <Search size={15} style={{ color: "var(--text-muted)" }} />
+        <div className="mt-3 flex items-center gap-2 rounded-md px-3 py-2 border! border-border!"
+          >
+          <Search size={15}   className="text-fg-muted!"/>
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            className="w-full bg-transparent text-sm outline-none"
+            className="w-full bg-transparent text-sm outline-none text-fg-primary!"
             placeholder="搜尋學年度、班級代碼"
-            style={{ color: "var(--text-primary)" }}
           />
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={toggleAllVisible}
-            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs"
-            style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs border! border-border! text-fg-secondary!"
+            >
             {allVisibleSelected ? <CheckSquare size={14} /> : <Square size={14} />}
             {allVisibleSelected ? "取消本頁" : "選取本頁"}
           </button>
-          <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+          <span className="text-xs text-fg-muted!">
             已選 {selectedIds.length} 班
           </span>
           {hasSelection && (
@@ -88,24 +87,24 @@ export function ClassList({
                 type="button"
                 disabled={bulkBusy}
                 onClick={() => onBulkAction("deactivate")}
-                className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs disabled:opacity-50"
-                style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+                className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs disabled:opacity-50 border! border-border! text-fg-secondary!"
+                >
                 <Power size={14} /> 批量停用
               </button>
               <button
                 type="button"
                 disabled={bulkBusy}
                 onClick={() => onBulkAction("activate")}
-                className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs disabled:opacity-50"
-                style={{ border: "1px solid var(--border)", color: "var(--primary-text)" }}>
+                className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs disabled:opacity-50 border! border-border! text-accent-text!"
+                >
                 <Power size={14} /> 批量啟用
               </button>
               <button
                 type="button"
                 disabled={bulkBusy}
                 onClick={() => onBulkAction("delete")}
-                className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs disabled:opacity-50"
-                style={{ border: "1px solid var(--border)", color: "#dc2626" }}>
+                className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs disabled:opacity-50 border! border-border!"
+                style={{ color: "#dc2626" }}>
                 <Trash2 size={14} /> 批量刪除
               </button>
             </>
@@ -119,11 +118,8 @@ export function ClassList({
           return (
             <div
               key={item.id}
-              className="flex items-stretch"
-              style={{
-                borderBottom: "1px solid var(--border)",
-                background: active ? "var(--primary-dim)" : "transparent",
-              }}>
+              className="flex items-stretch border-b! border-b-border!"
+              style={{ background: active ? "var(--primary-dim)" : "transparent" }}>
               <button
                 type="button"
                 onClick={() => toggleSelected(item.id)}
@@ -142,17 +138,13 @@ export function ClassList({
                     style={{ color: active ? "var(--primary-text)" : "var(--text-primary)" }}>
                     {classTitle(item)}
                   </p>
-                  <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+                  <p className="text-xs mt-0.5 text-fg-muted!">
                     {item.grade} 年級 · {item.label ?? item.class_code}
                   </p>
                 </div>
                 <span
-                  className="rounded px-2 py-1 text-xs"
-                  style={{
-                    color: item.is_active ? "#047857" : "var(--text-muted)",
-                    background: item.is_active ? "rgba(16,185,129,0.12)" : "transparent",
-                    border: "1px solid var(--border)",
-                  }}>
+                  className="rounded px-2 py-1 text-xs border! border-border!"
+                  style={{ color: item.is_active ? "#047857" : "var(--text-muted)", background: item.is_active ? "rgba(16,185,129,0.12)" : "transparent" }}>
                   {item.is_active ? "當前" : "停用"}
                 </span>
               </div>
@@ -161,7 +153,7 @@ export function ClassList({
           );
         })}
         {filtered.length === 0 && (
-          <div className="p-4 text-sm" style={{ color: "var(--text-muted)" }}>
+          <div className="p-4 text-sm text-fg-muted!">
             找不到符合條件的班級。
           </div>
         )}
@@ -184,8 +176,8 @@ export function RangePanel({
 
   return (
     <div className="space-y-4">
-      <section className="rounded-md p-4" style={{ border: "1px solid var(--border)" }}>
-        <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+      <section className="rounded-md p-4 border! border-border!">
+        <h3 className="text-sm font-semibold text-fg-primary!">
           新增學號區間
         </h3>
         <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-[1fr_1fr_auto]">
@@ -195,8 +187,7 @@ export function RangePanel({
             placeholder="結束學號" />
           <button
             type="button"
-            className="rounded-md px-4 py-2 text-sm font-semibold"
-            style={{ background: "var(--primary)", color: "var(--primary-fg)" }}
+            className="rounded-md px-4 py-2 text-sm font-semibold bg-accent! text-accent-foreground!"
             onClick={async () => {
               await onAdd(start, end);
               setStart("");
@@ -207,26 +198,26 @@ export function RangePanel({
         </div>
       </section>
 
-      <section className="rounded-md overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-        <div className="px-4 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
-          <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+      <section className="rounded-md overflow-hidden border! border-border!">
+        <div className="px-4 py-3 border-b! border-b-border!">
+          <h3 className="text-sm font-semibold text-fg-primary!">
             已設定區間
           </h3>
         </div>
         {ranges.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+          <p className="px-4 py-8 text-center text-sm text-fg-muted!">
             尚未設定學號區間。
           </p>
         ) : (
           ranges.map((range) => (
             <div
               key={range.id}
-              className="flex items-center justify-between px-4 py-3"
-              style={{ borderBottom: "1px solid var(--border)" }}>
-              <span className="font-mono text-sm" style={{ color: "var(--text-primary)" }}>
+              className="flex items-center justify-between px-4 py-3 border-b! border-b-border!"
+              >
+              <span className="font-mono text-sm text-fg-primary!">
                 {range.student_id_start} → {range.student_id_end}
               </span>
-              <button type="button" className="text-xs" style={{ color: "var(--danger)" }}
+              <button type="button" className="text-xs text-danger!"
                 onClick={() => onDelete(range.id)}>
                 刪除
               </button>
@@ -275,9 +266,9 @@ export function RosterPanel({
 
   return (
     <div className="space-y-4">
-      <section className="rounded-md p-4" style={{ border: "1px solid var(--border)" }}>
+      <section className="rounded-md p-4 border! border-border!">
         <div>
-          <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+          <h3 className="text-sm font-semibold text-fg-primary!">
             手動維護座號名冊
           </h3>
         </div>
@@ -299,8 +290,7 @@ export function RosterPanel({
           />
           <button
             type="button"
-            className="inline-flex items-center justify-center gap-1.5 rounded-md px-4 py-2 text-sm font-semibold"
-            style={{ background: "var(--primary)", color: "var(--primary-fg)" }}
+            className="inline-flex items-center justify-center gap-1.5 rounded-md px-4 py-2 text-sm font-semibold bg-accent! text-accent-foreground!"
             onClick={async () => {
               const number = Number(seatNumber);
               if (!Number.isInteger(number) || number < 1 || !studentId.trim()) {
@@ -315,8 +305,8 @@ export function RosterPanel({
             <Plus size={15} /> 新增
           </button>
         </div>
-        <div className="mt-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
-          <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+        <div className="mt-4 border-t pt-4 border-border!">
+          <label className="text-xs font-medium text-fg-secondary!">
             貼上多筆名冊
             <textarea
               className="input mt-1 min-h-24 w-full font-mono text-xs"
@@ -327,13 +317,12 @@ export function RosterPanel({
             />
           </label>
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-            <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+            <span className="text-xs text-fg-muted!">
               支援逗號、Tab 或空白分隔；相同座號會更新原資料。
             </span>
             <button
               type="button"
-              className="rounded-md px-3 py-2 text-xs font-semibold"
-              style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}
+              className="rounded-md px-3 py-2 text-xs font-semibold border! border-border! text-fg-secondary!"
               onClick={async () => {
                 try {
                   await onBulkImport(parseRows(pasteValue));
@@ -349,13 +338,13 @@ export function RosterPanel({
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-md" style={{ border: "1px solid var(--border)" }}>
-        <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
+      <section className="overflow-hidden rounded-md border! border-border!">
+        <div className="flex items-center justify-between px-4 py-3 border-b! border-b-border!">
           <div>
-            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+            <h3 className="text-sm font-semibold text-fg-primary!">
               班級座號名冊
             </h3>
-            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            <p className="mt-1 text-xs text-fg-muted!">
               共 {entries.length} 筆 · 可直接編輯或刪除
             </p>
           </div>
@@ -363,7 +352,7 @@ export function RosterPanel({
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr style={{ color: "var(--text-muted)", borderBottom: "1px solid var(--border)" }}>
+              <tr className="text-fg-muted! border-b! border-b-border!">
                 <th className="px-4 py-2 text-left font-medium">座號</th>
                 <th className="px-4 py-2 text-left font-medium">學號</th>
                 <th className="px-4 py-2 text-left font-medium">帳號連結</th>
@@ -374,14 +363,14 @@ export function RosterPanel({
               {entries.map((entry) => {
                 const editing = editingId === entry.id;
                 return (
-                  <tr key={entry.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                    <td className="px-4 py-2" style={{ color: "var(--text-primary)" }}>
+                  <tr key={entry.id}  className="border-b! border-b-border!">
+                    <td className="px-4 py-2 text-fg-primary!">
                       {editing ? (
                         <input className="input w-20" inputMode="numeric" value={editSeat}
                           onChange={(event) => setEditSeat(event.target.value)} aria-label="編輯座號" />
                       ) : entry.seat_number}
                     </td>
-                    <td className="px-4 py-2 font-mono text-xs" style={{ color: "var(--text-primary)" }}>
+                    <td className="px-4 py-2 font-mono text-xs text-fg-primary!">
                       {editing ? (
                         <input className="input min-w-36" value={editStudentId}
                           onChange={(event) => setEditStudentId(event.target.value)} aria-label="編輯學號" />
@@ -393,7 +382,7 @@ export function RosterPanel({
                     <td className="whitespace-nowrap px-4 py-2 text-right">
                       {editing ? (
                         <>
-                          <button type="button" className="mr-3 text-xs font-medium" style={{ color: "var(--primary-text)" }}
+                          <button type="button" className="mr-3 text-xs font-medium text-accent-text!"
                             onClick={async () => {
                               const number = Number(editSeat);
                               if (!Number.isInteger(number) || number < 1 || !editStudentId.trim()) {
@@ -403,18 +392,18 @@ export function RosterPanel({
                               await onUpdate(entry.id, number, editStudentId.trim());
                               setEditingId(null);
                             }}>儲存</button>
-                          <button type="button" className="text-xs" style={{ color: "var(--text-muted)" }}
+                          <button type="button" className="text-xs text-fg-muted!"
                             onClick={() => setEditingId(null)}>取消</button>
                         </>
                       ) : (
                         <>
-                          <button type="button" className="mr-3 text-xs" style={{ color: "var(--primary-text)" }}
+                          <button type="button" className="mr-3 text-xs text-accent-text!"
                             onClick={() => {
                               setEditingId(entry.id);
                               setEditSeat(String(entry.seat_number));
                               setEditStudentId(entry.student_id);
                             }}>編輯</button>
-                          <button type="button" className="text-xs" style={{ color: "var(--danger)" }}
+                          <button type="button" className="text-xs text-danger!"
                             onClick={() => onDelete(entry.id)}>刪除</button>
                         </>
                       )}
@@ -423,7 +412,7 @@ export function RosterPanel({
                 );
               })}
               {entries.length === 0 && (
-                <tr><td colSpan={4} className="px-4 py-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+                <tr><td colSpan={4} className="px-4 py-8 text-center text-sm text-fg-muted!">
                   尚未建立座號名冊，先輸入一筆或貼上多筆資料。
                 </td></tr>
               )}
