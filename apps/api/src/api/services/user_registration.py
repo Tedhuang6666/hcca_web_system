@@ -349,59 +349,6 @@ def _field_conflict(
     }
 
 
-async def _collect_identity_conflicts(
-    db: AsyncSession,
-    *,
-    target_user: User,
-    source_users: list[User],
-) -> list[dict[str, Any]]:
-    users = [target_user, *source_users]
-    user_names = {item.id: item.display_name for item in users}
-    records: list[dict[str, Any]] = []
-    for item in users:
-        if item.student_id:
-            records.append(
-                _field_record(
-                    record_id=f"user:{item.id}:student_id",
-                    side="target" if item.id == target_user.id else "source",
-                    owner_user_id=item.id,
-                    owner_name=user_names[item.id],
-                    field="學號",
-                    value=item.student_id,
-                )
-            )
-
-    people = (
-        await db.scalars(select(Person).where(Person.user_id.in_([item.id for item in users])))
-    ).all()
-    for person in people:
-        if person.student_id and not any(
-            item.id == person.user_id and item.student_id == person.student_id for item in users
-        ):
-            records.append(
-                _field_record(
-                    record_id=f"person:{person.id}:student_id",
-                    side="target" if person.user_id == target_user.id else "source",
-                    owner_user_id=person.user_id or target_user.id,
-                    owner_name=user_names.get(person.user_id, "人員檔案"),
-                    field="學號",
-                    value=person.student_id,
-                )
-            )
-    values = {record["_value"] for record in records}
-    if len(values) < 2:
-        return []
-    records.sort(key=lambda item: item["id"])
-    return [
-        _field_conflict(
-            key="field:identity:student_id:" + "|".join(item["id"] for item in records),
-            title="學號身分衝突",
-            field="student_id",
-            records=records,
-        )
-    ]
-
-
 async def _collect_profile_conflicts(
     db: AsyncSession,
     *,

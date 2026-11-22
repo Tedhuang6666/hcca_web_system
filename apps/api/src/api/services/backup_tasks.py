@@ -323,23 +323,3 @@ def _write_backup_record_sync(
         asyncio.run(_go())
     except Exception:
         logger.exception("backup record async wrapper failed")
-
-
-def _rotate_old_backups_all_exts(backup_dir: Path, retention_days: int) -> int:
-    """Wrapper：清舊 custom dump 與歷史 .sql.gz 檔名。"""
-    cutoff = time.time() - retention_days * 86400
-    removed = 0
-    for pattern in (
-        "hcca_backup_*.dump",
-        "hcca_backup_*.dump.gpg",
-        "hcca_backup_*.sql.gz",
-        "hcca_backup_*.sql.gz.gpg",
-    ):
-        for f in backup_dir.glob(pattern):
-            if f.stat().st_mtime < cutoff:
-                try:
-                    f.unlink()
-                    removed += 1
-                except OSError:
-                    logger.warning("無法刪除過期備份 %s", f, exc_info=True)
-    return removed

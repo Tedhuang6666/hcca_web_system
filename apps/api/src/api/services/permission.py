@@ -303,16 +303,6 @@ async def get_user_org_ids(
     return list(result.scalars().all())
 
 
-async def user_has_permission(
-    db: AsyncSession,
-    user_id: uuid.UUID,
-    permission_code: str,
-) -> bool:
-    """快速檢查使用者是否擁有特定權限碼（全域）"""
-    codes = await get_user_permission_codes(db, user_id)
-    return permission_code in codes
-
-
 async def is_privileged_account(
     db: AsyncSession, *, user_id: uuid.UUID, is_superuser: bool
 ) -> bool:
