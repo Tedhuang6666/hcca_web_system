@@ -39,6 +39,25 @@ router = APIRouter(prefix="/auth/mfa", tags=["多因素認證"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
+_MFA_REAUTH_WINDOW_SECONDS = 300
+_MFA_REAUTH_USER_ID_KEY = "mfa_reauth_user_id"
+_MFA_REAUTH_UNTIL_KEY = "mfa_reauth_until"
+
+
+def _mark_mfa_reauthenticated(session: dict[str, Any], user: User) -> None:
+    session[_MFA_REAUTH_USER_ID_KEY] = str(user.id)
+    session[_MFA_REAUTH_UNTIL_KEY] = time.time() + _MFA_REAUTH_WINDOW_SECONDS
+
+
+def _has_recent_mfa_reauth(session: dict[str, Any], user: User) -> bool:
+    if session.get(_MFA_REAUTH_USER_ID_KEY) != str(user.id):
+        return False
+    try:
+        expires_at = float(session.get(_MFA_REAUTH_UNTIL_KEY, 0))
+    except (OverflowError, TypeError, ValueError):
+        return False
+    now = time.time()
+    return now < expires_at <= now + _MFA_REAUTH_WINDOW_SECONDS
 
 
 class MFASetupOut(BaseModel):
@@ -191,7 +210,7 @@ async def verify_mfa(
         await _record_mfa_failure(lockout_key)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="2FA 驗證碼錯誤")
     await record_success(lockout_key)
-    request.session["mfa_reauth_until"] = time.time() + 300
+    _mark_mfa_reauthenticated(request.session, user)
     return {"verified": True}
 
 
@@ -351,7 +370,7 @@ async def delete_passkey(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="請先通過 TOTP 重新驗證"
         )
-    if not user.mfa_enabled and request.session.get("mfa_reauth_until", 0) < time.time():
+    if not user.mfa_enabled and not _has_recent_mfa_reauth(request.session, user):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="請先使用 Passkey 重新驗證"
         )
@@ -405,7 +424,7 @@ async def passkey_authentication_verify(
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="需要有效的登入狀態"
             )
-        request.session["mfa_reauth_until"] = time.time() + 300
+        _mark_mfa_reauthenticated(request.session, verified_user)
         return {"verified": True}
 
     ensure_admin_login_ip_allowed(request, verified_user)
