@@ -123,6 +123,83 @@ async def test_create_petition_without_login_returns_401(db_session, client) -> 
     assert resp.status_code == 401
 
 
+async def test_submit_petition_with_multiple_attachments_creates_case_once(
+    db_session, authed_client_factory, tmp_path, monkeypatch
+) -> None:
+    from api.core import config as config_module
+
+    monkeypatch.setattr(config_module.settings, "STORAGE_LOCAL_DIR", str(tmp_path))
+    _, petition_type = await _make_org_and_type(db_session)
+    submitter = await _bare_user(db_session)
+
+    response = await authed_client_factory(submitter).post(
+        "/petitions/submit",
+        data={
+            "type_id": str(petition_type.id),
+            "title": "走廊照明故障",
+            "content": "附上照片和檢查紀錄，請協助處理。",
+        },
+        files=[
+            ("attachments", ("現場照片.pdf", b"%PDF-1.4 photo", "application/pdf")),
+            ("attachments", ("檢查紀錄.pdf", b"%PDF-1.4 report", "application/pdf")),
+        ],
+    )
+
+    assert response.status_code == 201
+    detail = await authed_client_factory(submitter).get(f"/petitions/{response.json()['id']}")
+    assert detail.status_code == 200
+    assert {item["filename"] for item in detail.json()["attachments"]} == {
+        "現場照片.pdf",
+        "檢查紀錄.pdf",
+    }
+
+
+async def test_submit_petition_rolls_back_case_when_an_attachment_is_invalid(
+    db_session, authed_client_factory, tmp_path, monkeypatch
+) -> None:
+    from api.core import config as config_module
+
+    monkeypatch.setattr(config_module.settings, "STORAGE_LOCAL_DIR", str(tmp_path))
+    _, petition_type = await _make_org_and_type(db_session)
+    submitter = await _bare_user(db_session)
+    title = "附件失敗時不建立案件"
+
+    response = await authed_client_factory(submitter).post(
+        "/petitions/submit",
+        data={
+            "type_id": str(petition_type.id),
+            "title": title,
+            "content": "其中一個附件內容不符合宣告格式。",
+        },
+        files=[
+            ("attachments", ("有效附件.pdf", b"%PDF-1.4 valid", "application/pdf")),
+            ("attachments", ("錯誤附件.pdf", b"not a pdf", "application/pdf")),
+        ],
+    )
+
+    assert response.status_code == 422
+    assert not any(path.is_file() for path in tmp_path.rglob("*"))
+    await db_session.rollback()
+    assert await db_session.scalar(select(PetitionCase).where(PetitionCase.title == title)) is None
+
+
+async def test_submit_petition_with_attachments_without_login_returns_401(
+    db_session, client
+) -> None:
+    _, petition_type = await _make_org_and_type(db_session)
+
+    response = await client.post(
+        "/petitions/submit",
+        data={
+            "type_id": str(petition_type.id),
+            "title": "未登入送件",
+            "content": "登入後才能送出陳情。",
+        },
+    )
+
+    assert response.status_code == 401
+
+
 async def test_admin_can_create_external_petition_with_contact_email(
     db_session, authed_client_factory, admin_user: User
 ) -> None:
