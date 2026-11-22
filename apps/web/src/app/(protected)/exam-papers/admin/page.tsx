@@ -152,7 +152,7 @@ export default function ExamPaperAdminPage() {
   };
 
   return (
-    <main className="mx-auto w-full max-w-7xl space-y-6 px-4 py-5 text-[var(--text-primary)] sm:px-5 sm:py-6">
+    <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-5 text-[var(--text-primary)] sm:px-5 sm:py-6">
       <header>
         <h1 className="text-xl font-semibold sm:text-2xl">題庫管理</h1>
       </header>
@@ -373,6 +373,6 @@ export default function ExamPaperAdminPage() {
           </div>
         </aside>
       </section>
-    </main>
+    </div>
   );
 }

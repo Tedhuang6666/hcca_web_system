@@ -14,6 +14,9 @@ const FOCUSABLE_SELECTOR = [
   "[tabindex]:not([tabindex='-1'])",
 ].join(",");
 
+/** 目前開啟中的對話框（由下而上），只有最上層回應 Esc 與 Tab。 */
+const openDialogStack: HTMLElement[] = [];
+
 function focusableElements(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
     .filter((element) => element.getClientRects().length > 0 || element === document.activeElement);
@@ -119,7 +122,10 @@ export default function Modal({
   useEffect(() => {
     if (!mounted || !dialogRef.current) return;
     const dialog = dialogRef.current;
+    openDialogStack.push(dialog);
     const handler = (e: KeyboardEvent) => {
+      // 疊開的對話框（例如 Modal 內再開確認框）只由最上層處理按鍵，避免一次 Esc 全部關閉。
+      if (openDialogStack[openDialogStack.length - 1] !== dialog) return;
       if (e.key === "Escape") {
         e.preventDefault();
         onClose();
@@ -143,7 +149,11 @@ export default function Modal({
       }
     };
     document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
+    return () => {
+      document.removeEventListener("keydown", handler);
+      const index = openDialogStack.lastIndexOf(dialog);
+      if (index !== -1) openDialogStack.splice(index, 1);
+    };
   }, [mounted, onClose]);
 
   if (!mounted) return null;
@@ -151,8 +161,8 @@ export default function Modal({
   const widthClass = SIZE_CLASS[size ?? "lg"];
 
   const mobileClass = mobileFullscreen
-    ? "h-full max-h-full sm:my-auto sm:h-auto sm:max-h-[calc(100vh-2rem)]"
-    : "my-auto max-h-[calc(100vh-2rem)]";
+    ? "h-full max-h-full sm:my-auto sm:h-auto sm:max-h-[calc(100dvh-2rem)]"
+    : "my-auto max-h-[calc(100dvh-2rem)]";
   const mobileRadius = mobileFullscreen ? "rounded-none sm:rounded-2xl" : "rounded-2xl";
 
   return createPortal(

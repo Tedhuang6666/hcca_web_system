@@ -43,7 +43,7 @@ export default function RecommendedVendorCategoriesPage() {
   };
 
   return (
-    <main className="mx-auto max-w-5xl space-y-5">
+    <div className="mx-auto max-w-5xl space-y-5">
       <header>
         <p className="flex items-center gap-2 text-sm font-medium" style={{ color: "var(--primary-text)" }}><Tags size={16} aria-hidden="true" />統一管理選項</p>
         <h1 className="mt-1 text-xl font-semibold" style={{ color: "var(--text-primary)" }}>商家分類</h1>
@@ -62,7 +62,7 @@ export default function RecommendedVendorCategoriesPage() {
         <div className="flex items-center gap-2 border-b p-4" style={{ borderColor: "var(--border)" }}><Check size={16} style={{ color: "#15803D" }} aria-hidden="true" /><h2 className="font-semibold" style={{ color: "var(--text-primary)" }}>分類清單</h2></div>
         {loading ? <p className="p-5 text-sm" style={{ color: "var(--text-muted)" }}>載入中…</p> : categories.length === 0 ? <p className="p-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>尚未建立分類。</p> : <div className="divide-y" style={{ borderColor: "var(--border)" }}>{categories.map((category) => <div key={category.id} className="flex items-center justify-between gap-4 p-4"><div><p className="font-medium" style={{ color: "var(--text-primary)" }}>{category.name} {!category.is_active && <span className="text-xs" style={{ color: "var(--text-muted)" }}>（停用）</span>}</p>{category.description && <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>{category.description}</p>}</div><button type="button" className="btn btn-secondary" onClick={() => edit(category)}><Edit3 size={15} aria-hidden="true" />編輯</button></div>)}</div>}
       </section>
-    </main>
+    </div>
   );
 }
 

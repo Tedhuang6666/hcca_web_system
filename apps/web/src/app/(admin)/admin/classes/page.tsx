@@ -1832,7 +1832,7 @@ function ClassManagementPanel() {
               </div>
             </details>
           </aside>
-          <main className={mobileDetailOpen ? "" : "hidden xl:block"}>
+          <div className={mobileDetailOpen ? "" : "hidden xl:block"}>
             <div className="xl:hidden mb-3">
               <MobileBackToList onBack={() => setMobileDetailOpen(false)} label="返回班級清單" />
             </div>
@@ -1849,7 +1849,7 @@ function ClassManagementPanel() {
                 請先建立或選擇班級。
               </section>
             )}
-          </main>
+          </div>
         </div>
         </>
         )}

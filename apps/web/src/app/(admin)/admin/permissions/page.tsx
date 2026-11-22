@@ -280,7 +280,7 @@ function OrganizationPermissionPanel() {
           <ListPageSkeleton rows={6} showHeader={false} showFilters={false} />
         </div>
       ) : (
-        <main className="flex-1 min-h-0 flex overflow-hidden relative">
+        <div className="flex-1 min-h-0 flex overflow-hidden relative">
           {sidebarOpen && <div className="fixed inset-0 z-30 sm:hidden" style={{ background: "rgba(0,0,0,0.45)" }} onClick={() => setSidebarOpen(false)} />}
           <aside
             className={[
@@ -359,7 +359,7 @@ function OrganizationPermissionPanel() {
               metrics={{ orphanPositions, noPermPositions, riskyUsers, expiringAssignments }}
             />
           </section>
-        </main>
+        </div>
       )}
 
       {showNewOrg && <OrgCreateModal orgs={activeOrgs} onClose={() => setShowNewOrg(false)} onDone={() => { setShowNewOrg(false); load(); }} />}

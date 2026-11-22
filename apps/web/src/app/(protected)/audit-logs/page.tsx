@@ -622,7 +622,19 @@ export default function AuditLogsPage() {
               <tbody>
                 {logs.map((log) => (
                   <tr key={log.id} className="table-row" onClick={() => setSelectedLog(log)}>
-                    <td className="whitespace-nowrap">{formatDateTime(log.created_at)}</td>
+                    <td className="whitespace-nowrap">
+                      {/* 整列可點擊；鍵盤與螢幕閱讀器改由這個按鈕開啟明細。 */}
+                      <button
+                        type="button"
+                        className="text-left underline-offset-2 hover:underline"
+                        aria-label={`查看 ${formatDateTime(log.created_at)} ${actionLabel(log.action)} 的明細`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setSelectedLog(log);
+                        }}>
+                        {formatDateTime(log.created_at)}
+                      </button>
+                    </td>
                     <td>
                       <span
                         className="inline-flex rounded-full px-2.5 py-1 text-xs font-medium"

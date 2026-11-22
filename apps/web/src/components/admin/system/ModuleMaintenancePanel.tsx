@@ -308,7 +308,7 @@ export default function ModuleMaintenancePanel() {
           </div>
 
           {/* 桌面版表格 */}
-          <div className="hidden overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] shadow-sm md:block">
+          <div className="hidden overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] shadow-sm md:block">
             <table className="w-full min-w-[800px] text-sm">
               <thead className="border-b border-[var(--border)] bg-[var(--bg-hover)] text-xs text-[var(--text-muted)]">
                 <tr>

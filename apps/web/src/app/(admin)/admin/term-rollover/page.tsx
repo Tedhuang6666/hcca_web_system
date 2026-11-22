@@ -169,7 +169,7 @@ export default function TermRolloverPage() {
 
   if (!isAdmin) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
+      <div className="mx-auto max-w-3xl p-6">
         <section
           className="rounded-lg border p-8 text-center"
           style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}>
@@ -178,12 +178,12 @@ export default function TermRolloverPage() {
             需要超級管理員權限
           </h1>
         </section>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="mx-auto max-w-6xl p-4 md:p-6">
+    <div className="mx-auto max-w-6xl p-4 md:p-6">
       <header className="mb-5">
         <h1 className="text-2xl font-bold text-[var(--text-primary)]">換屆精靈</h1>
         <p className="mt-1 max-w-3xl text-xs text-[var(--text-muted)]">
@@ -379,6 +379,6 @@ export default function TermRolloverPage() {
           </span>
         </div>
       )}
-    </main>
+    </div>
   );
 }

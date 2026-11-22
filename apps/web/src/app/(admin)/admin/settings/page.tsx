@@ -130,7 +130,7 @@ export default function SystemSettingsPage() {
 
   if (!isAdmin) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
+      <div className="mx-auto max-w-3xl p-6">
         <section
           className="rounded-lg border p-8 text-center"
           style={{
@@ -140,13 +140,13 @@ export default function SystemSettingsPage() {
           <Lock className="mx-auto mb-3 text-[var(--danger)]" size={32} aria-hidden />
           <h1 className="text-xl font-semibold text-[var(--text-primary)]">需要超級管理員權限</h1>
         </section>
-      </main>
+      </div>
     );
   }
 
   if (disabled) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
+      <div className="mx-auto max-w-3xl p-6">
         <section
           className="rounded-lg border p-8 text-center"
           style={{
@@ -160,22 +160,22 @@ export default function SystemSettingsPage() {
             <code>ENABLE_ENV_EDITOR=true</code> 並重啟 API 後再進入。
           </p>
         </section>
-      </main>
+      </div>
     );
   }
 
   if (!data) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
+      <div className="mx-auto max-w-3xl p-6">
         <p className="text-sm text-[var(--text-secondary)]">{loadError ?? "載入中…"}</p>
-      </main>
+      </div>
     );
   }
 
   const dirtyCount = Object.keys(changes).length;
 
   return (
-    <main className="mx-auto max-w-6xl p-4 md:p-6">
+    <div className="mx-auto max-w-6xl p-4 md:p-6">
       <header className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[var(--text-primary)]">系統設定</h1>
@@ -275,7 +275,7 @@ export default function SystemSettingsPage() {
           onSubmit={submitMfa}
         />
       )}
-    </main>
+    </div>
   );
 }
 
