@@ -35,16 +35,16 @@ function PublicShopChrome({ children }: { children: React.ReactNode }) {
     <PublicModuleStatusProvider>
       <div className="public-site min-h-dvh text-[var(--public-text)]">
         <a
-          href="#main-content"
+          href="#shop-main-content"
           className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-[var(--public-surface)] focus:px-3 focus:py-2"
         >
           跳到主要內容
         </a>
         <PublicSiteHeader />
         <ShopWorkspaceNavigation groups={groupShopTabs(getShopTabs(isAdmin, permissions))} />
-        <main id="main-content">
+        <div id="shop-main-content">
           <PageTransition>{children}</PageTransition>
-        </main>
+        </div>
         <PublicSiteFooter />
       </div>
     </PublicModuleStatusProvider>
@@ -169,7 +169,7 @@ function ShopWorkspaceDenied({ section }: { section: "class" | "oversight" | "ma
       : "這個工作區提供給負責商品與活動設定的班聯人員。";
 
   return (
-    <main className="mx-auto my-8 max-w-xl px-4" role="alert">
+    <div className="mx-auto my-8 max-w-xl px-4" role="alert">
       <section className="rounded-lg p-6" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
         <h1 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
           目前帳號無法進入這個工作區
@@ -179,7 +179,7 @@ function ShopWorkspaceDenied({ section }: { section: "class" | "oversight" | "ma
           回到商品目錄
         </Link>
       </section>
-    </main>
+    </div>
   );
 }
 
