@@ -404,3 +404,43 @@ def test_overlapping_bundles_compare_savings_after_losing_individual_discount():
             "幹部單價": 10,
             "折抵二十五但只失去十": 25,
         }
+
+
+def test_overlapping_bundles_pick_the_best_combination_of_set_counts():
+    big, small, mid = _product(100), _product(30), _product(50)
+    first = _promotion("小物套組", ShopDiscountType.BUNDLE_PRICE, 73, [small, mid])
+    second = _promotion("大件套組", ShopDiscountType.BUNDLE_PRICE, 139, [mid, big])
+    for ordered in permutations([first, second]):
+        allocations = _allocate(
+            ordered,
+            {big.id: 100, small.id: 90, mid.id: 150},
+            {big.id: 1, small.id: 3, mid.id: 3},
+            {},
+        )
+        assert {row.promotion.name: row.discount_amount for row in allocations} == {
+            "大件套組": 11,
+            "小物套組": 14,
+        }
+
+
+def test_staff_bundle_and_price_override_on_other_products_both_apply():
+    badge, charm, shirt = _product(30), _product(50), _product(1000)
+    override = _promotion(
+        "指定價",
+        ShopDiscountType.PRICE_OVERRIDE,
+        0,
+        [shirt, badge, charm],
+        prices=[(shirt, 700), (badge, 25), (charm, 45)],
+    )
+    bundle = _promotion("幹部套組", ShopDiscountType.BUNDLE_PRICE, 65, [badge, charm])
+    for ordered in permutations([override, bundle]):
+        allocations = _allocate(
+            ordered,
+            {badge.id: 30, charm.id: 50, shirt.id: 1000},
+            {badge.id: 1, charm.id: 1, shirt.id: 1},
+            {},
+        )
+        assert {row.promotion.name: row.discount_amount for row in allocations} == {
+            "幹部套組": 15,
+            "指定價": 300,
+        }

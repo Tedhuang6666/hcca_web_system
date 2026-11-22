@@ -232,13 +232,7 @@ export default function NavigationSettingsPage() {
     <div className="mx-auto max-w-3xl space-y-5">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--primary)" }}>
-            INTERFACE
-          </p>
-          <h1 className="mt-1 text-xl font-semibold">介面導覽設定</h1>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            調整左側側邊欄與手機底部欄位的顯示項目和排序
-          </p>
+          <h1 className="text-xl font-semibold">介面導覽設定</h1>
         </div>
         <button type="button" className="btn btn-ghost" onClick={reset}>
           <RotateCcw size={15} aria-hidden={true} />
@@ -278,7 +272,7 @@ export default function NavigationSettingsPage() {
             />
 
             <p className="mt-4 text-xs" style={{ color: "var(--text-muted)" }}>
-              手機底欄會依序顯示這四格；其他入口可從「更多」開啟。
+              其他入口可從「更多」開啟。
             </p>
           </div>
         ) : (
@@ -319,7 +313,7 @@ function TabButton({
       onClick={onClick}
       style={{
         background: active ? "var(--primary-dim)" : "transparent",
-        color: active ? "var(--primary)" : "var(--text-muted)",
+        color: active ? "var(--primary-text)" : "var(--text-muted)",
       }}
     >
       {children}
@@ -390,7 +384,7 @@ function SortableNavRow({
           className="flex h-4 w-4 items-center justify-center rounded-full bg-white transition-transform"
           style={{ transform: visible ? "translateX(24px)" : "translateX(4px)" }}
         >
-          {visible && <Check size={10} aria-hidden={true} style={{ color: "var(--primary)" }} />}
+          {visible && <Check size={10} aria-hidden={true} style={{ color: "var(--primary-text)" }} />}
         </span>
       </button>
     </div>

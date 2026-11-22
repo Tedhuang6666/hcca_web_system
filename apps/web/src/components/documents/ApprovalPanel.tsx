@@ -127,15 +127,15 @@ function DelegatePicker({
             style={selectedId === u.id
               ? { background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }
               : { background: "var(--bg-elevated)", border: "1px solid transparent" }}>
-            <span className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
-              style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
+            <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+              style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
               {u.display_name.charAt(0)}
             </span>
             <div className="flex-1 min-w-0">
               <p className="truncate" style={{ color: "var(--text-primary)" }}>{u.display_name}</p>
               <p className="truncate" style={{ color: "var(--text-muted)" }}>{u.email}</p>
             </div>
-            {selectedId === u.id && <span style={{ color: "var(--primary)" }}>✓</span>}
+            {selectedId === u.id && <span style={{ color: "var(--primary-text)" }}>✓</span>}
           </button>
         ))}
       </div>
@@ -144,7 +144,7 @@ function DelegatePicker({
           style={{ color: "var(--text-muted)" }}>取消</button>
         <button onClick={handleSave} disabled={saving}
           className="text-xs px-3 py-1.5 rounded font-medium disabled:opacity-50"
-          style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }}>
+          style={{ background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--border-strong)" }}>
           {saving ? "儲存中…" : "確認"}
         </button>
       </div>
@@ -222,7 +222,7 @@ export function ApprovalPanel({
                   aria-label={`${step.approver.name}：${STATUS_LABEL[step.status]}`}>
                   {STATUS_ICON[step.status]}
                 </div>
-                <span className="text-[11px] font-medium text-center max-w-16 truncate"
+                <span className="text-xs font-medium text-center max-w-16 truncate"
                   style={{ color: `var(${s.colorVar})` }}>
                   {step.approver.name}
                 </span>
@@ -292,13 +292,13 @@ export function ApprovalPanel({
                         {actorDisplay.primary}
                       </p>
                       {actorDisplay.secondary && (
-                        <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+                        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                           {actorDisplay.secondary}
                         </p>
                       )}
                     </div>
                     <span
-                      className="approval-status-badge badge text-[10px]"
+                      className="approval-status-badge badge text-xs"
                       style={{
                         color: `var(${s.colorVar})`,
                         background: `var(${s.bgVar})`,
@@ -308,7 +308,7 @@ export function ApprovalPanel({
                     </span>
                     {isMyTurn && (
                       <span
-                        className="badge text-[10px] font-semibold"
+                        className="badge text-xs font-semibold"
                         style={{
                           color: "var(--warning)",
                           background: "var(--warning-dim)",
@@ -328,8 +328,8 @@ export function ApprovalPanel({
                       <button
                         type="button"
                         onClick={() => void toggleDelegatePicker(step.step_order)}
-                        className="min-h-11 rounded px-3 py-2 text-[10px] transition-[color,background-color,border-color,opacity,box-shadow,transform]"
-                        style={{ color: "var(--primary)", background: "var(--primary-dim)" }}>
+                        className="min-h-11 rounded px-3 py-2 text-xs transition-[color,background-color,border-color,opacity,box-shadow,transform]"
+                        style={{ color: "var(--primary-text)", background: "var(--primary-dim)" }}>
                         {step.delegate ? "變更代理" : "指定代理"}
                       </button>
                     )}

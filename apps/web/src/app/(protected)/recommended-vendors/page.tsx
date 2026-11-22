@@ -28,7 +28,7 @@ function inspectionText(item: RecommendedVendorListItemWithHours | RecommendedVe
 
 function FilePreviewIcon({ kind }: { kind: "link" | "image" | "pdf" }) {
   const Icon = kind === "image" ? ImageIcon : kind === "pdf" ? FileText : Link2;
-  return <Icon size={22} style={{ color: "var(--primary)" }} aria-hidden="true" />;
+  return <Icon size={22} style={{ color: "var(--primary-text)" }} aria-hidden="true" />;
 }
 
 function menuHref(url: string | null): string {
@@ -110,7 +110,7 @@ function VendorDetail({ vendor, onClose }: { vendor: VendorDetail; onClose: () =
           <div className="mt-2 divide-y rounded-md border" style={{ borderColor: "var(--border)" }}>
             {vendor.products.map((product) => <div key={product.id} className="flex items-center justify-between gap-3 p-3 text-sm">
               <div><p className="font-medium" style={{ color: "var(--text-primary)" }}>{product.name}</p>{product.description && <p className="mt-1" style={{ color: "var(--text-muted)" }}>{product.description}</p>}</div>
-              {product.price_text && <span className="shrink-0 font-medium" style={{ color: "var(--primary)" }}>{product.price_text}</span>}
+              {product.price_text && <span className="shrink-0 font-medium" style={{ color: "var(--primary-text)" }}>{product.price_text}</span>}
             </div>)}
           </div>
         )}
@@ -158,7 +158,7 @@ export default function RecommendedVendorsPage() {
   return (
     <main className="mx-auto max-w-6xl space-y-5">
       <header className="workspace-header flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div><h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>推薦商家</h1><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>整理通過衛生檢驗、方便學生聯絡訂購的校園周邊商家。</p></div>
+        <div><h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>推薦商家</h1></div>
         <div className="flex gap-2" role="group" aria-label="檢視方式">
           <button type="button" className={`btn ${mode === "list" ? "btn-primary" : "btn-secondary"}`} onClick={() => { setMode("list"); router.replace("/recommended-vendors"); }}><Store size={15} aria-hidden="true" />清單</button>
           <button type="button" className={`btn ${mode === "map" ? "btn-primary" : "btn-secondary"}`} onClick={() => { setMode("map"); router.replace("/recommended-vendors?view=map"); }}><MapPin size={15} aria-hidden="true" />地圖</button>

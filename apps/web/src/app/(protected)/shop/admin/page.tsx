@@ -551,7 +551,7 @@ function ProductFormModal({
           </Field>
           {fieldError("unitCost")}
           <p id="shop-product-cost-hint" className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>
-            僅供內部管理與銷售分析，購買者看不到。留空表示未設定；各規格共用此成本，修改後會重算歷史毛利。
+            購買者看不到；各規格共用此成本，修改後會重算歷史毛利。
           </p>
           {costState === "loading" && <p role="status">正在讀取商品成本…</p>}
           {costState === "error" && <p role="alert" className="text-sm" style={{ color: "var(--danger)" }}>
@@ -776,7 +776,7 @@ function SortableOption({
       {option.image_url && <Thumb url={option.image_url} size={20} />}
       <span style={{ color: "var(--text-primary)" }}>{option.value}</span>
       {option.price_delta !== 0 && (
-        <span style={{ color: "var(--primary)" }}>
+        <span style={{ color: "var(--primary-text)" }}>
           {option.price_delta > 0 ? `+${option.price_delta}` : option.price_delta}
         </span>
       )}
@@ -874,7 +874,7 @@ function VariantOptionList({
             disabled={disabled}
             onClick={onAdd}
             className="min-h-11 rounded-lg px-2 text-xs disabled:opacity-45"
-            style={{ color: "var(--primary)", border: "1px dashed var(--border-strong)" }}
+            style={{ color: "var(--primary-text)", border: "1px dashed var(--border-strong)" }}
           >
             + 選項
           </button>
@@ -1493,7 +1493,6 @@ function StatsView() {
           <button type="button" className="btn btn-ghost min-h-11" disabled={loading} onClick={() => setRetryKey((value) => value + 1)}>重新整理</button>
         </div>
         <p className="text-sm" style={{ color: "var(--text-secondary)" }}>統計範圍：{scopeLabels.join(" · ")}</p>
-        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>交給班代的款項，需由班聯確認後才計入「班聯已確認」。</p>
         {optionsError && <div role="alert" className="text-sm" style={{ color: "var(--danger)" }}>
           篩選選項載入失敗。<button type="button" className="btn btn-ghost min-h-11" onClick={() => setRetryKey((value) => value + 1)}>重新載入選項</button>
         </div>}
@@ -1881,12 +1880,12 @@ export default function ShopAdminPage() {
       <button type="button" onClick={() => selectProduct(item.id)}
         className="shop-admin-product-select flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg p-2 text-left"
         style={productId === item.id
-          ? { background: "var(--primary-dim)", color: "var(--primary)" }
+          ? { background: "var(--primary-dim)", color: "var(--primary-text)" }
           : { background: "var(--bg)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
         <Thumb url={item.image_url} size={34} />
         <span className="flex-1 min-w-0">
           <span className="block break-words text-sm font-medium">{item.name}</span>
-          <span className="block text-[11px] truncate" style={{ color: "var(--text-muted)" }}>
+          <span className="block text-xs truncate" style={{ color: "var(--text-muted)" }}>
             NT${item.price.toLocaleString()} · {STATUS_LABEL[item.status] ?? item.status} · {item.variant_groups.length} 組規格
           </span>
         </span>
@@ -1904,7 +1903,7 @@ export default function ShopAdminPage() {
   );
 
   const detailContent = !cat ? (
-    <div className="p-6 text-sm" style={{ color: "var(--text-muted)" }}>選擇商品即可編輯售價、上架狀態與規格。</div>
+    <div className="p-6 text-sm" style={{ color: "var(--text-muted)" }}>尚未選擇商品</div>
   ) : productId && !product ? (
     <div className="p-6 text-sm" style={{ color: "var(--text-muted)" }}>載入商品詳情中…</div>
   ) : product ? (
@@ -1989,9 +1988,6 @@ export default function ShopAdminPage() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>{tab === "stats" ? "訂購統計" : tab === "promotions" ? "優惠設定" : tab === "offices" ? "教師處室設定" : tab === "imports" ? "組織預購同步" : tab === "note-groups" ? "購買名單備註分組" : "商品設定"}</h1>
-          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            {tab === "stats" ? "按活動核對訂購金額與班聯收款進度。" : tab === "promotions" ? "設定折扣條件、優惠碼與適用商品。" : tab === "offices" ? "維護老師訂購商品時可選的辦公室與處室。" : tab === "imports" ? "自動匯入表單、核對尺寸與寄送訂單成立通知。" : tab === "note-groups" ? "依可訂購人的備註，跨商品查看各組名單分配。" : "選擇活動，新增商品、設定規格並上架。"}
-          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           {tab !== "catalog" && <Link href="/shop/admin" className="btn btn-secondary min-h-11">返回商品設定</Link>}
@@ -2032,7 +2028,7 @@ export default function ShopAdminPage() {
               <div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom: "1px solid var(--border)" }}>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>活動</p>
-                  <p className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>{categories.length} 個活動</p>
+                  <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{categories.length} 個活動</p>
                 </div>
                 <MiniBtn tone="primary" onClick={() => setCatModal({ initial: null })}>新增活動</MiniBtn>
               </div>
@@ -2042,12 +2038,12 @@ export default function ShopAdminPage() {
                     <button type="button" onClick={() => selectCategory(c)}
                       className="min-h-11 flex-1 min-w-0 flex items-center gap-2 p-2 rounded-lg text-left"
                       style={cat?.id === c.id
-                        ? { background: "var(--primary-dim)", color: "var(--primary)" }
+                        ? { background: "var(--primary-dim)", color: "var(--primary-text)" }
                         : { color: "var(--text-secondary)", opacity: c.is_active ? 1 : 0.6 }}>
                       <Thumb url={c.image_url} size={34} />
                       <span className="flex-1 min-w-0">
                         <span className="block text-sm font-medium truncate">{c.name}</span>
-                        <span className="block text-[11px] truncate" style={{ color: "var(--text-muted)" }}>
+                        <span className="block text-xs truncate" style={{ color: "var(--text-muted)" }}>
                           {c.description || "無描述"}
                         </span>
                       </span>
@@ -2081,7 +2077,7 @@ export default function ShopAdminPage() {
               </div>
               <div className="flex-1 overflow-y-auto">
                 {!cat ? (
-                  <p className="p-6 text-sm text-center" style={{ color: "var(--text-muted)" }}>先選擇活動，即可新增或管理商品。</p>
+                  <p className="p-6 text-sm text-center" style={{ color: "var(--text-muted)" }}>尚未選擇活動</p>
                 ) : (
                   <div className="divide-y" style={{ borderColor: "var(--border)" }}>
                     <section className="space-y-2 p-3">
@@ -2100,7 +2096,7 @@ export default function ShopAdminPage() {
                       <div key={s.id}>
                         <div className="flex items-center gap-3 px-4 py-3" style={{ background: series?.id === s.id ? "var(--bg-elevated)" : undefined }}>
                           <button type="button" onClick={() => selectSeries(s)} className="flex-1 min-h-11 min-w-0 text-left">
-                            <p className="text-sm font-semibold truncate" style={{ color: series?.id === s.id ? "var(--primary)" : "var(--text-primary)" }}>{s.name}</p>
+                            <p className="text-sm font-semibold truncate" style={{ color: series?.id === s.id ? "var(--primary-text)" : "var(--text-primary)" }}>{s.name}</p>
                             <p className="text-xs truncate" style={{ color: "var(--text-muted)" }}>{s.description || "無描述"}</p>
                           </button>
                           <button type="button" className="btn btn-ghost min-h-11 px-3 text-xs lg:hidden"
@@ -2164,8 +2160,7 @@ export default function ShopAdminPage() {
               <button type="button" onClick={() => setClearOrdersOpen(false)} disabled={clearingOrders}
                 className="btn btn-ghost min-h-11 px-4 disabled:opacity-50">取消</button>
               <button type="button" onClick={() => void clearAllOrders()} disabled={clearingOrders}
-                className="btn min-h-11 px-4 disabled:opacity-50"
-                style={{ background: "#b83a30", color: "#fff", border: "none" }}>
+                className="btn btn-danger min-h-11 px-4 disabled:opacity-50">
                 {clearingOrders ? "清除中…" : "確認清除所有訂單"}
               </button>
             </div>

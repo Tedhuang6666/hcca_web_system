@@ -232,7 +232,7 @@ export function AccountDirectoryPanel({
                 className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-medium"
                 aria-pressed={activeOnly}
                 style={{
-                  color: activeOnly ? "var(--primary)" : "var(--text-muted)",
+                  color: activeOnly ? "var(--primary-text)" : "var(--text-muted)",
                   background: activeOnly ? "var(--primary-dim)" : "transparent",
                   border: "1px solid var(--border)",
                 }}
@@ -279,14 +279,14 @@ export function AccountDirectoryPanel({
                 background: selectedId === user.id ? "var(--primary-dim)" : "transparent",
               }}
             >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold" style={{ background: user.is_active ? "var(--primary-dim)" : "var(--bg-elevated)", color: user.is_active ? "var(--primary)" : "var(--text-muted)" }}>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold" style={{ background: user.is_active ? "var(--primary-dim)" : "var(--bg-elevated)", color: user.is_active ? "var(--primary-text)" : "var(--text-muted)" }}>
                 {user.display_name.slice(0, 1) || <UserRound size={16} />}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{user.display_name}</span>
-                  {user.is_superuser && <span className="rounded px-1.5 py-0.5 text-[10px]" style={{ background: "var(--warning-dim)", color: "var(--warning)" }}>超管</span>}
-                  {!user.is_active && <span className="rounded px-1.5 py-0.5 text-[10px]" style={{ background: "var(--danger-dim)", color: "var(--danger)" }}>停用</span>}
+                  {user.is_superuser && <span className="rounded px-1.5 py-0.5 text-xs" style={{ background: "var(--warning-dim)", color: "var(--warning)" }}>超管</span>}
+                  {!user.is_active && <span className="rounded px-1.5 py-0.5 text-xs" style={{ background: "var(--danger-dim)", color: "var(--danger)" }}>停用</span>}
                 </div>
                 <p className="mt-1 truncate text-xs" style={{ color: "var(--text-muted)" }}>
                   {user.student_id ?? "無學號"} · {user.email}
@@ -294,7 +294,7 @@ export function AccountDirectoryPanel({
                 <p className="mt-1 truncate text-xs" style={{ color: "var(--text-secondary)" }}>
                   {userClassSummary(user)}
                 </p>
-                <p className="mt-1 text-[10px]" style={{ color: "var(--text-muted)" }}>
+                <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
                   {user.mfa_enabled ? "已啟用 2FA" : "未啟用 2FA"} · {user.positions.length} 個職位
                 </p>
               </div>

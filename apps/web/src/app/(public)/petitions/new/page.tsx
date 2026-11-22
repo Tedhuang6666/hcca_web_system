@@ -68,13 +68,6 @@ export default function NewPetitionPage() {
       !draft.title.trim() && !draft.content.trim()
     ), []),
   });
-  const completedSections = [
-    Boolean(typeId),
-    true,
-    Boolean(title.trim()),
-    Boolean(content.trim()),
-  ];
-
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (authState !== "authenticated" || submitting) return;
@@ -111,9 +104,6 @@ export default function NewPetitionPage() {
           <div className="petition-receipt-heading">
             <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>案件已送出</h1>
           </div>
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-            案件已連結至你的登入帳號，可從「我的案件」查看進度。
-          </p>
           <div className="petition-receipt-codes">
             <div className="petition-receipt-code rounded-lg p-4" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>案號</p>
@@ -147,10 +137,7 @@ export default function NewPetitionPage() {
             登入後以具名方式送出。
           </p>
         </div>
-        <section className="card space-y-4 p-6" aria-labelledby="petition-login-heading">
-          <h2 id="petition-login-heading" className="text-base font-semibold">請先登入再開始填寫</h2>
-          <Link className="btn btn-primary" href="/login?next=%2Fpetitions%2Fnew">登入後開始陳情</Link>
-        </section>
+        <Link className="btn btn-primary" href="/login?next=%2Fpetitions%2Fnew">登入</Link>
       </div>
     );
   }
@@ -159,18 +146,9 @@ export default function NewPetitionPage() {
     <div className="max-w-3xl mx-auto space-y-5">
       <div>
         <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>我要陳情</h1>
-        <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>依陳情類型自動分派負責機關。</p>
         <DraftStatus lastSavedAt={lastSavedAt} className="mt-2" />
       </div>
       <form onSubmit={submit} className="petition-submission-form card p-5 space-y-4">
-        <ol className="petition-progress" aria-label="陳情填寫進度">
-          {["選擇類型", "聯絡資料", "填寫內容", "確認送出"].map((label, index) => (
-            <li key={label} data-complete={completedSections[index] || undefined}>
-              <span className="petition-progress-dot" aria-hidden="true" />
-              <span>{label}</span>
-            </li>
-          ))}
-        </ol>
         <div className="rounded-lg p-4 text-sm" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", color: "var(--text-muted)" }}>
           系統會以目前登入帳號送件：{accountName || "未命名使用者"} · {accountEmail || "未提供 email"}。
         </div>
@@ -194,7 +172,7 @@ export default function NewPetitionPage() {
           multiple
           maxFiles={10}
           label="拖曳陳情附件到這裡"
-          hint="可點擊選檔，或貼上圖片；送出陳情時會一併上傳"
+          hint="可貼上圖片"
           onFiles={(selected) => setFiles((current) => [...current, ...selected].slice(0, 10))}
           onRemove={(removed) => setFiles((current) => current.filter((file) => file !== removed))}
         />

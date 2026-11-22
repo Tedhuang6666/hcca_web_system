@@ -409,7 +409,7 @@ export default function GongwenEditor({ value, onChange, placeholder, minRows = 
           >↪</button>
         </div>
         <span
-          className="text-[10px] ml-1"
+          className="text-xs ml-1"
           style={{ color: "var(--text-muted)" }}
         >
           Enter 續編 ／ Tab 降級 ／ Shift+Tab 升級 ／ Ctrl+Z 復原

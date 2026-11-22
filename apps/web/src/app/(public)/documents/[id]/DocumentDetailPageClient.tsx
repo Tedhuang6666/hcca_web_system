@@ -155,7 +155,7 @@ const UserPicker = memo(function UserPicker({
                 ? { background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }
                 : { background: "var(--bg-elevated)", border: "1px solid transparent" }}
             >
-              <span className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold"
+              <span className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold"
                 style={{ background: selected ? "var(--primary)" : "var(--bg-surface)", color: selected ? "var(--primary-fg)" : "var(--text-muted)" }}>
                 {selected ? idx + 1 : ""}
               </span>
@@ -163,7 +163,7 @@ const UserPicker = memo(function UserPicker({
                 <p className=" truncate">{u.display_name}</p>
                 <p className="truncate" style={{ color: "var(--text-muted)" }}>{u.email}</p>
               </div>
-              {selected && <span style={{ color: "var(--primary)" }}>✓</span>}
+              {selected && <span style={{ color: "var(--primary-text)" }}>✓</span>}
             </button>
           );
         })}
@@ -489,7 +489,6 @@ export default function DocumentDetailPageClient({
     return (
       <DetailPageLoading
         title="公文詳情載入中"
-        description="正在取得簽核、附件與版本紀錄。"
       />
     );
   }
@@ -572,7 +571,7 @@ export default function DocumentDetailPageClient({
         <div className="flex min-w-0 flex-1 items-start gap-3">
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
-              <span className="text-sm break-all" style={{ color: "var(--primary)" }}>
+              <span className="text-sm break-all" style={{ color: "var(--primary-text)" }}>
                 {doc.serial_number}
               </span>
               <div className="flex flex-wrap items-center gap-2">
@@ -782,7 +781,7 @@ export default function DocumentDetailPageClient({
             className="px-4 py-2 text-sm font-medium inline-flex items-center justify-center gap-1.5 transition-colors hover:brightness-110"
             style={{
               background: "var(--primary-dim)",
-              color: "var(--primary)",
+              color: "var(--primary-text)",
               borderLeft: canChoosePrintVariant ? "1px solid var(--border-strong)" : undefined,
             }}
           >列印公文</button>
@@ -830,7 +829,7 @@ export default function DocumentDetailPageClient({
               onClick={() => setDispatchMode("user")}
               className="rounded px-3 py-1.5 text-xs"
               style={dispatchMode === "user"
-                ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
+                ? { background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--border-strong)" }
                 : { border: "1px solid var(--border)", color: "var(--text-muted)" }}
             >
               平台使用者
@@ -840,7 +839,7 @@ export default function DocumentDetailPageClient({
               onClick={() => setDispatchMode("email")}
               className="rounded px-3 py-1.5 text-xs"
               style={dispatchMode === "email"
-                ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
+                ? { background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--border-strong)" }
                 : { border: "1px solid var(--border)", color: "var(--text-muted)" }}
             >
               外部 Email
@@ -862,7 +861,7 @@ export default function DocumentDetailPageClient({
                   <option key={user.id} value={user.id}>{user.display_name}（{user.email}）</option>
                 ))}
               </select>
-              <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+              <span className="text-xs" style={{ color: "var(--text-muted)" }}>
                 對方會收到 Email，並取得這份公文的查閱權限。
               </span>
             </label>
@@ -1022,7 +1021,7 @@ export default function DocumentDetailPageClient({
                 <div className="mt-3 flex flex-wrap gap-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
                   {doc.recipients.map(r => (
                     <span key={r.id} className="text-xs px-2.5 py-1 rounded-full"
-                      style={{ color: "var(--primary)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }}>
+                      style={{ color: "var(--primary-text)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }}>
                       {{ main: "受文者", primary: "正本", copy: "副本", attendee: "出席者", observer: "列席者" }[r.recipient_type]} {r.name}
                     </span>
                   ))}
@@ -1074,7 +1073,7 @@ export default function DocumentDetailPageClient({
                             {isLink ? (
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                 strokeWidth="2" strokeLinecap="round" aria-hidden="true"
-                                style={{ color: "var(--primary)", flexShrink: 0 }}>
+                                style={{ color: "var(--primary-text)", flexShrink: 0 }}>
                                 <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
                                 <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
                               </svg>
@@ -1087,7 +1086,7 @@ export default function DocumentDetailPageClient({
                             )}
                             {isLink ? (
                               <a href={a.link_url!} target="_blank" rel="noopener noreferrer"
-                                className="truncate hover:underline" style={{ color: "var(--primary)" }}>
+                                className="truncate hover:underline" style={{ color: "var(--primary-text)" }}>
                                 {a.display_name || a.filename}
                               </a>
                             ) : (
@@ -1103,7 +1102,7 @@ export default function DocumentDetailPageClient({
                                 href={fileUrl}
                                 filename={a.display_name || a.filename}
                                 className="text-xs hover:underline"
-                                style={{ color: "var(--primary)" }}
+                                style={{ color: "var(--primary-text)" }}
                                 label="下載" />
                             )}
                             {isDraft && (
@@ -1145,7 +1144,7 @@ export default function DocumentDetailPageClient({
                                 href={fileUrl}
                                 filename={a.display_name || a.filename}
                                 className="text-xs underline"
-                                style={{ color: "var(--primary)" }}
+                                style={{ color: "var(--primary-text)" }}
                                 label="下載查看" />。
                             </p>
                           </object>
@@ -1163,7 +1162,7 @@ export default function DocumentDetailPageClient({
                               取消
                             </button>
                             <button onClick={() => renameAttachment(a.id)} className="text-xs px-2 py-1 rounded"
-                              style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }}>
+                              style={{ background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--border-strong)" }}>
                               儲存
                             </button>
                           </div>
@@ -1177,7 +1176,7 @@ export default function DocumentDetailPageClient({
                     <button
                       onClick={() => setShowAllAttachments(v => !v)}
                       className="text-xs px-3 py-1.5 rounded transition-opacity hover:opacity-80"
-                      style={{ color: "var(--primary)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }}>
+                      style={{ color: "var(--primary-text)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }}>
                       {showAllAttachments ? "收合附件" : `顯示全部附件（${doc.attachments.length}）`}
                     </button>
                   </div>
@@ -1199,7 +1198,7 @@ export default function DocumentDetailPageClient({
                   style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
                 <button onClick={addLink} disabled={addingLink || !newLinkUrl.trim()}
                   className="text-xs px-3 py-1.5 rounded transition-opacity hover:opacity-80 disabled:opacity-40 flex-shrink-0"
-                  style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }}>
+                  style={{ background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--border-strong)" }}>
                   {addingLink ? "新增中…" : "＋ 新增連結"}
                 </button>
               </div>
@@ -1244,7 +1243,7 @@ export default function DocumentDetailPageClient({
                 />
                 <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
                   若預覽空白，請確認檔案分享權限為「知道連結的任何人可檢視」，或{" "}
-                  <a href={p.sourceUrl} target="_blank" rel="noreferrer" className="underline" style={{ color: "var(--primary)" }}>
+                  <a href={p.sourceUrl} target="_blank" rel="noreferrer" className="underline" style={{ color: "var(--primary-text)" }}>
                     在 Google Drive 開啟
                   </a>。
                 </p>

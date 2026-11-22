@@ -33,7 +33,7 @@ const WIDGET_ICONS: Record<string, React.ComponentType<IconProps>> = {
 
 const SEVERITY_STYLES: Record<string, { color: string; bg: string; border: string }> = {
   info: {
-    color: "var(--primary)",
+    color: "var(--primary-text)",
     bg: "var(--primary-dim)",
     border: "var(--info-border)",
   },
@@ -63,7 +63,6 @@ function WidgetCard({ widget, index }: { widget: DashboardWidget; index: number 
     <section
       aria-labelledby={`widget-${widget.key}`}
       className="dashboard-widget card overflow-hidden flex flex-col"
-      style={{ animationDelay: `${Math.min(index * 55, 330)}ms` }}
     >
       <header
         className="px-5 py-4 flex items-center justify-between gap-3"
@@ -95,20 +94,10 @@ function WidgetCard({ widget, index }: { widget: DashboardWidget; index: number 
               </p>
             )}
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
-              <span
-                className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
-                style={{
-                  color: severity.color,
-                  background: severity.bg,
-                  border: `1px solid ${severity.border}`,
-                }}
-              >
-                優先 {widget.priority_score}
-              </span>
               {widget.priority_reasons.slice(0, 1).map((reason) => (
                 <span
                   key={reason}
-                  className="rounded px-1.5 py-0.5 text-[10px]"
+                  className="rounded px-1.5 py-0.5 text-xs"
                   style={{ color: "var(--text-secondary)", background: "var(--bg-hover)" }}
                 >
                   {reason}
@@ -149,7 +138,7 @@ function WidgetCard({ widget, index }: { widget: DashboardWidget; index: number 
                     <div className="flex items-center gap-2 mt-0.5">
                       {item.badge && (
                         <span
-                          className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                          className="text-xs px-1.5 py-0.5 rounded font-medium"
                           style={{
                             color: severity.color,
                             background: severity.bg,
@@ -175,7 +164,7 @@ function WidgetCard({ widget, index }: { widget: DashboardWidget; index: number 
                     </div>
                     {item.recommended_action && (
                       <p
-                        className="mt-1 truncate text-[11px]"
+                        className="mt-1 truncate text-xs"
                         style={{ color: "var(--text-muted)" }}
                       >
                         {item.recommended_action}

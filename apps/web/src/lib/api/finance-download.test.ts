@@ -4,7 +4,9 @@ import { financeApi } from "./finance";
 
 // Exercise the retained Excel transport, including download lifetime and session recovery.
 describe("budget Excel download", () => {
-  const createObjectURL = vi.fn(() => "blob:budget-workbook");
+  const createObjectURL = vi.fn<(object: Blob | MediaSource) => string>(
+    () => "blob:budget-workbook",
+  );
   const revokeObjectURL = vi.fn();
   let downloads: { filename: string; href: string; attached: boolean }[];
 
@@ -30,8 +32,10 @@ describe("budget Excel download", () => {
   });
 
   it("downloads the workbook with credentials and releases its temporary URL", async () => {
-    const workbook = new Blob(["excel-content"]);
-    const fetchMock = vi.fn().mockResolvedValue(new Response(workbook));
+    const contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    const fetchMock = vi.fn().mockResolvedValue(new Response(new Uint8Array([1, 2, 3]), {
+      headers: { "Content-Type": contentType },
+    }));
     vi.stubGlobal("fetch", fetchMock);
 
     await financeApi.exportBudget("budget-123");
@@ -39,7 +43,8 @@ describe("budget Excel download", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/finance/budgets/budget-123/export.xlsx", expect.objectContaining({
       method: "GET", credentials: "include",
     }));
-    expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect(createObjectURL.mock.calls[0]?.[0]).toMatchObject({ size: 3, type: contentType });
     expect(downloads).toEqual([{ filename: "預算總表.xlsx", href: "blob:budget-workbook", attached: true }]);
     expect(document.querySelector('a[download="預算總表.xlsx"]')).toBeNull();
     expect(revokeObjectURL).not.toHaveBeenCalled();

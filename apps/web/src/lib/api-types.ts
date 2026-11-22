@@ -10330,6 +10330,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop/orders/recalculate-promotions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 手動重算指定訂單的優惠 */
+        post: operations["recalculate_order_promotions_shop_orders_recalculate_promotions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shop/orders/receipts/changed.pdf": {
         parameters: {
             query?: never;
@@ -22115,6 +22132,43 @@ export interface components {
             series_name: string;
             /** Variant Key */
             variant_key: string;
+        };
+        /** OrderRecalculateItem */
+        OrderRecalculateItem: {
+            /** New Total */
+            new_total: number;
+            /** Old Total */
+            old_total: number;
+            /**
+             * Order Id
+             * Format: uuid
+             */
+            order_id: string;
+            /** Reason */
+            reason?: string | null;
+            /** Serial Number */
+            serial_number: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "updated" | "unchanged" | "skipped";
+        };
+        /** OrderRecalculateOut */
+        OrderRecalculateOut: {
+            /** Results */
+            results: components["schemas"]["OrderRecalculateItem"][];
+            /** Skipped */
+            skipped: number;
+            /** Unchanged */
+            unchanged: number;
+            /** Updated */
+            updated: number;
+        };
+        /** OrderRecalculateRequest */
+        OrderRecalculateRequest: {
+            /** Order Ids */
+            order_ids: string[];
         };
         /**
          * OrderStatus
@@ -55322,6 +55376,39 @@ export interface operations {
                 };
                 content: {
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recalculate_order_promotions_shop_orders_recalculate_promotions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrderRecalculateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderRecalculateOut"];
                 };
             };
             /** @description Validation Error */

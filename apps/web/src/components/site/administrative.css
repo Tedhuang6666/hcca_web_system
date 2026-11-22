@@ -85,7 +85,7 @@
 .law-reading-heading :is(h2, h3) { font-size: 1.0625em; font-weight: 600; }
 .law-reading-heading-line { position: relative; text-align: center; padding-block: 0.5em; }
 .law-reading-heading-line .law-reading-chapter-toggle { display: block; margin-inline: auto; }
-.law-reading-chapter-toggle { min-height: 32px; color: var(--public-muted); font-size: 0.8125em; text-decoration: underline; text-underline-offset: 0.25em; cursor: pointer; }
+.law-reading-chapter-toggle { min-height: 44px; color: var(--public-muted); font-size: 0.8125em; text-decoration: underline; text-underline-offset: 0.25em; cursor: pointer; }
 .law-reading-heading:first-child { margin-top: 0; }
 .law-reading-number { font-weight: 600; color: var(--public-text); }
 .law-reading-number a { display: inline-block; color: inherit; }
@@ -108,7 +108,7 @@
 .law-reading-highlight { min-height: 2em; }
 .law-reading-notice { grid-column: 1 / -1; color: var(--public-muted); font-size: 0.875em; }
 .law-reading-actions { position: absolute; top: 0; right: 0; display: flex; flex-direction: column; }
-.law-reading-actions button { display: grid; place-items: center; width: 32px; height: 32px; color: var(--public-muted); cursor: pointer; }
+.law-reading-actions button { display: grid; place-items: center; width: 44px; height: 44px; color: var(--public-muted); cursor: pointer; }
 .law-reading-actions button:hover { color: var(--public-accent-text); background: var(--public-soft); }
 .law-reading-highlight { background: var(--public-accent-soft); }
 .law-reading-deleted .law-reading-text { text-decoration: line-through; color: var(--public-muted); }

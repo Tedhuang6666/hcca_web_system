@@ -22,7 +22,7 @@
 
 ## 固定驗證入口
 
-- `bash scripts/check.sh debt`：以 `config/technical-debt-baseline.json` 限制逐檔債務增加。
+- `bash scripts/check.sh debt`：以 `config/technical-debt-baseline.json` 限制逐檔債務增加；長檔每檔保留 50 行、inline style 保留 5 個的小幅調整額度，超過才失敗。
   `python3 scripts/check-technical-debt.py --ratchet` 只接受下降，不能用來放寬既有債務。
 - `python3 scripts/validate-compose.py`：只用暫存變數與空 env 檔驗證六份 Compose，不讀取實際 service env。
   映像版本由 `config/compose-images.json` 約束；本機可用 `--compose-binary` 指定獨立 CLI。

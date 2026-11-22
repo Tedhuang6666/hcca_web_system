@@ -87,7 +87,7 @@ export async function renderContentOgImage({ title, category, date }: ContentOgI
               />
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-              <div style={{ display: "flex", fontSize: 32, fontWeight: 800 }}>
+              <div style={{ display: "flex", fontSize: 32, fontWeight: 700 }}>
                 {BRANDING.orgShortName}
               </div>
               <div style={{ display: "flex", fontSize: 20, color: "#d9e8f7" }}>
@@ -103,7 +103,7 @@ export async function renderContentOgImage({ title, category, date }: ContentOgI
               color: BRANDING.themeColor,
               background: BRANDING.accentColor,
               fontSize: 24,
-              fontWeight: 800,
+              fontWeight: 700,
             }}
           >
             {category}
@@ -115,7 +115,7 @@ export async function renderContentOgImage({ title, category, date }: ContentOgI
             style={{
               display: "flex",
               fontSize: 56,
-              fontWeight: 900,
+              fontWeight: 700,
               lineHeight: 1.18,
               maxHeight: 200,
               overflow: "hidden",

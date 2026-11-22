@@ -3,7 +3,7 @@
 import NumberInput from "@/components/ui/NumberInput";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Ban, Copy, KeyRound, Lock, Plus, RefreshCcw } from "lucide-react";
+import { AlertTriangle, Ban, Copy, Lock, Plus, RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
@@ -118,10 +118,6 @@ export default function ApiKeysPage() {
     <main className="mx-auto max-w-6xl p-4 md:p-6">
       <header className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <div className="mb-2 inline-flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)]">
-            <KeyRound size={14} aria-hidden />
-            API Keys（機器對機器存取）
-          </div>
           <h1 className="text-2xl font-bold text-[var(--text-primary)]">API Keys</h1>
           <p className="mt-1 max-w-3xl text-xs text-[var(--text-muted)]">
             密鑰僅顯示一次，遺失須重建；撤銷後立即失效。
@@ -252,7 +248,7 @@ export default function ApiKeysPage() {
                   style={{ opacity: k.is_active ? 1 : 0.5 }}>
                   <td className="px-3 py-2">{k.name}</td>
                   <td className="px-3 py-2 font-mono">{k.key_prefix}…</td>
-                  <td className="px-3 py-2 font-mono text-[10px]">
+                  <td className="px-3 py-2 font-mono text-xs">
                     {k.scopes.length === 0 ? "—" : k.scopes.join(", ")}
                   </td>
                   <td className="px-3 py-2 text-right">{k.rate_limit_per_minute}</td>

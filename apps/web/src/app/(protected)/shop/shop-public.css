@@ -142,7 +142,7 @@
   padding: 0 0.7rem;
   color: var(--text-secondary);
   font-size: 0.8rem;
-  font-weight: 650;
+  font-weight: 600;
   text-decoration: none;
   transition: background var(--transition), border-color var(--transition), color var(--transition);
 }
@@ -279,7 +279,7 @@
   padding: 0.65rem 1rem;
   color: var(--primary-fg);
   font-size: 0.82rem;
-  font-weight: 750;
+  font-weight: 700;
   text-decoration: none;
   box-shadow: none;
   transition: background-color var(--transition), transform var(--transition);
@@ -308,7 +308,7 @@
 .shop-delegation-scope span { display: block; color: var(--public-secondary); }
 .shop-delegation-panel .shop-delegation-share { margin: 1.25rem 0 0; padding: 0; background: transparent; border-radius: 0; }
 .shop-delegation-panel .shop-delegation-share-title { font-size: 1.1rem; font-weight: 700; color: var(--public-text); }
-.shop-delegation-panel .shop-delegation-form .shop-delegation-code { font-size: 2rem; font-weight: 650; letter-spacing: 0.25em; text-indent: 0.25em; text-align: center; padding-block: 0.75rem; }
+.shop-delegation-panel .shop-delegation-form .shop-delegation-code { font-size: 2rem; font-weight: 600; letter-spacing: 0.25em; text-indent: 0.25em; text-align: center; padding-block: 0.75rem; }
 .shop-delegation-panel .shop-delegation-note { margin-top: 0.65rem; color: var(--public-secondary); font-size: 0.8rem; line-height: 1.7; }
 .shop-delegation-panel .shop-delegation-secondary { margin-top: 1rem; }
 .shop-delegation-support { margin-top: 1.5rem; padding-top: 0.5rem; border-top: 1px solid var(--public-border); }
@@ -372,7 +372,7 @@
   margin: 0;
   color: var(--public-text);
   font-size: 0.95rem;
-  font-weight: 750;
+  font-weight: 700;
 }
 
 .shop-public-activity-heading p {
@@ -703,7 +703,7 @@
   padding: 0.35rem 0.65rem;
   color: var(--public-text);
   font-size: 0.72rem;
-  font-weight: 750;
+  font-weight: 700;
   box-shadow: 0 3px 12px rgb(0 0 0 / 0.12);
 }
 
@@ -737,7 +737,7 @@
 .shop-public-product-price {
   color: var(--public-accent-text);
   font-size: 0.95rem;
-  font-weight: 750;
+  font-weight: 700;
 }
 
 .shop-public-product-price small {
@@ -1120,7 +1120,7 @@
 
 .shop-public-context strong {
   color: var(--public-text);
-  font-weight: 750;
+  font-weight: 700;
 }
 
 
@@ -1128,9 +1128,9 @@
 .shop-class-correction-toggle {
   min-height: 44px;
   padding: 0.4rem 0;
-  color: var(--primary);
+  color: var(--primary-text);
   font-size: 0.82rem;
-  font-weight: 650;
+  font-weight: 600;
   text-align: left;
   text-decoration: underline;
   text-underline-offset: 0.2em;
@@ -1190,7 +1190,7 @@
   margin: 0;
   color: var(--public-secondary);
   font-size: 1rem;
-  font-weight: 750;
+  font-weight: 700;
 }
 
 .shop-public-closed-page p {
@@ -1237,7 +1237,7 @@
   margin: 0;
   color: var(--public-secondary);
   font-size: 0.9rem;
-  font-weight: 760;
+  font-weight: 700;
 }
 
 .shop-product-closed-heading p {
@@ -1264,7 +1264,7 @@
   margin: 0.15rem 0 0;
   color: var(--public-secondary);
   font-size: 0.78rem;
-  font-weight: 650;
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
 
@@ -1570,7 +1570,7 @@
   padding: 0.5rem 1rem;
   color: var(--public-accent-text);
   font-size: 0.82rem;
-  font-weight: 750;
+  font-weight: 700;
 }
 
 .shop-product-dialog-close {
@@ -1613,7 +1613,7 @@
 .shop-product-dialog-section > label {
   color: var(--public-text);
   font-size: 0.8rem;
-  font-weight: 750;
+  font-weight: 700;
 }
 
 .shop-product-options,
@@ -1666,7 +1666,7 @@
 .shop-product-quantity span {
   min-width: 2rem;
   color: var(--public-text);
-  font-weight: 750;
+  font-weight: 700;
   text-align: center;
 }
 
@@ -1691,7 +1691,7 @@
   background: var(--public-accent);
   color: var(--primary-fg);
   font-size: 0.88rem;
-  font-weight: 750;
+  font-weight: 700;
   text-align: center;
   text-decoration: none;
   padding: 0.65rem 0.8rem;
@@ -1739,7 +1739,7 @@
   background: var(--public-surface);
   color: var(--public-text);
   font-size: 0.88rem;
-  font-weight: 750;
+  font-weight: 700;
   transition: border-color var(--transition), background-color var(--transition);
 }
 
@@ -1945,7 +1945,7 @@
   margin: 0;
   color: var(--text-primary);
   font-size: 1.18rem;
-  font-weight: 750;
+  font-weight: 700;
 }
 
 .shop-order-activity-heading .shop-order-delegated-note {
@@ -2103,7 +2103,7 @@
   color: var(--text-primary);
   font-size: 0.98rem;
   font-variant-numeric: tabular-nums;
-  font-weight: 750;
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -2143,7 +2143,7 @@
   margin-bottom: 1.2rem;
   color: var(--text-secondary);
   font-size: 0.82rem;
-  font-weight: 650;
+  font-weight: 600;
   text-decoration: none;
 }
 
@@ -2173,7 +2173,7 @@
   margin: 0.5rem 0 0;
   color: var(--text-secondary);
   font-size: 0.82rem;
-  font-weight: 650;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
@@ -2198,7 +2198,7 @@
   color: var(--primary-text);
   font-size: 1.45rem;
   font-variant-numeric: tabular-nums;
-  font-weight: 760;
+  font-weight: 700;
 }
 
 .shop-order-detail-panel {
@@ -2231,7 +2231,7 @@
   margin: 0.25rem 0 0;
   color: var(--text-primary);
   font-size: 0.84rem;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .shop-order-edit-note {
@@ -2283,7 +2283,7 @@
   color: var(--text-primary);
   font-size: 0.88rem;
   font-variant-numeric: tabular-nums;
-  font-weight: 750;
+  font-weight: 700;
   text-align: right;
   white-space: nowrap;
 }
@@ -2330,7 +2330,7 @@
   border-top: 1px solid var(--border);
   padding-top: 0.7rem;
   color: var(--text-primary);
-  font-weight: 750;
+  font-weight: 700;
 }
 
 .shop-order-detail-note {
@@ -2536,7 +2536,7 @@
   margin-top: 0.3rem;
   color: var(--public-accent-text);
   font-size: 0.76rem;
-  font-weight: 750;
+  font-weight: 700;
 }
 
 .shop-public-product-card:disabled .shop-public-product-action,
@@ -2896,7 +2896,7 @@
     margin: 0;
     color: var(--text-secondary);
     font-size: 0.875rem;
-    font-weight: 650;
+    font-weight: 600;
   }
 
   .shop-workspace-navigation .shop-workspace-links { gap: 0.5rem; }
@@ -2908,7 +2908,7 @@
     padding: 0.75rem 1.25rem;
     color: var(--text-primary);
     font-size: 1rem;
-    font-weight: 650;
+    font-weight: 600;
   }
 
   .shop-workspace-navigation .shop-workspace-tab {

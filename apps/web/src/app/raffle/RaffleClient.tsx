@@ -196,7 +196,6 @@ export default function RaffleClient() {
           {stage === "gate" && (
             <form className={styles.gate} onSubmit={submitEntry}>
               <BrandEmblem size={76} className={styles.gateEmblem} />
-              <p className={styles.formLabel}>ENTER ACCESS CODE</p>
               <h2>準備好了嗎？</h2>
               <p className={styles.formIntro}>請向工作人員索取現場驗證碼。</p>
               <label>

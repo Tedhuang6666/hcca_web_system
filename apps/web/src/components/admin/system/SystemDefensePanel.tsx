@@ -18,7 +18,6 @@ import {
   RotateCcw,
   Save,
   Shield,
-  ShieldCheck,
   SlidersHorizontal,
   Trash2,
   Wrench,
@@ -101,7 +100,7 @@ function Panel({
     >
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="grid h-8 w-8 place-items-center rounded-md bg-[var(--primary-dim)] text-[var(--primary)]">
+          <span className="grid h-8 w-8 place-items-center rounded-md bg-[var(--primary-dim)] text-[var(--primary-text)]">
             {icon}
           </span>
           <h2 className="truncate text-sm font-semibold text-[var(--text-primary)]">{title}</h2>
@@ -402,10 +401,6 @@ export default function SystemDefensePanel() {
     <div>
       <header className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <div className="mb-2 inline-flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)]">
-            <ShieldCheck size={14} aria-hidden />
-            超級管理員控制台
-          </div>
           <h2 className="text-2xl font-bold text-[var(--text-primary)]">全站防護管理</h2>
           <p className="mt-1 text-sm text-[var(--text-secondary)]">
             每 {POLL_INTERVAL_MS / 1000} 秒更新；最後更新{" "}
@@ -845,14 +840,14 @@ function DeadLetterPanel() {
       <p className="mb-3 text-xs text-[var(--text-muted)]">
         背景排程／worker 任務失敗時寫入 Redis；這裡只顯示 Celery 失敗，不包含 API 5xx。
         其他錯誤與慢查詢請前往{" "}
-        <Link href="/admin/system?tab=observability" className="font-medium text-[var(--primary)] underline underline-offset-2">
+        <Link href="/admin/system?tab=observability" className="font-medium text-[var(--primary-text)] underline underline-offset-2">
           系統可觀測性
         </Link>
         。
       </p>
       {items.length === 0 ? (
         <p className="py-6 text-center text-sm text-[var(--text-muted)]">
-          {loading ? "載入中…" : "目前沒有 Celery 失敗紀錄 🎉"}
+          {loading ? "載入中…" : "目前沒有背景工作失敗紀錄"}
         </p>
       ) : (
         <div className="space-y-2">

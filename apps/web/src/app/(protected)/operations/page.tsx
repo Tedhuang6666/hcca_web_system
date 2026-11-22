@@ -1,50 +1,44 @@
 "use client";
 
-import Link from "next/link";
 import { Mail, Megaphone, ReceiptText, Settings, Store, Wallet } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
+import ToolLinkList from "@/components/layout/ToolLinkList";
 
 const TOOLS = [
   {
     href: "/publications",
     icon: Megaphone,
     label: "發布中心",
-    desc: "公告、公開網站與多渠道發布任務",
     prefixes: ["announcement:"],
   },
   {
     href: "/email",
     icon: Mail,
     label: "電子郵件",
-    desc: "寄送、名單、模板、紀錄與成效",
     prefixes: ["email:"],
   },
   {
     href: "/admin/public-site",
     icon: Settings,
     label: "公開網站設定",
-    desc: "首頁、導覽與公開資訊設定",
     perms: ["site:manage"],
   },
   {
     href: "/finance/receivables",
     icon: ReceiptText,
     label: "收款對帳",
-    desc: "應收款、付款狀態與對帳資料",
     prefixes: ["finance:"],
   },
   {
     href: "/finance",
     icon: Wallet,
     label: "財務總帳",
-    desc: "帳務總覽、收支紀錄與分類分析",
     perms: ["finance:view"],
   },
   {
     href: "/merchandise-submissions/admin",
     icon: Store,
     label: "校商投稿管理",
-    desc: "檢視與處理校商投稿內容",
     perms: [
       "merchandise_submission:view",
       "merchandise_submission:manage",
@@ -67,10 +61,7 @@ export default function OperationsPage() {
   return (
     <main className="mx-auto max-w-6xl space-y-6 p-5 md:p-6">
       <header>
-        <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--primary)" }}>
-          OPERATIONS
-        </p>
-        <h1 className="mt-1 text-2xl font-semibold">營運中心</h1>
+        <h1 className="text-2xl font-semibold">營運中心</h1>
       </header>
 
       {visibleTools.length === 0 ? (
@@ -78,25 +69,7 @@ export default function OperationsPage() {
           目前沒有可使用的營運工具。
         </section>
       ) : (
-        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {visibleTools.map((tool) => {
-            const Icon = tool.icon;
-            return (
-              <Link
-                key={tool.href}
-                href={tool.href}
-                className="rounded-md border p-4 transition-colors hover:bg-[var(--bg-hover)]"
-                style={{ borderColor: "var(--border)", textDecoration: "none" }}
-              >
-                <Icon size={18} aria-hidden={true} style={{ color: "var(--primary)" }} />
-                <h2 className="mt-3 text-sm font-semibold">{tool.label}</h2>
-                <p className="mt-1 text-xs leading-5" style={{ color: "var(--text-muted)" }}>
-                  {tool.desc}
-                </p>
-              </Link>
-            );
-          })}
-        </section>
+        <ToolLinkList tools={visibleTools} />
       )}
     </main>
   );

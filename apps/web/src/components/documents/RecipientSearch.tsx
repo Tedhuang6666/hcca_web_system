@@ -225,7 +225,7 @@ export function RecipientSearch({
     <div className="space-y-2">
       {recents.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-[10px] font-semibold" style={{ color: "var(--text-muted)" }}>
+          <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
             最近使用：
           </span>
           {recents.map((r) => (
@@ -233,7 +233,7 @@ export function RecipientSearch({
               key={r.id}
               type="button"
               onClick={() => addRecent(r)}
-              className="text-[11px] px-2 py-0.5 rounded-full transition-opacity hover:opacity-80"
+              className="text-xs px-2 py-0.5 rounded-full transition-opacity hover:opacity-80"
               style={{
                 background: "var(--bg-surface)",
                 color: "var(--text-secondary)",
@@ -248,7 +248,7 @@ export function RecipientSearch({
       )}
       {isMeetingNotice && (recipientLists.length > 0 || recipientListError) && (
         <div className="space-y-1.5">
-          <p className="text-[10px] font-semibold" style={{ color: "var(--text-muted)" }}>
+          <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
             通知群組（加入全部出席者）
           </p>
           {recipientListError ? (
@@ -260,11 +260,11 @@ export function RecipientSearch({
                   key={list.id}
                   type="button"
                   onClick={() => addRecipientList(list)}
-                  className="rounded-full border px-2.5 py-1 text-[11px] transition-opacity hover:opacity-80"
+                  className="rounded-full border px-2.5 py-1 text-xs transition-opacity hover:opacity-80"
                   style={{
                     background: "var(--primary-dim)",
                     borderColor: "var(--primary-dim)",
-                    color: "var(--primary)",
+                    color: "var(--primary-text)",
                   }}
                 >
                   {list.name} · {list.members.length} 人
@@ -330,7 +330,7 @@ export function RecipientSearch({
             {suggestions.length > 0 && (
               <>
                 <p
-                  className="px-3 py-1 text-[10px] font-semibold"
+                  className="px-3 py-1 text-xs font-semibold"
                   style={{ color: "var(--text-muted)", background: "var(--bg-surface)" }}
                 >
                   使用者
@@ -345,15 +345,15 @@ export function RecipientSearch({
                     aria-selected="false"
                   >
                     <div
-                      className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold"
-                      style={{ background: "var(--primary-dim)", color: "var(--primary)" }}
+                      className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold"
+                      style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}
                     >
                       {u.display_name.charAt(0)}
                     </div>
                     <div className="min-w-0">
                       <p style={{ color: "var(--text-primary)" }}>{u.display_name}</p>
                       <p
-                        className="truncate text-[10px]"
+                        className="truncate text-xs"
                         style={{ color: "var(--text-muted)" }}
                       >
                         {u.email}
@@ -366,7 +366,7 @@ export function RecipientSearch({
             {orgSuggestions.length > 0 && (
               <>
                 <p
-                  className="px-3 py-1 text-[10px] font-semibold"
+                  className="px-3 py-1 text-xs font-semibold"
                   style={{ color: "var(--text-muted)", background: "var(--bg-surface)" }}
                 >
                   組織單位（點選快速新增）
@@ -396,7 +396,7 @@ export function RecipientSearch({
                     <div className="min-w-0 flex-1">
                       <p style={{ color: "var(--text-primary)" }}>{o.name}</p>
                       {o.prefix && (
-                        <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+                        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                           前綴：{o.prefix}
                         </p>
                       )}
@@ -408,7 +408,7 @@ export function RecipientSearch({
             {classSuggestions.length > 0 && (
               <>
                 <p
-                  className="px-3 py-1 text-[10px] font-semibold"
+                  className="px-3 py-1 text-xs font-semibold"
                   style={{ color: "var(--text-muted)", background: "var(--bg-surface)" }}
                 >
                   班級（點選快速新增）
@@ -426,7 +426,7 @@ export function RecipientSearch({
                     >
                       <div className="min-w-0 flex-1">
                         <p style={{ color: "var(--text-primary)" }}>{name}</p>
-                        <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+                        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                           班級受文者
                         </p>
                       </div>

@@ -31,7 +31,7 @@ describe("公開公文檢索", () => {
     view.rerender(<DocumentSearch />);
     await screen.findByRole("alert");
     expect(screen.queryByRole("link", { name: "內容摘要：公示摘要1" })).not.toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("已載入公文 0 筆");
+    expect(screen.getByRole("status")).toHaveTextContent("已載入 0 筆");
     state.list.mockResolvedValueOnce([document(2)]);
     fireEvent.click(screen.getByRole("button", { name: "重試" }));
     await screen.findByRole("link", { name: "內容摘要：公示摘要2" });
@@ -45,7 +45,7 @@ describe("公開公文檢索", () => {
     fireEvent.click(screen.getByRole("button", { name: "載入更多公文" }));
     await screen.findByRole("alert");
     expect(screen.getByRole("link", { name: "內容摘要：公示摘要0" })).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("已載入公文 20 筆");
+    expect(screen.getByRole("status")).toHaveTextContent("已載入 20 筆");
   });
 
   it("使用公開可見度與實際發文日期篩選，保留主旨摘要而非內部狀態", async () => {

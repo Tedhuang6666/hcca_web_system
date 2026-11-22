@@ -262,7 +262,7 @@ export default function CredentialAuthorizationPanel() {
       <div className="space-y-4">
         <section className="card p-5" aria-labelledby="student-credential-settings-title">
           <div className="mb-4 flex items-start gap-3">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ color: "var(--primary)", background: "var(--primary-dim)" }}>
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ color: "var(--primary-text)", background: "var(--primary-dim)" }}>
               <ShieldCheck size={18} aria-hidden="true" />
             </span>
             <div>
@@ -304,7 +304,7 @@ export default function CredentialAuthorizationPanel() {
           </div>
           <p
             id="student-credential-prefixes-help"
-            className="mt-2 text-[11px] leading-5"
+            className="mt-2 text-xs leading-5"
             style={{ color: "var(--text-muted)" }}
           >
             可用逗號分隔多個前三碼。學生信箱須是 g0 加完整學號，例如 g0410xxx；空白時只停用一般學生證件資格。
@@ -318,7 +318,7 @@ export default function CredentialAuthorizationPanel() {
 
         <section className="card p-5">
           <div className="mb-5 flex items-start gap-3">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ color: "var(--primary)", background: "var(--primary-dim)" }}>
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ color: "var(--primary-text)", background: "var(--primary-dim)" }}>
               <ShieldCheck size={18} aria-hidden="true" />
             </span>
             <div>
@@ -345,7 +345,7 @@ export default function CredentialAuthorizationPanel() {
                     className="flex-1 rounded-md px-3 py-2 text-xs font-medium transition-colors"
                     style={{
                       background: bulkMode === isBulk ? "var(--primary-dim)" : "transparent",
-                      color: bulkMode === isBulk ? "var(--primary)" : "var(--text-secondary)",
+                      color: bulkMode === isBulk ? "var(--primary-text)" : "var(--text-secondary)",
                     }}
                     onClick={() => switchCreationMode(isBulk as boolean)}
                   >
@@ -368,7 +368,7 @@ export default function CredentialAuthorizationPanel() {
                   value={form.email}
                   onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
                 />
-                <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                <span className="text-xs" style={{ color: "var(--text-muted)" }}>
                   最多 5000 個不同 Email；已存在授權的帳號會自動跳過，不影響其他新增。
                 </span>
               </label>
@@ -434,7 +434,7 @@ export default function CredentialAuthorizationPanel() {
                           >
                             <span
                               className="grid h-8 w-8 shrink-0 place-items-center rounded-full"
-                              style={{ color: "var(--primary)", background: "var(--primary-dim)" }}
+                              style={{ color: "var(--primary-text)", background: "var(--primary-dim)" }}
                             >
                               <UserRound size={15} aria-hidden="true" />
                             </span>
@@ -446,7 +446,7 @@ export default function CredentialAuthorizationPanel() {
                                 {user.email}
                               </span>
                             </span>
-                            {form.email === user.email && <Check size={15} className="mt-1 shrink-0" style={{ color: "var(--primary)" }} aria-hidden="true" />}
+                            {form.email === user.email && <Check size={15} className="mt-1 shrink-0" style={{ color: "var(--primary-text)" }} aria-hidden="true" />}
                           </button>
                         ))
                       ) : (
@@ -457,7 +457,7 @@ export default function CredentialAuthorizationPanel() {
                     </div>
                   )}
                 </div>
-                <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                <span className="text-xs" style={{ color: "var(--text-muted)" }}>
                   可搜尋姓名或 Email 選取使用者；帳號尚未登入也可以先建立授權。
                 </span>
               </label>
@@ -474,7 +474,7 @@ export default function CredentialAuthorizationPanel() {
                     style={{
                       borderColor: form.identity_label === preset ? "var(--primary)" : "var(--border)",
                       background: form.identity_label === preset ? "var(--primary-dim)" : "transparent",
-                      color: form.identity_label === preset ? "var(--primary)" : "var(--text-secondary)",
+                      color: form.identity_label === preset ? "var(--primary-text)" : "var(--text-secondary)",
                     }}
                     onClick={() => setForm((current) => ({ ...current, identity_label: preset }))}
                   >
@@ -523,7 +523,7 @@ export default function CredentialAuthorizationPanel() {
 
         <section className="rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
           <div className="flex items-start gap-3">
-            <Mail size={16} className="mt-0.5 shrink-0" style={{ color: "var(--primary)" }} aria-hidden="true" />
+            <Mail size={16} className="mt-0.5 shrink-0" style={{ color: "var(--primary-text)" }} aria-hidden="true" />
             <p className="text-xs leading-5" style={{ color: "var(--text-muted)" }}>
               授權會套用在電子證件卡面；停用後，該帳號仍可依原本的校內資格使用證件，但不會再顯示這個特殊身份。
             </p>
@@ -565,13 +565,13 @@ export default function CredentialAuthorizationPanel() {
             {authorizations.map((authorization) => (
               <div key={authorization.id} className="flex flex-col gap-4 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: authorization.is_active ? "var(--border)" : "var(--border-strong)", opacity: authorization.is_active ? 1 : 0.68 }}>
                 <div className="flex min-w-0 items-start gap-3">
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full" style={{ color: authorization.is_active ? "var(--primary)" : "var(--text-muted)", background: authorization.is_active ? "var(--primary-dim)" : "var(--bg-elevated)" }}>
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full" style={{ color: authorization.is_active ? "var(--primary-text)" : "var(--text-muted)", background: authorization.is_active ? "var(--primary-dim)" : "var(--bg-elevated)" }}>
                     <UserRound size={17} aria-hidden="true" />
                   </span>
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{authorization.identity_label}</p>
-                      <span className="rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ color: authorization.is_active ? "var(--success)" : "var(--text-muted)", background: authorization.is_active ? "var(--success-dim)" : "var(--bg-elevated)" }}>
+                      <span className="rounded-full px-2 py-0.5 text-xs font-medium" style={{ color: authorization.is_active ? "var(--success)" : "var(--text-muted)", background: authorization.is_active ? "var(--success-dim)" : "var(--bg-elevated)" }}>
                         {authorization.is_active ? "啟用中" : "已停用"}
                       </span>
                     </div>

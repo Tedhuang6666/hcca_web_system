@@ -30,15 +30,15 @@ const TYPE_META: Record<string, { icon: React.ReactNode; color: string; label: s
   },
   petition_assigned: {
     icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg>,
-    color: "var(--primary)", label: "陳情分案",
+    color: "var(--primary-text)", label: "陳情分案",
   },
   petition_received: {
     icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/><path d="M12 7v6"/><path d="M9 10h6"/></svg>,
-    color: "var(--primary)", label: "新陳情",
+    color: "var(--primary-text)", label: "新陳情",
   },
   petition_updated: {
     icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/><path d="M8 12h8"/><path d="M8 8h5"/></svg>,
-    color: "var(--primary)", label: "陳情更新",
+    color: "var(--primary-text)", label: "陳情更新",
   },
   petition_replied: {
     icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>,
@@ -54,7 +54,7 @@ const TYPE_META: Record<string, { icon: React.ReactNode; color: string; label: s
   },
   merchandise_submission_received: {
     icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 7h-4l-2-3h-4L8 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/><path d="M12 11v5"/><path d="M9.5 13.5h5"/></svg>,
-    color: "var(--primary)", label: "新校商投稿",
+    color: "var(--primary-text)", label: "新校商投稿",
   },
   merchandise_submission_status: {
     icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 4h14v16H5z"/><path d="M8 8h8"/><path d="M8 12h8"/><path d="M8 16h5"/></svg>,
@@ -62,14 +62,26 @@ const TYPE_META: Record<string, { icon: React.ReactNode; color: string; label: s
   },
   system: {
     icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M22 17H2a3 3 0 0 0 3-3V9a7 7 0 0 1 14 0v5a3 3 0 0 0 3 3zm-8.27 4a2 2 0 0 1-3.46 0"/></svg>,
-    color: "var(--primary)", label: "系統公告",
+    color: "var(--primary-text)", label: "系統公告",
   },
+};
+
+const OTHER_TYPE_LABELS: Record<string, string> = {
+  announcement: "公告通知",
+  petition_status_updated: "陳情狀態",
+  regulation_publish_ready: "法規待公布",
+  regulation_published: "法規公布",
+  regulation_review_assigned: "法規審議",
+  shop_order_paid: "商品訂單",
+  survey_invitation: "問卷邀請",
+  work_item_assigned: "工作指派",
+  work_item_due: "工作期限",
 };
 
 function getMeta(type: string) {
   return TYPE_META[type] ?? {
     icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>,
-    color: "var(--text-muted)", label: type,
+    color: "var(--text-muted)", label: OTHER_TYPE_LABELS[type] ?? "通知",
   };
 }
 
@@ -137,11 +149,11 @@ function NotificationCard({
         )}
         <div className="flex items-center gap-2 mt-1">
           <span
-            className="text-[10px] px-1.5 py-0.5 rounded"
-            style={{ color: meta.color, background: `${meta.color}18` }}>
+            className="text-xs px-1.5 py-0.5 rounded"
+            style={{ color: meta.color, background: `color-mix(in srgb, ${meta.color} 9%, transparent)` }}>
             {meta.label}
           </span>
-          <span className="text-[10px]" style={{ color: "var(--text-disabled)" }}>
+          <span className="text-xs" style={{ color: "var(--text-disabled)" }}>
             {timeAgo(n.created_at, now)}
           </span>
         </div>
@@ -266,14 +278,11 @@ export default function NotificationsPage() {
             {unreadCount > 0 && (
               <span
                 className="ml-2 text-xs px-2 py-0.5 rounded-full font-medium"
-                style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--info-border)" }}>
+                style={{ background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--info-border)" }}>
                 {unreadCount} 未讀
               </span>
             )}
           </h1>
-          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            公文審核、系統通知與重要提醒
-          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
         <Link
@@ -286,7 +295,7 @@ export default function NotificationsPage() {
           <button
             onClick={handleReadAll}
             className="px-4 py-2 rounded-lg text-sm font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-80"
-            style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }}>
+            style={{ background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--border-strong)" }}>
             全部標為已讀
           </button>
         )}
@@ -304,8 +313,8 @@ export default function NotificationsPage() {
             onClick={() => setUnreadOnly(key)}
             className="flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform]"
             style={unreadOnly === key
-              ? { background: "var(--primary-dim)", border: "1px solid var(--border-strong)", color: "var(--primary)" }
-              : { color: "#475569" }}>
+              ? { background: "var(--primary-dim)", border: "1px solid var(--border-strong)", color: "var(--primary-text)" }
+              : { color: "var(--text-secondary)" }}>
             {label}
           </button>
         ))}
@@ -358,11 +367,11 @@ export default function NotificationsPage() {
       ) : displayed.length === 0 ? (
         <SmartEmptyState
           reason={unreadOnly || dateFrom || dateTo ? "filtered" : "none"}
-          subject="通知"
-          message={unreadOnly ? "所有通知已讀完畢，做得好！" : undefined}
+          subject={unreadOnly ? "未讀通知" : "通知"}
           onClearFilters={() => {
             setDateFrom("");
             setDateTo("");
+            setUnreadOnly(false);
           }}
         />
       ) : (

@@ -89,10 +89,6 @@
   50%      { box-shadow: 0 0 0 1px rgba(232, 201, 112, 0.7) inset, 0 0 32px 0 rgba(232, 201, 112, 0.22); }
 }
 
-/* 領先徽章脈動 */
-.live-badge {
-  animation: live-badge-pop 2s ease-in-out infinite;
-}
 @keyframes live-badge-pop {
   0%, 100% { transform: scale(1); }
   50%      { transform: scale(1.06); }
@@ -281,10 +277,6 @@
   to   { transform: scale(1); opacity: 1; }
 }
 
-/* 結算金色獎章旋轉光環 */
-.live-trophy-ring {
-  animation: live-trophy-spin 14s linear infinite;
-}
 @keyframes live-trophy-spin {
   to { transform: rotate(360deg); }
 }
@@ -337,18 +329,18 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .live-board::before,
   .live-candidate-row,
-  .live-vote-bump,
-  .live-overtake-badge,
-  .live-leader-glow,
-  .live-bar-sheen::after,
-  .live-result-enter,
-  .live-winner-pop,
-  .live-trophy-ring,
-  .live-confetti i,
-  .live-row-flash::after,
-  .live-ballot,
-  .live-vote-gain {
+.live-vote-bump,
+.live-overtake-badge,
+.live-leader-glow,
+.live-bar-sheen::after,
+.live-result-enter,
+.live-winner-pop,
+.live-confetti i,
+.live-row-flash::after,
+.live-ballot,
+.live-vote-gain {
     animation: none !important;
     transition: none !important;
   }

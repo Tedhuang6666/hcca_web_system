@@ -19,9 +19,9 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 
 const OPTION_GROUPS = [
-  { id: "governance", label: "公文與法規", desc: "簽核、起草與法規流程的提醒" },
-  { id: "campus", label: "校園服務", desc: "陳情、商品、問卷與公告" },
-  { id: "personal", label: "工作與系統", desc: "個人工作與帳號、系統安全提醒" },
+  { id: "governance", label: "公文與法規" },
+  { id: "campus", label: "校園服務" },
+  { id: "personal", label: "工作與系統" },
 ] as const;
 
 type OptionGroup = (typeof OPTION_GROUPS)[number]["id"];
@@ -29,7 +29,6 @@ type OptionGroup = (typeof OPTION_GROUPS)[number]["id"];
 type NotificationOption = {
   key: keyof NotificationPreferences;
   label: string;
-  desc: string;
   group: OptionGroup;
   permissions?: readonly string[];
 };
@@ -38,35 +37,30 @@ const OPTIONS: NotificationOption[] = [
   {
     key: "document_pending",
     label: "公文待審",
-    desc: "有公文需要您審核或處理時提醒",
     group: "governance",
     permissions: ["document:approve"],
   },
   {
     key: "document_approved",
     label: "公文核准",
-    desc: "您送出的公文通過審核時提醒",
     group: "governance",
     permissions: ["document:draft"],
   },
   {
     key: "document_rejected",
     label: "公文退回",
-    desc: "公文被退回或需要修正時提醒",
     group: "governance",
     permissions: ["document:draft"],
   },
   {
     key: "document_recalled",
     label: "公文撤回",
-    desc: "相關公文從簽核流程撤回時提醒",
     group: "governance",
     permissions: ["document:draft"],
   },
   {
     key: "regulation_review_assigned",
     label: "法規審議",
-    desc: "法規排入議程或需要審議時提醒",
     group: "governance",
     permissions: [
       "regulation:schedule",
@@ -77,20 +71,17 @@ const OPTIONS: NotificationOption[] = [
   {
     key: "regulation_publish_ready",
     label: "法規待公布",
-    desc: "法規完成議會核定等待公布時提醒",
     group: "governance",
     permissions: ["regulation:president_publish", "regulation:admin"],
   },
   {
     key: "regulation_published",
     label: "法規公布",
-    desc: "法規發布、修正或廢止時提醒",
     group: "governance",
   },
   {
     key: "petition_received",
     label: "新陳情",
-    desc: "負責的陳情案件收到新送件時提醒",
     group: "campus",
     permissions: [
       "petition:view_org",
@@ -103,7 +94,6 @@ const OPTIONS: NotificationOption[] = [
   {
     key: "petition_updated",
     label: "陳情更新",
-    desc: "負責的陳情案件有回覆、補件或狀態變更時提醒",
     group: "campus",
     permissions: [
       "petition:view_org",
@@ -116,69 +106,58 @@ const OPTIONS: NotificationOption[] = [
   {
     key: "petition_assigned",
     label: "陳情指派",
-    desc: "陳情案件被分派給您或所屬機關時提醒",
     group: "campus",
     permissions: ["petition:handle", "petition:admin"],
   },
   {
     key: "petition_replied",
     label: "陳情回覆",
-    desc: "陳情已有公開回覆或補件要求時提醒",
     group: "campus",
   },
   {
     key: "petition_status_updated",
     label: "陳情狀態",
-    desc: "陳情轉派、結案或狀態改變時提醒",
     group: "campus",
   },
   {
     key: "merchandise_submission_received",
     label: "新校商投稿",
-    desc: "負責的校商投稿品項收到新投稿時提醒",
     group: "campus",
     permissions: ["merchandise_submission:review", "merchandise_submission:manage", "shop:manage"],
   },
   {
     key: "merchandise_submission_status",
     label: "校商投稿狀態",
-    desc: "您送出的校商投稿審核狀態更新時提醒",
     group: "campus",
   },
   {
     key: "shop_order_paid",
     label: "商品訂單",
-    desc: "訂單、付款、停售與取貨相關提醒",
     group: "campus",
   },
   {
     key: "survey_invitation",
     label: "問卷邀請",
-    desc: "問卷開放、填答與截止提醒",
     group: "campus",
   },
   {
     key: "announcement",
     label: "公告通知",
-    desc: "重要公告、緊急公告與公告更新提醒",
     group: "campus",
   },
   {
     key: "work_item_assigned",
     label: "工作指派",
-    desc: "社群平台或系統建立的工作被指派給您",
     group: "personal",
   },
   {
     key: "work_item_due",
     label: "工作期限",
-    desc: "工作項目即將到期或已逾期提醒",
     group: "personal",
   },
   {
     key: "system",
     label: "系統通知",
-    desc: "平台維運、權限或安全相關提醒",
     group: "personal",
   },
 ];
@@ -187,7 +166,7 @@ const SYSTEM_EMAIL_OPTIONS = [
   {
     key: "email_scheduled_dispatch",
     label: "預約寄信",
-    desc: "每 60 秒處理到期的預約郵件。關閉後，郵件會保留在排程中。",
+    desc: "關閉後，到期郵件會保留在排程中。",
     confirm: "確定關閉預約寄信？到期郵件會保留在排程中，不會被刪除。",
   },
 ] as const;
@@ -504,7 +483,7 @@ export default function NotificationSettingsPage() {
                   active
                     ? {
                         background: "var(--primary-dim)",
-                        color: "var(--primary)",
+                        color: "var(--primary-text)",
                         border: "1px solid var(--border-strong)",
                       }
                     : {
@@ -529,7 +508,7 @@ export default function NotificationSettingsPage() {
           >
             <h2 className="text-sm font-semibold">系統寄信</h2>
             <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-              全站開關，僅具 Feature Flag 管理權限者可調整；個人偏好不受影響。
+              全站設定，會影響所有使用者。
             </p>
           </div>
           {systemEmailLoading ? (
@@ -564,7 +543,7 @@ export default function NotificationSettingsPage() {
                       >
                         {flag
                           ? option.desc
-                          : "尚未完成系統 migration，暫無法調整。"}
+                          : "目前無法調整。"}
                       </p>
                     </div>
                     <Switch
@@ -654,20 +633,20 @@ export default function NotificationSettingsPage() {
             >
               <div className="flex-1" />
               <div
-                className="w-12 text-center text-[11px] font-semibold"
+                className="w-12 text-center text-xs font-semibold"
                 style={{ color: "var(--text-muted)" }}
               >
                 站內
               </div>
               <div
-                className="w-12 text-center text-[11px] font-semibold"
+                className="w-12 text-center text-xs font-semibold"
                 style={{ color: "var(--text-muted)" }}
               >
                 Email
               </div>
               {showLine && (
                 <div
-                  className="w-12 text-center text-[11px] font-semibold"
+                  className="w-12 text-center text-xs font-semibold"
                   style={{ color: "var(--text-muted)" }}
                 >
                   LINE
@@ -675,7 +654,7 @@ export default function NotificationSettingsPage() {
               )}
               {showDiscord && (
                 <div
-                  className="w-16 text-center text-[11px] font-semibold"
+                  className="w-16 text-center text-xs font-semibold"
                   style={{ color: "var(--text-muted)" }}
                 >
                   Discord
@@ -699,12 +678,6 @@ export default function NotificationSettingsPage() {
                       >
                         {group.label}
                       </h3>
-                      <p
-                        className="mt-0.5 text-xs"
-                        style={{ color: "var(--text-muted)" }}
-                      >
-                        {group.desc}
-                      </p>
                     </div>
                     <ul>
                       {group.options.map((item) => (
@@ -719,12 +692,6 @@ export default function NotificationSettingsPage() {
                               style={{ color: "var(--text-primary)" }}
                             >
                               {item.label}
-                            </p>
-                            <p
-                              className="mt-1 text-xs"
-                              style={{ color: "var(--text-muted)" }}
-                            >
-                              {item.desc}
                             </p>
                           </div>
                           <div className="flex w-12 justify-center">
@@ -781,7 +748,7 @@ export default function NotificationSettingsPage() {
               <h2 className="text-sm font-semibold">瀏覽器推播</h2>
               {pushPermission === "granted" && (
                 <span
-                  className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                  className="text-xs px-1.5 py-0.5 rounded font-medium"
                   style={{
                     background:
                       "color-mix(in srgb, var(--success) 12%, transparent)",
@@ -793,7 +760,7 @@ export default function NotificationSettingsPage() {
               )}
               {pushPermission === "denied" && (
                 <span
-                  className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                  className="text-xs px-1.5 py-0.5 rounded font-medium"
                   style={{
                     background:
                       "color-mix(in srgb, var(--danger) 12%, transparent)",
@@ -805,7 +772,7 @@ export default function NotificationSettingsPage() {
               )}
               {pushPermission === "default" && (
                 <span
-                  className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                  className="text-xs px-1.5 py-0.5 rounded font-medium"
                   style={{
                     background:
                       "color-mix(in srgb, var(--warning) 12%, transparent)",

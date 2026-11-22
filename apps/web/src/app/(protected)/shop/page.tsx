@@ -1953,7 +1953,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
           <UsersRound size={18} aria-hidden="true" />
           <div>
             <p><strong>調整對象：{classMemberName || "指定同學"}</strong></p>
-            <p>商品數量會合併這位同學所有未鎖定訂購；已收款或鎖定的數量會保留。</p>
+            <p>已收款或鎖定的數量不會變動。</p>
             {authLoading && <p role="status">正在確認登入與班級權限…</p>}
             {classMemberAccess === "loading" && <p role="status">正在載入同學的商品登記…</p>}
             {classMemberAccess === "error" && <p role="alert">無法讀取同學的商品登記，請返回班代頁重新選擇同學。</p>}

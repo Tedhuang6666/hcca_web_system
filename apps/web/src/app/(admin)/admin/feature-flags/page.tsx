@@ -5,7 +5,6 @@ import NumberInput from "@/components/ui/NumberInput";
 import { useCallback, useEffect, useState } from "react";
 import {
   Archive,
-  Flag,
   Lock,
   Plus,
   RefreshCcw,
@@ -81,15 +80,7 @@ export default function FeatureFlagsPage() {
     <main className="mx-auto max-w-6xl p-4 md:p-6">
       <header className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <div className="mb-2 inline-flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)]">
-            <Flag size={14} aria-hidden />
-            Feature Flags
-          </div>
           <h1 className="text-2xl font-bold text-[var(--text-primary)]">Feature Flags</h1>
-          <p className="mt-1 max-w-3xl text-xs text-[var(--text-muted)]">
-            控制功能的全域開關 / 漸進放量 / 白名單。前端用 <code>GET /feature-flags/me</code>{" "}
-            評估結果做條件渲染。
-          </p>
         </div>
         <button type="button" className="btn btn-ghost" onClick={load}>
           <RefreshCcw size={16} aria-hidden />
@@ -200,7 +191,7 @@ function FlagRow({ flag, onChange }: { flag: FeatureFlagOut; onChange: () => voi
         <div>
           <code className="text-sm font-semibold text-[var(--text-primary)]">{flag.key}</code>
           {flag.archived_at && (
-            <span className="ml-2 rounded bg-[var(--text-muted)] px-1 py-0.5 text-[10px] text-white">
+            <span className="ml-2 rounded bg-[var(--text-muted)] px-1 py-0.5 text-xs text-white">
               ARCHIVED
             </span>
           )}
@@ -254,7 +245,7 @@ function FlagRow({ flag, onChange }: { flag: FeatureFlagOut; onChange: () => voi
             rows={3}
             value={users}
             onChange={(e) => setUsers(e.target.value)}
-            className="input font-mono text-[11px]"
+            className="input font-mono text-xs"
           />
         </label>
         <label className="flex flex-col gap-1 text-xs">
@@ -264,7 +255,7 @@ function FlagRow({ flag, onChange }: { flag: FeatureFlagOut; onChange: () => voi
             value={perms}
             onChange={(e) => setPerms(e.target.value)}
             placeholder="例：admin:all"
-            className="input font-mono text-[11px]"
+            className="input font-mono text-xs"
           />
         </label>
       </div>

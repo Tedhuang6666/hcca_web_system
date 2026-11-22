@@ -9,7 +9,7 @@ import {
   Plus,
   RefreshCcw,
   Save,
-  ScrollText } from "lucide-react";
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
@@ -70,10 +70,6 @@ export default function PoliciesPage() {
   return (
     <main className="mx-auto max-w-6xl p-4 md:p-6">
       <header className="mb-4">
-        <div className="mb-2 inline-flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)]">
-          <ScrollText size={14} aria-hidden />
-          政策版本管理
-        </div>
         <h1 className="text-2xl font-bold text-[var(--text-primary)]">政策與個資請求</h1>
       </header>
 
@@ -110,7 +106,7 @@ function TabButton({
         active ? "border-b-2" : "opacity-60 hover:opacity-100"
       }`}
       style={{
-        color: active ? "var(--primary)" : "var(--text-secondary)",
+        color: active ? "var(--primary-text)" : "var(--text-secondary)",
         borderBottomColor: active ? "var(--primary)" : "transparent",
       }}>
       {children}
@@ -217,7 +213,7 @@ function DocumentsTab() {
                     {KIND_LABEL[it.kind]}
                   </span>
                   {it.is_active && (
-                    <span className="inline-flex items-center gap-0.5 rounded bg-[var(--success-dim)] px-1 py-0.5 text-[10px] text-[var(--success)]">
+                    <span className="inline-flex items-center gap-0.5 rounded bg-[var(--success-dim)] px-1 py-0.5 text-xs text-[var(--success)]">
                       <CheckCircle size={10} aria-hidden />
                       生效
                     </span>
@@ -376,7 +372,7 @@ function DocumentEditor({
             value={summary}
             onChange={(e) => setSummary(e.target.value)}
             disabled={doc.is_active}
-            className="input mt-1 font-mono text-[11px]"
+            className="input mt-1 font-mono text-xs"
           />
         </label>
         <label className="text-xs">
@@ -386,7 +382,7 @@ function DocumentEditor({
             value={content}
             onChange={(e) => setContent(e.target.value)}
             disabled={doc.is_active}
-            className="input mt-1 font-mono text-[11px]"
+            className="input mt-1 font-mono text-xs"
           />
         </label>
       </div>
@@ -494,7 +490,7 @@ function CreateModal({
               rows={10}
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              className="input mt-1 font-mono text-[11px]"
+              className="input mt-1 font-mono text-xs"
             />
           </label>
         </div>
@@ -511,7 +507,7 @@ function CreateModal({
             建立（不啟用）
           </button>
         </div>
-        <p className="mt-2 text-[10px] text-[var(--text-muted)]">
+        <p className="mt-2 text-xs text-[var(--text-muted)]">
           建立後為草稿；啟用時自動停用同類別舊版本。
         </p>
       </div>
@@ -609,7 +605,7 @@ function PrivacyRequestsTab() {
                   <td className="px-3 py-2 whitespace-nowrap">
                     {new Date(r.created_at).toLocaleString()}
                   </td>
-                  <td className="px-3 py-2 font-mono text-[10px]">{r.request_type}</td>
+                  <td className="px-3 py-2 font-mono text-xs">{r.request_type}</td>
                   <td className="px-3 py-2">{r.subject}</td>
                   <td
                     className="px-3 py-2"

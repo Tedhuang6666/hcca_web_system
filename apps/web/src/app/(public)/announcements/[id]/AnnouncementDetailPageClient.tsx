@@ -87,7 +87,7 @@ export default function AnnouncementDetailPageClient({
             </span>
           )}
           {item.audience_type !== "all" && (
-            <span className="badge" style={{ color: "var(--primary)", background: "var(--primary-dim)", borderColor: "var(--border-strong)" }}>
+            <span className="badge" style={{ color: "var(--primary-text)", background: "var(--primary-dim)", borderColor: "var(--border-strong)" }}>
               對象：{AUDIENCE_LABEL[item.audience_type] ?? item.audience_type}
             </span>
           )}
@@ -141,9 +141,11 @@ export default function AnnouncementDetailPageClient({
             {item.link_label || "前往連結"}
           </a>
         )}
-        <div className="mt-8 border-t pt-4 text-sm" style={{ borderColor: "var(--border)", color: "var(--text-secondary)" }}>
-          公告人：{item.author_name || "未命名"}
-        </div>
+        {item.author_name && (
+          <div className="mt-8 border-t pt-4 text-sm" style={{ borderColor: "var(--border)", color: "var(--text-secondary)" }}>
+            公告人：{item.author_name}
+          </div>
+        )}
       </div>
     </article>
   );

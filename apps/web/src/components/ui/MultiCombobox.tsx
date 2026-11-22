@@ -88,7 +88,7 @@ export default function MultiCombobox({
             <span
               key={s.value}
               className="multi-combobox-chip inline-flex max-w-full items-center gap-1 rounded-md px-2 py-0.5 text-xs"
-              style={{ background: "var(--primary-dim)", color: "var(--primary)" }}
+              style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}
             >
               <span className="min-w-0 break-words">{s.label}</span>
               <button
@@ -194,7 +194,7 @@ export default function MultiCombobox({
               >
                 <p className="text-sm">{opt.label}</p>
                 {opt.description && (
-                  <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-muted)" }}>
+                  <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
                     {opt.description}
                   </p>
                 )}

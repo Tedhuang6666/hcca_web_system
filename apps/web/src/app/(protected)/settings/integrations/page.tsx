@@ -228,8 +228,7 @@ export default function IntegrationsPage() {
             <button
               type="button"
               onClick={handleConnect}
-              className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium"
-              style={{ background: "var(--primary)", color: "#fff" }}
+              className="btn btn-primary"
             >
               <Link2 size={15} aria-hidden={true} />
               連結 Google Tasks
@@ -245,7 +244,7 @@ export default function IntegrationsPage() {
                 className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-60"
                 style={{
                   background: "var(--primary-dim)",
-                  color: "var(--primary)",
+                  color: "var(--primary-text)",
                   border: "1px solid var(--info-border)",
                 }}
               >

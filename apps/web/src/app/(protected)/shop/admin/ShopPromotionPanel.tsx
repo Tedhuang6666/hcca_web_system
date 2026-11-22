@@ -384,7 +384,7 @@ export default function ShopPromotionPanel() {
             />
             <span>
               公開顯示優惠
-              <span className="mt-1 block text-[11px] font-normal" style={{ color: "var(--text-muted)" }}>
+              <span className="mt-1 block text-xs font-normal" style={{ color: "var(--text-muted)" }}>
                 關閉後不會列在商品頁優惠清單；知道優惠碼的使用者仍可輸入使用。
               </span>
             </span>
@@ -432,13 +432,13 @@ export default function ShopPromotionPanel() {
           <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
             最低件數
             <input className="input mt-1 w-full" type="number" min="1" max="100" value={form.min_quantity} onChange={(e) => update("min_quantity", e.target.value)} />
-            <span className="mt-1 block text-[11px]" style={{ color: "var(--text-muted)" }}>
+            <span className="mt-1 block text-xs" style={{ color: "var(--text-muted)" }}>
               各活動分開計算，只計下方指定商品；未指定商品時以該活動的登記件數計算。
             </span>
           </label>
           <fieldset className="sm:col-span-2">
             <legend className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>適用商品（可複選）</legend>
-            <p className="mt-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
               {form.discount_type === "gift"
                 ? "多選時須同時登記，各贈指定件數；受贈者自行選規格。"
                 : form.discount_type === "price_override"
@@ -447,7 +447,7 @@ export default function ShopPromotionPanel() {
                   ? "至少兩項商品，各一件為一套。"
                 : "折扣只計指定品項，最低消費門檻看整筆登記金額。多選時每項都需登記，最低件數為指定商品合計；只選一項可設定單品買滿件數優惠。"}
             </p>
-            <p className="mt-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
               含草稿與下架商品；上架後才可使用優惠。
             </p>
             <div className="mt-2 grid max-h-48 gap-1 overflow-y-auto rounded-lg border p-2 sm:grid-cols-2" style={{ borderColor: "var(--border)" }}>
@@ -462,7 +462,7 @@ export default function ShopPromotionPanel() {
                     </span>
                   )}</span>
                   <span
-                    className="ml-auto whitespace-nowrap rounded px-1.5 py-0.5 text-[10px]"
+                    className="ml-auto whitespace-nowrap rounded px-1.5 py-0.5 text-xs"
                     style={{
                       background: product.status === "active" ? "var(--success-dim)" : "var(--bg-elevated)",
                       color: product.status === "active" ? "var(--success)" : "var(--text-muted)",
@@ -578,10 +578,10 @@ export default function ShopPromotionPanel() {
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-medium" style={{ color: "var(--text-primary)" }}>{promotion.name}</p>
-                      <span className="rounded-md px-2 py-1 text-[11px]" style={{ background: promotion.is_active ? "var(--success-dim)" : "var(--bg-elevated)", color: promotion.is_active ? "var(--success)" : "var(--text-muted)" }}>
+                      <span className="rounded-md px-2 py-1 text-xs" style={{ background: promotion.is_active ? "var(--success-dim)" : "var(--bg-elevated)", color: promotion.is_active ? "var(--success)" : "var(--text-muted)" }}>
                         {promotion.is_active ? "啟用中" : "已停用"}
                       </span>
-                      <span className="rounded-md px-2 py-1 text-[11px]" style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
+                      <span className="rounded-md px-2 py-1 text-xs" style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
                         {promotion.is_public ? "公開" : "隱藏"}
                       </span>
                     </div>

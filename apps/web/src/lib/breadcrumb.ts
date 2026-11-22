@@ -32,12 +32,74 @@ const SEGMENT_LABELS: Record<string, string> = {
   email: "電子郵件",
   settings: "設定",
   about: "關於本系統",
+  dashboard: "平台首頁",
+  "work-items": "我的工作",
+  "council-proposals": "議會提案",
+  "judicial-petitions": "評議訴訟",
+  credential: "電子證件",
+  "exam-papers": "段考題庫",
+  finance: "預算與收支",
+  receivables: "班級／校商收款",
+  publications: "發布中心",
+  backoffice: "模組後台",
+  "recommended-vendors": "推薦商家",
+  "merchandise-submissions": "校商投稿",
+  "qr-code": "經營工具",
+  search: "搜尋",
+  delegations: "簽核代理",
+  archived: "已廢止法規",
+  pending: "待議法規",
+  new: "新增",
+  edit: "編輯",
+  cart: "購物車",
+  orders: "我的訂單",
+  lists: "收件名單",
+  logs: "寄送紀錄",
+  templates: "郵件範本",
+  manage: "管理",
+  "my-businesses": "我的店家",
+  types: "類型",
+  account: "帳號與個人資料",
+  "data-saver": "省流模式",
+  integrations: "外部整合",
+  navigation: "介面導覽設定",
+  privacy: "隱私與資料",
+  security: "安全設定",
+  "api-keys": "API 金鑰",
+  classes: "班級管理",
+  "data-lifecycle": "資料保存",
+  diagnostics: "系統診斷",
+  discord: "Discord 機器人",
+  elections: "開票控制台",
+  "feature-flags": "功能開關",
+  gallery: "活動影像",
+  modules: "模組狀態",
+  "navigation-profiles": "視角管理",
+  people: "人員與組織",
+  permissions: "權限管理",
+  policies: "政策文件",
+  "public-site": "公開網站設定",
+  raffle: "現場抽獎",
+  reports: "報表",
+  system: "系統營運",
+  "term-rollover": "學期換屆",
+  trash: "回收桶",
+  "user-lifecycle": "帳號生命週期",
+  users: "使用者",
+  webhooks: "Webhook",
 };
 
 const PATH_OVERRIDES: Record<string, string> = {
   "/":                            "平台首頁",
-  "/admin":                       "管理後台",
-  "/admin/system":                "系統營運中心",
+  "/admin":                       "系統總覽",
+  "/admin/system":                "系統營運",
+  "/admin/settings":              "系統設定",
+  "/shop/admin/stats":            "訂購統計",
+  "/exam-papers/admin":           "題庫管理",
+  "/merchandise-submissions/admin": "校商投稿管理",
+  "/recommended-vendors/admin":   "推薦商家管理",
+  "/email/analytics":             "寄送成效",
+  "/publications/new":            "新增發布",
   "/documents/new":               "新增公文",
   "/documents/delegations":       "簽核代理",
   "/regulations/new":             "新增法規",
@@ -121,13 +183,17 @@ function labelFor(pathname: string, segment: string, parentSegment?: string): st
   return decodedSegment.charAt(0).toUpperCase() + decodedSegment.slice(1);
 }
 
+/** 登入後介面的起點；訪客瀏覽公開頁時改用公開網站首頁。 */
+export const APP_HOME_CRUMB: Crumb = { label: "平台首頁", href: "/dashboard" };
+export const PUBLIC_HOME_CRUMB: Crumb = { label: "首頁", href: "/" };
+
 /**
  * 從 pathname 推導麵包屑序列。
- * 第一筆固定為「首頁」，最後一筆不附 href（current page）。
+ * 第一筆為起點（預設平台首頁），最後一筆不附 href（current page）。
  */
-export function getBreadcrumbs(pathname: string): Crumb[] {
-  const crumbs: Crumb[] = [{ label: "首頁", href: "/" }];
-  if (pathname === "/" || pathname === "") return crumbs;
+export function getBreadcrumbs(pathname: string, root: Crumb = APP_HOME_CRUMB): Crumb[] {
+  if (pathname === "/" || pathname === "" || pathname === root.href) return [{ label: root.label }];
+  const crumbs: Crumb[] = [root];
 
   const segments = pathname.split("/").filter(Boolean);
   let accumulated = "";
@@ -149,8 +215,8 @@ export function getBreadcrumbs(pathname: string): Crumb[] {
 /**
  * 取頁面標題（麵包屑最後一段，或 fallback）。
  */
-export function getPageTitle(pathname: string): string {
-  const crumbs = getBreadcrumbs(pathname);
+export function getPageTitle(pathname: string, root: Crumb = APP_HOME_CRUMB): string {
+  const crumbs = getBreadcrumbs(pathname, root);
   const last = crumbs[crumbs.length - 1];
   return last?.label ?? "新竹高中班聯會數位整合系統";
 }

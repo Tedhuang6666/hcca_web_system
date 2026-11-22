@@ -17,6 +17,8 @@ import { BarChart2, Mail, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { classApi, emailApi, shopApi, apiErrorMessage } from "@/lib/api";
+import { CloseBadge } from "@/components/shop/CloseBadge";
+import { OrderRecalcBar, OrderRecalcCheckbox, OrderRecalcSelectAll, useOrderRecalc } from "@/components/shop/OrderRecalc";
 import {
   planClassStatusRefresh,
   type ClassStatusCache,
@@ -70,25 +72,6 @@ function taipeiDateTime(value: string) {
 }
 
 // ── 結單狀態徽章 ─────────────────────────────────────────────────────────────
-
-function CloseBadge({ status, partial = false }: { status: CloseStatusItem | undefined; partial?: boolean }) {
-  if (!status && !partial) return <span className="text-xs" style={{ color: "var(--text-secondary)" }}>狀態待確認</span>;
-  if (partial) return (
-    <span className="rounded-full px-2 py-0.5 text-xs" style={{ background: "rgba(245,158,11,0.12)", color: "#b45309" }}>
-      部分商品停止訂購
-    </span>
-  );
-  if (!status?.is_closed) return (
-    <span className="rounded-full px-2 py-0.5 text-xs" style={{ background: "rgba(34,197,94,0.12)", color: "#16a34a" }}>
-      開放訂購
-    </span>
-  );
-  return (
-    <span className="rounded-full px-2 py-0.5 text-xs" style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444" }}>
-      已停止訂購
-    </span>
-  );
-}
 
 // ── 主頁面 ───────────────────────────────────────────────────────────────────
 
@@ -180,7 +163,8 @@ export default function CouncilOrdersPage() {
   const [reminderBusy, setReminderBusy] = useState<"orders" | "class_reps" | null>(null);
   const [reminderError, setReminderError] = useState("");
   const [reminderStatus, setReminderStatus] = useState("");
-  const mutationBusy = paymentBusy !== null || cancelBusy || quantityBusy !== null || assistedBusy;
+  const recalc = useOrderRecalc();
+  const mutationBusy = paymentBusy !== null || cancelBusy || quantityBusy !== null || assistedBusy || recalc.busy;
   const canCreateBatchReminders = canViewClassPaymentReport
     && (hasAdminPermission || permissions.has("email:send_bulk"));
 
@@ -1373,6 +1357,7 @@ export default function CouncilOrdersPage() {
         <section>
           {cancelResult && <p role="status" className="mb-3 text-sm">{cancelResult}</p>}
           {quantityResult && <p role="status" className="mb-3 text-sm">{quantityResult}</p>}
+          {canConfirmClassPayment && <OrderRecalcBar recalc={recalc} disabled={loading || mutationBusy} onDone={async () => { await Promise.all([loadOrders(), loadSummary()]); }} />}
           {canCreateBatchReminders && (
             <div className="mb-3 flex flex-col gap-3 rounded-lg p-4 sm:flex-row sm:items-center sm:justify-between"
               style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
@@ -1401,6 +1386,7 @@ export default function CouncilOrdersPage() {
                   <table className="shop-mobile-table w-full min-w-[700px] text-sm">
                     <thead>
                       <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                        {canConfirmClassPayment && <OrderRecalcSelectAll recalc={recalc} orderIds={visibleOrders.map((row) => row.id)} />}
                         {["訂單編號", "訂購人", "班級／處室", "狀態", "金額", "班聯收款", "建立時間"].map((h) => (
                           <th key={h} className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "var(--text-muted)" }}>{h}</th>
                         ))}
@@ -1411,6 +1397,7 @@ export default function CouncilOrdersPage() {
                       {visibleOrders.map((order, idx) => (
                         <Fragment key={order.id}>
                           <tr style={idx < visibleOrders.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}>
+                            {canConfirmClassPayment && <OrderRecalcCheckbox recalc={recalc} order={order} />}
                             <td className="px-4 py-3">
                               <Link href={`/shop/orders/${order.id}?from=council`} className="text-sm underline" style={{ color: "var(--primary-text)" }}>{order.serial_number}</Link>
                             </td>
@@ -1464,7 +1451,7 @@ export default function CouncilOrdersPage() {
                           </tr>
                           {quantityTarget?.id === order.id && (
                             <tr id={`quantity-editor-${order.id}`} style={{ borderBottom: "1px solid var(--border)" }}>
-                              <td colSpan={canConfirmClassPayment ? 8 : 7} className="px-4 py-4" style={{ background: "var(--bg-elevated)" }}>
+                              <td colSpan={canConfirmClassPayment ? 9 : 7} className="px-4 py-4" style={{ background: "var(--bg-elevated)" }}>
                                 <fieldset className="space-y-3">
                                   <legend className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
                                     調整 {order.user_name ?? "訂購人"} 的訂購數量

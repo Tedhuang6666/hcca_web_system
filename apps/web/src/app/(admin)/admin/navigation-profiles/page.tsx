@@ -3,7 +3,7 @@
 import NumberInput from "@/components/ui/NumberInput";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus, Save, ShieldCheck, Trash2 } from "lucide-react";
+import { Plus, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import MobileNavConfigurator from "@/components/layout/MobileNavConfigurator";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -134,10 +134,6 @@ export default function NavigationProfilesPage() {
     <main className="mx-auto max-w-7xl p-4 md:p-6">
       <header className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <div className="mb-2 inline-flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)]">
-            <ShieldCheck size={14} aria-hidden />
-            角色視角 / 可編輯導覽設定
-          </div>
           <h1 className="text-2xl font-bold">視角管理</h1>
         </div>
         <button type="button" className="btn btn-primary" onClick={() => selectProfile(null)}>
@@ -410,7 +406,7 @@ function PermissionPicker({
     <div className="mt-4 block">
       <div className="mb-1.5 flex items-center justify-between gap-2">
         <span className="text-xs font-medium text-[var(--text-muted)]">{label}</span>
-        <span className="text-[11px] text-[var(--text-muted)]">已選 {values.length} 項</span>
+        <span className="text-xs text-[var(--text-muted)]">已選 {values.length} 項</span>
       </div>
       <input
         className="input mb-2 h-9 text-sm"

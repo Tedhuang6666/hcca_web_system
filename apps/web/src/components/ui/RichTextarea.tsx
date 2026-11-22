@@ -318,7 +318,7 @@ const RichTextarea = forwardRef<RichTextareaHandle, RichTextareaProps>(function 
               }}
               className="w-7 h-7 rounded flex items-center justify-center text-xs transition-colors"
               style={active
-                ? { color: "var(--primary)", background: "var(--primary-dim)" }
+                ? { color: "var(--primary-text)", background: "var(--primary-dim)" }
                 : { color: "var(--text-muted)", background: "transparent" }}
             >
               <span className={[
@@ -331,7 +331,7 @@ const RichTextarea = forwardRef<RichTextareaHandle, RichTextareaProps>(function 
             </button>
           );
         })}
-        <span className="ml-auto text-[10px] pr-1 flex-shrink-0" style={{ color: "var(--text-disabled)" }}>
+        <span className="ml-auto text-xs pr-1 flex-shrink-0" style={{ color: "var(--text-disabled)" }}>
           Markdown
         </span>
       </div>
@@ -341,7 +341,7 @@ const RichTextarea = forwardRef<RichTextareaHandle, RichTextareaProps>(function 
         <EditorContent editor={editor} />
       </div>
       <p
-        className="border-t px-3 py-1.5 text-[10px]"
+        className="border-t px-3 py-1.5 text-xs"
         style={{ borderColor: "var(--border)", color: "var(--text-disabled)" }}
       >
         Enter 或 ¶+ 建立下一段／清單項目；Shift+Enter 或 ↵ 在同一段內換行

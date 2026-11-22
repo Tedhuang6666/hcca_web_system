@@ -108,10 +108,7 @@ export default function PrivacySettingsPage() {
     <div className="mx-auto max-w-5xl space-y-5">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--primary)" }}>
-            PRIVACY
-          </p>
-          <h1 className="mt-1 text-xl font-semibold">隱私與資料請求</h1>
+          <h1 className="text-xl font-semibold">隱私與資料請求</h1>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href="/legal/privacy" className="btn btn-ghost">
@@ -126,7 +123,7 @@ export default function PrivacySettingsPage() {
 
       <section className="card p-5">
         <div className="flex items-start gap-3">
-          <ShieldCheck size={20} aria-hidden style={{ color: "var(--primary)" }} />
+          <ShieldCheck size={20} aria-hidden style={{ color: "var(--primary-text)" }} />
           <div>
             <h2 className="text-sm font-semibold">你可以行使的資料權利</h2>
             <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
@@ -254,7 +251,7 @@ export default function PrivacySettingsPage() {
                     className="rounded-full px-2.5 py-1 text-xs font-medium"
                     style={{
                       background: "var(--primary-dim)",
-                      color: "var(--primary)",
+                      color: "var(--primary-text)",
                       border: "1px solid var(--warning-border)",
                     }}>
                     {STATUS_LABEL[item.status] ?? item.status}

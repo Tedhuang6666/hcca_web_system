@@ -506,8 +506,7 @@ export default function LiveElectionBoard({
           <div className="space-y-3">
             <div className="mb-4 flex items-end justify-between gap-4">
               <div>
-                <p className="text-xs font-semibold tracking-[0.16em] text-[#e8c970]">{isClosed ? "FINAL STANDINGS" : "RESULTS"}</p>
-                <h2 className="mt-1 text-xl font-semibold">{isClosed ? "最終名次" : "候選人得票"}</h2>
+                <h2 className="text-xl font-semibold">{isClosed ? "最終名次" : "候選人得票"}</h2>
               </div>
               <p className="text-xs text-[#91a5b5]">依目前票數排序</p>
             </div>
@@ -638,8 +637,7 @@ export default function LiveElectionBoard({
 
           <aside className={`${vertical ? "mt-auto" : ""} space-y-4`}>
             <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-5">
-              <p className="text-xs font-semibold tracking-[0.16em] text-[#e8c970]">BALLOT BOXES</p>
-              <h2 className="mt-1 text-lg font-semibold">票匭進度</h2>
+              <h2 className="text-lg font-semibold">票匭進度</h2>
               <div className="mt-4 space-y-3">
                 {summary.ballot_boxes.map((box) => (
                   <div key={box.ballot_box_id} className="rounded-xl bg-black/10 p-3.5">

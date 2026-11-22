@@ -53,14 +53,14 @@ export default function PasskeyLogin({ nextPath }: { nextPath: string }) {
     <>
       <div className="my-7 flex items-center gap-4">
         <div className="h-px flex-1" style={{ background: "var(--border)" }} />
-        <span className="text-[11px] tracking-[0.12em]" style={{ color: "var(--text-muted)" }}>
+        <span className="text-xs" style={{ color: "var(--text-muted)" }}>
           本機快速登入
         </span>
         <div className="h-px flex-1" style={{ background: "var(--border)" }} />
       </div>
       <button
         type="button"
-        className="flex h-13 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2"
+        className="flex h-13 w-full items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition-[border-color,background-color] duration-200 focus-visible:outline-2 focus-visible:outline-offset-2"
         style={{
           background: "var(--bg-surface)",
           color: "var(--text-primary)",
@@ -70,7 +70,6 @@ export default function PasskeyLogin({ nextPath }: { nextPath: string }) {
         disabled={busy}
         onClick={handlePasskeyLogin}
       >
-        <span aria-hidden="true">🔐</span>
         {busy ? "生物辨識驗證中" : "使用指紋／臉部辨識快速登入"}
       </button>
     </>

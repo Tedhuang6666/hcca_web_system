@@ -122,9 +122,9 @@ export default function BusinessAccountPanel({ businessId }: { businessId: strin
           <div className="absolute left-0 right-0 top-[calc(100%+0.35rem)] z-20 max-h-56 overflow-y-auto rounded-md border p-1" style={{ background: "var(--bg-surface)", borderColor: "var(--border-strong)" }}>
             {options.map((user) => (
               <button key={user.id} type="button" className="flex w-full items-center gap-2 rounded px-2 py-2 text-left hover:bg-[var(--bg-elevated)]" onClick={() => addUser(user)}>
-                <UserRound size={15} aria-hidden="true" style={{ color: "var(--primary)" }} />
+                <UserRound size={15} aria-hidden="true" style={{ color: "var(--primary-text)" }} />
                 <span className="min-w-0 flex-1"><span className="block truncate text-sm" style={{ color: "var(--text-primary)" }}>{user.display_name}</span><span className="block truncate text-xs" style={{ color: "var(--text-muted)" }}>{user.email}</span></span>
-                {selectedIds.includes(user.id) && <Check size={15} aria-hidden="true" style={{ color: "var(--primary)" }} />}
+                {selectedIds.includes(user.id) && <Check size={15} aria-hidden="true" style={{ color: "var(--primary-text)" }} />}
               </button>
             ))}
           </div>
@@ -136,7 +136,7 @@ export default function BusinessAccountPanel({ businessId }: { businessId: strin
           <p className="rounded-md border border-dashed p-3 text-xs" style={{ color: "var(--text-muted)", borderColor: "var(--border)" }}>尚未指定店家帳號。</p>
         ) : activeAccounts.map((account) => (
           <div key={account.user_id} className="flex items-center gap-2 rounded-md border px-3 py-2" style={{ borderColor: "var(--border)" }}>
-            <UserRound size={15} aria-hidden="true" style={{ color: "var(--primary)" }} />
+            <UserRound size={15} aria-hidden="true" style={{ color: "var(--primary-text)" }} />
             <span className="min-w-0 flex-1"><span className="block truncate text-sm" style={{ color: "var(--text-primary)" }}>{account.display_name}</span><span className="block truncate text-xs" style={{ color: "var(--text-muted)" }}>{account.email}</span></span>
             <button type="button" className="topbar-icon-btn" onClick={() => removeUser(account.user_id)} aria-label={`移除 ${account.display_name}`}><X size={14} /></button>
           </div>

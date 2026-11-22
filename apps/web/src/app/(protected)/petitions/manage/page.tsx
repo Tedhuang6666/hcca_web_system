@@ -12,6 +12,7 @@ import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import PetitionAttachmentList from "@/components/petitions/PetitionAttachmentList";
 import { orgDisplayName } from "@/lib/orgs";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { PetitionPublicDiff } from "@/components/petitions/PetitionPublicConsent";
 import { PetitionConfidentialBlocked } from "@/components/petitions/PetitionConfidentialBlocked";
 import { PetitionConfidentialReasonEditor } from "@/components/petitions/PetitionConfidentialReasonEditor";
@@ -54,7 +55,15 @@ const PET_LIST_KEY = "petitions/manage/list:confidential-scope-v2";
 const PET_STATS_KEY = "petitions/manage/stats";
 const PET_ORGS_KEY = "petitions/manage/orgs";
 
+const ACTION_CONFIRM: Record<string, { title: string; description: string; confirmLabel: string; danger?: boolean }> = {
+  reject: { title: "駁回／不受理此案件？", description: "駁回原因會通知陳情人。", confirmLabel: "駁回", danger: true },
+  close: { title: "結案？", description: "陳情人會收到結案通知。", confirmLabel: "結案" },
+  reply: { title: "送出正式回覆並完成？", description: "回覆會通知陳情人，案件標示為完成。", confirmLabel: "送出回覆" },
+  transfer: { title: "轉派至其他機關？", description: "案件會移交給選定的機關。", confirmLabel: "確認轉派" },
+};
+
 export default function PetitionManagePage() {
+  const confirm = useConfirm();
   const [items, setItems] = useState<PetitionCaseListItem[]>(() => cacheGet<PetitionCaseListItem[]>(PET_LIST_KEY) ?? []);
   const [selected, setSelected] = useState<PetitionCaseOut | null>(null);
   const [stats, setStats] = useState<PetitionStatsOut | null>(() => cacheGet<PetitionStatsOut>(PET_STATS_KEY) ?? null);
@@ -330,6 +339,8 @@ export default function PetitionManagePage() {
 
   const run = async (action: string) => {
     if (!selected || busy) return;
+    const confirmation = ACTION_CONFIRM[action];
+    if (confirmation && !(await confirm(confirmation))) return;
     setBusy(true);
     try {
       let updated: PetitionCaseOut;
@@ -421,12 +432,7 @@ export default function PetitionManagePage() {
   return (
     <div className="petition-manage-page min-w-0 max-w-7xl mx-auto space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>陳情工作台</h1>
-          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            依序完成收件、分派、承辦、補件、跨機關轉派、駁回與結案
-          </p>
-        </div>
+        <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>陳情工作台</h1>
         <div className="flex flex-wrap gap-2">
           {can("petition:admin") && (
             <button className="btn btn-primary" onClick={() => void openExternalIntake()}>
@@ -442,13 +448,9 @@ export default function PetitionManagePage() {
       {showExternalIntake && can("petition:admin") && (
         <section
           className="card p-5 space-y-4"
-          style={{ borderColor: "var(--primary)", borderLeftWidth: "4px" }}
           aria-labelledby="external-petition-title">
           <div>
-            <p className="text-xs font-medium tracking-wide" style={{ color: "var(--primary)" }}>
-              其他管道收件
-            </p>
-            <h2 id="external-petition-title" className="text-lg font-semibold mt-1" style={{ color: "var(--text-primary)" }}>
+            <h2 id="external-petition-title" className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
               代收外部陳情
             </h2>
             <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
@@ -569,7 +571,7 @@ export default function PetitionManagePage() {
                     <div className="flex items-center gap-2 min-w-0">
                       <p className="font-medium truncate" style={{ color: "var(--text-primary)" }}>{item.title}</p>
                       {item.is_confidential && (
-                        <span className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ background: "var(--warning-dim)", color: "var(--warning)" }}>
+                        <span className="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium" style={{ background: "var(--warning-dim)", color: "var(--warning)" }}>
                           密件
                         </span>
                       )}
@@ -940,7 +942,7 @@ export default function PetitionManagePage() {
                       <>
                         <div className="flex min-w-0 items-start justify-between gap-2">
                           <p className="min-w-0 break-words font-medium">{event.title}{event.updated_at !== event.created_at ? "（已編輯）" : ""}</p>
-                          {event.can_edit && <button className="text-xs" style={{ color: "var(--primary)" }} onClick={() => startEventEdit(event)}>編輯</button>}
+                          {event.can_edit && <button className="text-xs" style={{ color: "var(--primary-text)" }} onClick={() => startEventEdit(event)}>編輯</button>}
                         </div>
                         {event.content && <p className="whitespace-pre-wrap mt-1" style={{ color: "var(--text-muted)" }}>{event.content}</p>}
                         <p className="text-xs mt-1" style={{ color: "var(--text-disabled)" }}>{fmt(event.created_at)} · {event.visibility === "internal" ? "內部" : "公開"}</p>

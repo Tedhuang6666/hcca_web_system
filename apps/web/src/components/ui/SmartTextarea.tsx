@@ -96,7 +96,7 @@ export default function SmartTextarea({ value, onChange, className = "", style, 
           {checks.map((check) => (
             <p
               key={check.message}
-              className="text-[11px]"
+              className="text-xs"
               style={{
                 color: check.severity === "warning" ? "var(--warning)" : "var(--text-muted)",
               }}>

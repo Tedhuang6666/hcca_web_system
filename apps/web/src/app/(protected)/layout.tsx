@@ -4,7 +4,6 @@ import AppShell from "@/components/layout/AppShell";
 import AppEnhancements from "@/components/layout/AppEnhancements";
 import NavigationProgress from "@/components/layout/NavigationProgress";
 import AccessBlockGuard from "@/components/security/AccessBlockGuard";
-import ScrollProgressBar from "@/components/ui/ScrollProgressBar";
 import PerformanceProvider from "@/components/providers/PerformanceProvider";
 import { getServerImportantAnnouncement, getServerSession } from "@/lib/server/session";
 import "../design-system.css";
@@ -30,7 +29,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <>
       <AccessBlockGuard />
       <NavigationProgress />
-      <ScrollProgressBar />
       <PerformanceProvider>
         <AppShell
           initialUser={initialUser}

@@ -200,7 +200,7 @@ export default function NewPositionPage() {
               <ArrowLeft />返回權限管理
             </Link>
             <div className="mt-4 flex items-start gap-3">
-              <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl" style={{ color: "var(--primary)", background: "var(--primary-dim)" }}>
+              <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl" style={{ color: "var(--primary-text)", background: "var(--primary-dim)" }}>
                 <ShieldPlus />
               </span>
               <div>
@@ -211,7 +211,7 @@ export default function NewPositionPage() {
           </div>
           {selectedOrg && (
             <div className="rounded-xl px-4 py-3 sm:min-w-56" style={{ border: "1px solid var(--border)", background: "var(--bg-surface)" }}>
-              <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>目前組織預設</p>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>目前組織預設</p>
               <p className="mt-1 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{selectedOrg.name}</p>
               <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{defaultCodes.length} 個預設權限</p>
             </div>
@@ -257,11 +257,11 @@ export default function NewPositionPage() {
                             style={{
                               border: `1px solid ${active ? "var(--border-strong)" : "var(--border)"}`,
                               background: active ? "var(--primary-dim)" : "var(--bg-base)",
-                              color: active ? "var(--primary)" : "var(--text-secondary)",
+                              color: active ? "var(--primary-text)" : "var(--text-secondary)",
                             }}
                           >
                             <span className="block text-xs font-semibold">{option.label}</span>
-                            <span className="mt-1 block text-[11px] leading-4" style={{ color: active ? "var(--primary)" : "var(--text-muted)" }}>{option.description}</span>
+                            <span className="mt-1 block text-xs leading-4" style={{ color: active ? "var(--primary-text)" : "var(--text-muted)" }}>{option.description}</span>
                           </button>
                         );
                       })}
@@ -271,7 +271,7 @@ export default function NewPositionPage() {
                     <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
                       權重
                       <TextInput type="number" min={0} value={weight} onChange={(event) => setWeight(Number(event.target.value) || 0)} className="mt-1.5" />
-                      <span className="mt-1 block text-[11px] font-normal" style={{ color: "var(--text-muted)" }}>數字越大，同組織內順位越高。</span>
+                      <span className="mt-1 block text-xs font-normal" style={{ color: "var(--text-muted)" }}>數字越大，同組織內順位越高。</span>
                     </label>
                     <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
                       上級職位
@@ -311,7 +311,7 @@ export default function NewPositionPage() {
                 <div>
                   <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>職位權限</h2>
                 </div>
-                <span className="rounded-full px-2.5 py-1 text-xs font-semibold" style={{ color: "var(--primary)", background: "var(--primary-dim)" }}>{codes.length} 個</span>
+                <span className="rounded-full px-2.5 py-1 text-xs font-semibold" style={{ color: "var(--primary-text)", background: "var(--primary-dim)" }}>{codes.length} 個</span>
               </div>
               <PermCheckboxes selected={codes} onChange={setCodes} permCodes={permCodes} />
             </section>
@@ -333,7 +333,7 @@ function SummaryCell({ label, value, tone = "normal" }: { label: string; value: 
   const color = tone === "positive" ? "#15803d" : tone === "warning" ? "#b45309" : "var(--text-primary)";
   return (
     <div className="rounded-lg px-3 py-2" style={{ background: "var(--bg-base)", border: "1px solid var(--border)" }}>
-      <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>{label}</p>
+      <p className="text-xs" style={{ color: "var(--text-muted)" }}>{label}</p>
       <p className="mt-0.5 text-lg font-semibold" style={{ color }}>{value}</p>
     </div>
   );
@@ -344,7 +344,7 @@ function OverrideRow({ label, codes, labelFor, tone }: { label: string; codes: s
     <div className="flex items-start gap-2">
       <span className="w-16 flex-shrink-0 pt-1 font-medium" style={{ color: tone === "positive" ? "#15803d" : "#b45309" }}>{label}</span>
       <div className="flex flex-wrap gap-1">
-        {codes.map((code) => <span key={code} className="rounded-full px-2 py-1 text-[11px]" title={code} style={{ color: tone === "positive" ? "#15803d" : "#b45309", background: tone === "positive" ? "rgba(21,128,61,0.1)" : "rgba(180,83,9,0.1)" }}>{labelFor(code)}</span>)}
+        {codes.map((code) => <span key={code} className="rounded-full px-2 py-1 text-xs" title={code} style={{ color: tone === "positive" ? "#15803d" : "#b45309", background: tone === "positive" ? "rgba(21,128,61,0.1)" : "rgba(180,83,9,0.1)" }}>{labelFor(code)}</span>)}
       </div>
     </div>
   );
