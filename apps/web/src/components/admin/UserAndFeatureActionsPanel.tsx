@@ -65,9 +65,8 @@ function expirationLabel(seconds: number | null): string {
 }
 
 function StatusLabel({ active }: { active: boolean }) {
-  const color = active ? "var(--success)" : "var(--text-muted)";
   return (
-    <span className="inline-flex min-h-7 items-center rounded-full border px-2.5 text-xs font-semibold" style={{ borderColor: color, color }}>
+    <span className={`inline-flex min-h-7 items-center rounded-full border px-2.5 text-xs font-semibold ${active ? "border-success! text-success!" : "border-fg-muted! text-fg-muted!"}`}>
       {active ? "啟用" : "停用"}
     </span>
   );
@@ -75,7 +74,7 @@ function StatusLabel({ active }: { active: boolean }) {
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label className="block min-w-0 text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+    <label className="block min-w-0 text-xs font-medium text-fg-secondary!">
       <span className="mb-1 block">{label}</span>
       {children}
     </label>
@@ -288,7 +287,7 @@ export default function UserAndFeatureActionsPanel() {
 
   if (!isAdmin) {
     return (
-      <section className="p-6 text-sm" role="alert" style={{ color: "var(--danger)" }}>
+      <section className="p-6 text-sm text-danger!" role="alert">
         需要超級管理員權限才能管理使用者封鎖與全站功能旗標。
       </section>
     );
@@ -296,12 +295,12 @@ export default function UserAndFeatureActionsPanel() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
-      <header className="border-b pb-4" style={{ borderColor: "var(--border)" }}>
-        <h1 className="text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>使用者與功能處置</h1>
+      <header className="border-b! border-b-border! pb-4">
+        <h1 className="text-2xl font-semibold text-fg-primary!">使用者與功能處置</h1>
       </header>
 
       {loadError && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3 text-sm" role="alert" style={{ borderColor: "var(--danger-border)", color: "var(--danger)" }}>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border! border-danger-border! p-3 text-sm text-danger!" role="alert">
           <span>{loadError}</span>
           <button type="button" onClick={() => void refresh()} className="btn btn-ghost" disabled={loading}>
             <RefreshCcw size={15} aria-hidden /> 重新載入
@@ -311,12 +310,12 @@ export default function UserAndFeatureActionsPanel() {
 
       <section className="space-y-4" aria-labelledby="user-actions-title">
         <div>
-          <h2 id="user-actions-title" className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>使用者處置</h2>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>可先預覽目標帳號，再執行封鎖或撤銷所有登入工作階段。</p>
+          <h2 id="user-actions-title" className="text-lg font-semibold text-fg-primary!">使用者處置</h2>
+          <p className="mt-1 text-sm text-fg-muted!">可先預覽目標帳號，再執行封鎖或撤銷所有登入工作階段。</p>
         </div>
-        <div className="grid gap-4 xl:grid-cols-2">
-          <section className="space-y-3 rounded-md border p-4" style={{ borderColor: "var(--border)" }}>
-            <h3 className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <section className="space-y-3 rounded-md border! border-border! p-4">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-fg-primary!">
               <Ban size={16} aria-hidden /> 封鎖使用者
             </h3>
             <div className="flex flex-col gap-2 sm:flex-row">
@@ -335,19 +334,19 @@ export default function UserAndFeatureActionsPanel() {
               </button>
             </div>
             {blockUserPreview && (
-              <dl className="grid gap-x-4 gap-y-1 rounded-md border p-3 text-xs sm:grid-cols-[auto_1fr]" style={{ borderColor: "var(--border)" }}>
-                <dt style={{ color: "var(--text-muted)" }}>帳號</dt>
-                <dd className="break-all" style={{ color: "var(--text-primary)" }}>{blockUserPreview.display_name} · {blockUserPreview.email}</dd>
-                <dt style={{ color: "var(--text-muted)" }}>已使用 Email</dt>
-                <dd className="break-all" style={{ color: "var(--text-secondary)" }}>{blockUserPreview.emails.join("、") || "無"}</dd>
-                <dt style={{ color: "var(--text-muted)" }}>近 30 天登入 IP</dt>
-                <dd className="break-all" style={{ color: "var(--text-secondary)" }}>{blockUserPreview.ips.join("、") || "無紀錄"}</dd>
+              <dl className="grid gap-x-4 gap-y-1 rounded-md border! border-border! p-3 text-xs sm:grid-cols-[auto_1fr]">
+                <dt className="text-fg-muted!">帳號</dt>
+                <dd className="break-all text-fg-primary!">{blockUserPreview.display_name} · {blockUserPreview.email}</dd>
+                <dt className="text-fg-muted!">已使用 Email</dt>
+                <dd className="break-all text-fg-secondary!">{blockUserPreview.emails.join("、") || "無"}</dd>
+                <dt className="text-fg-muted!">近 30 天登入 IP</dt>
+                <dd className="break-all text-fg-secondary!">{blockUserPreview.ips.join("、") || "無紀錄"}</dd>
               </dl>
             )}
             <Field label="封鎖原因（會顯示給使用者）">
               <input value={blockUserReason} onChange={(event) => setBlockUserReason(event.target.value)} placeholder="例如：濫用服務" className="input w-full" />
             </Field>
-            <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs" style={{ color: "var(--text-secondary)" }}>
+            <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs text-fg-secondary!">
               <label className="flex min-h-11 items-center gap-2">
                 <input type="checkbox" checked={blockUserEmails} onChange={(event) => setBlockUserEmails(event.target.checked)} />
                 一併封鎖使用過的 Email
@@ -362,11 +361,11 @@ export default function UserAndFeatureActionsPanel() {
             </button>
           </section>
 
-          <section className="space-y-3 rounded-md border p-4" style={{ borderColor: "var(--border)" }}>
-            <h3 className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+          <section className="space-y-3 rounded-md border! border-border! p-4">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-fg-primary!">
               <UserX size={16} aria-hidden /> 強制登出
             </h3>
-            <p className="text-xs" style={{ color: "var(--text-muted)" }}>撤銷指定使用者的所有登入工作階段，使用者需重新登入。</p>
+            <p className="text-xs text-fg-muted!">撤銷指定使用者的所有登入工作階段，使用者需重新登入。</p>
             <Field label="使用者 UUID">
               <input value={revokeUserId} onChange={(event) => setRevokeUserId(event.target.value)} className="input w-full font-mono" />
             </Field>
@@ -379,19 +378,19 @@ export default function UserAndFeatureActionsPanel() {
 
       <section className="space-y-4" aria-labelledby="feature-flags-title">
         <div>
-          <h2 id="feature-flags-title" className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>功能旗標</h2>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>調整全站功能的啟用狀態。</p>
+          <h2 id="feature-flags-title" className="text-lg font-semibold text-fg-primary!">功能旗標</h2>
+          <p className="mt-1 text-sm text-fg-muted!">調整全站功能的啟用狀態。</p>
         </div>
-        <div className="divide-y rounded-md border" style={{ borderColor: "var(--border)" }}>
+        <div className="divide-y rounded-md border! border-border!">
           {flags.length === 0 ? (
-            <p className="p-4 text-sm" role={loading ? "status" : undefined} style={{ color: "var(--text-muted)" }}>
+            <p className="p-4 text-sm text-fg-muted!" role={loading ? "status" : undefined}>
               {loading ? "載入功能旗標…" : "目前沒有功能旗標。"}
             </p>
           ) : flags.map((flag) => (
             <div key={flag.key} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
               <div className="min-w-0">
-                <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{flag.description}</p>
-                <p className="break-all font-mono text-xs" style={{ color: "var(--text-muted)" }}>{flag.key}</p>
+                <p className="text-sm font-medium text-fg-primary!">{flag.description}</p>
+                <p className="break-all font-mono text-xs text-fg-muted!">{flag.key}</p>
               </div>
               <button type="button" onClick={() => void toggleFlag(flag)} disabled={working} aria-pressed={flag.enabled} className={`btn ${flag.enabled ? "btn-secondary" : "btn-ghost"}`}>
                 <ShieldCheck size={15} aria-hidden /> {flag.enabled ? "停用" : "啟用"}
@@ -404,17 +403,17 @@ export default function UserAndFeatureActionsPanel() {
       <section className="space-y-4" aria-labelledby="defense-rules-title">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 id="defense-rules-title" className="flex items-center gap-2 text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
+            <h2 id="defense-rules-title" className="flex items-center gap-2 text-lg font-semibold text-fg-primary!">
               <LockKeyhole size={18} aria-hidden /> 長期防禦規則
             </h2>
-            <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>規則儲存後持續生效，可修改目標、原因、到期與限流參數。</p>
+            <p className="mt-1 text-sm text-fg-muted!">規則儲存後持續生效，可修改目標、原因、到期與限流參數。</p>
           </div>
           <button type="button" onClick={() => void refresh()} disabled={loading} className="btn btn-ghost">
             <RefreshCcw size={15} aria-hidden /> 重新整理
           </button>
         </div>
 
-        <div className="space-y-3 rounded-md border p-4" style={{ borderColor: "var(--border)" }}>
+        <div className="space-y-3 rounded-md border! border-border! p-4">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(10rem,0.8fr)_minmax(12rem,1.2fr)_minmax(12rem,1fr)_8rem_auto]">
             <Field label="規則類型">
               <select value={ruleType} onChange={(event) => setRuleType(event.target.value as DefenseRuleType)} className="input w-full">
@@ -446,15 +445,15 @@ export default function UserAndFeatureActionsPanel() {
           )}
         </div>
 
-        <div className="overflow-x-auto rounded-md border" style={{ borderColor: "var(--border)" }}>
+        <div className="overflow-x-auto rounded-md border! border-border!">
           {rules.length === 0 ? (
-            <p className="p-5 text-center text-sm" role={loading ? "status" : undefined} style={{ color: "var(--text-muted)" }}>
+            <p className="p-5 text-center text-sm text-fg-muted!" role={loading ? "status" : undefined}>
               {loading ? "載入防禦規則…" : "目前沒有防禦規則。"}
             </p>
           ) : (
             <table className="w-full min-w-[820px] text-sm">
-              <thead style={{ color: "var(--text-muted)" }}>
-                <tr className="border-b text-left text-xs" style={{ borderColor: "var(--border)" }}>
+              <thead className="text-fg-muted!">
+                <tr className="border-b! border-b-border! text-left text-xs">
                   <th scope="col" className="px-3 py-2 font-medium">狀態</th>
                   <th scope="col" className="px-3 py-2 font-medium">類型</th>
                   <th scope="col" className="px-3 py-2 font-medium">目標</th>
@@ -540,12 +539,12 @@ function FragmentRow({
 }) {
   return (
     <>
-      <tr className="border-b align-top last:border-0" style={{ borderColor: "var(--border)" }}>
+      <tr className="border-b! border-b-border! align-top last:border-0">
         <td className="px-3 py-2"><StatusLabel active={rule.is_active} /></td>
-        <td className="px-3 py-2" style={{ color: "var(--text-primary)" }}>{RULE_TYPE_LABEL[rule.rule_type]}</td>
-        <td className="max-w-64 break-all px-3 py-2 font-mono text-xs" style={{ color: "var(--text-primary)" }}>{rule.target}</td>
-        <td className="max-w-64 px-3 py-2" style={{ color: "var(--text-secondary)" }} title={rule.reason}>{rule.reason || "—"}</td>
-        <td className="whitespace-nowrap px-3 py-2 text-xs" style={{ color: "var(--text-muted)" }}>{expirationLabel(rule.expires_at)}</td>
+        <td className="px-3 py-2 text-fg-primary!">{RULE_TYPE_LABEL[rule.rule_type]}</td>
+        <td className="max-w-64 break-all px-3 py-2 font-mono text-xs text-fg-primary!">{rule.target}</td>
+        <td className="max-w-64 px-3 py-2 text-fg-secondary!" title={rule.reason}>{rule.reason || "—"}</td>
+        <td className="whitespace-nowrap px-3 py-2 text-xs text-fg-muted!">{expirationLabel(rule.expires_at)}</td>
         <td className="px-3 py-2 text-right">
           <div className="flex justify-end gap-1.5">
             <button type="button" onClick={onStartEdit} disabled={working} className="btn-sm btn-ghost">
@@ -558,7 +557,7 @@ function FragmentRow({
         </td>
       </tr>
       {editing && (
-        <tr className="border-b" style={{ borderColor: "var(--border)", background: "var(--bg-hover)" }}>
+        <tr className="border-b! border-b-border! bg-hover!">
           <td colSpan={6} className="p-3">
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <Field label="規則類型">
