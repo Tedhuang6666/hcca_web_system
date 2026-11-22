@@ -1,11 +1,19 @@
-"""商品訂購系統服務層
+"""商品訂購系統服務層。
 
-結構：
-  _catalog.py - 分類 / 系列 / 商品 CRUD / 變體 / 瀏覽樹
-  _orders.py  - 購物車 / 訂單 CRUD / 序列化 / 統計
-  _export.py  - 報表匯出
+主要邊界：catalog、cart compatibility、order writes、registration queries、
+class settlement、order queries / serialization。
 """
 
+from api.services.shop._cart import (
+    _cart_item_availability,
+    add_cart_item,
+    clear_cart,
+    get_or_create_cart,
+    remaining_product_quantity,
+    remove_cart_item,
+    serialize_cart,
+    update_cart_item,
+)
 from api.services.shop._catalog import (
     activate_product,
     add_variant_group,
@@ -36,56 +44,50 @@ from api.services.shop._catalog import (
     update_variant_option,
 )
 from api.services.shop._catalog_links import filter_catalog_to_direct_product
+from api.services.shop._class_close_status import (
+    _serialize_close,
+    get_close_status,
+    get_close_status_collection_details,
+)
+from api.services.shop._class_settlement import (
+    close_category_for_class,
+    reopen_category_for_class,
+    set_class_collected,
+    set_class_member_product,
+    set_class_paid,
+)
 from api.services.shop._confirmation import export_class_order_confirmations_pdf
-from api.services.shop._export import (
-    export_orders_csv,
-    export_orders_excel,
+from api.services.shop._export import export_orders_csv, export_orders_excel
+from api.services.shop._order_queries import (
+    class_order_summary,
+    class_payment_report,
+    order_quantities,
+    order_summary,
+)
+from api.services.shop._order_serialization import (
+    serialize_order,
+    serialize_order_item,
+    serialize_order_list_item,
+)
+from api.services.shop._order_writes import (
+    _create_order_from_items,
+    _order_items_to_cart_items,
+    cancel_order,
+    checkout,
+    clear_all_orders,
+    create_direct_order,
+    replace_order_items,
+    set_order_paid,
 )
 from api.services.shop._orders import (
     PurchaseLimitError,
     _assert_activity_open,
-    _cart_item_availability,
-    _create_order_from_items,
     _options_delta,
     _options_signature,
     _order_activity_id,
-    _order_items_to_cart_items,
     _resolve_selected_options,
-    _serialize_close,
-    add_cart_item,
-    apply_registration_promotion,
-    cancel_order,
-    checkout,
-    class_order_summary,
-    class_payment_report,
-    clear_all_orders,
-    clear_cart,
-    close_category_for_class,
-    create_direct_order,
-    get_class_member_registrations,
-    get_close_status,
-    get_close_status_collection_details,
-    get_current_registration,
-    get_current_registrations,
-    get_or_create_cart,
     get_order,
     list_orders,
-    order_quantities,
-    order_summary,
-    remaining_product_quantity,
-    remove_cart_item,
-    reopen_category_for_class,
-    replace_order_items,
-    serialize_cart,
-    serialize_order,
-    serialize_order_item,
-    serialize_order_list_item,
-    set_class_collected,
-    set_class_member_product,
-    set_class_paid,
-    set_current_registration_product,
-    set_order_paid,
-    update_cart_item,
 )
 from api.services.shop._promotions import (
     create_promotion,
@@ -105,7 +107,14 @@ from api.services.shop._receipts import (
     export_class_receipt_pdf,
     export_class_receipts_pdf,
 )
+from api.services.shop._registration import set_current_registration_product
 from api.services.shop._registration_preview import preview_registration_promotion
+from api.services.shop._registration_queries import (
+    apply_registration_promotion,
+    get_class_member_registrations,
+    get_current_registration,
+    get_current_registrations,
+)
 
 __all__ = [
     "export_class_order_confirmations_pdf",

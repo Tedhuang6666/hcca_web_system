@@ -3,19 +3,25 @@
 import NumberInput from "@/components/ui/NumberInput";
 import Modal from "@/components/ui/Modal";
 import CollectionActivityPicker from "@/components/shop/CollectionActivityPicker";
-import SeparateOrderButton from "@/components/shop/SeparateOrderButton";
 import SupplementOrders from "@/components/shop/SupplementOrders";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { CheckSquare, Edit2, Plus, RefreshCw, Search, Square, Trash2, X } from "lucide-react";
+import { Edit2, Plus, RefreshCw, X } from "lucide-react";
 import { toast } from "sonner";
 
-import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 import { classApi, shopApi, apiErrorMessage } from "@/lib/api";
 import { orderScopeKey, catalogScopeKey, orderScopeParams, isOrderingClosed } from "@/lib/shop-order-scope";
-import { mergeDraftItems, summarizeOrderItems } from "@/lib/shop-order-items";
+import { mergeDraftItems } from "@/lib/shop-order-items";
 import { flattenCatalog, money } from "@/lib/shop-class-orders";
+import { AssistedOrderDraftList } from "@/components/shop/AssistedOrderDraftList";
+import { ClassOrderCollectionPanel } from "@/components/shop/ClassOrderCollectionPanel";
+import { ClassOrdersListPanel } from "@/components/shop/ClassOrdersListPanel";
+import type { AssistedItemDraft, AssistedOrderDraft } from "@/components/shop/classOrderTypes";
+import {
+  buildActivityLabels, buildActivityRows, buildProductFilterOptions, buildProductRows,
+  buildSeatRows, isCollectableOrder, resolveActiveLedgerKey,
+} from "@/components/shop/classOrderSelectors";
 import type {
   CatalogCategoryOut,
   ClassMemberOut,
@@ -30,33 +36,6 @@ type PaidFilter = "all" | "paid" | "unpaid";
 type AssistedFilter = "all" | "assisted";
 
 type ClassOrderQuery = NonNullable<Parameters<typeof shopApi.listClassOrders>[0]>;
-type AssistedItemDraft = {
-  scope_key: string;
-  id: string;
-  product_id: string;
-  product_name: string;
-  activity_id: string | null;
-  quantity: number;
-  option_ids: string[];
-  option_label: string;
-  unit_price: number;
-};
-
-type AssistedOrderDraft = {
-  id: string;
-  student_id: string;
-  student_name: string;
-  items: AssistedItemDraft[];
-  notes: string;
-};
-
-type ActivityOptionRow = {
-  key: string;
-  label: string;
-  closed: boolean;
-  hasUncollectedOrders?: boolean;
-};
-
 const CLASS_ORDER_PAGE_SIZE = 500;
 const ORDER_LIST_PAGE_SIZE = 50;
 
@@ -67,9 +46,6 @@ const emptySummary: ShopClassSummaryOut = {
 };
 
 
-function isCollectableOrder(order: Pick<OrderListItem, "status">) {
-  return order.status !== "cancelled" && order.status !== "refunded";
-}
 
 function scrollToSection(id: string) {
   const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
@@ -169,51 +145,21 @@ export default function ClassOrdersPage() {
   const [cancelReason, setCancelReason] = useState("");
 
   const catalogProducts = useMemo(() => flattenCatalog(catalog), [catalog]);
-  const activityLabels = useMemo(() => {
-    const namesById = new Map<string, Set<string>>();
-    for (const category of catalog) {
-      const key = catalogScopeKey(category);
-      const names = namesById.get(key) ?? new Set<string>();
-      names.add(category.activity_name ?? category.name);
-      namesById.set(key, names);
-    }
-    return new Map(
-      Array.from(namesById, ([id, names]) => [id, Array.from(names).join("／")]),
-    );
-  }, [catalog]);
+  const activityLabels = useMemo(() => buildActivityLabels(catalog), [catalog]);
 
   const activityLabel = useCallback((activityId: string | null | undefined) => {
     if (!activityId || activityId === "none") return "一般商品";
     return activityLabels.get(activityId) ?? `已結束活動 · ${activityId.slice(0, 6)}`;
   }, [activityLabels]);
 
-  const activityRows = useMemo(() => {
-    const rows = new Map<string, ActivityOptionRow>();
-    for (const category of catalog) {
-      const key = catalogScopeKey(category);
-      const row = rows.get(key);
-      const closed = isOrderingClosed(category);
-      rows.set(key, { key, label: category.activity_name ?? category.name, closed: row ? row.closed && closed : closed });
-    }
-    for (const order of activityOrders) {
-      if (!isCollectableOrder(order)) continue;
-      const key = orderScopeKey(order);
-      const row = rows.get(key) ?? { key, label: order.category_name ?? activityLabel(key), closed: true };
-      rows.set(key, {
-        ...row,
-        label: order.activity_name ?? order.category_name ?? row.label,
-        hasUncollectedOrders: row.hasUncollectedOrders
-          || (!order.is_class_collected && order.total_price > 0),
-      });
-    }
-    return Array.from(rows.values()).sort((a, b) => a.label.localeCompare(b.label, "zh-Hant"));
-  }, [activityOrders, activityLabel, catalog]);
-  const activeLedgerKey = useMemo(() => {
-    if (catalogLoading) return "";
-    if (selectedActivityKey !== null) return activityRows.some((row) => row.key === selectedActivityKey) ? selectedActivityKey : "";
-    const open = activityRows.filter((row) => !row.closed);
-    return open.length === 1 ? open[0].key : "";
-  }, [activityRows, catalogLoading, selectedActivityKey]);
+  const activityRows = useMemo(
+    () => buildActivityRows(catalog, activityOrders, activityLabel),
+    [activityOrders, activityLabel, catalog],
+  );
+  const activeLedgerKey = useMemo(
+    () => resolveActiveLedgerKey(activityRows, catalogLoading, selectedActivityKey),
+    [activityRows, catalogLoading, selectedActivityKey],
+  );
   const ledgerActivities = activityRows.filter((row) => row.key === activeLedgerKey);
   const ledgerActivityLabel = ledgerActivities[0]?.label ?? "請先選擇活動";
   const composerActivityKey = activeLedgerKey;
@@ -251,70 +197,18 @@ export default function ClassOrdersPage() {
     );
   }, [formProducts, orderProductSearch]);
   const selectedOrderProduct = formProducts.find((product) => product.id === orderProductId);
-  const productRows = useMemo(() => {
-    const rows = new Map(productSummary.product_rows.map((row) => [row.product_id, row]));
-    for (const product of activeProducts) {
-      if (orderScopeKey({ activity_id: product.activity_id, category_id: product.categoryId }) !== activeLedgerKey) continue;
-      if (activityFilter !== "all" && `category:${product.categoryId}` !== activityFilter) continue;
-      if (rows.has(product.id)) continue;
-      rows.set(product.id, {
-        product_id: product.id,
-        product_name: product.name,
-        quantity: 0,
-        total_amount: 0,
-        collected_order_count: 0,
-        uncollected_order_count: 0,
-        collected_quantity: 0,
-        uncollected_quantity: 0,
-        collected_amount: 0,
-        uncollected_amount: 0,
-      });
-    }
-    return [...rows.values()].sort((a, b) => a.product_name.localeCompare(b.product_name, "zh-Hant"));
-  }, [activeProducts, activeLedgerKey, activityFilter, productSummary.product_rows]);
-  const productFilterOptions = useMemo(() => {
-    const byId = new Map<string, string>();
-    for (const p of catalogProducts) {
-      if (orderScopeKey({ activity_id: p.activity_id, category_id: p.categoryId }) !== activeLedgerKey) continue;
-      if (activityFilter === "all" || `category:${p.categoryId}` === activityFilter) byId.set(p.id, p.name);
-    }
-    for (const row of productRows) byId.set(row.product_id, row.product_name);
-    return Array.from(byId.entries()).sort((a, b) => a[1].localeCompare(b[1], "zh-Hant"));
-  }, [activeLedgerKey, activityFilter, catalogProducts, productRows]);
-
-  const seatRows = useMemo(() => {
-    const ordersByMember = new Map<string, OrderListItem[]>();
-    for (const order of activityOrders) {
-      if (!order.user_id) continue;
-      if (orderScopeKey(order) !== activeLedgerKey || !isCollectableOrder(order)) continue;
-      const memberOrders = ordersByMember.get(order.user_id) ?? [];
-      memberOrders.push(order);
-      ordersByMember.set(order.user_id, memberOrders);
-    }
-    const rows = members.map((member) => {
-      const memberOrders = ordersByMember.get(member.id) ?? [];
-      ordersByMember.delete(member.id);
-      return {
-        id: member.id, name: member.display_name, seat: member.seat_number,
-        orders: memberOrders,
-        amount: memberOrders.reduce((sum, order) => sum + order.total_price, 0),
-        collected: memberOrders.reduce((sum, order) => sum + (order.is_class_collected ? order.total_price : 0), 0),
-        councilPaid: memberOrders.reduce((sum, order) => sum + (order.is_paid ? order.total_price : 0), 0),
-      };
-    });
-    for (const [id, memberOrders] of ordersByMember) {
-      rows.push({
-        id, name: memberOrders[0].user_name ?? "未列入名冊的訂購人", seat: null,
-        orders: memberOrders,
-        amount: memberOrders.reduce((sum, order) => sum + order.total_price, 0),
-        collected: memberOrders.reduce((sum, order) => sum + (order.is_class_collected ? order.total_price : 0), 0),
-        councilPaid: memberOrders.reduce((sum, order) => sum + (order.is_paid ? order.total_price : 0), 0),
-      });
-    }
-    return rows.sort((a, b) => (a.seat ?? Number.POSITIVE_INFINITY) - (b.seat ?? Number.POSITIVE_INFINITY)
-      || a.name.localeCompare(b.name, "zh-Hant"));
-  }, [activityOrders, activeLedgerKey, members]);
-
+  const productRows = useMemo(
+    () => buildProductRows(activeProducts, activeLedgerKey, activityFilter, productSummary.product_rows),
+    [activeProducts, activeLedgerKey, activityFilter, productSummary.product_rows],
+  );
+  const productFilterOptions = useMemo(
+    () => buildProductFilterOptions(catalogProducts, activeLedgerKey, activityFilter, productRows),
+    [activeLedgerKey, activityFilter, catalogProducts, productRows],
+  );
+  const seatRows = useMemo(
+    () => buildSeatRows(activityOrders, activeLedgerKey, members),
+    [activityOrders, activeLedgerKey, members],
+  );
   const filteredSeatRows = seatRows.filter((row) =>
     `${row.seat ?? ""} ${row.name}`.includes(seatSearch.trim())
     && (seatFilter === "all" || (seatFilter === "unpaid"
@@ -1601,108 +1495,14 @@ export default function ClassOrdersPage() {
                     : "送出" + (selectedStudent ? selectedStudent.display_name + "的" : "") + "訂單 · 小計 " + money(assistedTotal)}
             </button>
           </div>}
-          {!editOrder && assistedOrderDraftRows.length > 0 && (
-            <section aria-labelledby="assisted-drafts-heading" className="mt-4 overflow-hidden rounded-md"
-              style={{ border: "1px solid var(--border)" }}>
-              <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-3"
-                style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
-                <div>
-                  <h3 id="assisted-drafts-heading" className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                    待送出登記 · {assistedOrderDraftRows.length} 位同學
-                  </h3>
-                  <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
-                    {assistedOrderDraftRows.reduce((count, row) => count + row.items.length, 0)} 項商品 · 各活動小計分開計算
-                  </p>
-                </div>
-                <strong className="text-sm tabular-nums" style={{ color: "var(--primary-text)" }}>
-                  合計 {money(assistedOrderDraftRows.reduce((total, row) => total + row.subtotal, 0))}
-                </strong>
-              </div>
-              <div className="divide-y md:hidden" style={{ borderColor: "var(--border)" }}>
-                {assistedOrderDraftRows.map((row) => (
-                  <article key={row.id} className="space-y-2 px-3 py-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <strong className="min-w-0 truncate text-sm" style={{ color: "var(--text-primary)" }}>{row.student_name}</strong>
-                      <strong className="shrink-0 text-sm tabular-nums" style={{ color: "var(--text-primary)" }}>{money(row.subtotal)}</strong>
-                    </div>
-                    <div className="space-y-1 text-xs" style={{ color: "var(--text-secondary)" }}>
-                      {row.items.map((item) => (
-                        <p key={item.id} className="break-words">
-                          {item.product_name}{item.option_label ? ` · ${item.option_label}` : ""} × {item.quantity}
-                        </p>
-                      ))}
-                    </div>
-                    <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs tabular-nums" style={{ color: "var(--text-muted)" }}>
-                      {row.activity_totals.map((activity) => (
-                        <span key={activity.key}>{activity.label} {money(activity.amount)}</span>
-                      ))}
-                    </div>
-                    <div className="flex gap-2">
-                      <button type="button" onClick={() => loadAssistedDraft(row)} disabled={creating || hasCurrentComposerInput}
-                        className="btn btn-ghost min-h-11 flex-1 text-xs disabled:opacity-50">載入編輯</button>
-                      <button type="button" onClick={() => setAssistedOrderDrafts((drafts) => drafts.filter((draft) => draft.id !== row.id))}
-                        disabled={creating} className="btn btn-ghost min-h-11 min-w-11 text-xs disabled:opacity-50"
-                        aria-label={`移除${row.student_name}的待送出登記`}>
-                        <X size={14} />
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-              <div className="hidden overflow-x-auto md:block">
-                <table className="w-full min-w-[860px] text-sm" aria-label="待送出的班級代訂清單">
-                  <thead>
-                    <tr style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
-                      {["同學", "商品品項", "活動小計", "商品小計", "操作"].map((heading) => (
-                        <th key={heading} scope="col" className="px-3 py-2 text-left text-xs font-semibold"
-                          style={{ color: "var(--text-muted)" }}>{heading}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {assistedOrderDraftRows.map((row) => (
-                      <tr key={row.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                        <th scope="row" className="px-3 py-3 text-left text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-                          {row.student_name}
-                        </th>
-                        <td className="max-w-sm px-3 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>
-                          <ul className="space-y-1">
-                            {row.items.map((item) => (
-                              <li key={item.id} className="break-words">
-                                {item.product_name}{item.option_label ? ` · ${item.option_label}` : ""} × {item.quantity}
-                              </li>
-                            ))}
-                          </ul>
-                        </td>
-                        <td className="px-3 py-3 text-xs tabular-nums" style={{ color: "var(--text-secondary)" }}>
-                          <div className="space-y-1">
-                            {row.activity_totals.map((activity) => (
-                              <p key={activity.key}>{activity.label} · {money(activity.amount)}</p>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="px-3 py-3 font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>{money(row.subtotal)}</td>
-                        <td className="px-3 py-2">
-                          <div className="flex gap-1">
-                            <button type="button" onClick={() => loadAssistedDraft(row)}
-                              disabled={creating || hasCurrentComposerInput}
-                              className="min-h-11 rounded-md px-2 text-xs disabled:opacity-50"
-                              style={{ border: "1px solid var(--border)", color: "var(--primary-text)" }}>載入編輯</button>
-                            <button type="button" onClick={() => setAssistedOrderDrafts((drafts) => drafts.filter((draft) => draft.id !== row.id))}
-                              disabled={creating} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md disabled:opacity-50"
-                              style={{ border: "1px solid var(--border)", color: "var(--danger)" }}
-                              aria-label={`移除${row.student_name}的待送出登記`}>
-                              <X size={14} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          )}
+          <AssistedOrderDraftList
+            rows={assistedOrderDraftRows}
+            creating={creating}
+            hasCurrentComposerInput={hasCurrentComposerInput}
+            onLoadDraft={loadAssistedDraft}
+            onRemoveDraft={(id) => setAssistedOrderDrafts((drafts) => drafts.filter((draft) => draft.id !== id))}
+          />
+
           {membersLoading && (
             <p className="mt-3 text-sm" role="status" style={{ color: "var(--text-muted)" }}>正在載入本班名冊...</p>
           )}
@@ -1735,173 +1535,26 @@ export default function ClassOrdersPage() {
         </div>
       </Modal>}
       <div hidden={workspace !== "collect"} className="space-y-5">
-        <section aria-labelledby="seat-collection-heading" className="space-y-3">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <h2 id="seat-collection-heading" className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>登記收款</h2>
-            </div>
-          </div>
-          {ledgerActivities.length > 0 && <p className="text-base font-semibold">本次收款：{ledgerActivityLabel}</p>}
-          {ledgerActivities.length > 0 && (loading ? (
-            <p className="rounded-lg px-4 py-3 text-sm" role="status"
-              style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
-              正在載入全班收款統計…
-            </p>
-          ) : loadFailed ? (
-            <p className="rounded-lg px-4 py-3 text-sm" role="alert"
-              style={{ border: "1px solid var(--danger-border)", background: "var(--danger-dim)", color: "var(--danger)" }}>
-              無法載入全班收款統計，請重新整理後再試。
-            </p>
-          ) : (
-            <div className="rounded-lg px-4 py-3" role="group" aria-label="全班收款統計"
-              style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
-              <p className="mb-2 text-xs" style={{ color: "var(--text-secondary)" }}>全班進度 · {ledgerActivityLabel}（不受下方篩選影響）</p>
-              <dl className="grid gap-y-2 text-sm sm:grid-cols-2 sm:gap-x-6">
-                <div className="flex items-baseline justify-between gap-3">
-                  <dt style={{ color: "var(--text-secondary)" }}>全班應收</dt>
-                  <dd className="font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>
-                    {money(seatCollectionTotals.amount)}
-                  </dd>
-                </div>
-                <div className="flex items-baseline justify-between gap-3">
-                  <dt style={{ color: "var(--text-secondary)" }}>班代目前已收</dt>
-                  <dd className="font-semibold tabular-nums" style={{ color: "var(--success)" }}>
-                    {money(seatCollectionTotals.collected)}
-                  </dd>
-                </div>
-              </dl>
-            </div>
-          ))}
-          {activityRows.length === 0 ? (
-            <p className="rounded-lg px-4 py-6 text-sm" role={loadFailed ? "alert" : "status"}
-              style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
-              {loading ? "正在載入活動與座號收款資料…" : loadFailed ? "無法載入活動與座號收款資料，請重新整理後再試。" : "目前沒有可收款的活動"}
-            </p>
-          ) : !ledgerActivities.length ? (
-            <p role="status" className="py-4 text-sm" style={{ color: "var(--text-secondary)" }}>請在頁面上方選擇本次要收款的活動。</p>
-          ) : (
-            <>
-              <div className="flex flex-wrap gap-2">
-                <input className="input min-h-11 min-w-0 flex-1" placeholder="搜尋座號或姓名" aria-label="搜尋收款同學"
-                  value={seatSearch} onChange={(event) => setSeatSearch(event.target.value)} />
-                <select className="input min-h-11" aria-label="名冊收款狀態" value={seatFilter}
-                  onChange={(event) => setSeatFilter(event.target.value as typeof seatFilter)}>
-                  <option value="all">全班同學</option><option value="unpaid">只看待收</option><option value="paid">已收齊</option>
-                </select>
-              </div>
-              {membersLoading ? (
-                <p className="rounded-lg px-4 py-6 text-sm" role="status"
-                  style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>正在載入班級座號與收款資料…</p>
-              ) : membersLoadFailed ? (
-                <p className="rounded-lg px-4 py-6 text-sm" role="alert"
-                  style={{ border: "1px solid var(--danger-border)", background: "var(--danger-dim)", color: "var(--danger)" }}>無法載入本班座號名冊，請重新整理後再試。</p>
-              ) : (
-                <div className="rounded-lg" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
-                  <div className="divide-y md:hidden" style={{ borderColor: "var(--border)" }}>
-                    {filteredSeatRows.map((row) => {
-                      const outstanding = row.amount - row.collected;
-                      const seatBusy = busy === `seat:${row.id}`;
-                      return (
-                        <article key={row.id} className="space-y-3 p-4">
-                          <div className="flex items-baseline justify-between gap-3">
-                            <h3 className="font-semibold" style={{ color: "var(--text-primary)" }}>
-                              {row.seat == null ? "未登錄座號" : `${row.seat} 號`} · {row.name}
-                            </h3>
-                          </div>
-                          <p className="text-sm" style={{ color: "var(--text-secondary)", overflowWrap: "anywhere" }}>
-                            {summarizeOrderItems(row.orders.flatMap((order) => order.items ?? [])) || (row.orders.length ? "品項資訊請查看明細" : "尚未登記")}
-                            {ledgerActivities.length > 1 && <span className="mt-1 block text-xs">{ledgerActivities.map((activity) => `${activity.label} ${money(row.orders.filter((order) => orderScopeKey(order) === activity.key && !order.is_class_collected).reduce((sum, order) => sum + order.total_price, 0))}`).join("／")}</span>}
-                          </p>
-                          <p className="flex items-baseline justify-between gap-3 text-sm">
-                            <span style={{ color: "var(--text-secondary)" }}>{outstanding > 0 ? row.collected > 0 ? "還要補收" : "還要收" : row.orders.length ? "已收齊" : "尚未訂購"}</span>
-                            <strong className="text-lg tabular-nums" style={{ color: "var(--text-primary)" }}>{money(outstanding)}</strong>
-                          </p>
-                          {outstanding > 0 && <button type="button" className="btn btn-secondary min-h-11 w-full px-3 text-sm"
-                            disabled={busy !== null || loadFailed || batchBusy}
-                            onClick={() => void setSeatCollected(row.id, true)}>{seatBusy ? "處理中" : `已收到 ${money(outstanding)}`}</button>}
-                          <details>
-                            <summary className="min-h-11 cursor-pointer py-3 text-sm" style={{ color: "var(--text-secondary)" }}>收款明細與其他操作</summary>
-                            <dl className="grid grid-cols-2 gap-2 text-sm">
-                              <div><dt>應收</dt><dd className="tabular-nums">{money(row.amount)}</dd></div>
-                              <div><dt>班代已收</dt><dd className="tabular-nums">{money(row.collected)}</dd></div>
-                              <div><dt>班聯已確認</dt><dd className="tabular-nums">{money(row.councilPaid)}</dd></div>
-                            </dl>
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              {row.collected > 0 && <button type="button" className="btn btn-ghost min-h-11 px-3 text-sm"
-                                disabled={busy !== null || loadFailed || batchBusy}
-                                onClick={() => void setSeatCollected(row.id, false)}>撤銷收款</button>}
-                              <button type="button" className="btn btn-ghost min-h-11 px-3 text-sm"
-                                disabled={!members.some((member) => member.id === row.id) || loadFailed}
-                                onClick={() => openCreateForSeat(row.id)}>代訂</button>
-                            </div>
-                          </details>
-                        </article>
-                      );
-                    })}
-                  </div>
-                  <div className="hidden overflow-x-auto md:block">
-                  <table className="w-full text-sm" aria-label={`${ledgerActivityLabel || "活動"}各座號收款`}>
-                    <thead style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}>
-                      <tr>
-                        {["同學", "預購品項", "還要收", "收款"].map((heading) => (
-                          <th key={heading} scope="col" className="px-3 py-3 text-left font-semibold">{heading}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredSeatRows.map((row) => {
-                        const outstanding = row.amount - row.collected;
-                        const seatBusy = busy === `seat:${row.id}`;
-                        return (
-                          <tr key={row.id} style={{ borderTop: "1px solid var(--border)" }}>
-                            <th scope="row" className="px-3 py-3 text-left tabular-nums" style={{ color: "var(--text-primary)" }}>
-                              <span className="block text-xs font-normal" style={{ color: "var(--text-secondary)" }}>{row.seat == null ? "未編座號" : `${row.seat} 號`}</span>
-                              {row.name}
-                            </th>
-                            <td className="max-w-64 px-3 py-3" style={{ color: "var(--text-secondary)", overflowWrap: "anywhere" }}>
-                              {summarizeOrderItems(row.orders.flatMap((order) => order.items ?? [])) || (row.orders.length ? "品項資訊請查看明細" : "尚未登記")}
-                            {ledgerActivities.length > 1 && <span className="mt-1 block text-xs">{ledgerActivities.map((activity) => `${activity.label} ${money(row.orders.filter((order) => orderScopeKey(order) === activity.key && !order.is_class_collected).reduce((sum, order) => sum + order.total_price, 0))}`).join("／")}</span>}
-                            </td>
-                            <td className="px-3 py-3 font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>
-                              {outstanding > 0 ? <>{row.collected > 0 && <span className="block text-xs">待補收</span>}{money(outstanding)}</> : row.orders.length ? "已收齊" : "尚未訂購"}
-                            </td>
-                            <td className="px-3 py-2">
-                              {outstanding > 0 && <button type="button" className="btn btn-secondary min-h-11 px-3 text-sm"
-                                disabled={busy !== null || loadFailed || batchBusy}
-                                onClick={() => void setSeatCollected(row.id, true)}>
-                                {seatBusy ? "處理中" : `已收到 ${money(outstanding)}`}
-                              </button>}
-                              <details>
-                                <summary className="min-h-11 cursor-pointer py-3 text-xs" style={{ color: "var(--text-secondary)" }}>明細與其他操作</summary>
-                                <dl className="space-y-1 pb-2 text-xs font-normal">
-                                  <div><dt className="inline">應收：</dt><dd className="inline tabular-nums">{money(row.amount)}</dd></div>
-                                  <div><dt className="inline">班代已收：</dt><dd className="inline tabular-nums">{money(row.collected)}</dd></div>
-                                  <div><dt className="inline">班聯已確認：</dt><dd className="inline tabular-nums">{money(row.councilPaid)}</dd></div>
-                                </dl>
-                                <div className="flex flex-wrap gap-2">
-                                  {row.collected > 0 && <button type="button" className="btn btn-ghost min-h-11 px-3 text-xs"
-                                    disabled={busy !== null || loadFailed || batchBusy}
-                                    onClick={() => void setSeatCollected(row.id, false)}>撤銷收款</button>}
-                                  <button type="button" className="btn btn-ghost min-h-11 px-3 text-xs"
-                                    disabled={!members.some((member) => member.id === row.id) || loadFailed}
-                                    onClick={() => openCreateForSeat(row.id)}>代訂</button>
-                                </div>
-                              </details>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                  </div>
-                  {filteredSeatRows.length === 0 && (
-                    <p className="px-4 py-6 text-sm" role="status" style={{ color: "var(--text-secondary)" }}>目前沒有符合條件的同學；可以清除搜尋或切換收款狀態。</p>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-        </section>
+        <ClassOrderCollectionPanel
+          activityRows={activityRows}
+          ledgerActivities={ledgerActivities}
+          ledgerActivityLabel={ledgerActivityLabel}
+          loading={loading}
+          loadFailed={loadFailed}
+          seatCollectionTotals={seatCollectionTotals}
+          seatSearch={seatSearch}
+          setSeatSearch={setSeatSearch}
+          seatFilter={seatFilter}
+          setSeatFilter={setSeatFilter}
+          membersLoading={membersLoading}
+          membersLoadFailed={membersLoadFailed}
+          filteredSeatRows={filteredSeatRows}
+          members={members}
+          busy={busy}
+          batchBusy={batchBusy}
+          setSeatCollected={setSeatCollected}
+          openCreateForSeat={openCreateForSeat}
+        />
 
       </div>
 
@@ -1909,258 +1562,47 @@ export default function ClassOrdersPage() {
 
       <div className="space-y-5">
         {/* 訂單列表 */}
-        <section id="class-orders-list" className="min-w-0 scroll-mt-5 space-y-4">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <div>
-              <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>班級訂單 · {selectedActivityLabel}</h2>
-              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>此操作僅記錄班代收款，班聯仍須確認。</p>
-            </div>
-            <span className="text-sm tabular-nums" style={{ color: "var(--text-muted)" }}>{visibleOrders.length} 筆</span>
-          </div>
-          <div className="rounded-lg p-4" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
-            <div className="grid gap-3 md:grid-cols-[1fr_180px_160px]">
-              <label className="relative block">
-                <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2" size={15} style={{ color: "var(--text-muted)" }} />
-                <input className="input w-full pl-9" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜尋訂單編號、姓名" aria-label="搜尋訂單編號或姓名" />
-              </label>
-              <select className="input min-h-11" value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)} aria-label="依學生篩選">
-                <option value="">全班學生</option>
-                {members.map((m) => (
-                  <option key={m.id} value={m.id}>{m.display_name}{m.student_id ? `（${m.student_id}）` : ""}</option>
-                ))}
-              </select>
-              <select className="input min-h-11" value={paidFilter} onChange={(e) => setPaidFilter(e.target.value as PaidFilter)} aria-label="依收款狀態篩選">
-                <option value="all">全部收款紀錄</option>
-                <option value="unpaid">待收款</option>
-                <option value="paid">已收款</option>
-              </select>
-            </div>
-            <div className="mt-3 grid gap-3 md:grid-cols-3">
-              <select className="input min-h-11" value={assistedFilter} onChange={(e) => setAssistedFilter(e.target.value as AssistedFilter)} aria-label="依訂單來源篩選">
-                <option value="all">全班訂單</option>
-                <option value="assisted">只看代訂</option>
-              </select>
-              <select className="input min-h-11" value={productFilter} onChange={(e) => setProductFilter(e.target.value)} aria-label="依商品篩選">
-                <option value="">全部商品</option>
-                {productFilterOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-              </select>
-              <select className="input min-h-11" value={activityFilter} onChange={(e) => { setActivityFilter(e.target.value); setProductFilter(""); setSelectedIds([]); }} aria-label="依活動篩選">
-                <option value="all">目前活動全部商品</option>
-                {filterActivityRows.map((row) => (
-                  <option key={row.key} value={row.key}>{row.label}</option>
-                ))}
-              </select>
-            </div>
-            {(activityFilter !== "all" || productFilter || paidFilter !== "all" || assistedFilter !== "all" || memberFilter || query) && (
-              <div className="mt-3 flex justify-end">
-                <button type="button" onClick={clearFilters} className="btn btn-ghost min-h-11 px-3 text-xs">
-                  清除所有篩選
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
-            <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-              style={{ borderBottom: "1px solid var(--border)" }}>
-              <div className="flex flex-wrap items-center gap-2">
-                <button type="button" onClick={() => {
-                  const pageIds = selectablePageOrders.map((order) => order.id);
-                  setSelectedIds((current) => allVisibleSelected
-                    ? current.filter((id) => !pageIds.includes(id))
-                    : Array.from(new Set([...current, ...pageIds])));
-                }}
-                  disabled={!selectablePageOrders.length}
-                  className="inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 text-xs disabled:opacity-50"
-                  style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
-                  {allVisibleSelected ? <CheckSquare size={14} /> : <Square size={14} />}
-                  {allVisibleSelected ? "取消選取本頁" : "全選本頁"}
-                </button>
-                <span className="text-xs" style={{ color: "var(--text-muted)" }}>已選 {selectedOrders.length} 筆</span>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {[...selectedActivityGroups.entries()].map(([activityKey, group]) => (
-                  <div key={activityKey} className="flex flex-wrap items-center gap-1 rounded-md px-2 py-1"
-                    style={{ border: "1px solid var(--border)" }}>
-                    <span className="mr-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                      {group.label} · {group.orders.length} 筆
-                    </span>
-                    <button type="button" disabled={batchBusy} onClick={() => batchSetPaid(activityKey, true)}
-                      className="min-h-9 rounded-md px-2 text-xs font-medium disabled:opacity-50"
-                      style={{ border: "1px solid var(--border)", color: "var(--success)" }}>標記已收款</button>
-                    <button type="button" disabled={batchBusy} onClick={() => batchSetPaid(activityKey, false)}
-                      className="min-h-9 rounded-md px-2 text-xs font-medium disabled:opacity-50"
-                      style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>撤銷收款</button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {loading ? (
-              <div className="py-16 text-center text-sm" style={{ color: "var(--text-muted)" }}>載入中...</div>
-            ) : !visibleOrders.length ? (
-              <div className="py-16 text-center" style={{ color: "var(--text-muted)" }}>
-                <p className="text-sm">目前沒有符合條件的班級訂單</p>
-                <button type="button" onClick={openCreate} className="btn btn-ghost mt-3 text-xs">替同學建立第一筆訂單</button>
-              </div>
-            ) : (
-              <>
-              <div className="space-y-2 p-3 md:hidden">
-                {pageOrders.map((order) => (
-                  <article key={order.id} className="rounded-md p-3" style={{ border: "1px solid var(--border)" }}>
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <Link href={`/shop/orders/${order.id}?from=class`} className="block truncate text-xs font-mono font-medium hover:underline" style={{ color: "var(--primary-text)" }}>
-                          {order.serial_number}
-                        </Link>
-                        <p className="mt-1 truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{order.user_name ?? "未具名訂購人"}</p>
-                        <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
-                          {order.activity_name ?? order.category_name ?? activityLabel(orderScopeKey(order))} · {order.assistance_scope === "class_assisted" ? "幹部代訂" : "自行訂購"}
-                        </p>
-                      </div>
-                      <span className="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium"
-                        style={order.is_class_collected
-                          ? { background: "rgba(34,197,94,0.12)", color: "#16a34a" }
-                          : { background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
-                        {order.is_class_collected ? "已收款" : "待收款"}
-                      </span>
-                    </div>
-                    <div className="mt-3 flex items-center justify-between gap-3">
-                      <OrderStatusBadge status={order.status} />
-                      <span className="text-sm font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>{money(order.total_price)}</span>
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {isCollectableOrder(order) ? (
-                        <button type="button" onClick={() => togglePaid(order)} disabled={busy === order.id}
-                          className="min-h-11 rounded-md px-3 text-xs font-medium disabled:opacity-50"
-                          aria-label={order.is_class_collected ? `撤銷${order.user_name ?? "此筆"}收款` : `標記${order.user_name ?? "此筆"}已收款`}
-                          style={{ border: "1px solid var(--border)", color: order.is_class_collected ? "var(--text-secondary)" : "var(--success)" }}>
-                          {order.is_class_collected ? "撤銷收款" : "標記已收"}
-                        </button>
-                      ) : (
-                        <span className="inline-flex min-h-11 items-center px-3 text-xs" style={{ color: "var(--text-muted)" }}>
-                          不列入收款
-                        </span>
-                      )}
-                      <button type="button" disabled={!isCollectableOrder(order)}
-                        onClick={() => setSelectedIds((current) => current.includes(order.id) ? current.filter((id) => id !== order.id) : [...current, order.id])}
-                        aria-pressed={selectedSet.has(order.id)}
-                        className="min-h-11 rounded-md px-3 text-xs disabled:opacity-50" style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
-                        {!isCollectableOrder(order) ? "無法選取" : selectedSet.has(order.id) ? "取消選取" : "選取"}
-                      </button>
-                      {isCollectableOrder(order) && (
-                        <>
-                          {!order.is_paid && !order.is_class_collected && (
-                            <button type="button" onClick={() => openEdit(order)} className="min-h-11 rounded-md px-3 text-xs"
-                            style={{ border: "1px solid var(--border)", color: "var(--primary-text)" }}>修改</button>
-                          )}
-                          <SeparateOrderButton order={order} onSeparated={() => { void load(); }} />
-                          <button type="button" onClick={() => { setCancelTarget(order); setCancelReason(""); }} className="min-h-11 rounded-md px-3 text-xs"
-                            style={{ border: "1px solid var(--border)", color: "#ef4444" }}>取消</button>
-                        </>
-                      )}
-                    </div>
-                  </article>
-                ))}
-              </div>
-              <div className="hidden overflow-x-auto md:block">
-                <table className="w-full min-w-[820px] text-sm" role="table">
-                  <thead>
-                    <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                      {["", "訂單編號", "訂購人", "活動", "來源", "狀態", "應收金額", "班代收款", "操作"].map((h, i) => (
-                        <th key={i} className="px-4 py-3 text-left text-xs font-semibold"
-                          style={{ color: "var(--text-muted)" }} scope="col">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pageOrders.map((order, idx) => (
-                      <tr key={order.id} style={idx < pageOrders.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}>
-                        <td className="px-4 py-3">
-                          <button type="button" disabled={!isCollectableOrder(order)}
-                            onClick={() => setSelectedIds((cur) => cur.includes(order.id) ? cur.filter((id) => id !== order.id) : [...cur, order.id])}
-                            aria-label={`${selectedSet.has(order.id) ? "取消選取" : "選取"}${order.user_name ?? order.serial_number}`}
-                            aria-pressed={selectedSet.has(order.id)}
-                            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md disabled:opacity-40"
-                            style={{ color: selectedSet.has(order.id) ? "var(--primary-text)" : "var(--text-muted)" }}>
-                            {selectedSet.has(order.id) ? <CheckSquare size={16} /> : <Square size={16} />}
-                          </button>
-                        </td>
-                        <td className="px-4 py-3">
-                          <Link href={`/shop/orders/${order.id}?from=class`} className="text-xs font-mono hover:underline" style={{ color: "var(--primary-text)" }}>
-                            {order.serial_number}
-                          </Link>
-                        </td>
-                        <td className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>{order.user_name ?? "-"}</td>
-                        <td className="px-4 py-3 text-xs" style={{ color: "var(--text-muted)" }}>{order.activity_name ?? order.category_name ?? activityLabel(orderScopeKey(order))}</td>
-                        <td className="px-4 py-3 text-xs" style={{ color: "var(--text-muted)" }}>
-                          {order.assistance_scope === "class_assisted" ? "幹部代訂" : "自行訂購"}
-                        </td>
-                        <td className="px-4 py-3"><OrderStatusBadge status={order.status} /></td>
-                        <td className="px-4 py-3 font-medium tabular-nums" style={{ color: "var(--text-primary)" }}>{money(order.total_price)}</td>
-                        <td className="px-4 py-3">
-                          <span className="rounded-full px-2 py-0.5 text-xs font-medium"
-                            style={order.is_class_collected
-                              ? { background: "rgba(34,197,94,0.12)", color: "#16a34a" }
-                              : { background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
-                            {order.is_class_collected ? "已收款" : "待收款"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-1">
-                            {isCollectableOrder(order) ? (
-                              <button type="button" onClick={() => togglePaid(order)} disabled={busy === order.id}
-                                aria-label={order.is_class_collected ? `撤銷${order.user_name ?? "此筆"}收款` : `標記${order.user_name ?? "此筆"}已收款`}
-                                className="min-h-11 rounded-md px-3 text-xs disabled:opacity-50"
-                                style={{ border: "1px solid var(--border)" }}>
-                                {order.is_class_collected ? "撤銷收款" : "標記已收"}
-                              </button>
-                            ) : (
-                              <span className="px-2 text-xs" style={{ color: "var(--text-muted)" }}>不列入收款</span>
-                            )}
-                            {isCollectableOrder(order) && (
-                              <>
-                                {!order.is_paid && !order.is_class_collected && (
-                                  <button type="button" onClick={() => openEdit(order)} title="修改訂單"
-                                  className="rounded-md p-1 hover:opacity-70" style={{ color: "var(--primary-text)" }}>
-                                  <Edit2 size={14} />
-                                  </button>
-                                )}
-                                <SeparateOrderButton order={order} onSeparated={() => { void load(); }} />
-                                <button type="button" onClick={() => { setCancelTarget(order); setCancelReason(""); }} title="取消訂單"
-                                  className="rounded-md p-1 hover:opacity-70" style={{ color: "#ef4444" }}>
-                                  <Trash2 size={14} />
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              </>
-            )}
-          </div>
-          {visibleOrders.length > ORDER_LIST_PAGE_SIZE && (
-            <nav className="flex flex-wrap items-center justify-between gap-3" aria-label="訂單分頁">
-              <p className="text-xs tabular-nums" aria-live="polite" style={{ color: "var(--text-muted)" }}>
-                第 {currentPage + 1} / {pageCount} 頁 · 共 {visibleOrders.length} 筆
-              </p>
-              <div className="flex gap-2">
-                <button type="button" onClick={() => setOrderPage(Math.max(0, currentPage - 1))}
-                  disabled={currentPage === 0} className="btn btn-ghost min-h-11 px-3 text-xs disabled:opacity-50">
-                  上一頁
-                </button>
-                <button type="button" onClick={() => setOrderPage(Math.min(pageCount - 1, currentPage + 1))}
-                  disabled={currentPage >= pageCount - 1} className="btn btn-ghost min-h-11 px-3 text-xs disabled:opacity-50">
-                  下一頁
-                </button>
-              </div>
-            </nav>
-          )}
-        </section>
+        <ClassOrdersListPanel
+          selectedActivityLabel={selectedActivityLabel}
+          visibleOrders={visibleOrders}
+          query={query}
+          setQuery={setQuery}
+          members={members}
+          memberFilter={memberFilter}
+          setMemberFilter={setMemberFilter}
+          paidFilter={paidFilter}
+          setPaidFilter={setPaidFilter}
+          assistedFilter={assistedFilter}
+          setAssistedFilter={setAssistedFilter}
+          productFilter={productFilter}
+          setProductFilter={setProductFilter}
+          setActivityFilter={(value) => { setActivityFilter(value); setProductFilter(""); setSelectedIds([]); }}
+          activityFilter={activityFilter}
+          productFilterOptions={productFilterOptions}
+          filterActivityRows={filterActivityRows}
+          clearFilters={clearFilters}
+          selectablePageOrders={selectablePageOrders}
+          allVisibleSelected={allVisibleSelected}
+          setSelectedIds={setSelectedIds}
+          selectedOrders={selectedOrders}
+          selectedActivityGroups={selectedActivityGroups}
+          batchBusy={batchBusy}
+          batchSetPaid={batchSetPaid}
+          loading={loading}
+          openCreate={openCreate}
+          pageOrders={pageOrders}
+          activityLabel={activityLabel}
+          togglePaid={togglePaid}
+          busy={busy}
+          selectedSet={selectedSet}
+          openEdit={openEdit}
+          load={load}
+          onCancelOrder={(order) => { setCancelTarget(order); setCancelReason(""); }}
+          currentPage={currentPage}
+          pageCount={pageCount}
+          setOrderPage={setOrderPage}
+          orderListPageSize={ORDER_LIST_PAGE_SIZE}
+        />
 
       </div>
 

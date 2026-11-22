@@ -1,43 +1,34 @@
 "use client";
 
-import NumberInput from "@/components/ui/NumberInput";
+import { Field, Select, TextArea, TextInput, Toggle } from "@/components/site/PublicSiteAdminFields";
+import OfficerAdminTab, { type OfficerProfileDraft } from "@/components/site/OfficerAdminTab";
 import PublicSiteWorkspaceHeader from "@/components/site/PublicSiteWorkspaceHeader";
 
 import Image from "next/image";
 import {
-  closestCenter,
   DndContext,
   KeyboardSensor,
-  pointerWithin,
   PointerSensor,
   useSensor,
   useSensors,
-  useDroppable,
-  type CollisionDetection,
   type DragEndEvent,
 } from "@dnd-kit/core";
 import {
-  arrayMove,
   SortableContext,
+  arrayMove,
   sortableKeyboardCoordinates,
-  useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import {
   ArrowDown,
   ArrowUp,
   ArrowUpRight,
-  AlertTriangle,
-  CheckCircle2,
-  ClipboardPaste,
   Compass,
   ChevronDown,
   Eye,
   EyeOff,
   FileUp,
   FileText,
-  GripVertical,
   Handshake,
   Home,
   Info,
@@ -59,6 +50,7 @@ import { uploadUrl } from "@/lib/config";
 import MarkdownBlock from "@/components/site/MarkdownBlock";
 import ArticleMarkdownEditor from "@/components/site/ArticleMarkdownEditor";
 import PublicNavIcon from "@/components/site/PublicNavIcon";
+import { linkTreeCollisionDetection, SortablePublicLinkCategory, UnassignedPublicLinks } from "@/components/site/PublicLinksEditor";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import DraftStatus from "@/components/ui/DraftStatus";
@@ -218,45 +210,6 @@ function applicationFieldsForEditor(
   }));
 }
 
-function Field({
-  label,
-  children,
-  hint,
-}: {
-  label: string;
-  children: React.ReactNode;
-  hint?: string;
-}) {
-  return (
-    <label className="block">
-      <span className="text-sm font-medium text-[var(--text-secondary)]">{label}</span>
-      <div className="mt-1">{children}</div>
-      {hint && <span className="mt-1 block text-xs text-[var(--text-muted)]">{hint}</span>}
-    </label>
-  );
-}
-
-function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  const Input = props.type === "number" ? NumberInput : "input";
-  return (
-    <Input
-      {...props}
-      className={`w-full rounded-lg px-3 py-2 text-sm outline-none ${props.className ?? ""}`}
-      style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-primary)", ...props.style }}
-    />
-  );
-}
-
-function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return (
-    <textarea
-      {...props}
-      className={`min-h-28 w-full rounded-lg px-3 py-2 text-sm leading-6 outline-none ${props.className ?? ""}`}
-      style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-primary)", ...props.style }}
-    />
-  );
-}
-
 function MarkdownEditor({
   value,
   onChange,
@@ -290,38 +243,6 @@ function MarkdownEditor({
         <TextArea rows={rows} value={value} onChange={(event) => onChange(event.target.value)} />
       )}
     </div>
-  );
-}
-
-function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
-  return (
-    <select
-      {...props}
-      className={`w-full rounded-lg px-3 py-2 text-sm outline-none ${props.className ?? ""}`}
-      style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-primary)", ...props.style }}
-    />
-  );
-}
-
-function Toggle({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (value: boolean) => void;
-}) {
-  return (
-    <label className="inline-flex min-h-11 items-center gap-2 text-sm text-[var(--text-secondary)]">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-        className="h-4 w-4"
-      />
-      {label}
-    </label>
   );
 }
 
@@ -388,268 +309,6 @@ function ImageField({
 
 
 
-function SortablePublicLinkRow({
-  link,
-  disabled,
-  onEdit,
-  onDelete,
-  onToggle,
-}: {
-  link: PublicLinkOut;
-  disabled: boolean;
-  onEdit: () => void;
-  onDelete: () => void;
-  onToggle: () => void;
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: link.id,
-    disabled,
-    data: { type: "link", categoryId: link.category_id ?? null },
-  });
-  const isManuallyEnabled = link.is_active;
-
-  return (
-    <div
-      ref={setNodeRef}
-      className="flex flex-col gap-3 rounded-lg px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
-      style={{
-        background: "var(--bg-elevated)",
-        border: "1px solid var(--border)",
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.55 : 1,
-        zIndex: isDragging ? 1 : undefined,
-      }}
-    >
-      <div className="flex min-w-0 items-start gap-2">
-        <button
-          type="button"
-          className="btn btn-sm btn-ghost min-h-11 min-w-11 shrink-0 cursor-grab touch-none active:cursor-grabbing"
-          aria-label={`拖曳調整「${link.title}」順序`}
-          style={{ touchAction: "none" }}
-          disabled={disabled}
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical size={17} aria-hidden />
-        </button>
-        <span className="min-w-0 pt-1 text-sm">
-          <span className="font-medium">{link.title}</span>
-          <span className="mt-1 block break-all text-xs text-[var(--text-muted)]">{link.url}</span>
-          <span className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--text-muted)]">
-            <span
-              className="rounded-full px-2 py-1"
-              style={{
-                background: isManuallyEnabled ? "var(--success-dim)" : "var(--bg-surface)",
-                color: isManuallyEnabled ? "var(--success)" : "var(--text-secondary)",
-              }}
-            >
-              {isManuallyEnabled ? "手動啟用" : "手動停用"}
-            </span>
-            {link.starts_at && (
-              <span>啟用：{new Date(link.starts_at).toLocaleString("zh-TW")}</span>
-            )}
-            {link.ends_at && (
-              <span>停用：{new Date(link.ends_at).toLocaleString("zh-TW")}</span>
-            )}
-          </span>
-        </span>
-      </div>
-      <div className="grid w-full grid-cols-3 gap-1 sm:flex sm:w-auto sm:shrink-0 sm:flex-wrap sm:justify-end">
-        <button type="button" className="btn btn-sm btn-ghost justify-center" onClick={onEdit} aria-label={`編輯${link.title}`}>
-          <Pencil size={14} aria-hidden /> 編輯
-        </button>
-        <button type="button" className="btn btn-sm btn-ghost justify-center" onClick={onDelete} aria-label={`刪除${link.title}`}>
-          <Trash2 size={14} aria-hidden /> 刪除
-        </button>
-        <button type="button" className="btn btn-sm btn-ghost justify-center" onClick={onToggle}>
-          {link.is_active ? "手動停用" : "手動啟用"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function dndItemType(args: Parameters<CollisionDetection>[0], id: string | number) {
-  return args.droppableContainers.find((container) => container.id === id)?.data.current?.type;
-}
-
-const linkTreeCollisionDetection: CollisionDetection = (args) => {
-  const activeType = args.active.data.current?.type;
-  const allowedTypes = activeType === "category"
-    ? new Set(["category"])
-    : new Set(["link", "category-drop", "category"]);
-  const matches = (collisions: ReturnType<typeof pointerWithin>) =>
-    collisions.filter((collision) => allowedTypes.has(String(dndItemType(args, collision.id))));
-  const pointerMatches = matches(pointerWithin(args));
-
-  if (activeType === "category") {
-    if (pointerMatches.length > 0) return pointerMatches;
-  } else {
-    const linkRow = pointerMatches.find((collision) => dndItemType(args, collision.id) === "link");
-    if (linkRow) return [linkRow];
-    const categoryDrop = pointerMatches.find((collision) => dndItemType(args, collision.id) === "category-drop");
-    if (categoryDrop) return [categoryDrop];
-    const category = pointerMatches.find((collision) => dndItemType(args, collision.id) === "category");
-    if (category) return [category];
-  }
-
-  return matches(closestCenter(args));
-};
-
-function SortablePublicLinkCategory({
-  category,
-  links,
-  disabled,
-  onDelete,
-  onEditLink,
-  onDeleteLink,
-  onToggleLink,
-}: {
-  category: PublicLinkCategoryOut;
-  links: PublicLinkOut[];
-  disabled: boolean;
-  onDelete: () => void;
-  onEditLink: (link: PublicLinkOut) => void;
-  onDeleteLink: (link: PublicLinkOut) => void;
-  onToggleLink: (link: PublicLinkOut) => void;
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: category.id,
-    disabled,
-    data: { type: "category", categoryId: category.id },
-  });
-  const { setNodeRef: setDropNodeRef, isOver } = useDroppable({
-    id: `category-drop:${category.id}`,
-    disabled,
-    data: { type: "category-drop", categoryId: category.id },
-  });
-
-  return (
-    <section
-      ref={setNodeRef}
-      className="rounded-xl"
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.55 : 1,
-        zIndex: isDragging ? 1 : undefined,
-      }}
-    >
-      <div className="rounded-xl p-3 sm:p-4" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-        <div className="flex min-w-0 items-center gap-2">
-          <button
-            type="button"
-            className="btn btn-sm btn-ghost min-h-11 min-w-11 shrink-0 cursor-grab touch-none active:cursor-grabbing"
-            aria-label={`拖曳調整「${category.title}」分類順序`}
-            style={{ touchAction: "none" }}
-            disabled={disabled}
-            {...attributes}
-            {...listeners}
-          >
-            <GripVertical size={17} aria-hidden />
-          </button>
-          <div className="min-w-0 flex-1">
-            <h3 className="break-words text-sm font-semibold">{category.title}</h3>
-            {category.description && <p className="mt-0.5 text-xs text-[var(--text-muted)]">{category.description}</p>}
-          </div>
-          <span className="shrink-0 text-xs text-[var(--text-muted)]">{links.length} 個連結</span>
-          <button
-            type="button"
-            className="btn btn-sm btn-ghost min-h-11 shrink-0"
-            onClick={onDelete}
-            disabled={disabled}
-            aria-label={`刪除「${category.title}」分類`}
-          >
-            <Trash2 size={14} aria-hidden />
-            <span className="hidden sm:inline">刪除</span>
-          </button>
-        </div>
-        <div
-          ref={setDropNodeRef}
-          className="mt-3 min-h-14 space-y-2 rounded-lg p-2 transition-colors"
-          style={{
-            background: isOver ? "var(--primary-dim)" : "var(--bg-surface)",
-            border: `1px ${links.length ? "solid" : "dashed"} ${isOver ? "var(--primary)" : "var(--border)"}`,
-          }}
-        >
-          {links.length === 0 ? (
-            <p className="px-2 py-2 text-sm text-[var(--text-muted)]">把連結拖到這裡加入分類</p>
-          ) : (
-            <SortableContext items={links.map((link) => link.id)} strategy={verticalListSortingStrategy}>
-              {links.map((link) => (
-                <SortablePublicLinkRow
-                  key={link.id}
-                  link={link}
-                  disabled={disabled}
-                  onEdit={() => onEditLink(link)}
-                  onDelete={() => onDeleteLink(link)}
-                  onToggle={() => onToggleLink(link)}
-                />
-              ))}
-            </SortableContext>
-          )}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function UnassignedPublicLinks({
-  links,
-  disabled,
-  onEditLink,
-  onDeleteLink,
-  onToggleLink,
-}: {
-  links: PublicLinkOut[];
-  disabled: boolean;
-  onEditLink: (link: PublicLinkOut) => void;
-  onDeleteLink: (link: PublicLinkOut) => void;
-  onToggleLink: (link: PublicLinkOut) => void;
-}) {
-  const { setNodeRef, isOver } = useDroppable({
-    id: "category-drop:uncategorized",
-    disabled,
-    data: { type: "category-drop", categoryId: null },
-  });
-
-  return (
-    <section
-      ref={setNodeRef}
-      aria-label="未分類連結放置區"
-      className="min-h-16 rounded-xl p-3 transition-colors sm:p-4"
-      style={{
-        background: isOver ? "var(--primary-dim)" : "var(--bg-surface)",
-        border: `1px ${links.length ? "solid" : "dashed"} ${isOver ? "var(--primary)" : "var(--border)"}`,
-      }}
-    >
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold">未分類</h3>
-        <span className="text-xs text-[var(--text-muted)]">{links.length} 個連結</span>
-      </div>
-      {links.length === 0 ? (
-        <p className="text-sm text-[var(--text-muted)]">把連結拖到這裡即可移出分類</p>
-      ) : (
-        <SortableContext items={links.map((link) => link.id)} strategy={verticalListSortingStrategy}>
-          <div className="space-y-2">
-            {links.map((link) => (
-              <SortablePublicLinkRow
-                key={link.id}
-                link={link}
-                disabled={disabled}
-                onEdit={() => onEditLink(link)}
-                onDelete={() => onDeleteLink(link)}
-                onToggle={() => onToggleLink(link)}
-              />
-            ))}
-          </div>
-        </SortableContext>
-      )}
-    </section>
-  );
-}
-
 export default function PublicSiteAdminPage() {
   const confirm = useConfirm();
   const linkSensors = useSensors(
@@ -713,7 +372,7 @@ export default function PublicSiteAdminPage() {
     ends_at: "",
   });
   const [editingLinkId, setEditingLinkId] = useState<string | null>(null);
-  const [officerDraft, setOfficerDraft] = useState({
+  const [officerDraft, setOfficerDraft] = useState<OfficerProfileDraft>({
     user_position_id: "",
     display_name_override: "",
     title_override: "",
@@ -781,10 +440,6 @@ export default function PublicSiteAdminPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const candidateByUserPosition = useMemo(
-    () => new Map(candidates.map((candidate) => [candidate.user_position_id, candidate])),
-    [candidates],
-  );
 
   const rosterLines = useMemo(() => parseOfficerRoster(rosterText), [rosterText]);
   const rosterSummary = useMemo(() => {
@@ -2249,202 +1904,32 @@ export default function PublicSiteAdminPage() {
       )}
 
       {tab === "officers" && (
-        <section key="officers" className="tab-panel-transition space-y-4">
-          <div className="card space-y-4 p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="font-semibold">快速貼上幹部名單</h2>
-                  <span className="rounded-full px-2 py-0.5 text-xs font-semibold" style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
-                    批次輸入
-                  </span>
-                </div>
-                <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--text-muted)]">
-                  每行一個職位，姓名以空白、頓號或逗號分隔；名單直接公開。
-                </p>
-              </div>
-              <ClipboardPaste size={20} className="text-[var(--primary-text)]" aria-hidden />
-            </div>
-            <div className="space-y-3 rounded-lg p-3" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-              <div className="hidden flex-wrap gap-2 sm:flex" role="tablist" aria-label="幹部名單組織頁籤">
-                {rosterTabs.map((tab) => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={tab.id === activeRosterTabId}
-                    onClick={() => selectRosterTab(tab.id)}
-                    className={`min-h-10 rounded-lg px-3 text-sm font-semibold transition-colors ${tab.id === activeRosterTabId ? "" : "text-[var(--text-secondary)] hover:bg-[var(--bg-surface)]"}`}
-                    style={tab.id === activeRosterTabId ? { color: "var(--primary-contrast, white)", background: "var(--primary)" } : undefined}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-              <div className="sm:hidden">
-                <label htmlFor="public-roster-tab" className="text-xs font-semibold text-[var(--text-secondary)]">
-                  目前編輯組織
-                </label>
-                <div className="relative mt-2">
-                  <Select
-                    id="public-roster-tab"
-                    value={activeRosterTabId}
-                    onChange={(event) => selectRosterTab(event.target.value)}
-                    className="min-h-11 appearance-none pr-10 font-semibold"
-                    aria-label="選擇幹部名單組織"
-                  >
-                    {rosterTabs.map((tab) => <option key={tab.id} value={tab.id}>{tab.label}</option>)}
-                  </Select>
-                  <ChevronDown
-                    size={17}
-                    aria-hidden={true}
-                    className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"
-                  />
-                </div>
-              </div>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <TextInput
-                  value={newRosterTabLabel}
-                  onChange={(event) => setNewRosterTabLabel(event.target.value)}
-                  placeholder="新增組織，例如：學生議會"
-                  aria-label="新增組織名稱"
-                />
-                <button type="button" onClick={addRosterTab} className="btn btn-secondary min-h-11 shrink-0">
-                  <Plus size={16} aria-hidden /> 新增組織頁籤
-                </button>
-                <button type="button" onClick={deleteRosterTab} className="btn btn-ghost min-h-11 shrink-0" disabled={rosterTabs.length <= 1}>
-                  <Trash2 size={15} aria-hidden /> 刪除目前頁籤
-                </button>
-              </div>
-              <p className="text-xs text-[var(--text-muted)]">目前編輯：{activeRosterTab?.label ?? "尚未建立組織"}；每個頁籤各自保存一份名單。</p>
-            </div>
-            <TextArea
-              rows={10}
-              value={rosterText}
-              onChange={(event) => setRosterText(event.target.value)}
-              placeholder={"主席｜黃丞廷\n副主席｜葉鎧丞\n秘書｜簡子皓 黃柏硯\n活動｜邱翊展 劉哲愷 黃言真"}
-              aria-label="快速貼上幹部名單"
-              className="font-mono text-[13px] leading-7"
-            />
-            <div className="flex flex-col gap-3 rounded-lg p-3 text-sm" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }} aria-live="polite">
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[var(--text-secondary)]">
-                <span className="inline-flex items-center gap-1.5"><CheckCircle2 size={15} className="text-emerald-400" aria-hidden />{rosterSummary.memberCount} 位成員</span>
-                <span className="inline-flex items-center gap-1.5"><AlertTriangle size={15} className={rosterLines.some((line) => line.error) ? "text-amber-400" : "text-[var(--text-muted)]"} aria-hidden />{rosterLines.filter((line) => line.error).length} 行待修正</span>
-                <span className="text-[var(--text-muted)]">{rosterSummary.validLines.length} 個職位</span>
-              </div>
-              {rosterLines.some((line) => line.error) && (
-                <p className="text-xs text-amber-300">
-                  {rosterLines.filter((line) => line.error).map((line) => `第 ${line.lineNumber} 行：${line.error}`).join("；")}
-                </p>
-              )}
-            </div>
-            {rosterSummary.validLines.length > 0 && (
-              <div className="overflow-hidden rounded-lg border" style={{ background: "var(--bg-elevated)", borderColor: "var(--border)" }}>
-                <div className="flex flex-wrap items-baseline justify-between gap-2 border-b px-4 py-3" style={{ borderColor: "var(--border)" }}>
-                  <div>
-                    <h3 className="text-sm font-semibold">解析預覽</h3>
-                    <p className="mt-1 text-xs text-[var(--text-muted)]">標示套用於個人，可在同職位中單獨指定。</p>
-                  </div>
-                  <span className="text-xs text-[var(--text-muted)]">{rosterSummary.validLines.length} 個職位</span>
-                </div>
-                <div className="divide-y" style={{ borderColor: "var(--border)" }}>
-                  {rosterSummary.validLines.map((line) => {
-                    return (
-                      <div key={`${line.lineNumber}-${line.title}`} className="border-b last:border-0" style={{ borderColor: "var(--border)" }}>
-                        <div className="flex items-center justify-between gap-3 px-4 py-3">
-                          <span className="font-semibold">{line.title}</span>
-                          <span className="text-xs text-[var(--text-muted)]">{line.names.length} 位成員</span>
-                        </div>
-                        <div className="divide-y" style={{ borderColor: "var(--border)" }}>
-                          {line.names.map((name) => {
-                            const label = getRosterMemberLabel(line.title, name);
-                            return (
-                              <div key={`${line.title}-${name}`} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:pl-8">
-                                <span className="min-w-0 text-sm text-[var(--text-secondary)]">{name}</span>
-                                <TextInput
-                                  value={label}
-                                  onChange={(event) => setRosterMemberLabel(line.title, name, event.target.value)}
-                                  placeholder="個人標示（選填）"
-                                  aria-label={`${line.title}的${name}公開標示`}
-                                  className="min-h-11 w-full sm:max-w-52"
-                                  maxLength={24}
-                                />
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-xs text-[var(--text-muted)]">格式：職位｜姓名 姓名；也支援「職位：姓名」；同一人可出現在不同職位。</p>
-              <button type="button" onClick={saveOfficerRoster} disabled={rosterBusy || rosterSummary.memberCount === 0} className="btn btn-primary min-h-11">
-                <ClipboardPaste size={16} aria-hidden /> {rosterBusy ? "儲存中…" : "儲存這份名單"}
-              </button>
-            </div>
-          </div>
-
-          <div className={`grid gap-4 ${profiles.length > 0 ? "lg:grid-cols-[0.9fr_1.1fr]" : ""}`}>
-            <div className="card space-y-4 p-5">
-              <h2 className="font-semibold">單筆覆寫（進階）</h2>
-            <p className="text-xs text-[var(--text-muted)]">
-              公開幹部頁會<strong>自動列出當屆所有幹部</strong>，不需逐一新增。只有在你想覆寫顯示名稱／稱謂／簡介、調整排序、設為首頁精選，或<strong>隱藏</strong>某位成員時，才需要在此建立設定。
-            </p>
-            <Field label="幹部候選人">
-              <Select value={officerDraft.user_position_id} onChange={(e) => setOfficerDraft({ ...officerDraft, user_position_id: e.target.value })}>
-                <option value="">請選擇</option>
-                {candidates.map((candidate) => (
-                  <option key={candidate.user_position_id} value={candidate.user_position_id}>
-                    {candidate.display_name} / {candidate.org_name} / {candidate.position_name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label="公開姓名覆寫"><TextInput value={officerDraft.display_name_override} onChange={(e) => setOfficerDraft({ ...officerDraft, display_name_override: e.target.value })} /></Field>
-              <Field label="公開稱謂覆寫" hint="以「長」或「主席」結尾的職稱會以長級樣式顯示。"><TextInput value={officerDraft.title_override} onChange={(e) => setOfficerDraft({ ...officerDraft, title_override: e.target.value })} /></Field>
-            </div>
-            <Field label="公開簡介"><TextArea value={officerDraft.bio} onChange={(e) => setOfficerDraft({ ...officerDraft, bio: e.target.value })} /></Field>
-            <Field label="公開 Email" hint="僅公開已允許顯示 Email 的帳號。">
-              <TextInput value={officerDraft.public_email} onChange={(e) => setOfficerDraft({ ...officerDraft, public_email: e.target.value })} />
-            </Field>
-            <div className="flex flex-wrap gap-4">
-              <Toggle label="顯示" checked={officerDraft.is_visible} onChange={(value) => setOfficerDraft({ ...officerDraft, is_visible: value })} />
-              <Toggle label="首頁精選" checked={officerDraft.is_featured} onChange={(value) => setOfficerDraft({ ...officerDraft, is_featured: value })} />
-            </div>
-            <button type="button" onClick={createOfficerProfile} className="btn btn-primary"><Plus size={16} aria-hidden /> 新增公開幹部</button>
-            </div>
-            <div className="space-y-3">
-              {profiles.map((profile) => {
-                const candidate = candidateByUserPosition.get(profile.user_position_id);
-                return (
-                  <div key={profile.id} className="card p-4">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
-                        <h3 className="font-semibold">{profile.display_name_override || candidate?.display_name || "未命名幹部"}</h3>
-                        <p className="mt-1 text-xs text-[var(--text-muted)]">
-                          {profile.title_override || candidate?.position_name || "職位未載入"} / {candidate?.org_name ?? "既有任期"}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <button type="button" className="btn btn-sm btn-ghost" onClick={() => patchProfile(profile, { is_visible: !profile.is_visible }).catch((e) => displayError(e, "更新幹部失敗"))}>
-                          {profile.is_visible ? "隱藏" : "顯示"}
-                        </button>
-                        <button type="button" className="btn btn-sm btn-ghost" onClick={() => patchProfile(profile, { is_featured: !profile.is_featured }).catch((e) => displayError(e, "更新精選失敗"))}>
-                          {profile.is_featured ? "取消精選" : "設為精選"}
-                        </button>
-                        <button type="button" className="btn btn-sm btn-ghost" onClick={() => siteApi.deleteOfficerProfile(profile.id).then(load).catch((e) => displayError(e, "刪除幹部失敗"))}>刪除</button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </section>
+        <OfficerAdminTab
+          rosterTabs={rosterTabs}
+          activeRosterTab={activeRosterTab}
+          activeRosterTabId={activeRosterTabId}
+          newRosterTabLabel={newRosterTabLabel}
+          onNewRosterTabLabelChange={setNewRosterTabLabel}
+          onSelectRosterTab={selectRosterTab}
+          onAddRosterTab={addRosterTab}
+          onDeleteRosterTab={deleteRosterTab}
+          rosterText={rosterText}
+          onRosterTextChange={setRosterText}
+          rosterLines={rosterLines}
+          rosterSummary={rosterSummary}
+          getRosterMemberLabel={getRosterMemberLabel}
+          setRosterMemberLabel={setRosterMemberLabel}
+          rosterBusy={rosterBusy}
+          onSaveRoster={saveOfficerRoster}
+          candidates={candidates}
+          profiles={profiles}
+          officerDraft={officerDraft}
+          onOfficerDraftChange={(patch) => setOfficerDraft((draft) => ({ ...draft, ...patch }))}
+          onCreateOfficerProfile={createOfficerProfile}
+          patchProfile={patchProfile}
+          deleteOfficerProfile={(profile) => siteApi.deleteOfficerProfile(profile.id).then(load)}
+          displayError={displayError}
+        />
       )}
 
       {tab === "advanced" && (

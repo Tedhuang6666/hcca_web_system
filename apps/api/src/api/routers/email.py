@@ -40,6 +40,12 @@ from api.models.user import User
 from api.schemas.email_platform import EmailConditionalRule
 from api.services import audit as audit_svc
 from api.services.email_dispatch import (
+    _merged_custom_variables,
+)
+from api.services.email_dispatch import (
+    normalize_external_emails as _normalize_external_emails,
+)
+from api.services.email_dispatch import (
     render_attachments as _render_attachments,
 )
 from api.services.email_dispatch import (
@@ -351,17 +357,6 @@ def _is_bulk(sel: RecipientSelector) -> bool:
     )
 
 
-def _normalize_external_emails(values: list[str]) -> list[str]:
-    emails: list[str] = []
-    seen: set[str] = set()
-    for value in values:
-        email = str(value).strip().lower()
-        if email and email not in seen:
-            seen.add(email)
-            emails.append(email)
-    return emails
-
-
 def _safe_url_or_empty(value: str) -> str:
     if not value:
         return ""
@@ -462,18 +457,6 @@ def _normalize_conditional_rules(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
         ) from exc
-
-
-def _merged_custom_variables(
-    definitions: list[dict], defaults: dict[str, str], recipient_vars: dict[str, str]
-) -> dict[str, str]:
-    allowed = {str(item["key"]) for item in definitions}
-    merged: dict[str, str] = {
-        str(item["key"]): str(item.get("default_value") or "") for item in definitions
-    }
-    merged.update({k: str(v) for k, v in defaults.items() if k in allowed})
-    merged.update({k: str(v) for k, v in recipient_vars.items() if k in allowed})
-    return merged
 
 
 def _make_personalization_context(row: PersonalizedRecipient) -> dict:
