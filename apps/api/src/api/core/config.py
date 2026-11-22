@@ -269,6 +269,17 @@ class Settings(BaseSettings):
     JWT_SIGNING_KEY: str = ""
     JWT_PREVIOUS_SIGNING_KEYS: Annotated[list[str], NoDecode] = Field(default_factory=list)
     JWT_SESSION_HASH_KEY: str = ""
+    # 稽核鏈使用獨立 HMAC key；未設定時暫沿用 SECRET_KEY，保持既有部署可啟動。
+    # 前一代 key 格式為 kid:secret；被稽核資料仍存在時不可移除舊 key。
+    AUDIT_CHAIN_ACTIVE_KID: str = Field(default="v1", pattern=r"^[A-Za-z0-9_-]{1,16}$")
+    AUDIT_CHAIN_SIGNING_KEY: str = Field(
+        default="",
+        description="稽核鏈 HMAC key；未設定時相容使用 SECRET_KEY",
+    )
+    AUDIT_CHAIN_PREVIOUS_SIGNING_KEYS: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        description="歷史稽核鏈 HMAC keys，格式 kid:secret，逗號分隔",
+    )
     # 無 kid 的舊 JWT 僅能在受控遷移期間於非正式環境暫時開啟；正式環境一律拒絕。
     AUTH_LEGACY_TOKEN_COMPAT_ENABLED: bool = False
     OAUTH_SESSION_SECRET: str = ""
@@ -582,6 +593,38 @@ class Settings(BaseSettings):
             return [str(item).strip() for item in value if str(item).strip()]
         raise ValueError("JWT_PREVIOUS_SIGNING_KEYS 必須是 kid:secret 的逗號分隔字串")
 
+    @field_validator("AUDIT_CHAIN_SIGNING_KEY")
+    @classmethod
+    def audit_chain_signing_key_must_be_strong(cls, value: str) -> str:
+        if value and len(value.encode("utf-8")) < 32:
+            raise ValueError("AUDIT_CHAIN_SIGNING_KEY 至少需要 32 bytes")
+        return value
+
+    @field_validator("AUDIT_CHAIN_PREVIOUS_SIGNING_KEYS", mode="before")
+    @classmethod
+    def parse_audit_chain_previous_signing_keys(cls, value: object) -> list[str]:
+        if value is None or value == "":
+            return []
+        if isinstance(value, str):
+            items = [item.strip() for item in value.split(",") if item.strip()]
+        elif isinstance(value, list):
+            items = [str(item).strip() for item in value if str(item).strip()]
+        else:
+            raise ValueError("AUDIT_CHAIN_PREVIOUS_SIGNING_KEYS 必須是 kid:secret 的逗號分隔字串")
+
+        for item in items:
+            kid, separator, secret = item.partition(":")
+            valid_kid = (
+                bool(kid)
+                and len(kid) <= 16
+                and all(char.isascii() and (char.isalnum() or char in "_-") for char in kid)
+            )
+            if not separator or not valid_kid or len(secret.encode("utf-8")) < 32:
+                raise ValueError(
+                    "AUDIT_CHAIN_PREVIOUS_SIGNING_KEYS 項目必須是有效 kid:secret，key 至少 32 bytes"
+                )
+        return items
+
     @field_validator("RATE_LIMIT_TRUSTED_IPS", mode="before")
     @classmethod
     def parse_trusted_ips(cls, value: object) -> list[str]:
@@ -647,6 +690,17 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def production_security_must_be_explicit(self) -> "Settings":
         is_prod = self.ENVIRONMENT.lower() in {"prod", "production"}
+        active_audit_key = self.AUDIT_CHAIN_SIGNING_KEY or self.SECRET_KEY
+        previous_audit_kids: set[str] = set()
+        for item in self.AUDIT_CHAIN_PREVIOUS_SIGNING_KEYS:
+            kid, _, key = item.partition(":")
+            if (
+                kid == self.AUDIT_CHAIN_ACTIVE_KID
+                or kid in previous_audit_kids
+                or key == active_audit_key
+            ):
+                raise ValueError("AUDIT_CHAIN_PREVIOUS_SIGNING_KEYS 的 kid 與 key 必須唯一")
+            previous_audit_kids.add(kid)
         if is_prod and self.SECRET_KEY in _KNOWN_INSECURE_KEYS:
             raise ValueError(
                 "生產環境必須設定強 SECRET_KEY，不能使用已知不安全值（dev/CI 固定字串）"
@@ -659,6 +713,18 @@ class Settings(BaseSettings):
             raise ValueError("生產環境 JWT_SESSION_HASH_KEY 至少需要 32 bytes 的獨立隨機值")
         if is_prod and len(self.OAUTH_SESSION_SECRET.encode("utf-8")) < 32:
             raise ValueError("生產環境 OAUTH_SESSION_SECRET 至少需要 32 bytes 的獨立隨機值")
+        if (
+            is_prod
+            and self.AUDIT_CHAIN_SIGNING_KEY
+            and self.AUDIT_CHAIN_SIGNING_KEY
+            in {
+                self.SECRET_KEY,
+                self.JWT_SIGNING_KEY,
+                self.JWT_SESSION_HASH_KEY,
+                self.OAUTH_SESSION_SECRET,
+            }
+        ):
+            raise ValueError("生產環境 AUDIT_CHAIN_SIGNING_KEY 必須使用獨立金鑰")
         if (
             is_prod
             and len(

@@ -22,7 +22,7 @@ class AuditLog(Base):
 
     雜湊鏈（ADR-004）：
       prev_hash: 前一筆紀錄的 self_hash；首筆為 GENESIS_HASH
-      self_hash: 本筆內容 + prev_hash 的 SHA-256
+      self_hash: 舊紀錄為 SHA-256；新紀錄為含 key id 的 HMAC-SHA-256
     prev_hash / self_hash 由 audit_chain.write_audit_log_with_chain 自動填入。
     """
 
@@ -46,9 +46,9 @@ class AuditLog(Base):
     # 人類可讀摘要（搜尋用）
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # 雜湊鏈；新寫入由 audit_chain.write_audit_log_with_chain 自動填。
-    prev_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    self_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # 舊 SHA-256 為 64 字元；版本化 HMAC 需保留演算法與 key id。
+    prev_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    self_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
 
 __all__ = ["AuditLog"]

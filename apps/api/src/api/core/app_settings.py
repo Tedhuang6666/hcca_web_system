@@ -123,6 +123,7 @@ def _classify(key: str) -> str:
     if (
         key.startswith("MFA_")
         or key.startswith("SECURITY_")
+        or key.startswith("AUDIT_CHAIN_")
         or key
         in {
             "SECRET_KEY",

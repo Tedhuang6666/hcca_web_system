@@ -39,6 +39,25 @@ def test_legacy_token_compatibility_is_disabled_by_default() -> None:
     assert _make().AUTH_LEGACY_TOKEN_COMPAT_ENABLED is False
 
 
+def test_audit_chain_key_ring_parses_previous_keys() -> None:
+    settings = _make(
+        AUDIT_CHAIN_ACTIVE_KID="v2",
+        AUDIT_CHAIN_SIGNING_KEY="n" * 64,
+        AUDIT_CHAIN_PREVIOUS_SIGNING_KEYS=f"v1:{'o' * 64}",
+    )
+
+    assert settings.AUDIT_CHAIN_ACTIVE_KID == "v2"
+    assert [f"v1:{'o' * 64}"] == settings.AUDIT_CHAIN_PREVIOUS_SIGNING_KEYS
+
+
+def test_audit_chain_key_ring_rejects_short_or_duplicate_keys() -> None:
+    with pytest.raises(ValidationError, match="至少需要 32 bytes"):
+        _make(AUDIT_CHAIN_SIGNING_KEY="short")
+
+    with pytest.raises(ValidationError, match="kid 與 key 必須唯一"):
+        _make(AUDIT_CHAIN_PREVIOUS_SIGNING_KEYS=f"v1:{'x' * 64}")
+
+
 def test_production_rejects_default_secret() -> None:
     with pytest.raises(ValidationError) as exc:
         _make(
