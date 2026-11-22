@@ -3,7 +3,7 @@ import { shopDelegationLoginNext } from "../shop-delegation-link";
 import { ApiError } from "../api-helpers";
 import { clearAuthCache } from "../auth-cache";
 import { reportClientError } from "../client-error-reporter";
-import { beginApiRequest, recordApiMetric, recordCircuitOpen } from "../client-metrics";
+import { recordApiMetric, recordCircuitOpen } from "../client-metrics";
 import { PERMISSION_DENIED_EVENT, type PermissionDeniedDetail } from "../permission-events";
 import { apiErrorFromResponse, errorMessageFromResponse, formatErrorDetail } from "./errors";
 import { circuitKey, circuitOpen, recordHardFailure, recordReachable } from "./circuit";
@@ -92,17 +92,16 @@ export async function request<T>(
   }
 
   const { headers: trace } = traceHeaders();
-  const requestId = beginApiRequest();
   let response: Response;
   try {
     const result = await fetchWithRetry(path, init, trace, method === "GET" ? 2 : 0);
     response = result.response;
     const protectiveResponse = response.headers.get("X-HCCA-Protective-Response") === "1";
-    recordApiMetric({ path, method, operation_kind: operationKind, status: response.status, protective_response: protectiveResponse, attempts: result.attempts, request_id: requestId, duration_ms: Math.max(0, (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt) });
+    recordApiMetric({ path, method, operation_kind: operationKind, status: response.status, protective_response: protectiveResponse, attempts: result.attempts, duration_ms: Math.max(0, (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt) });
   } catch (error) {
     if (isRequestAborted(error, init.signal)) throw error;
     recordHardFailure(key);
-    recordApiMetric({ path, method, operation_kind: operationKind, status: 0, attempts: method === "GET" ? 2 : 0, request_id: requestId, duration_ms: Math.max(0, (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt) });
+    recordApiMetric({ path, method, operation_kind: operationKind, status: 0, attempts: method === "GET" ? 2 : 0, duration_ms: Math.max(0, (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt) });
     if (error instanceof NetworkRequestError) throw new ApiError(0, error.message);
     throw error;
   }

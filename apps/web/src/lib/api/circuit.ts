@@ -23,11 +23,3 @@ export function recordHardFailure(key: string): void {
 export function recordReachable(key: string): void {
   if (circuits.has(key)) circuits.delete(key);
 }
-
-export function openCircuitCount(): number {
-  let count = 0;
-  for (const circuit of circuits.values()) {
-    if (circuit.openUntil > Date.now()) count += 1;
-  }
-  return count;
-}

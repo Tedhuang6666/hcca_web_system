@@ -29,7 +29,6 @@ export const SITE_URL = resolveSiteUrl(
 );
 
 export const SITE_BRAND = BRAND_TITLE;
-export const DEFAULT_SEO_DESCRIPTION = BRANDING.description;
 
 export function absoluteUrl(path: string) {
   return new URL(path, SITE_URL).toString();

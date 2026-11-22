@@ -528,7 +528,7 @@ function getDashboardContent(
       primaryAction,
       quickActions: getQuickActions(profile, can, canAny, isOperator),
       serviceTitle: "常用治理入口",
-      services: getServiceActions("default", can, canAny),
+      services: getServiceActions("default", can),
     },
     student: {
       busySubtitle: "待填寫與待確認事項已排在最前面。",
@@ -537,7 +537,7 @@ function getDashboardContent(
       primaryAction,
       quickActions: getQuickActions(profile, can, canAny, isOperator),
       serviceTitle: "你常用的校園服務",
-      services: getServiceActions("student", can, canAny),
+      services: getServiceActions("student", can),
     },
     teacher: {
       busySubtitle: "班級、問卷與通知待辦已集中在這裡。",
@@ -546,7 +546,7 @@ function getDashboardContent(
       primaryAction,
       quickActions: getQuickActions(profile, can, canAny, isOperator),
       serviceTitle: "師長常用工具",
-      services: getServiceActions("teacher", can, canAny),
+      services: getServiceActions("teacher", can),
     },
     vendor: {
       busySubtitle: "合作資料與待處理事項已集中在這裡。",
@@ -555,7 +555,7 @@ function getDashboardContent(
       primaryAction,
       quickActions: getQuickActions(profile, can, canAny, isOperator),
       serviceTitle: "合作夥伴服務",
-      services: getServiceActions("vendor", can, canAny),
+      services: getServiceActions("vendor", can),
     },
   }[profile];
 }
@@ -595,7 +595,7 @@ function getQuickActions(
   canAny: (...codes: string[]) => boolean,
   isOperator: boolean,
 ): DashboardAction[] {
-  if (profile !== "default") return getServiceActions(profile, can, canAny).slice(0, 6);
+  if (profile !== "default") return getServiceActions(profile, can).slice(0, 6);
 
   const actions: DashboardAction[] = [
     { href: "/tasks", label: "我的待辦", icon: ListChecks, tone: "primary" },
@@ -614,7 +614,6 @@ function getQuickActions(
 function getServiceActions(
   profile: NavigationProfile,
   can: (code: string) => boolean,
-  canAny: (...codes: string[]) => boolean,
 ): DashboardAction[] {
   const commonStudent: DashboardAction[] = [
     { href: "/announcements", label: "看最新公告", icon: Bell },

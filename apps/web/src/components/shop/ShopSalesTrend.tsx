@@ -279,7 +279,7 @@ export default function ShopSalesTrend({
               </tr>
             </thead>
             <tbody>
-              {current.daily.map((row, index) => (
+              {current.daily.map((row) => (
                 <tr key={row.key}>
                   <th scope="row">{row.key}</th>
                   <td>{number(row.order_count)}</td>

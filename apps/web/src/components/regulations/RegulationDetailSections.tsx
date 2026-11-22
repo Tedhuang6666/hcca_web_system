@@ -131,19 +131,6 @@ function findSnapshotArticleTarget(
   return matched?.id ?? null;
 }
 
-export function filenameFromContentDisposition(disposition: string | null, fallback: string) {
-  if (!disposition) return fallback;
-  const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
-  if (encoded) {
-    try {
-      return decodeURIComponent(encoded);
-    } catch {
-      return fallback;
-    }
-  }
-  return disposition.match(/filename="?([^"]+)"?/i)?.[1] ?? fallback;
-}
-
 export const PROSE = "prose max-w-none";
 
 // ── 條文列（thin wrapper，沿用 LawArticleRow 視覺）────────────────────────────

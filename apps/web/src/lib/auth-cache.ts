@@ -1,4 +1,3 @@
-import type { UserSummary } from "./types";
 import { cachePurge } from "./api-cache";
 
 export interface CurrentUserCache {
@@ -105,5 +104,3 @@ export function getSecureAuthItem(key: string): string | null {
   if (typeof window === "undefined") return null;
   return window.sessionStorage.getItem(key);
 }
-
-export type CachedUserSummary = Pick<UserSummary, "id" | "email" | "display_name">;
