@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen flex items-center justify-center p-6">
+    <div className="min-h-dvh flex items-center justify-center p-6">
       <div className="text-center flex flex-col items-center gap-4 max-w-sm">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor"
           strokeWidth="1.5" className="opacity-40" style={{ color: "var(--text-muted)" }}>

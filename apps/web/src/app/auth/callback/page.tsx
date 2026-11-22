@@ -56,7 +56,7 @@ export default function AuthCallbackPage() {
   }, [searchParams]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center"
+    <div className="min-h-dvh flex items-center justify-center"
       style={{ background: "var(--primary-fg)" }}>
       <div className="text-center space-y-3">
         <Loader2 size={40} className="mx-auto animate-spin" style={{ color: "var(--primary-text)" }} aria-label="載入中" />

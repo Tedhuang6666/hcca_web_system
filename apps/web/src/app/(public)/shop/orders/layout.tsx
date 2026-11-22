@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 
 export default function PublicShopOrderLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="public-site min-h-screen text-[var(--public-text)]">
+    <div className="public-site min-h-dvh text-[var(--public-text)]">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-[var(--public-surface)] focus:px-3 focus:py-2"

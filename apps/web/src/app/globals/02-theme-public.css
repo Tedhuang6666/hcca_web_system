@@ -252,6 +252,7 @@
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--public-bg);
   color: var(--public-text);
 }
@@ -260,6 +261,22 @@
   flex: 1 0 auto;
   /* Keep hash targets visible below the sticky public header and announcements. */
   scroll-margin-top: 10rem;
+}
+
+/* Keep Tailwind dynamic viewport utilities usable on browsers without dvh support. */
+.min-h-dvh {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+@supports not (height: 100dvh) {
+  [class~="min-h-[calc(100dvh-3rem)]"] {
+    min-height: calc(100vh - 3rem);
+  }
+
+  [class~="max-h-[calc(100dvh-250px)]"] {
+    max-height: calc(100vh - 250px);
+  }
 }
 
 [data-theme="dark"] .public-site {

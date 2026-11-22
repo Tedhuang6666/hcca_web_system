@@ -58,7 +58,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
 
   return (
     <div
-      className="relative min-h-screen overflow-hidden"
+      className="relative min-h-dvh overflow-hidden"
       style={{ background: "var(--bg-base)" }}
     >
       <LoginClientEffects nextPath={nextPath} />
@@ -78,7 +78,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
         <span>回到首頁</span>
       </Link>
 
-      <div className="grid min-h-screen lg:grid-cols-[minmax(0,1.12fr)_minmax(440px,0.88fr)]">
+      <div className="grid min-h-dvh lg:grid-cols-[minmax(0,1.12fr)_minmax(440px,0.88fr)]">
         <section
           className="login-aside relative hidden overflow-hidden px-12 py-10 lg:flex lg:flex-col lg:justify-between xl:px-20 xl:py-14"
           style={{
@@ -115,7 +115,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
         </section>
 
         <section
-          className="relative flex min-h-screen items-center justify-center px-5 py-24 sm:px-10 lg:py-16"
+          className="relative flex min-h-dvh items-center justify-center px-5 py-24 sm:px-10 lg:py-16"
           style={{ background: "var(--bg-base)" }}
         >
           <main className="relative z-10 w-full max-w-md text-center">

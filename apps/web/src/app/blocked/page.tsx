@@ -47,8 +47,8 @@ function BlockedContent() {
   };
 
   return (
-    <main className="min-h-screen bg-[var(--bg-base)] px-5 py-6 text-[var(--text-primary)]">
-      <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-4xl flex-col">
+    <main className="min-h-dvh bg-[var(--bg-base)] px-5 py-6 text-[var(--text-primary)]">
+      <div className="mx-auto flex min-h-[calc(100dvh-3rem)] max-w-4xl flex-col">
         <header className="flex items-center gap-3">
           <BrandEmblem size={42} priority />
           <div className="text-sm font-semibold">{BRANDING.platformName}</div>
@@ -91,7 +91,7 @@ function BlockedContent() {
 
 export default function BlockedPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[var(--bg-base)]" />}>
+    <Suspense fallback={<div className="min-h-dvh bg-[var(--bg-base)]" />}>
       <BlockedContent />
     </Suspense>
   );

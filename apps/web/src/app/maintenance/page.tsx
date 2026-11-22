@@ -69,8 +69,8 @@ function MaintenanceContent() {
       : "系統已啟動防護措施，請稍後再試。";
 
   return (
-    <main className="min-h-screen bg-[var(--bg-base)] px-5 text-[var(--text-primary)] sm:px-8">
-      <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col">
+    <main className="min-h-dvh bg-[var(--bg-base)] px-5 text-[var(--text-primary)] sm:px-8">
+      <div className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col">
         <header className="flex items-center gap-3 border-b-2 border-[var(--text-primary)] py-5">
           <div className="flex items-center gap-3">
             <BrandEmblem size={44} priority />
@@ -109,7 +109,7 @@ function MaintenanceContent() {
 
 function MaintenanceFallback() {
   return (
-    <main className="grid min-h-screen place-items-center bg-[var(--bg-base)] px-5 text-[var(--text-primary)]">
+    <main className="grid min-h-dvh place-items-center bg-[var(--bg-base)] px-5 text-[var(--text-primary)]">
       <p className="text-sm text-[var(--text-muted)]">正在載入系統狀態…</p>
     </main>
   );

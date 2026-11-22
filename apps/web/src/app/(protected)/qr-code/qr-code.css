@@ -1,5 +1,6 @@
 .qr-tool-page {
   min-height: calc(100vh - 4rem);
+  min-height: calc(100dvh - 4rem);
   background: var(--bg-base);
   color: var(--text-primary);
   padding: clamp(1.5rem, 4vw, 3.25rem) clamp(1rem, 3vw, 2.5rem) 4rem;

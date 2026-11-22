@@ -95,7 +95,7 @@ export default function MFALoginPage() {
 
   return (
     <div
-      className="flex min-h-screen items-center justify-center p-4 sm:p-6"
+      className="flex min-h-dvh items-center justify-center p-4 sm:p-6"
       style={{ background: "var(--bg-base)" }}
     >
       <main

@@ -217,7 +217,7 @@ export default function LiveElectionBoard({
 
   if (!summary) {
     return (
-      <div className="grid min-h-screen place-items-center bg-[#0d1f31] px-6 text-[#f8f3e5]">
+      <div className="grid min-h-dvh place-items-center bg-[#0d1f31] px-6 text-[#f8f3e5]">
         <div className="text-center">
           <RefreshCw className="mx-auto animate-spin text-[#e8c970]" size={28} aria-hidden />
           <p className="mt-4 text-sm text-[#cdd8e0]">正在載入開票資料...</p>
@@ -237,7 +237,7 @@ export default function LiveElectionBoard({
 
   return (
     <main
-      className={`live-board relative min-h-screen bg-[#0d1f31] text-[#f8f3e5] ${
+      className={`live-board relative min-h-dvh bg-[#0d1f31] text-[#f8f3e5] ${
         vertical ? "mx-auto w-full max-w-[1080px]" : ""
       }`}
     >
@@ -262,7 +262,7 @@ export default function LiveElectionBoard({
       <div
         className={
           vertical
-            ? "flex min-h-screen flex-col px-10 py-12 sm:px-14 sm:py-16"
+            ? "flex min-h-dvh flex-col px-10 py-12 sm:px-14 sm:py-16"
             : "mx-auto max-w-[1480px] px-4 py-5 sm:px-7 sm:py-8 lg:px-10 lg:py-10"
         }
       >
