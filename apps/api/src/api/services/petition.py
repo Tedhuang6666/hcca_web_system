@@ -418,7 +418,7 @@ async def _redact_sent_notifications(session: AsyncSession, case_obj: PetitionCa
     from sqlalchemy import update
 
     from api.models.notification import Notification
-    from api.models.outbox import OutboxEvent, OutboxStatus
+    from api.models.outbox import OutboxEvent
 
     await session.execute(
         update(Notification)
@@ -428,17 +428,16 @@ async def _redact_sent_notifications(session: AsyncSession, case_obj: PetitionCa
         )
         .values(body=CONFIDENTIAL_NOTIFICATION_BODY)
     )
-    pending = await session.scalars(
+    related_events = await session.scalars(
         select(OutboxEvent).where(
             OutboxEvent.event_type == "petition.external_notify",
-            OutboxEvent.status == OutboxStatus.PENDING,
+            OutboxEvent.payload["related_id"].as_string() == str(case_obj.id),
         )
     )
-    for event in pending:
+    for event in related_events:
         payload = dict(event.payload or {})
-        if payload.get("related_id") == str(case_obj.id):
-            payload["body"] = CONFIDENTIAL_NOTIFICATION_BODY
-            event.payload = payload
+        payload["body"] = CONFIDENTIAL_NOTIFICATION_BODY
+        event.payload = payload
 
 
 async def update_content(

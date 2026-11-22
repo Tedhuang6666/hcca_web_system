@@ -11,7 +11,7 @@ from sqlalchemy import select
 from api.core.config import settings
 from api.models.notification import Notification
 from api.models.org import Org, Permission, Position, UserPosition
-from api.models.outbox import OutboxEvent
+from api.models.outbox import OutboxEvent, OutboxStatus
 from api.models.petition import (
     PetitionCase,
     PetitionCaseEvent,
@@ -1717,7 +1717,7 @@ async def test_supplement_case_requires_authenticated_submitter(
     assert ok.json()["status"] == "in_progress"
 
 
-async def test_marking_confidential_redacts_earlier_notifications(
+async def test_marking_confidential_redacts_earlier_notifications_and_outbox_payloads(
     db_session, authed_client_factory, admin_user: User
 ) -> None:
     from api.models.notification import Notification
@@ -1736,7 +1736,26 @@ async def test_marking_confidential_redacts_earlier_notifications(
     unrelated = Notification(
         user_id=owner.id, type="petition_received", title="其他案件", body="保留內容"
     )
-    db_session.add_all([sent, unrelated])
+    outbox_events = [
+        OutboxEvent(
+            event_type="petition.external_notify",
+            payload={"related_id": str(case_obj.id), "body": case_obj.content},
+            status=outbox_status,
+            created_at=datetime.now(UTC),
+        )
+        for outbox_status in (
+            OutboxStatus.PENDING,
+            OutboxStatus.PROCESSED,
+            OutboxStatus.DEAD,
+        )
+    ]
+    unrelated_outbox = OutboxEvent(
+        event_type="petition.external_notify",
+        payload={"related_id": str(uuid.uuid4()), "body": "其他陳情內容"},
+        status=OutboxStatus.PROCESSED,
+        created_at=datetime.now(UTC),
+    )
+    db_session.add_all([sent, unrelated, *outbox_events, unrelated_outbox])
     await db_session.flush()
 
     response = await authed_client_factory(admin_user).post(
@@ -1749,3 +1768,9 @@ async def test_marking_confidential_redacts_earlier_notifications(
     assert sent.body == CONFIDENTIAL_NOTIFICATION_BODY
     assert case_obj.content not in (sent.body or "")
     assert unrelated.body == "保留內容"
+    for event in outbox_events:
+        await db_session.refresh(event)
+        assert event.payload["body"] == CONFIDENTIAL_NOTIFICATION_BODY
+        assert case_obj.content not in event.payload["body"]
+    await db_session.refresh(unrelated_outbox)
+    assert unrelated_outbox.payload["body"] == "其他陳情內容"
