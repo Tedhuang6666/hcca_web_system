@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import UTC, date, datetime
 from typing import Any
@@ -83,6 +84,30 @@ def _with_utc_timezone(value: datetime | None) -> datetime | None:
     return value
 
 
+# custom_css 會被注入公開首頁的 <style>，先清除已知 HTML/CSS 執行向量。
+_CSS_DANGER_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        r"<\s*/?\s*(?:style|script|iframe|svg|img|object|embed|link|meta)\b[^>]*>?",
+        re.I,
+    ),
+    re.compile(r"<!--|--!?>"),
+    re.compile(r"@import\b[^;]*;?", re.I),
+    re.compile(r"expression\s*\(", re.I),
+    re.compile(r"(?:javascript|vbscript|behavior|-moz-binding)\s*:", re.I),
+    re.compile(r"url\(\s*['\"]?\s*(?:javascript|vbscript|data\s*:\s*text/html)[^)]*\)", re.I),
+)
+
+
+def sanitize_css(raw: str | None) -> str | None:
+    """中和 custom_css 中常見的標籤逃逸與 CSS 執行片段。"""
+    if not raw:
+        return raw
+    cleaned = raw
+    for pattern in _CSS_DANGER_PATTERNS:
+        cleaned = pattern.sub("", cleaned)
+    return cleaned
+
+
 async def get_settings(db: AsyncSession) -> PublicSiteSettings:
     result = await db.execute(select(PublicSiteSettings).order_by(PublicSiteSettings.created_at))
     settings = result.scalars().first()
@@ -96,7 +121,9 @@ async def get_settings(db: AsyncSession) -> PublicSiteSettings:
 
 async def update_settings(db: AsyncSession, data: PublicSiteSettingsUpdate) -> PublicSiteSettings:
     settings = await get_settings(db)
-    apply_updates(settings, data)
+    updates = apply_updates(settings, data)
+    if "custom_css" in updates:
+        settings.custom_css = sanitize_css(settings.custom_css)
     await db.flush()
     return settings
 

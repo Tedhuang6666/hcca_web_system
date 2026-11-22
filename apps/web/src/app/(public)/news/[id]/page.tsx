@@ -7,7 +7,8 @@ import { BRANDING } from "@/lib/branding";
 import { fetchAnnouncement, fetchPublicShellData } from "@/lib/serverFetch";
 import { contentOgImagePath } from "@/lib/social-metadata";
 import { breadcrumbJsonLd, organizationJsonLd } from "@/lib/structured-data";
-import { JsonLd, absoluteUrl, excerpt, pageMetadata } from "@/lib/seo";
+import { absoluteUrl, excerpt, pageMetadata } from "@/lib/seo";
+import { JsonLd } from "@/lib/seo-jsonld";
 
 function markdownFromContent(content: Record<string, unknown> | null | undefined) {
   if (!content) return "";

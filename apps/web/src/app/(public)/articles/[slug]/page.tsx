@@ -13,7 +13,8 @@ import { uploadUrl } from "@/lib/config";
 import { getExamScopeDefaultSection, parseExamScopeMarkdown } from "@/lib/exam-scope";
 import { fetchPublicPage, fetchPublicShellData } from "@/lib/serverFetch";
 import { breadcrumbJsonLd, organizationJsonLd } from "@/lib/structured-data";
-import { JsonLd, absoluteUrl, excerpt, pageMetadata } from "@/lib/seo";
+import { absoluteUrl, excerpt, pageMetadata } from "@/lib/seo";
+import { JsonLd } from "@/lib/seo-jsonld";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;

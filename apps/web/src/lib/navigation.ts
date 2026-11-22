@@ -140,6 +140,20 @@ export const NAV_ITEMS: NavItem[] = [
     perm: "admin:all",
   },
   {
+    id: "policies",
+    href: "/admin/policies",
+    iconKey: "policy",
+    label: "政策版本",
+    perm: "policy:admin",
+  },
+  {
+    id: "privacyAdmin",
+    href: "/admin/privacy",
+    iconKey: "shield",
+    label: "個資處理",
+    perm: "system:privacy",
+  },
+  {
     id: "discordAdmin",
     href: "/admin/discord",
     iconKey: "settings",
@@ -333,7 +347,14 @@ export const NAV_DEF: NavEntry[] = [
     id: "system",
     heading: "系統",
     collapsible: true,
-    items: byIds(["adminDashboard", "systemOperations", "systemSettings", "audit"]),
+    items: byIds([
+      "adminDashboard",
+      "systemOperations",
+      "systemSettings",
+      "policies",
+      "privacyAdmin",
+      "audit",
+    ]),
   },
 ];
 

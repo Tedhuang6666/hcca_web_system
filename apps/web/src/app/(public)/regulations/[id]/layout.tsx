@@ -6,7 +6,8 @@ import { contentCategoryLabel, REGULATION_CATEGORY_LABELS } from "@/lib/content-
 import { socialDescription } from "@/lib/social-metadata";
 import { contentOgImagePath } from "@/lib/social-metadata";
 import { breadcrumbJsonLd, organizationJsonLd } from "@/lib/structured-data";
-import { absoluteUrl, excerpt, JsonLd, pageMetadata } from "@/lib/seo";
+import { absoluteUrl, excerpt, pageMetadata } from "@/lib/seo";
+import { JsonLd } from "@/lib/seo-jsonld";
 import { fetchPublicJson } from "@/lib/serverFetch";
 
 type RegulationMeta = {

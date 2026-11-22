@@ -52,6 +52,7 @@ const Icons: Record<string, React.ComponentType<IconProps>> = {
   petition: MessageSquare,
   email: Mail,
   permissions: Lock,
+  policy: FileText,
   people: Users,
   audit: ClipboardList,
   org: Network,

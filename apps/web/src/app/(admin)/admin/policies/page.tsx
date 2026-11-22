@@ -49,10 +49,16 @@ const STATUS_COLOR: Record<PrivacyRequestStatus, string> = {
 type Tab = "documents" | "privacy_requests";
 
 export default function PoliciesPage() {
-  const { isAdmin } = usePermissions();
+  const { can, canAny } = usePermissions();
+  const canManagePolicies = can("policy:admin");
+  const canManagePrivacyRequests = can("system:privacy");
   const [tab, setTab] = useState<Tab>("documents");
 
-  if (!isAdmin) {
+  useEffect(() => {
+    if (!canManagePolicies && canManagePrivacyRequests) setTab("privacy_requests");
+  }, [canManagePolicies, canManagePrivacyRequests]);
+
+  if (!canAny("policy:admin", "system:privacy")) {
     return (
       <div className="mx-auto max-w-3xl p-6">
         <section
@@ -60,7 +66,7 @@ export default function PoliciesPage() {
           style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}>
           <Lock className="mx-auto mb-3 text-[var(--danger)]" size={32} aria-hidden />
           <h1 className="text-xl font-semibold text-[var(--text-primary)]">
-            需要超級管理員權限
+            需要政策或個資管理權限
           </h1>
         </section>
       </div>
@@ -74,17 +80,21 @@ export default function PoliciesPage() {
       </header>
 
       <nav className="mb-4 flex gap-1 border-b border-[var(--border)]">
-        <TabButton active={tab === "documents"} onClick={() => setTab("documents")}>
-          <FileText size={14} aria-hidden /> 政策版本
-        </TabButton>
-        <TabButton
-          active={tab === "privacy_requests"}
-          onClick={() => setTab("privacy_requests")}>
-          <Inbox size={14} aria-hidden /> 個資權利請求
-        </TabButton>
+        {canManagePolicies && (
+          <TabButton active={tab === "documents"} onClick={() => setTab("documents")}>
+            <FileText size={14} aria-hidden /> 政策版本
+          </TabButton>
+        )}
+        {canManagePrivacyRequests && (
+          <TabButton
+            active={tab === "privacy_requests"}
+            onClick={() => setTab("privacy_requests")}>
+            <Inbox size={14} aria-hidden /> 個資權利請求
+          </TabButton>
+        )}
       </nav>
 
-      {tab === "documents" ? <DocumentsTab /> : <PrivacyRequestsTab />}
+      {tab === "documents" && canManagePolicies ? <DocumentsTab /> : <PrivacyRequestsTab />}
     </div>
   );
 }
