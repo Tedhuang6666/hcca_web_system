@@ -62,6 +62,14 @@ export const petitionsApi = {
   deleteNotificationRule: (id: string) =>
     del<void>(`/petitions/admin/notification-rules/${id}`),
   create: (body: PetitionCreate) => post<PetitionCreatedOut>("/petitions", body),
+  submit: (body: PetitionCreate, attachments: File[]) => {
+    const formData = new FormData();
+    formData.append("type_id", body.type_id);
+    formData.append("title", body.title);
+    formData.append("content", body.content);
+    attachments.forEach((file) => formData.append("attachments", file));
+    return uploadPetitionFile<PetitionCreatedOut>("/petitions/submit", formData);
+  },
   lookup: (caseNumber: string) =>
     get<PetitionCaseOut>(`/petitions/lookup?${new URLSearchParams({ case_number: caseNumber }).toString()}`),
   lookupShare: (shareToken: string) => post<PetitionCaseOut>("/petitions/share", { share_token: shareToken }),
