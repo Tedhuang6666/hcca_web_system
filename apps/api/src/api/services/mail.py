@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 import re
 import uuid
+from contextvars import ContextVar
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -25,6 +28,7 @@ from api.models.email_message import (
 )
 
 logger = logging.getLogger(__name__)
+OUTBOX_EVENT_ID: ContextVar[str | None] = ContextVar("outbox_event_id", default=None)
 
 RESEND_EMAILS_URL = "https://api.resend.com/emails"
 
@@ -52,6 +56,8 @@ async def _send_via_resend(
     body: str,
     subtype: str = "html",
     attachments: list[dict[str, str]] | None = None,
+    *,
+    idempotency_key: str | None = None,
 ) -> str | None:
     if not settings.RESEND_API_KEY:
         raise RuntimeError("RESEND_API_KEY 未設定，無法寄送 Email")
@@ -79,13 +85,17 @@ async def _send_via_resend(
     if attachments:
         payload["attachments"] = attachments
 
+    headers = {
+        "Authorization": f"Bearer {settings.RESEND_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    if idempotency_key:
+        headers["Idempotency-Key"] = idempotency_key
+
     async with httpx.AsyncClient(timeout=20) as client:
         response = await client.post(
             RESEND_EMAILS_URL,
-            headers={
-                "Authorization": f"Bearer {settings.RESEND_API_KEY}",
-                "Content-Type": "application/json",
-            },
+            headers=headers,
             json=payload,
         )
     if response.is_error:
@@ -237,6 +247,32 @@ def _preview_text(body: str) -> str:
     return " ".join(text.split())[:200]
 
 
+def _email_idempotency_key(
+    recipients: list[str],
+    subject: str,
+    body: str,
+    subtype: str,
+    attachments: list[dict[str, str]] | None,
+) -> str:
+    event_id = OUTBOX_EVENT_ID.get()
+    if event_id is None:
+        return f"email/{uuid.uuid4()}"
+    request = json.dumps(
+        {
+            "to": recipients,
+            "subject": subject,
+            "body": body,
+            "subtype": subtype,
+            "attachments": attachments,
+        },
+        sort_keys=True,
+        ensure_ascii=False,
+        default=str,
+    )
+    fingerprint = hashlib.sha256(request.encode()).hexdigest()
+    return f"outbox/{event_id}/{fingerprint}"
+
+
 async def _create_automatic_email_message(
     to: list[str],
     subject: str,
@@ -331,6 +367,7 @@ def send_email(
     recipient_metadata: list[dict[str, str | None]] | None = None,
     source: str | None = None,
     message_template: str | None = None,
+    provider_idempotency_key: str | None = None,
 ) -> dict[str, object]:
     """
     Celery 背景郵件發送任務。
@@ -340,6 +377,8 @@ def send_email(
       並記錄 attempt_count / next_retry_at；耗盡後標記 DEAD（dead-letter）。
     """
     attempt = self.request.retries + 1  # 本次嘗試（1-based）
+    if not provider_idempotency_key:
+        provider_idempotency_key = f"email/{uuid.uuid4()}"
 
     try:
         if email_message_id is None:
@@ -364,7 +403,14 @@ def send_email(
             )
         delivery_subtype = "html" if format_body else subtype
         message_id = asyncio.run(
-            _send_via_resend(to, subject, rendered_body, delivery_subtype, attachments)
+            _send_via_resend(
+                to,
+                subject,
+                rendered_body,
+                delivery_subtype,
+                attachments,
+                idempotency_key=provider_idempotency_key,
+            )
         )
         if email_recipient_id is not None:
             asyncio.run(
@@ -454,6 +500,7 @@ def send_email(
                 "recipient_metadata": recipient_metadata,
                 "source": source,
                 "message_template": message_template,
+                "provider_idempotency_key": provider_idempotency_key,
             },
         ) from exc
 
@@ -508,6 +555,13 @@ def enqueue_email(
         task_kwargs["source"] = source
     if message_template is not None:
         task_kwargs["message_template"] = message_template
+    task_kwargs["provider_idempotency_key"] = _email_idempotency_key(
+        recipients,
+        subject,
+        queued_body,
+        queued_subtype,
+        attachments,
+    )
     result = send_email.delay(
         recipients,
         subject,

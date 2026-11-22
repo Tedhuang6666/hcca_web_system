@@ -6,6 +6,7 @@ import asyncio
 import os
 import uuid
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -342,6 +343,59 @@ async def test_failed_websocket_does_not_block_push_or_email_intents(
     assert events["notification.email_batch"].status == OutboxStatus.PROCESSED
     transports.push.assert_awaited_once()
     transports.batch.assert_called_once()
+
+
+async def test_slow_outbox_delivery_renews_its_lease(delivery_sessions, monkeypatch):
+    @asynccontextmanager
+    async def task_session():
+        async with delivery_sessions() as session:
+            yield session
+
+    monkeypatch.setattr(database_core, "task_session", task_session)
+    monkeypatch.setattr(outbox, "_LEASE_SECONDS", 0.15)
+    started = asyncio.Event()
+    release = asyncio.Event()
+    calls = 0
+
+    async def slow_dispatch(_db, _event):  # noqa: ANN001
+        nonlocal calls
+        calls += 1
+        started.set()
+        await release.wait()
+
+    monkeypatch.setattr(outbox, "_dispatch", slow_dispatch)
+    async with delivery_sessions.begin() as session:
+        event = OutboxEvent(
+            event_type="test.slow_delivery",
+            payload={},
+            status=OutboxStatus.PENDING,
+            created_at=datetime.now(UTC),
+            next_attempt_at=datetime.now(UTC),
+        )
+        session.add(event)
+        await session.flush()
+        event_id = event.id
+
+    delivery = asyncio.create_task(outbox.process_pending_outbox())
+    try:
+        await asyncio.wait_for(started.wait(), timeout=5)
+        await asyncio.sleep(0.3)
+        async with delivery_sessions() as reader:
+            stored = await reader.get(OutboxEvent, event_id)
+            assert stored is not None
+            assert stored.locked_until is not None
+            assert stored.locked_until > datetime.now(UTC)
+            assert stored.locked_by is not None
+    finally:
+        release.set()
+        await delivery
+
+    async with delivery_sessions() as reader:
+        stored = await reader.get(OutboxEvent, event_id)
+        assert stored is not None
+        assert stored.status == OutboxStatus.PROCESSED
+        assert stored.locked_by is None
+        assert calls == 1
 
 
 async def test_digest_email_only_notification_is_hidden_and_not_immediately_scheduled(

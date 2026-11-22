@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 from html import escape as html_escape
 from typing import Any
 
-from sqlalchemy import event, or_, select
+from sqlalchemy import event, or_, select, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -146,7 +146,12 @@ async def _dispatch(db: AsyncSession, event: OutboxEvent) -> None:
             if not href.startswith(("http://", "https://")):
                 href = f"{base}{href if href.startswith('/') else '/' + href}"
             text = f"{text}\n{href}"
-        push_text_message(str(payload.get("line_user_id")), text)
+        await asyncio.to_thread(
+            push_text_message,
+            str(payload.get("line_user_id")),
+            text,
+            retry_key=event.id.hex,
+        )
     elif etype == "email.send":
         # 通用 email 發送事件：解耦業務模組對 mail service 的直接依賴
         to = payload.get("to", "")
@@ -644,8 +649,47 @@ async def process_pending_outbox() -> None:
             claims.append((event.id, worker_id))
         await db.commit()
 
-    for event_id, owner in claims:
-        await _process_claimed_event(event_id, owner)
+    if not claims:
+        return
+
+    lease_heartbeat = asyncio.create_task(
+        _renew_outbox_leases(worker_id, [event_id for event_id, _ in claims])
+    )
+    try:
+        for event_id, owner in claims:
+            await _process_claimed_event(event_id, owner)
+    finally:
+        lease_heartbeat.cancel()
+        await asyncio.gather(lease_heartbeat, return_exceptions=True)
+
+
+async def _renew_outbox_leases(worker_id: str, event_ids: list[uuid.UUID]) -> None:
+    """長批次或慢速傳遞期間定期延長仍由本 worker 持有的 lease。"""
+    from api.core.database import task_session
+
+    interval = max(0.05, _LEASE_SECONDS / 3)
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            async with task_session() as db:
+                await db.execute(
+                    update(OutboxEvent)
+                    .where(
+                        OutboxEvent.id.in_(event_ids),
+                        OutboxEvent.status == OutboxStatus.PENDING,
+                        OutboxEvent.locked_by == worker_id,
+                    )
+                    .values(locked_until=datetime.now(UTC) + timedelta(seconds=_LEASE_SECONDS))
+                )
+                await db.commit()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning(
+                "Outbox lease renewal failed worker=%s error_type=%s",
+                worker_id,
+                type(exc).__name__,
+            )
 
 
 async def _process_claimed_event(event_id: uuid.UUID, owner: str) -> None:
@@ -663,7 +707,13 @@ async def _process_claimed_event(event_id: uuid.UUID, owner: str) -> None:
         if event is None:
             return
         try:
-            await _dispatch(db, event)
+            from api.services.mail import OUTBOX_EVENT_ID
+
+            context_token = OUTBOX_EVENT_ID.set(str(event.id))
+            try:
+                await _dispatch(db, event)
+            finally:
+                OUTBOX_EVENT_ID.reset(context_token)
             event.status = OutboxStatus.PROCESSED
             event.processed_at = datetime.now(UTC)
             event.next_attempt_at = None

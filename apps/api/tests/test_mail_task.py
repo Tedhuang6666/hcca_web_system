@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from api.services.mail import ResendAPIError, enqueue_email, send_email
+from api.services.mail import OUTBOX_EVENT_ID, ResendAPIError, enqueue_email, send_email
 
 
 @pytest.mark.parametrize(
@@ -89,15 +89,23 @@ def test_enqueue_email_returns_task_id() -> None:
 
     assert task_id == "fake-task-id-12345"
     # delay 應以 list 型態呼叫（單一收件人也轉換成 list）
-    mock_delay.assert_called_once_with(
+    mock_delay.assert_called_once()
+    assert mock_delay.call_args.args == (
         ["to@example.com"],
         "subject",
         "<html>body</html>",
         "html",
-        email_message_id=None,
-        email_recipient_id=None,
-        attachments=None,
     )
+    assert set(mock_delay.call_args.kwargs) == {
+        "email_message_id",
+        "email_recipient_id",
+        "attachments",
+        "provider_idempotency_key",
+    }
+    assert mock_delay.call_args.kwargs["email_message_id"] is None
+    assert mock_delay.call_args.kwargs["email_recipient_id"] is None
+    assert mock_delay.call_args.kwargs["attachments"] is None
+    assert mock_delay.call_args.kwargs["provider_idempotency_key"].startswith("email/")
 
 
 def test_enqueue_email_accepts_list_of_recipients() -> None:
@@ -120,15 +128,12 @@ def test_enqueue_email_accepts_message_id() -> None:
     with patch("api.services.mail.send_email.delay", return_value=mock_task_result) as mock_delay:
         enqueue_email("to@example.com", "subject", "body", email_message_id="message-id")
 
-    mock_delay.assert_called_once_with(
-        ["to@example.com"],
-        "subject",
-        "body",
-        "html",
-        email_message_id="message-id",
-        email_recipient_id=None,
-        attachments=None,
-    )
+    mock_delay.assert_called_once()
+    assert mock_delay.call_args.args == (["to@example.com"], "subject", "body", "html")
+    assert mock_delay.call_args.kwargs["email_message_id"] == "message-id"
+    assert mock_delay.call_args.kwargs["email_recipient_id"] is None
+    assert mock_delay.call_args.kwargs["attachments"] is None
+    assert mock_delay.call_args.kwargs["provider_idempotency_key"].startswith("email/")
 
 
 def test_enqueue_email_accepts_campaign_recipient_id() -> None:
@@ -145,15 +150,34 @@ def test_enqueue_email_accepts_campaign_recipient_id() -> None:
             email_recipient_id="recipient-id",
         )
 
-    mock_delay.assert_called_once_with(
-        ["to@example.com"],
-        "subject",
-        "body",
-        "html",
-        email_message_id="message-id",
-        email_recipient_id="recipient-id",
-        attachments=None,
-    )
+    mock_delay.assert_called_once()
+    assert mock_delay.call_args.args == (["to@example.com"], "subject", "body", "html")
+    assert mock_delay.call_args.kwargs["email_message_id"] == "message-id"
+    assert mock_delay.call_args.kwargs["email_recipient_id"] == "recipient-id"
+    assert mock_delay.call_args.kwargs["attachments"] is None
+    assert mock_delay.call_args.kwargs["provider_idempotency_key"].startswith("email/")
+
+
+def test_enqueue_email_uses_stable_key_for_outbox_event() -> None:
+    mock_task_result = MagicMock()
+    mock_task_result.id = "outbox-email-task"
+    token = OUTBOX_EVENT_ID.set("outbox-event-123")
+    try:
+        with (
+            patch(
+                "api.services.mail.send_email.delay", return_value=mock_task_result
+            ) as mock_delay,
+            patch("api.services.mail.render_generic_message", return_value="<p>body</p>"),
+        ):
+            enqueue_email("to@example.com", "subject", "body")
+            first_key = mock_delay.call_args.kwargs["provider_idempotency_key"]
+            enqueue_email("to@example.com", "subject", "body")
+            second_key = mock_delay.call_args.kwargs["provider_idempotency_key"]
+    finally:
+        OUTBOX_EVENT_ID.reset(token)
+
+    assert first_key == second_key
+    assert first_key.startswith("outbox/outbox-event-123/")
 
 
 def test_send_email_retries_on_failure() -> None:
@@ -172,6 +196,7 @@ def test_send_email_retries_on_failure() -> None:
     assert retry_call["kwargs"]["to"] == ["x@y.com"]
     assert retry_call["kwargs"]["subject"] == "s"
     assert retry_call["kwargs"]["body"] == "b"
+    assert retry_call["kwargs"]["provider_idempotency_key"].startswith("email/")
 
 
 def test_send_email_does_not_retry_invalid_api_key() -> None:
@@ -222,11 +247,14 @@ async def test_resend_provider_posts_rendered_html(monkeypatch: pytest.MonkeyPat
         body = render_generic_message(
             "主旨", "<p>內容 https://example.com/petitions/1</p>", {"body_format": "html"}
         )
-        await _send_via_resend(["user@example.com"], "主旨", body, "html")
+        await _send_via_resend(
+            ["user@example.com"], "主旨", body, "html", idempotency_key="outbox/test"
+        )
 
     mock_client.post.assert_awaited_once()
     _url, kwargs = mock_client.post.call_args
     assert kwargs["headers"]["Authorization"] == "Bearer re_test"
+    assert kwargs["headers"]["Idempotency-Key"] == "outbox/test"
     assert kwargs["json"]["from"] == "HCCA <noreply@hct.works>"
     assert kwargs["json"]["to"] == ["user@example.com"]
     assert kwargs["json"]["subject"] == "主旨"

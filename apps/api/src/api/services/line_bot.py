@@ -426,15 +426,17 @@ async def reply_text_message(reply_token: str, text: str) -> None:
     await run_in_threadpool(_reply_text_message, reply_token, text)
 
 
-def push_text_message(user_id: str, text: str) -> None:
+def push_text_message(user_id: str, text: str, *, retry_key: str | None = None) -> None:
     """同步推播文字訊息給指定 LINE userId，供 Celery/outbox 呼叫。"""
     if not is_configured():
         logger.warning("LINE Bot 未設定，跳過推播")
         return
     with ApiClient(_line_config) as api_client:
-        MessagingApi(api_client).push_message(
-            PushMessageRequest(to=user_id, messages=[TextMessage(text=text[:4900])])
-        )
+        request = PushMessageRequest(to=user_id, messages=[TextMessage(text=text[:4900])])
+        if retry_key:
+            MessagingApi(api_client).push_message(request, x_line_retry_key=retry_key)
+        else:
+            MessagingApi(api_client).push_message(request)
     logger.info("LINE 推播完成 to=%s", user_id)
 
 

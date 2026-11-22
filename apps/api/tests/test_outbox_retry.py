@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy import delete, select
@@ -50,3 +51,27 @@ async def test_database_error_during_dispatch_is_counted_and_releases_lease(
         async with task_session() as db:
             await db.execute(delete(OutboxEvent).where(OutboxEvent.id == event_id))
             await db.commit()
+
+
+async def test_line_push_is_offloaded_and_uses_event_retry_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from api.services import line_bot
+
+    event = OutboxEvent(
+        id=uuid.uuid4(),
+        event_type="line.push",
+        payload={"line_user_id": "line-user", "title": "提醒"},
+        status=OutboxStatus.PENDING,
+        created_at=datetime.now(UTC),
+    )
+    to_thread = AsyncMock()
+    monkeypatch.setattr(outbox.asyncio, "to_thread", to_thread)
+
+    await outbox._dispatch(None, event)  # type: ignore[arg-type]
+
+    args = to_thread.await_args
+    assert args is not None
+    assert args.args[0] is line_bot.push_text_message
+    assert args.args[1:] == ("line-user", "提醒")
+    assert args.kwargs == {"retry_key": event.id.hex}
