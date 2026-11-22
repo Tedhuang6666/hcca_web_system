@@ -3,19 +3,15 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.permissions import require_any, require_permission
-from api.models.org import Position
-from api.models.person import Person, PersonAffiliation, PersonAffiliationStatus, PersonStatus
-from api.models.school_class import SchoolClass
+from api.models.person import Person, PersonAffiliation, PersonStatus
 from api.models.user import User
 from api.routers._common import or_404
 from api.schemas.person import (
@@ -35,7 +31,8 @@ from api.schemas.person import (
 )
 from api.services import audit as audit_svc
 from api.services import person as person_svc
-from api.services.permission import get_user_org_ids_with_permission, get_user_permission_codes
+from api.services import person_access as person_access_svc
+from api.services.person_access import PeopleAccessScope
 
 router = APIRouter(prefix="/people", tags=["人員與身分"])
 
@@ -54,188 +51,32 @@ PeopleManager = Annotated[
 AdminUser = Annotated[User, Depends(require_permission(PermissionCode.ADMIN_ALL))]
 
 
-@dataclass(frozen=True)
-class PeopleAccessScope:
-    # 組織成員管理權直接涵蓋組織歸屬；班級管理權只涵蓋指定組織內的班級。
-    org_ids: frozenset[uuid.UUID] | None
-    class_ids: frozenset[uuid.UUID] | None
-    manageable_class_ids: frozenset[uuid.UUID] | None
-    class_org_by_id: dict[uuid.UUID, uuid.UUID | None] | None
-
-    @property
-    def is_global(self) -> bool:
-        return self.org_ids is None and self.class_ids is None
-
-    @property
-    def visible_org_ids(self) -> frozenset[uuid.UUID] | None:
-        if self.org_ids is None or self.class_org_by_id is None:
-            return None
-        return frozenset(
-            self.org_ids | {org_id for org_id in self.class_org_by_id.values() if org_id}
-        )
-
-
 async def _get_people_access_scope(db: AsyncSession, actor: User) -> PeopleAccessScope:
-    codes = await get_user_permission_codes(db, actor.id)
-    if (
-        actor.is_superuser
-        or {
-            PermissionCode.ADMIN_ALL.value,
-            PermissionCode.ADMIN_USERS.value,
-        }
-        & codes
-    ):
-        return PeopleAccessScope(
-            org_ids=None,
-            class_ids=None,
-            manageable_class_ids=None,
-            class_org_by_id=None,
-        )
-
-    org_ids = set(
-        await get_user_org_ids_with_permission(
-            db, actor.id, PermissionCode.ORG_MANAGE_MEMBERS.value
-        )
-    )
-    class_permission_org_ids = set(
-        await get_user_org_ids_with_permission(db, actor.id, PermissionCode.CLASS_MANAGE.value)
-    )
-    scoped_org_ids = org_ids | class_permission_org_ids
-    class_rows = (
-        await db.execute(
-            select(SchoolClass.id, SchoolClass.org_id).where(
-                SchoolClass.org_id.in_(scoped_org_ids),
-                SchoolClass.is_active.is_(True),
-            )
-        )
-        if scoped_org_ids
-        else None
-    )
-    class_org_by_id = dict(class_rows.all()) if class_rows is not None else {}
-    manageable_class_ids = frozenset(
-        class_id
-        for class_id, org_id in class_org_by_id.items()
-        if org_id in class_permission_org_ids
-    )
-    return PeopleAccessScope(
-        org_ids=frozenset(org_ids),
-        class_ids=frozenset(class_org_by_id),
-        manageable_class_ids=manageable_class_ids,
-        class_org_by_id=class_org_by_id,
-    )
+    return await person_access_svc.get_people_access_scope(db, actor)
 
 
 def _scope_affiliation_filter(scope: PeopleAccessScope):
-    scope_filters = []
-    if scope.org_ids:
-        scope_filters.append(
-            and_(
-                PersonAffiliation.org_id.in_(scope.org_ids),
-                PersonAffiliation.class_id.is_(None),
-            )
-        )
-    if scope.class_ids:
-        class_org_id = (
-            select(SchoolClass.org_id)
-            .where(SchoolClass.id == PersonAffiliation.class_id)
-            .scalar_subquery()
-        )
-        scope_filters.append(
-            and_(
-                PersonAffiliation.class_id.in_(scope.class_ids),
-                or_(PersonAffiliation.org_id.is_(None), PersonAffiliation.org_id == class_org_id),
-            )
-        )
-    return or_(*scope_filters) if scope_filters else False
+    return person_access_svc.scope_affiliation_filter(scope)
 
 
 async def _require_person_scope(
     db: AsyncSession, person_id: uuid.UUID, scope: PeopleAccessScope
 ) -> None:
-    if scope.is_global:
-        return
-    affiliation_id = await db.scalar(
-        select(PersonAffiliation.id)
-        .where(
-            PersonAffiliation.person_id == person_id,
-            _scope_affiliation_filter(scope),
-            PersonAffiliation.status.in_(
-                [PersonAffiliationStatus.ACTIVE, PersonAffiliationStatus.PENDING_USER]
-            ),
-        )
-        .limit(1)
-    )
-    if affiliation_id is None:
+    if not await person_access_svc.person_has_access_scope(db, person_id, scope):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到人員主檔")
 
 
 async def _require_affiliation_scope(
     db: AsyncSession, affiliation: PersonAffiliation, scope: PeopleAccessScope
 ) -> None:
-    if scope.is_global:
-        return
-    class_org_id = (
-        scope.class_org_by_id.get(affiliation.class_id)
-        if affiliation.class_id is not None and scope.class_org_by_id is not None
-        else None
-    )
-    class_scope = affiliation.class_id is not None and affiliation.class_id in (
-        scope.manageable_class_ids or set()
-    )
-    if class_scope and affiliation.org_id is not None and affiliation.org_id != class_org_id:
-        class_scope = False
-    org_scope = affiliation.class_id is None and affiliation.org_id in (scope.org_ids or set())
-    position_org_id = None
-    if affiliation.position_id is not None:
-        position_org_id = await db.scalar(
-            select(Position.org_id).where(Position.id == affiliation.position_id)
-        )
-    position_matches_scope = (
-        affiliation.position_id is None
-        or (org_scope and position_org_id == affiliation.org_id)
-        or (class_scope and position_org_id == class_org_id)
-    )
-    if not (org_scope or class_scope) or not position_matches_scope:
+    if not await person_access_svc.affiliation_has_access_scope(db, affiliation, scope):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到身分紀錄")
 
 
 async def _require_new_affiliation_scope(
     db: AsyncSession, payload: PersonAffiliationCreate, scope: PeopleAccessScope
 ) -> None:
-    if scope.is_global:
-        return
-    has_scope = False
-    class_org_id = (
-        scope.class_org_by_id.get(payload.class_id)
-        if payload.class_id is not None and scope.class_org_by_id is not None
-        else None
-    )
-    class_scope = payload.class_id is not None and payload.class_id in (
-        scope.manageable_class_ids or set()
-    )
-    if class_scope and payload.org_id is not None and payload.org_id != class_org_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到目標身分範圍")
-    if payload.org_id is not None:
-        has_scope = True
-        if payload.class_id is None and payload.org_id not in (scope.org_ids or set()):
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到目標身分範圍")
-    if payload.class_id is not None:
-        has_scope = True
-        if not class_scope:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到目標身分範圍")
-    if payload.position_id is not None:
-        has_scope = True
-        position_org_id = await db.scalar(
-            select(Position.org_id).where(Position.id == payload.position_id)
-        )
-        position_allowed = (
-            position_org_id == class_org_id
-            if payload.class_id is not None
-            else position_org_id in (scope.org_ids or set())
-        )
-        if not position_allowed:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到目標身分範圍")
-    if not has_scope:
+    if not await person_access_svc.new_affiliation_has_access_scope(db, payload, scope):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到目標身分範圍")
 
 
@@ -244,37 +85,11 @@ async def _require_roster_import_scope(
 ) -> None:
     if scope.is_global:
         return
-    student_ids = {row.student_id for row in payload.rows}
-    if any(
-        row.class_id is None or row.class_id not in (scope.manageable_class_ids or set())
-        for row in payload.rows
-    ):
+    if not person_access_svc.roster_classes_have_access_scope(payload, scope):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="只能匯入管理範圍內的班級名冊"
         )
-
-    existing_people = await db.execute(
-        select(Person.id, Person.student_id).where(Person.student_id.in_(student_ids))
-    )
-    existing_by_student_id = {student_id: person_id for person_id, student_id in existing_people}
-    if not existing_by_student_id:
-        return
-    in_scope_person_ids = set(
-        (
-            await db.scalars(
-                select(PersonAffiliation.person_id)
-                .where(
-                    PersonAffiliation.person_id.in_(set(existing_by_student_id.values())),
-                    _scope_affiliation_filter(scope),
-                    PersonAffiliation.status.in_(
-                        [PersonAffiliationStatus.ACTIVE, PersonAffiliationStatus.PENDING_USER]
-                    ),
-                )
-                .distinct()
-            )
-        ).all()
-    )
-    if not set(existing_by_student_id.values()) <= in_scope_person_ids:
+    if not await person_access_svc.existing_roster_people_have_access_scope(db, payload, scope):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="名冊包含管理範圍外的既有人員，請由全域管理者處理",
@@ -346,14 +161,10 @@ async def get_people_stats(
 )
 async def read_people_access_scope(db: DbDep, actor: PeopleManager) -> PeopleAccessScopeOut:
     scope = await _get_people_access_scope(db, actor)
-    classes = []
-    if scope.class_ids:
-        class_rows = await db.scalars(
-            select(SchoolClass)
-            .where(SchoolClass.id.in_(scope.class_ids))
-            .order_by(SchoolClass.academic_year.desc(), SchoolClass.class_code)
-        )
-        classes = [PeopleAccessClassOut.model_validate(row) for row in class_rows]
+    classes = [
+        PeopleAccessClassOut.model_validate(row)
+        for row in await person_access_svc.list_scope_classes(db, scope)
+    ]
     return PeopleAccessScopeOut(
         is_global=scope.is_global,
         org_ids=sorted(scope.visible_org_ids, key=str)

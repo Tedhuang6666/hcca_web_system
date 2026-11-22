@@ -26,9 +26,10 @@ import {
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
-import { adminApi, ApiError, classApi, orgsApi, peopleApi, withFallback } from "@/lib/api";
+import { ApiError, classApi, peopleApi } from "@/lib/api";
 import { getPeopleDirectoryStats } from "@/lib/api/people";
 import { today } from "@/lib/dateUtils";
+import { loadPeopleDirectoryReferenceData } from "@/lib/people-directory-reference";
 import { AccountDirectoryPanel } from "@/components/admin/AccountDirectoryPanel";
 import MobileBackToList from "@/components/ui/MobileBackToList";
 import styles from "@/components/admin/PeopleManagement.module.css";
@@ -236,43 +237,11 @@ function PersonDirectoryPanel() {
   const loadReference = useCallback(async () => {
     setUsersLoading(true);
     try {
-      const scope = await withFallback(peopleApi.accessScope(), {
-        is_global: false,
-        org_ids: [],
-        class_ids: [],
-        classes: [],
-      });
-      const scopedClasses = scope.is_global
-        ? classApi.list({ is_active: "true" })
-        : Promise.resolve(scope.classes ?? []);
-      const scopedOrgs = scope.is_global
-        ? orgsApi.list({ active_only: true })
-        : Promise.all((scope.org_ids ?? []).map((orgId) => orgsApi.get(orgId)));
-      const scopedPositions = scope.is_global
-        ? adminApi.listPositions()
-        : Promise.all((scope.org_ids ?? []).map((orgId) => orgsApi.listPositions(orgId))).then((rows) => rows.flat());
-      const [classRows, orgRows, positionRows, userRows] = await Promise.all([
-        withFallback(scopedClasses, []),
-        withFallback(scopedOrgs, []),
-        withFallback(scopedPositions, []),
-        scope.is_global ? withFallback(adminApi.listUsers({ limit: 200 }), []) : Promise.resolve([]),
-      ]);
-      const allowedOrgIds = new Set(scope.org_ids ?? []);
-      const orgNames = new Map(orgRows.map((item) => [item.id, item.name]));
-      setClasses(classRows);
-      setOrgs(orgRows);
-      setPositions(
-        positionRows
-          .filter((item) => scope.is_global || allowedOrgIds.has(item.org_id))
-          .map((item) => ({
-            ...item,
-            org_name:
-              "org_name" in item && typeof item.org_name === "string"
-                ? item.org_name
-                : (orgNames.get(item.org_id) ?? ""),
-          })),
-      );
-      setUsers(scope.is_global ? userRows : []);
+      const data = await loadPeopleDirectoryReferenceData();
+      setClasses(data.classes);
+      setOrgs(data.orgs);
+      setPositions(data.positions);
+      setUsers(data.users);
     } finally {
       setUsersLoading(false);
     }

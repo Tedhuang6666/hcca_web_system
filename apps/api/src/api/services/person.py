@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import date
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -34,7 +34,6 @@ from api.schemas.person import (
     PersonAffiliationUpdate,
     PersonCreate,
     PersonDetailOut,
-    PersonDirectoryStats,
     PersonListItem,
     PersonRosterImport,
     PersonRosterImportResult,
@@ -44,6 +43,10 @@ from api.schemas.school_class import ClassRosterSummary
 from api.services._base import apply_updates
 from api.services.discord_bot import enqueue_role_sync
 from api.services.electronic_credential import get_settings
+from api.services.person_access import affiliation_matches_scope as _affiliation_matches_scope
+from api.services.person_access import scope_affiliation_filters as _scope_affiliation_filters
+from api.services.person_access import scoped_person_ids_query as _scoped_person_ids_query
+from api.services.person_stats import get_directory_stats as get_directory_stats
 from api.services.student_identity_rules import (
     is_alumni_school_account,
     is_g0_school_account_email,
@@ -54,70 +57,6 @@ def _class_label(sc: SchoolClass | None) -> str | None:
     if sc is None:
         return None
     return sc.label or f"{sc.academic_year} 學年度 {sc.class_code} 班"
-
-
-def _scope_affiliation_filters(
-    *,
-    org_ids: set[uuid.UUID] | None,
-    class_ids: set[uuid.UUID] | None,
-):
-    if org_ids is None and class_ids is None:
-        return []
-
-    scope_filters = []
-    if org_ids:
-        scope_filters.append(
-            (PersonAffiliation.org_id.in_(org_ids)) & PersonAffiliation.class_id.is_(None)
-        )
-    if class_ids:
-        class_org_id = (
-            select(SchoolClass.org_id)
-            .where(SchoolClass.id == PersonAffiliation.class_id)
-            .scalar_subquery()
-        )
-        scope_filters.append(
-            (PersonAffiliation.class_id.in_(class_ids))
-            & or_(PersonAffiliation.org_id.is_(None), PersonAffiliation.org_id == class_org_id)
-        )
-    return [or_(*scope_filters)] if scope_filters else [False]
-
-
-def _scoped_person_ids_query(
-    *,
-    org_ids: set[uuid.UUID] | None,
-    class_ids: set[uuid.UUID] | None,
-):
-    """依有效組織／班級身分回傳可檢視的人員 ID。None 代表不套用範圍。"""
-    if org_ids is None and class_ids is None:
-        return select(Person.id)
-
-    return (
-        select(PersonAffiliation.person_id)
-        .join(Person, Person.id == PersonAffiliation.person_id)
-        .where(
-            *_scope_affiliation_filters(org_ids=org_ids, class_ids=class_ids),
-            PersonAffiliation.status.in_(
-                [PersonAffiliationStatus.ACTIVE, PersonAffiliationStatus.PENDING_USER]
-            ),
-        )
-        .distinct()
-    )
-
-
-def _affiliation_matches_scope(
-    affiliation: PersonAffiliation,
-    *,
-    org_ids: set[uuid.UUID] | None,
-    class_ids: set[uuid.UUID] | None,
-) -> bool:
-    if org_ids is None and class_ids is None:
-        return True
-    if affiliation.class_id is None:
-        return org_ids is not None and affiliation.org_id in org_ids
-    if class_ids is None or affiliation.class_id not in class_ids:
-        return False
-    class_org_id = affiliation.school_class.org_id if affiliation.school_class else None
-    return affiliation.org_id is None or affiliation.org_id == class_org_id
 
 
 def affiliation_to_out(affiliation: PersonAffiliation) -> PersonAffiliationOut:
@@ -372,112 +311,6 @@ async def list_people(
             )
         )
     return rows
-
-
-async def get_directory_stats(
-    db: AsyncSession,
-    *,
-    keyword: str | None = None,
-    class_id: uuid.UUID | None = None,
-    status: PersonStatus | None = None,
-    scope_org_ids: set[uuid.UUID] | None = None,
-    scope_class_ids: set[uuid.UUID] | None = None,
-) -> PersonDirectoryStats:
-    scoped_person_ids = _scoped_person_ids_query(
-        org_ids=scope_org_ids,
-        class_ids=scope_class_ids,
-    )
-    scoped = scope_org_ids is not None or scope_class_ids is not None
-    if scoped:
-        account_count = (
-            await db.scalar(
-                select(func.count(func.distinct(Person.user_id))).where(
-                    Person.user_id.is_not(None), Person.id.in_(scoped_person_ids)
-                )
-            )
-            or 0
-        )
-        people_count = (
-            await db.scalar(select(func.count(Person.id)).where(Person.id.in_(scoped_person_ids)))
-            or 0
-        )
-    else:
-        account_count = await db.scalar(select(func.count(User.id))) or 0
-        people_count = await db.scalar(select(func.count(Person.id))) or 0
-    linked_count = (
-        await db.scalar(
-            select(func.count(Person.id)).where(
-                Person.user_id.is_not(None),
-                *([Person.id.in_(scoped_person_ids)] if scoped else []),
-            )
-        )
-        or 0
-    )
-    classed_count = (
-        await db.scalar(
-            select(func.count(func.distinct(PersonAffiliation.person_id))).where(
-                PersonAffiliation.kind == PersonAffiliationKind.CLASS_MEMBER,
-                PersonAffiliation.status.in_(
-                    [PersonAffiliationStatus.ACTIVE, PersonAffiliationStatus.PENDING_USER]
-                ),
-                *_scope_affiliation_filters(
-                    org_ids=scope_org_ids,
-                    class_ids=scope_class_ids,
-                ),
-            )
-        )
-        or 0
-    )
-    pending_link_count = (
-        await db.scalar(
-            select(func.count(func.distinct(PersonAffiliation.person_id))).where(
-                PersonAffiliation.status == PersonAffiliationStatus.PENDING_USER,
-                *_scope_affiliation_filters(
-                    org_ids=scope_org_ids,
-                    class_ids=scope_class_ids,
-                ),
-            )
-        )
-        or 0
-    )
-
-    matched_query = select(func.count(func.distinct(Person.id))).select_from(Person)
-    if scoped:
-        matched_query = matched_query.where(Person.id.in_(scoped_person_ids))
-    if keyword:
-        pattern = f"%{keyword.strip()}%"
-        matched_query = matched_query.where(
-            or_(
-                Person.display_name.ilike(pattern),
-                Person.legal_name.ilike(pattern),
-                Person.email.ilike(pattern),
-                Person.student_id.ilike(pattern),
-            )
-        )
-    if status is not None:
-        matched_query = matched_query.where(Person.status == status)
-    if class_id:
-        matched_query = matched_query.join(PersonAffiliation).where(
-            PersonAffiliation.class_id == class_id,
-            *(
-                _scope_affiliation_filters(
-                    org_ids=scope_org_ids,
-                    class_ids=scope_class_ids,
-                )
-                if scoped
-                else []
-            ),
-        )
-    matched_people_count = await db.scalar(matched_query) or 0
-
-    return PersonDirectoryStats(
-        account_count=account_count,
-        people_count=people_count,
-        linked_count=linked_count,
-        classed_count=classed_count,
-        pending_link_count=pending_link_count,
-        matched_people_count=matched_people_count,
-    )
 
 
 async def create_person(db: AsyncSession, *, data: PersonCreate) -> Person:
