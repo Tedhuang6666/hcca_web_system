@@ -48,6 +48,7 @@ def main() -> int:
         environment.update(
             PROD_ENV_FILE=str(empty),
             API_IMAGE="example.invalid/hcca-api:validation",
+            PETITION_PREVIEW_IMAGE="example.invalid/hcca-petition-preview:validation",
             WEB_IMAGE="example.invalid/hcca-web:validation",
             POSTGRES_USER="validation",
             POSTGRES_DB="validation_test",

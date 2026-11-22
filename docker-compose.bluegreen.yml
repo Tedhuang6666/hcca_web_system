@@ -11,6 +11,7 @@ x-api-common: &api-common
   build:
     context: .
     dockerfile: apps/api/Dockerfile
+    target: runtime
   env_file:
     - ${PROD_ENV_FILE:-.env.production}
   environment: &api-env
@@ -34,6 +35,7 @@ x-api-common: &api-common
     OTEL_ENABLED: ${OTEL_ENABLED:-false}
     OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
     OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+    PETITION_PREVIEW_SOCKET: /run/petition-preview/worker.sock
   depends_on:
     db:
       condition: service_healthy
@@ -50,6 +52,7 @@ x-api-common: &api-common
   volumes:
     - uploads:/app/uploads
     - privacy-exports:/app/privacy-exports
+    - petition-preview-socket:/run/petition-preview
     - "${GOOGLE_DRIVE_SERVICE_ACCOUNT_HOST_FILE:-/dev/null}:/run/secrets/google-drive-service-account.json:ro"
 
 x-api-service: &api-service
@@ -67,6 +70,8 @@ x-api-service: &api-service
   depends_on:
     migrate:
       condition: service_completed_successfully
+    petition-preview-worker:
+      condition: service_healthy
   healthcheck:
     test:
       [
@@ -250,6 +255,50 @@ services:
     healthcheck:
       disable: true
 
+  petition-preview-worker:
+    image: ${PETITION_PREVIEW_IMAGE:-hcca-petition-preview:bluegreen-local}
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: petition-preview
+    restart: unless-stopped
+    network_mode: none
+    user: "1001:1001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: ${PETITION_PREVIEW_MEM_LIMIT:-512m}
+    memswap_limit: ${PETITION_PREVIEW_MEM_LIMIT:-512m}
+    mem_reservation: 128m
+    cpus: ${PETITION_PREVIEW_CPUS:-0.75}
+    tmpfs:
+      - /tmp:rw,nosuid,noexec,size=256m
+    environment:
+      HOME: /tmp
+      PETITION_PREVIEW_SOCKET: /run/petition-preview/worker.sock
+    command:
+      - sh
+      - -c
+      - >-
+        rm -f /run/petition-preview/worker.sock &&
+        exec uvicorn api.petition_preview_worker:app
+        --uds /run/petition-preview/worker.sock
+        --no-access-log --limit-concurrency 4
+    volumes:
+      - petition-preview-socket:/run/petition-preview
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          test -S /run/petition-preview/worker.sock &&
+          curl --fail --silent --unix-socket /run/petition-preview/worker.sock
+          http://localhost/health >/dev/null
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
   celery-beat:
     <<: *worker-service
     mem_limit: ${CELERY_BEAT_MEM_LIMIT:-256m}
@@ -304,6 +353,7 @@ volumes:
   redisbrokerdata:
   uploads:
   privacy-exports:
+  petition-preview-socket:
   celerybeat:
   caddydata:
   caddyconfig:

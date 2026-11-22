@@ -29,9 +29,15 @@ jobs:
           - name: api
             dockerfile: apps/api/Dockerfile
             image: ghcr.io/tedhuang6666/hcca_web_system-api
+            target: runtime
+          - name: petition-preview
+            dockerfile: apps/api/Dockerfile
+            image: ghcr.io/tedhuang6666/hcca_web_system-petition-preview
+            target: petition-preview
           - name: web
             dockerfile: apps/web/Dockerfile
             image: ghcr.io/tedhuang6666/hcca_web_system-web
+            target: ""
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -70,6 +76,7 @@ jobs:
         with:
           context: .
           file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
           push: true
           tags: |
             ${{ matrix.image }}:${{ steps.version.outputs.commit }}

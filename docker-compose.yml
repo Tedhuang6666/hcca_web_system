@@ -4,12 +4,14 @@ x-development-environment: &development-env
   DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
   DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
   REDIS_URL: redis://:${REDIS_PASSWORD:-dev-redis-change-in-prod}@redis:6379/0
+  PETITION_PREVIEW_SOCKET: /run/petition-preview/worker.sock
 
 # ── 共用 API 設定（anchor） ────────────────────────────────────────────────────
 x-api-common: &api-common
   build:
     context: .
     dockerfile: apps/api/Dockerfile
+    target: runtime
   env_file:
     - .env
   environment:
@@ -48,6 +50,7 @@ x-api-common: &api-common
   volumes:
     - ./uploads:/app/uploads
     - privacy-exports:/app/privacy-exports
+    - petition-preview-socket:/run/petition-preview
 
 services:
   # ── PostgreSQL ────────────────────────────────────────────────
@@ -119,6 +122,13 @@ services:
     <<: *api-common
     container_name: campus_api
     restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      petition-preview-worker:
+        condition: service_healthy
     environment:
       <<: *development-env
       DEBUG: "true"
@@ -181,6 +191,51 @@ services:
       start_period: 30s
     # 開發模式可 override CMD 為：uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 
+  # LibreOffice runs in its own container with no network interface. API traffic reaches it
+  # only through the shared Unix socket volume.
+  petition-preview-worker:
+    image: ${PETITION_PREVIEW_IMAGE:-hcca-petition-preview:dev}
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: petition-preview
+    restart: unless-stopped
+    network_mode: none
+    user: "1001:1001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: 0.75
+    tmpfs:
+      - /tmp:rw,nosuid,noexec,size=256m
+    environment:
+      HOME: /tmp
+      PETITION_PREVIEW_SOCKET: /run/petition-preview/worker.sock
+    command:
+      - sh
+      - -c
+      - >-
+        rm -f /run/petition-preview/worker.sock &&
+        exec uvicorn api.petition_preview_worker:app
+        --uds /run/petition-preview/worker.sock
+        --no-access-log --limit-concurrency 4
+    volumes:
+      - petition-preview-socket:/run/petition-preview
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          test -S /run/petition-preview/worker.sock &&
+          curl --fail --silent --unix-socket /run/petition-preview/worker.sock
+          http://localhost/health >/dev/null
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
   # ── FastAPI Admin 通道（管理員優先 / Load Shed 關閉） ─────────
   # 與 api 共用 image 與 DB/Redis，但綁不同 port、worker 數較少、永遠不 shed。
   # Cloudflare 規則：admin.<domain> → 8001；api.<domain> → 8000
@@ -188,6 +243,13 @@ services:
     <<: *api-common
     container_name: campus_api_admin
     restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      petition-preview-worker:
+        condition: service_healthy
     environment:
       <<: *development-env
       DEBUG: "true"
@@ -618,6 +680,7 @@ volumes:
   redisdata:
   meilidata:
   privacy-exports:
+  petition-preview-socket:
   celerybeat:
   prometheusdata:
   grafanadata:

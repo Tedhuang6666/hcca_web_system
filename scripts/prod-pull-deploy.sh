@@ -93,6 +93,7 @@ export BUILD_COMMIT="$release_sha"
 step "確認指定 commit 的不可變 GHCR 映像已就緒"
 ./scripts/wait-ghcr-image.sh "$release_sha"
 export API_IMAGE="ghcr.io/tedhuang6666/hcca_web_system-api:${release_sha}"
+export PETITION_PREVIEW_IMAGE="ghcr.io/tedhuang6666/hcca_web_system-petition-preview:${release_sha}"
 export WEB_IMAGE="ghcr.io/tedhuang6666/hcca_web_system-web:${release_sha}"
 
 step "docker compose pull（拉指定 commit 映像）"
@@ -119,7 +120,8 @@ echo "✓ 預部署備份完成：$backup_file"
 
 if [[ "${DEPLOY_STRATEGY:-bluegreen}" == "bluegreen" ]]; then
   step "啟動 blue-green 部署"
-  API_IMAGE="$API_IMAGE" WEB_IMAGE="$WEB_IMAGE" WITH_WORKERS="$with_workers" \
+  API_IMAGE="$API_IMAGE" PETITION_PREVIEW_IMAGE="$PETITION_PREVIEW_IMAGE" \
+    WEB_IMAGE="$WEB_IMAGE" WITH_WORKERS="$with_workers" \
     MAINTENANCE_MODE="${MAINTENANCE_MODE:-1}" DRAIN_SECONDS="${DRAIN_SECONDS:-10}" \
     ENV_FILE="$env_file" COMPOSE_FILE="docker-compose.bluegreen.yml" \
     ./scripts/zero-downtime-deploy.sh "${DEPLOY_SLOT:-auto}"

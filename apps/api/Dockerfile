@@ -37,9 +37,6 @@ RUN apt-get update && \
         libopenjp2-7 \
         libpango-1.0-0 \
         libpangoft2-1.0-0 \
-        libreoffice-calc \
-        libreoffice-impress \
-        libreoffice-writer \
         postgresql-client && \
     mkdir -p /usr/share/fonts/truetype/hcca /usr/share/fonts/opentype/noto-custom && \
     rm -rf /var/lib/apt/lists/*
@@ -73,7 +70,8 @@ COPY apps/api/alembic.ini /app/alembic.ini
 COPY apps/api/gunicorn.conf.py /app/gunicorn.conf.py
 COPY VERSION /app/VERSION
 
-RUN mkdir -p /app/uploads /app/backups && chown -R appuser:appgroup /app/uploads /app/backups
+RUN mkdir -p /app/uploads /app/backups /run/petition-preview && \
+    chown -R appuser:appgroup /app/uploads /app/backups /run/petition-preview
 
 # Production runtime 預先產生 Python bytecode，避免非 root 使用者啟動時
 # 因 PYTHONDONTWRITEBYTECODE=1 每次重新編譯大量模組。
@@ -100,3 +98,24 @@ EXPOSE 8000
 # 生產：Gunicorn + UvicornWorker（多 worker 充分利用多核）
 # 開發：CMD 可被 docker-compose override 為 uvicorn --reload
 CMD ["python", "-m", "gunicorn.app.wsgiapp", "api.main:app", "--config", "/app/gunicorn.conf.py"]
+
+# LibreOffice and UNO stay in a dedicated image used by the no-network preview worker.
+FROM runtime AS petition-preview
+
+USER root
+
+RUN apt-get update && \
+    apt-get upgrade -y --no-install-recommends && \
+    apt-get install -y --no-install-recommends \
+        libreoffice-calc \
+        libreoffice-impress \
+        libreoffice-writer \
+        python3-uno && \
+    rm -rf /var/lib/apt/lists/*
+
+USER appuser
+
+CMD ["uvicorn", "api.petition_preview_worker:app", "--uds", "/run/petition-preview/worker.sock"]
+
+# Keep the default Docker target as the API runtime for direct `docker build` users.
+FROM runtime AS default-runtime

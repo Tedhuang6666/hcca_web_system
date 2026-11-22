@@ -33,6 +33,7 @@ x-api-common: &api-common
     OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-hcca-api}
     OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
     OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+    PETITION_PREVIEW_SOCKET: /run/petition-preview/worker.sock
   depends_on:
     db:
       condition: service_healthy
@@ -50,6 +51,7 @@ x-api-common: &api-common
     - uploads:/app/uploads
     - backups:/app/backups
     - privacy-exports:/app/privacy-exports
+    - petition-preview-socket:/run/petition-preview
     - "${GOOGLE_DRIVE_SERVICE_ACCOUNT_HOST_FILE:-/dev/null}:/run/secrets/google-drive-service-account.json:ro"
 
 services:
@@ -106,6 +108,7 @@ services:
     mem_reservation: 256m
     environment:
       HOME: /tmp
+      PETITION_PREVIEW_SOCKET: /run/petition-preview/worker.sock
       APP_RELEASE: ${APP_RELEASE:-}
       BUILD_COMMIT: ${BUILD_COMMIT:-}
       DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
@@ -114,6 +117,21 @@ services:
       GUNICORN_WORKERS: ${GUNICORN_WORKERS:-1}
       GUNICORN_KEEPALIVE: ${GUNICORN_KEEPALIVE:-5}
       GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-60}
+    depends_on:
+      db:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      redis-broker:
+        condition: service_healthy
+      redis-realtime:
+        condition: service_healthy
+      petition-preview-worker:
+        condition: service_healthy
     healthcheck:
       test:
         [
@@ -132,6 +150,45 @@ services:
       timeout: 10s
       retries: 10
       start_period: 60s
+
+  petition-preview-worker:
+    image: ${PETITION_PREVIEW_IMAGE:?set PETITION_PREVIEW_IMAGE to an immutable GHCR image tag}
+    restart: unless-stopped
+    network_mode: none
+    user: "1001:1001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: ${PETITION_PREVIEW_MEM_LIMIT:-512m}
+    memswap_limit: ${PETITION_PREVIEW_MEM_LIMIT:-512m}
+    cpus: ${PETITION_PREVIEW_CPUS:-0.75}
+    tmpfs:
+      - /tmp:rw,nosuid,noexec,size=256m
+    environment:
+      HOME: /tmp
+      PETITION_PREVIEW_SOCKET: /run/petition-preview/worker.sock
+    command:
+      - sh
+      - -c
+      - >-
+        rm -f /run/petition-preview/worker.sock &&
+        exec uvicorn api.petition_preview_worker:app
+        --uds /run/petition-preview/worker.sock
+        --no-access-log --limit-concurrency 4
+    volumes:
+      - petition-preview-socket:/run/petition-preview
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          test -S /run/petition-preview/worker.sock &&
+          curl --fail --silent --unix-socket /run/petition-preview/worker.sock
+          http://localhost/health >/dev/null
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
 
   # 一般背景任務 worker：不吃 email queue（寄信交給專責的 email-worker，
   # 避免大量背景任務把寄信卡住）。
@@ -285,6 +342,7 @@ volumes:
   uploads:
   backups:
   privacy-exports:
+  petition-preview-socket:
   celerybeat:
   caddydata:
   caddyconfig:

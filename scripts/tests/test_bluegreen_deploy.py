@@ -50,6 +50,7 @@ elif "up" in command and "api-green" in command:
                     "TEST_ALEMBIC_CURRENT": current,
                     "TEST_FAIL_TARGET": str(int(fail_target)),
                     "API_IMAGE": "hcca-api:candidate",
+                    "PETITION_PREVIEW_IMAGE": "hcca-preview:candidate",
                     "WEB_IMAGE": "hcca-web:candidate",
                     "WITH_WORKERS": "1",
                     "AUTO_ROLLBACK": "1",
@@ -104,6 +105,18 @@ elif "up" in command and "api-green" in command:
         upgrade = next(cmd for cmd in commands if "run" in cmd and cmd[-1] == "migrate")
         target_starts = [cmd for cmd in commands if "up" in cmd and "api-green" in cmd]
         self.assertEqual(len(target_starts), 2)
+        self.assertTrue(all("petition-preview-worker" in cmd for cmd in target_starts))
+        pull = next(cmd for cmd in commands if "pull" in cmd)
+        self.assertIn("petition-preview-worker", pull)
+        preview_health_wait = next(
+            index
+            for index, cmd in enumerate(commands)
+            if "ps" in cmd and cmd[-1] == "petition-preview-worker"
+        )
+        caddy_reload = max(
+            index for index, cmd in enumerate(commands) if "exec" in cmd and "reload" in cmd
+        )
+        self.assertLess(preview_health_wait, caddy_reload)
         self.assertLess(commands.index(upgrade), commands.index(target_starts[0]))
         self.assertTrue(all("--no-deps" in cmd for cmd in target_starts))
         self.assertEqual(sum("run" in cmd and cmd[-1] == "migrate" for cmd in commands), 1)

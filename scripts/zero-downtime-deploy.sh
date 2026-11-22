@@ -51,7 +51,7 @@ fi
 
 compose=(docker compose --env-file "$env_file" -f "$compose_file")
 worker_services=()
-target_services=("api-$target" "web-$target")
+target_services=("petition-preview-worker" "api-$target" "web-$target")
 if [[ "${WITH_WORKERS:-0}" == "1" ]]; then
   worker_services=("celery-worker-$target" celery-beat)
   target_services+=("${worker_services[@]}")
@@ -188,7 +188,8 @@ echo "Starting shared infrastructure..."
 "${compose[@]}" up -d --wait --wait-timeout "$health_wait_seconds" \
   db pgbouncer redis redis-cache redis-broker redis-realtime
 
-if [[ -n "${API_IMAGE:-}" && -n "${WEB_IMAGE:-}" ]]; then
+if [[ -n "${API_IMAGE:-}" && -n "${WEB_IMAGE:-}" \
+  && -n "${PETITION_PREVIEW_IMAGE:-}" ]]; then
   echo "Pulling immutable target images..."
   "${compose[@]}" pull "${target_services[@]}"
 else
@@ -253,6 +254,9 @@ if ! "${bootstrap_compose[@]}" up -d --no-deps "${target_services[@]}"; then
 fi
 
 if ! wait_healthy "api-$target"; then
+  abort_deploy
+fi
+if ! wait_healthy "petition-preview-worker"; then
   abort_deploy
 fi
 if ! wait_healthy "web-$target"; then

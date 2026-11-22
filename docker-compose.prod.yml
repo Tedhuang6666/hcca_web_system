@@ -21,6 +21,7 @@ x-api-common: &api-common
   build:
     context: .
     dockerfile: apps/api/Dockerfile
+    target: runtime
     args:
       APP_VERSION: ${APP_VERSION:-01.00.00.00.00}
       BUILD_COMMIT: ${BUILD_COMMIT:-}
@@ -49,6 +50,7 @@ x-api-common: &api-common
     OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-hcca-api}
     OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
     APP_RELEASE: ${APP_RELEASE:-}
+    PETITION_PREVIEW_SOCKET: /run/petition-preview/worker.sock
     GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE: ${GOOGLE_DRIVE_SERVICE_ACCOUNT_HOST_FILE:+/run/secrets/google-drive-service-account.json}
     GOOGLE_DRIVE_SERVICE_ACCOUNT_HOST_FILE: ""
   depends_on:
@@ -68,6 +70,7 @@ x-api-common: &api-common
     - uploads:/app/uploads
     - backups:/app/backups
     - privacy-exports:/app/privacy-exports
+    - petition-preview-socket:/run/petition-preview
     - "${GOOGLE_DRIVE_SERVICE_ACCOUNT_HOST_FILE:-/dev/null}:/run/secrets/google-drive-service-account.json:ro"
 
 services:
@@ -139,6 +142,7 @@ services:
       autoheal: "true"
     environment:
       HOME: /tmp
+      PETITION_PREVIEW_SOCKET: /run/petition-preview/worker.sock
       DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
       DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-20}
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
@@ -150,6 +154,21 @@ services:
       GUNICORN_WORKERS: ${GUNICORN_WORKERS:-1}
       GUNICORN_KEEPALIVE: ${GUNICORN_KEEPALIVE:-5}
       GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-60}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      redis-broker:
+        condition: service_healthy
+      redis-realtime:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
+      petition-preview-worker:
+        condition: service_healthy
     healthcheck:
       test:
         [
@@ -169,6 +188,54 @@ services:
       retries: 10
       # 拉長至 90s：給 lifespan 啟動 readiness 退避重試空間，避免重試期間被判 unhealthy
       start_period: 90s
+
+  petition-preview-worker:
+    image: ${PETITION_PREVIEW_IMAGE:-hcca-petition-preview:local}
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: petition-preview
+      args:
+        APP_VERSION: ${APP_VERSION:-01.00.00.00.00}
+        BUILD_COMMIT: ${BUILD_COMMIT:-}
+        BUILD_REF: ${BUILD_REF:-}
+        BUILD_TIME: ${BUILD_TIME:-}
+    restart: unless-stopped
+    network_mode: none
+    user: "1001:1001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: ${PETITION_PREVIEW_MEM_LIMIT:-512m}
+    memswap_limit: ${PETITION_PREVIEW_MEM_LIMIT:-512m}
+    cpus: ${PETITION_PREVIEW_CPUS:-0.75}
+    tmpfs:
+      - /tmp:rw,nosuid,noexec,size=256m
+    environment:
+      HOME: /tmp
+      PETITION_PREVIEW_SOCKET: /run/petition-preview/worker.sock
+    command:
+      - sh
+      - -c
+      - >-
+        rm -f /run/petition-preview/worker.sock &&
+        exec uvicorn api.petition_preview_worker:app
+        --uds /run/petition-preview/worker.sock
+        --no-access-log --limit-concurrency 4
+    volumes:
+      - petition-preview-socket:/run/petition-preview
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          test -S /run/petition-preview/worker.sock &&
+          curl --fail --silent --unix-socket /run/petition-preview/worker.sock
+          http://localhost/health >/dev/null
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
 
   celery-worker:
     <<: *api-common
@@ -580,6 +647,7 @@ volumes:
   uploads:
   backups:
   privacy-exports:
+  petition-preview-socket:
   celerybeat:
   caddydata:
   caddyconfig:
