@@ -51,20 +51,21 @@ def test_header_value_case_insensitive():
 # ── middleware 行為 ───────────────────────────────────────────────────────────
 
 
-def _counting_app():
+def _counting_app(
+    *,
+    cacheable: bool = True,
+    extra_headers: list[tuple[bytes, bytes]] | None = None,
+):
     """每次被呼叫就 +1，body 回傳當前計數 → 可藉此判斷是否真的重跑或重播快取。"""
     state = {"calls": 0}
 
     async def app(scope, receive, send):
         state["calls"] += 1
         body = json.dumps({"n": state["calls"]}).encode()
-        await send(
-            {
-                "type": "http.response.start",
-                "status": 201,
-                "headers": [(b"content-type", b"application/json")],
-            }
-        )
+        headers = [(b"content-type", b"application/json"), *(extra_headers or [])]
+        if cacheable:
+            headers.append((b"x-hcca-idempotency-cacheable", b"true"))
+        await send({"type": "http.response.start", "status": 201, "headers": headers})
         await send({"type": "http.response.body", "body": body})
 
     return IdempotencyMiddleware(app), state
@@ -83,6 +84,7 @@ async def test_first_request_executes(key: str):
     assert r.status_code == 201
     assert r.json() == {"n": 1}
     assert "x-idempotent-replay" not in {k.lower() for k in r.headers}
+    assert "x-hcca-idempotency-cacheable" not in {k.lower() for k in r.headers}
     assert state["calls"] == 1
 
 
@@ -107,6 +109,32 @@ async def test_same_key_different_body_conflicts(key: str):
         await ac.post("/do", json={"a": 1}, headers={IDEMPOTENCY_HEADER: key})
         r = await ac.post("/do", json={"a": 999}, headers={IDEMPOTENCY_HEADER: key})
     assert r.status_code == 409
+
+
+async def test_response_without_opt_in_keeps_only_bodyless_tombstone(key: str):
+    wrapped, state = _counting_app(cacheable=False)
+    transport = ASGITransport(app=wrapped)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        first = await ac.post("/do", json={"a": 1}, headers={IDEMPOTENCY_HEADER: key})
+        retry = await ac.post("/do", json={"a": 1}, headers={IDEMPOTENCY_HEADER: key})
+
+    assert first.json() == {"n": 1}
+    assert retry.status_code == 409
+    assert retry.json() == {"detail": "此請求已完成，回應未保留；請勿重送。"}
+    assert state["calls"] == 1
+
+
+async def test_private_response_is_not_replayed_even_when_marked(key: str):
+    wrapped, state = _counting_app(extra_headers=[(b"cache-control", b"private, no-store")])
+    transport = ASGITransport(app=wrapped)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        first = await ac.post("/do", json={"a": 1}, headers={IDEMPOTENCY_HEADER: key})
+        retry = await ac.post("/do", json={"a": 1}, headers={IDEMPOTENCY_HEADER: key})
+
+    assert first.json() == {"n": 1}
+    assert retry.status_code == 409
+    assert "n" not in retry.json()
+    assert state["calls"] == 1
 
 
 async def test_no_key_bypasses_middleware():

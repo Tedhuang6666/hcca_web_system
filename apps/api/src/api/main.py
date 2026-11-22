@@ -635,7 +635,6 @@ def create_app() -> FastAPI:
                         "duration_ms": round(duration_ms, 1),
                         "db_queries": query_count,
                         "db_time_ms": round(query_ms, 1),
-                        "client_ip": request.client.host if request.client else None,
                         "user_agent": request.headers.get("user-agent"),
                     },
                 )

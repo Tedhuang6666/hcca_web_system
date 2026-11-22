@@ -627,8 +627,8 @@ async def test_audit_middleware_records_authenticated_actor(
         "type": "http",
         "method": "PATCH",
         "path": "/users/me",
-        "query_string": b"",
-        "client": ("127.0.0.1", 12345),
+        "query_string": b"email=member%40school.edu&token=private-token",
+        "client": ("198.51.100.24", 12345),
         "state": {},
     }
     messages: list[Message] = []
@@ -644,8 +644,14 @@ async def test_audit_middleware_records_authenticated_actor(
     log_info.assert_called_once()
     assert log_info.call_args is not None
     assert log_info.call_args.args == ("Security audit: sensitive operation",)
-    assert log_info.call_args.kwargs["extra"]["user_id"] == str(user.id)
-    assert log_info.call_args.kwargs["extra"]["user_email"] == user.email
+    extra = log_info.call_args.kwargs["extra"]
+    assert extra["user_id"] == str(user.id)
+    assert "user_email" not in extra
+    assert "client_ip" not in extra
+    assert "query_params" not in extra
+    assert user.email not in repr(extra)
+    assert "198.51.100.24" not in repr(extra)
+    assert "private-token" not in repr(extra)
     assert any(message["type"] == "http.response.start" for message in messages)
 
 

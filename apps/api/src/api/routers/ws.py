@@ -13,6 +13,7 @@ from api.core.auth_cookies import access_token_from_cookies
 from api.core.clock import local_today
 from api.core.config import settings
 from api.core.database import AsyncSessionLocal
+from api.core.ip_blocklist import is_blocked
 from api.core.security import decode_token, is_blacklisted, is_session_revoked
 from api.core.ws_manager import WSCapacityError, manager
 from api.dependencies.permissions import require_permission
@@ -30,6 +31,8 @@ WS_CLOSE_FORBIDDEN = 4003
 @router.websocket("/ws/public/elections/{election_id}")
 async def public_election_websocket(websocket: WebSocket, election_id: uuid.UUID) -> None:
     """公開唯讀開票推播；客戶端只能回覆心跳，不可廣播訊息。"""
+    if await _reject_blocked_ws_ip(websocket):
+        return
     room = f"election:{election_id}"
     async with AsyncSessionLocal() as db:
         from api.models.election import Election
@@ -66,6 +69,8 @@ async def public_election_websocket(websocket: WebSocket, election_id: uuid.UUID
 @router.websocket("/ws/public/announcements")
 async def public_announcement_websocket(websocket: WebSocket) -> None:
     """公開重要公告變更推播；訊息只包含公告 ID，不攜帶受限內容。"""
+    if await _reject_blocked_ws_ip(websocket):
+        return
     if not await _validate_ws_origin(websocket):
         return
     room = "public:announcements"
@@ -110,6 +115,15 @@ async def _validate_ws_origin(websocket: WebSocket) -> bool:
 def _client_ip(websocket: WebSocket) -> str:
     """取真實 client IP（TrustedProxyMiddleware 已替換 scope["client"]）。"""
     return websocket.client.host if websocket.client else "unknown"
+
+
+async def _reject_blocked_ws_ip(websocket: WebSocket) -> bool:
+    """HTTP middleware 不會攔截 WebSocket，握手時改用相同 IP 黑名單。"""
+    ip = _client_ip(websocket)
+    if ip == "unknown" or not await is_blocked(ip):
+        return False
+    await websocket.close(code=WS_CLOSE_FORBIDDEN, reason="連線受到限制")
+    return True
 
 
 async def _authenticate_ws(
@@ -285,6 +299,8 @@ async def websocket_room(
           "data": { "text": "Hello" }, "timestamp": "..." }
         { "type": "ping" }                          # 伺服器心跳（前端必須回 pong）
     """
+    if await _reject_blocked_ws_ip(websocket):
+        return
     if not await _validate_ws_origin(websocket):
         return
     auth = await _authenticate_ws(websocket)
@@ -311,10 +327,9 @@ async def websocket_room(
         connected = True
     except WSCapacityError as exc:
         logger.warning(
-            "WS capacity hit scope=%s room=%s ip=%s reason=%s",
+            "WS capacity hit scope=%s room=%s reason=%s",
             exc.scope,
             room,
-            client_ip,
             exc.reason,
         )
         # 1013 = Try Again Later；前端可依此 backoff 重試

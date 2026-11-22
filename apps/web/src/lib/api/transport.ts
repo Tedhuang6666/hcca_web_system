@@ -1,23 +1,14 @@
 import { API_BASE } from "../config";
 import { reportClientError, type ClientErrorDiagnostics } from "../client-error-reporter";
+import { getCsrfToken } from "../csrf-cookie";
 
 export type HccaRequestInit = RequestInit;
-
-function getCookie(name: string): string | null {
-  if (typeof document === "undefined") return null;
-  const prefix = `${name}=`;
-  return document.cookie
-    .split(";")
-    .map((item) => item.trim())
-    .find((item) => item.startsWith(prefix))
-    ?.slice(prefix.length) ?? null;
-}
 
 export function csrfHeaders(method?: string): Record<string, string> {
   const normalized = (method ?? "GET").toUpperCase();
   if (!["POST", "PUT", "PATCH", "DELETE"].includes(normalized)) return {};
-  const token = getCookie("csrf_token");
-  return token ? { "X-CSRF-Token": decodeURIComponent(token) } : {};
+  const token = getCsrfToken();
+  return token ? { "X-CSRF-Token": token } : {};
 }
 
 export function createTraceId(): string {

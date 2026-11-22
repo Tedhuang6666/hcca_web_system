@@ -391,5 +391,5 @@ async def anonymize_user(
     await user_session_svc.revoke_all(session, user.id)
     await session.flush()
     now = datetime.now(UTC)
-    logger.info("User anonymized id=%s by=%s fields=%s", user.id, requested_by_email, updated)
+    logger.info("User anonymized id=%s fields=%s", user.id, updated)
     return AnonymizeResult(user_id=user.id, fields_updated=updated, anonymized_at=now)

@@ -1,5 +1,6 @@
 import { authFetch, type DefenseRule } from "@/lib/api";
 import { apiUrl } from "@/lib/config";
+import { getCsrfToken } from "@/lib/csrf-cookie";
 
 export interface UserBlockPreview {
   user_id: string;
@@ -15,13 +16,8 @@ export interface UserBlockResult extends UserBlockPreview {
 }
 
 function csrfHeader(): Record<string, string> {
-  if (typeof document === "undefined") return {};
-  const value = document.cookie
-    .split(";")
-    .map((item) => item.trim())
-    .find((item) => item.startsWith("csrf_token="))
-    ?.slice("csrf_token=".length);
-  return value ? { "X-CSRF-Token": decodeURIComponent(value) } : {};
+  const token = getCsrfToken();
+  return token ? { "X-CSRF-Token": token } : {};
 }
 
 async function readJson<T>(response: Response): Promise<T> {

@@ -134,7 +134,7 @@ class TrustedProxyMiddleware:
         try:
             ipaddress.ip_address(real_ip)
         except ValueError:
-            logger.warning("Invalid CF-Connecting-IP value: %r (peer=%s)", real_ip, peer_ip)
+            logger.warning("Invalid CF-Connecting-IP value ignored")
             await self.app(scope, receive, send)
             return
 

@@ -9,10 +9,10 @@ import type {
   SurveyParticipationItem,
 } from "../types";
 import { BASE, get, post } from "./core";
+import { getCsrfToken } from "../csrf-cookie";
 
 function hasCsrfCookie(): boolean {
-  return typeof document !== "undefined"
-    && document.cookie.split(";").some((item) => item.trim().startsWith("csrf_token="));
+  return getCsrfToken() !== null;
 }
 
 async function ensureCsrfCookie(): Promise<boolean> {

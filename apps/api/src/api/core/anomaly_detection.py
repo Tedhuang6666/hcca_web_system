@@ -158,5 +158,7 @@ async def check_rate_anomaly_and_block(
     if is_anomalous and client_ip and client_ip != "unknown":
         reason = f"anomaly user={user_id} endpoint={endpoint} count={count}/{window_seconds}s"
         await ip_block(client_ip, reason=reason, ttl_seconds=block_ttl_seconds)
-        logger.warning("Auto-blocked IP=%s: %s", client_ip, reason)
+        logger.warning(
+            "Rate anomaly triggered an IP block count=%s window_seconds=%s", count, window_seconds
+        )
     return is_anomalous, count

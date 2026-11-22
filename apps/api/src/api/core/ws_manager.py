@@ -121,9 +121,8 @@ class ConnectionManager:
         self._last_pong[websocket] = asyncio.get_event_loop().time()
         self._heartbeat_tasks[websocket] = asyncio.create_task(self._heartbeat_loop(websocket))
         logger.debug(
-            "WS 連線建立 room=%s ip=%s total=%d room_count=%d ip_count=%d",
+            "WS 連線建立 room=%s total=%d room_count=%d ip_count=%d",
             room,
-            client_ip,
             self.total_connections(),
             self.room_count(room),
             len(self._ip_connections[client_ip]),

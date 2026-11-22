@@ -278,7 +278,7 @@ async def _upsert_google_user(
     if not _email_can_login(email, login_user, is_linked_email=identity_by_email is not None):
         logger.warning(
             "Rejected Google login from disallowed email domain",
-            extra={"email": email, "client_ip": client_ip},
+            extra={"event": "auth.google.rejected", "reason": "disallowed_email_domain"},
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -310,14 +310,14 @@ async def _upsert_google_user(
         if settings.ADMIN_IP_WHITELIST and client_ip not in settings.ADMIN_IP_WHITELIST:
             logger.warning(
                 "Unauthorized superuser access attempt from non-whitelisted IP",
-                extra={"email": email, "ip": client_ip, "allowed_ips": settings.ADMIN_IP_WHITELIST},
+                extra={"event": "auth.superuser.rejected", "reason": "ip_not_whitelisted"},
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="此 IP 不被授權為管理員"
             )
 
         is_superuser = True
-        logger.info("Superuser login successful", extra={"email": email, "ip": client_ip})
+        logger.info("Superuser login successful", extra={"event": "auth.superuser.login"})
 
     if user is None:
         user = User(
@@ -367,7 +367,7 @@ async def _upsert_google_user(
     if is_suspicious:
         logger.warning(
             "Suspicious login detected",
-            extra={"user_id": str(user.id), "reason": reason, "ip": client_ip},
+            extra={"user_id": str(user.id)},
         )
 
     await record_login(str(user.id), client_ip, user_agent)
@@ -431,7 +431,6 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
             "Google OAuth state validation failed",
             extra={
                 "error": getattr(e, "error", "mismatching_state"),
-                "client_ip": client_ip,
                 "retrying": not oauth_retry,
             },
         )
@@ -451,10 +450,7 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
         oauth_error = getattr(e, "error", "oauth_error")
         logger.warning(
             "OAuth2 authentication failed",
-            extra={
-                "client_ip": client_ip,
-                "retrying": not oauth_retry,
-            },
+            extra={"retrying": not oauth_retry},
         )
         if (
             oauth_error in {"invalid_grant", "temporarily_unavailable", "server_error"}
@@ -474,7 +470,6 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
     except ConnectTimeout:
         logger.exception(
             "Google OAuth2 token endpoint connection timed out",
-            extra={"client_ip": client_ip},
         )
         error_qs = urlencode({"error": "連線 Google 登入服務逾時，請稍後再試"})
         return RedirectResponse(url=f"{frontend_origin}/login?{error_qs}")
@@ -482,7 +477,6 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
         logger.error(
             "Unexpected error in OAuth2 callback",
             exc_info=True,
-            extra={"client_ip": client_ip},
         )
         error_qs = urlencode({"error": "伺服器內部錯誤"})
         return RedirectResponse(url=f"{frontend_origin}/login?{error_qs}")
@@ -491,9 +485,7 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
 
     # 與 One Tap 相同：未驗證的 email 聲明不得用來比對或併入既有帳號。
     if user_info.get("email_verified") not in (True, "true"):
-        logger.warning(
-            "Google OAuth callback rejected unverified email", extra={"client_ip": client_ip}
-        )
+        logger.warning("Google OAuth callback rejected unverified email")
         error_qs = urlencode({"error": "Google 信箱尚未驗證，無法登入"})
         return RedirectResponse(url=f"{frontend_origin}/login?{error_qs}")
 
@@ -583,14 +575,13 @@ async def discord_callback(
     except OAuthError as exc:
         logger.warning(
             "Discord OAuth2 authentication failed",
-            extra={"error": str(exc), "client_ip": client_ip},
+            extra={"error": str(exc)},
         )
         error_qs = urlencode({"error": "Discord 授權失敗，請重新登入"})
         return RedirectResponse(url=f"{frontend_origin}/login?{error_qs}")
     except ConnectTimeout:
         logger.exception(
             "Discord OAuth2 endpoint connection timed out",
-            extra={"client_ip": client_ip},
         )
         error_qs = urlencode({"error": "連線 Discord 登入服務逾時，請稍後再試"})
         return RedirectResponse(url=f"{frontend_origin}/login?{error_qs}")
@@ -598,7 +589,6 @@ async def discord_callback(
         logger.error(
             "Unexpected error in Discord OAuth2 callback",
             exc_info=True,
-            extra={"client_ip": client_ip},
         )
         error_qs = urlencode({"error": "伺服器內部錯誤"})
         return RedirectResponse(url=f"{frontend_origin}/login?{error_qs}")
@@ -623,7 +613,7 @@ async def discord_callback(
     if is_suspicious:
         logger.warning(
             "Suspicious Discord login detected",
-            extra={"user_id": str(user.id), "reason": reason, "ip": client_ip},
+            extra={"user_id": str(user.id)},
         )
     await record_login(str(user.id), client_ip, request.headers.get("user-agent"))
 

@@ -39,16 +39,11 @@ def _cookies(scope: Scope) -> dict[str, str]:
     return cookies
 
 
-def _client_ip(scope: Scope) -> str:
-    client = scope.get("client")
-    return client[0] if client else "unknown"
-
-
 class CSRFMiddleware:
     """
     Double-Submit Cookie 模式 CSRF 保護：
-    - GET 請求：設置可讓 JS 讀取的 csrf_token cookie（非 httponly）
-    - POST/PATCH/PUT/DELETE：驗證 X-CSRF-Token header 與 csrf_token cookie 一致
+    - GET 請求：設置可讓 JS 讀取的 CSRF cookie（非 httponly）
+    - POST/PATCH/PUT/DELETE：驗證 X-CSRF-Token header 與 cookie 一致
     - 只讀取 header，不讀取 body
 
     Pure ASGI；不依賴 BaseHTTPMiddleware（後者每個請求都多開一層 anyio task group）。
@@ -67,7 +62,11 @@ class CSRFMiddleware:
         self.app = app
         self.enabled = enabled
         self.token_header_name = token_header_name
-        self.token_cookie_name = token_cookie_name
+        self.token_cookie_name = (
+            token_cookie_name
+            if not secure or token_cookie_name.startswith("__Host-")
+            else f"__Host-{token_cookie_name}"
+        )
         self.secure = secure
         self.exempt_paths = exempt_paths or [
             "/health",
@@ -124,7 +123,6 @@ class CSRFMiddleware:
                         "path": scope.get("path"),
                         "has_cookie": bool(stored_token),
                         "has_header": bool(header_token),
-                        "client_ip": _client_ip(scope),
                     },
                 )
                 response = JSONResponse(
@@ -139,7 +137,6 @@ class CSRFMiddleware:
                     extra={
                         "method": method,
                         "path": scope.get("path"),
-                        "client_ip": _client_ip(scope),
                     },
                 )
                 response = JSONResponse({"detail": "CSRF 驗證失敗"}, status_code=403)
@@ -158,6 +155,7 @@ class CSRFMiddleware:
                 dummy.set_cookie(
                     self.token_cookie_name,
                     token,
+                    path="/",
                     httponly=False,  # 必須讓 JS 能讀取
                     secure=self.secure,
                     samesite="strict",

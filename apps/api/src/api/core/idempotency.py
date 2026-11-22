@@ -17,10 +17,18 @@ from api.core.security import redis_client
 logger = logging.getLogger(__name__)
 
 IDEMPOTENCY_HEADER = "Idempotency-Key"
+_REPLAYABLE_RESPONSE_HEADER = b"x-hcca-idempotency-cacheable"
 _SAFE_HEADER_ALLOWLIST = {
     b"content-type",
     b"location",
     b"cache-control",
+}
+_SENSITIVE_RESPONSE_HEADERS = {
+    b"set-cookie",
+    b"authorization",
+    b"proxy-authenticate",
+    b"www-authenticate",
+    b"x-api-key",
 }
 
 
@@ -64,12 +72,38 @@ def _cacheable_headers(headers: list[tuple[bytes, bytes]]) -> list[tuple[str, st
     return result
 
 
+def _is_replayable_response(status_code: int, headers: list[tuple[bytes, bytes]]) -> bool:
+    """Only replay responses explicitly marked safe by the endpoint itself."""
+    if not 200 <= status_code < 300:
+        return False
+    if (_header_value(headers, _REPLAYABLE_RESPONSE_HEADER) or "").lower() != "true":
+        return False
+    if any(key.lower() in _SENSITIVE_RESPONSE_HEADERS for key, _ in headers):
+        return False
+    cache_control = _header_value(headers, b"cache-control") or ""
+    directives = {item.strip().lower().partition("=")[0] for item in cache_control.split(",")}
+    return not directives.intersection({"private", "no-cache", "no-store"})
+
+
+def _without_replayable_marker(message: Message) -> Message:
+    headers = message.get("headers") or []
+    if not any(key.lower() == _REPLAYABLE_RESPONSE_HEADER for key, _ in headers):
+        return message
+    return {
+        **message,
+        "headers": [
+            (key, value) for key, value in headers if key.lower() != _REPLAYABLE_RESPONSE_HEADER
+        ],
+    }
+
+
 class IdempotencyMiddleware:
     """Cache successful explicit-retry responses by Idempotency-Key.
 
-    Clients opt in by sending `Idempotency-Key` on unsafe methods. Reusing the
-    same key with a different body returns 409, preventing duplicate creates
-    caused by repeated clicks or network retries.
+    Clients opt in by sending `Idempotency-Key` on unsafe methods. Endpoints
+    must additionally mark a response `X-HCCA-Idempotency-Cacheable: true` only
+    when its body is safe to replay. Other successful responses retain a bodyless
+    tombstone so retries cannot repeat the operation or expose its response body.
     """
 
     def __init__(self, app: ASGIApp) -> None:
@@ -98,7 +132,9 @@ class IdempotencyMiddleware:
         body = await self._read_body(receive)
         body_hash = _body_hash(method, str(scope.get("path") or ""), body)
         namespace = _scope_fingerprint(scope)
-        cache_key = f"idempotency:{namespace}:{method}:{scope.get('path')}:{key}"
+        # v2 isolates this stricter response policy from response bodies cached by
+        # earlier middleware versions.
+        cache_key = f"idempotency:v2:{namespace}:{method}:{scope.get('path')}:{key}"
         lock_key = f"{cache_key}:lock"
 
         cached = await self._get_cached(cache_key)
@@ -106,6 +142,13 @@ class IdempotencyMiddleware:
             if cached.get("body_hash") != body_hash:
                 response = JSONResponse(
                     {"detail": "Idempotency-Key 已被不同請求內容使用"},
+                    status_code=409,
+                )
+                await response(scope, receive, send)
+                return
+            if cached.get("replayable") is not True:
+                response = JSONResponse(
+                    {"detail": "此請求已完成，回應未保留；請勿重送。"},
                     status_code=409,
                 )
                 await response(scope, receive, send)
@@ -124,6 +167,7 @@ class IdempotencyMiddleware:
 
         response_start: Message | None = None
         response_body = bytearray()
+        replayable = False
         body_sent = False
 
         async def replay_receive() -> Message:
@@ -134,31 +178,37 @@ class IdempotencyMiddleware:
             return {"type": "http.request", "body": body, "more_body": False}
 
         async def capture_send(message: Message) -> None:
-            nonlocal response_start
+            nonlocal response_start, replayable
             if message["type"] == "http.response.start":
                 response_start = message
+                replayable = _is_replayable_response(
+                    int(message.get("status", 500)), message.get("headers", [])
+                )
+                message = _without_replayable_marker(message)
             elif message["type"] == "http.response.body":
-                response_body.extend(message.get("body", b""))
+                if replayable:
+                    response_body.extend(message.get("body", b""))
             await send(message)
 
         try:
             await self.app(scope, replay_receive, capture_send)
+            if response_start is not None:
+                status_code = int(response_start.get("status", 500))
+                if 200 <= status_code < 300:
+                    await self._store_cached(
+                        cache_key,
+                        {
+                            "body_hash": body_hash,
+                            "status_code": status_code,
+                            "replayable": replayable,
+                            "headers": _cacheable_headers(response_start.get("headers", []))
+                            if replayable
+                            else [],
+                            "body": response_body.decode("latin-1") if replayable else "",
+                        },
+                    )
         finally:
             await self._release_lock(lock_key)
-
-        if response_start is None:
-            return
-        status_code = int(response_start.get("status", 500))
-        if 200 <= status_code < 500 and status_code not in {409, 429}:
-            await self._store_cached(
-                cache_key,
-                {
-                    "body_hash": body_hash,
-                    "status_code": status_code,
-                    "headers": _cacheable_headers(response_start.get("headers", [])),
-                    "body": response_body.decode("latin-1"),
-                },
-            )
 
     async def _read_body(self, receive: Receive) -> bytes:
         chunks: list[bytes] = []

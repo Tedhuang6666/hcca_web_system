@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -21,7 +22,14 @@ from api.core.permission_codes import PermissionCode
 from api.core.security import add_to_blacklist, create_access_token, create_refresh_token
 from api.models.user import User
 from api.models.user_session import UserSession
-from api.routers.ws import _assert_room_access, _authenticate_ws, _ws_token_from_websocket
+from api.routers.ws import (
+    _assert_room_access,
+    _authenticate_ws,
+    _ws_token_from_websocket,
+    public_announcement_websocket,
+    public_election_websocket,
+    websocket_room,
+)
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -47,6 +55,7 @@ class FakeWebSocket:
         query_token: str | None = None,
         header_token: str | None = None,
         cookie_token: str | None = None,
+        client_ip: str | None = None,
     ) -> None:
         self.query_params: dict[str, str] = {"token": query_token} if query_token else {}
         self.headers: dict[str, str] = (
@@ -55,7 +64,7 @@ class FakeWebSocket:
         self.cookies: dict[str, str] = (
             {settings.ACCESS_TOKEN_COOKIE_NAME: cookie_token} if cookie_token else {}
         )
-        self.client = None
+        self.client = SimpleNamespace(host=client_ip) if client_ip else None
         self.closed_with: tuple[int, str] | None = None
 
     async def close(self, code: int, reason: str = "") -> None:
@@ -148,6 +157,29 @@ async def test_authenticate_ws_blacklisted_token_rejected(member_user: User) -> 
     user_id = await _authenticate_ws(ws)  # type: ignore[arg-type]
     assert user_id is None
     assert ws.closed_with == (4001, "Token 已登出")
+
+
+@pytest.mark.parametrize("endpoint", ["election", "announcements", "room"])
+async def test_websocket_routes_reject_blocked_client_ip(
+    endpoint: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import api.routers.ws as ws_module
+
+    async def _blocked(ip: str) -> bool:
+        return ip == "203.0.113.45"
+
+    monkeypatch.setattr(ws_module, "is_blocked", _blocked)
+    ws = FakeWebSocket(client_ip="203.0.113.45")
+
+    if endpoint == "election":
+        await public_election_websocket(ws, uuid.uuid4())  # type: ignore[arg-type]
+    elif endpoint == "announcements":
+        await public_announcement_websocket(ws)  # type: ignore[arg-type]
+    else:
+        await websocket_room(ws, "user:some-user")  # type: ignore[arg-type]
+
+    assert ws.closed_with == (4003, "連線受到限制")
 
 
 async def test_authenticate_ws_garbage_token_rejected() -> None:

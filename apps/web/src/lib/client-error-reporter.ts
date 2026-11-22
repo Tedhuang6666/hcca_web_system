@@ -1,5 +1,6 @@
 import { API_BASE, apiUrl } from "./config";
 import { recordClientMetric } from "./client-metrics";
+import { getCsrfToken } from "./csrf-cookie";
 
 const MAX_MESSAGE_LENGTH = 1000;
 const MAX_STACK_LENGTH = 6000;
@@ -134,13 +135,8 @@ function diagnosticContext(): Record<string, string | boolean> {
 }
 
 function csrfHeader(): Record<string, string> {
-  if (typeof document === "undefined") return {};
-  const token = document.cookie
-    .split(";")
-    .map((item) => item.trim())
-    .find((item) => item.startsWith("csrf_token="))
-    ?.slice("csrf_token=".length);
-  return token ? { "X-CSRF-Token": decodeURIComponent(token) } : {};
+  const token = getCsrfToken();
+  return token ? { "X-CSRF-Token": token } : {};
 }
 
 function safeDiagnostics(input: ClientErrorDiagnostics | undefined): ClientErrorDiagnostics | undefined {

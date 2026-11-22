@@ -359,9 +359,8 @@ class LoadShedMiddleware:
         base = settings.LOAD_SHED_RETRY_AFTER_BASE_SECONDS
         retry_after = base + secrets.randbelow(base * 2 + 1)
         logger.info(
-            "Load shed: path=%s ip=%s reason=%s retry_after=%d",
+            "Load shed: path=%s reason=%s retry_after=%d",
             scope.get("path"),
-            _client_ip(scope),
             reason,
             retry_after,
         )

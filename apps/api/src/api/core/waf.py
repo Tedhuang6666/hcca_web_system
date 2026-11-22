@@ -239,10 +239,9 @@ class WAFMiddleware:
                     await self._record_offender(_client_ip(scope))
                 return
             logger.warning(
-                "WAF detect-only hit rule=%s severity=%s ip=%s method=%s path=%s",
+                "WAF detect-only hit rule=%s severity=%s method=%s path=%s",
                 name,
                 severity,
-                _client_ip(scope),
                 scope.get("method"),
                 path,
             )
@@ -263,9 +262,8 @@ class WAFMiddleware:
                     await self._record_offender(_client_ip(scope))
                     return
                 logger.warning(
-                    "WAF body detect-only rule=%s ip=%s path=%s",
+                    "WAF body detect-only rule=%s path=%s",
                     name,
-                    _client_ip(scope),
                     path,
                 )
 
@@ -297,15 +295,12 @@ class WAFMiddleware:
         return body, _replayed_receive
 
     async def _reject(self, scope: Scope, send: Send, rule: str, severity: Severity) -> None:
-        ip = _client_ip(scope)
         logger.warning(
-            "WAF blocked rule=%s severity=%s ip=%s method=%s path=%s query=%s",
+            "WAF blocked rule=%s severity=%s method=%s path=%s",
             rule,
             severity,
-            ip,
             scope.get("method"),
             scope.get("path"),
-            scope.get("query_string", b"")[:256],
         )
         resp = JSONResponse({"detail": "請求遭安全防護攔截"}, status_code=400)
 
@@ -332,9 +327,7 @@ class WAFMiddleware:
             # SECURITY: Redis 故障時 fallback 到 in-memory 計數，
             # 避免 autoblock 在 Redis 不可用時完全失效（fail-open 攻擊面）。
             count = self._local_incr(ip)
-            logger.warning(
-                "WAF offender counter using local fallback for ip=%s count=%s", ip, count
-            )
+            logger.warning("WAF offender counter using local fallback count=%s", count)
         if count >= settings.WAF_AUTOBLOCK_THRESHOLD:
             with contextlib.suppress(Exception):
                 await ip_block(
@@ -342,7 +335,7 @@ class WAFMiddleware:
                     reason=f"waf_autoblock hits={count}/{settings.WAF_AUTOBLOCK_WINDOW_SECONDS}s",
                     ttl_seconds=settings.WAF_AUTOBLOCK_TTL_SECONDS,
                 )
-                logger.warning("WAF auto-blocked IP=%s after %s hits", ip, count)
+                logger.warning("WAF auto-blocked client after %s hits", count)
 
     @staticmethod
     def _local_incr(ip: str) -> int:

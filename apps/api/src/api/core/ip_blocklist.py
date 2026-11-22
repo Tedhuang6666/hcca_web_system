@@ -105,9 +105,9 @@ async def block(ip: str, *, reason: str = "", ttl_seconds: int | None = 3600) ->
     payload = json.dumps({"reason": reason, "expires_at": expires_at})
     try:
         await redis_client.hset(BLOCKLIST_KEY, ip, payload)
-        logger.warning("IP blocked ip=%s reason=%s ttl=%s", ip, reason, ttl_seconds)
-    except RedisError:
-        logger.error("Failed to block IP=%s", ip, exc_info=True)
+        logger.warning("IP blocklist entry stored ttl=%s", ttl_seconds)
+    except RedisError as exc:
+        logger.error("IP blocklist write failed (error_type=%s)", type(exc).__name__)
         return
     # 清本地快取讓下個 request 立即看到
     _cache.pop(ip, None)

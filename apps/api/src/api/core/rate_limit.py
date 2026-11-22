@@ -285,7 +285,7 @@ class SimpleRateLimitMiddleware:
                 "（多 worker 環境下有效上限為 N×%d，請立即修復 Redis）",
                 req_limit,
                 exc_info=True,
-                extra={"client_ip": client_host, "path": request.url.path},
+                extra={"path": request.url.path},
             )
             if self._check_memory_rate_limit(key, req_limit, win):
                 record_rate_limit_blocked("memory")
@@ -300,7 +300,7 @@ class SimpleRateLimitMiddleware:
             logger.error(
                 "Rate limit 意外失敗，降級至 per-process 內存限流",
                 exc_info=True,
-                extra={"client_ip": client_host, "path": request.url.path},
+                extra={"path": request.url.path},
             )
             if self._check_memory_rate_limit(key, req_limit, win):
                 record_rate_limit_blocked("memory")

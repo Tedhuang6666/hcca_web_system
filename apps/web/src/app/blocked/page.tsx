@@ -7,6 +7,7 @@ import { Clock, LogOut, ShieldBan } from "lucide-react";
 import BrandEmblem from "@/components/brand/BrandEmblem";
 import { clearAuthCache } from "@/lib/auth-cache";
 import { BRANDING } from "@/lib/branding";
+import { getCsrfToken } from "@/lib/csrf-cookie";
 
 function BlockedContent() {
   const router = useRouter();
@@ -33,15 +34,11 @@ function BlockedContent() {
   const logout = async () => {
     setChecking(true);
     try {
-      const csrf = document.cookie
-        .split(";")
-        .map((item) => item.trim())
-        .find((item) => item.startsWith("csrf_token="))
-        ?.slice("csrf_token=".length);
+      const csrf = getCsrfToken();
       await fetch("/api/auth/logout", {
         method: "POST",
         credentials: "include",
-        headers: csrf ? { "X-CSRF-Token": decodeURIComponent(csrf) } : {},
+        headers: csrf ? { "X-CSRF-Token": csrf } : {},
       });
     } finally {
       clearAuthCache();
