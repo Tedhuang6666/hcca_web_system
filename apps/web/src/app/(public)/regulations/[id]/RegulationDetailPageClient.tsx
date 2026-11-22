@@ -21,6 +21,7 @@ import { regulationHref, regulationsApi } from "@/lib/api/regulations";
 import { apiErrorMessage } from "@/lib/api-helpers";
 import { copyText } from "@/lib/clipboard";
 import { apiUrl } from "@/lib/config";
+import { directRegulationPdfUrl } from "@/lib/regulation-pdf";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import CopyButton from "@/components/ui/CopyButton";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -106,6 +107,7 @@ export default function RegulationDetailPageClient({
   const [currentUserId, setCurrentUserId] = useState("");
   const isAnonymous = !currentUserId;
   const currentRegHref = reg ? regulationHref(reg) : `/regulations/${encodeURIComponent(id)}`;
+  const directPdfUrl = reg ? directRegulationPdfUrl(reg) : null;
 
   const reload = useCallback(() => {
     regulationsApi.get(id).then(setReg).catch(() => {});
@@ -515,14 +517,20 @@ export default function RegulationDetailPageClient({
               <button type="button" onClick={handleShare} className="btn btn-ghost">分享</button>
               <CopyButton value={() => window.location.href} label="複製連結" icon="none"
                 announcement="法規連結已複製" failureHint="複製失敗，請手動複製網址列" className="btn btn-ghost" />
-              <AnimatedDownloadButton
-                request={() => authFetch(apiUrl(`${currentRegHref}/print`), { credentials: "include" })}
-                filename={`${reg.title || "法規"}.pdf`}
-                className="btn btn-secondary"
-                aria-label="下載 PDF"
-                label="下載 PDF"
-                onComplete={() => showSuccessToast("PDF 已下載")}
-                onError={(error) => showErrorToast(`PDF 匯出失敗${error instanceof Error && error.message ? `：${error.message}` : ""}`)} />
+              {directPdfUrl ? (
+                <a className="btn btn-secondary" href={directPdfUrl} aria-label="下載 114-2 版 PDF">
+                  下載 PDF（114-2）
+                </a>
+              ) : (
+                <AnimatedDownloadButton
+                  request={() => authFetch(apiUrl(`${currentRegHref}/print`), { credentials: "include" })}
+                  filename={`${reg.title || "法規"}.pdf`}
+                  className="btn btn-secondary"
+                  aria-label="下載 PDF"
+                  label="下載 PDF"
+                  onComplete={() => showSuccessToast("PDF 已下載")}
+                  onError={(error) => showErrorToast(`PDF 匯出失敗${error instanceof Error && error.message ? `：${error.message}` : ""}`)} />
+              )}
             </div>
             {!reg.published_at && !reg.is_repealed && reg.workflow_status !== "archived"
               && (can("regulation:publish") || can("regulation:president_publish") || can("regulation:admin")) && (
