@@ -1,6 +1,12 @@
 import { defineConfig, devices } from "@playwright/test";
+import { existsSync } from "node:fs";
 
 const storageState = process.env.E2E_AUTH_STORAGE;
+const anonymousState = { cookies: [], origins: [] };
+
+if (process.env.CI && (!storageState || !existsSync(storageState))) {
+  throw new Error("CI requires E2E_AUTH_STORAGE to point to a generated authenticated session.");
+}
 
 export default defineConfig({
   testDir: "./e2e",
@@ -18,13 +24,26 @@ export default defineConfig({
   },
   projects: [
     {
-      name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      name: "public-chromium",
+      testMatch: /public\.spec\.ts$/,
+      use: { ...devices["Desktop Chrome"], storageState: anonymousState },
     },
     {
       name: "mobile-chromium",
-      testMatch: /public\.spec\.ts/,
-      use: { ...devices["Pixel 7"] },
+      testMatch: /public\.spec\.ts$/,
+      use: { ...devices["Pixel 7"], storageState: anonymousState },
+    },
+    {
+      name: "authenticated-chromium",
+      testMatch: /(?:authenticated|document_approval|ticket_purchase)\.spec\.ts$/,
+      workers: 1,
+      use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      name: "accessibility-chromium",
+      testMatch: /a11y\.spec\.ts$/,
+      workers: 1,
+      use: { ...devices["Desktop Chrome"], storageState: anonymousState },
     },
   ],
   webServer: {

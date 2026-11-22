@@ -9,11 +9,6 @@
 
 import { expect, test } from "@playwright/test";
 
-test.skip(
-  !process.env.E2E_AUTH_STORAGE,
-  "Set E2E_AUTH_STORAGE to a trusted Playwright storage-state file.",
-);
-
 test.describe("商品登記流程", () => {
   test("商品頁可正常載入，顯示商品或空狀態", async ({ page }) => {
     await page.goto("/shop");

@@ -69,6 +69,7 @@
   },
   "devDependencies": {
     "@typescript/native": "npm:typescript@^7.0.2",
+    "@axe-core/playwright": "^4.13.0",
     "@next/bundle-analyzer": "^16.4.1",
     "@playwright/test": "^1.64.1",
     "@types/qrcode": "^1.5.6",

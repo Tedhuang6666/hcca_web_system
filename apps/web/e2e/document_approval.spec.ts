@@ -12,12 +12,28 @@
  *     npx playwright test e2e/document_approval.spec.ts --headed
  */
 
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
-test.skip(
-  !process.env.E2E_AUTH_STORAGE,
-  "Set E2E_AUTH_STORAGE to a trusted Playwright storage-state file.",
-);
+const E2E_ORG_NAME = "HCCA CI E2E 組織";
+const E2E_SUBJECT = "E2E 測試公文主旨供流程驗證";
+const DOCUMENT_DETAIL_URL = /\/documents\/(?!new(?:\/|$))[^/?#]+/;
+
+async function selectE2eOrg(page: Page) {
+  const orgSelect = page.getByRole("combobox").first();
+  await orgSelect.selectOption({ label: E2E_ORG_NAME });
+  await expect(orgSelect).not.toHaveValue("");
+}
+
+async function saveDraft(page: Page) {
+  const createResponse = page.waitForResponse(
+    (response) => response.url().endsWith("/documents")
+      && response.request().method() === "POST",
+  );
+  await page.getByRole("button", { name: "儲存草稿" }).click();
+  const response = await createResponse;
+  const responseBody = await response.text();
+  expect(response.status(), `POST /documents failed: ${responseBody}`).toBe(201);
+}
 
 test.describe("公文建立流程", () => {
   test("可進入公文新建頁並看到必要欄位", async ({ page }) => {
@@ -54,19 +70,19 @@ test.describe("公文建立流程", () => {
     }
 
     // 填寫主旨（找第一個文字 input，placeholder 含「例」或「主旨」）
+    await selectE2eOrg(page);
     const titleField = page.locator(
       "input[placeholder*='例'], input[placeholder*='主旨'], input[placeholder*='標題']",
     ).first();
     await titleField.fill(`e2e 測試公文 ${Date.now()}`);
+    await page.getByPlaceholder(/一句話概述目的/).fill(E2E_SUBJECT);
+    await page.getByRole("switch", { name: "顯示 Email" }).uncheck();
 
     // 提交 / 儲存草稿
-    const submitBtn = page
-      .getByRole("button", { name: /儲存|建立|提交|送出|確認/ })
-      .first();
-    await submitBtn.click();
+    await saveDraft(page);
 
-    // 應跳轉到詳情頁 /documents/{id}
-    await expect(page).toHaveURL(/\/documents\/[0-9a-f-]{36}/, { timeout: 15_000 });
+    // 詳情頁路徑使用公文字號，不一定是 UUID。
+    await expect(page).toHaveURL(DOCUMENT_DETAIL_URL, { timeout: 15_000 });
     await expect(page.locator("body")).not.toContainText("Internal Server Error");
     await expect(page.locator("body")).not.toContainText("500");
   });
@@ -92,12 +108,12 @@ test.describe("公文建立流程", () => {
       }
       await firstDocLink.click();
     } else {
+      await selectE2eOrg(page);
       await titleField.fill(`e2e 簽核測試 ${Date.now()}`);
-      const submitBtn = page
-        .getByRole("button", { name: /儲存|建立|提交|送出/ })
-        .first();
-      await submitBtn.click();
-      await expect(page).toHaveURL(/\/documents\/[0-9a-f-]{36}/, { timeout: 15_000 });
+      await page.getByPlaceholder(/一句話概述目的/).fill(E2E_SUBJECT);
+      await page.getByRole("switch", { name: "顯示 Email" }).uncheck();
+      await saveDraft(page);
+      await expect(page).toHaveURL(DOCUMENT_DETAIL_URL, { timeout: 15_000 });
     }
 
     // 確認頁面含有簽核相關元素（面板、狀態標籤、或操作按鈕）
