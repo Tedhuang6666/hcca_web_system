@@ -15,7 +15,7 @@ from api.models.regulation import Regulation, RegulationArticle
 from api.models.survey import Survey, SurveyStatus
 from api.models.user import User
 from api.services.discord_bot import (
-    create_open_url,
+    plain_frontend_url,
 )
 from api.services.discord_command_common import (
     DiscordCommandError,
@@ -49,7 +49,7 @@ async def handle(
                     "title": row.title,
                     "is_urgent": row.is_urgent,
                     "published_at": row.published_at.isoformat() if row.published_at else None,
-                    "url": await create_open_url(user.id, f"/announcements/{row.id}"),
+                    "url": plain_frontend_url(f"/announcements/{row.id}"),
                 }
                 for row in rows
             ]
@@ -70,7 +70,7 @@ async def handle(
                     "title": row.title,
                     "closes_at": row.closes_at.isoformat() if row.closes_at else None,
                     "is_anonymous": row.is_anonymous,
-                    "url": await create_open_url(user.id, f"/surveys/{row.id}"),
+                    "url": plain_frontend_url(f"/surveys/{row.id}"),
                 }
                 for row in rows
             ]
@@ -105,7 +105,7 @@ async def handle(
                     "workflow_status": str(row.workflow_status),
                     "published": row.published_at is not None,
                     "updated_at": row.updated_at.isoformat() if row.updated_at else None,
-                    "url": await create_open_url(user.id, f"/regulations/{row.id}"),
+                    "url": plain_frontend_url(f"/regulations/{row.id}"),
                 }
                 for row in rows
             ]
@@ -134,7 +134,7 @@ async def handle(
                     {
                         "type": "announcement",
                         "title": row.title,
-                        "url": await create_open_url(user.id, f"/announcements/{row.id}"),
+                        "url": plain_frontend_url(f"/announcements/{row.id}"),
                     }
                 )
         if scope in {"all", "document"}:
@@ -158,7 +158,7 @@ async def handle(
                         "type": "document",
                         "title": row.title,
                         "subtitle": row.serial_number,
-                        "url": await create_open_url(user.id, f"/documents/{row.id}"),
+                        "url": plain_frontend_url(f"/documents/{row.id}"),
                     }
                 )
         if scope in {"all", "regulation"}:
@@ -180,7 +180,7 @@ async def handle(
                         "type": "regulation",
                         "title": row.title,
                         "subtitle": f"v{row.version}",
-                        "url": await create_open_url(user.id, f"/regulations/{row.id}"),
+                        "url": plain_frontend_url(f"/regulations/{row.id}"),
                     }
                 )
         return {"items": items}
@@ -209,6 +209,6 @@ async def handle(
             "legal_number": article.legal_number,
             "subtitle": article.subtitle,
             "content": article.content,
-            "url": await create_open_url(user.id, f"/regulations/{regulation.id}"),
+            "url": plain_frontend_url(f"/regulations/{regulation.id}"),
         }
     return None

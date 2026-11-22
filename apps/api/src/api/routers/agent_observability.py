@@ -193,6 +193,16 @@ async def authenticated_session(session: DbDep) -> dict[str, Any]:
             detail="效能監測帳號不可為超級管理員",
         )
     permissions = await get_user_permission_codes(session, user.id, on_date=local_today())
+    if any(
+        code.startswith(("admin:", "system:"))
+        or "admin" in code.partition(":")[2]
+        or "manage" in code.partition(":")[2]
+        for code in permissions
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="效能監測帳號不可持有管理權限",
+        )
     # 建立正式 UserSession，讓登出、撤銷全部工作階段與管理員撤銷都能讓此 token 失效；
     # refresh token 不回傳，access token 到期後即無法續用。
     tokens = await user_session_svc.issue_session_tokens(

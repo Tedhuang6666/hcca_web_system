@@ -61,7 +61,6 @@ async function fillAndSubmit() {
 
 describe("我要陳情", () => {
   it("submits the case and multiple attachments in one request", async () => {
-
     await fillAndSubmit();
 
     expect(await screen.findByText("P-0001")).toBeVisible();
@@ -75,12 +74,23 @@ describe("我要陳情", () => {
     );
   });
 
-  it("keeps the form when the case or one of its attachments cannot be submitted", async () => {
+  it("keeps the form when submission rejects an attachment", async () => {
     api.submit.mockRejectedValue(new api.ApiError(422, "附件格式不支援"));
 
     await fillAndSubmit();
 
     expect(await screen.findByRole("alert")).toHaveTextContent("附件格式不支援");
+    expect(screen.getByLabelText("標題")).toHaveValue("走廊燈壞了");
+    expect(screen.queryByText("P-0001")).not.toBeInTheDocument();
+    expect(api.submit).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the form and shows an inline error when submission fails", async () => {
+    api.submit.mockRejectedValue(new api.ApiError(500, "伺服器暫時無法處理"));
+
+    await fillAndSubmit();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("伺服器暫時無法處理");
     expect(screen.getByLabelText("標題")).toHaveValue("走廊燈壞了");
     expect(screen.queryByText("P-0001")).not.toBeInTheDocument();
     expect(api.submit).toHaveBeenCalledTimes(1);

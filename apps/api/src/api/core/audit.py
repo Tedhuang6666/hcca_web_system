@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from urllib.parse import parse_qsl
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -61,18 +62,19 @@ class SecurityAuditMiddleware:
 
         client_ip = _client_ip(scope)
         status_code = 500
+        actor: SimpleNamespace | None = None
 
         async def send_wrapper(message: Message) -> None:
-            nonlocal status_code
+            nonlocal actor, status_code
             if message["type"] == "http.response.start":
                 status_code = message["status"]
+                actor = (scope.get("state") or {}).get("user")
             await send(message)
 
         await self.app(scope, receive, send_wrapper)
 
         # 提取使用者資訊（若可用；由上游 auth middleware/dependency 寫入 scope["state"]）
-        state = scope.get("state") or {}
-        user = state.get("user")
+        user = actor or (scope.get("state") or {}).get("user")
         user_id = str(user.id) if user is not None else "anonymous"
         user_email = user.email if user is not None else "unknown"
 

@@ -293,6 +293,27 @@ def test_confirmation_many_products_keep_headers_totals_and_all_items_across_pag
     assert "班級確認人" in final
 
 
+def test_confirmation_class_with_many_products_fits_on_one_page():
+    order = _order(30)
+    school_class = SchoolClass(academic_year=115, class_code="101", label="一年一班")
+    pdf = PdfReader(
+        BytesIO(
+            _render_class_order_confirmations_pdf(
+                [(school_class, [order])],
+                "校慶預購",
+                datetime(2026, 11, 16, tzinfo=ZoneInfo("Asia/Taipei")),
+            )
+        )
+    )
+    assert len(pdf.pages) == 1
+    text = pdf.pages[0].extract_text()
+    for index in range(30):
+        assert text.count(f"紀念商品{index:02d}") == 1
+    assert "總件數：30 件" in text
+    assert "訂單總額：3,000 元" in text
+    assert "班級確認人" in text
+
+
 def test_variant_combinations_and_unspecified_items_are_counted_separately():
     from api.services.shop._receipts import _receipt_products, _receipt_variant_summary
 
