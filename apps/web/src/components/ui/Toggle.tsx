@@ -8,11 +8,13 @@ interface ToggleProps {
   label?: ReactNode;
   disabled?: boolean;
   ariaLabel?: string;
+  className?: string;
 }
 
 /**
- * 全站統一的膠囊樣式 Toggle Switch。
- * 容器 36×20、滑塊 16×16、padding 2px、translateX 16px 為標準尺寸。
+ * 全站唯一的開關。尺寸、顏色與動態都在 globals/10-shared-controls.css 的 `.switch`。
+ * 動態：滑塊帶著主色從原位滑到另一側；按住時滑塊朝要去的方向伸長；開啟後在滑塊上畫出勾號，
+ * 讓狀態不只靠顏色辨識。
  */
 export default function Toggle({
   checked,
@@ -20,41 +22,31 @@ export default function Toggle({
   label,
   disabled = false,
   ariaLabel,
+  className,
 }: ToggleProps) {
-  const handleClick = () => {
-    if (!disabled) onChange(!checked);
-  };
-  const swatch = (
+  const control = (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
       aria-label={ariaLabel ?? (typeof label === "string" ? label : undefined)}
       disabled={disabled}
-      onClick={handleClick}
-      className="relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full overflow-hidden transition-colors disabled:opacity-45 disabled:cursor-not-allowed"
-      style={{
-        background: checked ? "var(--primary)" : "var(--border-strong)",
-        cursor: disabled ? "not-allowed" : "pointer",
-      }}
+      onClick={() => onChange(!checked)}
+      className={label ? "switch" : `switch${className ? ` ${className}` : ""}`}
     >
-      <span
-        aria-hidden="true"
-        className="inline-block h-4 w-4 rounded-full bg-white shadow transition-transform"
-        style={{ transform: checked ? "translateX(18px)" : "translateX(2px)" }}
-      />
+      <span className="switch__ink" aria-hidden="true" />
+      <span className="switch__thumb" aria-hidden="true">
+        <svg className="switch__check" viewBox="0 0 12 12" focusable="false">
+          <path d="M3.1 6.3 5.2 8.3 9 4.1" pathLength={1} />
+        </svg>
+      </span>
     </button>
   );
-  if (!label) return swatch;
+  if (!label) return control;
   return (
-    <label
-      className="inline-flex items-center gap-2 cursor-pointer select-none"
-      style={{ cursor: disabled ? "not-allowed" : "pointer" }}
-    >
-      {swatch}
-      <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-        {label}
-      </span>
+    <label className={`switch-field${className ? ` ${className}` : ""}`} data-disabled={disabled || undefined}>
+      {control}
+      <span className="switch-field__label">{label}</span>
     </label>
   );
 }

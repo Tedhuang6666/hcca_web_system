@@ -3,6 +3,7 @@
 import ActivityImage from "./ActivityImage";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { ChevronLeft, ChevronRight, Download, Share2, X, ZoomIn, ZoomOut } from "lucide-react";
+import { copyText } from "@/lib/clipboard";
 import { uploadUrl } from "@/lib/config";
 import { galleryDate, type GalleryPhoto } from "@/lib/public-activity-albums";
 
@@ -131,11 +132,12 @@ export default function GalleryViewer({ items, initialIndex, origin, onClose }: 
     const url = new URL("/gallery/" + item.albumId, window.location.origin);
     url.searchParams.set("photo", item.id);
     try {
-      if (navigator.share) await navigator.share({ title: item.albumTitle, url: url.href });
-      else if (navigator.clipboard) {
-        await navigator.clipboard.writeText(url.href);
-        setMessage("照片連結已複製");
-      } else setShareUrl(url.href);
+      if (navigator.share) {
+        await navigator.share({ title: item.albumTitle, url: url.href });
+        return;
+      }
+      await copyText(url.href);
+      setMessage("照片連結已複製");
     } catch (error) {
       if (!(error instanceof DOMException && error.name === "AbortError")) setShareUrl(url.href);
     }

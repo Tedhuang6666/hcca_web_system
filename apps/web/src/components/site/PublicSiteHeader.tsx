@@ -3,7 +3,7 @@
 import Link from "@/components/ui/IntentLink";
 import { ChevronDown, LogIn, Menu, Moon, Search, Sun, X } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { usePublicModuleStatus } from "@/contexts/PublicModuleStatusContext";
 import { useTheme } from "@/components/providers/ThemeProvider";
@@ -11,7 +11,9 @@ import ImportantAnnouncementBanner, {
   type ImportantAnnouncement,
 } from "@/components/site/ImportantAnnouncementBanner";
 import PublicEmblem from "@/components/site/PublicEmblem";
+import LocationMark, { useLocationMarkScope } from "@/components/ui/LocationMark";
 import { BRANDING } from "@/lib/branding";
+import { coverRadius, MOTION_EASE_IN, MOTION_EASE_OUT, shouldReduceMotion } from "@/lib/motion";
 import {
   PUBLIC_NAV_GROUP_META,
   type ResolvedNavItem,
@@ -24,6 +26,18 @@ import type { PublicSitePageOut, PublicSiteSettingsOut } from "@/lib/types";
 const DeferredLiveElectionBanner = lazy(() => import("@/components/site/LiveElectionBanner"));
 /** 窄於此寬度時改用側拉選單，避免頁首連結擠在一起。 */
 const DESKTOP_NAV_QUERY = "(min-width: 960px)";
+const NAV_MARK_GROUP = "public-site-nav";
+
+/** 選單從選單鈕的位置展開（及收回），與深淺色切換同一種「從觸發點擴散」的語彙。 */
+function menuClipFrames(menu: HTMLElement, button: HTMLElement | null) {
+  const buttonRect = button?.getBoundingClientRect();
+  if (!buttonRect || buttonRect.width === 0) return null;
+  const menuRect = menu.getBoundingClientRect();
+  const x = buttonRect.left + buttonRect.width / 2;
+  const y = buttonRect.top + buttonRect.height / 2;
+  const at = `at ${x - menuRect.left}px ${y - menuRect.top}px`;
+  return [`circle(0px ${at})`, `circle(${coverRadius(menuRect, x, y)}px ${at})`];
+}
 
 type PublicHeaderSettings = Pick<
   PublicSiteSettingsOut,
@@ -62,8 +76,42 @@ function PublicSiteHeaderContent({
   const publicEmblemUrl = settings?.site_logo_url?.trim() || BRANDING.publicEmblemUrl;
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const mobileNavRef = useRef<HTMLDivElement>(null);
+  const mobileBackdropRef = useRef<HTMLButtonElement>(null);
   const headerRef = useRef<HTMLElement>(null);
   const moduleStatusReady = Object.keys(statuses).length > 0;
+  useLocationMarkScope(NAV_MARK_GROUP);
+
+  // 收合動畫結束後才卸載選單；減少動態或量不到按鈕位置時直接關閉。
+  const closeMobileMenu = useCallback(() => {
+    const menu = mobileNavRef.current;
+    const finish = () => {
+      setOpen(false);
+      if (menuButtonRef.current?.isConnected) menuButtonRef.current.focus();
+    };
+    if (!menu) {
+      finish();
+      return;
+    }
+    if (menu.dataset.closing === "true") return;
+    const frames = shouldReduceMotion() ? null : menuClipFrames(menu, menuButtonRef.current);
+    if (!frames) {
+      finish();
+      return;
+    }
+    menu.dataset.closing = "true";
+    const timing = { duration: 240, easing: MOTION_EASE_IN, fill: "forwards" as const };
+    mobileBackdropRef.current?.animate([{ opacity: 1 }, { opacity: 0 }], timing);
+    menu.animate({ clipPath: [...frames].reverse() }, timing).finished.then(finish, finish);
+  }, []);
+
+  useLayoutEffect(() => {
+    const menu = mobileNavRef.current;
+    if (!open || !menu || shouldReduceMotion()) return;
+    const frames = menuClipFrames(menu, menuButtonRef.current);
+    if (!frames) return;
+    const reveal = menu.animate({ clipPath: frames }, { duration: 420, easing: MOTION_EASE_OUT });
+    return () => reveal.cancel();
+  }, [open]);
   const closedModuleIds = new Set(
     Object.values(statuses)
       .filter((status) => status.on && status.mode === "closed")
@@ -112,8 +160,7 @@ function PublicSiteHeaderContent({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        setOpen(false);
-        menuButtonRef.current?.focus();
+        closeMobileMenu();
         return;
       }
       if (event.key !== "Tab") return;
@@ -150,7 +197,7 @@ function PublicSiteHeaderContent({
       desktopMedia.removeEventListener("change", closeOnDesktop);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [open]);
+  }, [closeMobileMenu, open]);
 
   const resolvedGroups = groupResolvedNav(
     resolvePublicNav(settings?.theme_config as Record<string, unknown> | undefined),
@@ -251,6 +298,9 @@ function PublicSiteHeaderContent({
               aria-current={isCurrentPath(pathname, item.href) ? "page" : undefined}
             >
               {item.label}
+              {isCurrentPath(pathname, item.href) && (
+                <LocationMark group={NAV_MARK_GROUP} className="public-nav-mark" />
+              )}
             </Link>
           ))}
           {menuGroups.map((group) => {
@@ -328,13 +378,11 @@ function PublicSiteHeaderContent({
       {open && (
         <>
           <button
+            ref={mobileBackdropRef}
             type="button"
             className="public-mobile-backdrop"
             aria-label="關閉導覽"
-            onClick={() => {
-              setOpen(false);
-              menuButtonRef.current?.focus();
-            }}
+            onClick={closeMobileMenu}
           />
           <div
             id="public-mobile-nav"
@@ -349,10 +397,7 @@ function PublicSiteHeaderContent({
                 type="button"
                 className="public-icon-button public-mobile-menu-close"
                 aria-label="關閉導覽"
-                onClick={() => {
-                  setOpen(false);
-                  menuButtonRef.current?.focus();
-                }}
+                onClick={closeMobileMenu}
               >
                 <X size={20} aria-hidden />
               </button>

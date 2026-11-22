@@ -7,10 +7,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal, preconnect } from "react-dom";
 import Link from "next/link";
 import Image from "next/image";
-import { AtSign, Clock, Copy, ExternalLink, LocateFixed, Mail, MapPin, MessageCircle, Phone, Search, Share2, Tag } from "lucide-react";
+import { AtSign, Clock, ExternalLink, LocateFixed, Mail, MapPin, MessageCircle, Phone, Search, Share2, Tag } from "lucide-react";
 import { partnerMapApi, recommendedVendorsApi, ApiError } from "@/lib/api";
 import type { PartnerBusinessDetail, PartnerBusinessDirectoryItem } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
+import { copyText } from "@/lib/clipboard";
+import CopyButton from "@/components/ui/CopyButton";
 import type { PartnerTagOut } from "@/lib/types";
 import type { RecommendedVendorOutWithHours, UnifiedMapItem } from "@/lib/partner-map-types";
 import { formatBusinessHours } from "@/lib/business-hours";
@@ -72,25 +74,6 @@ function normalizedBusinessName(value: string): string {
   return decodeBusinessSlug(value).toLocaleLowerCase();
 }
 
-async function copyText(value: string): Promise<void> {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(value);
-    return;
-  }
-  const textarea = document.createElement("textarea");
-  textarea.value = value;
-  textarea.setAttribute("readonly", "true");
-  textarea.style.position = "fixed";
-  textarea.style.opacity = "0";
-  document.body.appendChild(textarea);
-  textarea.select();
-  try {
-    if (!document.execCommand("copy")) throw new Error("copy_failed");
-  } finally {
-    textarea.remove();
-  }
-}
-
 function replacePartnerMapPath(path: string): void {
   if (typeof window === "undefined") return;
   window.history.replaceState(window.history.state, "", path);
@@ -121,13 +104,11 @@ function DetailPanel({
   business,
   loading,
   onShare,
-  onCopyLink,
   onClose,
 }: {
   business: PartnerBusinessDetail | null;
   loading: boolean;
   onShare: () => void;
-  onCopyLink: () => void;
   onClose: () => void;
 }) {
   if (!business && !loading) return null;
@@ -155,9 +136,14 @@ function DetailPanel({
             <button type="button" className="btn btn-secondary min-h-11 flex-1" onClick={onShare}>
               <Share2 size={15} aria-hidden="true" /> 分享店家
             </button>
-            <button type="button" className="btn btn-secondary min-h-11 flex-1" onClick={onCopyLink}>
-              <Copy size={15} aria-hidden="true" /> 複製連結
-            </button>
+            <CopyButton
+              value={businessUrl(business.name)}
+              label="複製連結"
+              icon="link"
+              announcement="店家連結已複製"
+              failureHint="無法複製連結，請手動複製網址列"
+              className="btn btn-secondary min-h-11 flex-1"
+            />
           </div>
           {business.cover_image_url && (
             <Image
@@ -577,16 +563,6 @@ export default function PartnerMapClient({
     replacePartnerMapPath("/partner-map");
   }, []);
 
-  const copySelectedLink = useCallback(async () => {
-    if (!selectedBusiness) return;
-    try {
-      await copyText(businessUrl(selectedBusiness.name));
-      showSuccessToast("店家連結已複製");
-    } catch {
-      showErrorToast("無法複製連結，請手動複製網址列");
-    }
-  }, [selectedBusiness]);
-
   const shareSelected = useCallback(async () => {
     if (!selectedBusiness) return;
     const url = businessUrl(selectedBusiness.name);
@@ -913,7 +889,6 @@ export default function PartnerMapClient({
             business={selectedBusiness ? attachCategoryTag(selectedBusiness, tags) : null}
             loading={detailLoading}
             onShare={shareSelected}
-            onCopyLink={copySelectedLink}
             onClose={closeDetails}
           />
           <RecommendedDetailPanel

@@ -18,10 +18,11 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Check, GripVertical, RotateCcw } from "lucide-react";
+import { GripVertical, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import MobileNavConfigurator from "@/components/layout/MobileNavConfigurator";
 import NavIcon from "@/components/layout/NavIcon";
+import Toggle from "@/components/ui/Toggle";
 import { useModuleStatus } from "@/contexts/ModuleStatusContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { navigationProfilesApi } from "@/lib/api";
@@ -366,27 +367,12 @@ function SortableNavRow({
           {item.href}
         </p>
       </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={visible}
-        aria-label={`${visible ? "隱藏" : "顯示"}${item.label}`}
+      <Toggle
+        checked={visible}
+        onChange={onToggle}
         disabled={disabled}
-        onClick={onToggle}
-        className="inline-flex h-6 w-11 items-center rounded-full transition-colors"
-        style={{
-          background: visible ? "var(--primary)" : "var(--border-strong)",
-          opacity: disabled ? 0.55 : 1,
-          cursor: disabled ? "not-allowed" : "pointer",
-        }}
-      >
-        <span
-          className="flex h-4 w-4 items-center justify-center rounded-full bg-white transition-transform"
-          style={{ transform: visible ? "translateX(24px)" : "translateX(4px)" }}
-        >
-          {visible && <Check size={10} aria-hidden={true} style={{ color: "var(--primary-text)" }} />}
-        </span>
-      </button>
+        ariaLabel={`在選單顯示${item.label}`}
+      />
     </div>
   );
 }

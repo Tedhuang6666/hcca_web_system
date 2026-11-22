@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { ChevronDown, Globe2, Search } from "lucide-react";
 import BrandEmblem from "@/components/brand/BrandEmblem";
+import LocationMark, { useLocationMarkScope } from "@/components/ui/LocationMark";
 import { usePermissions } from "@/hooks/usePermissions";
 import { AUTH_CACHE_EVENT } from "@/lib/auth-cache";
 import { useModuleStatus } from "@/contexts/ModuleStatusContext";
@@ -78,6 +79,8 @@ function writeCollapsed(set: Set<string>) {
   }
 }
 
+const SIDEBAR_MARK_GROUP = "app-sidebar-nav";
+
 /* ── NavLink ──────────────────────────────────────────────────────────────── */
 function NavLink({ item, pathname, down }: { item: NavItem; pathname: string; down?: boolean }) {
   const href = item.id === "about" || item.id === "publicAbout" ? "/system-info" : item.href;
@@ -90,6 +93,7 @@ function NavLink({ item, pathname, down }: { item: NavItem; pathname: string; do
       href={href}
       className="sidebar-nav-item motion-nav-link"
       aria-current={active ? "page" : undefined}>
+      {active && <LocationMark group={SIDEBAR_MARK_GROUP} className="sidebar-location-mark" />}
       <span className="flex-shrink-0"><NavIcon iconKey={item.iconKey} size={15} /></span>
       <span className="flex-1 truncate">{item.label}</span>
       {down && (
@@ -346,6 +350,7 @@ export default function Sidebar() {
   // 模組狀態首輪回應前保持 skeleton，避免先顯示已關閉入口、回應抵達後再把側欄推回去。
   // 訪客使用公開 fallback，沿用原本不等待登入後模組狀態的行為。
   const navigationReady = hydrated && (!isLoggedIn || moduleStatusReady);
+  useLocationMarkScope(SIDEBAR_MARK_GROUP, navigationReady);
 
   const initials = userName.charAt(0).toUpperCase();
 

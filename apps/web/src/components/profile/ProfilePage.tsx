@@ -7,6 +7,7 @@ import { usersApi, classApi, apiErrorMessage } from "@/lib/api";
 import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 import { SectionSkeleton } from "@/components/ui/Skeleton";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import Toggle from "@/components/ui/Toggle";
 import SessionManagement from "@/components/profile/SessionManagement";
 import { usePermissions } from "@/hooks/usePermissions";
 import type {
@@ -518,24 +519,7 @@ export default function ProfilePage() {
                   onToggle: toggleShowEmail,
                 },
               ].map(({ label, checked, onToggle }) => (
-                <label key={label} className="flex items-center gap-3 cursor-pointer">
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={checked}
-                    aria-label={label}
-                    onClick={onToggle}
-                    className="inline-flex h-5 w-10 flex-shrink-0 items-center rounded-full p-0.5 transition-colors"
-                    style={{
-                      background: checked ? "var(--primary)" : "var(--border-strong)",
-                    }}>
-                    <span
-                      className="block h-4 w-4 rounded-full bg-white shadow-sm transition-transform"
-                      style={{ transform: checked ? "translateX(20px)" : "translateX(0)" }}
-                    />
-                  </button>
-                  <span className="text-sm" style={{ color: "var(--text-primary)" }}>{label}</span>
-                </label>
+                <Toggle key={label} checked={checked} onChange={onToggle} label={label} />
               ))}
             </div>
           </div>

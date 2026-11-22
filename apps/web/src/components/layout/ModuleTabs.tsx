@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 
+import LocationMark, { useLocationMarkScope } from "@/components/ui/LocationMark";
+
 export type ModuleTab = {
   href: string;
   label: string;
@@ -20,6 +22,9 @@ export default function ModuleTabs({
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  // 每組分頁各自一條金線；不同模組之間換頁不會互相滑動。
+  const markGroup = `module-tabs:${label}`;
+  useLocationMarkScope(markGroup, tabs.length > 1);
 
   if (tabs.length <= 1) return null;
 
@@ -46,6 +51,7 @@ export default function ModuleTabs({
               aria-current={active ? "page" : undefined}
               className={`module-tab-link${active ? " is-active" : ""}`}
             >
+              {active && <LocationMark group={markGroup} className="module-tab-mark" />}
               <Icon size={15} aria-hidden={true} />
               <span>{tab.label}</span>
             </Link>

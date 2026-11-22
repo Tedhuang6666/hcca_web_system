@@ -28,6 +28,7 @@ import ProductThumbnail from "@/components/shop/ProductThumbnail";
 import ProductSizeChartEditor from "@/components/shop/ProductSizeChartEditor";
 import { usePermissions } from "@/hooks/usePermissions";
 import Modal from "@/components/ui/Modal";
+import CopyButton from "@/components/ui/CopyButton";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import ProductPurchaseRulesEditor, { emptyPurchaseRules, type PurchaseRulesDraft } from "@/components/shop/ProductPurchaseRulesEditor";
 import ShopNoteGroupsPanel from "@/components/shop/ShopNoteGroupsPanel";
@@ -1711,15 +1712,10 @@ export default function ShopAdminPage() {
     }
   };
 
-  const copyOrderLink = async (id: string) => {
+  const orderLink = (id: string) => {
     const url = new URL("/shop", window.location.origin);
     url.searchParams.set("product", id);
-    try {
-      await navigator.clipboard.writeText(url.toString());
-      toast.success("已複製商品訂購連結");
-    } catch {
-      toast.error("無法複製訂購連結，請確認瀏覽器剪貼簿權限");
-    }
+    return url.toString();
   };
 
   // Modal
@@ -1927,9 +1923,16 @@ export default function ShopAdminPage() {
       </div>
       <div className="flex flex-wrap gap-2">
         <MiniBtn tone="primary" onClick={() => setProductModal({ initial: product })}>編輯商品</MiniBtn>
-        <MiniBtn disabled={product.status !== "active" && product.status !== "testing"} onClick={() => void copyOrderLink(product.id)}>
-          複製訂購連結
-        </MiniBtn>
+        <CopyButton
+          disabled={product.status !== "active" && product.status !== "testing"}
+          value={() => orderLink(product.id)}
+          label="複製訂購連結"
+          icon="none"
+          announcement="已複製商品訂購連結"
+          failureHint="無法複製訂購連結，請確認瀏覽器剪貼簿權限"
+          className="min-h-11 px-3 py-1 rounded-lg text-xs font-medium disabled:opacity-45 sm:px-2.5"
+          style={{ color: "var(--text-secondary)", border: "1px solid var(--border)" }}
+        />
         {can("shop:test") && (product.status === "draft" || product.status === "cancelled") && (
           <MiniBtn disabled={productStatusBusy} onClick={() => void toggleProduct(product, true)}>開始測試</MiniBtn>
         )}
