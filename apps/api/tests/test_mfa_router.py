@@ -7,6 +7,7 @@ test_mfa_service.py 只測 service 層（setup_mfa / confirm_mfa / verify_mfa）
 
 from __future__ import annotations
 
+import time
 import uuid
 from collections.abc import Callable
 from typing import Any
@@ -23,6 +24,13 @@ from api.models.passkey import PasskeyCredential
 from api.models.user import User
 from api.routers.mfa import exchange_mfa_challenge
 from api.services import mfa as mfa_svc
+
+
+def _totp_code_pair(secret: str) -> tuple[str, str]:
+    """Return codes for adjacent TOTP windows using one shared timestamp."""
+    totp = pyotp.TOTP(secret)
+    timestamp = int(time.time())
+    return totp.at(timestamp), totp.at(timestamp, counter_offset=1)
 
 
 def _authed(factory: Callable[[User], AsyncClient], user: User) -> AsyncClient:
@@ -125,11 +133,10 @@ async def test_verify_with_correct_code_returns_true(
 ) -> None:
     user = await make_user()
     setup = await mfa_svc.setup_mfa(db_session, user)
-    code = pyotp.TOTP(setup["secret"]).now()
+    code, new_code = _totp_code_pair(setup["secret"])
     assert await mfa_svc.confirm_mfa(db_session, user, code)
 
     ac = _authed(authed_client_factory, user)
-    new_code = pyotp.TOTP(setup["secret"]).now()
     response = await ac.post("/auth/mfa/verify", json={"code": new_code})
 
     assert response.status_code == 200
@@ -218,11 +225,10 @@ async def test_login_verify_completes_challenge_and_sets_cookies(
 ) -> None:
     user = await make_user()
     setup = await mfa_svc.setup_mfa(db_session, user)
-    confirm_code = pyotp.TOTP(setup["secret"]).now()
+    confirm_code, login_code = _totp_code_pair(setup["secret"])
     await mfa_svc.confirm_mfa(db_session, user, confirm_code)
 
     challenge_token = create_mfa_challenge_token(subject=str(user.id))
-    login_code = pyotp.TOTP(setup["secret"]).now()
 
     response = await client.post(
         "/auth/mfa/login/verify",
@@ -246,10 +252,10 @@ async def test_login_verify_rejects_superuser_outside_admin_ip_whitelist(
 
     user = await make_user(is_superuser=True, mfa_enabled=True)
     setup = await mfa_svc.setup_mfa(db_session, user)
-    await mfa_svc.confirm_mfa(db_session, user, pyotp.TOTP(setup["secret"]).now())
+    confirm_code, code = _totp_code_pair(setup["secret"])
+    await mfa_svc.confirm_mfa(db_session, user, confirm_code)
     monkeypatch.setattr(settings, "ADMIN_IP_WHITELIST", ["10.9.8.7"])
     challenge_token = create_mfa_challenge_token(subject=str(user.id))
-    code = pyotp.TOTP(setup["secret"]).now()
 
     response = await client.post(
         "/auth/mfa/login/verify",
@@ -365,11 +371,10 @@ async def test_regenerate_backup_codes_with_correct_code(
 ) -> None:
     user = await make_user()
     setup = await mfa_svc.setup_mfa(db_session, user)
-    confirm_code = pyotp.TOTP(setup["secret"]).now()
+    confirm_code, verify_code = _totp_code_pair(setup["secret"])
     await mfa_svc.confirm_mfa(db_session, user, confirm_code)
 
     ac = _authed(authed_client_factory, user)
-    verify_code = pyotp.TOTP(setup["secret"]).now()
     response = await ac.post("/auth/mfa/backup-codes/regenerate", json={"code": verify_code})
 
     assert response.status_code == 200
@@ -399,11 +404,10 @@ async def test_disable_mfa_with_correct_code(
 ) -> None:
     user = await make_user()
     setup = await mfa_svc.setup_mfa(db_session, user)
-    confirm_code = pyotp.TOTP(setup["secret"]).now()
+    confirm_code, disable_code = _totp_code_pair(setup["secret"])
     await mfa_svc.confirm_mfa(db_session, user, confirm_code)
 
     ac = _authed(authed_client_factory, user)
-    disable_code = pyotp.TOTP(setup["secret"]).now()
     response = await ac.request("DELETE", "/auth/mfa/disable", json={"code": disable_code})
 
     assert response.status_code == 200

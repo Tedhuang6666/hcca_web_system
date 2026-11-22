@@ -8,6 +8,23 @@ from urllib.parse import urlsplit
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+from api.core.config_validation import (
+    ensure_audit_chain_signing_key_is_independent,
+    validate_audit_chain_previous_signing_keys,
+)
+from api.core.config_validation import (
+    parse_audit_chain_previous_signing_keys as _parse_audit_chain_previous_signing_keys,
+)
+from api.core.config_validation import (
+    parse_field_encryption_keys as _parse_field_encryption_keys,
+)
+from api.core.config_validation import (
+    parse_jwt_previous_signing_keys as _parse_jwt_previous_signing_keys,
+)
+from api.core.config_validation import (
+    parse_rate_limit_trusted_ips as _parse_rate_limit_trusted_ips,
+)
+
 _FALLBACK_SIGNING_KEY = "CHANGE_ME_IN_PRODUCTION_USE_256_BIT_KEY"
 
 # 已知不安全金鑰清單：dev/CI 環境使用的固定字串，生產環境必須拒絕。
@@ -561,37 +578,12 @@ class Settings(BaseSettings):
     @field_validator("FIELD_ENCRYPTION_KEYS", mode="before")
     @classmethod
     def parse_field_encryption_keys(cls, value: object) -> list[str]:
-        if value is None or value == "":
-            return []
-        if isinstance(value, str):
-            raw = value.strip()
-            if not raw:
-                return []
-            if raw.startswith("["):
-                import json
-
-                try:
-                    parsed = json.loads(raw)
-                except json.JSONDecodeError:
-                    parsed = [item.strip() for item in raw.strip("[]").split(",") if item.strip()]
-                if not isinstance(parsed, list):
-                    raise ValueError("FIELD_ENCRYPTION_KEYS 必須是 JSON array 或逗號分隔字串")
-                return [str(item).strip() for item in parsed if str(item).strip()]
-            return [item.strip() for item in raw.split(",") if item.strip()]
-        if isinstance(value, list):
-            return [str(item).strip() for item in value if str(item).strip()]
-        raise ValueError("FIELD_ENCRYPTION_KEYS 必須是 JSON array 或逗號分隔字串")
+        return _parse_field_encryption_keys(value)
 
     @field_validator("JWT_PREVIOUS_SIGNING_KEYS", mode="before")
     @classmethod
     def parse_jwt_previous_signing_keys(cls, value: object) -> list[str]:
-        if value is None or value == "":
-            return []
-        if isinstance(value, str):
-            return [item.strip() for item in value.split(",") if item.strip()]
-        if isinstance(value, list):
-            return [str(item).strip() for item in value if str(item).strip()]
-        raise ValueError("JWT_PREVIOUS_SIGNING_KEYS 必須是 kid:secret 的逗號分隔字串")
+        return _parse_jwt_previous_signing_keys(value)
 
     @field_validator("AUDIT_CHAIN_SIGNING_KEY")
     @classmethod
@@ -603,51 +595,12 @@ class Settings(BaseSettings):
     @field_validator("AUDIT_CHAIN_PREVIOUS_SIGNING_KEYS", mode="before")
     @classmethod
     def parse_audit_chain_previous_signing_keys(cls, value: object) -> list[str]:
-        if value is None or value == "":
-            return []
-        if isinstance(value, str):
-            items = [item.strip() for item in value.split(",") if item.strip()]
-        elif isinstance(value, list):
-            items = [str(item).strip() for item in value if str(item).strip()]
-        else:
-            raise ValueError("AUDIT_CHAIN_PREVIOUS_SIGNING_KEYS 必須是 kid:secret 的逗號分隔字串")
-
-        for item in items:
-            kid, separator, secret = item.partition(":")
-            valid_kid = (
-                bool(kid)
-                and len(kid) <= 16
-                and all(char.isascii() and (char.isalnum() or char in "_-") for char in kid)
-            )
-            if not separator or not valid_kid or len(secret.encode("utf-8")) < 32:
-                raise ValueError(
-                    "AUDIT_CHAIN_PREVIOUS_SIGNING_KEYS 項目必須是有效 kid:secret，key 至少 32 bytes"
-                )
-        return items
+        return _parse_audit_chain_previous_signing_keys(value)
 
     @field_validator("RATE_LIMIT_TRUSTED_IPS", mode="before")
     @classmethod
     def parse_trusted_ips(cls, value: object) -> list[str]:
-        if value is None or value == "":
-            return []
-        if isinstance(value, str):
-            raw = value.strip()
-            if not raw:
-                return []
-            if raw.startswith("["):
-                import json
-
-                try:
-                    parsed = json.loads(raw)
-                except json.JSONDecodeError:
-                    parsed = [item.strip() for item in raw.strip("[]").split(",") if item.strip()]
-                if not isinstance(parsed, list):
-                    raise ValueError("RATE_LIMIT_TRUSTED_IPS 必須是 JSON array 或逗號分隔字串")
-                return [str(item).strip() for item in parsed if str(item).strip()]
-            return [item.strip() for item in raw.split(",") if item.strip()]
-        if isinstance(value, list):
-            return [str(item).strip() for item in value if str(item).strip()]
-        raise ValueError("RATE_LIMIT_TRUSTED_IPS 必須是 JSON array 或逗號分隔字串")
+        return _parse_rate_limit_trusted_ips(value)
 
     @model_validator(mode="after")
     def derive_public_urls(self) -> "Settings":
@@ -690,17 +643,12 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def production_security_must_be_explicit(self) -> "Settings":
         is_prod = self.ENVIRONMENT.lower() in {"prod", "production"}
-        active_audit_key = self.AUDIT_CHAIN_SIGNING_KEY or self.SECRET_KEY
-        previous_audit_kids: set[str] = set()
-        for item in self.AUDIT_CHAIN_PREVIOUS_SIGNING_KEYS:
-            kid, _, key = item.partition(":")
-            if (
-                kid == self.AUDIT_CHAIN_ACTIVE_KID
-                or kid in previous_audit_kids
-                or key == active_audit_key
-            ):
-                raise ValueError("AUDIT_CHAIN_PREVIOUS_SIGNING_KEYS 的 kid 與 key 必須唯一")
-            previous_audit_kids.add(kid)
+        validate_audit_chain_previous_signing_keys(
+            active_kid=self.AUDIT_CHAIN_ACTIVE_KID,
+            audit_chain_signing_key=self.AUDIT_CHAIN_SIGNING_KEY,
+            secret_key=self.SECRET_KEY,
+            previous_signing_keys=self.AUDIT_CHAIN_PREVIOUS_SIGNING_KEYS,
+        )
         if is_prod and self.SECRET_KEY in _KNOWN_INSECURE_KEYS:
             raise ValueError(
                 "生產環境必須設定強 SECRET_KEY，不能使用已知不安全值（dev/CI 固定字串）"
@@ -713,18 +661,14 @@ class Settings(BaseSettings):
             raise ValueError("生產環境 JWT_SESSION_HASH_KEY 至少需要 32 bytes 的獨立隨機值")
         if is_prod and len(self.OAUTH_SESSION_SECRET.encode("utf-8")) < 32:
             raise ValueError("生產環境 OAUTH_SESSION_SECRET 至少需要 32 bytes 的獨立隨機值")
-        if (
-            is_prod
-            and self.AUDIT_CHAIN_SIGNING_KEY
-            and self.AUDIT_CHAIN_SIGNING_KEY
-            in {
-                self.SECRET_KEY,
-                self.JWT_SIGNING_KEY,
-                self.JWT_SESSION_HASH_KEY,
-                self.OAUTH_SESSION_SECRET,
-            }
-        ):
-            raise ValueError("生產環境 AUDIT_CHAIN_SIGNING_KEY 必須使用獨立金鑰")
+        ensure_audit_chain_signing_key_is_independent(
+            is_production=is_prod,
+            audit_chain_signing_key=self.AUDIT_CHAIN_SIGNING_KEY,
+            secret_key=self.SECRET_KEY,
+            jwt_signing_key=self.JWT_SIGNING_KEY,
+            jwt_session_hash_key=self.JWT_SESSION_HASH_KEY,
+            oauth_session_secret=self.OAUTH_SESSION_SECRET,
+        )
         if (
             is_prod
             and len(
@@ -772,7 +716,7 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "生產環境 DB_USE_PGBOUNCER=false 時，DATABASE_URL 不可指向 PgBouncer"
                 )
-            service_urls = (
+            service_urls: tuple[tuple[str, str], ...] = (
                 ("DATABASE_URL", self.DATABASE_URL),
                 ("REDIS_URL", self.REDIS_URL),
                 ("REDIS_CACHE_URL", self.REDIS_CACHE_URL or self.REDIS_URL),
