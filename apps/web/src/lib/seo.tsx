@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
 
 import { BRAND_TITLE, BRANDING } from "@/lib/branding";
 import { SOCIAL_IMAGE, SOCIAL_SITE_NAME } from "@/lib/social-metadata";
@@ -88,15 +87,4 @@ export function pageMetadata({
       images: [{ url: image, alt: title }],
     },
   };
-}
-
-export async function JsonLd({ data }: { data: Record<string, unknown> }) {
-  const nonce = (await headers()).get("x-nonce") ?? undefined;
-  return (
-    <script
-      nonce={nonce}
-      type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(data).replace(/</g, "\\u003c") }}
-    />
-  );
 }

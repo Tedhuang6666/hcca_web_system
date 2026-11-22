@@ -5,7 +5,8 @@ import { contentCategoryLabel, DOCUMENT_CATEGORY_LABELS } from "@/lib/content-la
 import { fetchPublicDocument, fetchPublicDocumentResult } from "@/lib/publicSeoFetch";
 import { contentOgImagePath } from "@/lib/social-metadata";
 import { breadcrumbJsonLd, organizationJsonLd } from "@/lib/structured-data";
-import { absoluteUrl, excerpt, JsonLd, pageMetadata } from "@/lib/seo";
+import { absoluteUrl, excerpt, pageMetadata } from "@/lib/seo";
+import { JsonLd } from "@/lib/seo-jsonld";
 
 import DocumentDetailEntry from "./DocumentDetailEntry";
 
