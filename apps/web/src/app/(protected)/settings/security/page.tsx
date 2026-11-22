@@ -221,16 +221,11 @@ export default function SecuritySettingsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5">
+    <div className="mx-auto w-full max-w-6xl space-y-5">
       {/* MFA 守衛引導橫幅 */}
       {mfaRequired && (
         <div
-          className="flex items-start gap-3 rounded-md px-4 py-3 text-sm"
-          style={{
-            background: "var(--warning-dim)",
-            border: "1px solid var(--warning-border)",
-            color: "var(--warning)",
-          }}
+          className="flex items-start gap-3 rounded-md border px-4 py-3 text-sm bg-warning-soft! border-warning-border! text-warning!"
         >
           <div>
             <p className="font-semibold">需要設定兩步驟驗證才能繼續</p>
@@ -245,265 +240,264 @@ export default function SecuritySettingsPage() {
         <h1 className="text-xl font-semibold">安全設定</h1>
       </header>
 
-      <section className="card overflow-hidden">
-        <div className="flex items-center justify-between gap-3 px-5 py-4"
-          style={{ borderBottom: "1px solid var(--border)" }}>
-          <div>
-            <h2 className="text-sm font-semibold">兩步驟驗證</h2>
-            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-              {loading ? "讀取中" : status?.mfa_enabled ? "已啟用" : "未啟用"}
-            </p>
-          </div>
-          <span
-            className="rounded-full px-2.5 py-1 text-xs font-medium"
-            style={status?.mfa_enabled
-              ? { background: "var(--success-dim)", color: "var(--success)" }
-              : { background: "var(--bg-hover)", color: "var(--text-muted)" }}>
-            {status?.mfa_enabled ? "保護中" : "未設定"}
-          </span>
-        </div>
-
-        {loading ? (
-          <div className="p-5"><SectionSkeleton lines={4} /></div>
-        ) : status?.mfa_enabled ? (
-          <div className="space-y-4 p-5">
-            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-              目前登入後的敏感操作可使用 TOTP 驗證碼做二次確認。
-            </p>
-            <div className="rounded-lg p-3" style={{ background: "var(--bg-hover)" }}>
-              <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
-                剩餘備用碼
-              </p>
-              <p className="mt-1 text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
-                {status.backup_code_count} 組
+      <div
+        className={mfaRequired
+          ? "space-y-5"
+          : "grid items-start gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(20rem,0.9fr)]"}
+      >
+        <section className="card overflow-hidden">
+          <div className="flex items-center justify-between gap-3 border-b px-5 py-4 border-border!">
+            <div>
+              <h2 className="text-sm font-semibold">兩步驟驗證</h2>
+              <p className="mt-1 text-xs text-fg-muted!">
+                {loading ? "讀取中" : status?.mfa_enabled ? "已啟用" : "未啟用"}
               </p>
             </div>
-            {recoveryCodes.length > 0 && (
-              <div className="rounded-lg p-4" style={{ background: "var(--warning-dim)", border: "1px solid var(--warning-border)" }}>
-                <p className="text-sm font-semibold" style={{ color: "var(--warning)" }}>
-                  請立即保存新的備用碼
+            <span
+              className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                status?.mfa_enabled
+                  ? "bg-success-soft! text-success!"
+                  : "bg-hover! text-fg-muted!"
+              }`}>
+              {status?.mfa_enabled ? "保護中" : "未設定"}
+            </span>
+          </div>
+
+          {loading ? (
+            <div className="p-5"><SectionSkeleton lines={4} /></div>
+          ) : status?.mfa_enabled ? (
+            <div className="space-y-4 p-5">
+              <p className="text-sm text-fg-secondary!">
+                目前登入後的敏感操作可使用 TOTP 驗證碼做二次確認。
+              </p>
+              <div className="rounded-lg bg-hover! p-3">
+                <p className="text-xs font-medium text-fg-muted!">
+                  剩餘備用碼
+                </p>
+                <p className="mt-1 text-lg font-semibold text-fg-primary!">
+                  {status.backup_code_count} 組
+                </p>
+              </div>
+              {recoveryCodes.length > 0 && (
+                <div className="rounded-lg border bg-warning-soft! border-warning-border! p-4">
+                  <p className="text-sm font-semibold text-warning!">
+                    請立即保存新的備用碼
+                  </p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    {recoveryCodes.map((item) => (
+                      <code key={item} className="rounded-md border bg-surface! px-2 py-1 text-center font-mono text-sm border-border! text-fg-primary!">
+                        {item}
+                      </code>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="rounded-lg border border-border! p-4">
+                <div className="block space-y-1.5">
+                  <span className="text-xs font-medium text-fg-muted!">
+                    重新產生備用碼
+                  </span>
+                  <OtpInput
+                    value={regenerateCode}
+                    onChange={setRegenerateCode}
+                    label="重新產生備用碼的 2FA 驗證碼"
+                    disabled={busy}
+                  />
+                </div>
+                <button
+                  className="btn btn-secondary mt-3"
+                  disabled={busy || regenerateCode.trim().length < 6}
+                  onClick={regenerateBackupCodes}>
+                  重新產生備用碼
+                </button>
+              </div>
+              <div className="block space-y-1.5">
+                <span className="text-xs font-medium text-fg-muted!">
+                  停用驗證碼
+                </span>
+                <OtpInput
+                  value={disableCode}
+                  onChange={setDisableCode}
+                  label="停用 2FA 驗證碼"
+                  disabled={busy}
+                />
+              </div>
+              <button
+                className="btn btn-danger"
+                disabled={busy || disableCode.trim().length < 6}
+                onClick={disableMfa}>
+                停用 2FA
+              </button>
+            </div>
+          ) : setup ? (
+            <div className="space-y-4 p-5">
+              <div className="grid gap-4 sm:grid-cols-[240px_1fr]">
+                <div className="rounded-lg bg-hover! p-4">
+                  <p className="text-xs font-medium text-fg-muted!">掃描 QRCode</p>
+                  <div
+                    className="mt-3 flex min-h-[220px] items-center justify-center rounded-lg border bg-white p-2 border-border!">
+                    {qrDataUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={qrDataUrl} alt="2FA TOTP QRCode" width={220} height={220}
+                        className="h-[220px] w-[220px]" />
+                    ) : (
+                      <span className="text-xs text-fg-muted!">產生中</span>
+                    )}
+                  </div>
+                </div>
+                <div className="rounded-lg bg-hover! p-4">
+                  <p className="text-xs font-medium text-fg-muted!">手動輸入密鑰</p>
+                  <p className="mt-2 break-all font-mono text-sm text-fg-primary!">
+                    {setup.secret}
+                  </p>
+                </div>
+              </div>
+              <div className="block space-y-1.5">
+                <span className="text-xs font-medium text-fg-muted!">
+                  Authenticator URI
+                </span>
+                <textarea className="input min-h-24 resize-none font-mono text-xs" readOnly value={setup.qr_uri} />
+              </div>
+              <div className="block space-y-1.5">
+                <span className="text-xs font-medium text-fg-muted!">
+                  驗證碼
+                </span>
+                <OtpInput
+                  value={confirmCode}
+                  onChange={setConfirmCode}
+                  label="啟用 2FA 的驗證碼"
+                  disabled={busy}
+                />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button className="btn btn-primary" disabled={busy || confirmCode.trim().length < 6} onClick={confirmSetup}>
+                  啟用 2FA
+                </button>
+                <button className="btn btn-ghost" disabled={busy} onClick={() => setSetup(null)}>
+                  取消
+                </button>
+              </div>
+              <div className="rounded-lg border bg-warning-soft! border-warning-border! p-4">
+                <p className="text-sm font-semibold text-warning!">
+                  啟用後請保存這些備用碼
                 </p>
                 <div className="mt-3 grid grid-cols-2 gap-2">
-                  {recoveryCodes.map((item) => (
-                    <code key={item} className="rounded-md px-2 py-1 text-center font-mono text-sm"
-                      style={{ background: "var(--bg-surface)", color: "var(--text-primary)", border: "1px solid var(--border)" }}>
+                  {setup.backup_codes.map((item) => (
+                    <code key={item} className="rounded-md border bg-surface! px-2 py-1 text-center font-mono text-sm border-border! text-fg-primary!">
                       {item}
                     </code>
                   ))}
                 </div>
               </div>
-            )}
-            <div className="rounded-lg p-4" style={{ border: "1px solid var(--border)" }}>
-              <div className="block space-y-1.5">
-                <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
-                  重新產生備用碼
-                </span>
-                <OtpInput
-                  value={regenerateCode}
-                  onChange={setRegenerateCode}
-                  label="重新產生備用碼的 2FA 驗證碼"
-                  disabled={busy}
-                />
-              </div>
-              <button
-                className="btn btn-secondary mt-3"
-                disabled={busy || regenerateCode.trim().length < 6}
-                onClick={regenerateBackupCodes}>
-                重新產生備用碼
+            </div>
+          ) : (
+            <div className="space-y-4 p-5">
+              <p className="text-sm text-fg-secondary!">
+                使用支援 TOTP 的驗證器 App 產生一次性驗證碼。
+              </p>
+              <button className="btn btn-primary" disabled={busy} onClick={startSetup}>
+                設定 2FA
               </button>
             </div>
-            <div className="block space-y-1.5">
-              <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
-                停用驗證碼
-              </span>
-              <OtpInput
-                value={disableCode}
-                onChange={setDisableCode}
-                label="停用 2FA 驗證碼"
-                disabled={busy}
-              />
-            </div>
-            <button
-              className="btn btn-danger"
-              disabled={busy || disableCode.trim().length < 6}
-              onClick={disableMfa}>
-              停用 2FA
-            </button>
-          </div>
-        ) : setup ? (
-          <div className="space-y-4 p-5">
-            <div className="grid gap-4 sm:grid-cols-[240px_1fr]">
-              <div className="rounded-lg p-4" style={{ background: "var(--bg-hover)" }}>
-                <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>掃描 QRCode</p>
-                <div
-                  className="mt-3 flex min-h-[220px] items-center justify-center rounded-lg bg-white p-2"
-                  style={{ border: "1px solid var(--border)" }}>
-                  {qrDataUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={qrDataUrl} alt="2FA TOTP QRCode" width={220} height={220}
-                      className="h-[220px] w-[220px]" />
-                  ) : (
-                    <span className="text-xs" style={{ color: "var(--text-muted)" }}>產生中</span>
-                  )}
-                </div>
-              </div>
-              <div className="rounded-lg p-4" style={{ background: "var(--bg-hover)" }}>
-                <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>手動輸入密鑰</p>
-                <p className="mt-2 break-all font-mono text-sm" style={{ color: "var(--text-primary)" }}>
-                  {setup.secret}
+          )}
+        </section>
+
+        <div className="space-y-5">
+          <section className="card overflow-hidden">
+            <div className="flex items-center justify-between gap-3 border-b px-5 py-4 border-border!">
+              <div>
+                <h2 className="text-sm font-semibold">Passkey</h2>
+                <p className="mt-1 text-xs text-fg-muted!">
+                  使用指紋、臉部辨識、裝置 PIN 或安全金鑰完成登入與驗證。
                 </p>
               </div>
-            </div>
-            <div className="block space-y-1.5">
-              <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
-                Authenticator URI
+              <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                passkeys.length > 0
+                  ? "bg-success-soft! text-success!"
+                  : "bg-hover! text-fg-muted!"
+              }`}>
+                {passkeys.length} 組
               </span>
-              <textarea className="input min-h-24 resize-none font-mono text-xs" readOnly value={setup.qr_uri} />
             </div>
-            <div className="block space-y-1.5">
-              <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
-                驗證碼
-              </span>
-              <OtpInput
-                value={confirmCode}
-                onChange={setConfirmCode}
-                label="啟用 2FA 的驗證碼"
-                disabled={busy}
-              />
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button className="btn btn-primary" disabled={busy || confirmCode.trim().length < 6} onClick={confirmSetup}>
-                啟用 2FA
-              </button>
-              <button className="btn btn-ghost" disabled={busy} onClick={() => setSetup(null)}>
-                取消
-              </button>
-            </div>
-            <div className="rounded-lg p-4" style={{ background: "var(--warning-dim)", border: "1px solid var(--warning-border)" }}>
-              <p className="text-sm font-semibold" style={{ color: "var(--warning)" }}>
-                啟用後請保存這些備用碼
-              </p>
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                {setup.backup_codes.map((item) => (
-                  <code key={item} className="rounded-md px-2 py-1 text-center font-mono text-sm"
-                    style={{ background: "var(--bg-surface)", color: "var(--text-primary)", border: "1px solid var(--border)" }}>
-                    {item}
-                  </code>
-                ))}
+            <div className="space-y-4 p-5">
+              {passkeys.length > 0 && (
+                <div className="space-y-2">
+                  {passkeys.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg bg-hover! p-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">{item.device_name}</p>
+                        <p className="mt-1 text-xs text-fg-muted!">
+                          新增於 {new Date(item.created_at).toLocaleString()}
+                          {item.last_used_at ? ` · 上次使用 ${new Date(item.last_used_at).toLocaleString()}` : ""}
+                        </p>
+                      </div>
+                      <button className="btn btn-ghost btn-sm" disabled={passkeyBusy}
+                        onClick={() => removePasskey(item.credential_id)}>
+                        刪除
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {status?.mfa_enabled && passkeys.length > 0 && (
+                <OtpInput
+                  value={passkeyCode}
+                  onChange={setPasskeyCode}
+                  label="刪除 Passkey 時的 TOTP 驗證碼"
+                  disabled={passkeyBusy}
+                />
+              )}
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input className="input min-w-0 flex-1" maxLength={100} value={passkeyName}
+                  onChange={(e) => setPasskeyName(e.target.value)} placeholder="裝置名稱（例如：Windows Hello）" />
+                <button className="btn btn-primary whitespace-nowrap" disabled={passkeyBusy} onClick={registerPasskey}>
+                  {passkeyBusy ? "處理中" : "新增 Passkey"}
+                </button>
               </div>
             </div>
-          </div>
-        ) : (
-          <div className="space-y-4 p-5">
-            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-              使用支援 TOTP 的驗證器 App 產生一次性驗證碼。
-            </p>
-            <button className="btn btn-primary" disabled={busy} onClick={startSetup}>
-              設定 2FA
-            </button>
-          </div>
-        )}
-      </section>
+          </section>
 
-      <section className="card overflow-hidden">
-        <div
-          className="flex items-center justify-between gap-3 px-5 py-4"
-          style={{ borderBottom: "1px solid var(--border)" }}
-        >
-          <div>
-            <h2 className="text-sm font-semibold">Passkey</h2>
-            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-              使用指紋、臉部辨識、裝置 PIN 或安全金鑰完成登入與驗證。
-            </p>
-          </div>
-          <span className="rounded-full px-2.5 py-1 text-xs font-medium"
-            style={passkeys.length > 0
-              ? { background: "var(--success-dim)", color: "var(--success)" }
-              : { background: "var(--bg-hover)", color: "var(--text-muted)" }}>
-            {passkeys.length} 組
-          </span>
-        </div>
-        <div className="space-y-4 p-5">
-          {passkeys.length > 0 && (
-            <div className="space-y-2">
-              {passkeys.map((item) => (
-                <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg p-3"
-                  style={{ background: "var(--bg-hover)" }}>
-                  <div>
-                    <p className="text-sm font-medium">{item.device_name}</p>
-                    <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                      新增於 {new Date(item.created_at).toLocaleString()}
-                      {item.last_used_at ? ` · 上次使用 ${new Date(item.last_used_at).toLocaleString()}` : ""}
-                    </p>
-                  </div>
-                  <button className="btn btn-ghost btn-sm" disabled={passkeyBusy}
-                    onClick={() => removePasskey(item.credential_id)}>
-                    刪除
-                  </button>
-                </div>
-              ))}
+          <section className="card overflow-hidden">
+            <div className="flex items-center justify-between gap-3 border-b px-5 py-4 border-border!">
+              <div>
+                <h2 className="text-sm font-semibold">Discord 登入</h2>
+                <p className="mt-1 text-xs text-fg-muted!">
+                  綁定後可直接使用 Discord 登入平台，並接收 Bot 通知。
+                </p>
+              </div>
+              {discordBinding?.linked ? (
+                <button
+                  className="btn btn-ghost btn-sm"
+                  disabled={discordBusy}
+                  onClick={unlinkDiscord}
+                >
+                  解除綁定
+                </button>
+              ) : (
+                <button
+                  className="btn btn-primary btn-sm"
+                  disabled={discordBusy}
+                  onClick={linkDiscord}
+                >
+                  連結 Discord
+                </button>
+              )}
             </div>
-          )}
-          {status?.mfa_enabled && passkeys.length > 0 && (
-            <OtpInput
-              value={passkeyCode}
-              onChange={setPasskeyCode}
-              label="刪除 Passkey 時的 TOTP 驗證碼"
-              disabled={passkeyBusy}
-            />
-          )}
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <input className="input" maxLength={100} value={passkeyName}
-              onChange={(e) => setPasskeyName(e.target.value)} placeholder="裝置名稱（例如：Windows Hello）" />
-            <button className="btn btn-primary whitespace-nowrap" disabled={passkeyBusy} onClick={registerPasskey}>
-              {passkeyBusy ? "處理中" : "新增 Passkey"}
-            </button>
-          </div>
+            <div className="px-5 py-5">
+              <p className="text-sm text-fg-primary!">
+                {discordBinding?.linked
+                  ? `已綁定 ${discordBinding.global_name || discordBinding.username || "Discord 帳號"}`
+                  : "尚未綁定 Discord"}
+              </p>
+              {discordBinding?.linked_at && (
+                <p className="mt-1 text-xs text-fg-muted!">
+                  綁定時間：{new Date(discordBinding.linked_at).toLocaleString()}
+                </p>
+              )}
+            </div>
+          </section>
         </div>
-      </section>
-
-      <section className="card overflow-hidden">
-        <div
-          className="flex items-center justify-between gap-3 px-5 py-4"
-          style={{ borderBottom: "1px solid var(--border)" }}
-        >
-          <div>
-            <h2 className="text-sm font-semibold">Discord 登入</h2>
-            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-              綁定後可直接使用 Discord 登入平台，並接收 Bot 通知。
-            </p>
-          </div>
-          {discordBinding?.linked ? (
-            <button
-              className="btn btn-ghost btn-sm"
-              disabled={discordBusy}
-              onClick={unlinkDiscord}
-            >
-              解除綁定
-            </button>
-          ) : (
-            <button
-              className="btn btn-primary btn-sm"
-              disabled={discordBusy}
-              onClick={linkDiscord}
-            >
-              連結 Discord
-            </button>
-          )}
-        </div>
-        <div className="px-5 py-5">
-          <p className="text-sm" style={{ color: "var(--text-primary)" }}>
-            {discordBinding?.linked
-              ? `已綁定 ${discordBinding.global_name || discordBinding.username || "Discord 帳號"}`
-              : "尚未綁定 Discord"}
-          </p>
-          {discordBinding?.linked_at && (
-            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-              綁定時間：{new Date(discordBinding.linked_at).toLocaleString()}
-            </p>
-          )}
-        </div>
-      </section>
+      </div>
     </div>
   );
 }
