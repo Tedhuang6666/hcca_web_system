@@ -180,6 +180,27 @@ async def test_anonymize_nonexistent_user_returns_404(
     assert response.status_code == 404
 
 
+async def test_anonymize_owner_is_rejected_even_for_superuser(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    make_user: Callable[..., object],
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = await make_user(email="owner@school.edu", is_superuser=True)
+    monkeypatch.setattr(settings, "OWNER_EMAILS", ["owner@school.edu"])
+    ac = _authed(authed_client_factory, admin_user)
+
+    response = await ac.post(
+        f"/admin/privacy/users/{owner.id}/anonymize", json={"confirm_phrase": "假名化"}
+    )
+
+    assert response.status_code == 409
+    await db_session.refresh(owner)
+    assert owner.email == "owner@school.edu"
+    assert owner.is_active is True
+
+
 async def test_anonymize_without_permission_returns_403(
     authed_client_factory: Callable[[User], AsyncClient],
     member_user: User,

@@ -15,9 +15,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 from authlib.integrations.base_client import MismatchingStateError
+from fastapi import HTTPException
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import Request
 
 from api.core.config import settings
 from api.core.defense import publish_rules
@@ -153,6 +155,47 @@ async def test_refresh_for_blocked_user_returns_403(client: AsyncClient, member_
         assert response.json()["detail"]["blocked"] is True
     finally:
         await publish_rules([])
+
+
+async def test_refresh_rejects_superuser_outside_admin_ip_whitelist(
+    client: AsyncClient,
+    make_user: Callable[..., Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    superuser = await make_user(is_superuser=True)
+    monkeypatch.setattr(settings, "ADMIN_IP_WHITELIST", ["10.9.8.7"])
+    client.cookies.set(settings.REFRESH_TOKEN_COOKIE_NAME, create_refresh_token(str(superuser.id)))
+
+    response = await client.post("/auth/refresh")
+
+    assert response.status_code == 403
+    assert settings.ACCESS_TOKEN_COOKIE_NAME not in response.cookies
+    assert settings.REFRESH_TOKEN_COOKIE_NAME not in response.cookies
+
+
+async def test_issue_auth_tokens_rejects_superuser_outside_admin_ip_whitelist(
+    db_session: AsyncSession,
+    make_user: Callable[..., Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import api.routers.auth as auth_module
+
+    superuser = await make_user(is_superuser=True)
+    monkeypatch.setattr(settings, "ADMIN_IP_WHITELIST", ["10.9.8.7"])
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/auth/callback",
+            "headers": [],
+            "client": ("198.51.100.10", 12345),
+        }
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await auth_module._issue_auth_tokens(db_session, superuser, request, auth_method="google")
+
+    assert exc_info.value.status_code == 403
 
 
 # ---------------------------------------------------------------------------
