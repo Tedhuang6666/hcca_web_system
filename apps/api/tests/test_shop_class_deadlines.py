@@ -19,7 +19,7 @@ from api.schemas.shop import (
 )
 from api.services import school_class as class_svc
 from api.services import shop as shop_svc
-from api.services.shop import _orders
+from api.services.shop import _class_close_status, _order_writes, _orders
 
 
 @pytest.fixture
@@ -218,6 +218,8 @@ async def test_unified_cutoff_locks_student_family_and_assisted_orders(
             return cutoff
 
     monkeypatch.setattr(_orders, "datetime", AtCutoff)
+    monkeypatch.setattr(_class_close_status, "datetime", AtCutoff)
+    monkeypatch.setattr(_order_writes, "datetime", AtCutoff)
     assert (await s["student"].put(registration_path(s), json={"variants": []})).status_code == 409
     assert (await s["cadre"].post("/shop/orders/class", json=order_payload(s))).status_code == 422
     assert (

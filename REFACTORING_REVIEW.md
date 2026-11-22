@@ -351,3 +351,22 @@ GitNexus 重建對流程產生仍有採樣／深度截斷警告及跨語言、re
 本次未跑完整 API pytest、migration、Web 全套測試／build、瀏覽器流程、正式流量與映像體積量測：
 交付物只有盤點文件，沒有應用程式行為變更；資料庫與正式功能現況不在本次驗證結論內。
 後續真正實作時，必須依各項驗收與專案驗證矩陣重跑，不能沿用本報告作為回歸通過證據。
+
+## 拆檔實作狀態補記（2026-11-22）
+
+以下記錄本次分支完成後的模組狀態；上文保留 2026-10-26 的盤點與當時驗證，不回溯改寫歷史結論。
+
+| 項目 | 實作狀態 |
+| --- | --- |
+| R04 Email | `routers/email.py` 共用 `email_dispatch` 的自訂變數合併、外部 Email 正規化與附件渲染；移除無呼叫點的 router 配額 helper，保留上傳者歸屬及批次權限檢查。 |
+| R05 Web 頁面 | 抽出站台連結／幹部／設定欄位、Email 收件人表格／附件／預覽、班級訂單查詢／代訂草稿／收款／訂單清單、商品卡片／商品 modal／結單面板、投稿 AI 鑑識／品項編輯／審核列，以及班級管理面板。Shop admin 另拆媒體欄位、商品與規格 modal、規格管理及資料載入。原路由保留組裝與身份／權限責任。 |
+| R06 CSS | 目前 `globals.css` 已分層匯入 `globals/01-prelude.css` 至 `08-print-and-app-motion.css`；此結構在本次分支基準已存在，未重複搬動。 |
+| R07 Finance | `finance.py` 保留服務 facade；預算公開查詢移入 `finance_public_budget.py`，報帳／付款移入 `finance_claims.py`。`finance_journal.py` 保留分錄流程，舊 claims 匯入以延遲相容轉接保留；router 依 ledger、claims、budget、public、common 拆分。 |
+| R08 Shop | `_orders.py` 拆出 cart、order writes、registration queries、class close status；舊 `_orders` 符號提供相容轉接，`api.services.shop` 保留公開匯出。購物車流程與資料未退役，R03 的 E2E／舊入口不一致仍須另案處理。 |
+| R09 Regulations | 發布編排已由 router 移至 regulation service；router 維持入口授權與回應。現況在本次分支基準已拆分，未改動。 |
+| R10 Official print | 列印共用、文件處理與主要列印流程目前分為 `official_print_common.py`、`official_print_document.py`、`official_print.py`；本次分支基準已拆分，未改動輸出模板。 |
+| R11 Discord | API command dispatch 與 bot command groups 目前已按領域模組拆分；本次分支基準已拆分，未改動授權及 dispatch 行為。 |
+
+大型檔掃描排除生成型 `api-types.ts`，並將按用途分層的 CSS、schema／型別集合及單一領域模組依責任檢視；不以行數單獨當作拆分依據。購物促銷模組維持單一促銷規則領域，舊購物車退役、其他功能行為與資料清理不包含在本次模組拆分。
+
+本次 GitNexus `detect-changes --scope all` 回報 47 個檔案、39 個符號、46 條受影響流程，風險為 CRITICAL；CLI 摘要列出前 10 條並附其餘數量。`git diff --check` 通過。Web type-check 與目標 lint、Python compileall／Ruff 通過；API gate 另執行 3 個 runtime 單元檢查，文件 gate 執行 4 個 setup 檢查，均通過。未執行 API pytest、Web Vitest／完整 build 或瀏覽器回歸；此補記不把靜態檢查標記為行為測試通過。

@@ -13,6 +13,9 @@ import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import type { RichTextareaHandle } from "@/components/ui/RichTextarea";
 const RichTextarea = dynamic(() => import("@/components/ui/RichTextarea"), { ssr: false });
 import RecipientPicker from "@/components/email/RecipientPicker";
+import { EmailRecipientDataTable } from "@/components/email/EmailRecipientDataTable";
+import { EmailAttachmentList } from "@/components/email/EmailAttachmentList";
+import { EmailLivePreview } from "@/components/email/EmailLivePreview";
 import SafeImagePreview from "@/components/email/SafeImagePreview";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import { ApiError, emailApi, apiErrorMessage } from "@/lib/api";
@@ -1732,170 +1735,24 @@ function ComposeInner() {
           </details>
 
           <section className={`card space-y-3 p-4 ${currentStep === 2 ? "" : "hidden"}`}>
-            <div className="space-y-2 rounded-lg p-3" style={{ background: "var(--bg-elevated)" }}>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <span className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>
-                    收件人資料表
-                  </span>
-                  <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                    直接編輯表頭與資料。每個表頭都會自動成為同名佔位符。
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => setPasteTableOpen((open) => !open)}
-                  >
-                    貼上表格
-                  </button>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={addVariableDefinition}>
-                    + 新增欄位
-                  </button>
-                </div>
-              </div>
-              {pasteTableOpen && (
-                <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
-                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                    支援姓名、Email 與自訂欄位，資料會追加至現有表格。
-                  </p>
-                  <textarea
-                    className="input min-h-28 font-mono text-xs"
-                    value={pasteTableText}
-                    onChange={(event) => setPasteTableText(event.target.value)}
-                    placeholder={"電子郵件\t姓名\t錄取部門\t錄取部門數\nted981026@gmail.com\t黃丞廷\t資訊部\t1"}
-                  />
-                  <div className="flex justify-end gap-2">
-                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPasteTableOpen(false)}>
-                      取消
-                    </button>
-                    <button type="button" className="btn btn-primary btn-sm" onClick={importPastedTable}>
-                      匯入表格
-                    </button>
-                  </div>
-                </div>
-              )}
-              <div className="max-w-full overflow-x-auto overscroll-x-contain rounded-lg border" style={{ borderColor: "var(--border)" }}>
-                <table className="w-max min-w-full border-separate border-spacing-1">
-                  <thead>
-                    <tr className="text-left text-xs" style={{ color: "var(--text-muted)" }}>
-                      <th className="min-w-56 px-1">
-                        電子郵件
-                        <code className="ml-2 font-normal" style={{ color: "var(--primary-text)" }}>
-                          {"{{ 電子郵件 }}"}
-                        </code>
-                      </th>
-                      <th className="min-w-40 px-1">
-                        姓名
-                        <code className="ml-2 font-normal" style={{ color: "var(--primary-text)" }}>
-                          {"{{ 姓名 }}"}
-                        </code>
-                      </th>
-                      {variableDefinitions.map((variable, i) => (
-                        <th key={i} className="min-w-52 px-1">
-                          <div className="flex items-center gap-1">
-                            <input
-                              className="input min-w-36 py-1 text-xs"
-                              value={variable.key}
-                              maxLength={64}
-                              placeholder="欄位名稱"
-                              aria-label={`第 ${i + 1} 個自訂欄位名稱`}
-                              onChange={(event) => updateVariableName(i, event.target.value)}
-                            />
-                            <button
-                              type="button"
-                              className="btn btn-ghost btn-sm"
-                              aria-label={`移除欄位 ${variable.key || i + 1}`}
-                              onClick={() => removeVariable(i)}
-                            >
-                              ×
-                            </button>
-                          </div>
-                          <code className="mt-1 block font-normal" style={{ color: "var(--primary-text)" }}>
-                            {variable.key ? `{{ ${variable.key} }}` : "輸入名稱後自動產生"}
-                          </code>
-                        </th>
-                      ))}
-                      <th className="w-10" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recipientRows.map((row, i) => (
-                      <tr key={i}>
-                        <td>
-                          {row.userId ? (
-                            <span className="inline-flex min-h-11 min-w-56 items-center px-3 text-sm" style={{ color: "var(--text-secondary)" }}>
-                              平台帳號收件人
-                            </span>
-                          ) : (
-                            <input
-                              className="input min-w-56"
-                              type="email"
-                              value={row.email}
-                              placeholder="user@example.com"
-                              style={{
-                                borderColor:
-                                  row.email.trim() &&
-                                  !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email.trim())
-                                    ? "var(--danger)"
-                                    : undefined,
-                              }}
-                              onChange={(e) => updateRecipientRow(i, { email: e.target.value })}
-                            />
-                          )}
-                        </td>
-                        <td>
-                          <input
-                            className="input min-w-36"
-                            value={row.name}
-                            placeholder="王小明"
-                            onChange={(e) => updateRecipientRow(i, { name: e.target.value })}
-                          />
-                        </td>
-                        {variableDefinitions.map((variable, variableIndex) => (
-                          <td key={`${variableIndex}-${variable.key}`}>
-                            <input
-                              className="input min-w-40"
-                              value={row.variables[variable.key] ?? ""}
-                              placeholder={variable.key}
-                              onChange={(e) =>
-                                updateRecipientVar(i, variable.key, e.target.value)
-                              }
-                            />
-                          </td>
-                        ))}
-                        <td>
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-sm"
-                            aria-label="移除此資料列"
-                            onClick={() => removeRecipientRow(i)}
-                          >
-                            ×
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {recipientRows.length === 0 && (
-                <p className="py-3 text-center text-xs" style={{ color: "var(--text-muted)" }}>
-                  尚無資料，請新增第一列。
-                </p>
-              )}
-              {invalidRecipientRows.length > 0 && (
-                <p className="text-xs" style={{ color: "var(--danger)" }}>
-                  有 {invalidRecipientRows.length} 列電子郵件格式錯誤，已以紅框標示。
-                </p>
-              )}
-              <div ref={recipientTableBottomRef} className="flex justify-center border-t pt-3" style={{ borderColor: "var(--border)" }}>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={addRecipientRow}>
-                  + 新增資料列
-                </button>
-              </div>
-            </div>
+            <EmailRecipientDataTable
+              pasteTableOpen={pasteTableOpen}
+              onPasteTableOpenChange={setPasteTableOpen}
+              pasteTableText={pasteTableText}
+              onPasteTableTextChange={setPasteTableText}
+              onImportPastedTable={importPastedTable}
+              variableDefinitions={variableDefinitions}
+              onAddVariableDefinition={addVariableDefinition}
+              onUpdateVariableName={updateVariableName}
+              onRemoveVariable={removeVariable}
+              recipientRows={recipientRows}
+              invalidRecipientRows={invalidRecipientRows}
+              recipientTableBottomRef={recipientTableBottomRef}
+              onAddRecipientRow={addRecipientRow}
+              onUpdateRecipientRow={updateRecipientRow}
+              onUpdateRecipientVariable={updateRecipientVar}
+              onRemoveRecipientRow={removeRecipientRow}
+            />
             <div className="space-y-3 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
@@ -2189,61 +2046,21 @@ function ComposeInner() {
                 onUpload={uploadAttachment}
               />
             </div>
-            {attachments.map((attachment) => (
-              <div key={attachment.id} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs" style={{ borderColor: "var(--border)" }}>
-                <span className="min-w-0 flex-1 truncate">{attachment.filename}</span>
-                <span style={{ color: "var(--text-muted)" }}>
-                  {(attachment.file_size / 1024 / 1024).toFixed(2)} MB ·
-                  {attachment.delivery_mode === "attachment" ? " 實體附件" : " 安全連結"}
-                </span>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => void removeAttachment(attachment)}>移除</button>
-              </div>
-            ))}
+            <EmailAttachmentList attachments={attachments} onRemove={removeAttachment} />
           </section>
         </div>
 
         {/* ── 預覽與動作 ─────────────────────────────────────── */}
         <div className={`min-w-0 space-y-4 ${currentStep >= 3 ? "" : "hidden"}`}>
-          <section className="card overflow-hidden p-0">
-            <div
-              className="flex flex-wrap items-center justify-between gap-2 px-4 py-2"
-              style={{ borderBottom: "1px solid var(--border)" }}
-            >
-              <span className="text-sm font-semibold">信件預覽</span>
-              {recipientRows.length > 0 && (
-                <select
-                  className="input max-w-64 py-1 text-xs"
-                  value={Math.min(previewRecipientIndex, recipientRows.length - 1)}
-                  onChange={(e) => setPreviewRecipientIndex(Number(e.target.value))}
-                  aria-label="選擇預覽收件人"
-                >
-                  {recipientRows.map((row, index) => (
-                    <option key={`${row.email}-${index}`} value={index}>
-                      {row.name || row.email || `第 ${index + 1} 列`}
-                      {row.name && row.email ? `（${row.email}）` : row.userId ? "（平台帳號）" : ""}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-            {previewHtml ? (
-              <iframe
-                title="信件預覽"
-                srcDoc={sanitizedPreviewHtml}
-                sandbox=""
-                className="h-[520px] w-full"
-                style={{ background: "#fff" }}
-              />
-            ) : (
-              <div
-                role={previewError ? "alert" : "status"}
-                className="flex h-[520px] items-center justify-center text-sm"
-                style={{ color: "var(--text-muted)" }}
-              >
-                {previewError || (subject.trim() ? "正在產生預覽…" : "填寫主旨後即可預覽")}
-              </div>
-            )}
-          </section>
+          <EmailLivePreview
+            recipientRows={recipientRows}
+            previewRecipientIndex={previewRecipientIndex}
+            onPreviewRecipientChange={setPreviewRecipientIndex}
+            sanitizedPreviewHtml={sanitizedPreviewHtml}
+            previewHtml={previewHtml}
+            previewError={previewError}
+            subject={subject}
+          />
 
           <section className={`card space-y-3 p-4 ${currentStep >= 4 ? "" : "hidden"}`}>
             <div className="grid gap-2 sm:grid-cols-2">
