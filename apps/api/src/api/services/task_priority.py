@@ -7,17 +7,9 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Protocol
 
 from api.schemas.dashboard import DashboardWidget
 from api.schemas.task import TaskItem
-
-
-class PrioritizedItem(Protocol):
-    priority_score: int
-    priority_reasons: list[str]
-    recommended_action: str | None
-
 
 MODULE_IMPACT_WEIGHT = {
     "document": 20,

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 from urllib.parse import urlparse
@@ -30,10 +29,8 @@ from api.models.email_message import (
     EmailAttachment,
     EmailCampaignRecipient,
     EmailMessage,
-    EmailRecipientListMember,
     EmailRecipientStatus,
     EmailStatus,
-    EmailSuppression,
     EmailTemplate,
 )
 from api.models.user import User
@@ -314,15 +311,6 @@ _IMAGE_TYPES = frozenset({"image/jpeg", "image/png", "image/gif", "image/webp"})
 # ── 內部輔助 ──────────────────────────────────────────────────────────────────
 
 
-@dataclass
-class PersonalizedRecipient:
-    user_id: uuid.UUID | None
-    email: str
-    name: str | None
-    student_id: str | None
-    variables: dict[str, str]
-
-
 def _to_utc(dt: datetime) -> datetime:
     """把（可能為 naive 的）時間正規化為 aware UTC；naive 視為 Asia/Taipei。"""
     if dt.tzinfo is None:
@@ -474,129 +462,6 @@ def _merged_custom_variables(
     merged.update({k: str(v) for k, v in defaults.items() if k in allowed})
     merged.update({k: str(v) for k, v in recipient_vars.items() if k in allowed})
     return merged
-
-
-def _make_personalization_context(row: PersonalizedRecipient) -> dict:
-    return build_personalization_context(
-        user_id=row.user_id,
-        name=row.name,
-        email=row.email,
-        student_id=row.student_id,
-        custom_variables=row.variables,
-    )
-
-
-async def _resolve_personalized_recipients(
-    db: AsyncSession,
-    msg: EmailMessage,
-) -> list[PersonalizedRecipient]:
-    users, emails = await resolve_recipients(db, **spec_to_resolve_kwargs(msg.recipient_spec or {}))
-    definitions = list(msg.variable_definitions or [])
-    defaults = {str(k): str(v) for k, v in (msg.default_variables or {}).items()}
-    inputs = list(msg.recipient_variables or [])
-    recipient_list_id = (msg.recipient_spec or {}).get("recipient_list_id")
-    if recipient_list_id:
-        list_rows = (
-            (
-                await db.execute(
-                    select(EmailRecipientListMember).where(
-                        EmailRecipientListMember.list_id == uuid.UUID(str(recipient_list_id))
-                    )
-                )
-            )
-            .scalars()
-            .all()
-        )
-        inputs.extend(
-            {
-                "user_id": str(item.user_id) if item.user_id else None,
-                "email": item.email,
-                "name": item.name,
-                "variables": dict(item.variables or {}),
-            }
-            for item in list_rows
-        )
-    by_user_id = {str(row.get("user_id")): row for row in inputs if row.get("user_id")}
-    by_email = {
-        str(row.get("email", "")).strip().lower(): row
-        for row in inputs
-        if str(row.get("email", "")).strip()
-    }
-
-    rows: list[PersonalizedRecipient] = []
-    seen_emails: set[str] = set()
-    for user_obj, email in zip(users, emails, strict=False):
-        imported = by_user_id.get(str(user_obj.id)) or by_email.get(email.strip().lower()) or {}
-        imported_name = str(imported.get("name") or "").strip()
-        custom = _merged_custom_variables(
-            definitions, defaults, dict(imported.get("variables") or {})
-        )
-        label = imported_name or user_obj.display_name or email
-        try:
-            validate_required_variables(definitions, custom, recipient_label=label)
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
-            ) from exc
-        normalized_email = email.strip().lower()
-        seen_emails.add(normalized_email)
-        rows.append(
-            PersonalizedRecipient(
-                user_id=user_obj.id,
-                email=email,
-                name=imported_name or user_obj.display_name,
-                student_id=user_obj.student_id,
-                variables=custom,
-            )
-        )
-
-    external_inputs: list[dict] = [
-        {"email": email, "name": None, "variables": {}}
-        for email in _normalize_external_emails(
-            [str(x) for x in (msg.recipient_spec or {}).get("external_emails", [])]
-        )
-    ]
-    external_inputs.extend(inputs)
-
-    for imported in external_inputs:
-        email = str(imported.get("email") or "").strip()
-        if not email or email.lower() in seen_emails:
-            continue
-        custom = _merged_custom_variables(
-            definitions, defaults, dict(imported.get("variables") or {})
-        )
-        label = str(imported.get("name") or email)
-        try:
-            validate_required_variables(definitions, custom, recipient_label=label)
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
-            ) from exc
-        seen_emails.add(email.lower())
-        rows.append(
-            PersonalizedRecipient(
-                user_id=None,
-                email=email,
-                name=str(imported.get("name") or "") or None,
-                student_id=None,
-                variables=custom,
-            )
-        )
-    if rows:
-        suppressed = set(
-            (
-                await db.execute(
-                    select(EmailSuppression.email).where(
-                        EmailSuppression.is_active.is_(True),
-                        EmailSuppression.email.in_([row.email.lower() for row in rows]),
-                    )
-                )
-            )
-            .scalars()
-            .all()
-        )
-        rows = [row for row in rows if row.email.lower() not in suppressed]
-    return rows
 
 
 async def _ensure_can_send(db: AsyncSession, user: User, sel: RecipientSelector) -> None:

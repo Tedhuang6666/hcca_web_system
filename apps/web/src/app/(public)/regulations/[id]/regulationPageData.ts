@@ -8,7 +8,6 @@ import {
 import type { RegulationOut } from "@/lib/types";
 
 export type RegulationDetailSearchParams = Record<string, string | string[] | undefined>;
-export type RegulationDetailMeta = { title: string };
 
 export function firstSearchParam(
   params: RegulationDetailSearchParams,

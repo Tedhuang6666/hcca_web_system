@@ -55,7 +55,7 @@ function formatDate(value?: string | null) {
   return `${date.getMonth() + 1}/${date.getDate()}`;
 }
 
-function WidgetCard({ widget, index }: { widget: DashboardWidget; index: number }) {
+function WidgetCard({ widget }: { widget: DashboardWidget }) {
   const Icon = WIDGET_ICONS[widget.key] ?? FallbackWidgetIcon;
   const severity = SEVERITY_STYLES[widget.severity] ?? SEVERITY_STYLES.info;
 
@@ -205,8 +205,8 @@ function WidgetCard({ widget, index }: { widget: DashboardWidget; index: number 
 export default function DashboardWidgets({ widgets }: { widgets: DashboardWidget[] }) {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {widgets.map((widget, index) => (
-        <WidgetCard key={widget.key} widget={widget} index={index} />
+      {widgets.map((widget) => (
+        <WidgetCard key={widget.key} widget={widget} />
       ))}
     </div>
   );

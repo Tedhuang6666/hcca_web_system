@@ -464,10 +464,6 @@ export const NAVIGATION_PROFILES: Record<NavigationProfile, NavigationProfileCon
   },
 };
 
-export const PROFILE_MOBILE_ORDER: Record<NavigationProfile, string[]> = Object.fromEntries(
-  Object.values(NAVIGATION_PROFILES).map((profile) => [profile.id, profile.mobileOrder]),
-) as Record<NavigationProfile, string[]>;
-
 export const NAV_PREF_EVENT = "hcca:navigation-preferences-changed";
 
 function byIds(ids: string[]) {

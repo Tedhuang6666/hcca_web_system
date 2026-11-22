@@ -1,4 +1,4 @@
-import type { DocumentStatus, OrderStatus, PetitionStatus, ProductStatus } from "@/lib/types";
+import type { DocumentStatus, OrderStatus, PetitionStatus } from "@/lib/types";
 
 /* ── 統一徽章基礎 ─────────────────────────────────────────────────────────── */
 interface BadgeDef { label: string; color: string; bg: string; border: string }
@@ -88,42 +88,6 @@ export function UrgencyBadge({ urgency }: { urgency: string }) {
 }
 
 /* ── 商品狀態 ─────────────────────────────────────────────────────────────── */
-const PRODUCT_STATUS: Record<ProductStatus, BadgeDef> = {
-  testing: {
-    label: "測試中",
-    color: "var(--text-secondary)",
-    bg: "var(--bg-hover)",
-    border: "var(--border)",
-  },
-  draft: {
-    label: "草稿",
-    color: "var(--text-muted)",
-    bg: "var(--bg-hover)",
-    border: "var(--border)",
-  },
-  active: {
-    label: "上架中",
-    color: "var(--success)",
-    bg: "var(--success-dim)",
-    border: "var(--success-border)",
-  },
-  sold_out: {
-    label: "售罄",
-    color: "var(--danger)",
-    bg: "var(--danger-dim)",
-    border: "var(--danger-border)",
-  },
-  cancelled: {
-    label: "已下架",
-    color: "var(--text-muted)",
-    bg: "var(--bg-hover)",
-    border: "var(--border)",
-  },
-};
-
-export function ProductStatusBadge({ status }: { status: ProductStatus }) {
-  return <Badge {...(PRODUCT_STATUS[status] ?? PRODUCT_STATUS.draft)} />;
-}
 
 /* ── 訂單狀態 ─────────────────────────────────────────────────────────────── */
 const ORDER_STATUS: Record<OrderStatus, BadgeDef> = {
