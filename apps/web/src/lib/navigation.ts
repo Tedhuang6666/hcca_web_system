@@ -121,7 +121,7 @@ export const NAV_ITEMS: NavItem[] = [
     id: "adminDashboard",
     href: "/admin",
     iconKey: "dashboard",
-    label: "管理後台",
+    label: "系統總覽",
     perms: ["admin:users", "admin:all"],
     end: true,
   },
@@ -184,6 +184,20 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "email", href: "/email", iconKey: "email", label: "電子郵件", perm: "email:*" },
   { id: "examPaperAdmin", href: "/exam-papers/admin", iconKey: "examPaperAdmin", label: "題庫管理", perm: "exam:manage" },
   { id: "shopAdmin", href: "/shop/admin", iconKey: "shopAdmin", label: "商品設定", perm: "shop:manage" },
+  {
+    id: "councilOrders",
+    href: "/shop/council-orders",
+    iconKey: "shopOrders",
+    label: "全校收款與訂單",
+    perms: ["shop:view_all", "shop:manage_orders", "shop:manage"],
+  },
+  {
+    id: "classOrders",
+    href: "/shop/class-orders",
+    iconKey: "shopOrders",
+    label: "班級收款與代訂",
+    perm: "class:shop_collect",
+  },
   {
     id: "merchandiseSubmissionsAdmin",
     href: "/merchandise-submissions/admin",
@@ -271,15 +285,17 @@ const PRIVATE_PUBLIC_NAV_ITEM_IDS = new Set([
   "publicRecommendedVendors",
 ]);
 
+/** 管理工具直接列出、依權限過濾，不再先進入營運中心或模組後台再找一次。 */
 export const NAV_DEF: NavEntry[] = [
   {
     id: "work",
-    heading: "工作入口",
+    heading: "工作",
     items: byIds(["dashboard", "tasks"]),
   },
   {
     id: "governance",
     heading: "治理與公開",
+    collapsible: true,
     items: byIds([
       "documents",
       "regulations",
@@ -292,21 +308,40 @@ export const NAV_DEF: NavEntry[] = [
   {
     id: "services",
     heading: "校園服務",
-    items: byIds(["shop", "merchandiseSubmissions", "surveys", "partnerMap", "credential", "recommendedVendors", "examPapers"]),
+    collapsible: true,
+    items: byIds(["shop", "surveys", "partnerMap", "credential", "merchandiseSubmissions", "recommendedVendors", "examPapers"]),
   },
   {
-    id: "workbench",
-    heading: "管理後台",
+    id: "manage",
+    heading: "管理工作",
     collapsible: true,
-    defaultCollapsed: false,
     items: byIds([
-      "operations",
+      "publications",
+      "email",
+      "classOrders",
+      "councilOrders",
+      "shopAdmin",
+      "receivables",
+      "finance",
+      "petitionsManage",
+      "merchandiseSubmissionsAdmin",
+      "partnerMapAdmin",
+      "recommendedVendorsAdmin",
+      "electionsAdmin",
+      "raffleAdmin",
+      "examPaperAdmin",
+      "documentTemplates",
+      "serialTemplates",
       "qrCode",
-      "moduleBackoffice",
-      "adminDashboard",
-      "systemOperations",
-      "about",
+      "publicSiteAdmin",
+      "peopleAdmin",
     ]),
+  },
+  {
+    id: "system",
+    heading: "系統",
+    collapsible: true,
+    items: byIds(["adminDashboard", "systemOperations", "systemSettings", "audit"]),
   },
 ];
 
@@ -428,10 +463,6 @@ export const NAVIGATION_PROFILES: Record<NavigationProfile, NavigationProfileCon
     mobileOrder: ["dashboard", "tasks", "partnerMapAdmin", "partnerMap", "credential", "announcements"],
   },
 };
-
-export const PROFILE_MOBILE_ORDER: Record<NavigationProfile, string[]> = Object.fromEntries(
-  Object.values(NAVIGATION_PROFILES).map((profile) => [profile.id, profile.mobileOrder]),
-) as Record<NavigationProfile, string[]>;
 
 export const NAV_PREF_EVENT = "hcca:navigation-preferences-changed";
 

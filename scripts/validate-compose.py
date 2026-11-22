@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -27,13 +28,20 @@ def main() -> int:
     args = parser.parse_args()
     command = [str(args.compose_binary.resolve())] if args.compose_binary else ["docker", "compose"]
     expected = json.loads((ROOT / "config/compose-images.json").read_text())
+    sources = sorted(ROOT.glob("docker-compose*.yml"))
     required = {
         name
-        for file in FILES
-        for name in re.findall(r"\$\{([A-Z_][A-Z_0-9]*):\?", (ROOT / file).read_text())
+        for source in sources
+        for name in re.findall(r"\$\{([A-Z_][A-Z_0-9]*):\?", source.read_text())
     }
     with tempfile.TemporaryDirectory(prefix="hcca-compose-") as directory:
-        empty = Path(directory) / "empty.env"
+        workspace = Path(directory)
+        # Compose checks env_file existence even with --no-env-resolution. Copy only
+        # public YAML sources; never use the checkout's local or production env files.
+        for source in sources:
+            shutil.copyfile(source, workspace / source.name)
+        (workspace / ".env").write_text("")
+        empty = workspace / "empty.env"
         empty.write_text("")
         environment = {"PATH": os.environ["PATH"], **{name: "validation" for name in required}}
         environment.update(
@@ -61,7 +69,7 @@ def main() -> int:
                     "--format",
                     "json",
                 ],
-                cwd=ROOT,
+                cwd=workspace,
                 env=environment,
                 capture_output=True,
                 text=True,

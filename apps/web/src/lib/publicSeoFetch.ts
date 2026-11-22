@@ -4,8 +4,6 @@ import type {
   PetitionPublicOut,
   PublicBudgetDetail,
   PublicBudgetListItem,
-  PublicExpenseOut,
-  PublicFinanceTotalsOut,
   RegulationOut,
 } from "@/lib/types";
 import {
@@ -57,20 +55,6 @@ export async function fetchPublicPetition(id: string): Promise<PetitionPublicOut
 export async function fetchPublicBudgets(): Promise<PublicFetchResult<PublicBudgetListItem[]>> {
   // 公開狀態可能剛更新；直接讀取，並保留失敗狀態，避免舊快取或 API 錯誤被當成空清單。
   return fetchPublicJsonResult<PublicBudgetListItem[]>("/finance/public/budgets");
-}
-
-export async function fetchPublicExpenses(
-  limit = 10,
-): Promise<PublicFetchResult<PublicExpenseOut[]>> {
-  return fetchPublicJsonResult<PublicExpenseOut[]>(`/finance/public/expenses?limit=${limit}`);
-}
-
-export async function fetchPublicBudgetTotals(
-  budgetId: string,
-): Promise<PublicFinanceTotalsOut | null> {
-  return (await fetchPublicJsonResult<PublicFinanceTotalsOut>(
-    `/finance/public/budgets/${encodeURIComponent(budgetId)}/totals`,
-  )).data;
 }
 
 export async function fetchPublicBudget(

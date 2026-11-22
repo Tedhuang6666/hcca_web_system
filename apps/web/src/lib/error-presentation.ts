@@ -114,7 +114,3 @@ export function errorCode(error: unknown): string {
   if (typeof value.digest === "string" && value.digest) return value.digest;
   return "HCCA-UNKNOWN";
 }
-
-export function isApiErrorStatus(error: unknown, status: number): boolean {
-  return statusOf(error) === status;
-}

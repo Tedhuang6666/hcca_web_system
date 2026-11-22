@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import io
 import uuid
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from api.models.document import Document, DocumentAttachment, DocumentStatus, DocumentVisibility
 from api.models.org import Org
@@ -37,6 +40,86 @@ def _make_doc(org: Org, creator: User, **overrides: object) -> Document:
     }
     defaults.update(overrides)
     return Document(**defaults)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "doc_status",
+    [
+        DocumentStatus.PENDING,
+        DocumentStatus.APPROVED,
+        DocumentStatus.REJECTED,
+        DocumentStatus.ARCHIVED,
+    ],
+)
+async def test_non_draft_attachments_cannot_be_changed(
+    db_session: AsyncSession, authed_client_factory, doc_status: DocumentStatus
+) -> None:
+    org = Org(name=f"附件狀態組織-{uuid.uuid4().hex[:6]}")
+    creator = User(email=f"{uuid.uuid4().hex}@example.com", display_name="Creator", is_active=True)
+    db_session.add_all([org, creator])
+    await db_session.flush()
+    doc = _make_doc(org, creator, status=doc_status)
+    db_session.add(doc)
+    await db_session.flush()
+    attachment = DocumentAttachment(
+        document_id=doc.id, filename="link", link_url="https://example.com", uploaded_by=creator.id
+    )
+    db_session.add(attachment)
+    await db_session.flush()
+    ac = _authed(authed_client_factory, creator)
+    base = f"/documents/{doc.id}/attachments"
+    headers = {"X-CSRF-Token": ac._csrf_token}
+    responses = [
+        await ac.post(base, files={"file": ("test.png", _PNG_MAGIC, "image/png")}, headers=headers),
+        await ac.post(f"{base}/link", json={"url": "https://example.com"}, headers=headers),
+        await ac.patch(f"{base}/{attachment.id}", json={"filename": "new"}, headers=headers),
+        await ac.delete(f"{base}/{attachment.id}", headers=headers),
+    ]
+    assert [response.status_code for response in responses] == [409, 409, 409, 409]
+
+
+@pytest.mark.asyncio
+async def test_attachment_waits_for_concurrent_submission(db_session: AsyncSession) -> None:
+    from api.routers.documents_attachments import _assert_attachment_mutable
+
+    assert db_session.bind is not None
+    if db_session.bind.dialect.name != "postgresql":
+        pytest.skip("需要 PostgreSQL 資料列鎖")
+    factory = async_sessionmaker(bind=db_session.bind.engine, expire_on_commit=False)
+    async with factory() as setup:
+        org = Org(name=f"附件併發-{uuid.uuid4().hex[:8]}")
+        creator = User(
+            email=f"{uuid.uuid4().hex}@example.com", display_name="Creator", is_active=True
+        )
+        setup.add_all([org, creator])
+        await setup.flush()
+        doc = _make_doc(org, creator)
+        setup.add(doc)
+        await setup.commit()
+        doc_id, org_id, user_id = doc.id, org.id, creator.id
+
+    try:
+        async with factory() as submission, factory() as attachment:
+            editing_doc = await attachment.get(Document, doc_id)
+            submitting_doc = await submission.get(Document, doc_id)
+            assert editing_doc is not None and submitting_doc is not None
+            submitting_doc.status = DocumentStatus.PENDING
+            await submission.flush()
+            task = asyncio.create_task(_assert_attachment_mutable(attachment, editing_doc))
+            await asyncio.sleep(0.05)
+            assert not task.done()
+            await submission.commit()
+            with pytest.raises(HTTPException) as exc:
+                await asyncio.wait_for(task, timeout=5)
+            assert exc.value.status_code == 409
+    finally:
+        async with factory() as cleanup:
+            for model, item_id in ((Document, doc_id), (Org, org_id), (User, user_id)):
+                item = await cleanup.get(model, item_id)
+                if item is not None:
+                    await cleanup.delete(item)
+            await cleanup.commit()
 
 
 # ── 列表 ───────────────────────────────────────────────────────────────────────
@@ -274,6 +357,88 @@ async def test_delete_attachment_by_uploader_succeeds(
     resp = await ac.delete(f"/documents/{doc.id}/attachments/{att.id}")
 
     assert resp.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_delete_file_is_deferred_to_outbox(
+    db_session: AsyncSession, authed_client_factory, tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from api.models.outbox import OutboxEvent
+    from api.services import outbox, storage
+
+    backend = storage.LocalStorageBackend(str(tmp_path))
+    monkeypatch.setattr(storage, "get_storage", lambda: backend)
+    org = Org(name=f"附件刪除佇列-{uuid.uuid4().hex[:6]}")
+    creator = User(email=f"{uuid.uuid4().hex}@example.com", display_name="Creator", is_active=True)
+    db_session.add_all([org, creator])
+    await db_session.flush()
+    doc = _make_doc(org, creator)
+    db_session.add(doc)
+    await db_session.flush()
+    file_path = tmp_path / "test.pdf"
+    file_path.write_bytes(b"test")
+    att = DocumentAttachment(
+        document_id=doc.id, filename="test.pdf", storage_key="test.pdf", uploaded_by=creator.id
+    )
+    db_session.add(att)
+    await db_session.flush()
+
+    response = await _authed(authed_client_factory, creator).delete(
+        f"/documents/{doc.id}/attachments/{att.id}"
+    )
+    assert response.status_code == 204
+    event = await db_session.scalar(
+        select(OutboxEvent).where(OutboxEvent.event_type == "document.attachment_delete")
+    )
+    assert event is not None and file_path.exists()
+    await outbox._dispatch(db_session, event)
+    assert not file_path.exists()
+    await outbox._dispatch(db_session, event)  # 重試不可因檔案已刪除而失敗。
+
+
+@pytest.mark.asyncio
+async def test_rolled_back_attachment_deletion_keeps_file_and_has_no_event(
+    db_session: AsyncSession, tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from api.models.outbox import OutboxEvent
+    from api.routers.documents_attachments import delete_attachment
+    from api.services.storage import LocalStorageBackend
+
+    monkeypatch.setattr(
+        "api.routers.documents_attachments.get_storage", lambda: LocalStorageBackend(str(tmp_path))
+    )
+
+    org = Org(name=f"附件回滾-{uuid.uuid4().hex[:6]}")
+    creator = User(email=f"{uuid.uuid4().hex}@example.com", display_name="Creator", is_active=True)
+    db_session.add_all([org, creator])
+    await db_session.flush()
+    doc = _make_doc(org, creator)
+    db_session.add(doc)
+    await db_session.flush()
+    file_path = tmp_path / "rollback.pdf"
+    file_path.write_bytes(b"test")
+    att = DocumentAttachment(
+        document_id=doc.id,
+        filename="rollback.pdf",
+        storage_key="rollback.pdf",
+        uploaded_by=creator.id,
+    )
+    db_session.add(att)
+    await db_session.flush()
+    doc_id, att_id = str(doc.id), att.id
+    savepoint = await db_session.begin_nested()
+    await delete_attachment(doc_id, att_id, db_session, creator)
+    await db_session.flush()
+    await savepoint.rollback()
+
+    assert file_path.exists()
+    assert await db_session.get(DocumentAttachment, att_id) is not None
+    assert (
+        await db_session.scalar(
+            select(OutboxEvent).where(OutboxEvent.event_type == "document.attachment_delete")
+        )
+        is None
+    )
 
 
 @pytest.mark.asyncio

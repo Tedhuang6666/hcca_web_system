@@ -23,6 +23,7 @@ import PeopleManagementRedirect from "@/components/admin/PeopleManagementRedirec
 import MobileBackToList from "@/components/ui/MobileBackToList";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import Modal from "@/components/ui/Modal";
+import TabBar from "@/components/ui/TabBar";
 import ClassCorrectionRequestsPanel from "@/components/admin/ClassCorrectionRequestsPanel";
 import type {
   ClassMemberOut,
@@ -1130,21 +1131,17 @@ function ClassWorkspace({
         </div>}
       </section>
 
-      <nav className="module-tabs-scroll max-w-full overflow-x-auto" aria-label="班級管理分頁">
-        <div className="module-tabs-list">
-        {tabs.map((item) => (
-          <button
-            key={item.key}
-            type="button"
-            onClick={() => setTab(item.key)}
-            aria-pressed={tab === item.key}
-            className={`module-tab-link min-h-11 cursor-pointer${tab === item.key ? " is-active" : ""}`}>
-            <span>{item.label}</span>
-            {item.count !== undefined && <span className="ml-1 text-xs">{item.count}</span>}
-          </button>
-        ))}
-        </div>
-      </nav>
+      <TabBar
+        label="班級管理分頁"
+        tabClassName="min-h-11"
+        items={tabs.map(({ key, label, count }) => ({
+          key,
+          label,
+          meta: count !== undefined ? <span className="ml-1 text-xs">{count}</span> : undefined,
+        }))}
+        value={tab}
+        onChange={setTab}
+      />
 
       {tab === "roles" && (
         <div key="roles" className="tab-panel-transition">

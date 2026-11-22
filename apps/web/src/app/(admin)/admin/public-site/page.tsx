@@ -1,6 +1,6 @@
 "use client";
 
-import { Field, Select, TextArea, TextInput, Toggle } from "@/components/site/PublicSiteAdminFields";
+import { Field, Select, TextArea, TextInput } from "@/components/site/PublicSiteAdminFields";
 import OfficerAdminTab, { type OfficerProfileDraft } from "@/components/site/OfficerAdminTab";
 import PublicSiteWorkspaceHeader from "@/components/site/PublicSiteWorkspaceHeader";
 
@@ -54,10 +54,13 @@ import { linkTreeCollisionDetection, SortablePublicLinkCategory, UnassignedPubli
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import DraftStatus from "@/components/ui/DraftStatus";
+import TabBar from "@/components/ui/TabBar";
+import Toggle from "@/components/ui/Toggle";
 import { clearStoredDraft, useDraftAutosave } from "@/hooks/useDraftAutosave";
 import { getSystemInfoMarkdown } from "@/lib/systemInfoMarkdown";
 import {
   PUBLIC_NAV_GROUP_META,
+  PUBLIC_NAV_GROUP_ORDER,
   PUBLIC_NAV_ITEMS,
   type PublicNavGroupId,
   type PublicNavOverride,
@@ -118,7 +121,7 @@ function isEmptyPageDraft(draft: typeof EMPTY_PAGE_DRAFT) {
 }
 
 /** 後台導覽列分頁的群組顯示順序。 */
-const NAV_GROUP_ORDER: PublicNavGroupId[] = ["primary", "info", "data", "participation"];
+const NAV_GROUP_ORDER: PublicNavGroupId[] = PUBLIC_NAV_GROUP_ORDER;
 
 const emptySettings: PublicSiteSettingsOut = {
   id: "",
@@ -1225,21 +1228,13 @@ export default function PublicSiteAdminPage() {
         </div>
       </div>
 
-      <nav className="public-site-admin-tabs module-tabs-scroll hidden max-w-full overflow-x-auto sm:block" aria-label="公開網站設定分頁">
-        <div className="module-tabs-list">
-          {tabs.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setTab(item.id)}
-              aria-pressed={tab === item.id}
-              className={`module-tab-link cursor-pointer${tab === item.id ? " is-active" : ""}`}>
-              {item.icon}
-              <span>{item.label}</span>
-            </button>
-          ))}
-        </div>
-      </nav>
+      <TabBar
+        className="public-site-admin-tabs hidden sm:block"
+        label="公開網站設定分頁"
+        items={tabs.map(({ id, label, icon }) => ({ key: id, label, icon }))}
+        value={tab}
+        onChange={setTab}
+      />
 
       {tab === "homepage" && (
         <section key="homepage" className="tab-panel-transition grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
@@ -1565,7 +1560,7 @@ export default function PublicSiteAdminPage() {
               <div>
                 <h2 className="font-semibold">公開站導覽列</h2>
                 <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--text-muted)]">
-                  主要導覽顯示於頂列，其餘收進「所有公開服務」。
+                  「主要入口」直接顯示在頁首，「公開資料」與「關於」各收成一個下拉選單。
                 </p>
               </div>
               <div className="flex shrink-0 gap-2">

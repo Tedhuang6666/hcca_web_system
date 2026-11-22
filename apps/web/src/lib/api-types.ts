@@ -8081,6 +8081,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/petitions/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 建立陳情案件並同時上傳附件（需登入且具名） */
+        post: operations["submit_petition_with_attachments_petitions_submit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/petitions/types": {
         parameters: {
             query?: never;
@@ -13642,6 +13659,20 @@ export interface components {
         Body_replace_admin_submission_file_merchandise_submissions_admin_submissions__submission_id__files__file_id__put: {
             /** File */
             file: string;
+        };
+        /** Body_submit_petition_with_attachments_petitions_submit_post */
+        Body_submit_petition_with_attachments_petitions_submit_post: {
+            /** Attachments */
+            attachments?: string[] | null;
+            /** Content */
+            content: string;
+            /** Title */
+            title: string;
+            /**
+             * Type Id
+             * Format: uuid
+             */
+            type_id: string;
         };
         /** Body_upload_attachment_documents__doc_id__attachments_post */
         Body_upload_attachment_documents__doc_id__attachments_post: {
@@ -50339,6 +50370,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PetitionMonthlyStatsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_petition_with_attachments_petitions_submit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_submit_petition_with_attachments_petitions_submit_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PetitionCreatedOut"];
                 };
             };
             /** @description Validation Error */

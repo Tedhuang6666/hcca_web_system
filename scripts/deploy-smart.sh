@@ -11,7 +11,7 @@ usage() {
 
 選項：
   --release <sha>  部署指定的完整 40 字元 commit SHA（預設 HEAD）
-  --no-push        不推送 Git，只部署遠端已存在的 commit
+  --no-push        不推送 Git，只部署遠端分支目前正好指向的 commit
   --allow-dirty    允許本機未提交變更；只會部署指定的 commit
   --dry-run        只做本機驗證與顯示決策，不連線、不推送、不部署
   -h, --help       顯示說明
@@ -219,20 +219,24 @@ wait_for_ci() {
 
 if [[ "$dry_run" == "1" ]]; then
   if [[ "$push_enabled" == "1" ]]; then
-    echo "▶ dry-run：會推送 $branch → $remote_name（目標 $release_sha）"
+    echo "▶ dry-run：會推送 $release_sha → $remote_name/$branch"
   else
-    echo "▶ dry-run：不推送 Git，確認遠端是否已有 $release_sha"
+    if [[ "$base_sha" != "$release_sha" ]]; then
+      echo "❌ --no-push 時，遠端分支 $base_ref 必須正好指向 $release_sha（目前為 $base_sha）" >&2
+      exit 1
+    fi
+    echo "▶ dry-run：不推送 Git，使用 $base_ref 目前指向的 $release_sha"
   fi
 elif [[ "$push_enabled" == "1" ]]; then
-  echo "▶ 推送 $branch → $remote_name（目標 $release_sha）"
-  git push "$remote_name" "HEAD:$branch"
+  echo "▶ 推送 $release_sha → $remote_name/$branch"
+  git push "$remote_name" "$release_sha:$branch"
   git fetch --quiet "$remote_name" "$branch"
 else
-  if ! git merge-base --is-ancestor "$release_sha" "$base_ref"; then
-    echo "❌ --no-push 時，遠端尚未包含 $release_sha" >&2
+  if [[ "$base_sha" != "$release_sha" ]]; then
+    echo "❌ --no-push 時，遠端分支 $base_ref 必須正好指向 $release_sha（目前為 $base_sha）" >&2
     exit 1
   fi
-  echo "▶ 跳過 Git push，使用遠端已有的 $release_sha"
+  echo "▶ 跳過 Git push，使用 $base_ref 目前指向的 $release_sha"
 fi
 
 # Docker image 可在 push 後立即平行建置，但正式環境切流只能使用通過完整 CI 的 commit。

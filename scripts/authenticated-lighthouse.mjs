@@ -157,6 +157,8 @@ const performanceExcludedRoutes = new Set([
   "/maintenance",
   "/module-status",
   "/profile/complete",
+  // Next.js redirect alias; measure the canonical admin system page instead.
+  "/admin/system/observability",
   "/petitions/share",
   "/raffle",
   "/unsubscribe",

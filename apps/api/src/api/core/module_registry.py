@@ -39,10 +39,6 @@ def register(module_id: str, *, startup_check: StartupCheck | None = None) -> No
     _REGISTRATIONS[module_id] = ModuleRegistration(module_id=module_id, startup_check=startup_check)
 
 
-def registered_ids() -> tuple[str, ...]:
-    return tuple(_REGISTRATIONS.keys())
-
-
 async def run_startup_checks() -> dict[str, str | None]:
     """併發執行所有已登錄的 startup_check（每個 check 開獨立 session）。
 

@@ -414,11 +414,6 @@ details.public-nav-dropdown[open] > .public-nav-dropdown-panel {
   animation: public-menu-in 150ms ease both;
 }
 
-@media (min-width: 768px) and (max-width: 1179.98px) {
-  details.public-nav-dropdown[open] > .public-nav-dropdown-panel {
-    animation-name: public-menu-in-centered;
-  }
-}
 
 :where(a, button, input, select, textarea, [role="button"], [tabindex]):focus-visible {
   outline: 2px solid var(--border-focus);

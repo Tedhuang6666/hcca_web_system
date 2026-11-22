@@ -13,11 +13,6 @@ export type PrivateServerDataPolicy = {
 
 export type ServerDataPolicy = PublicServerDataPolicy | PrivateServerDataPolicy;
 
-export const publicServerData = (revalidate = 60): PublicServerDataPolicy => ({
-  scope: "public",
-  revalidate,
-});
-
 export const privateServerData: PrivateServerDataPolicy = { scope: "private" };
 
 export class ServerRequestError extends Error {

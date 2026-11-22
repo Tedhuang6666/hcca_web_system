@@ -849,8 +849,6 @@ export type {
 
 import type {
   AnnouncementListItem,
-  BallotBoxStatus,
-  DashboardResponse,
   DeliveryMethod,
   ExpenseClaimCreate,
   ExpenseClaimItemCreate,
@@ -862,7 +860,6 @@ import type {
   RateLimitOverride,
   RecipientOut,
   RecipientType,
-  TaskInboxResponse
 } from './api-bridge'
 
 // 財務報帳工作流的手寫擴充；後端新增欄位時，財務 API 先以此維持型別安全。
@@ -1073,36 +1070,6 @@ export interface SecurityEventRead {
 
 
 // ── 公文系統型別 ──────────────────────────────────────────────────────────────
-
-
-export interface ElectionCandidateMember {
-  id: string;
-  candidate_id: string;
-  position: string;
-  name: string;
-  photo_url: string | null;
-  sort_order: number;
-}
-
-export interface ElectionCandidate {
-  id: string;
-  election_id: string;
-  name: string;
-  number: number;
-  color: string;
-  sort_order: number;
-  is_active: boolean;
-  members: ElectionCandidateMember[];
-}
-
-export interface ElectionBallotBox {
-  id: string;
-  election_id: string;
-  name: string;
-  status: BallotBoxStatus;
-  expected_total_votes: number | null;
-  sort_order: number;
-}
 
 
 /** 速別：普通件 / 速件 / 最速件 */
@@ -1326,7 +1293,6 @@ export interface OrgWithPositions {
 // ── 通用型別 ──────────────────────────────────────────────────────────────────
 
 export interface ApiError { detail: string; status: number }
-export interface PaginatedResponse<T> { items: T[]; total: number; page: number; size: number }
 
 
 export interface MFAChallengeOut {
@@ -1342,8 +1308,6 @@ export interface MFAChallengeOut {
 
 // ── 陳情系統型別 ──────────────────────────────────────────────────────────────
 
-
-export type PetitionVisibility = "public" | "internal";
 
 export interface PetitionAdminCreate {
   type_id: string;
@@ -1427,9 +1391,6 @@ export interface EmailCardRow {
 
 
 export type EmailButtonStyle = "primary" | "secondary" | "outline";
-
-
-export type EmailBlockType = "text" | "image" | "divider";
 
 
 export type EmailResourceVisibility = "private" | "org";

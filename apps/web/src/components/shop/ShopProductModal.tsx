@@ -12,7 +12,7 @@ import ShopImage from "@/components/shop/ShopImage";
 import ShopPrice from "@/components/shop/ShopPrice";
 import OrderItemGiftBreakdown from "@/components/shop/OrderItemGiftBreakdown";
 import { useShopRegistration } from "@/hooks/useShopRegistration";
-import { apiErrorMessage } from "@/lib/api-helpers";
+import { apiErrorMessage } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
 import { productDeadline } from "@/lib/shop-deadlines";
 import { productGallery } from "@/lib/shop-product-media";

@@ -19,6 +19,7 @@ import { apiUrl } from "@/lib/config";
 import { recordRecent } from "@/lib/recents";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
+import CopyButton from "@/components/ui/CopyButton";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { PetitionLinkSelector, type PetitionLinkOption } from "@/components/documents/PetitionLinkSelector";
 
@@ -32,12 +33,6 @@ const VersionHistory = dynamic(
   { loading: () => <DeferredPanel />, ssr: false },
 );
 
-function toROCDate(dateStr: string) {
-  const d = new Date(dateStr);
-  const y = d.getFullYear() - 1911;
-  return `中華民國 ${y} 年 ${d.getMonth() + 1} 月 ${d.getDate()} 日`;
-}
-
 const CAT_LABEL: Record<string, string> = {
   letter: "函", decree: "令", announcement: "公告", report: "報告",
   record: "紀錄", consultation: "咨", meeting_notice: "開會通知單", inspection_notice: "會勘通知單",
@@ -46,7 +41,6 @@ const CAT_LABEL: Record<string, string> = {
   contract: "契約書", proposal: "提案", summary: "節略", briefing: "說帖", form: "定型化表單", other: "其他",
 };
 const CLASS_LABEL: Record<string, string> = { normal: "普通", confidential: "密", secret: "機密", highly_confidential: "極機密", absolutely_confidential: "絕對機密" };
-const URGENCY_LABEL: Record<string, string> = { normal: "普通件", priority: "速件", express: "最速件" };
 const VISIBILITY_LABEL: Record<DocumentVisibility, string> = {
   subject_only: "密件",
   org_only: "機關可見",
@@ -78,27 +72,6 @@ function googleDrivePreviewUrl(value: string) {
   } catch {
     return null;
   }
-}
-
-function formatActingSignature(step: DocumentWithArchive["approvals"][number] | undefined) {
-  if (!step) return null;
-  if (!step.is_acting || !step.delegate) {
-    const signer = step.approver;
-    return {
-      title: step.approver_title ?? "簽核人",
-      name: signer.name ?? signer.email?.split("@")[0] ?? "",
-    };
-  }
-  const principal = step.approver_title
-    ? `${step.approver.name}（${step.approver_title}）`
-    : step.approver.name;
-  const delegate = step.delegate_title
-    ? `${step.delegate.name}（${step.delegate_title}）`
-    : step.delegate.name;
-  return {
-    title: "代理簽署",
-    name: `${principal}假 ${delegate}代`,
-  };
 }
 
 // ── 使用者選取器 ──────────────────────────────────────────────────────────────
@@ -610,23 +583,16 @@ export default function DocumentDetailPageClient({
           </div>
 
           {/* 複製連結 */}
-          <button
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(window.location.href);
-                toast.success("連結已複製");
-              } catch {
-                toast.error("無法複製連結，請手動複製網址列");
-              }
-            }}
+          <CopyButton
+            value={() => window.location.href}
+            icon="link"
+            iconSize={14}
+            announcement="公文連結已複製"
+            failureHint="無法複製連結，請手動複製網址列"
             className="topbar-icon-btn"
             title="複製連結"
-            aria-label="複製公文連結">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-            </svg>
-          </button>
+            aria-label="複製公文連結"
+          />
           </div>
 
           <div className="document-detail-document-actions" role="group" aria-label="公文操作">
