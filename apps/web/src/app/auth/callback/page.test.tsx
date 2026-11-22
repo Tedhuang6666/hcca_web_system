@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   me: vi.fn(),
   cacheCurrentUser: vi.fn(),
+  clearAuthCache: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -11,7 +12,10 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/lib/api", () => ({ authApi: { me: mocks.me } }));
-vi.mock("@/lib/auth-cache", () => ({ cacheCurrentUser: mocks.cacheCurrentUser }));
+vi.mock("@/lib/auth-cache", () => ({
+  cacheCurrentUser: mocks.cacheCurrentUser,
+  clearAuthCache: mocks.clearAuthCache,
+}));
 
 import AuthCallbackPage from "./page";
 
@@ -31,5 +35,9 @@ describe("AuthCallbackPage", () => {
       expect(mocks.me).toHaveBeenCalledTimes(1);
       expect(mocks.cacheCurrentUser).toHaveBeenCalledWith(user);
     });
+    expect(mocks.clearAuthCache).toHaveBeenCalledTimes(1);
+    expect(mocks.clearAuthCache.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.me.mock.invocationCallOrder[0],
+    );
   });
 });

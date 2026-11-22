@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
 import { authApi } from "@/lib/api";
-import { cacheCurrentUser } from "@/lib/auth-cache";
+import { cacheCurrentUser, clearAuthCache } from "@/lib/auth-cache";
 import { safeNextPath } from "@/lib/safe-redirect";
 import { loginDestination } from "@/lib/login-destination";
 
@@ -25,6 +25,10 @@ export default function AuthCallbackPage() {
       window.location.replace(`/login?error=${encodeURIComponent(error)}`);
       return;
     }
+
+    // /api/auth/me 取得 401 時會依 localStorage 的 user_id 靜默刷新；若 callback
+    // 的新 cookie 尚未到位，舊 refresh cookie 會把前一個帳號續回來。
+    clearAuthCache();
 
     // Google callback 已在 API response 設定 HttpOnly cookies，但公開頁面不會
     // 經過受保護 layout，因此仍需同步本機登入快取，讓問卷等公開頁面知道目前
