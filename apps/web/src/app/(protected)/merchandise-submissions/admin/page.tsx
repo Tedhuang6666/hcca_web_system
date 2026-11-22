@@ -161,24 +161,24 @@ export default function MerchandiseSubmissionsAdminPage() {
   };
   if (!permissionsReady || loading || (canManageSubmissions && !settings))
     return (
-      <main className="p-6">
+      <div className="p-6">
         <div
           className="h-36 animate-pulse rounded-xl"
           style={{ background: "var(--bg-elevated)" }}
         />
-      </main>
+      </div>
     );
   if (!canAccessAdmin)
     return (
-      <main className="p-6">
+      <div className="p-6">
         <h1 className="text-xl font-bold">無法存取投稿管理</h1>
         <p className="mt-2 text-sm" style={{ color: "var(--text-muted)" }}>
           需要校商投稿查看、管理或審核權限。
         </p>
-      </main>
+      </div>
     );
   return (
-    <main className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:py-8">
+    <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:py-8">
       <header
         className="flex flex-wrap items-end justify-between gap-4 border-b pb-6"
         style={{ borderColor: "var(--border)" }}
@@ -812,6 +812,6 @@ export default function MerchandiseSubmissionsAdminPage() {
           </div>
         </section>
       )}
-    </main>
+    </div>
   );
 }

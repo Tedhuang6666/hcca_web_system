@@ -1,0 +1,59 @@
+---
+name: prod-host-operations
+description: 參照 scripts/deploy-smart.sh 的 SSH 設定直連 HCCA 正式主機，處理日誌、資料及其他使用者指定的主機操作。MCP 非必要；正式操作依 AGENTS.md 與對應 runbook 執行。
+---
+
+# HCCA 正式主機操作
+
+此 skill 提供操作流程，不會授予主機或資料庫權限，也不額外限制 SSH 可執行的操作類別。SSH 目標和認證參數沿用 `scripts/deploy-smart.sh`：`DEPLOY_HOST`、`DEPLOY_SSH_USER`（預設 `root`）、`DEPLOY_KEY_PATH`（預設 `$HOME/.ssh/hcca_deploy`）。不需要先連接 MCP；根目錄 `AGENTS.md` 的 deny 設定只適用於 MCP。正式操作仍依 `AGENTS.md` 的當次核准規範與對應 runbook 執行。
+
+## 連線門檻
+
+- 依 `scripts/deploy-smart.sh` 使用 `DEPLOY_HOST`、`DEPLOY_SSH_USER`、`DEPLOY_KEY_PATH` 直連；`.env.local` 只在本機子 shell 中載入以取得必要參數，不輸出任何設定值，其他本機環境值不得傳給 SSH process。沿用腳本的 `IdentitiesOnly=yes`、`StrictHostKeyChecking=accept-new`、`ConnectTimeout=10`、`ServerAliveInterval=30`、`ServerAliveCountMax=6`。若 SSH 連線失敗就回報原因，不讀取或輸出私鑰、token、cookie 或認證內容，也不繞過 host-key 驗證。
+- 連線後用不含機密的主機／服務資訊確認目標為 HCCA 正式環境。目標不符或無法辨識時停止，不在錯誤主機執行操作。
+- 每一回合重新判斷本次授權。明確查某服務日誌或某筆資料可授權該範圍的唯讀查詢；寫入則須由本次指示清楚指定資料目標和預期變更。使用者泛稱「修一下正式資料」不足以寫入，先整理具體方案並詢問。
+- 不因載入或呼叫此 skill 而推定獲准連線、讀取或寫入正式環境。
+
+在 repository 根目錄執行以下連線範本。它只沿用部署腳本的 SSH 參數，不執行部署。一般遠端命令可加在 SSH 目標後；只有需要互動終端時才加 `-t`。
+
+```bash
+(
+  set +x
+  [[ -f .env.local ]] || { echo '找不到 .env.local'; exit 1; }
+  # shellcheck source=/dev/null
+  source .env.local
+  ssh_user="${DEPLOY_SSH_USER:-root}"
+  ssh_key="${DEPLOY_KEY_PATH:-$HOME/.ssh/hcca_deploy}"
+  ssh_host="${DEPLOY_HOST:?DEPLOY_HOST 未設定}"
+  exec env -i PATH="$PATH" HOME="$HOME" ssh \
+    -i "$ssh_key" \
+    -o IdentitiesOnly=yes \
+    -o StrictHostKeyChecking=accept-new \
+    -o ConnectTimeout=10 \
+    -o ServerAliveInterval=30 \
+    -o ServerAliveCountMax=6 \
+    "$ssh_user@$ssh_host"
+)
+```
+
+`scripts/deploy-smart.sh` 會推送並部署程式；一般查閱或主機操作不要執行該部署腳本本身，只沿用上面的 SSH 連線設定。
+
+## 查閱日誌或資料
+
+- 日誌查詢限定指定服務及相關時間範圍；若使用者未指定範圍，先問清楚。每次只取足以回答問題的有限內容，不開啟無限串流或整份歷史日誌。
+- 資料查詢先確認目標記錄，再選取必要欄位並使用明確條件；避免 `SELECT *`、無條件列舉或大量匯出。
+- 日誌和資料可能含個資、token、cookie 或其他機密。回覆前遮蔽這些值，只提供診斷所需摘要；不要將正式資料寫入 repository、公開 issue 或一般文件。
+
+## 修改正式資料
+
+1. 先查明相關 model、service、資料關聯及業務狀態規則。若已有應用程式操作可保留權限、歸屬和狀態轉移檢查，優先使用該操作；直接資料庫寫入只用於使用者清楚要求的窄範圍修正。
+2. 寫入前唯讀確認唯一目標、目前值和預期影響筆數。準備精確的變更摘要；若實際記錄、目前狀態或筆數與指示不符，停止，不自行擴大範圍。
+3. 只有本次指示已明確授權該目標與新值時才執行。若寫入方式或影響不在授權範圍，先提供目標、目前值、新值及預期筆數，等待使用者明確核准。
+4. 透過 SSH 使用主機上既有管理工具執行；資料庫寫入使用交易與參數化操作，條件包含唯一識別及已讀取的原狀態。更新／刪除前先確認作用筆數；筆數不是預期值時回滾並停止。完成後重新讀取必要欄位核對結果，再結束交易。
+5. 本 skill 不排除部署、migration、正式 compose 或服務維運；若使用者提出這類操作，依 `AGENTS.md` 的核准要求及 repository 對應 runbook 辦理。退款、庫存、座位、審核與覆核等受保護的業務政策，也遵守 `AGENTS.md` 的當次明確核准要求。
+
+若主機上的工具不支援安全交易、條件更新或結果核對，停止並說明限制，不以裸命令繞過。
+
+## 回報
+
+簡述查閱／修改的服務或資料類型、範圍、實際影響筆數及核對結果。不要回報未遮蔽的個資、密鑰或完整敏感日誌；若因權限、環境辨識或資料不符而停止，明確說明原因。

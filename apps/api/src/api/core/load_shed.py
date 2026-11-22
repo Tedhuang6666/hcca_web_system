@@ -79,6 +79,17 @@ def _access_claims(scope: Scope) -> dict:
 
     不查 DB；不阻塞。若 token 缺失/失效則回傳空 dict。
     """
+    token = _access_token(scope)
+    if not token:
+        return {}
+    try:
+        return decode_token(token)
+    except jwt.PyJWTError:
+        return {}
+
+
+def _access_token(scope: Scope) -> str | None:
+    """從 cookie / Authorization header 取出 access token 原文。"""
     headers = scope.get("headers") or []
     token: str | None = None
     for k, v in headers:
@@ -103,13 +114,7 @@ def _access_claims(scope: Scope) -> dict:
                     break
             if token:
                 break
-
-    if not token:
-        return {}
-    try:
-        return decode_token(token)
-    except jwt.PyJWTError:
-        return {}
+    return token
 
 
 def _can_bypass_protection(scope: Scope) -> bool:
@@ -120,6 +125,28 @@ def _can_bypass_protection(scope: Scope) -> bool:
         or "admin:all" in permissions
         or "system:maintenance_bypass" in permissions
     )
+
+
+async def _bypass_token_still_valid(scope: Scope) -> bool:
+    """旁路只信任 JWT 宣告不夠：已登出、被撤銷的管理員 token 在到期前仍會通過。
+
+    這裡只查 Redis（黑名單與 session 撤銷快取），不查資料庫；Redis 失效時一律不旁路。
+    """
+    from api.core.security import RedisUnavailableError, is_blacklisted, is_session_revoked
+
+    token = _access_token(scope)
+    if not token:
+        return False
+    try:
+        if await is_blacklisted(token, fail_closed=True, raise_on_unavailable=True):
+            return False
+        session_id = _access_claims(scope).get("sid")
+        if session_id and await is_session_revoked(str(session_id), fail_closed=True):
+            return False
+    except RedisUnavailableError:
+        logger.warning("無法確認管理員旁路 token 狀態，改走一般防護", exc_info=True)
+        return False
+    return True
 
 
 def _is_browser_navigation(scope: Scope) -> bool:
@@ -192,7 +219,9 @@ class LoadShedMiddleware:
 
         # 自己人白名單 IP / 有效掃描 token：豁免黑名單與後續鎖定 / 維護 / load shed
         trusted = request_is_trusted(scope)
-        can_bypass = trusted or _can_bypass_protection(scope)
+        can_bypass = trusted or (
+            _can_bypass_protection(scope) and await _bypass_token_still_valid(scope)
+        )
         check_ip_block = not trusted and not can_bypass
 
         # 這些都是唯讀防護投影；串行讀取會在 Redis pool 短暫壅塞時把多個

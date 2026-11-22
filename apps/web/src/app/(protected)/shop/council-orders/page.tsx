@@ -713,7 +713,7 @@ export default function CouncilOrdersPage() {
   ].filter(Boolean);
 
   return (
-    <main className="shop-council-page mx-auto max-w-7xl space-y-5 px-4 py-5">
+    <div className="shop-council-page mx-auto max-w-7xl space-y-5 px-4 py-5">
       <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
@@ -1527,6 +1527,6 @@ export default function CouncilOrdersPage() {
           </div>
         </form>
       </Modal>}
-    </main>
+    </div>
   );
 }

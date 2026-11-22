@@ -156,7 +156,7 @@ export default function DataLifecyclePage() {
 
   if (!isAdmin) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
+      <div className="mx-auto max-w-3xl p-6">
         <section
           className="rounded-lg border p-8 text-center"
           style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}>
@@ -165,12 +165,12 @@ export default function DataLifecyclePage() {
             需要超級管理員權限
           </h1>
         </section>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="mx-auto max-w-6xl p-4 md:p-6">
+    <div className="mx-auto max-w-6xl p-4 md:p-6">
       <header className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[var(--text-primary)]">資料生命週期</h1>
@@ -409,6 +409,6 @@ export default function DataLifecyclePage() {
           無法復原大量誤刪 → 從備份還原（見 <code>docs/INCIDENT_RUNBOOK.md</code>）。
         </span>
       </div>
-    </main>
+    </div>
   );
 }

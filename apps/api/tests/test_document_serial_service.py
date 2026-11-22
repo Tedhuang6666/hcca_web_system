@@ -351,3 +351,38 @@ async def test_update_serial_template_can_change_parent_prefix_inheritance(
 
     assert result.org_prefix == "生"
     assert result.inherit_parent_prefix is False
+
+
+async def test_generate_serial_skips_numbers_taken_by_manual_serials(
+    db_session: AsyncSession, make_user
+) -> None:
+    from api.models.document import Document, DocumentStatus
+
+    org = await _make_org(db_session, prefix="嶺代")
+    creator = await make_user()
+    roc_year = now_local().year - 1911
+    template = DocumentSerialTemplate(
+        org_id=org.id,
+        org_prefix="嶺代",
+        category_char="生",
+        year_mode=YearMode.ROC,
+        current_year=roc_year,
+        counter=5,
+        is_active=True,
+        created_by=creator.id,
+    )
+    db_session.add(template)
+    db_session.add(
+        Document(
+            serial_number=f"嶺代生字第 {roc_year}0000006 號",
+            title="手動字號公文",
+            org_id=org.id,
+            created_by=creator.id,
+            status=DocumentStatus.DRAFT,
+        )
+    )
+    await db_session.flush()
+
+    serial = await generate_serial_from_template(db_session, template)
+
+    assert serial == f"嶺代生字第 {roc_year}0000007 號"

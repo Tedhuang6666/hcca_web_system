@@ -159,6 +159,21 @@ async def test_module_maintenance_blocks_non_admin_but_admin_bypasses(
     assert _can_bypass_protection(anon_scope) is False
 
 
+async def test_logged_out_admin_token_no_longer_bypasses_protection() -> None:
+    from api.core.load_shed import _bypass_token_still_valid
+    from api.core.security import add_to_blacklist
+
+    token = create_access_token("admin-subject", {"is_admin": True})
+    scope = {
+        "type": "http",
+        "headers": [(b"cookie", f"{settings.ACCESS_TOKEN_COOKIE_NAME}={token}".encode())],
+    }
+
+    assert await _bypass_token_still_valid(scope) is True
+    await add_to_blacklist(token)
+    assert await _bypass_token_still_valid(scope) is False
+
+
 async def test_closed_module_blocks_admin_and_reports_closed(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:

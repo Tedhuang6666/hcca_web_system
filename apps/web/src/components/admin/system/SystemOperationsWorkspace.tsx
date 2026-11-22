@@ -123,15 +123,15 @@ export default function SystemOperationsWorkspace({
 
   if (!isReady) {
     return (
-      <main className="mx-auto max-w-7xl p-4 md:p-6">
+      <div className="mx-auto max-w-7xl p-4 md:p-6">
         <WorkspaceLoading />
-      </main>
+      </div>
     );
   }
 
   if (!activeTab) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
+      <div className="mx-auto max-w-3xl p-6">
         <section className="card p-8 text-center">
           <LockKeyhole className="mx-auto mb-3 text-[var(--danger)]" size={32} aria-hidden />
           <h1 className="text-xl font-semibold text-[var(--text-primary)]">無法查看系統營運</h1>
@@ -139,14 +139,14 @@ export default function SystemOperationsWorkspace({
             請洽系統管理員開啟權限。
           </p>
         </section>
-      </main>
+      </div>
     );
   }
 
   const ActivePanel = PANELS[activeTab];
 
   return (
-    <main className="mx-auto max-w-7xl p-4 md:p-6">
+    <div className="mx-auto max-w-7xl p-4 md:p-6">
       <header className="border-b pb-4" style={{ borderColor: "var(--border)" }}>
         <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
           {isPerformanceOnly ? "績效管理" : "系統營運中心"}
@@ -177,6 +177,6 @@ export default function SystemOperationsWorkspace({
       <section className="pt-6" aria-label={TABS.find((tab) => tab.id === activeTab)?.label}>
         <ActivePanel />
       </section>
-    </main>
+    </div>
   );
 }

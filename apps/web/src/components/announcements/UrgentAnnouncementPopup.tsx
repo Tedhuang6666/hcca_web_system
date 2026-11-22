@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import { announcementsApi } from "@/lib/api";
@@ -113,6 +113,26 @@ export default function UrgentAnnouncementPopup() {
     }).catch(() => undefined);
   }, !lowDataMode);
 
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  // 彈窗可能在使用者操作中途由推播開啟：移入焦點、支援 Esc，關閉後把焦點還原。
+  useEffect(() => {
+    if (!open || !item) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeButtonRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      rememberUrgentDismissal(item);
+      setOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      if (previous?.isConnected) previous.focus();
+    };
+  }, [open, item]);
+
   if (!mounted || !item || !open) return null;
 
   const dismiss = () => {
@@ -131,7 +151,7 @@ export default function UrgentAnnouncementPopup() {
       aria-modal="true"
       aria-labelledby="important-announcement-title">
       <div className="absolute inset-0" onClick={dismiss} aria-hidden="true" />
-      <section className="relative flex w-full max-w-2xl flex-col overflow-hidden rounded-lg max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100vh-2rem)]"
+      <section className="relative flex w-full max-w-2xl flex-col overflow-hidden rounded-lg max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)]"
         style={{ background: "var(--bg-surface)", border: "1px solid var(--warning-border)", boxShadow: "var(--shadow-xl)" }}>
         <div className="flex items-center justify-between gap-3 px-5 py-3"
           style={{ background: "var(--warning-dim)", borderBottom: "1px solid var(--warning-border)" }}>
@@ -141,7 +161,7 @@ export default function UrgentAnnouncementPopup() {
               {item.title}
             </h2>
           </div>
-          <button type="button" className="topbar-icon-btn flex-shrink-0" onClick={dismiss} aria-label="關閉重要公告">
+          <button ref={closeButtonRef} type="button" className="topbar-icon-btn flex-shrink-0" onClick={dismiss} aria-label="關閉重要公告">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
               <line x1="18" y1="6" x2="6" y2="18" />

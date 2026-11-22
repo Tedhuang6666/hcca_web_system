@@ -25,3 +25,10 @@
     min-height: 44px;
   }
 }
+/* 觸控裝置的按鈕至少 44px 高（WCAG 2.5.5／Apple HIG），包含 .btn-sm。 */
+@media (pointer: coarse) {
+  .btn,
+  .btn-sm {
+    min-height: 44px;
+  }
+}

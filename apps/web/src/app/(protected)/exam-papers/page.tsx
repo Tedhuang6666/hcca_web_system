@@ -126,7 +126,7 @@ export default function ExamPapersPage() {
   };
 
   return (
-    <main className="mx-auto w-full max-w-6xl space-y-5 px-4 py-5 text-[var(--text-primary)] sm:px-5 sm:py-6">
+    <div className="mx-auto w-full max-w-6xl space-y-5 px-4 py-5 text-[var(--text-primary)] sm:px-5 sm:py-6">
       <header>
         <h1 className="text-xl font-semibold sm:text-2xl">段考題庫</h1>
       </header>
@@ -236,6 +236,6 @@ export default function ExamPapersPage() {
           <p className={`py-10 text-center ${mutedClass}`}>沒有符合條件的段考題。</p>
         )}
       </section>
-    </main>
+    </div>
   );
 }
