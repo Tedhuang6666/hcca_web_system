@@ -437,7 +437,7 @@ export default function PetitionManagePage() {
   return (
     <div className="petition-manage-page min-w-0 max-w-7xl mx-auto space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>陳情工作台</h1>
+        <h1 className="text-xl font-semibold text-fg-primary!" >陳情工作台</h1>
         <div className="flex flex-wrap gap-2">
           {can("petition:admin") && (
             <button className="btn btn-primary" onClick={() => void openExternalIntake()}>
@@ -455,10 +455,10 @@ export default function PetitionManagePage() {
           className="card p-5 space-y-4"
           aria-labelledby="external-petition-title">
           <div>
-            <h2 id="external-petition-title" className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
+            <h2 id="external-petition-title" className="text-lg font-semibold text-fg-primary!" >
               代收外部陳情
             </h2>
-            <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
+            <p className="text-sm mt-1 text-fg-muted!" >
               案件更新通知會寄至登記的聯絡信箱。
             </p>
           </div>
@@ -553,30 +553,27 @@ export default function PetitionManagePage() {
 
           <div className="max-h-[72vh] space-y-2 overflow-auto">
             {items.length === 0 ? (
-              <p className="text-sm" style={{ color: "var(--text-muted)" }}>目前沒有符合條件的案件。</p>
+              <p className="text-sm text-fg-muted!" >目前沒有符合條件的案件。</p>
             ) : items.map((item) => (
               <button
                 key={item.id}
                 onClick={() => open(item.id)}
-                className="w-full text-left rounded-lg p-3"
-                style={{
-                  border: "1px solid var(--border)",
-                  background: selected?.id === item.id ? "var(--primary-dim)" : "transparent",
-                }}>
+                className="w-full text-left rounded-lg p-3 border! border-border!"
+                style={{ background: selected?.id === item.id ? "var(--primary-dim)" : "transparent" }}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 min-w-0">
-                      <p className="font-medium truncate" style={{ color: "var(--text-primary)" }}>{item.title}</p>
+                      <p className="font-medium truncate text-fg-primary!" >{item.title}</p>
                       {item.is_confidential && (
-                        <span className="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium" style={{ background: "var(--warning-dim)", color: "var(--warning)" }}>
+                        <span className="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium bg-warning-soft! text-warning!" >
                           密件
                         </span>
                       )}
                     </div>
-                    <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+                    <p className="text-xs mt-1 text-fg-muted!" >
                       #{item.case_number} · {item.current_org_name} · {item.assigned_to_name || "未分案"}
                     </p>
-                    <p className="text-xs mt-1" style={{ color: "var(--text-disabled)" }}>{fmt(item.updated_at)} · {item.next_action}</p>
+                    <p className="text-xs mt-1 text-fg-disabled!" >{fmt(item.updated_at)} · {item.next_action}</p>
                   </div>
                   <PetitionStatusBadge status={item.status} />
                 </div>
@@ -587,7 +584,7 @@ export default function PetitionManagePage() {
 
         <section className={`card min-w-0 space-y-5 p-4 sm:p-5 ${!selected ? "hidden xl:block" : ""}`} aria-label="陳情案件詳情與處理">
           {!selected ? (
-            <div className="text-sm" style={{ color: "var(--text-muted)" }}>
+            <div className="text-sm text-fg-muted!" >
               請選擇案件
             </div>
           ) : selected.confidential_blocked ? (
@@ -611,16 +608,16 @@ export default function PetitionManagePage() {
               </button>
               <div className="flex min-w-0 items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-sm" style={{ color: "var(--text-muted)" }}>#{selected.case_number} · {selected.type_name}</p>
+                  <p className="text-sm text-fg-muted!" >#{selected.case_number} · {selected.type_name}</p>
                   <h2
                     id="petition-detail-title"
                     tabIndex={-1}
-                    className="break-words text-lg font-semibold"
-                    style={{ color: "var(--text-primary)" }}
+                    className="break-words text-lg font-semibold text-fg-primary!"
+
                   >
                     {selected.title}
                   </h2>
-                  <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
+                  <p className="text-sm mt-1 text-fg-muted!" >
                     {selected.current_org_name} · {selected.assigned_to_name || "尚未分派承辦人"} · 更新 {fmt(selected.updated_at)}
                   </p>
                 </div>
@@ -637,7 +634,7 @@ export default function PetitionManagePage() {
                     confirmingConfidential ? (
                       <div className="flex flex-wrap items-center justify-end gap-2" role="group" aria-label="確認標註密件">
                         <label className="w-full text-left space-y-1" htmlFor="confidential-reason">
-                          <span className="text-xs font-medium" style={{ color: "var(--warning)" }}>密件原因（必填）</span>
+                          <span className="text-xs font-medium text-warning!" >密件原因（必填）</span>
                           <textarea
                             id="confidential-reason"
                             className="input w-full min-h-20"
@@ -648,7 +645,7 @@ export default function PetitionManagePage() {
                             autoFocus
                           />
                         </label>
-                        <p className="w-full text-xs text-left" style={{ color: "var(--text-muted)" }}>
+                        <p className="w-full text-xs text-left text-fg-muted!" >
                           設定後只有陳情人本人、該案指派承辦人與網站擁有者能看完整內容，密件案件不能公開。
                         </p>
                         <button className="btn btn-primary" disabled={busy || !confidentialReason.trim()} onClick={() => void setConfidential()}>
@@ -665,7 +662,7 @@ export default function PetitionManagePage() {
                     )
                   )}
                   {selected.is_confidential && !selected.confidential_blocked && (
-                    <span className="rounded-full px-2.5 py-1 text-xs font-medium" style={{ background: "var(--warning-dim)", color: "var(--warning)" }}>
+                    <span className="rounded-full px-2.5 py-1 text-xs font-medium bg-warning-soft! text-warning!" >
                       密件處理
                     </span>
                   )}
@@ -674,10 +671,10 @@ export default function PetitionManagePage() {
               </div>
 
               {selected.is_confidential && !selected.confidential_blocked && (
-                <div className="rounded-lg p-3 text-sm space-y-1" style={{ background: "var(--warning-dim)", border: "1px solid var(--warning-border)" }}>
-                  <p className="font-medium" style={{ color: "var(--warning)" }}>本案已密件處理</p>
-                  <p style={{ color: "var(--text-secondary)" }}>密件原因：{selected.confidential_reason || "未提供密件原因。"}</p>
-                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>完整內容僅陳情人本人、該案指派承辦人與網站擁有者可查看。</p>
+                <div className="rounded-lg p-3 text-sm space-y-1 bg-warning-soft! border! border-warning-border!" >
+                  <p className="font-medium text-warning!" >本案已密件處理</p>
+                  <p  className="text-fg-secondary!">密件原因：{selected.confidential_reason || "未提供密件原因。"}</p>
+                  <p className="text-xs text-fg-muted!" >完整內容僅陳情人本人、該案指派承辦人與網站擁有者可查看。</p>
                   {can("petition:admin") && (
                     <PetitionConfidentialReasonEditor
                       key={selected.id}
@@ -697,34 +694,30 @@ export default function PetitionManagePage() {
                   const active = selected.status === step;
                   const done = currentIndex > index;
                   return (
-                    <div key={step} className="min-w-0 rounded-lg px-2 py-2 text-center text-xs" style={{
-                      background: active ? "var(--primary-dim)" : done ? "var(--success-dim)" : "var(--bg-hover)",
-                      border: `1px solid ${active ? "var(--primary)" : done ? "var(--success-border)" : "var(--border)"}`,
-                      color: "var(--text-primary)",
-                    }}>
+                    <div key={step} className="min-w-0 rounded-lg px-2 py-2 text-center text-xs text-fg-primary!" style={{ background: active ? "var(--primary-dim)" : done ? "var(--success-dim)" : "var(--bg-hover)", border: `1px solid ${active ? "var(--primary)" : done ? "var(--success-border)" : "var(--border)"}` }}>
                       {STATUS_OPTIONS.find((s) => s.value === step)?.label}
                     </div>
                   );
                 })}
               </div>
 
-              <div className="rounded-lg p-4 space-y-2" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
+              <div className="rounded-lg p-4 space-y-2 bg-hover! border! border-border!" >
                 <p className="text-sm font-medium">案件內容</p>
-                <p className="break-words whitespace-pre-wrap text-sm leading-7" style={{ color: "var(--text-muted)" }}>{selected.content}</p>
+                <p className="break-words whitespace-pre-wrap text-sm leading-7 text-fg-muted!" >{selected.content}</p>
               </div>
 
-              <section className="rounded-lg p-4 space-y-3" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
+              <section className="rounded-lg p-4 space-y-3 bg-hover! border! border-border!" >
                 <h3 className="text-sm font-medium">案件附件（{selected.attachments.length}）</h3>
                 <PetitionAttachmentList caseId={selected.id} attachments={selected.attachments} showVisibility />
               </section>
 
-              <div className="rounded-lg p-3 text-sm space-y-3" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
+              <div className="rounded-lg p-3 text-sm space-y-3 bg-hover! border! border-border!" >
                 <div className="flex min-w-0 items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="font-medium" style={{ color: "var(--text-primary)" }}>
+                    <p className="font-medium text-fg-primary!" >
                       {selected.submitter_id ? "平台帳號陳情人" : "外部陳情人"}
                     </p>
-                    <p className="mt-1" style={{ color: "var(--text-muted)" }}>
+                    <p className="mt-1 text-fg-muted!" >
                       {selected.submitter_id
                         ? `${selected.submitter?.display_name || "未提供姓名"} · ${selected.submitter?.email || "無平台信箱"}`
                         : selected.contact_name
@@ -741,7 +734,7 @@ export default function PetitionManagePage() {
                   )}
                 </div>
                 {!selected.submitter_id && editingSubmitter && (
-                  <div className="grid sm:grid-cols-2 gap-3 pt-2" style={{ borderTop: "1px solid var(--border)" }}>
+                  <div className="grid sm:grid-cols-2 gap-3 pt-2 border-t! border-t-border!" >
                     <label className="space-y-1.5">
                       <span className="text-xs font-medium">姓名</span>
                       <input className="input w-full" value={submitterName} onChange={(e) => setSubmitterName(e.target.value)} autoComplete="name" />
@@ -754,7 +747,7 @@ export default function PetitionManagePage() {
                       <button className="btn btn-primary" disabled={busy || !submitterName.trim() || !submitterEmail.trim()} onClick={() => void saveSubmitter()}>
                         {busy ? "儲存中…" : "儲存陳情人"}
                       </button>
-                      <p className="text-xs" style={{ color: "var(--text-muted)" }}>後續案件通知會寄到此信箱。</p>
+                      <p className="text-xs text-fg-muted!" >後續案件通知會寄到此信箱。</p>
                     </div>
                   </div>
                 )}
@@ -785,10 +778,10 @@ export default function PetitionManagePage() {
               </div>
 
               {activeAction === "assign" && (
-                <div className="rounded-lg p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
+                <div className="rounded-lg p-4 space-y-3 border! border-border!" >
                   <div>
                     <h3 className="font-medium">分派給機關內部承辦人</h3>
-                    <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>只會列出目前負責機關內有效任期的成員。</p>
+                    <p className="text-sm mt-1 text-fg-muted!" >只會列出目前負責機關內有效任期的成員。</p>
                   </div>
                   <label className="block space-y-1.5">
                     <span className="text-sm font-medium">承辦人</span>
@@ -806,10 +799,10 @@ export default function PetitionManagePage() {
               )}
 
               {activeAction === "handle" && (
-                <div className="rounded-lg p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
+                <div className="rounded-lg p-4 space-y-3 border! border-border!" >
                   <div>
                     <h3 className="font-medium">處理、要求補件或正式回覆</h3>
-                    <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>公開內容會顯示給陳情人；內部備註只給幹部看。</p>
+                    <p className="text-sm mt-1 text-fg-muted!" >公開內容會顯示給陳情人；內部備註只給幹部看。</p>
                   </div>
                   <label className="block space-y-1.5">
                     <span className="text-sm font-medium">公開說明、補件原因或正式回覆</span>
@@ -842,10 +835,10 @@ export default function PetitionManagePage() {
               )}
 
               {activeAction === "transfer" && (
-                <div className="rounded-lg p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
+                <div className="rounded-lg p-4 space-y-3 border! border-border!" >
                   <div>
                     <h3 className="font-medium">跨機關分案 / 轉派</h3>
-                    <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>轉派後案件會移到目標機關工作台，原承辦人會被清空，目標機關可重新分派。</p>
+                    <p className="text-sm mt-1 text-fg-muted!" >轉派後案件會移到目標機關工作台，原承辦人會被清空，目標機關可重新分派。</p>
                   </div>
                   <label className="block space-y-1.5">
                     <span className="text-sm font-medium">目標機關</span>
@@ -863,10 +856,10 @@ export default function PetitionManagePage() {
               )}
 
               {activeAction === "reject_close" && (
-                <div className="rounded-lg p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
+                <div className="rounded-lg p-4 space-y-3 border! border-border!" >
                   <div>
                     <h3 className="font-medium">駁回、不受理或結案</h3>
-                    <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>駁回/不受理必須填公開原因；結案可填結案說明。</p>
+                    <p className="text-sm mt-1 text-fg-muted!" >駁回/不受理必須填公開原因；結案可填結案說明。</p>
                   </div>
                   <label className="block space-y-1.5">
                     <span className="text-sm font-medium">公開原因或結案說明</span>
@@ -884,15 +877,15 @@ export default function PetitionManagePage() {
               )}
 
               {activeAction === "public" && (
-                <div className="rounded-lg p-4 space-y-4" style={{ border: "1px solid var(--border)" }}>
+                <div className="rounded-lg p-4 space-y-4 border! border-border!" >
                   <div>
                     <h3 className="font-medium">公開陳情</h3>
-                    <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
+                    <p className="text-sm mt-1 text-fg-muted!" >
                       公開前會先徵詢陳情人；若陳情人修改內容，承辦需再次確認差異後才會發布。
                     </p>
                   </div>
                   {selected.public_status === "pending_user" && (
-                    <p className="rounded-lg p-3 text-sm" style={{ background: "var(--primary-dim)", color: "var(--text-muted)" }}>
+                    <p className="rounded-lg p-3 text-sm bg-accent-soft! text-fg-muted!" >
                       已送出公開申請，等待陳情人同意、修改後同意或拒絕。
                     </p>
                   )}
@@ -923,13 +916,13 @@ export default function PetitionManagePage() {
                     </>
                   )}
                   {selected.public_status === "published" && (
-                    <p className="rounded-lg p-3 text-sm" style={{ background: "var(--success-dim)", color: "var(--success)" }}>此案件已公開。</p>
+                    <p className="rounded-lg p-3 text-sm text-success!" style={{ background: "var(--success-dim)" }}>此案件已公開。</p>
                   )}
                 </div>
               )}
 
               {activeAction === "attachments" && (
-                <div className="rounded-lg p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
+                <div className="rounded-lg p-4 space-y-3 border! border-border!" >
                   <h3 className="font-medium">上傳附件或新增內部備註</h3>
                   <label className="block space-y-1.5">
                     <span className="text-sm font-medium">附件可見對象</span>
@@ -965,7 +958,7 @@ export default function PetitionManagePage() {
                 </div>
               )}
 
-              <div className="space-y-3 pt-3" style={{ borderTop: "1px solid var(--border)" }}>
+              <div className="space-y-3 pt-3 border-t! border-t-border!" >
                 <h3 className="font-medium">處理事件</h3>
                 {selected.events.map((event) => (
                   <div key={event.id} className="text-sm pl-3 py-1" style={{ borderLeft: "2px solid var(--border)" }}>
@@ -988,10 +981,10 @@ export default function PetitionManagePage() {
                       <>
                         <div className="flex min-w-0 items-start justify-between gap-2">
                           <p className="min-w-0 break-words font-medium">{event.title}{event.updated_at !== event.created_at ? "（已編輯）" : ""}</p>
-                          {event.can_edit && <button className="text-xs" style={{ color: "var(--primary-text)" }} onClick={() => startEventEdit(event)}>編輯</button>}
+                          {event.can_edit && <button className="text-xs text-accent-text!"  onClick={() => startEventEdit(event)}>編輯</button>}
                         </div>
-                        {event.content && <p className="whitespace-pre-wrap mt-1" style={{ color: "var(--text-muted)" }}>{event.content}</p>}
-                        <p className="text-xs mt-1" style={{ color: "var(--text-disabled)" }}>{fmt(event.created_at)} · {event.visibility === "internal" ? "內部" : "公開"}</p>
+                        {event.content && <p className="whitespace-pre-wrap mt-1 text-fg-muted!" >{event.content}</p>}
+                        <p className="text-xs mt-1 text-fg-disabled!" >{fmt(event.created_at)} · {event.visibility === "internal" ? "內部" : "公開"}</p>
                       </>
                     )}
                   </div>
@@ -1013,7 +1006,7 @@ export default function PetitionManagePage() {
             </thead>
             <tbody>
               {stats.by_org.map((org) => (
-                <tr key={org.org_id} style={{ borderTop: "1px solid var(--border)" }}>
+                <tr key={org.org_id}  className="border-t! border-t-border!">
                   <td className="py-2">{org.org_name}</td>
                   <td>{org.total}</td>
                   <td>{org.completed}</td>

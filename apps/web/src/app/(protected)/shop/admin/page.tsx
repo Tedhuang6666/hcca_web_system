@@ -166,7 +166,7 @@ export default function ShopAdminPage() {
 
   if (!allowed) {
     return (
-      <div className="py-20 text-center" style={{ color: "var(--text-muted)" }}>
+      <div className="py-20 text-center text-fg-muted!" >
         <p className="text-sm">需要「管理商品」權限才能存取此頁。</p>
       </div>
     );
@@ -267,7 +267,7 @@ export default function ShopAdminPage() {
         <Thumb url={item.image_url} size={34} />
         <span className="flex-1 min-w-0">
           <span className="block break-words text-sm font-medium">{item.name}</span>
-          <span className="block text-xs truncate" style={{ color: "var(--text-muted)" }}>
+          <span className="block text-xs truncate text-fg-muted!" >
             NT${item.price.toLocaleString()} · {STATUS_LABEL[item.status] ?? item.status} · {item.variant_groups.length} 組規格
           </span>
         </span>
@@ -285,22 +285,22 @@ export default function ShopAdminPage() {
   );
 
   const detailContent = !cat ? (
-    <div className="p-6 text-sm" style={{ color: "var(--text-muted)" }}>尚未選擇商品</div>
+    <div className="p-6 text-sm text-fg-muted!" >尚未選擇商品</div>
   ) : productId && !product ? (
-    <div className="p-6 text-sm" style={{ color: "var(--text-muted)" }}>載入商品詳情中…</div>
+    <div className="p-6 text-sm text-fg-muted!" >載入商品詳情中…</div>
   ) : product ? (
     <div className="p-5 space-y-4">
       <div className="flex items-start gap-4">
         <Thumb url={product.image_url} size={72} />
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>商品詳情</p>
-          <h2 className="text-xl font-semibold mt-1 break-words" style={{ color: "var(--text-primary)" }}>{product.name}</h2>
+          <p className="text-xs font-semibold uppercase tracking-widest text-fg-muted!" >商品詳情</p>
+          <h2 className="text-xl font-semibold mt-1 break-words text-fg-primary!" >{product.name}</h2>
           {product.description && (
-            <p className="text-sm mt-2 whitespace-pre-line" style={{ color: "var(--text-secondary)" }}>
+            <p className="text-sm mt-2 whitespace-pre-line text-fg-secondary!" >
               {product.description}
             </p>
           )}
-          <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>
+          <p className="text-xs mt-2 text-fg-muted!" >
             NT${product.price.toLocaleString()} · {product.is_unlimited ? "無限量" : `庫存 ${product.stock_quantity}`} · {STATUS_LABEL[product.status] ?? product.status}
             {product.effective_sale_end && ` · 截止 ${new Date(product.effective_sale_end).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}${product.sale_end ? "（單品設定）" : "（沿用活動）"}`}
             {product.max_quantity_per_user != null && ` · 每人限購 ${product.max_quantity_per_user} 件`}
@@ -316,8 +316,8 @@ export default function ShopAdminPage() {
           icon="none"
           announcement="已複製商品訂購連結"
           failureHint="無法複製訂購連結，請確認瀏覽器剪貼簿權限"
-          className="min-h-11 px-3 py-1 rounded-lg text-xs font-medium disabled:opacity-45 sm:px-2.5"
-          style={{ color: "var(--text-secondary)", border: "1px solid var(--border)" }}
+          className="min-h-11 px-3 py-1 rounded-lg text-xs font-medium disabled:opacity-45 sm:px-2.5 text-fg-secondary! border! border-border!"
+
         />
         {can("shop:test") && (product.status === "draft" || product.status === "cancelled") && (
           <MiniBtn disabled={productStatusBusy} onClick={() => void toggleProduct(product, true)}>開始測試</MiniBtn>
@@ -327,7 +327,7 @@ export default function ShopAdminPage() {
         </MiniBtn>
       </div>
       {product.status === "testing" && (
-        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+        <p className="text-sm text-fg-secondary!" >
           僅超管或具「測試商品」權限者能查看與試訂。正式開放時會清除這項商品的測試訂單及相關紀錄，並回補庫存。
         </p>
       )}
@@ -344,9 +344,9 @@ export default function ShopAdminPage() {
     <div className="p-5 space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>活動詳情</p>
-          <h2 className="text-xl font-semibold mt-1 break-words" style={{ color: "var(--text-primary)" }}>{cat.name}</h2>
-          <p className="text-sm mt-2" style={{ color: "var(--text-muted)" }}>{cat.description || "無描述"}</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-fg-muted!" >活動詳情</p>
+          <h2 className="text-xl font-semibold mt-1 break-words text-fg-primary!" >{cat.name}</h2>
+          <p className="text-sm mt-2 text-fg-muted!" >{cat.description || "無描述"}</p>
         </div>
         <Thumb url={cat.image_url} size={72} />
       </div>
@@ -359,9 +359,9 @@ export default function ShopAdminPage() {
     <div className="p-5 space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>系列詳情</p>
-          <h2 className="text-xl font-semibold mt-1" style={{ color: "var(--text-primary)" }}>{series.name}</h2>
-          <p className="text-sm mt-2" style={{ color: "var(--text-muted)" }}>{series.description || "無描述"}</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-fg-muted!" >系列詳情</p>
+          <h2 className="text-xl font-semibold mt-1 text-fg-primary!" >{series.name}</h2>
+          <p className="text-sm mt-2 text-fg-muted!" >{series.description || "無描述"}</p>
         </div>
         <Thumb url={series.image_url} size={72} />
       </div>
@@ -376,7 +376,7 @@ export default function ShopAdminPage() {
     <div className="shop-admin-page w-full min-w-0 space-y-5 max-w-7xl mx-auto px-4 py-5">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>{tab === "stats" ? "訂購統計" : tab === "promotions" ? "優惠設定" : tab === "offices" ? "教師處室設定" : tab === "imports" ? "組織預購同步" : tab === "note-groups" ? "購買名單備註分組" : "商品設定"}</h1>
+          <h1 className="text-xl font-semibold text-fg-primary!" >{tab === "stats" ? "訂購統計" : tab === "promotions" ? "優惠設定" : tab === "offices" ? "教師處室設定" : tab === "imports" ? "組織預購同步" : tab === "note-groups" ? "購買名單備註分組" : "商品設定"}</h1>
         </div>
         <div className="flex flex-wrap gap-2">
           {tab !== "catalog" && <Link href="/shop/admin" className="btn btn-secondary min-h-11">返回商品設定</Link>}
@@ -404,7 +404,7 @@ export default function ShopAdminPage() {
         <ShopNoteGroupsPanel />
       ) : (
         <div className="card overflow-hidden lg:min-h-[620px]">
-          {catalogError && <div role="alert" className="p-4 text-sm" style={{ color: "var(--danger)" }}>
+          {catalogError && <div role="alert" className="p-4 text-sm text-danger!" >
             <p>{catalogError}</p>
             <button type="button" className="btn btn-ghost min-h-11" onClick={() => {
               loadCategories();
@@ -413,11 +413,11 @@ export default function ShopAdminPage() {
             }}>重新載入商品目錄</button>
           </div>}
           <div className="grid grid-cols-1 lg:grid-cols-[190px_minmax(0,1fr)_minmax(0,1.2fr)] lg:min-h-[620px]">
-            <aside className="min-w-0 overflow-hidden flex flex-col" style={{ borderRight: "1px solid var(--border)" }}>
-              <div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom: "1px solid var(--border)" }}>
+            <aside className="min-w-0 overflow-hidden flex flex-col border-r! border-r-border!" >
+              <div className="px-4 py-3 flex items-center justify-between border-b! border-b-border!" >
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>活動</p>
-                  <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{categories.length} 個活動</p>
+                  <p className="text-xs font-semibold uppercase tracking-widest text-fg-muted!" >活動</p>
+                  <p className="text-xs mt-0.5 text-fg-muted!" >{categories.length} 個活動</p>
                 </div>
                 <MiniBtn tone="primary" onClick={() => setCatModal({ initial: null })}>新增活動</MiniBtn>
               </div>
@@ -432,7 +432,7 @@ export default function ShopAdminPage() {
                       <Thumb url={c.image_url} size={34} />
                       <span className="flex-1 min-w-0">
                         <span className="block text-sm font-medium truncate">{c.name}</span>
-                        <span className="block text-xs truncate" style={{ color: "var(--text-muted)" }}>
+                        <span className="block text-xs truncate text-fg-muted!" >
                           {c.description || "無描述"}
                         </span>
                       </span>
@@ -441,16 +441,16 @@ export default function ShopAdminPage() {
                   </div>
                 ))}
                 {catalogLoading && <p role="status" className="p-4 text-sm">正在載入活動…</p>}
-                {!catalogLoading && !catalogError && categories.length === 0 && <p className="p-4 text-sm" style={{ color: "var(--text-secondary)" }}>尚未建立活動。按「新增活動」開始，例如「校慶商品」。</p>}
+                {!catalogLoading && !catalogError && categories.length === 0 && <p className="p-4 text-sm text-fg-secondary!" >尚未建立活動。按「新增活動」開始，例如「校慶商品」。</p>}
               </div>
             </aside>
 
-            <section className="min-w-0 overflow-hidden flex flex-col" style={{ borderRight: "1px solid var(--border)" }}>
-              <div className="px-4 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
+            <section className="min-w-0 overflow-hidden flex flex-col border-r! border-r-border!" >
+              <div className="px-4 py-3 border-b! border-b-border!" >
                 <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
-                    <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>系列與商品</p>
-                    <p className="text-sm font-medium truncate mt-0.5" style={{ color: "var(--text-primary)" }}>
+                    <p className="text-xs font-semibold uppercase tracking-widest text-fg-muted!" >系列與商品</p>
+                    <p className="text-sm font-medium truncate mt-0.5 text-fg-primary!" >
                       {cat ? cat.name : "請先選擇活動"}
                     </p>
                   </div>
@@ -466,19 +466,19 @@ export default function ShopAdminPage() {
               </div>
               <div className="flex-1 overflow-y-auto">
                 {!cat ? (
-                  <p className="p-6 text-sm text-center" style={{ color: "var(--text-muted)" }}>尚未選擇活動</p>
+                  <p className="p-6 text-sm text-center text-fg-muted!" >尚未選擇活動</p>
                 ) : (
-                  <div className="divide-y" style={{ borderColor: "var(--border)" }}>
+                  <div className="divide-y border-border!" >
                     <section className="space-y-2 p-3">
                       <div className="flex items-center justify-between gap-2">
                         <div>
-                          <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>單一商品</p>
-                          <p className="text-xs" style={{ color: "var(--text-muted)" }}>直接放在「{cat.name}」下，不需要建立系列</p>
+                          <p className="text-sm font-semibold text-fg-primary!" >單一商品</p>
+                          <p className="text-xs text-fg-muted!" >直接放在「{cat.name}」下，不需要建立系列</p>
                         </div>
                       </div>
                       {directProducts.map(productRow)}
                       {directProducts.length === 0 && (
-                        <p className="py-2 text-xs" style={{ color: "var(--text-muted)" }}>目前沒有單一商品</p>
+                        <p className="py-2 text-xs text-fg-muted!" >目前沒有單一商品</p>
                       )}
                     </section>
                     {seriesList.map((s) => (
@@ -486,7 +486,7 @@ export default function ShopAdminPage() {
                         <div className="flex items-center gap-3 px-4 py-3" style={{ background: series?.id === s.id ? "var(--bg-elevated)" : undefined }}>
                           <button type="button" onClick={() => selectSeries(s)} className="flex-1 min-h-11 min-w-0 text-left">
                             <p className="text-sm font-semibold truncate" style={{ color: series?.id === s.id ? "var(--primary-text)" : "var(--text-primary)" }}>{s.name}</p>
-                            <p className="text-xs truncate" style={{ color: "var(--text-muted)" }}>{s.description || "無描述"}</p>
+                            <p className="text-xs truncate text-fg-muted!" >{s.description || "無描述"}</p>
                           </button>
                           <button type="button" className="btn btn-ghost min-h-11 px-3 text-xs lg:hidden"
                             onClick={() => { selectSeries(s); setMobileDetailOpen(true); }}>管理</button>
@@ -499,13 +499,13 @@ export default function ShopAdminPage() {
                               <MiniBtn tone="primary" onClick={() => setProductModal({ initial: null, seriesId: s.id })}>新增商品</MiniBtn>
                             </div>
                             {products.map(productRow)}
-                            {products.length === 0 && <p className="py-4 text-xs text-center" style={{ color: "var(--text-muted)" }}>此系列尚無商品</p>}
+                            {products.length === 0 && <p className="py-4 text-xs text-center text-fg-muted!" >此系列尚無商品</p>}
                           </div>
                         )}
                       </div>
                     ))}
                     {seriesList.length === 0 && (
-                      <p className="p-6 text-sm text-center" style={{ color: "var(--text-muted)" }}>
+                      <p className="p-6 text-sm text-center text-fg-muted!" >
                         尚無系列
                       </p>
                     )}
@@ -522,10 +522,10 @@ export default function ShopAdminPage() {
       )}
 
       {tab === "stats" && (
-        <details className="border-t pt-4" style={{ borderColor: "var(--border)" }}>
-          <summary className="min-h-11 cursor-pointer text-sm" style={{ color: "var(--text-secondary)" }}>訂單資料維護</summary>
-          <p className="mb-3 text-sm" style={{ color: "var(--text-secondary)" }}>清除會永久刪除所有活動的訂單，包含已收款資料，且無法復原。</p>
-          <button type="button" onClick={() => setClearOrdersOpen(true)} className="btn btn-ghost min-h-11" style={{ color: "var(--danger)" }}>
+        <details className="border-t pt-4 border-border!" >
+          <summary className="min-h-11 cursor-pointer text-sm text-fg-secondary!" >訂單資料維護</summary>
+          <p className="mb-3 text-sm text-fg-secondary!" >清除會永久刪除所有活動的訂單，包含已收款資料，且無法復原。</p>
+          <button type="button" onClick={() => setClearOrdersOpen(true)} className="btn btn-ghost min-h-11 text-danger!" >
             <Trash2 size={15} /> 清除所有商品訂購資料
           </button>
         </details>
@@ -536,10 +536,10 @@ export default function ShopAdminPage() {
           if (!clearingOrders) setClearOrdersOpen(false);
         }} size="md">
           <div className="space-y-4">
-            <div className="flex items-start gap-3 rounded-lg p-3"
-              style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
-              <AlertTriangle size={18} className="mt-0.5 shrink-0" style={{ color: "var(--danger)" }} />
-              <div className="space-y-2 text-sm" style={{ color: "var(--text-secondary)" }}>
+            <div className="flex items-start gap-3 rounded-lg p-3 border! border-border! bg-elevated!"
+              >
+              <AlertTriangle size={18} className="mt-0.5 shrink-0 text-danger!"  />
+              <div className="space-y-2 text-sm text-fg-secondary!" >
                 <p>這會永久刪除所有使用者、所有活動與所有狀態的商品訂單，包含已收款的訂單。</p>
                 <p>系統會同步清除訂單明細、商品應收款與尚未寄出的確認通知，並回補訂單占用的庫存及優惠使用次數。</p>
                 <p>商品目錄、購物車和稽核紀錄會保留。此動作無法復原。</p>

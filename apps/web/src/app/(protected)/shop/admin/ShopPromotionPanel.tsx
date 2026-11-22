@@ -325,29 +325,29 @@ export default function ShopPromotionPanel() {
     <div className="space-y-5">
       <section ref={formSectionRef} className="card space-y-4 p-5">
         <div>
-          <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+          <h2 className="text-base font-semibold text-fg-primary!" >
             {editingPromotionId ? "編輯優惠" : "建立優惠"}
           </h2>
-          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+          <p className="mt-1 text-xs text-fg-muted!" >
             優惠碼留空時自動套用；填寫時須領取使用。
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <fieldset className="sm:col-span-2" aria-describedby="promotion-topic-help">
-            <legend className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+            <legend className="text-xs font-medium text-fg-secondary!" >
               {form.discount_type === "activity_free" ? "適用活動（必填，可複選）" : "適用活動（選填，可複選）"}
             </legend>
-            <p id="promotion-topic-help" className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            <p id="promotion-topic-help" className="mt-1 text-xs text-fg-muted!" >
               滿額與最低件數依各活動分開計算，不跨活動累加。指定商品優惠價可跨活動逐項設定。
             </p>
-            {form.discount_type !== "activity_free" && <label className="flex min-h-11 items-center gap-2 text-xs" style={{ color: "var(--text-secondary)" }}>
+            {form.discount_type !== "activity_free" && <label className="flex min-h-11 items-center gap-2 text-xs text-fg-secondary!" >
               <input type="checkbox" checked={form.target_category_ids.length === 0} disabled={saving}
                 onChange={() => update("target_category_ids", [])} />
               不限活動
             </label>}
             <div className="grid gap-x-4 sm:grid-cols-2">
               {categories.map((category) => (
-                <label key={category.id} className="flex min-h-11 items-center gap-2 text-xs" style={{ color: "var(--text-secondary)" }}>
+                <label key={category.id} className="flex min-h-11 items-center gap-2 text-xs text-fg-secondary!" >
                   <input type="checkbox" checked={form.target_category_ids.includes(category.id)} disabled={saving}
                     onChange={() => toggleCategory(category.id)} />
                   {category.name}
@@ -355,10 +355,10 @@ export default function ShopPromotionPanel() {
               ))}
             </div>
             {!loading && !loadError && categories.length === 0 && (
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>{form.discount_type === "activity_free" ? "請先建立活動，再設定活動免費券。" : "尚未建立活動，目前可設定不限活動的優惠。"}</p>
+              <p className="text-xs text-fg-muted!" >{form.discount_type === "activity_free" ? "請先建立活動，再設定活動免費券。" : "尚未建立活動，目前可設定不限活動的優惠。"}</p>
             )}
           </fieldset>
-          <label className="block text-xs font-medium sm:col-span-2" style={{ color: "var(--text-secondary)" }}>
+          <label className="block text-xs font-medium sm:col-span-2 text-fg-secondary!" >
             優惠名稱
             <input ref={nameInputRef} className="input mt-1 w-full" value={form.name} onChange={(e) => update("name", e.target.value)} placeholder="例如：校友回饋 9 折" />
           </label>
@@ -371,11 +371,11 @@ export default function ShopPromotionPanel() {
                 : "留空表示不限帳號。學號可預先指定；Email 須已註冊。"} />
           </div>
           {form.discount_type !== "activity_free" && <>
-          <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+          <label className="block text-xs font-medium text-fg-secondary!" >
             優惠碼（選填）
             <input className="input mt-1 w-full uppercase" value={form.code} onChange={(e) => update("code", e.target.value.toUpperCase())} placeholder="WELCOME10" autoCapitalize="characters" />
           </label>
-          <label className="flex min-h-11 items-start gap-2 text-xs font-medium sm:col-span-2" style={{ color: "var(--text-secondary)" }}>
+          <label className="flex min-h-11 items-start gap-2 text-xs font-medium sm:col-span-2 text-fg-secondary!" >
             <input
               className="mt-0.5"
               type="checkbox"
@@ -384,13 +384,13 @@ export default function ShopPromotionPanel() {
             />
             <span>
               公開顯示優惠
-              <span className="mt-1 block text-xs font-normal" style={{ color: "var(--text-muted)" }}>
+              <span className="mt-1 block text-xs font-normal text-fg-muted!" >
                 關閉後不會列在商品頁優惠清單；知道優惠碼的使用者仍可輸入使用。
               </span>
             </span>
           </label>
           </>}
-          <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+          <label className="block text-xs font-medium text-fg-secondary!" >
             優惠內容
             <select className="input mt-1 w-full" value={form.discount_type} onChange={(e) => update("discount_type", e.target.value as PromotionForm["discount_type"])}>
               <option value="percentage">按百分比折抵</option>
@@ -402,43 +402,43 @@ export default function ShopPromotionPanel() {
             </select>
           </label>
           {form.discount_type === "activity_free" ? (
-            <p className="self-center text-xs" style={{ color: "var(--text-secondary)" }}>
+            <p className="self-center text-xs text-fg-secondary!" >
               指定帳號在所選活動不限次數全免，含所有數量、規格加價與日後新增商品。
             </p>
           ) : form.discount_type === "gift" ? (
-            <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+            <label className="block text-xs font-medium text-fg-secondary!" >
               每項贈送數量
               <input className="input mt-1 w-full" type="number" min="1" max="100" step="1"
                 value={form.gift_quantity} onChange={(e) => update("gift_quantity", e.target.value)} />
               <span className="mt-1 block font-normal">每個指定商品各贈送此件數；可加購多件，超出件數與規格加價照常計費。</span>
             </label>
           ) : form.discount_type !== "price_override" ? (
-            <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+            <label className="block text-xs font-medium text-fg-secondary!" >
               {form.discount_type === "percentage" ? "折抵百分比（%）" : form.discount_type === "bundle_price" ? "每套組合價（NT$）" : "折抵金額"}
               <input className="input mt-1 w-full" type="number" min="1" max={form.discount_type === "percentage" ? 100 : undefined} value={form.discount_value} onChange={(e) => update("discount_value", e.target.value)} />
               {form.discount_type === "percentage" && <span className="mt-1 block font-normal">例如填 10，表示減價 10%，也就是打 9 折。</span>}
               {form.discount_type === "bundle_price" && <span className="mt-1 block font-normal">所選商品各一件為一套；完整套數重複優惠，未成套商品與規格加價另計。</span>}
             </label>
           ) : (
-            <p className="self-center text-xs" style={{ color: "var(--text-muted)" }}>
+            <p className="self-center text-xs text-fg-muted!" >
               為下方選擇的商品逐項設定優惠後單價；規格加價會照常計入。
             </p>
           )}
           {form.discount_type !== "activity_free" && <>
-          <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+          <label className="block text-xs font-medium text-fg-secondary!" >
             每個活動最低消費（選填）
             <input className="input mt-1 w-full" type="number" min="0" value={form.min_order_price} onChange={(e) => update("min_order_price", e.target.value)} />
           </label>
-          <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+          <label className="block text-xs font-medium text-fg-secondary!" >
             最低件數
             <input className="input mt-1 w-full" type="number" min="1" max="100" value={form.min_quantity} onChange={(e) => update("min_quantity", e.target.value)} />
-            <span className="mt-1 block text-xs" style={{ color: "var(--text-muted)" }}>
+            <span className="mt-1 block text-xs text-fg-muted!" >
               各活動分開計算，只計下方指定商品；未指定商品時以該活動的登記件數計算。
             </span>
           </label>
           <fieldset className="sm:col-span-2">
-            <legend className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>適用商品（可複選）</legend>
-            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            <legend className="text-xs font-medium text-fg-secondary!" >適用商品（可複選）</legend>
+            <p className="mt-1 text-xs text-fg-muted!" >
               {form.discount_type === "gift"
                 ? "多選時須同時登記，各贈指定件數；受贈者自行選規格。"
                 : form.discount_type === "price_override"
@@ -447,17 +447,17 @@ export default function ShopPromotionPanel() {
                   ? "至少兩項商品，各一件為一套。"
                 : "折扣只計指定品項，最低消費門檻看整筆登記金額。多選時每項都需登記，最低件數為指定商品合計；只選一項可設定單品買滿件數優惠。"}
             </p>
-            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            <p className="mt-1 text-xs text-fg-muted!" >
               含草稿與下架商品；上架後才可使用優惠。
             </p>
-            <div className="mt-2 grid max-h-48 gap-1 overflow-y-auto rounded-lg border p-2 sm:grid-cols-2" style={{ borderColor: "var(--border)" }}>
+            <div className="mt-2 grid max-h-48 gap-1 overflow-y-auto rounded-lg border p-2 sm:grid-cols-2 border-border!" >
               {scopedProducts.length === 0 ? (
-                <p className="p-2 text-xs" style={{ color: "var(--text-muted)" }}>所選活動目前沒有可選商品；未指定商品時，優惠適用於所選活動日後新增的商品。</p>
+                <p className="p-2 text-xs text-fg-muted!" >所選活動目前沒有可選商品；未指定商品時，優惠適用於所選活動日後新增的商品。</p>
               ) : scopedProducts.map((product) => (
-                <label key={product.id} className="flex min-h-10 items-center gap-2 rounded-md px-2 text-xs" style={{ color: "var(--text-secondary)" }}>
+                <label key={product.id} className="flex min-h-10 items-center gap-2 rounded-md px-2 text-xs text-fg-secondary!" >
                   <input type="checkbox" checked={form.target_product_ids.includes(product.id)} onChange={() => toggleProduct(product.id)} />
                   <span>{product.name}{productCategory(product) && (
-                    <span className="ml-2" style={{ color: "var(--text-muted)" }}>
+                    <span className="ml-2 text-fg-muted!" >
                       {categories.find((category) => category.id === productCategory(product))?.name}
                     </span>
                   )}</span>
@@ -480,16 +480,16 @@ export default function ShopPromotionPanel() {
                   .map((product) => (
                     <div
                       key={product.id}
-                      className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between"
-                      style={{ borderColor: "var(--border)" }}
+                      className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between border-border!"
+
                     >
                       <div>
-                        <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{product.name}</p>
-                        <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
+                        <p className="text-sm font-medium text-fg-primary!" >{product.name}</p>
+                        <p className="mt-0.5 text-xs text-fg-muted!" >
                           目前單價 NT${product.price.toLocaleString()}
                         </p>
                       </div>
-                      <label className="flex min-h-11 items-center gap-2 text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+                      <label className="flex min-h-11 items-center gap-2 text-xs font-medium text-fg-secondary!" >
                         優惠後單價
                         <span>NT$</span>
                         <input
@@ -513,18 +513,18 @@ export default function ShopPromotionPanel() {
               </div>
             )}
           </fieldset>
-          <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+          <label className="block text-xs font-medium text-fg-secondary!" >
             使用次數上限（選填）
             <input className="input mt-1 w-full" type="number" min="1" value={form.max_uses} onChange={(e) => update("max_uses", e.target.value)} placeholder="不限次數" />
           </label>
           </>}
-          <label className="block text-xs font-medium sm:col-span-2" style={{ color: "var(--text-secondary)" }}>
+          <label className="block text-xs font-medium sm:col-span-2 text-fg-secondary!" >
             備註（選填）
             <input className="input mt-1 w-full" value={form.description} onChange={(e) => update("description", e.target.value)} />
           </label>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button className="btn min-h-11" onClick={save} disabled={saving || deletingPromotionId !== null} style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
+          <button className="btn min-h-11 bg-accent! text-accent-foreground! border-0!" onClick={save} disabled={saving || deletingPromotionId !== null} >
             {saving ? "儲存中…" : editingPromotionId ? "儲存變更" : "建立優惠"}
           </button>
           {editingPromotionId && (
@@ -536,19 +536,19 @@ export default function ShopPromotionPanel() {
       </section>
 
       <section className="card overflow-hidden">
-        <div className="border-b px-5 py-3" style={{ borderColor: "var(--border)" }}>
-          <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>優惠清單</h2>
+        <div className="border-b px-5 py-3 border-border!" >
+          <h2 className="text-sm font-semibold text-fg-primary!" >優惠清單</h2>
         </div>
         {loading ? (
-          <p className="p-5 text-sm" style={{ color: "var(--text-muted)" }}>載入中…</p>
+          <p className="p-5 text-sm text-fg-muted!" >載入中…</p>
         ) : loadError ? (
-          <div role="alert" className="p-5 text-sm" style={{ color: "var(--danger)" }}>
+          <div role="alert" className="p-5 text-sm text-danger!" >
             <p>{loadError}</p><button type="button" className="btn btn-ghost min-h-11" onClick={() => void load()}>重新載入優惠</button>
           </div>
         ) : promotions.length === 0 ? (
-          <p className="p-5 text-sm" style={{ color: "var(--text-muted)" }}>尚未建立優惠。</p>
+          <p className="p-5 text-sm text-fg-muted!" >尚未建立優惠。</p>
         ) : (
-          <div className="divide-y" style={{ borderColor: "var(--border)" }}>
+          <div className="divide-y border-border!" >
             {promotions.map((promotion) => {
               const targetUsers = promotion.target_users ?? [];
               const targetLabel = targetUsers.length > 0
@@ -577,18 +577,18 @@ export default function ShopPromotionPanel() {
                 <div key={promotion.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-medium" style={{ color: "var(--text-primary)" }}>{promotion.name}</p>
+                      <p className="font-medium text-fg-primary!" >{promotion.name}</p>
                       <span className="rounded-md px-2 py-1 text-xs" style={{ background: promotion.is_active ? "var(--success-dim)" : "var(--bg-elevated)", color: promotion.is_active ? "var(--success)" : "var(--text-muted)" }}>
                         {promotion.is_active ? "啟用中" : "已停用"}
                       </span>
-                      <span className="rounded-md px-2 py-1 text-xs" style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
+                      <span className="rounded-md px-2 py-1 text-xs bg-elevated! text-fg-muted!" >
                         {promotion.is_public ? "公開" : "隱藏"}
                       </span>
                     </div>
-                    <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                    <p className="mt-1 text-xs text-fg-muted!" >
                       {promotion.code ? `優惠碼 ${promotion.code} · ` : ""}適用：{topicLabel(promotion)} · {targetLabel} · {benefitLabel}
                     </p>
-                    <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                    <p className="mt-1 text-xs text-fg-muted!" >
                       {promotion.min_order_price > 0 ? `滿 NT$${promotion.min_order_price.toLocaleString()} · ` : ""}
                       {promotion.min_quantity > 1 ? `滿 ${promotion.min_quantity} 件 · ` : ""}
                       {promotion.target_products?.length
@@ -607,15 +607,15 @@ export default function ShopPromotionPanel() {
                     </button>
                     {promotion.used_count === 0 ? (
                       <button
-                        className="btn btn-ghost min-h-11 text-xs"
+                        className="btn btn-ghost min-h-11 text-xs text-danger!"
                         onClick={() => deletePromotion(promotion)}
                         disabled={saving || deletingPromotionId !== null}
-                        style={{ color: "var(--danger)" }}
+
                       >
                         {deletingPromotionId === promotion.id ? "刪除中…" : "刪除"}
                       </button>
                     ) : (
-                      <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                      <span className="text-xs text-fg-muted!" >
                         已使用 {promotion.used_count} 次，請停用以保留訂單紀錄
                       </span>
                     )}

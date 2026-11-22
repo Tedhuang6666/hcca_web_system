@@ -65,8 +65,8 @@ function MobileBreadcrumb({ items, fallbackTitle }: { items: Crumb[]; fallbackTi
       )}
       <span
         aria-current="page"
-        className="min-w-0 truncate whitespace-nowrap text-[15px] font-semibold leading-tight"
-        style={{ color: "var(--text-primary)" }}>
+        className="min-w-0 truncate whitespace-nowrap text-[15px] font-semibold leading-tight text-fg-primary!"
+        >
         {current}
       </span>
     </nav>
@@ -319,17 +319,13 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
               role="dialog"
               aria-label="通知預覽"
               tabIndex={-1}
-              className="motion-popover absolute right-0 top-full mt-1.5 w-72 max-w-[calc(100vw-1rem)] rounded-xl z-50 overflow-hidden"
-              style={{
-                background: "var(--bg-elevated)",
-                border: "1px solid var(--border-strong)",
-                boxShadow: "var(--shadow-xl)",
-              }}>
+              className="motion-popover absolute right-0 top-full mt-1.5 w-72 max-w-[calc(100vw-1rem)] rounded-xl z-50 overflow-hidden bg-elevated! border! border-border-strong!"
+              style={{ boxShadow: "var(--shadow-xl)" }}>
               {hasTaskAccess && <>
               {/* 待辦區 */}
-              <div className="px-4 py-2.5 flex items-center justify-between"
-                style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-hover)" }}>
-                <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
+              <div className="px-4 py-2.5 flex items-center justify-between border-b! border-b-border! bg-hover!"
+                >
+                <p className="text-xs font-semibold text-fg-primary!" >
                   待辦中心
                 </p>
                 {visibleTaskCount > 0 && (
@@ -341,7 +337,7 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
               </div>
               <div className="max-h-44 overflow-y-auto">
                 {previewTasks.length === 0 ? (
-                  <p className="text-xs text-center py-4" style={{ color: "var(--text-muted)" }}>
+                  <p className="text-xs text-center py-4 text-fg-muted!" >
                     目前沒有待辦
                   </p>
                 ) : (
@@ -351,8 +347,8 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
                       <Link
                         href={t.href}
                         onClick={() => setShowBell(false)}
-                        className="motion-notification-row flex items-start gap-2 px-4 py-2.5 transition-colors"
-                        style={{ textDecoration: "none", display: "flex" }}
+                        className="motion-notification-row flex items-start gap-2 px-4 py-2.5 transition-colors no-underline!"
+                        style={{ display: "flex" }}
                         onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-hover)")}
                         onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
                         <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5"
@@ -363,13 +359,13 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
                           }}
                           aria-hidden="true" />
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium truncate"
-                            style={{ color: "var(--text-primary)" }}>
+                          <p className="text-xs font-medium truncate text-fg-primary!"
+                            >
                             {t.title}
                           </p>
                           {t.subtitle && (
-                            <p className="text-xs truncate mt-0.5"
-                              style={{ color: "var(--text-muted)" }}>
+                            <p className="text-xs truncate mt-0.5 text-fg-muted!"
+                              >
                               {t.subtitle}
                             </p>
                           )}
@@ -380,20 +376,16 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
                 )}
               </div>
               <Link href="/tasks" onClick={() => setShowBell(false)}
-                className="block px-4 py-2 text-center text-xs font-medium"
-                style={{
-                  color: "var(--primary-text)",
-                  textDecoration: "none",
-                  borderBottom: "1px solid var(--border)",
-                }}>
+                className="block px-4 py-2 text-center text-xs font-medium text-accent-text! no-underline! border-b! border-b-border!"
+                >
                 查看全部待辦 →
               </Link>
               </>}
 
               {/* 通知區 */}
-              <div className="px-4 py-2.5 flex items-center justify-between"
-                style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-hover)" }}>
-                <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
+              <div className="px-4 py-2.5 flex items-center justify-between border-b! border-b-border! bg-hover!"
+                >
+                <p className="text-xs font-semibold text-fg-primary!" >
                   最新通知
                 </p>
                 <div className="flex items-center gap-2">
@@ -407,15 +399,15 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
                     type="button"
                     onClick={handleMarkAllRead}
                     disabled={unreadCount === 0}
-                    className="text-xs font-medium disabled:opacity-40"
-                    style={{ color: "var(--primary-text)" }}>
+                    className="text-xs font-medium disabled:opacity-40 text-accent-text!"
+                    >
                     全數已讀
                   </button>
                 </div>
               </div>
               <div className="max-h-44 overflow-y-auto">
                 {previewNtfs.length === 0 ? (
-                  <p className="text-xs text-center py-4" style={{ color: "var(--text-muted)" }}>
+                  <p className="text-xs text-center py-4 text-fg-muted!" >
                     目前沒有通知
                   </p>
                 ) : (
@@ -425,21 +417,21 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
                       <Link
                         href={n.link ?? "/"}
                         onClick={() => setShowBell(false)}
-                        className="motion-notification-row flex items-start gap-2 px-4 py-2.5 transition-colors"
-                        style={{ textDecoration: "none", display: "flex" }}
+                        className="motion-notification-row flex items-start gap-2 px-4 py-2.5 transition-colors no-underline!"
+                        style={{ display: "flex" }}
                         onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-hover)")}
                         onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
                         {!n.is_read && (
-                          <span className="notification-unread-dot w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5"
-                            style={{ background: "var(--primary)" }} aria-hidden="true" />
+                          <span className="notification-unread-dot w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5 bg-accent!"
+                             aria-hidden="true" />
                         )}
                         <div className={`flex-1 min-w-0 ${n.is_read ? "pl-3" : ""}`}>
-                          <p className="text-xs font-medium truncate"
-                            style={{ color: "var(--text-primary)" }}>
+                          <p className="text-xs font-medium truncate text-fg-primary!"
+                            >
                             {n.title}
                           </p>
-                          <p className="text-xs mt-0.5"
-                            style={{ color: "var(--text-disabled)" }}>
+                          <p className="text-xs mt-0.5 text-fg-disabled!"
+                            >
                             {new Date(n.created_at).toLocaleDateString("zh-TW")}
                           </p>
                         </div>
@@ -448,10 +440,10 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
                   ))
                 )}
               </div>
-              <div className="px-4 py-2" style={{ borderTop: "1px solid var(--border)" }}>
+              <div className="px-4 py-2 border-t! border-t-border!" >
                 <Link href="/notifications" onClick={() => setShowBell(false)}
-                  className="block text-center text-xs font-medium"
-                  style={{ color: "var(--primary-text)", textDecoration: "none" }}>
+                  className="block text-center text-xs font-medium text-accent-text! no-underline!"
+                  >
                   查看全部通知 →
                 </Link>
               </div>
@@ -464,17 +456,14 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
           <ThemeToggle />
         </div>
 
-        <div className="topbar-divider w-px h-4 mx-1" style={{ background: "var(--border)" }} aria-hidden="true" />
+        <div className="topbar-divider w-px h-4 mx-1 bg-border!"  aria-hidden="true" />
 
         {isLoggedIn ? (
           <div className="topbar-user-menu relative" ref={menuRef}>
             <button
               onClick={() => setShowMenu((p) => !p)}
-              className="flex items-center gap-2 h-9 px-2 rounded-lg transition-colors cursor-pointer"
-              style={{
-                border: "1px solid var(--border)",
-                background: showMenu ? "var(--bg-hover)" : "transparent",
-              }}
+              className="flex items-center gap-2 h-9 px-2 rounded-lg transition-colors cursor-pointer border! border-border!"
+              style={{ background: showMenu ? "var(--bg-hover)" : "transparent" }}
               aria-label="使用者選單"
               aria-expanded={showMenu}
               aria-haspopup="menu">
@@ -491,42 +480,30 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
                 />
               ) : (
                 <div
-                  className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0"
-                  style={{
-                    background: "linear-gradient(135deg, rgba(201,168,76,0.18) 0%, rgba(201,168,76,0.08) 100%)",
-                    color: "var(--primary-text)",
-                    border: "1.5px solid rgba(201,168,76,0.35)",
-                  }}
+                  className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 text-accent-text!"
+                  style={{ background: "linear-gradient(135deg, rgba(201,168,76,0.18) 0%, rgba(201,168,76,0.08) 100%)", border: "1.5px solid rgba(201,168,76,0.35)" }}
                   aria-hidden="true">
                   {initials}
                 </div>
               )}
 
-              <span className="text-xs font-medium max-w-24 truncate hidden sm:block"
-                style={{ color: "var(--text-secondary)" }}>
+              <span className="text-xs font-medium max-w-24 truncate hidden sm:block text-fg-secondary!"
+                >
                 {userName || "使用者"}
               </span>
 
               {isSuperuser && (
                 <span
-                  className="hidden sm:block text-xs px-1.5 py-0.5 rounded-sm font-medium leading-none"
-                  style={{
-                    background: "var(--warning-dim)",
-                    color: "var(--warning)",
-                    border: "1px solid var(--warning-border)",
-                  }}>
+                  className="hidden sm:block text-xs px-1.5 py-0.5 rounded-sm font-medium leading-none bg-warning-soft! text-warning! border! border-warning-border!"
+                  >
                   管理員
                 </span>
               )}
 
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                 strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                style={{
-                  color: "var(--text-muted)",
-                  transition: "transform 150ms",
-                  transform: showMenu ? "rotate(180deg)" : "rotate(0deg)",
-                }}
-                aria-hidden="true">
+                style={{ transition: "transform 150ms", transform: showMenu ? "rotate(180deg)" : "rotate(0deg)" }}
+                aria-hidden="true" className="text-fg-muted!">
                 <polyline points="6 9 12 15 18 9" />
               </svg>
             </button>
@@ -534,17 +511,13 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
             {showMenu && (
               <div
                 role="menu"
-                className="motion-popover absolute right-0 top-full mt-1.5 w-52 max-w-[calc(100vw-1rem)] rounded-xl z-50 overflow-hidden"
-                style={{
-                  background: "var(--bg-elevated)",
-                  border: "1px solid var(--border-strong)",
-                  boxShadow: "var(--shadow-xl)",
-                }}>
-                <div className="px-4 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
-                  <p className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>
+                className="motion-popover absolute right-0 top-full mt-1.5 w-52 max-w-[calc(100vw-1rem)] rounded-xl z-50 overflow-hidden bg-elevated! border! border-border-strong!"
+                style={{ boxShadow: "var(--shadow-xl)" }}>
+                <div className="px-4 py-3 border-b! border-b-border!" >
+                  <p className="text-sm font-semibold truncate text-fg-primary!" >
                     {userName || "—"}
                   </p>
-                  <p className="text-xs truncate mt-0.5" style={{ color: "var(--text-muted)" }}>
+                  <p className="text-xs truncate mt-0.5 text-fg-muted!" >
                     {userEmail}
                   </p>
                 </div>
@@ -554,8 +527,8 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
                     href="/settings/account"
                     role="menuitem"
                     onClick={() => setShowMenu(false)}
-                    className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-2.5 transition-colors cursor-pointer"
-                    style={{ color: "var(--text-secondary)", textDecoration: "none", display: "flex" }}
+                    className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-2.5 transition-colors cursor-pointer text-fg-secondary! no-underline!"
+                    style={{ display: "flex" }}
                     onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
                     onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -569,8 +542,8 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
                     href="/settings/notifications"
                     role="menuitem"
                     onClick={() => setShowMenu(false)}
-                    className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-2.5 transition-colors cursor-pointer"
-                    style={{ color: "var(--text-secondary)", textDecoration: "none", display: "flex" }}
+                    className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-2.5 transition-colors cursor-pointer text-fg-secondary! no-underline!"
+                    style={{ display: "flex" }}
                     onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
                     onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -584,8 +557,8 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
                     href="/settings/data-saver"
                     role="menuitem"
                     onClick={() => setShowMenu(false)}
-                    className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-2.5 transition-colors cursor-pointer"
-                    style={{ color: "var(--text-secondary)", textDecoration: "none", display: "flex" }}
+                    className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-2.5 transition-colors cursor-pointer text-fg-secondary! no-underline!"
+                    style={{ display: "flex" }}
                     onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
                     onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
                     <WifiOff size={14} aria-hidden={true} />
@@ -595,8 +568,8 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
                     href="/settings/security"
                     role="menuitem"
                     onClick={() => setShowMenu(false)}
-                    className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-2.5 transition-colors cursor-pointer"
-                    style={{ color: "var(--text-secondary)", textDecoration: "none", display: "flex" }}
+                    className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-2.5 transition-colors cursor-pointer text-fg-secondary! no-underline!"
+                    style={{ display: "flex" }}
                     onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
                     onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -607,13 +580,13 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
                     安全設定
                   </Link>
 
-                  <div style={{ borderTop: "1px solid var(--border)", margin: "4px 0" }} />
+                  <div style={{ margin: "4px 0" }}  className="border-t! border-t-border!"/>
 
                   <button
                     role="menuitem"
                     onClick={handleLogout}
-                    className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-2.5 transition-colors cursor-pointer"
-                    style={{ color: "var(--danger)", background: "transparent", border: "none", width: "100%" }}
+                    className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-2.5 transition-colors cursor-pointer text-danger! border-0!"
+                    style={{ background: "transparent", width: "100%" }}
                     onMouseEnter={(e) => (e.currentTarget.style.background = "var(--danger-dim)")}
                     onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -631,13 +604,8 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
         ) : (
           <Link
             href="/login"
-            className="topbar-login-action flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-medium transition-colors"
-            style={{
-              background: "var(--primary-dim)",
-              color: "var(--primary-text)",
-              border: "1px solid var(--border-strong)",
-              textDecoration: "none",
-            }}
+            className="topbar-login-action flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-medium transition-colors bg-accent-soft! text-accent-text! border! border-border-strong! no-underline!"
+
             onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
             onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"

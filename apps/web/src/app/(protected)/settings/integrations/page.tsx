@@ -142,19 +142,22 @@ export default function IntegrationsPage() {
   }
 
   return (
-    <div className="max-w-2xl space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
+    <div className="mx-auto grid w-full max-w-5xl gap-4 md:grid-cols-2">
+      <header className="md:col-span-2">
+        <h2 className="text-lg font-semibold text-fg-primary!" >
           外部整合
         </h2>
-      </div>
+        <p className="mt-1 max-w-2xl text-sm text-fg-muted!">
+          管理與此帳號連結的服務，並查看同步狀態。
+        </p>
+      </header>
 
       <div
-        className="rounded-xl p-5 space-y-4"
-        style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+        className="rounded-xl p-5 space-y-4 bg-surface! border! border-border! md:col-span-2"
+
       >
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
             <div
               className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
               style={{ background: "#e8f0fe", border: "1px solid #c5d8ff" }}
@@ -167,29 +170,29 @@ export default function IntegrationsPage() {
               </svg>
             </div>
             <div>
-              <p className="font-medium" style={{ color: "var(--text-primary)" }}>
+              <p className="font-medium text-fg-primary!" >
                 Google Tasks
               </p>
-              <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+              <p className="text-xs mt-0.5 text-fg-muted!" >
                 工作項目雙向同步至 Google Tasks 清單「HCCA 工作」
               </p>
             </div>
           </div>
 
           {loading ? (
-            <Loader2 size={18} className="animate-spin flex-shrink-0" style={{ color: "var(--text-muted)" }} />
+            <Loader2 size={18} className="animate-spin flex-shrink-0 text-fg-muted!"  />
           ) : status?.is_connected ? (
             <span
-              className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full flex-shrink-0"
-              style={{ background: "var(--success-dim)", color: "var(--success)", border: "1px solid var(--success-border, var(--border))" }}
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full flex-shrink-0 text-success!"
+              style={{ background: "var(--success-dim)", border: "1px solid var(--success-border, var(--border))" }}
             >
               <CheckCircle size={12} aria-hidden={true} />
               已連結
             </span>
           ) : (
             <span
-              className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full flex-shrink-0"
-              style={{ background: "var(--bg-hover)", color: "var(--text-muted)", border: "1px solid var(--border)" }}
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full flex-shrink-0 bg-hover! text-fg-muted! border! border-border!"
+
             >
               未連結
             </span>
@@ -198,16 +201,16 @@ export default function IntegrationsPage() {
 
         {!loading && status?.is_connected && (
           <div
-            className="rounded-lg px-4 py-3 space-y-1 text-sm"
-            style={{ background: "var(--bg-muted)", border: "1px solid var(--border)" }}
+            className="rounded-lg px-4 py-3 space-y-1 text-sm border! border-border!"
+            style={{ background: "var(--bg-muted)" }}
           >
-            <div className="flex items-center justify-between">
-              <span style={{ color: "var(--text-muted)" }}>授權帳號</span>
-              <span style={{ color: "var(--text-primary)" }}>{status.authorized_email ?? "—"}</span>
+            <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <span  className="text-fg-muted!">授權帳號</span>
+              <span className="min-w-0 break-all text-fg-primary! sm:text-right">{status.authorized_email ?? "—"}</span>
             </div>
-            <div className="flex items-center justify-between">
-              <span style={{ color: "var(--text-muted)" }}>上次同步</span>
-              <span style={{ color: "var(--text-primary)" }}>
+            <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <span  className="text-fg-muted!">上次同步</span>
+              <span className="min-w-0 break-words text-fg-primary! sm:text-right">
                 {status.last_sync_at
                   ? new Date(status.last_sync_at).toLocaleString("zh-TW")
                   : "尚未同步"}
@@ -215,7 +218,7 @@ export default function IntegrationsPage() {
             </div>
             {status.last_error && (
               <div className="flex items-start gap-2 mt-1">
-                <span className="text-xs mt-0.5" style={{ color: "var(--danger)" }}>
+                <span className="text-xs mt-0.5 text-danger!" >
                   {status.last_error}
                 </span>
               </div>
@@ -241,12 +244,8 @@ export default function IntegrationsPage() {
                 type="button"
                 onClick={handleSync}
                 disabled={syncing}
-                className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-60"
-                style={{
-                  background: "var(--primary-dim)",
-                  color: "var(--primary-text)",
-                  border: "1px solid var(--info-border)",
-                }}
+                className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-60 bg-accent-soft! text-accent-text! border! border-info-border!"
+
               >
                 {syncing ? (
                   <Loader2 size={14} className="animate-spin" aria-hidden={true} />
@@ -260,12 +259,8 @@ export default function IntegrationsPage() {
                 type="button"
                 onClick={handleDisconnect}
                 disabled={disconnecting}
-                className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-60"
-                style={{
-                  background: "var(--danger-dim)",
-                  color: "var(--danger)",
-                  border: "1px solid var(--danger-border)",
-                }}
+                className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-60 bg-danger-soft! text-danger! border! border-danger-border!"
+
               >
                 {disconnecting ? (
                   <Loader2 size={14} className="animate-spin" aria-hidden={true} />
@@ -279,13 +274,8 @@ export default function IntegrationsPage() {
                 href="https://tasks.google.com"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium"
-                style={{
-                  background: "transparent",
-                  color: "var(--text-muted)",
-                  border: "1px solid var(--border)",
-                  textDecoration: "none",
-                }}
+                className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-fg-muted! border! border-border! no-underline!"
+                style={{ background: "transparent" }}
               >
                 <ExternalLink size={13} aria-hidden={true} />
                 開啟 Google Tasks
@@ -294,17 +284,17 @@ export default function IntegrationsPage() {
           )}
         </div>
 
-        <p className="text-xs" style={{ color: "var(--text-disabled)" }}>
+        <p className="text-xs text-fg-disabled!" >
           自動同步自己負責的工作；Google Tasks 新增的任務需手動匯入。
         </p>
       </div>
 
       <div
-        className="rounded-xl p-5 space-y-4"
-        style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+        className="rounded-xl p-5 space-y-4 bg-surface! border! border-border!"
+
       >
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
             <div
               className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
               style={{ background: "#5865f2", color: "#fff" }}
@@ -313,25 +303,25 @@ export default function IntegrationsPage() {
               <MessageCircle size={20} />
             </div>
             <div>
-              <p className="font-medium" style={{ color: "var(--text-primary)" }}>Discord</p>
-              <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+              <p className="font-medium text-fg-primary!" >Discord</p>
+              <p className="text-xs mt-0.5 text-fg-muted!" >
                 綁定帳號以同步組織身分組與 Discord 通知。
               </p>
             </div>
           </div>
           {loading ? (
-            <Loader2 size={18} className="animate-spin flex-shrink-0" style={{ color: "var(--text-muted)" }} />
+            <Loader2 size={18} className="animate-spin flex-shrink-0 text-fg-muted!"  />
           ) : discord?.linked ? (
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full flex-shrink-0" style={{ background: "var(--success-dim)", color: "var(--success)", border: "1px solid var(--success-border, var(--border))" }}>
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full flex-shrink-0 text-success!" style={{ background: "var(--success-dim)", border: "1px solid var(--success-border, var(--border))" }}>
               <CheckCircle size={12} aria-hidden={true} />
               已連結
             </span>
           ) : (
-            <span className="inline-flex text-xs font-medium px-2 py-1 rounded-full flex-shrink-0" style={{ background: "var(--bg-hover)", color: "var(--text-muted)", border: "1px solid var(--border)" }}>未連結</span>
+            <span className="inline-flex text-xs font-medium px-2 py-1 rounded-full flex-shrink-0 bg-hover! text-fg-muted! border! border-border!" >未連結</span>
           )}
         </div>
         {!loading && discord?.linked && (
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+          <p className="text-sm text-fg-muted!" >
             已連結：{discord.global_name || discord.username || "Discord 帳號"}
           </p>
         )}
@@ -342,7 +332,7 @@ export default function IntegrationsPage() {
               連結 Discord
             </button>
           ) : !loading ? (
-            <button type="button" onClick={disconnectDiscord} disabled={discordBusy} className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-60" style={{ background: "var(--danger-dim)", color: "var(--danger)", border: "1px solid var(--danger-border)" }}>
+            <button type="button" onClick={disconnectDiscord} disabled={discordBusy} className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-60 bg-danger-soft! text-danger! border! border-danger-border!" >
               {discordBusy ? <Loader2 size={14} className="animate-spin" /> : <Link2Off size={14} aria-hidden={true} />}
               解除連結
             </button>
@@ -351,41 +341,41 @@ export default function IntegrationsPage() {
       </div>
 
       <div
-        className="rounded-xl p-5 space-y-4"
-        style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+        className="rounded-xl p-5 space-y-4 bg-surface! border! border-border!"
+
       >
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
             <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: "#06c755", color: "#fff" }} aria-hidden="true">
               <MessageCircle size={20} />
             </div>
             <div>
-              <p className="font-medium" style={{ color: "var(--text-primary)" }}>LINE</p>
-              <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+              <p className="font-medium text-fg-primary!" >LINE</p>
+              <p className="text-xs mt-0.5 text-fg-muted!" >
                 綁定 LINE Bot，接收即時通知與快速登入連結。
               </p>
             </div>
           </div>
           {loading ? (
-            <Loader2 size={18} className="animate-spin flex-shrink-0" style={{ color: "var(--text-muted)" }} />
+            <Loader2 size={18} className="animate-spin flex-shrink-0 text-fg-muted!"  />
           ) : line?.linked ? (
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full flex-shrink-0" style={{ background: "var(--success-dim)", color: "var(--success)", border: "1px solid var(--success-border, var(--border))" }}>
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full flex-shrink-0 text-success!" style={{ background: "var(--success-dim)", border: "1px solid var(--success-border, var(--border))" }}>
               <CheckCircle size={12} aria-hidden={true} />
               已連結
             </span>
           ) : (
-            <span className="inline-flex text-xs font-medium px-2 py-1 rounded-full flex-shrink-0" style={{ background: "var(--bg-hover)", color: "var(--text-muted)", border: "1px solid var(--border)" }}>未連結</span>
+            <span className="inline-flex text-xs font-medium px-2 py-1 rounded-full flex-shrink-0 bg-hover! text-fg-muted! border! border-border!" >未連結</span>
           )}
         </div>
         {!loading && line?.linked && (
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+          <p className="text-sm text-fg-muted!" >
             已連結：{line.line_display_name || "LINE 帳號"}
           </p>
         )}
         {!loading && lineCode && !line?.linked && (
-          <div className="rounded-lg px-4 py-3 text-sm" style={{ background: "var(--bg-muted)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+          <div className="rounded-lg px-4 py-3 text-sm border! border-border! text-fg-primary!" style={{ background: "var(--bg-muted)" }}>
             <p>{lineCode.instructions}</p>
-            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            <p className="mt-1 text-xs text-fg-muted!" >
               有效至 {new Date(lineCode.expires_at).toLocaleString("zh-TW")}
             </p>
           </div>
@@ -397,7 +387,7 @@ export default function IntegrationsPage() {
               產生綁定碼
             </button>
           ) : !loading ? (
-            <button type="button" onClick={disconnectLine} disabled={lineBusy} className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-60" style={{ background: "var(--danger-dim)", color: "var(--danger)", border: "1px solid var(--danger-border)" }}>
+            <button type="button" onClick={disconnectLine} disabled={lineBusy} className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-60 bg-danger-soft! text-danger! border! border-danger-border!" >
               {lineBusy ? <Loader2 size={14} className="animate-spin" /> : <Link2Off size={14} aria-hidden={true} />}
               解除連結
             </button>

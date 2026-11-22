@@ -191,14 +191,14 @@ export default function SerialTemplatesPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">字號模板管理</h1>
         <div className="flex items-center gap-2">
-          <label className="flex items-center gap-1.5 text-xs cursor-pointer" style={{ color: "var(--text-muted)" }}>
+          <label className="flex items-center gap-1.5 text-xs cursor-pointer text-fg-muted!" >
             <input type="checkbox" checked={activeOnly} onChange={e => setActiveOnly(e.target.checked)}
               className="accent-[var(--primary)]" />
             僅顯示有效
           </label>
           <button onClick={() => setShowCreate(p => !p)}
-            className="px-4 py-2 rounded-lg text-sm font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-90"
-            style={{ background: "var(--primary)", color: "var(--primary-fg)" }}>
+            className="px-4 py-2 rounded-lg text-sm font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-90 bg-accent! text-accent-foreground!"
+            >
             ＋ 新增模板
           </button>
         </div>
@@ -213,28 +213,25 @@ export default function SerialTemplatesPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Step 1：選擇組織 */}
             <div className="sm:col-span-2">
-              <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>發文組織 *</label>
+              <label className="text-xs mb-1 block text-fg-muted!" >發文組織 *</label>
               <select
                 value={form.org_id}
                 onChange={e => { handleOrgChange(e.target.value); touchField("org_id"); }}
                 onBlur={() => touchField("org_id")}
-                className="w-full text-sm outline-none rounded-lg px-3 py-2"
-                style={{
-                  background: "var(--bg-elevated)",
-                  border: `1px solid ${showFErr("org_id") ? "var(--danger)" : "var(--border)"}`,
-                }}>
+                className="w-full text-sm outline-none rounded-lg px-3 py-2 bg-elevated!"
+                style={{ border: `1px solid ${showFErr("org_id") ? "var(--danger)" : "var(--border)"}` }}>
                 <option value="">選擇組織…</option>
                 {orgs.map(o => <option key={o.id} value={o.id}>{orgDisplayName(o, orgs)}</option>)}
               </select>
               {showFErr("org_id") && (
-                <p className="text-xs mt-1" style={{ color: "var(--danger)" }} role="alert">請選擇組織</p>
+                <p className="text-xs mt-1 text-danger!"  role="alert">請選擇組織</p>
               )}
             </div>
 
             {/* Step 2：本層組織前綴（自動帶入，org:manage 可編輯） */}
             {form.org_id && (
               <div>
-                <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>
+                <label className="text-xs mb-1 block text-fg-muted!" >
                   本層字號前綴{canManageOrg ? "（可修改）" : "（唯讀）"}
                 </label>
                 <input
@@ -243,13 +240,9 @@ export default function SerialTemplatesPage() {
                   readOnly={!canManageOrg}
                   placeholder={canManageOrg ? "例：活" : "（尚未設定）"}
                   maxLength={10}
-                  className="w-full bg-transparent text-sm px-3 py-2 rounded-lg outline-none"
-                  style={{
-                    border: "1px solid var(--border)",
-                    opacity: canManageOrg ? 1 : 0.6,
-                    cursor: canManageOrg ? "text" : "not-allowed",
-                  }} />
-                <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+                  className="w-full bg-transparent text-sm px-3 py-2 rounded-lg outline-none border! border-border!"
+                  style={{ opacity: canManageOrg ? 1 : 0.6, cursor: canManageOrg ? "text" : "not-allowed" }} />
+                <p className="text-xs mt-1 text-fg-muted!" >
                   {canManageOrg
                     ? "只設定這一層，系統會自動接上上層前綴"
                     : "本層前綴由組織管理員設定，系統會自動接上上層前綴"}
@@ -268,7 +261,7 @@ export default function SerialTemplatesPage() {
                   />
                   <span className="text-sm">沿用上級組織前綴</span>
                 </label>
-                <p className="text-xs mt-1 ml-6" style={{ color: "var(--text-muted)" }}>
+                <p className="text-xs mt-1 ml-6 text-fg-muted!" >
                   {form.inherit_parent_prefix
                     ? "字號會依組織階層串接上級前綴"
                     : "僅使用本組織前綴，適用於不隸屬上級的單位"}
@@ -278,7 +271,7 @@ export default function SerialTemplatesPage() {
 
             {/* Step 3：分類字元（細別） */}
             <div>
-              <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>分類字元 *</label>
+              <label className="text-xs mb-1 block text-fg-muted!" >分類字元 *</label>
               <input value={form.category_char}
                 onChange={e => setForm(p => ({ ...p, category_char: e.target.value }))}
                 onBlur={() => touchField("category_char")}
@@ -288,16 +281,16 @@ export default function SerialTemplatesPage() {
                 style={{ border: `1px solid ${showFErr("category_char") ? "var(--danger)" : "var(--border)"}` }}
                 aria-invalid={!!showFErr("category_char")} />
               {showFErr("category_char")
-                ? <p className="text-xs mt-1" style={{ color: "var(--danger)" }} role="alert">必填欄位</p>
-                : <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>細別，如「嶺代生字」中的「生」</p>
+                ? <p className="text-xs mt-1 text-danger!"  role="alert">必填欄位</p>
+                : <p className="text-xs mt-1 text-fg-muted!" >細別，如「嶺代生字」中的「生」</p>
               }
             </div>
 
             <div>
-              <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>年份格式</label>
+              <label className="text-xs mb-1 block text-fg-muted!" >年份格式</label>
               <select value={form.year_mode} onChange={e => setForm(p => ({ ...p, year_mode: e.target.value as YearMode }))}
-                className="w-full text-sm outline-none rounded-lg px-3 py-2"
-                style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+                className="w-full text-sm outline-none rounded-lg px-3 py-2 bg-elevated! border! border-border!"
+                >
                 <option value="roc">民國年（ROC）</option>
                 <option value="ce">西元年（CE）</option>
               </select>
@@ -309,12 +302,12 @@ export default function SerialTemplatesPage() {
                   className="accent-[var(--primary)] w-4 h-4" />
                 <span className="text-sm">每年重置流水號</span>
               </label>
-              <p className="text-xs mt-1 ml-6" style={{ color: "var(--text-muted)" }}>
+              <p className="text-xs mt-1 ml-6 text-fg-muted!" >
                 勾選後，新年度第一份公文從 0000001 重新計數
               </p>
             </div>
-            <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-lg px-4 py-3"
-              style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+            <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-lg px-4 py-3 bg-elevated! border! border-border!"
+              >
               <label className="flex items-start gap-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -324,7 +317,7 @@ export default function SerialTemplatesPage() {
                 />
                 <span className="text-sm">
                   設為一般公文預設模板
-                  <span className="block text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+                  <span className="block text-xs mt-1 text-fg-muted!" >
                     同組織起草公文時，會優先自動帶入這個模板
                   </span>
                 </span>
@@ -338,24 +331,24 @@ export default function SerialTemplatesPage() {
                 />
                 <span className="text-sm">
                   設為主席公布預設模板
-                  <span className="block text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+                  <span className="block text-xs mt-1 text-fg-muted!" >
                     主席公布法規時，系統會優先使用這個模板
                   </span>
                 </span>
               </label>
             </div>
             <div className="sm:col-span-2">
-              <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>備註說明（選填）</label>
+              <label className="text-xs mb-1 block text-fg-muted!" >備註說明（選填）</label>
               <input value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
                 placeholder="例：學生會行政公文字號"
-                className="w-full bg-transparent text-sm px-3 py-2 rounded-lg outline-none"
-                style={{ border: "1px solid var(--border)" }} />
+                className="w-full bg-transparent text-sm px-3 py-2 rounded-lg outline-none border! border-border!"
+                 />
             </div>
           </div>
 
           {/* 預覽 */}
-          <div className="rounded-lg px-4 py-3" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-            <p className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>字號預覽</p>
+          <div className="rounded-lg px-4 py-3 bg-elevated! border! border-border!" >
+            <p className="text-xs mb-1 text-fg-muted!" >字號預覽</p>
             <p className="text-sm font-mono">{preview}</p>
           </div>
 
@@ -365,8 +358,8 @@ export default function SerialTemplatesPage() {
               取消
             </button>
             <button onClick={handleCreate} disabled={saving}
-              className="px-5 py-2 rounded-lg text-sm font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-90 disabled:opacity-50"
-              style={{ background: "var(--primary)", color: "var(--primary-fg)" }}>
+              className="px-5 py-2 rounded-lg text-sm font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-90 disabled:opacity-50 bg-accent! text-accent-foreground!"
+              >
               {saving ? "建立中..." : "建立模板"}
             </button>
           </div>
@@ -390,10 +383,10 @@ export default function SerialTemplatesPage() {
 
       {/* 說明 */}
       <div className="card p-4">
-        <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>
+        <h3 className="text-xs font-semibold uppercase tracking-wider mb-3 text-fg-muted!" >
           字號格式說明
         </h3>
-        <dl className="space-y-2 text-xs" style={{ color: "var(--text-muted)" }}>
+        <dl className="space-y-2 text-xs text-fg-muted!" >
           <div className="flex gap-2">
             <dt className="font-semibold  w-24 flex-shrink-0">格式結構</dt>
             <dd>{"{機關縮寫}{分類字}{第 {年度}{流水號} 號}"}</dd>
@@ -475,8 +468,8 @@ function TemplateCard({
               {t.org_prefix}{t.category_char}字第 …
             </span>
             {t.is_default && (
-              <span className="text-xs px-1.5 py-0.5 rounded"
-                style={{ color: "var(--primary-text)", background: "var(--primary-dim)" }}>
+              <span className="text-xs px-1.5 py-0.5 rounded text-accent-text! bg-accent-soft!"
+                >
                 一般預設
               </span>
             )}
@@ -495,19 +488,19 @@ function TemplateCard({
           </div>
 
           {t.preview && (
-            <p className="text-xs mt-0.5 font-mono" style={{ color: "var(--primary-text)" }}>
+            <p className="text-xs mt-0.5 font-mono text-accent-text!" >
               預覽：{t.preview}
             </p>
           )}
 
-          <div className="flex flex-wrap gap-3 mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+          <div className="flex flex-wrap gap-3 mt-2 text-xs text-fg-muted!" >
             <span>年份：{t.year_mode === "roc" ? "民國年" : "西元年"}</span>
             <span>流水號：{t.reset_on_new_year ? "每年重置" : "不重置"}</span>
             <span>目前計數：{t.counter.toLocaleString()}</span>
             {t.description && <span>{t.description}</span>}
           </div>
 
-          <p className="text-xs mt-1.5" style={{ color: "var(--text-muted)" }}>
+          <p className="text-xs mt-1.5 text-fg-muted!" >
             建立於 {new Date(t.created_at).toLocaleDateString("zh-TW")}
           </p>
         </div>
@@ -516,15 +509,15 @@ function TemplateCard({
         <div className="flex items-center gap-2 flex-shrink-0">
           {t.is_active && (
             <button onClick={() => setEditing(p => !p)}
-              className="text-xs px-3 py-1.5 rounded-lg transition-colors"
-              style={{ color: "var(--primary-text)", border: "1px solid var(--border)" }}>
+              className="text-xs px-3 py-1.5 rounded-lg transition-colors text-accent-text! border! border-border!"
+              >
               編輯
             </button>
           )}
           {t.is_active && (
             <button onClick={() => onDeactivate(t.id, `${t.org_prefix}${t.category_char}`)}
-              className="text-xs px-3 py-1.5 rounded-lg transition-colors hover:text-red-400"
-              style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}>
+              className="text-xs px-3 py-1.5 rounded-lg transition-colors hover:text-red-400 text-fg-muted! border! border-border!"
+              >
               停用
             </button>
           )}
@@ -533,13 +526,13 @@ function TemplateCard({
 
       {/* 編輯面板（收合式） */}
       {editing && (
-        <div className="mt-4 pt-4 space-y-3" style={{ borderTop: "1px solid var(--border)" }}>
+        <div className="mt-4 pt-4 space-y-3 border-t! border-t-border!" >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>年份格式</label>
+              <label className="text-xs mb-1 block text-fg-muted!" >年份格式</label>
               <select value={editYearMode} onChange={e => setEditYearMode(e.target.value as "roc" | "ce")}
-                className="w-full text-sm outline-none rounded-lg px-3 py-2"
-                style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+                className="w-full text-sm outline-none rounded-lg px-3 py-2 bg-elevated! border! border-border!"
+                >
                 <option value="roc">民國年（ROC）</option>
                 <option value="ce">西元年（CE）</option>
               </select>
@@ -561,8 +554,8 @@ function TemplateCard({
                 <span className="text-sm">沿用上級組織前綴</span>
               </label>
             </div>
-            <label className="flex items-start gap-2 cursor-pointer rounded-lg px-3 py-2"
-              style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+            <label className="flex items-start gap-2 cursor-pointer rounded-lg px-3 py-2 bg-elevated! border! border-border!"
+              >
               <input
                 type="checkbox"
                 checked={editDefault}
@@ -571,13 +564,13 @@ function TemplateCard({
               />
               <span className="text-sm">
                 設為一般公文預設模板
-                <span className="block text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+                <span className="block text-xs mt-1 text-fg-muted!" >
                   同組織只會保留一個一般預設
                 </span>
               </span>
             </label>
-            <label className="flex items-start gap-2 cursor-pointer rounded-lg px-3 py-2"
-              style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+            <label className="flex items-start gap-2 cursor-pointer rounded-lg px-3 py-2 bg-elevated! border! border-border!"
+              >
               <input
                 type="checkbox"
                 checked={editPresidentDefault}
@@ -586,17 +579,17 @@ function TemplateCard({
               />
               <span className="text-sm">
                 設為主席公布預設模板
-                <span className="block text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+                <span className="block text-xs mt-1 text-fg-muted!" >
                   主席公布法規時會優先使用這個模板
                 </span>
               </span>
             </label>
             <div className="sm:col-span-2">
-              <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>備註說明（選填）</label>
+              <label className="text-xs mb-1 block text-fg-muted!" >備註說明（選填）</label>
               <input value={editDesc} onChange={e => setEditDesc(e.target.value)}
                 placeholder="模板用途說明"
-                className="w-full bg-transparent text-sm px-3 py-2 rounded-lg outline-none"
-                style={{ border: "1px solid var(--border)" }} />
+                className="w-full bg-transparent text-sm px-3 py-2 rounded-lg outline-none border! border-border!"
+                 />
             </div>
           </div>
           <div className="flex gap-2 justify-end">
@@ -605,8 +598,8 @@ function TemplateCard({
               取消
             </button>
             <button onClick={handleEdit} disabled={saving}
-              className="text-xs px-5 py-2 rounded-lg font-medium disabled:opacity-50"
-              style={{ background: "var(--primary)", color: "var(--primary-fg)" }}>
+              className="text-xs px-5 py-2 rounded-lg font-medium disabled:opacity-50 bg-accent! text-accent-foreground!"
+              >
               {saving ? "儲存中…" : "儲存"}
             </button>
           </div>

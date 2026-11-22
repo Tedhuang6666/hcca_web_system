@@ -106,7 +106,7 @@ type SurveyDraft = {
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
-    <label className="text-xs font-medium block mb-1.5" style={{ color: "var(--text-secondary)" }}>
+    <label className="text-xs font-medium block mb-1.5 text-fg-secondary!" >
       {children}
     </label>
   );
@@ -132,7 +132,7 @@ function ConditionEditor({
   return (
     <div className="space-y-1.5">
       {rules.map((r, i) => (
-        <div key={i} className="space-y-1 rounded-lg p-2" style={{ background: "var(--bg-surface)" }}>
+        <div key={i} className="space-y-1 rounded-lg p-2 bg-surface!" >
           {i > 0 && (
             <div className="flex gap-1">
               {(["and", "or"] as const).map(c => (
@@ -184,7 +184,7 @@ function ConditionEditor({
                   strokeWidth="3" strokeLinecap="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
               </button>
               <button type="button" onClick={() => onChange(rules.filter((_, idx) => idx !== i))}
-                className="topbar-icon-btn" aria-label="刪除條件" style={{ color: "var(--danger)" }}>
+                className="topbar-icon-btn text-danger!" aria-label="刪除條件" >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                   strokeWidth="3" strokeLinecap="round" aria-hidden="true">
                   <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -599,7 +599,7 @@ export default function NewSurveyPage() {
           </svg>
         </Link>
         <div>
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>新增問卷</h1>
+          <h1 className="text-xl font-semibold text-fg-primary!" >新增問卷</h1>
         </div>
       </div>
 
@@ -625,7 +625,7 @@ export default function NewSurveyPage() {
           <GuidedFormStep step={0} activeStep={activeStep}>
           {/* 基本資訊 */}
           <div className="card p-5 space-y-4">
-            <h3 className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>基本資訊</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-fg-muted!" >基本資訊</h3>
             <div>
               <Label>問卷標題 *</Label>
               <input value={title} onChange={e => setTitle(e.target.value)}
@@ -644,12 +644,12 @@ export default function NewSurveyPage() {
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={isAnonymous} onChange={e => setIsAnonymous(e.target.checked)}
                   className="accent-[var(--primary)]" />
-                <span className="text-sm" style={{ color: "var(--text-secondary)" }}>匿名填答</span>
+                <span className="text-sm text-fg-secondary!" >匿名填答</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={allowMultiple} onChange={e => setAllowMultiple(e.target.checked)}
                   className="accent-[var(--primary)]" />
-                <span className="text-sm" style={{ color: "var(--text-secondary)" }}>允許重複填答</span>
+                <span className="text-sm text-fg-secondary!" >允許重複填答</span>
               </label>
             </div>
             <div>
@@ -664,12 +664,12 @@ export default function NewSurveyPage() {
                 {orgs.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
               </select>
             </div>
-            <div className="rounded-xl p-3 space-y-3" style={{ background: "var(--bg-elevated)" }}>
+            <div className="rounded-xl p-3 space-y-3 bg-elevated!" >
               <div>
-                <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+                <p className="text-xs font-medium text-fg-secondary!" >
                   公告設定（選填）
                 </p>
-                <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                <p className="mt-1 text-xs text-fg-muted!" >
                   儲存後同步至公告。
                 </p>
               </div>
@@ -682,7 +682,7 @@ export default function NewSurveyPage() {
                   className="input"
                 />
               </div>
-              <label className="flex items-center gap-2 cursor-pointer text-sm" style={{ color: "var(--text-secondary)" }}>
+              <label className="flex items-center gap-2 cursor-pointer text-sm text-fg-secondary!" >
                 <input
                   type="checkbox"
                   checked={showAnnouncementPopup}
@@ -708,13 +708,13 @@ export default function NewSurveyPage() {
           <GuidedFormStep step={1} activeStep={activeStep}>
           {/* 填答對象 */}
           <div className="card p-5 space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-fg-muted!" >
               填答對象
             </h3>
             <div>
               <label htmlFor="survey-access-mode"
-                className="text-xs font-medium block mb-1.5"
-                style={{ color: "var(--text-secondary)" }}>
+                className="text-xs font-medium block mb-1.5 text-fg-secondary!"
+                >
                 問卷的填答方式
               </label>
               <select
@@ -728,8 +728,8 @@ export default function NewSurveyPage() {
                 <option value="link">僅限連結填答（不公開）</option>
                 <option value="public">公開填答（列入公開列表）</option>
               </select>
-              <p id="survey-access-description" className="text-xs mt-1.5"
-                style={{ color: "var(--text-muted)" }}>
+              <p id="survey-access-description" className="text-xs mt-1.5 text-fg-muted!"
+                >
                 {accessMode === "link"
                   ? "不列於公開列表，持有連結者仍可填答。"
                   : accessMode === "public"
@@ -739,7 +739,7 @@ export default function NewSurveyPage() {
             </div>
             {accessMode === "members" && (
               <>
-                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                <p className="text-xs text-fg-muted!" >
                   須符合所選年級；其餘資格條件符合任一項即可。
                 </p>
                 <SurveyGradeSelector value={allowedGrades} onChange={setAllowedGrades} />
@@ -782,8 +782,8 @@ export default function NewSurveyPage() {
           {/* 題目列表 */}
           {questions.length > 0 && (
             <div className="card overflow-hidden">
-              <div className="px-5 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
-                <h3 className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>
+              <div className="px-5 py-3 border-b! border-b-border!" >
+                <h3 className="text-xs font-semibold uppercase tracking-widest text-fg-muted!" >
                   已加入的題目（{questions.length}）
                 </h3>
               </div>
@@ -804,17 +804,17 @@ export default function NewSurveyPage() {
                       ...(editingQuestionId === q.id ? { background: "var(--primary-dim)" } : {}),
                     }}>
                     <div className="flex items-start gap-3">
-                      <span className="cursor-grab mt-0.5 flex-shrink-0" style={{ color: "var(--text-muted)" }} title="拖曳調整順序">
+                      <span className="cursor-grab mt-0.5 flex-shrink-0 text-fg-muted!"  title="拖曳調整順序">
                         <GripVertical size={16} aria-hidden="true" />
                       </span>
-                      <span className="text-xs font-bold mt-0.5 w-5 flex-shrink-0" style={{ color: "var(--primary-text)" }}>
+                      <span className="text-xs font-bold mt-0.5 w-5 flex-shrink-0 text-accent-text!" >
                         Q{idx + 1}
                       </span>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm truncate" style={{ color: "var(--text-primary)" }}>
+                        <p className="text-sm truncate text-fg-primary!" >
                           {q.question_text || (q.question_type === "image" ? "（圖片區塊）" : "（未命名）")}
                         </p>
-                        <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+                        <p className="text-xs mt-0.5 text-fg-muted!" >
                           {QUESTION_TYPES.find(t => t.value === q.question_type)?.label}
                           {q.is_required && " · 必填"}
                           {q.options.length > 0 && ` · ${q.options.length} 個選項`}
@@ -840,8 +840,8 @@ export default function NewSurveyPage() {
                             strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
                         </button>
                         <button type="button" onClick={() => removeQuestion(q.id)}
-                          className="topbar-icon-btn hover:text-red-400"
-                          style={{ color: "var(--text-muted)" }} aria-label="刪除題目">
+                          className="topbar-icon-btn hover:text-red-400 text-fg-muted!"
+                           aria-label="刪除題目">
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
                             <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -851,7 +851,7 @@ export default function NewSurveyPage() {
                     </div>
                     {questions.length > 1 && (
                       <details className="pl-1 sm:pl-8">
-                        <summary className="text-xs cursor-pointer" style={{ color: "var(--text-muted)" }}>
+                        <summary className="text-xs cursor-pointer text-fg-muted!" >
                           顯示條件{q.rules.length > 0 ? `（已設 ${q.rules.length} 條）` : "（選填）"}
                         </summary>
                         <div className="pt-2">
@@ -880,7 +880,7 @@ export default function NewSurveyPage() {
 
           {/* 新增題目 */}
           <div className="card p-5 space-y-3">
-            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+            <h3 className="text-sm font-semibold text-fg-primary!" >
               {editingQuestionId ? "編輯題目" : "新增題目"}
             </h3>
             <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]">
@@ -924,7 +924,7 @@ export default function NewSurveyPage() {
                 <input type="checkbox" checked={newQ.is_required ?? true}
                   onChange={e => setNewQ(p => ({ ...p, is_required: e.target.checked }))}
                   className="accent-[var(--primary)]" />
-                <span className="text-sm" style={{ color: "var(--text-secondary)" }}>必填</span>
+                <span className="text-sm text-fg-secondary!" >必填</span>
               </label>
             )}
 
@@ -1030,7 +1030,7 @@ export default function NewSurveyPage() {
             )}
 
             {newQ.question_type === "multiple" && (
-              <div className="rounded-xl p-3 space-y-2" style={{ background: "var(--bg-elevated)" }}>
+              <div className="rounded-xl p-3 space-y-2 bg-elevated!" >
                 <div>
                   <Label>最多可選項數（選填）</Label>
                   <input
@@ -1046,7 +1046,7 @@ export default function NewSurveyPage() {
                     className="input"
                   />
                 </div>
-                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                <p className="text-xs text-fg-muted!" >
                   留空表示不限
                 </p>
               </div>
@@ -1054,8 +1054,8 @@ export default function NewSurveyPage() {
 
             {/* 自訂驗證規則（簡答 / 長答題型） */}
             {isTextInput && (
-              <div className="space-y-3 rounded-xl p-3" style={{ background: "var(--bg-elevated)" }}>
-                <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+              <div className="space-y-3 rounded-xl p-3 bg-elevated!" >
+                <p className="text-xs font-medium text-fg-secondary!" >
                   自訂驗證規則（選填）
                 </p>
                 <div className="grid grid-cols-2 gap-3">
@@ -1105,14 +1105,14 @@ export default function NewSurveyPage() {
             <button onClick={() => save(false)} disabled={saving} className="btn btn-ghost w-full" aria-busy={saving}>
               {saving ? "處理中…" : "儲存草稿"}
             </button>
-            <p className="text-xs text-center" style={{ color: "var(--text-muted)" }}>
+            <p className="text-xs text-center text-fg-muted!" >
               「建立並發布」立即開放填答；「儲存草稿」可稍後再開放
             </p>
           </div>
 
           <div className="card p-4 space-y-2">
-            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>發布前確認</h3>
-            <div className="space-y-1 text-xs" style={{ color: "var(--text-secondary)" }}>
+            <h3 className="text-sm font-semibold text-fg-primary!" >發布前確認</h3>
+            <div className="space-y-1 text-xs text-fg-secondary!" >
               <p>{questions.length} 道題目</p>
               <p>{isAnonymous ? "匿名填答" : "記名填答"}</p>
               <p>{allowMultiple ? "允許重複填答" : "每人限填一次"}</p>
