@@ -1,0 +1,1244 @@
+"use client";
+import { useState, useEffect, useCallback, useMemo, memo, useRef } from "react";
+import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import Image from "next/image";
+import dynamic from "next/dynamic";
+import { toast } from "sonner";
+import { authFetch, documentsApi, usersApi, ApiError, apiErrorMessage } from "@/lib/api";
+import type { DocumentWithArchive, UserSummary } from "@/lib/api";
+import type { DocumentDispatchCreate, DocumentVisibility, RecipientDownloadVariant } from "@/lib/types";
+import { usePermissions } from "@/hooks/usePermissions";
+import { DocumentStatusBadge } from "@/components/ui/StatusBadge";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { DetailPageLoading } from "@/components/ui/LoadingState";
+import { OfficialDocumentPaper } from "./PublicDocumentView";
+import { usePersistedZoom } from "@/hooks/usePersistedZoom";
+import { useWS } from "@/hooks/useWS";
+import { apiUrl } from "@/lib/config";
+import { recordRecent } from "@/lib/recents";
+import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
+import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
+import CopyButton from "@/components/ui/CopyButton";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { PetitionLinkSelector, type PetitionLinkOption } from "@/components/documents/PetitionLinkSelector";
+
+const DeferredPanel = () => <div className="card min-h-24 animate-pulse" aria-hidden="true" />;
+const ApprovalPanel = dynamic(
+  () => import("@/components/documents/ApprovalPanel").then((module) => module.ApprovalPanel),
+  { loading: () => <DeferredPanel />, ssr: false },
+);
+const VersionHistory = dynamic(
+  () => import("@/components/documents/VersionHistory").then((module) => module.VersionHistory),
+  { loading: () => <DeferredPanel />, ssr: false },
+);
+
+const CAT_LABEL: Record<string, string> = {
+  letter: "函", decree: "令", announcement: "公告", report: "報告",
+  record: "紀錄", consultation: "咨", meeting_notice: "開會通知單", inspection_notice: "會勘通知單",
+  presentation: "呈", phone_record: "公務電話紀錄", book_letter: "書函", directive: "手令",
+  signature: "簽", memo: "便簽", appointment: "聘書", certificate: "證明書", license: "證書／執照",
+  contract: "契約書", proposal: "提案", summary: "節略", briefing: "說帖", form: "定型化表單", other: "其他",
+};
+const CLASS_LABEL: Record<string, string> = { normal: "普通", confidential: "密", secret: "機密", highly_confidential: "極機密", absolutely_confidential: "絕對機密" };
+const VISIBILITY_LABEL: Record<DocumentVisibility, string> = {
+  subject_only: "密件",
+  org_only: "機關可見",
+  public: "登入",
+  publicly_open: "公開",
+};
+const VISIBILITY_OPTIONS: Array<{ value: DocumentVisibility; label: string }> = [
+  { value: "subject_only", label: "密件（建立者、上層機關與收件者）" },
+  { value: "org_only", label: "機關可見（全機關）" },
+  { value: "public", label: "登入（登入後可見）" },
+  { value: "publicly_open", label: "公開（未登入可見）" },
+];
+
+function fmtSize(bytes: number) {
+  return bytes < 1024 * 1024
+    ? `${(bytes / 1024).toFixed(1)} KB`
+    : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function googleDrivePreviewUrl(value: string) {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.hostname.toLowerCase() !== "drive.google.com") {
+      return null;
+    }
+    const pathMatch = url.pathname.match(/^\/file\/d\/([^/]+)/);
+    const id = pathMatch?.[1] || url.searchParams.get("id");
+    return id ? `https://drive.google.com/file/d/${encodeURIComponent(id)}/preview` : null;
+  } catch {
+    return null;
+  }
+}
+
+// ── 使用者選取器 ──────────────────────────────────────────────────────────────
+
+const UserPicker = memo(function UserPicker({
+  selectedIds, onChange,
+}: {
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const [users, setUsers] = useState<UserSummary[]>([]);
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    usersApi.list().then(setUsers).catch(() => {});
+  }, []);
+
+  const filtered = useMemo(
+    () => users.filter(u =>
+      u.display_name.toLowerCase().includes(search.toLowerCase()) ||
+      u.email.toLowerCase().includes(search.toLowerCase()),
+    ),
+    [users, search]
+  );
+
+  const toggle = (uid: string) =>
+    onChange(selectedIds.includes(uid)
+      ? selectedIds.filter(x => x !== uid)
+      : [...selectedIds, uid]);
+
+  return (
+    <div className="space-y-2">
+      <input
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        placeholder="搜尋姓名或 Email..."
+        className="w-full bg-transparent  text-xs px-2 py-1.5 rounded outline-none"
+        style={{ border: "1px solid var(--border)" }}
+      />
+      <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
+        {filtered.length === 0 && (
+          <p className="text-xs text-center py-3" style={{ color: "var(--text-muted)" }}>無符合的使用者</p>
+        )}
+        {filtered.map(u => {
+          const selected = selectedIds.includes(u.id);
+          const idx = selectedIds.indexOf(u.id);
+          return (
+            <button
+              key={u.id}
+              type="button"
+              onClick={() => toggle(u.id)}
+              className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs text-left transition-colors"
+              style={selected
+                ? { background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }
+                : { background: "var(--bg-elevated)", border: "1px solid transparent" }}
+            >
+              <span className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold"
+                style={{ background: selected ? "var(--primary)" : "var(--bg-surface)", color: selected ? "var(--primary-fg)" : "var(--text-muted)" }}>
+                {selected ? idx + 1 : ""}
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className=" truncate">{u.display_name}</p>
+                <p className="truncate" style={{ color: "var(--text-muted)" }}>{u.email}</p>
+              </div>
+              {selected && <span style={{ color: "var(--primary-text)" }}>✓</span>}
+            </button>
+          );
+        })}
+      </div>
+      {selectedIds.length > 0 && (
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+          已選 {selectedIds.length} 位，按選取順序作為簽核層級
+        </p>
+      )}
+    </div>
+  );
+});
+
+// ── 主頁面 ────────────────────────────────────────────────────────────────────
+
+export default function DocumentDetailPageClient({
+  initialDoc = null,
+}: {
+  initialDoc?: DocumentWithArchive | null;
+}) {
+  const { id } = useParams<{ id: string }>();
+  const router = useRouter();
+  const confirm = useConfirm();
+  const [doc, setDoc] = useState<DocumentWithArchive | null>(initialDoc);
+  const [loading, setLoading] = useState(!initialDoc);
+  const [forbidden, setForbidden] = useState(false);
+  const [submitMode, setSubmitMode] = useState(false);
+  const [approverIds, setApproverIds] = useState<string[]>([]);
+  const [allUsers, setAllUsers] = useState<UserSummary[]>([]);
+  const [allUsersLoaded, setAllUsersLoaded] = useState(false);
+  const { zoom, setZoom, zoomStyle } = usePersistedZoom("hcca.viewer.zoom");
+  const [downloadVariant, setDownloadVariant] = useState<RecipientDownloadVariant>("primary");
+  const [visibilityValue, setVisibilityValue] = useState<DocumentVisibility>("org_only");
+  const [visibilityBusy, setVisibilityBusy] = useState(false);
+  const [resendEmailBusy, setResendEmailBusy] = useState(false);
+  const [dispatchOpen, setDispatchOpen] = useState(false);
+  const [dispatchMode, setDispatchMode] = useState<"user" | "email">("user");
+  const [dispatchUserId, setDispatchUserId] = useState("");
+  const [dispatchEmail, setDispatchEmail] = useState("");
+  const [dispatchName, setDispatchName] = useState("");
+  const [dispatchBusy, setDispatchBusy] = useState(false);
+  const [petitionLinkBusy, setPetitionLinkBusy] = useState(false);
+  const initialFetchRef = useRef(true);
+  const { can, isAdmin } = usePermissions();
+  const currentUserId = typeof window !== "undefined" ? localStorage.getItem("user_id") ?? "" : "";
+
+  const fetchDoc = useCallback(async () => {
+    const isInitialFetch = initialFetchRef.current;
+    initialFetchRef.current = false;
+    try {
+      const d = await documentsApi.get(id);
+      setDoc(d);
+      setForbidden(false);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 403) {
+        // SSR 已由匿名端點驗證過的普通公開公文，不應因登入請求的
+        // 短暫身份／權限不同步而被清空成「無權限」。後續重新抓取若仍
+        // 403 則不再沿用舊資料，避免可見度已被收回時繼續顯示內容。
+        const canKeepPublicInitialDoc = isInitialFetch
+          && initialDoc
+          && initialDoc.classification === "normal"
+          && (initialDoc.visibility_level === "publicly_open" || initialDoc.is_public);
+        if (canKeepPublicInitialDoc) {
+          setDoc(initialDoc);
+          setForbidden(false);
+        } else {
+          setDoc(null);
+          setForbidden(true);
+        }
+      } else if (e instanceof ApiError && e.status === 404) {
+        setDoc(null);
+        setForbidden(false);
+      } else {
+        setForbidden(false);
+        toast.error(apiErrorMessage(e, "載入失敗"));
+      }
+    } finally { setLoading(false); }
+  }, [id, initialDoc]);
+
+  useEffect(() => {
+    // The route is shared with the public page. Its SSR data is fetched
+    // without credentials and may come from the public cache, so it cannot
+    // be used as the only authenticated document state. Keep it visible while
+    // the authenticated request fills in private fields, instead of replacing
+    // an already-rendered document with a full-page loading state.
+    setDoc(initialDoc);
+    setForbidden(false);
+    setLoading(!initialDoc);
+    void fetchDoc();
+  }, [fetchDoc, initialDoc]);
+  useEffect(() => {
+    if (doc && currentUserId) {
+      recordRecent({ kind: "document", id, title: doc.serial_number ?? doc.title, href: `/documents/${id}` });
+    }
+  }, [currentUserId, doc, id]);
+  useEffect(() => {
+    if (doc) {
+      setVisibilityValue(doc.visibility_level);
+    }
+  }, [doc]);
+
+  const loadAllUsers = useCallback(async () => {
+    if (allUsersLoaded) return;
+    try {
+      setAllUsers(await usersApi.list());
+      setAllUsersLoaded(true);
+    } catch {
+      toast.error("無法載入使用者清單，請稍後再試");
+    }
+  }, [allUsersLoaded]);
+
+  // 即時 WebSocket 更新
+  useWS(doc ? `org:${doc.org_id}` : null, (msg) => {
+    if (msg.type === "document_status_changed" &&
+      (msg as { document_id?: string }).document_id === id) {
+      toast.info("公文狀態已更新");
+      fetchDoc();
+    }
+  }, Boolean(doc && currentUserId));
+
+  const handleApprove = async (comment: string) => {
+    await documentsApi.approve(id, comment || undefined);
+    toast.success("已核准");
+    router.refresh();
+    fetchDoc();
+  };
+
+  const handleSetDelegate = async (stepOrder: number, delegateId: string | null) => {
+    try {
+      await documentsApi.setDelegate(id, stepOrder, delegateId);
+      toast.success(delegateId ? "代理人已設定" : "代理人已清除");
+      router.refresh();
+      fetchDoc();
+    } catch (e) { toast.error(apiErrorMessage(e, "操作失敗")); }
+  };
+
+  const handleReject = async (comment: string, mode: "to_creator" | "to_previous") => {
+    await documentsApi.reject(id, comment, mode);
+    toast.success("已退件");
+    router.refresh();
+    fetchDoc();
+  };
+
+  const handleRecall = async () => {
+    try { await documentsApi.recall(id); toast.success("已撤回"); fetchDoc(); }
+    catch (e) { toast.error(apiErrorMessage(e, "操作失敗")); }
+  };
+
+  const handleVisibilityChange = async () => {
+    if (!doc || visibilityValue === doc.visibility_level) return;
+    setVisibilityBusy(true);
+    try {
+      await documentsApi.updateVisibility(id, visibilityValue);
+      toast.success("公文可見度已更新");
+      fetchDoc();
+    } catch (e) {
+      setVisibilityValue(doc.visibility_level);
+      toast.error(apiErrorMessage(e, "可見度更新失敗"));
+    } finally {
+      setVisibilityBusy(false);
+    }
+  };
+
+  const handlePetitionLinkChange = async (petition: PetitionLinkOption | null) => {
+    if (!doc) return;
+    setPetitionLinkBusy(true);
+    try {
+      const updated = await documentsApi.updatePetitionLink(doc.id, petition?.id ?? null);
+      setDoc({ ...updated, archive_at: updated.archive_at ?? doc.archive_at });
+      toast.success(petition ? "已關聯陳情案件" : "已解除陳情關聯");
+      router.refresh();
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "更新陳情關聯失敗"));
+    } finally {
+      setPetitionLinkBusy(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!approverIds.length) { toast.error("請選取至少一位審核人"); return; }
+    try {
+      await documentsApi.submit(id, approverIds);
+      toast.success("已送審");
+      fetchDoc();
+      setSubmitMode(false);
+      setApproverIds([]);
+    } catch (e) { toast.error(apiErrorMessage(e, "送審失敗")); }
+  };
+
+  const handleIssueDirect = async () => {
+    if (!(await confirm({
+      title: "直接發文？",
+      description: "此操作會跳過審核流程，並將公文直接設為「已核准」。",
+      confirmLabel: "直接發文",
+      danger: true,
+    }))) return;
+    try {
+      await documentsApi.issueDirect(id);
+      toast.success("已直接發文");
+      fetchDoc();
+    } catch (e) { toast.error(apiErrorMessage(e, "操作失敗")); }
+  };
+
+  const handleResendEmail = async () => {
+    if (!(await confirm({
+      title: "重寄公文 Email？",
+      description: "只會依目前公文內容寄送一次，不會因為之後編輯而自動重寄。",
+      confirmLabel: "確認重寄",
+    }))) return;
+    setResendEmailBusy(true);
+    try {
+      const result = await documentsApi.resendEmail(id);
+      if (result.queued > 0) {
+        toast.success(`已排入 ${result.queued} 個收件信箱的重寄佇列`);
+      } else {
+        toast.info("目前沒有可寄送的 Email 受文者");
+      }
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "重寄 Email 失敗"));
+    } finally {
+      setResendEmailBusy(false);
+    }
+  };
+
+  const openDispatch = () => {
+    setDispatchOpen(true);
+    void loadAllUsers();
+  };
+
+  const handleDispatch = async () => {
+    const payload: DocumentDispatchCreate = dispatchMode === "user"
+      ? { target_user_id: dispatchUserId }
+      : { email: dispatchEmail.trim(), name: dispatchName.trim() || undefined };
+    if (dispatchMode === "user" && !dispatchUserId) {
+      toast.error("請選擇要派送的使用者");
+      return;
+    }
+    if (dispatchMode === "email" && !dispatchEmail.trim()) {
+      toast.error("請輸入收件 Email");
+      return;
+    }
+    setDispatchBusy(true);
+    try {
+      const result = await documentsApi.dispatch(id, payload);
+      toast.success(`已派送至 ${result.recipient.name}`);
+      setDispatchOpen(false);
+      setDispatchUserId("");
+      setDispatchEmail("");
+      setDispatchName("");
+      fetchDoc();
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "指定派送失敗"));
+    } finally {
+      setDispatchBusy(false);
+    }
+  };
+
+  // 進入送審模式時自動載入建議審核人
+  const enterSubmitMode = async () => {
+    setSubmitMode(true);
+    try {
+      const suggestions = await documentsApi.suggestApprovers(id);
+      if (suggestions.length > 0) {
+        setApproverIds(suggestions.map(u => u.id));
+        toast.info(`已自動帶入 ${suggestions.length} 位建議審核人`);
+      }
+    } catch { /* 查無建議審核人時靜默失敗 */ }
+  };
+
+  const uploadFile = async (file: File, reportProgress: (progress: number) => void) => {
+    const uploaded = await documentsApi.uploadAttachment(id, file, reportProgress);
+    toast.success(`已上傳 ${uploaded.filename}`);
+    fetchDoc();
+    return uploaded;
+  };
+
+  const deleteAttachment = async (attId: string) => {
+    try {
+      await documentsApi.deleteAttachment(id, attId);
+      toast.success("附件已刪除");
+      fetchDoc();
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "刪除失敗"));
+    }
+  };
+
+  const [newLinkUrl, setNewLinkUrl] = useState("");
+  const [newLinkText, setNewLinkText] = useState("");
+  const [addingLink, setAddingLink] = useState(false);
+  const [editingAttachmentId, setEditingAttachmentId] = useState<string | null>(null);
+  const [editingAttachmentName, setEditingAttachmentName] = useState("");
+  const [showAllAttachments, setShowAllAttachments] = useState(false);
+  const [showDocumentInfo, setShowDocumentInfo] = useState(false);
+  const [showAttachments, setShowAttachments] = useState(false);
+  const [showVersions, setShowVersions] = useState(false);
+  const addLink = async () => {
+    if (!newLinkUrl.trim()) return;
+    setAddingLink(true);
+    try {
+      await documentsApi.addLink(id, { url: newLinkUrl.trim(), display_text: newLinkText.trim() || undefined });
+      setNewLinkUrl(""); setNewLinkText("");
+      fetchDoc();
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "新增連結失敗"));
+    } finally { setAddingLink(false); }
+  };
+
+  const renameAttachment = async (attId: string) => {
+    const nextName = editingAttachmentName.trim();
+    if (!nextName) return toast.error("附件名稱不可為空");
+    try {
+      await documentsApi.renameAttachment(id, attId, nextName);
+      setEditingAttachmentId(null);
+      setEditingAttachmentName("");
+      toast.success("附件名稱已更新");
+      fetchDoc();
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "更新失敗"));
+    }
+  };
+
+  if (loading && !doc) {
+    return (
+      <DetailPageLoading
+        title="公文詳情載入中"
+      />
+    );
+  }
+  if (forbidden) return (
+    <div className="flex flex-col items-center justify-center h-64 gap-3 text-center">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        strokeWidth="1.5" strokeLinecap="round" style={{ color: "var(--text-muted)" }}>
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+      </svg>
+      <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>此公文為機密文件</p>
+      <p className="text-xs" style={{ color: "var(--text-muted)" }}>您目前的權限無法瀏覽此公文內容</p>
+    </div>
+  );
+  if (!doc) return <div className="text-center text-red-400 mt-20">公文不存在或無權限查看</div>;
+
+  const isCreator = doc.created_by === currentUserId;
+  const canEditSummary = isCreator || isAdmin || can("document:edit") || can("document:admin") || can("document:create") || can("document:view_all");
+  const canChoosePrintVariant = isCreator
+    || can("document:admin")
+    || can("document:view_all");
+  const canManageVisibility = isCreator
+    || can("document:admin")
+    || can("document:view_all")
+    || can("document:edit")
+    || can("document:create");
+  const canManagePetitionLink = isCreator
+    || isAdmin
+    || can("document:edit")
+    || can("document:admin")
+    || can("document:create");
+  const canResendEmail = doc.status === "approved" && (
+    isCreator || isAdmin || can("document:edit") || can("document:admin") || can("document:create")
+  );
+  const catLabel = CAT_LABEL[doc.category] ?? doc.category;
+  const canApprove = can("document:approve") &&
+    doc.status === "pending" &&
+    doc.approvals.some(
+      (a) => a.status === "pending"
+        && (a.approver.id === currentUserId || a.delegate?.id === currentUserId),
+    );
+  const isDraft = doc.status === "draft";
+  const isEditableIssued = Boolean(
+    doc.status === "approved"
+      && doc.issued_at
+      && Date.now() <= new Date(doc.issued_at).getTime() + 6 * 60 * 60 * 1000,
+  );
+  const isSummaryEditable = Boolean(
+    doc.status === "approved"
+      && doc.issued_at
+      && Date.now() > new Date(doc.issued_at).getTime() + 6 * 60 * 60 * 1000,
+  );
+  const canEditDocument = canEditSummary && (isDraft || isEditableIssued || isSummaryEditable);
+  const docInfoRows: [string, string][] = [
+    ["字號", doc.serial_number || "（未分配）"],
+    ["類別", catLabel],
+    ["密等", CLASS_LABEL[doc.classification] ?? doc.classification],
+    ["可見度", VISIBILITY_LABEL[doc.visibility_level]],
+    ["建立日期", new Date(doc.created_at).toLocaleDateString("zh-TW")],
+    ["送審日期", doc.submitted_at ? new Date(doc.submitted_at).toLocaleDateString("zh-TW") : "—"],
+    ["限辦日期", doc.due_date ? new Date(doc.due_date).toLocaleDateString("zh-TW") : "—"],
+    [
+      "承辦人",
+      doc.handler_name
+        ? `${doc.handler_name}${doc.handler_unit ? ` / ${doc.handler_unit}` : ""}`
+        : "—",
+    ],
+  ];
+
+  return (
+    <>
+    <div className="document-detail-page app-page-width space-y-5">
+      {/* 麵包屑 */}
+      <Breadcrumb items={[
+        { label: "公文系統", href: "/documents" },
+        { label: doc.serial_number ?? doc.title },
+      ]} />
+      {/* 頂部 */}
+        <div className="document-detail-heading flex min-w-0 flex-col gap-3">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <div className="min-w-0 flex-1 space-y-1">
+            <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+              <span className="text-sm break-all" style={{ color: "var(--primary-text)" }}>
+                {doc.serial_number}
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <DocumentStatusBadge status={doc.status} />
+              </div>
+            </div>
+            <h1 className="document-detail-title text-lg font-semibold leading-snug break-words sm:text-xl">{doc.title}</h1>
+          </div>
+        </div>
+
+        <div className="document-workspace-actions">
+          <div className="document-workspace-action-buttons">
+          <div className="document-workspace-reading-tools" role="group" aria-label="閱讀工具">
+          {/* 縮放控制 */}
+          <div className="document-workspace-zoom-control rounded-lg overflow-hidden"
+            style={{ border: "1px solid var(--border)" }}>
+            <button onClick={() => setZoom(z => Math.max(70, z - 10))}
+              className="px-2 py-1.5 text-xs transition-colors hover:opacity-80"
+              style={{ color: "var(--text-muted)" }} title="縮小" aria-label="縮小公文">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                <line x1="8" y1="11" x2="14" y2="11" />
+              </svg>
+            </button>
+            <span className="text-xs px-1 select-none" style={{ color: "var(--text-muted)" }}>{zoom}%</span>
+            <button onClick={() => setZoom(z => Math.min(150, z + 10))}
+              className="px-2 py-1.5 text-xs transition-colors hover:opacity-80"
+              style={{ color: "var(--text-muted)" }} title="放大" aria-label="放大公文">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                <line x1="11" y1="8" x2="11" y2="14" /><line x1="8" y1="11" x2="14" y2="11" />
+              </svg>
+            </button>
+          </div>
+
+          {/* 複製連結 */}
+          <CopyButton
+            value={() => window.location.href}
+            icon="link"
+            iconSize={14}
+            announcement="公文連結已複製"
+            failureHint="無法複製連結，請手動複製網址列"
+            className="topbar-icon-btn"
+            title="複製連結"
+            aria-label="複製公文連結"
+          />
+          </div>
+
+          <div className="document-detail-document-actions" role="group" aria-label="公文操作">
+          {/* 超過六小時的已發文公文仍可進入摘要編輯 */}
+          {canEditDocument && (
+            <Link href={`/documents/${id}/edit`} className="btn btn-ghost text-sm gap-1.5">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+              {isSummaryEditable ? "編輯摘要" : "編輯"}
+            </Link>
+          )}
+          {isCreator && (isDraft || isEditableIssued) && (
+            <button
+              type="button"
+              className="btn btn-ghost text-sm gap-1.5"
+              onClick={async () => {
+                if (!(await confirm({
+                  title: "刪除此公文？",
+                  description: "此動作無法復原。",
+                  confirmLabel: "刪除公文",
+                  danger: true,
+                }))) return;
+                try {
+                  await documentsApi.delete(id);
+                  toast.success("公文已刪除");
+                  router.push("/documents");
+                } catch (error) {
+                  toast.error(apiErrorMessage(error, "刪除公文失敗"));
+                }
+              }}
+            >
+              刪除公文
+            </button>
+          )}
+          {/* 草稿：送審（僅建立者） */}
+          {isDraft && isCreator && !submitMode && (
+            <button onClick={enterSubmitMode} className="btn btn-primary text-sm gap-1.5">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+              </svg>
+              送審
+            </button>
+          )}
+          {/* 直接發文（需 document:issue_direct 權限） */}
+          {isDraft && isCreator && can("document:issue_direct") && !submitMode && (
+            <button onClick={handleIssueDirect}
+              className="btn document-detail-direct-issue-action text-sm gap-1.5"
+              style={{ background: "var(--success-dim)", color: "var(--success)", border: "1px solid var(--success)" }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+              </svg>
+              逕行發文
+            </button>
+          )}
+          {/* 待審：撤回（僅建立者） */}
+          {doc.status === "pending" && isCreator && (
+            <button onClick={handleRecall} className="btn btn-ghost text-sm gap-1.5">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.12"/>
+              </svg>
+              撤回
+            </button>
+          )}
+          {/* 已核准：封存（僅建立者） */}
+          {doc.status === "approved" && isCreator && can("document:archive") && (
+            <button onClick={async () => { await documentsApi.archive(id); fetchDoc(); }}
+              className="btn btn-ghost text-sm gap-1.5">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/>
+                <line x1="10" y1="12" x2="14" y2="12"/>
+              </svg>
+              封存
+            </button>
+          )}
+          {canResendEmail && (
+            <button
+              type="button"
+              onClick={openDispatch}
+              className="btn btn-primary text-sm gap-1.5"
+              title="新增一位收件者並立即寄送公文副本"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <path d="M22 2 11 13" /><path d="m22 2-7 20-4-9-9-4Z" />
+              </svg>
+              指定派送
+            </button>
+          )}
+          {canResendEmail && (
+            <button
+              type="button"
+              onClick={handleResendEmail}
+              disabled={resendEmailBusy}
+              className="btn btn-ghost text-sm gap-1.5 disabled:opacity-50"
+              title="僅在你明確操作時重寄公文 Email"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <path d="M4 4h16v16H4z" /><path d="m4 4 8 7 8-7" /><path d="M16 16a4 4 0 1 1-1.2-2.85" />
+              </svg>
+              {resendEmailBusy ? "寄送中…" : "重寄 Email"}
+            </button>
+          )}
+          {doc.status === "archived" && isCreator && can("document:archive") && (
+            <button onClick={async () => { await documentsApi.unarchive(id); fetchDoc(); }}
+              className="btn btn-ghost text-sm gap-1.5">
+              解除封存
+            </button>
+          )}
+          </div>
+          {/* 官式公文列印；製作者與管理員可選正本、副本或影本。 */}
+          <div
+            className="document-detail-print-tools flex min-h-9 items-stretch overflow-hidden rounded-lg max-sm:min-h-11"
+            role="group"
+            aria-label="列印公文"
+            style={{ border: "1px solid var(--border-strong)" }}
+          >
+          {canChoosePrintVariant && (
+            <label className="relative flex items-center" style={{ background: "var(--bg-elevated)" }}>
+              <span className="sr-only">下載版本</span>
+              <select
+                aria-label="下載版本"
+                value={downloadVariant}
+                onChange={(event) => setDownloadVariant(event.target.value as RecipientDownloadVariant)}
+                className="h-full min-w-[5.25rem] appearance-auto bg-transparent px-2.5 pr-7 text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset"
+                style={{ color: "var(--text-primary)", borderColor: "transparent" }}
+              >
+                <option value="primary">正本</option>
+                <option value="duplicate">副本</option>
+                <option value="copy">影本</option>
+              </select>
+            </label>
+          )}
+          <button
+            type="button"
+            onClick={async () => {
+              const query = canChoosePrintVariant ? `?variant=${downloadVariant}` : "";
+              try {
+                const res = await authFetch(apiUrl(`/documents/${id}/print${query}`), { credentials: "include" });
+                if (!res.ok) throw new Error(res.statusText);
+                const url = URL.createObjectURL(await res.blob());
+                const link = document.createElement("a");
+                link.href = url;
+                link.download = `${doc.serial_number || doc.title || "公文"}.pdf`;
+                link.click();
+                URL.revokeObjectURL(url);
+                toast.success("PDF 已下載");
+              } catch (error) {
+                toast.error(`列印失敗${error instanceof Error && error.message ? `：${error.message}` : ""}`);
+              }
+            }}
+            className="px-4 py-2 text-sm font-medium inline-flex items-center justify-center gap-1.5 transition-colors hover:brightness-110"
+            style={{
+              background: "var(--primary-dim)",
+              color: "var(--primary-text)",
+              borderLeft: canChoosePrintVariant ? "1px solid var(--border-strong)" : undefined,
+            }}
+          >列印公文</button>
+          </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 送審面板（含使用者選取器） */}
+      {submitMode && (
+        <div className="card p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold ">設定審核人（按順序選取）</h2>
+            <button onClick={() => { setSubmitMode(false); setApproverIds([]); }}
+              className="text-xs px-3 py-1 rounded" style={{ color: "var(--text-muted)" }}>
+              取消
+            </button>
+          </div>
+          <UserPicker selectedIds={approverIds} onChange={setApproverIds} />
+          <button onClick={handleSubmit} disabled={!approverIds.length}
+            className="w-full py-2.5 rounded-lg text-sm font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-90 disabled:opacity-40"
+            style={{ background: "var(--warning-dim)", color: "var(--warning)", border: "1px solid var(--warning-border)" }}>
+            確認送審（{approverIds.length} 位審核人）
+          </button>
+        </div>
+      )}
+
+      {dispatchOpen && (
+        <section className="card p-4 space-y-4" aria-labelledby="dispatch-title">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 id="dispatch-title" className="text-sm font-semibold">指定派送</h2>
+              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                會新增一筆副本派送紀錄，並立即寄出含公文 PDF 的 Email；不會重寄原本的受文者。
+              </p>
+            </div>
+            <button type="button" onClick={() => setDispatchOpen(false)} className="text-xs" style={{ color: "var(--text-muted)" }}>
+              取消
+            </button>
+          </div>
+
+          <div className="flex gap-2" role="group" aria-label="派送對象類型">
+            <button
+              type="button"
+              onClick={() => setDispatchMode("user")}
+              className="rounded px-3 py-1.5 text-xs"
+              style={dispatchMode === "user"
+                ? { background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--border-strong)" }
+                : { border: "1px solid var(--border)", color: "var(--text-muted)" }}
+            >
+              平台使用者
+            </button>
+            <button
+              type="button"
+              onClick={() => setDispatchMode("email")}
+              className="rounded px-3 py-1.5 text-xs"
+              style={dispatchMode === "email"
+                ? { background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--border-strong)" }
+                : { border: "1px solid var(--border)", color: "var(--text-muted)" }}
+            >
+              外部 Email
+            </button>
+          </div>
+
+          {dispatchMode === "user" ? (
+            <label className="block space-y-1.5">
+              <span className="text-xs" style={{ color: "var(--text-secondary)" }}>選擇使用者</span>
+              <select
+                value={dispatchUserId}
+                onChange={(event) => setDispatchUserId(event.target.value)}
+                disabled={!allUsersLoaded}
+                className="w-full rounded bg-transparent px-3 py-2 text-sm outline-none disabled:opacity-50"
+                style={{ border: "1px solid var(--border)" }}
+              >
+                <option value="">{allUsersLoaded ? "請選擇使用者" : "正在載入使用者…"}</option>
+                {allUsers.map((user) => (
+                  <option key={user.id} value={user.id}>{user.display_name}（{user.email}）</option>
+                ))}
+              </select>
+              <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                對方會收到 Email，並取得這份公文的查閱權限。
+              </span>
+            </label>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block space-y-1.5">
+                <span className="text-xs" style={{ color: "var(--text-secondary)" }}>收件 Email</span>
+                <input
+                  type="email"
+                  value={dispatchEmail}
+                  onChange={(event) => setDispatchEmail(event.target.value)}
+                  placeholder="name@example.com"
+                  className="w-full rounded bg-transparent px-3 py-2 text-sm outline-none"
+                  style={{ border: "1px solid var(--border)" }}
+                />
+              </label>
+              <label className="block space-y-1.5">
+                <span className="text-xs" style={{ color: "var(--text-secondary)" }}>收件者名稱（選填）</span>
+                <input
+                  value={dispatchName}
+                  onChange={(event) => setDispatchName(event.target.value)}
+                  placeholder="例如：校長室"
+                  className="w-full rounded bg-transparent px-3 py-2 text-sm outline-none"
+                  style={{ border: "1px solid var(--border)" }}
+                />
+              </label>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setDispatchOpen(false)} className="btn btn-ghost text-sm">取消</button>
+            <button type="button" onClick={handleDispatch} disabled={dispatchBusy} className="btn btn-primary text-sm disabled:opacity-50">
+              {dispatchBusy ? "派送中…" : "確認派送"}
+            </button>
+          </div>
+        </section>
+      )}
+
+      <div className="document-workspace-body">
+        {/* 左：公文內容 */}
+        <div className="space-y-4">
+          <div className="administrative-document-stage">
+            <OfficialDocumentPaper document={doc} style={zoomStyle} />
+          </div>
+
+          <div className="document-detail-section-tabs no-print">
+            <button
+              type="button"
+              onClick={() => setShowDocumentInfo(v => !v)}
+              className="btn btn-ghost btn-sm"
+            >
+              {showDocumentInfo ? "收合公文資料" : "公文資料"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowAttachments(v => !v)}
+              className="btn btn-ghost btn-sm"
+            >
+              {showAttachments ? "收合附件" : `附件 ${doc.attachments.length ? `(${doc.attachments.length})` : ""}`}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowVersions(v => !v)}
+              className="btn btn-ghost btn-sm"
+            >
+              {showVersions ? "收合歷程" : `版本歷程 ${doc.revisions.length ? `(${doc.revisions.length})` : ""}`}
+            </button>
+          </div>
+
+          {doc.regulation_id && (
+            <div
+              className="card p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+              style={{ borderColor: "var(--border-strong)" }}
+            >
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+                  關聯法規
+                </p>
+                <p className="text-sm mt-1" style={{ color: "var(--text-primary)" }}>
+                  此公文是法規公布或處理流程的一部分
+                </p>
+              </div>
+              <Link
+                href={`/regulations/${encodeURIComponent(doc.regulation_id)}`}
+                className="btn btn-ghost btn-sm justify-center"
+              >
+                查看法規
+              </Link>
+            </div>
+          )}
+
+          {canManagePetitionLink && (
+            <div className="card p-4">
+              <PetitionLinkSelector
+                selected={doc.petition_case ? {
+                  id: doc.petition_case.id,
+                  case_number: doc.petition_case.case_number,
+                  title: doc.petition_case.title,
+                  status: String(doc.petition_case.status),
+                } : null}
+                onSelect={(petition) => { void handlePetitionLinkChange(petition); }}
+                disabled={petitionLinkBusy}
+              />
+            </div>
+          )}
+
+          {canManageVisibility && (
+            <div className="card flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                  公文可見度
+                </p>
+              </div>
+              <div className="flex w-full items-center gap-2 sm:w-auto">
+                <select
+                  aria-label="公文可見度"
+                  value={visibilityValue}
+                  onChange={event => setVisibilityValue(event.target.value as DocumentVisibility)}
+                  disabled={visibilityBusy}
+                  className="min-h-10 min-w-0 flex-1 rounded-lg bg-transparent px-3 text-sm outline-none focus-visible:ring-2 sm:min-w-40 sm:flex-none"
+                  style={{ border: "1px solid var(--border-strong)", color: "var(--text-primary)" }}
+                >
+                  {VISIBILITY_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleVisibilityChange}
+                  disabled={visibilityBusy || visibilityValue === doc.visibility_level}
+                  className="btn btn-primary min-h-10 whitespace-nowrap text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {visibilityBusy ? "儲存中…" : "儲存可見度"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {showDocumentInfo && (
+            <div className="card p-4">
+              <dl className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-3">
+                {docInfoRows.map(([k, v]) => (
+                  <div key={k}>
+                    <dt style={{ color: "var(--text-muted)" }}>{k}</dt>
+                    <dd className="mt-0.5" style={{ color: "var(--text-primary)" }}>{v}</dd>
+                  </div>
+                ))}
+              </dl>
+              {doc.handler_email && (
+                <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+                  聯絡：{doc.handler_email}
+                </p>
+              )}
+              {doc.category !== "announcement" && doc.recipients.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+                  {doc.recipients.map(r => (
+                    <span key={r.id} className="text-xs px-2.5 py-1 rounded-full"
+                      style={{ color: "var(--primary-text)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }}>
+                      {{ main: "受文者", primary: "正本", copy: "副本", attendee: "出席者", observer: "列席者" }[r.recipient_type]} {r.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 附件 */}
+          {showAttachments && (
+          <div className="card p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+                附件 {doc.attachments.length > 0 && `(${doc.attachments.length})`}
+              </h2>
+              {isDraft && (
+                <div className="w-full max-w-sm">
+                  <AnimatedFileUpload
+                    accept=".pdf,image/*,.zip"
+                    label="拖曳附件到這裡"
+                    hint="支援 PDF、圖片、ZIP，上限 20MB"
+                    onUpload={uploadFile}
+                  />
+                </div>
+              )}
+            </div>
+            {doc.attachments.length === 0
+              ? <p className="text-xs" style={{ color: "var(--text-muted)" }}>尚無附件</p>
+              : (
+                <>
+                <ul className="space-y-2">
+                  {(showAllAttachments ? doc.attachments : doc.attachments.slice(0, 3)).map(a => {
+                    const isLink = Boolean(a.link_url);
+                    const isImg = !isLink && (
+                      /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(a.filename) ||
+                      (a.content_type?.startsWith("image/") ?? false)
+                    );
+                    const isPdf = !isLink && (
+                      /\.pdf$/i.test(a.filename) || a.content_type === "application/pdf"
+                    );
+                    const fileUrl = documentsApi.attachmentDownloadUrl(id, a.id);
+                    const previewUrl = documentsApi.attachmentPreviewUrl(id, a.id);
+                    return (
+                      <li key={a.id} className="rounded overflow-hidden"
+                        style={{ border: "1px solid var(--border)" }}>
+                        <div className="flex items-center justify-between text-xs px-3 py-2"
+                          style={{ background: "var(--bg-elevated)" }}>
+                          <div className="flex items-center gap-2 min-w-0">
+                            {isLink ? (
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                strokeWidth="2" strokeLinecap="round" aria-hidden="true"
+                                style={{ color: "var(--primary-text)", flexShrink: 0 }}>
+                                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                              </svg>
+                            ) : (
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                strokeWidth="2" strokeLinecap="round" aria-hidden="true"
+                                style={{ color: "var(--text-muted)", flexShrink: 0 }}>
+                                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                              </svg>
+                            )}
+                            {isLink ? (
+                              <a href={a.link_url!} target="_blank" rel="noopener noreferrer"
+                                className="truncate hover:underline" style={{ color: "var(--primary-text)" }}>
+                                {a.display_name || a.filename}
+                              </a>
+                            ) : (
+                              <span className="truncate" style={{ color: "var(--text-primary)" }}>{a.display_name || a.filename}</span>
+                            )}
+                            {!isLink && a.file_size != null && (
+                              <span className="flex-shrink-0" style={{ color: "var(--text-muted)" }}>{fmtSize(a.file_size)}</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 flex-shrink-0">
+                            {!isLink && (
+                              <AnimatedDownloadButton
+                                href={fileUrl}
+                                filename={a.display_name || a.filename}
+                                className="text-xs hover:underline"
+                                style={{ color: "var(--primary-text)" }}
+                                label="下載" />
+                            )}
+                            {isDraft && (
+                              <button
+                                onClick={() => {
+                                  setEditingAttachmentId(a.id);
+                                  setEditingAttachmentName(a.display_name || a.filename);
+                                }}
+                                className="transition-colors hover:opacity-80"
+                                style={{ color: "var(--text-muted)" }}>
+                                改名
+                              </button>
+                            )}
+                            {isDraft && (
+                              <button onClick={() => deleteAttachment(a.id)}
+                                className="transition-colors hover:text-red-500"
+                                style={{ color: "var(--text-muted)" }}>刪除</button>
+                            )}
+                          </div>
+                        </div>
+                        {isImg && (
+                          <Image src={previewUrl} alt={a.display_name || a.filename}
+                            width={1600}
+                            height={1000}
+                            unoptimized
+                            sizes="(max-width: 768px) 100vw, 768px"
+                            className="w-full object-contain"
+                            style={{
+                              maxHeight: doc.attachments.length <= 2 ? "520px" : "320px",
+                              background: "var(--bg-surface)",
+                            }} />
+                        )}
+                        {isPdf && (
+                          <object data={previewUrl} type="application/pdf"
+                            className="w-full" style={{ height: "420px", display: "block" }}>
+                            <p className="text-xs p-3" style={{ color: "var(--text-muted)" }}>
+                              瀏覽器不支援 PDF 預覽，請{" "}
+                              <AnimatedDownloadButton
+                                href={fileUrl}
+                                filename={a.display_name || a.filename}
+                                className="text-xs underline"
+                                style={{ color: "var(--primary-text)" }}
+                                label="下載查看" />。
+                            </p>
+                          </object>
+                        )}
+                        {isDraft && editingAttachmentId === a.id && (
+                          <div className="px-3 py-2 flex items-center gap-2" style={{ borderTop: "1px solid var(--border)" }}>
+                            <input
+                              value={editingAttachmentName}
+                              onChange={e => setEditingAttachmentName(e.target.value)}
+                              className="flex-1 text-xs outline-none rounded px-2 py-1.5"
+                              style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
+                            />
+                            <button onClick={() => setEditingAttachmentId(null)} className="text-xs px-2 py-1 rounded"
+                              style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}>
+                              取消
+                            </button>
+                            <button onClick={() => renameAttachment(a.id)} className="text-xs px-2 py-1 rounded"
+                              style={{ background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--border-strong)" }}>
+                              儲存
+                            </button>
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+                {doc.attachments.length > 3 && (
+                  <div className="mt-3 flex justify-center">
+                    <button
+                      onClick={() => setShowAllAttachments(v => !v)}
+                      className="text-xs px-3 py-1.5 rounded transition-opacity hover:opacity-80"
+                      style={{ color: "var(--primary-text)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }}>
+                      {showAllAttachments ? "收合附件" : `顯示全部附件（${doc.attachments.length}）`}
+                    </button>
+                  </div>
+                )}
+                </>
+              )}
+            {/* 草稿模式：新增連結附件 */}
+            {isDraft && (
+              <div className="mt-3 pt-3 flex flex-wrap gap-2" style={{ borderTop: "1px dashed var(--border)" }}>
+                <input placeholder="連結網址 https://…" value={newLinkUrl}
+                  onChange={e => setNewLinkUrl(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") addLink(); }}
+                  className="text-xs outline-none rounded px-2 py-1.5 flex-[2] min-w-32"
+                  style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+                <input placeholder="顯示名稱（選填）" value={newLinkText}
+                  onChange={e => setNewLinkText(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") addLink(); }}
+                  className="text-xs outline-none rounded px-2 py-1.5 flex-1 min-w-24"
+                  style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+                <button onClick={addLink} disabled={addingLink || !newLinkUrl.trim()}
+                  className="text-xs px-3 py-1.5 rounded transition-opacity hover:opacity-80 disabled:opacity-40 flex-shrink-0"
+                  style={{ background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--border-strong)" }}>
+                  {addingLink ? "新增中…" : "＋ 新增連結"}
+                </button>
+              </div>
+            )}
+          </div>
+          )}
+
+          {/* PDF / Google Drive 預覽 */}
+          {showAttachments && (() => {
+            const previews: Array<{ key: string; label: string; src: string; sourceUrl: string }> = [];
+
+            // Google Drive 連結
+            for (const attachment of doc.attachments) {
+              if (previews.length >= 2) break;
+              if (!attachment.link_url) continue;
+              const src = googleDrivePreviewUrl(attachment.link_url);
+              if (src) {
+                previews.push({
+                  key: `gdrive-${attachment.id}`,
+                  label: `Google Drive 預覽：${attachment.filename}`,
+                  src,
+                  sourceUrl: attachment.link_url,
+                });
+              }
+            }
+
+            return previews.map(p => (
+              <div key={p.key} className="card p-4">
+                <h2 className="text-xs font-semibold uppercase tracking-wider mb-3"
+                  style={{ color: "var(--text-muted)" }}>
+                  {p.label}
+                </h2>
+                <iframe
+                  src={p.src}
+                  title={p.label}
+                  className="w-full rounded"
+                  style={{ height: "600px", border: "1px solid var(--border)" }}
+                  sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+                  referrerPolicy="strict-origin-when-cross-origin"
+                  allow="autoplay; fullscreen"
+                  allowFullScreen
+                />
+                <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+                  若預覽空白，請確認檔案分享權限為「知道連結的任何人可檢視」，或{" "}
+                  <a href={p.sourceUrl} target="_blank" rel="noreferrer" className="underline" style={{ color: "var(--primary-text)" }}>
+                    在 Google Drive 開啟
+                  </a>。
+                </p>
+              </div>
+            ));
+          })()}
+
+          {/* 版本歷程 */}
+          {showVersions && <VersionHistory revisions={doc.revisions} />}
+        </div>
+
+        {doc.status !== "archived" && (doc.approvals.length > 0 || isDraft) && (
+          <details className="administrative-document-supplement document-workspace-approvals no-print"
+            open={doc.status === "pending" || isDraft || canApprove}>
+            <summary>公文簽核</summary>
+            {doc.approvals.length > 0 ? <ApprovalPanel
+              steps={doc.approvals}
+              canApprove={canApprove}
+              currentUserId={currentUserId}
+              allUsers={allUsers}
+              onLoadUsers={loadAllUsers}
+              onApprove={handleApprove}
+              onReject={handleReject}
+              onSetDelegate={handleSetDelegate}
+            /> : <button type="button" onClick={() => setSubmitMode(true)} className="btn btn-secondary">設定並送審</button>}
+          </details>
+        )}
+      </div>
+    </div>
+    </>
+  );
+}

@@ -3,18 +3,16 @@
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING
+from datetime import datetime
+from typing import Any
 
-from sqlalchemy import Boolean, ForeignKey, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import expression
 
 from api.core.database import Base
 from api.models.base import TimestampMixin
-
-if TYPE_CHECKING:
-    from api.models.user import User
 
 
 class Notification(Base, TimestampMixin):
@@ -29,6 +27,17 @@ class Notification(Base, TimestampMixin):
     """
 
     __tablename__ = "notifications"
+    __table_args__ = (
+        Index("ix_notifications_user_read", "user_id", "is_read"),
+        Index("ix_notifications_user_created", "user_id", "created_at"),
+        Index(
+            "ix_notifications_email_batch",
+            "user_id",
+            "type",
+            "email_queued_at",
+            "created_at",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
@@ -44,10 +53,16 @@ class Notification(Base, TimestampMixin):
     is_read: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=expression.false()
     )
+    # 摘要 Email 專用的通知仍保留在資料庫，但不出現在站內收件匣。
+    is_inapp_visible: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=expression.true()
+    )
+    # 一般通知聚合寄信的去重標記；公文受文者正式遞送不使用此欄位。
+    email_queued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # 關聯資源 ID（如 document_id），方便前端快速導航
     related_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
 
-    user: Mapped[User] = relationship("User", back_populates="notifications", lazy="select")
+    user: Mapped[Any] = relationship("User", back_populates="notifications", lazy="select")
 
     def __repr__(self) -> str:
         return f"<Notification id={self.id} type={self.type} user={self.user_id}>"

@@ -1,4 +1,4 @@
-"""校商分類 / 變體 / 購物車 / 結單 與 班級系統測試（服務層）。"""
+"""商品分類 / 變體 / 購物車 / 結單 與 班級系統測試（服務層）。"""
 
 from __future__ import annotations
 
@@ -8,11 +8,18 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.models.org import Org
-from api.models.shop import Order, OrderItem, OrderStatus, Product
+from api.core.clock import local_today
+from api.models.activity import Activity
+from api.models.electronic_credential import ElectronicCredentialSettings
+from api.models.person import PersonAffiliationKind, PersonAffiliationStatus
+from api.models.shop import Order, OrderItem, OrderStatus, Product, ProductMedia
 from api.models.user import User
+from api.schemas.person import PersonAffiliationCreate
 from api.schemas.school_class import (
     ClassManualMemberCreate,
+    ClassRosterBulkCreate,
+    ClassRosterEntryCreate,
+    ClassRosterEntryUpdate,
     ClassStudentRangeCreate,
     ClassStudentRangeOverride,
     SchoolClassBulkCreate,
@@ -22,34 +29,87 @@ from api.schemas.school_class import (
 )
 from api.schemas.shop import (
     CartItemCreate,
+    ClassOrderUpsert,
+    OrderItemCreate,
     ProductCategoryCreate,
     ProductCreate,
     ProductSeriesCreate,
     ProductVariantGroupCreate,
     ProductVariantOptionCreate,
 )
+from api.services import person as person_svc
 from api.services import school_class as class_svc
 from api.services import shop as shop_svc
 
 # ── 測試輔助 ──────────────────────────────────────────────────────────────────
 
 
+@pytest.fixture(autouse=True)
+async def current_shop_student_prefixes(db_session):
+    db_session.add(ElectronicCredentialSettings(id=1, student_id_prefixes=["115"]))
+    await db_session.flush()
+
+
+async def test_assisted_order_merges_identical_variants_and_preserves_stock(db_session):
+    buyer = await _make_user(db_session)
+    product = await _make_product(db_session, stock=5)
+    options = [group.options[0].id for group in product.variant_groups]
+    different = [product.variant_groups[0].options[1].id, options[1]]
+    orders = await shop_svc.create_direct_order(
+        db_session,
+        user_id=buyer.id,
+        class_id=None,
+        data=ClassOrderUpsert(
+            user_id=buyer.id,
+            items=[
+                OrderItemCreate(product_id=product.id, quantity=1, option_ids=options),
+                OrderItemCreate(product_id=product.id, quantity=2, option_ids=options[::-1]),
+                OrderItemCreate(product_id=product.id, quantity=2, option_ids=different),
+            ],
+        ),
+    )
+    order = await shop_svc.get_order(db_session, orders[0].id)
+    assert len(order.items) == 2
+    assert sorted(item.quantity for item in order.items) == [2, 3]
+    assert order.total_price == 500
+    assert product.stock_quantity == 0
+    assert order.is_class_collected is False
+    assert order.is_paid is False
+
+
+async def test_assisted_edit_merges_duplicate_items(db_session):
+    buyer = await _make_user(db_session)
+    product = await _make_product(db_session, stock=10)
+    options = [group.options[0].id for group in product.variant_groups]
+    item = OrderItemCreate(product_id=product.id, quantity=1, option_ids=options)
+    orders = await shop_svc.create_direct_order(
+        db_session,
+        user_id=buyer.id,
+        class_id=None,
+        data=ClassOrderUpsert(user_id=buyer.id, items=[item]),
+    )
+    order = await shop_svc.get_order(db_session, orders[0].id)
+    await shop_svc.replace_order_items(
+        db_session,
+        order,
+        data=ClassOrderUpsert(user_id=buyer.id, items=[item, item]),
+    )
+    await db_session.refresh(order, ["items"])
+    assert len(order.items) == 1
+    assert order.items[0].quantity == 2
+    assert order.total_price == 200
+    assert product.stock_quantity == 8
+
+
 async def _make_user(db: AsyncSession, *, student_id: str | None = None) -> User:
     user = User(
-        email=f"u-{uuid.uuid4().hex[:8]}@test.edu",
+        email=f"u-{uuid.uuid4().hex[:8]}@hchs.hc.edu.tw",
         display_name="測試學生",
         student_id=student_id,
     )
     db.add(user)
     await db.flush()
     return user
-
-
-async def _make_org(db: AsyncSession, *, name: str = "校商組織") -> Org:
-    org = Org(name=name)
-    db.add(org)
-    await db.flush()
-    return org
 
 
 async def _make_actor(db: AsyncSession) -> uuid.UUID:
@@ -74,10 +134,9 @@ async def _make_class(db: AsyncSession, *, start: str = "11501", end: str = "115
 async def _make_product(
     db: AsyncSession, *, price: int = 100, stock: int = 50, sale_end: datetime | None = None
 ) -> Product:
-    org = await _make_org(db)
     creator = await _make_actor(db)
     category = await shop_svc.create_category(
-        db, data=ProductCategoryCreate(org_id=org.id, name="校商"), created_by=creator
+        db, data=ProductCategoryCreate(name="商品"), created_by=creator
     )
     series = await shop_svc.create_series(
         db, data=ProductSeriesCreate(category_id=category.id, name="衣服系列")
@@ -144,6 +203,57 @@ async def test_inactive_class_excluded_from_resolution(db_session: AsyncSession)
     assert await class_svc.resolve_user_class(db_session, user) is None
 
 
+@pytest.mark.parametrize(
+    ("start_delta", "end_delta", "status", "class_active", "expected"),
+    [
+        (0, None, PersonAffiliationStatus.ACTIVE, True, True),
+        (-1, 0, PersonAffiliationStatus.ACTIVE, True, True),
+        (1, None, PersonAffiliationStatus.ACTIVE, True, False),
+        (-2, -1, PersonAffiliationStatus.ACTIVE, True, False),
+        (-1, None, PersonAffiliationStatus.ENDED, True, False),
+        (-1, None, PersonAffiliationStatus.ACTIVE, False, False),
+    ],
+)
+async def test_person_class_affiliation_resolution_checks_dates_and_status(
+    db_session, start_delta, end_delta, status, class_active, expected
+) -> None:
+    sc = await _make_class(db_session)
+    user = await _make_user(db_session)
+    person = await person_svc.ensure_person_for_user(db_session, user)
+    affiliation = await person_svc.create_affiliation(
+        db_session,
+        data=PersonAffiliationCreate(
+            person_id=person.id,
+            kind=PersonAffiliationKind.CLASS_MEMBER,
+            class_id=sc.id,
+            start_date=local_today() + timedelta(days=start_delta),
+            end_date=local_today() + timedelta(days=end_delta) if end_delta is not None else None,
+        ),
+    )
+    affiliation.status = status
+    sc.is_active = class_active
+    await db_session.flush()
+
+    resolved = await class_svc.resolve_user_class(db_session, user)
+    assert (resolved.id if resolved else None) == (sc.id if expected else None)
+
+
+async def test_person_class_affiliation_does_not_match_an_unlinked_account(
+    db_session: AsyncSession,
+) -> None:
+    sc = await _make_class(db_session)
+    member = await _make_user(db_session)
+    other_user = await _make_user(db_session)
+    person = await person_svc.ensure_person_for_user(db_session, member)
+    await person_svc.create_affiliation(
+        db_session,
+        data=PersonAffiliationCreate(
+            person_id=person.id, kind=PersonAffiliationKind.CLASS_MEMBER, class_id=sc.id
+        ),
+    )
+    assert await class_svc.resolve_user_class(db_session, other_user) is None
+
+
 async def test_add_cadre_and_lookup_cadre_class_ids(db_session: AsyncSession) -> None:
     sc = await _make_class(db_session)
     user = await _make_user(db_session, student_id="11501")
@@ -173,9 +283,7 @@ async def test_manual_member_can_be_added_and_promoted_to_cadre(
     sc = await _make_class(db_session, start="11501", end="11510")
     user = await _make_user(db_session, student_id=None)
 
-    await class_svc.add_manual_member(
-        db_session, sc, data=ClassManualMemberCreate(user_id=user.id)
-    )
+    await class_svc.add_manual_member(db_session, sc, data=ClassManualMemberCreate(user_id=user.id))
     await class_svc.add_cadre(db_session, sc, user_id=user.id)
 
     members = await class_svc.list_class_members(
@@ -185,6 +293,94 @@ async def test_manual_member_can_be_added_and_promoted_to_cadre(
     assert members[0].source == "manual"
     assert members[0].is_cadre is True
     assert await class_svc.resolve_user_class(db_session, user) is not None
+
+
+async def test_roster_entry_supports_unregistered_student_and_links_existing_user(
+    db_session: AsyncSession,
+) -> None:
+    sc = await _make_class(db_session)
+    linked_user = await _make_user(db_session, student_id="11502")
+
+    unlinked = await class_svc.add_roster_entry(
+        db_session, sc, data=ClassRosterEntryCreate(seat_number=1, student_id="11501")
+    )
+    linked = await class_svc.add_roster_entry(
+        db_session, sc, data=ClassRosterEntryCreate(seat_number=2, student_id="11502")
+    )
+    assert unlinked.user_id is None
+    assert linked.user_id == linked_user.id
+
+    members = await class_svc.list_class_members(
+        db_session, await class_svc.get_class(db_session, sc.id)
+    )
+    assert [(member.seat_number, member.student_id) for member in members] == [
+        (1, "11501"),
+        (2, "11502"),
+    ]
+    assert members[0].id == unlinked.id
+    assert members[0].roster_entry_id == unlinked.id
+    assert members[0].user_id is None
+    assert members[0].email == ""
+    assert members[1].user_id == linked_user.id
+    assert await class_svc.resolve_user_class(db_session, linked_user) is not None
+
+
+async def test_roster_entry_rejects_duplicate_seat_or_student_id(
+    db_session: AsyncSession,
+) -> None:
+    sc = await _make_class(db_session)
+    await class_svc.add_roster_entry(
+        db_session, sc, data=ClassRosterEntryCreate(seat_number=1, student_id="11501")
+    )
+
+    with pytest.raises(ValueError, match="座號 1"):
+        await class_svc.add_roster_entry(
+            db_session, sc, data=ClassRosterEntryCreate(seat_number=1, student_id="11502")
+        )
+    with pytest.raises(ValueError, match="學號 11501"):
+        await class_svc.add_roster_entry(
+            db_session, sc, data=ClassRosterEntryCreate(seat_number=2, student_id="11501")
+        )
+
+
+async def test_bulk_roster_upsert_updates_by_seat_and_creates_new_rows(
+    db_session: AsyncSession,
+) -> None:
+    sc = await _make_class(db_session)
+    await class_svc.add_roster_entry(
+        db_session, sc, data=ClassRosterEntryCreate(seat_number=1, student_id="11501")
+    )
+
+    result = await class_svc.bulk_upsert_roster(
+        db_session,
+        sc,
+        data=ClassRosterBulkCreate(
+            entries=[
+                ClassRosterEntryCreate(seat_number=1, student_id="11511"),
+                ClassRosterEntryCreate(seat_number=2, student_id="11512"),
+            ]
+        ),
+    )
+    assert (result.created, result.updated) == (1, 1)
+    entries = await class_svc.list_roster_entries(db_session, sc)
+    assert [(entry.seat_number, entry.student_id) for entry in entries] == [
+        (1, "11511"),
+        (2, "11512"),
+    ]
+
+
+async def test_roster_entry_can_be_updated(db_session: AsyncSession) -> None:
+    sc = await _make_class(db_session)
+    entry = await class_svc.add_roster_entry(
+        db_session, sc, data=ClassRosterEntryCreate(seat_number=1, student_id="11501")
+    )
+    updated = await class_svc.update_roster_entry(
+        db_session,
+        sc,
+        entry.id,
+        data=ClassRosterEntryUpdate(seat_number=3, student_id="11503"),
+    )
+    assert (updated.seat_number, updated.student_id) == (3, "11503")
 
 
 async def test_cadre_requires_class_member(db_session: AsyncSession) -> None:
@@ -210,8 +406,10 @@ async def test_bulk_create_classes_builds_class_codes_and_student_ranges(
     assert result.succeeded == 2
     classes = await class_svc.list_classes(db_session, academic_year=115)
     assert [c.class_code for c in classes] == ["101", "102"]
-    assert classes[0].ranges[0].student_id_start == "11510101"
-    assert classes[0].ranges[0].student_id_end == "11510140"
+    first_class = await class_svc.get_class(db_session, classes[0].id)
+    assert first_class is not None
+    assert first_class.ranges[0].student_id_start == "11510101"
+    assert first_class.ranges[0].student_id_end == "11510140"
 
 
 async def test_bulk_create_classes_allows_per_class_student_count_override(
@@ -238,8 +436,12 @@ async def test_bulk_create_classes_allows_per_class_student_count_override(
     assert result.succeeded == 2
     classes = await class_svc.list_classes(db_session, academic_year=116)
     by_code = {c.class_code: c for c in classes}
-    assert by_code["101"].ranges[0].student_id_end == "11610140"
-    assert by_code["102"].ranges[0].student_id_end == "11610235"
+    first_class = await class_svc.get_class(db_session, by_code["101"].id)
+    second_class = await class_svc.get_class(db_session, by_code["102"].id)
+    assert first_class is not None
+    assert second_class is not None
+    assert first_class.ranges[0].student_id_end == "11610140"
+    assert second_class.ranges[0].student_id_end == "11610235"
 
 
 # ── 商品：分類階層與變體 ──────────────────────────────────────────────────────
@@ -248,11 +450,57 @@ async def test_bulk_create_classes_allows_per_class_student_count_override(
 async def test_build_catalog_tree_includes_active_product_with_variants(
     db_session: AsyncSession,
 ) -> None:
-    product = await _make_product(db_session)
-    tree = await shop_svc.build_catalog_tree(db_session, org_id=product.org_id)
+    await _make_product(db_session)
+    tree = await shop_svc.build_catalog_tree(db_session)
     assert len(tree) == 1
-    assert tree[0].name == "校商"
+    assert tree[0].name == "商品"
     assert tree[0].series[0].products[0].has_variants is True
+    assert tree[0].series[0].products[0].has_option_surcharge is True
+
+
+async def test_build_catalog_tree_ignores_options_without_current_surcharge(
+    db_session: AsyncSession,
+) -> None:
+    product = await _make_product(db_session)
+    for group in product.variant_groups:
+        for option in group.options:
+            option.price_delta = 0
+    product.variant_groups[1].options[1].original_price_delta = 50
+    await db_session.flush()
+
+    tree = await shop_svc.build_catalog_tree(db_session)
+    listed_product = tree[0].series[0].products[0]
+    assert listed_product.has_variants is True
+    assert listed_product.has_option_surcharge is False
+
+
+async def test_build_catalog_tree_uses_first_media_image_when_product_image_is_missing(
+    db_session: AsyncSession,
+) -> None:
+    product = await _make_product(db_session)
+    product.media = [
+        ProductMedia(image_url="/uploads/front.jpg", kind="product", sort_order=0),
+        ProductMedia(image_url="/uploads/back.jpg", kind="product", sort_order=1),
+    ]
+    standalone_product = await shop_svc.create_product(
+        db_session,
+        data=ProductCreate(
+            category_id=product.category_id,
+            name="單一商品",
+            price=80,
+        ),
+        created_by=await _make_actor(db_session),
+    )
+    await shop_svc.activate_product(db_session, standalone_product)
+    standalone_product.media = [
+        ProductMedia(image_url="/uploads/single.jpg", kind="product", sort_order=0),
+    ]
+    await db_session.flush()
+
+    tree = await shop_svc.build_catalog_tree(db_session)
+
+    assert tree[0].products[0].image_url == "/uploads/single.jpg"
+    assert tree[0].series[0].products[0].image_url == "/uploads/front.jpg"
 
 
 async def test_add_cart_item_requires_one_option_per_variant_group(
@@ -308,7 +556,9 @@ async def test_checkout_snapshots_class_and_variant_price(
         counter["n"] += 1
         return f"ORD-TEST-{counter['n']:04d}"
 
-    monkeypatch.setattr(shop_svc, "generate_order_serial", _fake_serial)
+    from api.services.shop import _orders
+
+    monkeypatch.setattr(_orders, "generate_order_serial", _fake_serial)
 
     sc = await _make_class(db_session, start="11501", end="11540")
     user = await _make_user(db_session, student_id="11510")
@@ -339,7 +589,9 @@ async def test_checkout_after_sale_end_is_rejected(
     async def _fake_serial(_session: AsyncSession) -> str:
         return "ORD-TEST-9999"
 
-    monkeypatch.setattr(shop_svc, "generate_order_serial", _fake_serial)
+    from api.services.shop import _orders
+
+    monkeypatch.setattr(_orders, "generate_order_serial", _fake_serial)
 
     user = await _make_user(db_session, student_id="11510")
     product = await _make_product(db_session, sale_end=datetime.now(UTC) - timedelta(hours=1))
@@ -358,12 +610,10 @@ async def test_checkout_after_sale_end_is_rejected(
 
 
 async def test_set_order_paid_can_toggle_both_directions(db_session: AsyncSession) -> None:
-    org = await _make_org(db_session)
     buyer = await _make_user(db_session)
     order = Order(
         serial_number="ORD-PAY-1",
         user_id=buyer.id,
-        org_id=org.id,
         status=OrderStatus.PENDING,
         total_price=100,
     )
@@ -384,14 +634,12 @@ async def test_set_order_paid_can_toggle_both_directions(db_session: AsyncSessio
 
 async def test_order_summary_groups_by_class_with_paid_split(db_session: AsyncSession) -> None:
     sc = await _make_class(db_session)
-    org = await _make_org(db_session)
     buyer = await _make_user(db_session)
     db_session.add_all(
         [
             Order(
                 serial_number="ORD-S-1",
                 user_id=buyer.id,
-                org_id=org.id,
                 class_id=sc.id,
                 status=OrderStatus.PENDING,
                 total_price=200,
@@ -400,7 +648,6 @@ async def test_order_summary_groups_by_class_with_paid_split(db_session: AsyncSe
             Order(
                 serial_number="ORD-S-2",
                 user_id=buyer.id,
-                org_id=org.id,
                 class_id=sc.id,
                 status=OrderStatus.PENDING,
                 total_price=300,
@@ -409,7 +656,6 @@ async def test_order_summary_groups_by_class_with_paid_split(db_session: AsyncSe
             Order(
                 serial_number="ORD-S-3",
                 user_id=buyer.id,
-                org_id=org.id,
                 class_id=sc.id,
                 status=OrderStatus.CANCELLED,
                 total_price=999,
@@ -426,6 +672,66 @@ async def test_order_summary_groups_by_class_with_paid_split(db_session: AsyncSe
     assert summary.rows[0].order_count == 2
 
 
+async def test_order_summary_sorts_classes_by_school_year_and_code(
+    db_session: AsyncSession,
+) -> None:
+    from api.models.school_class import SchoolClass
+
+    actor = await _make_actor(db_session)
+    classes = [
+        SchoolClass(
+            academic_year=115,
+            class_code="101",
+            grade=1,
+            label="班級 Z",
+            created_by=actor,
+        ),
+        SchoolClass(
+            academic_year=115,
+            class_code="102",
+            grade=1,
+            label="班級 A",
+            created_by=actor,
+        ),
+        SchoolClass(
+            academic_year=114,
+            class_code="101",
+            grade=2,
+            label="班級 M",
+            created_by=actor,
+        ),
+    ]
+    buyer = await _make_user(db_session)
+    db_session.add_all(classes)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            Order(
+                serial_number=f"ORD-{uuid.uuid4().hex[:20]}",
+                user_id=buyer.id,
+                class_id=school_class.id,
+                status=OrderStatus.PENDING,
+                total_price=100,
+            )
+            for school_class in classes
+        ]
+        + [
+            Order(
+                serial_number=f"ORD-{uuid.uuid4().hex[:20]}",
+                user_id=buyer.id,
+                class_id=None,
+                status=OrderStatus.PENDING,
+                total_price=100,
+            )
+        ]
+    )
+    await db_session.flush()
+
+    summary = await shop_svc.order_summary(db_session, group_by="class")
+
+    assert [row.label for row in summary.rows] == ["班級 Z", "班級 A", "班級 M", "未分班"]
+
+
 async def test_order_summary_filters_product_and_grade_amount(
     db_session: AsyncSession,
 ) -> None:
@@ -436,7 +742,6 @@ async def test_order_summary_filters_product_and_grade_amount(
     order = Order(
         serial_number="ORD-FILTER-1",
         user_id=buyer.id,
-        org_id=product_a.org_id,
         class_id=sc.id,
         status=OrderStatus.PENDING,
         total_price=400,
@@ -475,10 +780,9 @@ async def test_product_create_rejects_unknown_series(db_session: AsyncSession) -
 
 
 async def test_draft_product_not_in_catalog_tree(db_session: AsyncSession) -> None:
-    org = await _make_org(db_session)
     creator = await _make_actor(db_session)
     category = await shop_svc.create_category(
-        db_session, data=ProductCategoryCreate(org_id=org.id, name="校商"), created_by=creator
+        db_session, data=ProductCategoryCreate(name="商品"), created_by=creator
     )
     series = await shop_svc.create_series(
         db_session, data=ProductSeriesCreate(category_id=category.id, name="文具系列")
@@ -488,5 +792,209 @@ async def test_draft_product_not_in_catalog_tree(db_session: AsyncSession) -> No
         data=ProductCreate(series_id=series.id, name="未上架草稿", price=10),
         created_by=creator,
     )  # 維持 DRAFT
-    tree = await shop_svc.build_catalog_tree(db_session, org_id=category.org_id)
+    tree = await shop_svc.build_catalog_tree(db_session)
     assert tree[0].series[0].products == []
+
+
+async def test_class_order_list_defaults_to_all_class_orders(
+    db_session: AsyncSession,
+) -> None:
+    sc = await _make_class(db_session)
+    buyer = await _make_user(db_session)
+    assisted_buyer = await _make_user(db_session)
+    cadre = await _make_user(db_session)
+    db_session.add_all(
+        [
+            Order(
+                serial_number="ORD-CLASS-SELF",
+                user_id=buyer.id,
+                class_id=sc.id,
+                assistance_scope="self",
+                status=OrderStatus.PENDING,
+                total_price=100,
+            ),
+            Order(
+                serial_number="ORD-CLASS-ASSIST",
+                user_id=assisted_buyer.id,
+                class_id=sc.id,
+                assistance_scope="class_assisted",
+                assisted_by_id=cadre.id,
+                status=OrderStatus.PENDING,
+                total_price=100,
+            ),
+        ]
+    )
+    await db_session.flush()
+
+    all_orders = await shop_svc.list_orders(db_session, class_ids=[sc.id])
+    assisted_orders = await shop_svc.list_orders(
+        db_session, class_ids=[sc.id], assistance_scope="class_assisted"
+    )
+
+    assert {order.serial_number for order in all_orders} == {
+        "ORD-CLASS-SELF",
+        "ORD-CLASS-ASSIST",
+    }
+    assert [order.serial_number for order in assisted_orders] == ["ORD-CLASS-ASSIST"]
+
+
+async def test_class_order_summary_groups_products_and_payment(
+    db_session: AsyncSession,
+) -> None:
+    sc = await _make_class(db_session)
+    product_a = await _make_product(db_session, price=100, stock=10)
+    product_b = await _make_product(db_session, price=250, stock=10)
+    buyer = await _make_user(db_session)
+    paid_order = Order(
+        serial_number="ORD-CLASS-SUMMARY-1",
+        user_id=buyer.id,
+        class_id=sc.id,
+        status=OrderStatus.PENDING,
+        total_price=200,
+        is_class_collected=True,
+    )
+    unpaid_order = Order(
+        serial_number="ORD-CLASS-SUMMARY-2",
+        user_id=buyer.id,
+        class_id=sc.id,
+        status=OrderStatus.PENDING,
+        total_price=250,
+        is_paid=False,
+        assistance_scope="class_assisted",
+    )
+    db_session.add_all([paid_order, unpaid_order])
+    await db_session.flush()
+    db_session.add_all(
+        [
+            OrderItem(order_id=paid_order.id, product_id=product_a.id, quantity=2, unit_price=100),
+            OrderItem(
+                order_id=unpaid_order.id, product_id=product_b.id, quantity=1, unit_price=250
+            ),
+        ]
+    )
+    await db_session.flush()
+
+    summary = await shop_svc.class_order_summary(db_session, class_ids=[sc.id])
+    filtered = await shop_svc.class_order_summary(
+        db_session, class_ids=[sc.id], product_id=product_a.id
+    )
+
+    assert summary.order_count == 2
+    assert summary.item_count == 3
+    assert summary.total_amount == 450
+    assert summary.paid_amount == 200
+    assert summary.unpaid_amount == 250
+    assert summary.assisted_order_count == 1
+    assert [(row.product_id, row.quantity) for row in summary.product_rows] == [
+        (product_a.id, 2),
+        (product_b.id, 1),
+    ]
+    product_rows = {row.product_id: row for row in summary.product_rows}
+    assert (
+        product_rows[product_a.id].collected_order_count,
+        product_rows[product_a.id].uncollected_order_count,
+        product_rows[product_a.id].collected_quantity,
+        product_rows[product_a.id].uncollected_quantity,
+        product_rows[product_a.id].collected_amount,
+        product_rows[product_a.id].uncollected_amount,
+    ) == (1, 0, 2, 0, 200, 0)
+    assert (
+        product_rows[product_b.id].collected_order_count,
+        product_rows[product_b.id].uncollected_order_count,
+        product_rows[product_b.id].collected_quantity,
+        product_rows[product_b.id].uncollected_quantity,
+        product_rows[product_b.id].collected_amount,
+        product_rows[product_b.id].uncollected_amount,
+    ) == (0, 1, 0, 1, 0, 250)
+    assert filtered.order_count == 1
+    assert filtered.total_amount == 200
+
+
+async def test_filtered_shop_statistics_use_discounted_amount(db_session: AsyncSession) -> None:
+    school_class = await _make_class(db_session)
+    product_a = await _make_product(db_session, price=100)
+    product_b = await _make_product(db_session, price=200)
+    buyer = await _make_user(db_session)
+    order = Order(
+        serial_number="ORD-FILTER-DISCOUNT",
+        user_id=buyer.id,
+        class_id=school_class.id,
+        status=OrderStatus.PENDING,
+        subtotal_price=300,
+        discount_amount=30,
+        total_price=270,
+        is_paid=True,
+        is_class_collected=True,
+    )
+    db_session.add(order)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            OrderItem(order_id=order.id, product_id=product_a.id, quantity=1, unit_price=100),
+            OrderItem(order_id=order.id, product_id=product_b.id, quantity=1, unit_price=200),
+        ]
+    )
+    await db_session.flush()
+
+    class_summary = await shop_svc.class_order_summary(
+        db_session, class_ids=[school_class.id], product_id=product_a.id
+    )
+    council_summary = await shop_svc.order_summary(
+        db_session, group_by="class", product_id=product_a.id
+    )
+
+    assert class_summary.total_amount == 90
+    assert class_summary.paid_amount == 90
+    assert council_summary.total_amount == 90
+    assert council_summary.paid_amount == 90
+
+
+@pytest.mark.parametrize("collected", [False, True])
+async def test_class_summary_category_excludes_other_themes_in_shared_activity(
+    db_session: AsyncSession, collected: bool
+) -> None:
+    school_class = await _make_class(db_session)
+    buyer = await _make_user(db_session)
+    product_a = await _make_product(db_session, price=100)
+    product_b = await _make_product(db_session, price=200)
+    category_a = product_a.series.category
+    category_b = product_b.series.category
+    activity = Activity(name="同一活動")
+    db_session.add(activity)
+    await db_session.flush()
+    category_a.activity_id = category_b.activity_id = activity.id
+    # 同時涵蓋直屬主題與放在系列內的商品。
+    product_a.category_id = category_a.id
+    product_a.series_id = None
+    order = Order(
+        serial_number="ORD-CATEGORY-SUMMARY",
+        user_id=buyer.id,
+        class_id=school_class.id,
+        activity_id=activity.id,
+        status=OrderStatus.PENDING,
+        subtotal_price=300,
+        discount_amount=30,
+        total_price=270,
+        is_class_collected=collected,
+    )
+    db_session.add(order)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            OrderItem(order_id=order.id, product_id=product_a.id, quantity=1, unit_price=100),
+            OrderItem(order_id=order.id, product_id=product_b.id, quantity=1, unit_price=200),
+        ]
+    )
+    await db_session.flush()
+    for category, product, amount in [(category_a, product_a, 90), (category_b, product_b, 180)]:
+        result = await shop_svc.class_order_summary(
+            db_session, class_ids=[school_class.id], category_id=category.id
+        )
+        assert result.order_count == 1
+        assert result.item_count == 1
+        assert result.total_amount == amount
+        assert result.paid_amount == (amount if collected else 0)
+        assert result.unpaid_amount == (0 if collected else amount)
+        assert [
+            (row.product_id, row.quantity, row.total_amount) for row in result.product_rows
+        ] == [(product.id, 1, amount)]

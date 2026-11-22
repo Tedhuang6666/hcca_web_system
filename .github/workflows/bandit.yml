@@ -1,0 +1,66 @@
+name: Bandit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/api/src/**/*.py"
+      - "apps/discord-bot/src/**/*.py"
+      - "libs/shared/src/**/*.py"
+      - ".github/workflows/bandit.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/api/src/**/*.py"
+      - "apps/discord-bot/src/**/*.py"
+      - "libs/shared/src/**/*.py"
+      - ".github/workflows/bandit.yml"
+  schedule:
+    - cron: "22 13 * * 3"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bandit-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bandit:
+    name: Python security lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Bandit
+        run: python -m pip install --disable-pip-version-check bandit==1.9.4
+
+      - name: Generate JSON report
+        run: |
+          bandit -r apps/api/src apps/discord-bot/src libs/shared/src \
+            --configfile apps/api/pyproject.toml \
+            --severity-level medium \
+            --confidence-level medium \
+            --format json \
+            --output bandit-results.json \
+            --exit-zero
+
+      - name: Upload Bandit report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bandit-results
+          path: bandit-results.json
+          retention-days: 30
+
+      - name: Enforce high-severity findings
+        run: |
+          bandit -r apps/api/src apps/discord-bot/src libs/shared/src \
+            --configfile apps/api/pyproject.toml \
+            --severity-level high \
+            --confidence-level medium

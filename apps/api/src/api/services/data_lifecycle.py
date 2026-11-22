@@ -130,6 +130,34 @@ RULES: list[LifecycleRule] = [
         danger_level="dangerous",
         affects_modules=("audit",),
     ),
+    LifecycleRule(
+        id="survey_responses_old",
+        label="問卷回應（過舊）",
+        description="超過保留天數的問卷回應紀錄。"
+        "archive 後 purge，以履行個資最小化原則；問卷的統計摘要應事先另存。",
+        model_path="api.models.survey:SurveyResponse",
+        default_retention_days=730,  # 2 年
+        min_retention_days=365,
+        timestamp_field="created_at",
+        extra_filter=None,
+        default_action="archive_then_purge",
+        danger_level="caution",
+        affects_modules=("surveys",),
+    ),
+    LifecycleRule(
+        id="shop_orders_cancelled_old",
+        label="購票取消訂單（過舊）",
+        description="status=cancelled 且超過保留天數的購票訂單。"
+        "已取消的訂單不含付款資訊，歸檔後可清以縮減訂單表體積。",
+        model_path="api.models.shop:Order",
+        default_retention_days=365,
+        min_retention_days=180,
+        timestamp_field="created_at",
+        extra_filter="僅 status = cancelled",
+        default_action="archive_then_purge",
+        danger_level="caution",
+        affects_modules=("shop",),
+    ),
 ]
 
 
@@ -182,6 +210,10 @@ def _build_where(rule: LifecycleRule, model: type, cutoff: datetime) -> tuple[Co
                 [EmailStatus.SENT, EmailStatus.FAILED, EmailStatus.CANCELLED]
             ),
         )
+    if rule.id == "shop_orders_cancelled_old":
+        from api.models.shop import OrderStatus
+
+        return (*base, model.status == OrderStatus.CANCELLED)  # type: ignore[attr-defined]
     return base
 
 
@@ -214,11 +246,15 @@ def archive_root() -> Path:
     return root
 
 
-def _archive_path_for(rule_id: str, batch_id: str, when: datetime) -> Path:
+def _archive_path_for(rule_id: str, when: datetime) -> tuple[Path, str]:
+    rule = RULES_BY_ID.get(rule_id)
+    if rule is None:
+        raise ValueError(f"未知規則：{rule_id}")
+    batch_id = uuid.uuid4().hex[:12]
     root = archive_root()
-    sub = root / f"{when.year:04d}" / f"{when.month:02d}" / rule_id
+    sub = root / f"{when.year:04d}" / f"{when.month:02d}" / rule.id
     sub.mkdir(parents=True, exist_ok=True)
-    return sub / f"{batch_id}.jsonl.gz"
+    return sub / f"{batch_id}.jsonl.gz", batch_id
 
 
 def list_archives() -> list[dict[str, Any]]:
@@ -244,14 +280,18 @@ def list_archives() -> list[dict[str, Any]]:
     return out
 
 
+def resolve_archive_file(relative_path: str) -> Path:
+    root = archive_root()
+    normalized = relative_path.replace("\\", "/")
+    for archive_file in root.rglob("*.jsonl.gz"):
+        if archive_file.relative_to(root).as_posix() == normalized and archive_file.is_file():
+            return archive_file
+    raise FileNotFoundError(relative_path)
+
+
 def read_archive(relative_path: str, limit: int = 100) -> list[dict[str, Any]]:
     """讀取 archive 檔案的前 N 行（含 metadata header）。UI 預覽用。"""
-    root = archive_root()
-    target = (root / relative_path).resolve()
-    if not str(target).startswith(str(root.resolve())):
-        raise ValueError("非法路徑")
-    if not target.exists():
-        raise FileNotFoundError(relative_path)
+    target = resolve_archive_file(relative_path)
     rows: list[dict[str, Any]] = []
     with gzip.open(target, "rt", encoding="utf-8") as fh:
         for i, line in enumerate(fh):
@@ -348,8 +388,7 @@ async def execute(
 
     fh = None
     if chosen_action in ("archive", "archive_then_purge") and matched_total > 0:
-        batch_id = uuid.uuid4().hex[:12]
-        archive_file = _archive_path_for(rule_id, batch_id, started)
+        archive_file, batch_id = _archive_path_for(rule_id, started)
         fh = gzip.open(archive_file, "wt", encoding="utf-8")  # noqa: SIM115 closed in finally
         header = {
             "_metadata": True,

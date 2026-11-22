@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -21,6 +21,44 @@ def _parse_json_list(raw: object) -> list[str]:
     except (json.JSONDecodeError, TypeError):
         return []
     return parsed if isinstance(parsed, list) else []
+
+
+def _parse_json_int_list(raw: object) -> list[int]:
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    return [value for value in parsed if type(value) is int] if isinstance(parsed, list) else []
+
+
+def _normalize_survey_grades(grades: list[int] | None) -> list[int] | None:
+    if grades is None:
+        return None
+    if any(grade not in (1, 2, 3) for grade in grades):
+        raise ValueError("年級只能選擇高一、高二或高三")
+    if len(set(grades)) != len(grades):
+        raise ValueError("年級不可重複選擇")
+    return sorted(grades)
+
+
+def _parse_json_nested_list(raw: object) -> list[list[str]]:
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    return (
+        [
+            [str(value) for value in values if isinstance(value, str)]
+            for values in parsed
+            if isinstance(values, list)
+        ]
+        if isinstance(parsed, list)
+        else []
+    )
 
 
 # ── 問題 ─────────────────────────────────────────────────────────────────────
@@ -100,9 +138,12 @@ class SurveyQuestionOut(BaseModel):
     survey_id: uuid.UUID
     order_index: int
     question_text: str
+    description: str | None = None
     question_type: QuestionType
     is_required: bool
     options: list[str] = Field(default_factory=list)
+    grid_columns: list[str] = Field(default_factory=list)
+    option_image_sets: list[list[str]] = Field(default_factory=list)
     min_value: int | None
     max_value: int | None
     placeholder: str | None
@@ -130,6 +171,7 @@ class SurveyQuestionOut(BaseModel):
             "survey_id",
             "order_index",
             "question_text",
+            "description",
             "question_type",
             "is_required",
             "min_value",
@@ -144,6 +186,10 @@ class SurveyQuestionOut(BaseModel):
         )
         result: dict[str, Any] = {f: getattr(data, f, None) for f in fields}
         result["options"] = _parse_json_list(getattr(data, "options_json", None))
+        result["grid_columns"] = _parse_json_list(getattr(data, "grid_columns_json", None))
+        result["option_image_sets"] = _parse_json_nested_list(
+            getattr(data, "option_image_sets_json", None)
+        )
         result["condition"] = _parse_condition(getattr(data, "condition_json", None))
         result["option_config"] = _parse_option_config(getattr(data, "option_config_json", None))
         return result
@@ -152,14 +198,19 @@ class SurveyQuestionOut(BaseModel):
 class SurveyQuestionCreate(BaseModel):
     # 純顯示區塊（圖片、分頁等）可不填文字，由 _require_text_for_questions 驗證。
     question_text: str = Field("", max_length=1000)
+    description: str | None = Field(None, max_length=2000)
     question_type: QuestionType = QuestionType.TEXT
     is_required: bool = True
     options: list[str] = Field(
         default_factory=list, description="選項（SINGLE/MULTIPLE/RANKING 題型）"
     )
-    # 評分題：起始/最大分數；排序題：最少/最多必選項數
-    min_value: int | None = Field(None, ge=1, le=100, description="評分起始值或排序最少項數")
-    max_value: int | None = Field(None, ge=1, le=100, description="評分最大值或排序最多項數")
+    grid_columns: list[str] = Field(default_factory=list, max_length=20)
+    option_image_sets: list[list[str]] = Field(
+        default_factory=list, description="各選項的預覽圖片 URL，與 options 依序對應"
+    )
+    # 評分題：起始/最大分數；排序題：最少/最多必選項數；多選題：最多可選項數
+    min_value: int | None = Field(None, ge=0, le=100, description="評分起始值或排序最少項數")
+    max_value: int | None = Field(None, ge=0, le=100, description="評分最大值或排序最多項數")
     placeholder: str | None = Field(None, max_length=300)
     image_url: str | None = Field(
         None, max_length=500, description="附加圖片（可與題目合併或單獨顯示）"
@@ -180,6 +231,16 @@ class SurveyQuestionCreate(BaseModel):
     def validate_options(cls, v: list[str], info) -> list[str]:  # type: ignore[misc]
         return [o.strip() for o in v if o.strip()]
 
+    @field_validator("grid_columns")
+    @classmethod
+    def validate_grid_columns(cls, v: list[str]) -> list[str]:
+        return [column.strip() for column in v if column.strip()]
+
+    @field_validator("option_image_sets")
+    @classmethod
+    def validate_option_image_sets(cls, v: list[list[str]]) -> list[list[str]]:
+        return [[image.strip() for image in images if image.strip()] for images in v]
+
     @field_validator("is_required")
     @classmethod
     def display_blocks_are_not_required(cls, v: bool, info) -> bool:  # type: ignore[misc]
@@ -194,6 +255,22 @@ class SurveyQuestionCreate(BaseModel):
             raise ValueError("題目文字不可為空")
         if self.question_type == QuestionType.IMAGE and not self.image_url:
             raise ValueError("圖片題型需提供圖片")
+        if self.question_type == QuestionType.SINGLE_GRID:
+            if len(self.options) < 2:
+                raise ValueError("單選方格至少需要 2 列")
+            if len(self.grid_columns) < 2:
+                raise ValueError("單選方格至少需要 2 欄")
+            if len(self.options) > 50:
+                raise ValueError("單選方格最多 50 列")
+            if len(set(self.options)) != len(self.options):
+                raise ValueError("單選方格列標籤不可重複")
+            if len(set(self.grid_columns)) != len(self.grid_columns):
+                raise ValueError("單選方格欄標籤不可重複")
+        if self.question_type == QuestionType.MULTI_TEXT:
+            if len(self.options) < 2 or len(self.options) > 20:
+                raise ValueError("多欄詳答需要設定 2 至 20 個欄位名稱")
+            if len(set(self.options)) != len(self.options):
+                raise ValueError("多欄詳答欄位名稱不可重複")
         if (
             self.min_length is not None
             and self.max_length is not None
@@ -206,21 +283,46 @@ class SurveyQuestionCreate(BaseModel):
             and self.min_value > self.max_value
         ):
             raise ValueError("起始值不可大於最大值")
+        if self.question_type == QuestionType.LINEAR_SCALE:
+            minimum = self.min_value if self.min_value is not None else 0
+            maximum = self.max_value if self.max_value is not None else 5
+            if minimum >= maximum:
+                raise ValueError("線性刻度的最高值必須大於起始值")
+        elif self.question_type == QuestionType.RATING:
+            if (
+                self.min_value is not None
+                and self.max_value is not None
+                and self.min_value > self.max_value
+            ):
+                raise ValueError("起始分數不可大於最高分數")
+        elif self.question_type in (QuestionType.RANKING, QuestionType.MULTIPLE):
+            if self.min_value == 0 or self.max_value == 0:
+                raise ValueError("排序或選項數量不可設定為 0")
         if self.question_type == QuestionType.RANKING:
             if len(self.options) < 2:
                 raise ValueError("排序題至少需要 2 個選項")
             ceiling = self.max_value if self.max_value is not None else len(self.options)
             if ceiling > len(self.options):
                 raise ValueError("排序最多項數不可大於選項總數")
+        if (
+            self.question_type == QuestionType.MULTIPLE
+            and self.max_value is not None
+            and self.max_value > len(self.options)
+        ):
+            raise ValueError("多選最多項數不可大於選項總數")
         return self
 
 
 class SurveyQuestionUpdate(BaseModel):
     question_text: str | None = Field(None, max_length=1000)
+    description: str | None = Field(None, max_length=2000)
+    question_type: QuestionType | None = None
     is_required: bool | None = None
     options: list[str] | None = None
-    min_value: int | None = Field(None, ge=1, le=100)
-    max_value: int | None = Field(None, ge=1, le=100)
+    grid_columns: list[str] | None = Field(None, max_length=20)
+    option_image_sets: list[list[str]] | None = None
+    min_value: int | None = Field(None, ge=0, le=100)
+    max_value: int | None = Field(None, ge=0, le=100)
     placeholder: str | None = None
     image_url: str | None = Field(None, max_length=500)
     min_length: int | None = Field(None, ge=0, le=10000)
@@ -231,6 +333,20 @@ class SurveyQuestionUpdate(BaseModel):
     condition: QuestionCondition | None = None
     option_config: OptionConfig | None = None
     order_index: int | None = Field(None, ge=0)
+
+    @field_validator("options")
+    @classmethod
+    def normalize_update_options(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return None
+        return [option.strip() for option in v if option.strip()]
+
+    @field_validator("grid_columns")
+    @classmethod
+    def normalize_update_grid_columns(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return None
+        return [column.strip() for column in v if column.strip()]
 
 
 class SurveyImageOut(BaseModel):
@@ -262,9 +378,15 @@ class SurveyOut(BaseModel):
     questions: list[SurveyQuestionOut] = []
     response_count: int = 0
     is_public: bool = False
+    is_listed: bool = True
     allowed_org_ids: list[str] = Field(default_factory=list)
     allowed_user_ids: list[str] = Field(default_factory=list)
     allowed_domains: list[str] = Field(default_factory=list)
+    allowed_grades: list[int] = Field(default_factory=list)
+    announcement: str | None = None
+    announcement_title: str | None = None
+    show_announcement_popup: bool = False
+    announcement_id: uuid.UUID | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -287,12 +409,18 @@ class SurveyOut(BaseModel):
             "updated_at",
             "questions",
             "is_public",
+            "is_listed",
+            "announcement",
+            "announcement_title",
+            "show_announcement_popup",
+            "announcement_id",
         )
         result: dict[str, Any] = {f: getattr(data, f, None) for f in plain}
         result["response_count"] = getattr(data, "response_count", 0) or 0
         result["allowed_org_ids"] = _parse_json_list(getattr(data, "allowed_org_ids_json", None))
         result["allowed_user_ids"] = _parse_json_list(getattr(data, "allowed_user_ids_json", None))
         result["allowed_domains"] = _parse_json_list(getattr(data, "allowed_domains_json", None))
+        result["allowed_grades"] = _parse_json_int_list(getattr(data, "allowed_grades_json", None))
         return result
 
 
@@ -313,12 +441,22 @@ class SurveyListItem(BaseModel):
 
 
 class SurveyAudience(BaseModel):
-    """填答對象設定（公開與否、限制名單）。"""
+    """填答與公開列表設定。"""
 
     is_public: bool = False
+    is_listed: bool = True
     allowed_org_ids: list[uuid.UUID] = Field(default_factory=list)
     allowed_user_ids: list[uuid.UUID] = Field(default_factory=list)
     allowed_domains: list[str] = Field(default_factory=list)
+    allowed_grades: list[int] = Field(
+        default_factory=list,
+        description="限填年級（1=高一、2=高二、3=高三）；空清單代表不限年級",
+    )
+
+    @field_validator("allowed_grades")
+    @classmethod
+    def validate_allowed_grades(cls, value: list[int]) -> list[int]:
+        return _normalize_survey_grades(value) or []
 
 
 class SurveyCreate(SurveyAudience):
@@ -330,6 +468,15 @@ class SurveyCreate(SurveyAudience):
     closes_at: datetime | None = None
     org_id: uuid.UUID
     activity_id: uuid.UUID | None = None
+    announcement: str | None = Field(None, max_length=3000)
+    announcement_title: str | None = Field(None, max_length=200)
+    show_announcement_popup: bool = False
+
+    @model_validator(mode="after")
+    def require_login_for_grade_restriction(self) -> SurveyCreate:
+        if self.is_public and self.allowed_grades:
+            raise ValueError("年級限制僅適用登入後填答，請先將填答方式設為「登入後填答」。")
+        return self
 
 
 class SurveyUpdate(BaseModel):
@@ -338,10 +485,20 @@ class SurveyUpdate(BaseModel):
     opens_at: datetime | None = None
     closes_at: datetime | None = None
     is_public: bool | None = None
+    is_listed: bool = True
     allowed_org_ids: list[uuid.UUID] | None = None
     allowed_user_ids: list[uuid.UUID] | None = None
     allowed_domains: list[str] | None = None
+    allowed_grades: list[int] | None = None
     activity_id: uuid.UUID | None = None
+    announcement: str | None = Field(None, max_length=3000)
+    announcement_title: str | None = Field(None, max_length=200)
+    show_announcement_popup: bool | None = None
+
+    @field_validator("allowed_grades")
+    @classmethod
+    def validate_allowed_grades(cls, value: list[int] | None) -> list[int] | None:
+        return _normalize_survey_grades(value)
 
 
 # ── 答案 ─────────────────────────────────────────────────────────────────────
@@ -350,7 +507,7 @@ class SurveyUpdate(BaseModel):
 class AnswerSubmit(BaseModel):
     question_id: uuid.UUID
     answer_text: str | None = Field(None, max_length=5000)
-    answer_options: list[str] = Field(default_factory=list)
+    answer_options: list[Annotated[str, Field(max_length=5000)]] = Field(default_factory=list)
     other_text: str | None = Field(
         None, max_length=2000, description="多選題勾選「其他」時的補充文字"
     )
@@ -401,17 +558,42 @@ class SurveyResponseOut(BaseModel):
 
 
 class SurveyResponseAdminItem(BaseModel):
-    """後台檢視用的單筆填答記錄（含填答者 email 與各題答案）。"""
+    """後台檢視用的單筆填答記錄（含填答者姓名、email 與各題答案）。"""
 
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     submitted_at: datetime
+    respondent_id: uuid.UUID | None = None
+    respondent_name: str | None = None
     respondent_email: str | None = None
     answers: list[SurveyAnswerOut] = []
 
+    @model_validator(mode="before")
+    @classmethod
+    def _from_orm(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            return data
+        respondent = getattr(data, "respondent", None)
+        return {
+            "id": getattr(data, "id", None),
+            "submitted_at": getattr(data, "submitted_at", None),
+            "respondent_id": getattr(data, "respondent_id", None),
+            "respondent_name": getattr(respondent, "display_name", None),
+            "respondent_email": getattr(data, "respondent_email", None),
+            "answers": getattr(data, "answers", []),
+        }
+
 
 # ── 統計（管理員用） ──────────────────────────────────────────────────────────
+
+
+class SurveyRespondentSummary(BaseModel):
+    """統計中顯示的非匿名填答者摘要。"""
+
+    user_id: uuid.UUID
+    display_name: str
+    email: str
 
 
 class QuestionStats(BaseModel):
@@ -421,6 +603,8 @@ class QuestionStats(BaseModel):
     total_responses: int
     # SINGLE / MULTIPLE：各選項票數
     option_counts: dict[str, int] = Field(default_factory=dict)
+    # SINGLE / MULTIPLE / RANKING：各選項的非匿名填答者
+    option_respondents: dict[str, list[SurveyRespondentSummary]] = Field(default_factory=dict)
     # TEXT / TEXTAREA：所有文字回答
     text_answers: list[str] = Field(default_factory=list)
     # RATING：平均分

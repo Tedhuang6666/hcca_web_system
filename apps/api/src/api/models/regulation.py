@@ -7,7 +7,18 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Enum,
+    FetchedValue,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    text,
+)
 from sqlalchemy.dialects.postgresql import TSVECTOR, UUID
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -82,6 +93,19 @@ class Regulation(Base, TimestampMixin):
         Index("ix_regulations_category", "category"),
         Index("ix_regulations_is_active", "is_active"),
         Index("ix_regulations_is_active_workflow", "is_active", "workflow_status"),
+        Index(
+            "ix_regulations_active_published_updated",
+            text("updated_at DESC"),
+            postgresql_where=text("is_active = TRUE AND published_at IS NOT NULL"),
+        ),
+        Index(
+            "ix_regulations_workflow_pub",
+            "workflow_status",
+            text("updated_at DESC"),
+            postgresql_where=text(
+                "workflow_status IN ('under_review', 'scheduled', 'council_approved')"
+            ),
+        ),
         # 全文搜尋 GIN 索引（PostgreSQL tsvector）
         Index("ix_regulations_search_vector", "search_vector", postgresql_using="gin"),
     )
@@ -169,6 +193,7 @@ class Regulation(Base, TimestampMixin):
         UUID(as_uuid=True),
         ForeignKey("documents.id", ondelete="SET NULL"),
         nullable=True,
+        index=True,
     )
     # 是否已廢止
     is_repealed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -190,8 +215,9 @@ class Regulation(Base, TimestampMixin):
         nullable=True,
         index=True,
     )
-    # 全文搜尋向量（由 trigger 自動更新）
-    search_vector: Mapped[str | None] = mapped_column(TSVECTOR(), nullable=True)
+    # 全文搜尋向量（由 trigger 自動更新，DB 端維護，ORM 唯讀）。
+    # FetchedValue：INSERT/UPDATE 不帶值，交給 DB；與 documents/announcements 一致。
+    search_vector: Mapped[str | None] = mapped_column(TSVECTOR(), FetchedValue(), nullable=True)
 
     org: Mapped[Org] = relationship("Org")
     published_document: Mapped[Document | None] = relationship(
@@ -264,12 +290,34 @@ class RegulationRevision(Base, TimestampMixin):
     # 相關決議連結（JSON 字串，以逗號分隔多個 URL）
     resolution_link: Mapped[str | None] = mapped_column(Text, nullable=True)
     amended_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # 日期精度：date / month / year / unknown；amended_at 仍保留可排序的標準化日期
+    amended_at_precision: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="date", server_default="date"
+    )
+    # 僅有年份時保留使用者輸入的原始年份（可為民國年或西元年）
+    amended_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     amended_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
 
     regulation: Mapped[Regulation] = relationship("Regulation", back_populates="revisions")
     amender: Mapped[User] = relationship("User")
+    published_document: Mapped[Document | None] = relationship(
+        "Document",
+        foreign_keys="Document.regulation_revision_id",
+        back_populates="regulation_revision",
+        uselist=False,
+    )
+
+    @property
+    def published_document_id(self) -> uuid.UUID | None:
+        document = self.__dict__.get("published_document")
+        return document.id if document is not None else None
+
+    @property
+    def published_document_summary(self) -> str | None:
+        document = self.__dict__.get("published_document")
+        return document.summary if document is not None else None
 
 
 # ── 結構化條文 ────────────────────────────────────────────────────────────────

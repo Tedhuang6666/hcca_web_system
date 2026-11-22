@@ -1,76 +1,79 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import Link from "next/link";
+import Link from "@/components/ui/IntentLink";
 import Image from "next/image";
 import { ArrowLeft, Search, WifiOff } from "lucide-react";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
-import { notificationsApi, tasksApi } from "@/lib/api";
-import type { NotificationItem, TaskItem } from "@/lib/api";
+import { authFetch } from "@/lib/api/core";
+import type { NotificationItem } from "@/lib/api/notifications";
+import { notificationsApi } from "@/lib/api/notifications";
+import type { TaskItem } from "@/lib/api/tasks";
+import { tasksApi } from "@/lib/api/tasks";
 import { apiUrl } from "@/lib/config";
 import { useWS } from "@/hooks/useWS";
 import { useLowDataMode } from "@/hooks/useLowDataMode";
-import { getBreadcrumbs, getCompactCrumbs, getPageTitle } from "@/lib/breadcrumb";
+import { useInboxCountsContext } from "@/contexts/InboxCountsContext";
+import { usePermissions } from "@/hooks/usePermissions";
+import { clearAuthCache } from "@/lib/auth-cache";
+import {
+  APP_HOME_CRUMB,
+  PUBLIC_HOME_CRUMB,
+  getBreadcrumbs,
+  getCompactCrumbs,
+  getPageTitle,
+} from "@/lib/breadcrumb";
 import type { Crumb } from "@/lib/breadcrumb";
+import { OPEN_COMMAND_MENU_EVENT } from "./CommandMenu";
 
 interface TopbarProps {
   onMenuClick?: () => void;
+  /** 側邊選單目前是否展開，供 aria-expanded 使用。 */
+  menuExpanded?: boolean;
 }
 
 function MobileBreadcrumb({ items, fallbackTitle }: { items: Crumb[]; fallbackTitle: string }) {
   const current = items[items.length - 1]?.label ?? fallbackTitle;
-  const ancestors = items.slice(0, -1);
+  // 起點（平台首頁／首頁）不重複顯示在手機標題前。
+  const candidate = items.length > 2 ? items[items.length - 2] : undefined;
+  const parent = candidate && candidate.label !== "…" ? candidate : undefined;
+  const showParent = parent !== undefined;
 
   return (
-    <div className="min-w-0 flex flex-col justify-center gap-0.5 overflow-hidden">
-      {ancestors.length > 0 && (
-        <nav
-          aria-label="上層路徑"
-          className="flex items-center gap-1 overflow-hidden text-[10px] leading-none">
-          {ancestors.map((item, i) => (
-            <span key={`${item.label}-${i}`} className="flex min-w-0 items-center gap-1">
-              {i > 0 && (
-                <svg
-                  width="9"
-                  height="9"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  className="flex-shrink-0"
-                  style={{ color: "var(--text-disabled)" }}
-                  aria-hidden="true">
-                  <polyline points="9 18 15 12 9 6" />
-                </svg>
-              )}
-              {item.href ? (
-                <Link
-                  href={item.href}
-                  className="block max-w-16 truncate transition-colors hover:opacity-80"
-                  style={{ color: "var(--text-disabled)", textDecoration: "none" }}>
-                  {item.label}
-                </Link>
-              ) : (
-                <span className="block max-w-16 truncate" style={{ color: "var(--text-disabled)" }}>
-                  {item.label}
-                </span>
-              )}
-            </span>
-          ))}
-        </nav>
+    <nav
+      aria-label="目前位置"
+      className="topbar-mobile-title-content min-w-0 overflow-hidden">
+      {showParent && (
+        <span className="topbar-mobile-parent max-w-[40%] truncate">
+          {parent?.label}
+        </span>
       )}
-      <h1
-        className="truncate text-sm leading-tight"
-        style={{ color: "var(--text-primary)", fontWeight: 650 }}>
+      {showParent && (
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          className="topbar-mobile-separator flex-shrink-0"
+          aria-hidden="true">
+          <polyline points="9 18 15 12 9 6" />
+        </svg>
+      )}
+      <span
+        aria-current="page"
+        className="min-w-0 truncate whitespace-nowrap text-[15px] font-semibold leading-tight"
+        style={{ color: "var(--text-primary)" }}>
         {current}
-      </h1>
-    </div>
+      </span>
+    </nav>
   );
 }
 
-export default function Topbar({ onMenuClick }: TopbarProps) {
+export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [userName, setUserName] = useState("");
@@ -80,18 +83,26 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showBell, setShowBell] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [previewNtfs, setPreviewNtfs] = useState<NotificationItem[]>([]);
   const [previewTasks, setPreviewTasks] = useState<TaskItem[]>([]);
-  const [taskCount, setTaskCount] = useState(0);
   const [userRoom, setUserRoom] = useState<string | null>(null);
   const lowDataMode = useLowDataMode();
+  const { taskCount, unreadCount, setTaskCount, setUnreadCount, refresh: refreshCounts } =
+    useInboxCountsContext();
+  const { isAdmin, permissions } = usePermissions();
+  const hasTaskAccess = isAdmin
+    || permissions.has("admin:all")
+    || Array.from(permissions).some(
+      (permission) => permission.startsWith("document:") || permission.startsWith("regulation:"),
+    );
+  const visibleTaskCount = hasTaskAccess ? taskCount : 0;
   const menuRef = useRef<HTMLDivElement>(null);
   const bellRef = useRef<HTMLDivElement>(null);
 
-  const crumbs = useMemo(() => getBreadcrumbs(pathname), [pathname]);
+  const crumbRoot = isLoggedIn ? APP_HOME_CRUMB : PUBLIC_HOME_CRUMB;
+  const crumbs = useMemo(() => getBreadcrumbs(pathname, crumbRoot), [crumbRoot, pathname]);
   const compactCrumbs = useMemo(() => getCompactCrumbs(crumbs), [crumbs]);
-  const pageTitle = useMemo(() => getPageTitle(pathname), [pathname]);
+  const pageTitle = useMemo(() => getPageTitle(pathname, crumbRoot), [crumbRoot, pathname]);
   const parentHref = crumbs.length >= 2 ? crumbs[crumbs.length - 2]?.href : undefined;
   const showBack = crumbs.length > 2;  // 至少有 首頁 / X / Y 時才顯示
 
@@ -102,7 +113,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
     setUserName(localStorage.getItem("user_name") ?? "");
     setUserEmail(localStorage.getItem("user_email") ?? "");
     setUserAvatar(localStorage.getItem("user_avatar"));
-    setIsSuperuser(localStorage.getItem("is_superuser") === "true");
+    setIsSuperuser(sessionStorage.getItem("is_superuser") === "true");
   }, []);
 
   useEffect(() => {
@@ -118,37 +129,22 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
     return () => document.removeEventListener("mousedown", handle);
   }, [showMenu, showBell]);
 
-  const fetchCounts = useCallback(async () => {
-    try {
-      const { unread } = await notificationsApi.count();
-      setUnreadCount(unread);
-    } catch { /* ignore */ }
-    try {
-      const inbox = await tasksApi.list();
-      setTaskCount(inbox.total);
-    } catch { /* ignore */ }
-  }, []);
-
-  // 通知 + 待辦輪詢
-  useEffect(() => {
-    if (!userRoom) return;
-    fetchCounts();
-    const timer = setInterval(fetchCounts, lowDataMode ? 300_000 : 60_000);
-    return () => clearInterval(timer);
-  }, [fetchCounts, lowDataMode, userRoom]);
-
   useWS(
     userRoom,
     useCallback((msg) => {
+      if (msg.type === "inbox.changed") {
+        refreshCounts();
+        return;
+      }
       if (msg.type !== "notification.created") return;
       const unread = typeof msg.unread === "number" ? msg.unread : null;
       if (unread !== null) setUnreadCount(unread);
-      else void fetchCounts();
+      refreshCounts();
       if (msg.notification && typeof msg.notification === "object") {
         setPreviewNtfs((items) => [msg.notification as NotificationItem, ...items].slice(0, 5));
       }
-    }, [fetchCounts]),
-    !lowDataMode,
+    }, [refreshCounts, setUnreadCount]),
+    Boolean(userRoom) && !lowDataMode,
   );
 
   const openBell = async () => {
@@ -157,12 +153,17 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
       try {
         const [items, inbox] = await Promise.all([
           notificationsApi.list(false, 5),
-          tasksApi.list().catch(() => ({ items: [] as TaskItem[], total: 0, by_module: {} })),
+          hasTaskAccess
+            ? tasksApi.list().catch(() => ({ items: [] as TaskItem[], total: 0, by_module: {} }))
+            : Promise.resolve({ items: [] as TaskItem[], total: 0, by_module: {} }),
         ]);
         setPreviewNtfs(items);
         setPreviewTasks(inbox.items.slice(0, 5));
         setTaskCount(inbox.total);
-      } catch { /* ignore */ }
+      } catch {
+        setPreviewNtfs([]);
+        setPreviewTasks([]);
+      }
     }
   };
 
@@ -188,12 +189,12 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
 
   const handleLogout = async () => {
     try {
-      await fetch(apiUrl("/auth/logout"), {
+      await authFetch(apiUrl("/auth/logout"), {
         method: "POST",
         credentials: "include",
       });
     } catch { /* ignore */ }
-    localStorage.clear();
+    clearAuthCache();
     router.replace("/login");
   };
 
@@ -201,7 +202,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
 
   return (
     <header
-      className="flex items-center justify-between px-4 md:px-5 flex-shrink-0 gap-2"
+      className="topbar-header flex items-center justify-between px-4 md:px-5 flex-shrink-0 gap-2"
       style={{
         height: "56px",
         background: "var(--topbar-bg)",
@@ -216,11 +217,12 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
       role="banner">
 
       {/* 左側：選單 + 返回 + 麵包屑/標題 */}
-      <div className="flex items-center gap-2 min-w-0 flex-1">
+      <div className="topbar-leading flex items-center gap-2 min-w-0 flex-1">
         <button
           onClick={onMenuClick}
-          className="topbar-icon-btn md:hidden"
-          aria-label="開啟側邊選單">
+          className="topbar-icon-btn"
+          aria-label="切換側邊選單"
+          aria-expanded={menuExpanded}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             strokeWidth="2" strokeLinecap="round" aria-hidden="true">
             <line x1="3" y1="6"  x2="21" y2="6" />
@@ -240,47 +242,49 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
         )}
 
         {/* 桌面：完整麵包屑 */}
-        <div className="hidden md:block min-w-0 flex-1">
+        <div className="hidden lg:block min-w-0 flex-1">
           <Breadcrumb items={crumbs} />
         </div>
 
         {/* 行動裝置：上層小字、當前頁突出顯示 */}
-        <div className="md:hidden min-w-0 flex-1">
+        <div className="topbar-mobile-title lg:hidden min-w-0 flex-1">
           <MobileBreadcrumb items={compactCrumbs} fallbackTitle={pageTitle} />
         </div>
       </div>
 
       {/* 右側：搜尋 + 通知 + 主題 + 使用者 */}
-      <div className="flex items-center gap-1.5">
+      <div className="topbar-actions flex items-center gap-1.5">
         {isLoggedIn && (
-          <Link
-            href="/search"
-            className="topbar-icon-btn"
-            aria-label="全域搜尋"
-            title="全域搜尋"
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event(OPEN_COMMAND_MENU_EVENT))}
+            className="topbar-icon-btn topbar-search-action"
+            aria-label="搜尋或執行操作"
+            title="搜尋或執行操作（Ctrl K）"
           >
             <Search size={15} aria-hidden={true} />
-          </Link>
+          </button>
         )}
         {isLoggedIn && (
         <div className="relative" ref={bellRef}>
           <button
             onClick={openBell}
-            className="topbar-icon-btn relative"
-            aria-label={`通知與待辦${(unreadCount + taskCount) > 0 ? `（${unreadCount} 則未讀通知、${taskCount} 件待辦）` : ""}`}
+            className="topbar-icon-btn topbar-notification-trigger relative"
+            aria-label={`通知與待辦${(unreadCount + visibleTaskCount) > 0 ? `（${unreadCount} 則未讀通知、${visibleTaskCount} 件待辦）` : ""}`}
             aria-expanded={showBell}
             aria-haspopup="true">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            <svg className="topbar-bell-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
               <path d="M13.73 21a2 2 0 0 1-3.46 0" />
             </svg>
-            {(unreadCount + taskCount) > 0 && (
+            {(unreadCount + visibleTaskCount) > 0 && (
               <span
-                className="absolute -top-1 -right-1 min-w-[1rem] h-4 rounded-full flex items-center justify-center text-[10px] font-bold px-1"
+                key={unreadCount + visibleTaskCount}
+                className="notification-badge absolute -top-1 -right-1 min-w-[1rem] h-4 rounded-full flex items-center justify-center text-[10px] font-bold px-1"
                 style={{ background: "var(--danger)", color: "#fff" }}
                 aria-hidden="true">
-                {(unreadCount + taskCount) > 99 ? "99+" : (unreadCount + taskCount)}
+                {(unreadCount + visibleTaskCount) > 99 ? "99+" : (unreadCount + visibleTaskCount)}
               </span>
             )}
           </button>
@@ -289,28 +293,29 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
             <div
               role="dialog"
               aria-label="通知預覽"
-              className="absolute right-0 top-full mt-1.5 w-72 max-w-[calc(100vw-1rem)] rounded-xl z-50 animate-scale-in overflow-hidden"
+              className="motion-popover absolute right-0 top-full mt-1.5 w-72 max-w-[calc(100vw-1rem)] rounded-xl z-50 overflow-hidden"
               style={{
                 background: "var(--bg-elevated)",
                 border: "1px solid var(--border-strong)",
                 boxShadow: "var(--shadow-xl)",
               }}>
+              {hasTaskAccess && <>
               {/* 待辦區 */}
               <div className="px-4 py-2.5 flex items-center justify-between"
                 style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-hover)" }}>
                 <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
                   待辦中心
                 </p>
-                {taskCount > 0 && (
-                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+                {visibleTaskCount > 0 && (
+                  <span className="text-xs font-medium px-1.5 py-0.5 rounded-full"
                     style={{ background: "var(--warning)", color: "#fff" }}>
-                    {taskCount > 99 ? "99+" : taskCount}
+                    {visibleTaskCount > 99 ? "99+" : visibleTaskCount}
                   </span>
                 )}
               </div>
               <div className="max-h-44 overflow-y-auto">
                 {previewTasks.length === 0 ? (
-                  <p className="text-[11px] text-center py-4" style={{ color: "var(--text-muted)" }}>
+                  <p className="text-xs text-center py-4" style={{ color: "var(--text-muted)" }}>
                     目前沒有待辦
                   </p>
                 ) : (
@@ -320,7 +325,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
                       <Link
                         href={t.href}
                         onClick={() => setShowBell(false)}
-                        className="flex items-start gap-2 px-4 py-2.5 transition-colors"
+                        className="motion-notification-row flex items-start gap-2 px-4 py-2.5 transition-colors"
                         style={{ textDecoration: "none", display: "flex" }}
                         onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-hover)")}
                         onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
@@ -337,7 +342,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
                             {t.title}
                           </p>
                           {t.subtitle && (
-                            <p className="text-[10px] truncate mt-0.5"
+                            <p className="text-xs truncate mt-0.5"
                               style={{ color: "var(--text-muted)" }}>
                               {t.subtitle}
                             </p>
@@ -349,14 +354,15 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
                 )}
               </div>
               <Link href="/tasks" onClick={() => setShowBell(false)}
-                className="block px-4 py-2 text-center text-[11px] font-medium"
+                className="block px-4 py-2 text-center text-xs font-medium"
                 style={{
-                  color: "var(--primary)",
+                  color: "var(--primary-text)",
                   textDecoration: "none",
                   borderBottom: "1px solid var(--border)",
                 }}>
                 查看全部待辦 →
               </Link>
+              </>}
 
               {/* 通知區 */}
               <div className="px-4 py-2.5 flex items-center justify-between"
@@ -366,7 +372,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
                 </p>
                 <div className="flex items-center gap-2">
                   {unreadCount > 0 && (
-                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+                    <span className="text-xs font-medium px-1.5 py-0.5 rounded-full"
                       style={{ background: "var(--danger)", color: "#fff" }}>
                       {unreadCount > 99 ? "99+" : unreadCount}
                     </span>
@@ -375,15 +381,15 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
                     type="button"
                     onClick={handleMarkAllRead}
                     disabled={unreadCount === 0}
-                    className="text-[11px] font-medium disabled:opacity-40"
-                    style={{ color: "var(--primary)" }}>
+                    className="text-xs font-medium disabled:opacity-40"
+                    style={{ color: "var(--primary-text)" }}>
                     全數已讀
                   </button>
                 </div>
               </div>
               <div className="max-h-44 overflow-y-auto">
                 {previewNtfs.length === 0 ? (
-                  <p className="text-[11px] text-center py-4" style={{ color: "var(--text-muted)" }}>
+                  <p className="text-xs text-center py-4" style={{ color: "var(--text-muted)" }}>
                     目前沒有通知
                   </p>
                 ) : (
@@ -393,12 +399,12 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
                       <Link
                         href={n.link ?? "/"}
                         onClick={() => setShowBell(false)}
-                        className="flex items-start gap-2 px-4 py-2.5 transition-colors"
+                        className="motion-notification-row flex items-start gap-2 px-4 py-2.5 transition-colors"
                         style={{ textDecoration: "none", display: "flex" }}
                         onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-hover)")}
                         onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
                         {!n.is_read && (
-                          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5"
+                          <span className="notification-unread-dot w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5"
                             style={{ background: "var(--primary)" }} aria-hidden="true" />
                         )}
                         <div className={`flex-1 min-w-0 ${n.is_read ? "pl-3" : ""}`}>
@@ -406,7 +412,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
                             style={{ color: "var(--text-primary)" }}>
                             {n.title}
                           </p>
-                          <p className="text-[10px] mt-0.5"
+                          <p className="text-xs mt-0.5"
                             style={{ color: "var(--text-disabled)" }}>
                             {new Date(n.created_at).toLocaleDateString("zh-TW")}
                           </p>
@@ -418,8 +424,8 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
               </div>
               <div className="px-4 py-2" style={{ borderTop: "1px solid var(--border)" }}>
                 <Link href="/notifications" onClick={() => setShowBell(false)}
-                  className="block text-center text-[11px] font-medium"
-                  style={{ color: "var(--primary)", textDecoration: "none" }}>
+                  className="block text-center text-xs font-medium"
+                  style={{ color: "var(--primary-text)", textDecoration: "none" }}>
                   查看全部通知 →
                 </Link>
               </div>
@@ -428,12 +434,14 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
         </div>
         )}
 
-        <ThemeToggle />
+        <div className="topbar-theme-action">
+          <ThemeToggle />
+        </div>
 
-        <div className="w-px h-4 mx-1" style={{ background: "var(--border)" }} aria-hidden="true" />
+        <div className="topbar-divider w-px h-4 mx-1" style={{ background: "var(--border)" }} aria-hidden="true" />
 
         {isLoggedIn ? (
-          <div className="relative" ref={menuRef}>
+          <div className="topbar-user-menu relative" ref={menuRef}>
             <button
               onClick={() => setShowMenu((p) => !p)}
               className="flex items-center gap-2 h-9 px-2 rounded-lg transition-colors cursor-pointer"
@@ -457,10 +465,10 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
                 />
               ) : (
                 <div
-                  className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-semibold flex-shrink-0"
+                  className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0"
                   style={{
                     background: "linear-gradient(135deg, rgba(201,168,76,0.18) 0%, rgba(201,168,76,0.08) 100%)",
-                    color: "var(--primary)",
+                    color: "var(--primary-text)",
                     border: "1.5px solid rgba(201,168,76,0.35)",
                   }}
                   aria-hidden="true">
@@ -475,9 +483,9 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
 
               {isSuperuser && (
                 <span
-                  className="hidden sm:block text-[10px] px-1.5 py-0.5 rounded-sm font-medium leading-none"
+                  className="hidden sm:block text-xs px-1.5 py-0.5 rounded-sm font-medium leading-none"
                   style={{
-                    background: "rgba(245,158,11,0.12)",
+                    background: "var(--warning-dim)",
                     color: "var(--warning)",
                     border: "1px solid var(--warning-border)",
                   }}>
@@ -500,7 +508,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
             {showMenu && (
               <div
                 role="menu"
-                className="absolute right-0 top-full mt-1.5 w-52 max-w-[calc(100vw-1rem)] rounded-xl z-50 animate-scale-in overflow-hidden"
+                className="motion-popover absolute right-0 top-full mt-1.5 w-52 max-w-[calc(100vw-1rem)] rounded-xl z-50 overflow-hidden"
                 style={{
                   background: "var(--bg-elevated)",
                   border: "1px solid var(--border-strong)",
@@ -517,7 +525,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
 
                 <div className="py-1" role="none">
                   <Link
-                    href="/profile"
+                    href="/settings/account"
                     role="menuitem"
                     onClick={() => setShowMenu(false)}
                     className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-2.5 transition-colors cursor-pointer"
@@ -529,7 +537,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
                       <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                       <circle cx="12" cy="7" r="4" />
                     </svg>
-                    個人資料
+                    帳號與個人資料
                   </Link>
                   <Link
                     href="/settings/notifications"
@@ -597,7 +605,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
         ) : (
           <Link
             href="/login"
-            className="flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-medium transition-colors"
+            className="topbar-login-action flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-medium transition-colors"
             style={{
               background: "var(--primary-dim)",
               color: "var(--primary-text)",

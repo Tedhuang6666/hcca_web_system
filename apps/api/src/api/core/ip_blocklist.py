@@ -17,19 +17,22 @@ from redis.exceptions import RedisError
 
 from api.core.defense import is_ip_allowed, is_ip_blocked
 from api.core.security import redis_client
+from api.core.trust import is_trusted_ip
 
 logger = logging.getLogger(__name__)
 
 BLOCKLIST_KEY = "ip:blocklist"
 _LOCAL_CACHE_TTL = 5.0
+_DETAIL_CACHE_TTL = 5.0
 
 _cache: dict[str, tuple[float, bool]] = {}
+_detail_cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
 _cache_lock = asyncio.Lock()
 
 
 async def is_blocked(ip: str) -> bool:
     """檢查 IP 是否在黑名單；用本地快取攤平 Redis 壓力。"""
-    if await is_ip_allowed(ip):
+    if is_trusted_ip(ip) or await is_ip_allowed(ip):
         _cache[ip] = (time.monotonic() + _LOCAL_CACHE_TTL, False)
         return False
 
@@ -41,7 +44,11 @@ async def is_blocked(ip: str) -> bool:
     try:
         raw = await asyncio.wait_for(redis_client.hget(BLOCKLIST_KEY, ip), timeout=0.8)
     except (RedisError, TimeoutError):
-        return False  # Redis 異常時不擋（避免誤殺）
+        # defense projection 會在 Redis 寫入失敗時保留短期 process cache；
+        # fallback 到它，避免管理者剛發布的 block 因 Redis 短暫中斷直接失效。
+        blocked = await is_ip_blocked(ip)
+        _cache[ip] = (now + _LOCAL_CACHE_TTL, blocked)
+        return blocked
 
     blocked = False
     if raw:
@@ -64,6 +71,34 @@ async def is_blocked(ip: str) -> bool:
     return blocked
 
 
+async def get_block(ip: str) -> dict[str, Any] | None:
+    if is_trusted_ip(ip) or await is_ip_allowed(ip):
+        return None
+    now = time.monotonic()
+    cached = _detail_cache.get(ip)
+    if cached and cached[0] > now:
+        return cached[1]
+
+    result: dict[str, Any] | None = None
+    try:
+        raw = await asyncio.wait_for(redis_client.hget(BLOCKLIST_KEY, ip), timeout=0.8)
+    except (RedisError, TimeoutError):
+        raw = None
+    if raw:
+        try:
+            data = json.loads(raw)
+            if data.get("expires_at") is None or data["expires_at"] > time.time():
+                result = {"target": ip, "rule_type": "ip_block", **data}
+        except (json.JSONDecodeError, TypeError, KeyError):
+            result = {"target": ip, "rule_type": "ip_block", "reason": "", "expires_at": None}
+    if result is None:
+        from api.core.defense import find_ip_block
+
+        result = await find_ip_block(ip)
+    _detail_cache[ip] = (now + _DETAIL_CACHE_TTL, result)
+    return result
+
+
 async def block(ip: str, *, reason: str = "", ttl_seconds: int | None = 3600) -> None:
     """加入黑名單；ttl_seconds=None 代表永久。"""
     expires_at = (time.time() + ttl_seconds) if ttl_seconds else None
@@ -76,6 +111,7 @@ async def block(ip: str, *, reason: str = "", ttl_seconds: int | None = 3600) ->
         return
     # 清本地快取讓下個 request 立即看到
     _cache.pop(ip, None)
+    _detail_cache.pop(ip, None)
 
 
 async def unblock(ip: str) -> bool:
@@ -84,6 +120,7 @@ async def unblock(ip: str) -> bool:
     except RedisError:
         return False
     _cache.pop(ip, None)
+    _detail_cache.pop(ip, None)
     return bool(removed)
 
 
@@ -110,3 +147,4 @@ async def list_blocked() -> list[dict[str, Any]]:
 def clear_cache() -> None:
     """測試用：清本地快取。"""
     _cache.clear()
+    _detail_cache.clear()

@@ -1,0 +1,225 @@
+"use client";
+import { useState } from "react";
+import Link from "next/link";
+import { ApiError } from "@/lib/api";
+import { surveysApi } from "@/lib/api/surveys";
+import { useFetch } from "@/hooks/useFetch";
+import type { SurveyListItem, SurveyStatus } from "@/lib/types";
+import { usePermissions } from "@/hooks/usePermissions";
+import { usePersistedState } from "@/hooks/usePersistedState";
+import { ListPageSkeleton } from "@/components/ui/Skeleton";
+import SmartEmptyState from "@/components/ui/SmartEmptyState";
+
+const STATUS_CFG: Record<SurveyStatus, { label: string; color: string; bg: string }> = {
+  draft:    { label: "草稿",    color: "var(--text-muted)", bg: "var(--bg-elevated)" },
+  open:     { label: "開放中",  color: "var(--success)",    bg: "var(--success-dim)" },
+  closed:   { label: "已截止",  color: "var(--warning)",    bg: "var(--warning-dim)" },
+  archived: { label: "封存",    color: "var(--text-muted)", bg: "var(--bg-elevated)" },
+};
+
+const SURVEY_SORT = [
+  { key: "newest", label: "最新建立" },
+  { key: "oldest", label: "最早建立" },
+  { key: "responses", label: "回應數多→少" },
+  { key: "closing", label: "截止最近" },
+];
+
+export default function SurveysClient({
+  initialSurveys = [],
+  initialFailureStatus = null,
+}: {
+  initialSurveys?: SurveyListItem[];
+  initialFailureStatus?: number | null;
+}) {
+  const [tab, setTab] = usePersistedState<"open" | "all">("hcca:pref:surveys:tab:v1", "open");
+  const [search, setSearch] = useState("");
+  const [sortKey, setSortKey] = usePersistedState<string>("hcca:pref:surveys:sort:v1", "newest");
+  const [reloadVersion, setReloadVersion] = useState(0);
+  const [serviceError, setServiceError] = useState<"closed" | "unavailable" | null>(
+    initialFailureStatus === 503 ? "closed" : initialFailureStatus === null ? null : "unavailable",
+  );
+  const { can } = usePermissions();
+  const canManage = can("survey:manage");
+
+  // 未登入者改用公開問卷列表（僅公開顯示且開放/已截止的問卷）
+  const [surveys, loading] = useFetch(
+    () => {
+      const params = tab === "open" ? { status: "open" } : {};
+      const isLoggedIn = typeof window !== "undefined" && !!localStorage.getItem("user_id");
+      const request = isLoggedIn
+        ? surveysApi.list(params)
+        : surveysApi.listPublic(tab === "open" ? { status: "open" } : undefined);
+      return request
+        .then((items) => {
+          setServiceError(null);
+          return items;
+        })
+        .catch((error) => {
+          setServiceError(error instanceof ApiError && error.status === 503 ? "closed" : "unavailable");
+          throw error;
+        });
+    },
+    [tab, reloadVersion],
+    "載入失敗",
+    initialSurveys,
+    "surveys/list",
+  );
+
+  const displayed = surveys
+    .filter(s => !search.trim() || s.title.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      if (sortKey === "oldest")    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      if (sortKey === "responses") return b.response_count - a.response_count;
+      if (sortKey === "closing")   return (a.closes_at ?? "9999").localeCompare(b.closes_at ?? "9999");
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime(); // newest
+    });
+
+  return (
+    <div className="space-y-5 max-w-4xl mx-auto">
+      {/* 頁首 */}
+      <div className="workspace-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>問卷</h1>
+        </div>
+        {canManage && (
+          <Link href="/surveys/new" className="btn btn-primary self-start sm:self-auto">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            新增問卷
+          </Link>
+        )}
+      </div>
+
+      {/* 搜尋 + 排序 + 分頁 */}
+      <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-end">
+        <div className="relative w-full min-w-0 flex-1">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+            width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2" strokeLinecap="round" style={{ color: "var(--text-muted)" }} aria-hidden="true">
+            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            type="search"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="搜尋問卷標題…"
+            className="input w-full"
+            style={{ paddingLeft: "2.25rem" }}
+            aria-label="搜尋問卷" />
+        </div>
+        <div className="w-full shrink-0 md:w-36">
+          <select
+            value={sortKey}
+            onChange={e => setSortKey(e.target.value)}
+            className="input w-full"
+            aria-label="排序方式"
+            style={{ cursor: "pointer" }}>
+            {SURVEY_SORT.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+          </select>
+        </div>
+        <div className="flex w-full gap-1 rounded-xl p-1 md:w-auto md:shrink-0" style={{ background: "var(--bg-elevated)" }}>
+          {(["open", "all"] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className="flex min-h-11 flex-1 items-center justify-center rounded-lg px-3 py-1.5 text-sm font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] md:flex-none"
+              style={tab === t
+                ? { background: "var(--bg-surface)", color: "var(--text-primary)", boxShadow: "var(--shadow-sm)" }
+                : { color: "var(--text-muted)" }}>
+              {t === "open" ? "開放中" : "全部"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 問卷列表 */}
+      {serviceError ? (
+        <section className="card space-y-3 p-6 text-center" role="alert" aria-live="assertive">
+          <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+            {serviceError === "closed" ? "問卷服務目前關閉或維護中" : "暫時無法載入問卷"}
+          </h2>
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+            {serviceError === "closed"
+              ? "系統暫時不能提供問卷資料，請稍後再試。"
+              : "連線恢復後請重新載入。"}
+          </p>
+          <div>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                setServiceError(null);
+                setReloadVersion((version) => version + 1);
+              }}
+            >
+              重新載入
+            </button>
+          </div>
+        </section>
+      ) : loading ? (
+        <ListPageSkeleton rows={5} showHeader={false} showFilters={false} />
+      ) : displayed.length === 0 ? (
+        <SmartEmptyState
+          reason={search ? "filtered" : (canManage ? "new" : "none")}
+          subject="問卷"
+          createHref="/surveys/new"
+          createPerm={can("survey:manage") ? "survey:manage" : undefined}
+          onClearFilters={() => setSearch("")}
+          message={!search && tab === "open" ? "目前沒有開放填答的問卷" : undefined}
+        />
+      ) : (
+        <div
+          key={`${tab}:${sortKey}:${search}`}
+          className="survey-list-results space-y-3"
+        >
+          {displayed.map((survey) => {
+            const cfg = STATUS_CFG[survey.status];
+            const isOpen = survey.status === "open";
+            return (
+              <Link
+                key={survey.id}
+                href={`/surveys/${encodeURIComponent(survey.title)}`}
+                className="survey-list-card card card-hover flex items-center gap-4 px-5 py-4"
+                style={{ textDecoration: "none" }}>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>
+                      {survey.title}
+                    </h3>
+                    {survey.is_anonymous && (
+                      <span className="text-xs px-1.5 py-0.5 rounded"
+                        style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
+                        匿名
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+                    {survey.response_count} 份回應
+                    {survey.closes_at && ` · 截止 ${new Date(survey.closes_at).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" })}`}
+                  </p>
+                </div>
+
+                <span
+                  className="badge flex-shrink-0"
+                  style={{ color: cfg.color, background: cfg.bg, borderColor: cfg.color }}>
+                  {cfg.label}
+                </span>
+
+                <span className="survey-list-card-route" aria-hidden="true">
+                  {isOpen ? "填答" : "查看"}
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="2" strokeLinecap="round">
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}

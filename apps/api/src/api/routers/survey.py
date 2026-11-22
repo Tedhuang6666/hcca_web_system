@@ -9,9 +9,12 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from api.core.cache import cache_invalidate, cache_invalidate_dashboard
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.core.posthog import get_posthog_client
@@ -20,6 +23,7 @@ from api.dependencies.permissions import require_permission
 from api.email.sender import send_branded_email
 from api.models.survey import Survey, SurveyQuestion, SurveyResponse, SurveyStatus
 from api.models.user import User
+from api.routers._common import or_404
 from api.schemas.survey import (
     SurveyCreate,
     SurveyImageOut,
@@ -51,9 +55,7 @@ OptionalUser = Annotated[User | None, Depends(get_optional_user)]
 
 async def _survey_or_404(survey_id: uuid.UUID | str, session: DbDep) -> Survey:
     s = await survey_svc.get_survey_by_identifier(session, survey_id)
-    if s is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此問卷")
-    return s
+    return or_404(s, "找不到此問卷")
 
 
 async def _question_or_404(question_id: uuid.UUID, session: DbDep) -> SurveyQuestion:
@@ -61,9 +63,7 @@ async def _question_or_404(question_id: uuid.UUID, session: DbDep) -> SurveyQues
 
     result = await session.execute(select(SurveyQuestion).where(SurveyQuestion.id == question_id))
     q = result.scalar_one_or_none()
-    if q is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此題目")
-    return q
+    return or_404(q, "找不到此題目")
 
 
 async def _has_survey_manage(session: AsyncSession, user: User) -> bool:
@@ -75,14 +75,37 @@ async def _has_survey_manage(session: AsyncSession, user: User) -> bool:
     return str(PermissionCode.SURVEY_MANAGE) in codes or str(PermissionCode.ADMIN_ALL) in codes
 
 
+async def _can_manage_survey(
+    session: AsyncSession, user: User, activity_id: uuid.UUID | None
+) -> bool:
+    if await _has_survey_manage(session, user):
+        return True
+    return await activity_svc.can_manage_activity_resource(session, user, activity_id)
+
+
 async def _require_survey_manager(
     session: AsyncSession, user: User, activity_id: uuid.UUID | None
 ) -> None:
-    if await _has_survey_manage(session, user):
-        return
-    if await activity_svc.can_manage_activity_resource(session, user, activity_id):
+    if await _can_manage_survey(session, user, activity_id):
         return
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="需要權限：survey:manage")
+
+
+async def _response_with_answers(session: AsyncSession, response_id: uuid.UUID) -> SurveyResponse:
+    result = await session.execute(
+        select(SurveyResponse)
+        .options(selectinload(SurveyResponse.answers))
+        .where(SurveyResponse.id == response_id)
+    )
+    return result.scalar_one()
+
+
+async def _invalidate_response_caches(user: User | None) -> None:
+    if user is None:
+        return
+    user_id = str(user.id)
+    await cache_invalidate_dashboard(user_id)
+    await cache_invalidate(f"task_count:{user_id}")
 
 
 # ── 圖片上傳 ──────────────────────────────────────────────────────────────────
@@ -114,13 +137,23 @@ async def upload_survey_image(file: UploadFile = File(...)) -> SurveyImageOut:
 @router.get("", response_model=list[SurveyListItem], summary="列出問卷")
 async def list_surveys(
     session: DbDep,
-    _: CurrentUser,
+    user: CurrentUser,
     org_id: uuid.UUID | None = Query(None),
     activity_id: uuid.UUID | None = Query(None),
     status_filter: SurveyStatus | None = Query(None, alias="status"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ) -> list[Survey]:
+    if not await _has_survey_manage(session, user):
+        return await survey_svc.list_respondable_surveys(
+            session,
+            user,
+            org_id=org_id,
+            activity_id=activity_id,
+            status=status_filter,
+            limit=limit,
+            offset=offset,
+        )
     return await survey_svc.list_surveys(
         session,
         org_id=org_id,
@@ -142,7 +175,7 @@ async def list_public_surveys(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ) -> list[Survey]:
-    """列出公開問卷（僅 is_public 且開放/已截止）；草稿與封存不會出現。"""
+    """列出已開放且允許匿名填答、並設為公開顯示的問卷。"""
     if status_filter not in (None, SurveyStatus.OPEN, SurveyStatus.CLOSED):
         status_filter = None
     return await survey_svc.list_surveys(
@@ -151,15 +184,33 @@ async def list_public_surveys(
 
 
 @router.get("/{survey_id}", response_model=SurveyOut, summary="取得問卷詳細（含題目）")
-async def get_survey(survey_id: str, session: DbDep, _: CurrentUser) -> Survey:
-    return await _survey_or_404(survey_id, session)
+async def get_survey(survey_id: str, session: DbDep, user: CurrentUser) -> Survey:
+    survey = await _survey_or_404(survey_id, session)
+    if not await _can_manage_survey(session, user, survey.activity_id):
+        try:
+            await survey_svc.check_survey_access(session, survey, user)
+        except PermissionError as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    return survey
 
 
 @router.get("/public/{survey_id}", response_model=SurveyOut, summary="公開取得開放問卷（未登入）")
 async def get_public_survey(survey_id: str, session: DbDep) -> Survey:
     survey = await _survey_or_404(survey_id, session)
-    if not survey.is_public or survey.status not in (SurveyStatus.OPEN, SurveyStatus.CLOSED):
+    if survey.status not in (SurveyStatus.OPEN, SurveyStatus.CLOSED):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此問卷")
+    if not survey.is_listed:
+        try:
+            is_link_id = uuid.UUID(survey_id) == survey.id
+        except ValueError:
+            is_link_id = False
+        if not is_link_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此問卷")
+    if not survey.is_public:
+        try:
+            await survey_svc.check_survey_access(session, survey, None)
+        except PermissionError as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     return survey
 
 
@@ -187,6 +238,9 @@ async def create_survey(payload: SurveyCreate, session: DbDep, user: CurrentUser
             "allow_multiple": survey.allow_multiple,
             "opens_at": survey.opens_at.isoformat() if survey.opens_at else None,
             "closes_at": survey.closes_at.isoformat() if survey.closes_at else None,
+            "announcement": survey.announcement,
+            "announcement_title": survey.announcement_title,
+            "show_announcement_popup": survey.show_announcement_popup,
         },
         summary=f"建立問卷「{survey.title}」",
     )
@@ -210,9 +264,14 @@ async def update_survey(
         "allow_multiple": survey.allow_multiple,
         "opens_at": survey.opens_at.isoformat() if survey.opens_at else None,
         "closes_at": survey.closes_at.isoformat() if survey.closes_at else None,
+        "announcement": survey.announcement,
+        "announcement_title": survey.announcement_title,
+        "show_announcement_popup": survey.show_announcement_popup,
     }
     try:
-        survey = await survey_svc.update_survey(session, survey, data=payload)
+        survey = await survey_svc.update_survey(
+            session, survey, data=payload, updated_by_id=user.id
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     await audit_svc.record(
@@ -231,6 +290,9 @@ async def update_survey(
                 "allow_multiple": survey.allow_multiple,
                 "opens_at": survey.opens_at.isoformat() if survey.opens_at else None,
                 "closes_at": survey.closes_at.isoformat() if survey.closes_at else None,
+                "announcement": survey.announcement,
+                "announcement_title": survey.announcement_title,
+                "show_announcement_popup": survey.show_announcement_popup,
             },
         },
         summary=f"更新問卷「{survey.title}」",
@@ -440,32 +502,25 @@ async def submit_response(
         ) from e
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
-    await audit_svc.record(
-        session,
-        entity_type="survey_response",
-        entity_id=str(response.id),
-        action="survey.response_submit",
-        actor_id=str(user.id) if user else None,
-        actor_email=user.email if user else None,
-        meta={
-            "survey_id": str(survey.id),
-            "survey_title": survey.title,
-            "is_anonymous": survey.is_anonymous,
-            "answer_count": len(payload.answers),
-        },
-        summary=f"提交問卷「{survey.title}」填答",
-    )
+    if not survey.is_anonymous:
+        await audit_svc.record(
+            session,
+            entity_type="survey_response",
+            entity_id=str(response.id),
+            action="survey.response_submit",
+            actor_id=str(user.id) if user else None,
+            actor_email=user.email if user else None,
+            meta={
+                "survey_id": str(survey.id),
+                "survey_title": survey.title,
+                "is_anonymous": False,
+                "answer_count": len(payload.answers),
+            },
+            summary=f"提交問卷「{survey.title}」填答",
+        )
+    await _invalidate_response_caches(user)
 
-    # 重新載入含答案的回應
-    from sqlalchemy import select
-    from sqlalchemy.orm import selectinload
-
-    result = await session.execute(
-        select(SurveyResponse)
-        .options(selectinload(SurveyResponse.answers))
-        .where(SurveyResponse.id == response.id)
-    )
-    reloaded = result.scalar_one()
+    reloaded = await _response_with_answers(session, response.id)
 
     # 選用：寄送回答副本到填答者信箱（品牌範本；佇列失敗不應阻擋填答成功）
     if payload.email_copy and user and user.email:
@@ -476,7 +531,7 @@ async def submit_response(
             send_branded_email([user.email], subject, "generic", copy_context)
 
     _ph = get_posthog_client()
-    if _ph:
+    if _ph and not survey.is_anonymous:
         _distinct_id = str(user.id) if user else "anonymous"
         _ph.capture(
             distinct_id=_distinct_id,
@@ -488,6 +543,112 @@ async def submit_response(
             },
         )
 
+    return reloaded
+
+
+@router.get(
+    "/{survey_id}/my-responses",
+    response_model=list[SurveyResponseOut],
+    summary="列出自己的問卷回應",
+)
+async def list_my_responses(
+    survey_id: str,
+    session: DbDep,
+    user: OptionalUser,
+    anon_token: str | None = Query(None, max_length=64),
+) -> list[SurveyResponse]:
+    survey = await _survey_or_404(survey_id, session)
+    try:
+        await survey_svc.check_survey_access(session, survey, user)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    if not survey.is_anonymous and user is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="請先登入後查看自己的填答"
+        )
+    return await survey_svc.list_my_responses(
+        session,
+        survey,
+        respondent_id=user.id if user else None,
+        anon_token=anon_token,
+    )
+
+
+@router.patch(
+    "/{survey_id}/responses/{response_id}",
+    response_model=SurveyResponseOut,
+    summary="更新自己的問卷回應",
+)
+async def update_response(
+    survey_id: str,
+    response_id: uuid.UUID,
+    payload: SurveySubmit,
+    session: DbDep,
+    user: OptionalUser,
+) -> SurveyResponse:
+    survey = await _survey_or_404(survey_id, session)
+    try:
+        await survey_svc.check_survey_access(session, survey, user)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    if not survey.is_anonymous and user is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="請先登入後才能修改填答")
+    response = await survey_svc.get_my_response(
+        session,
+        survey,
+        response_id,
+        respondent_id=user.id if user else None,
+        anon_token=payload.anon_token,
+    )
+    if response is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到可修改的填答")
+    try:
+        response = await survey_svc.update_response(
+            session,
+            survey,
+            response,
+            respondent_id=user.id if user else None,
+            data=payload,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    if not survey.is_anonymous:
+        await audit_svc.record(
+            session,
+            entity_type="survey_response",
+            entity_id=str(response.id),
+            action="survey.response_update",
+            actor_id=str(user.id) if user else None,
+            actor_email=user.email if user else None,
+            meta={
+                "survey_id": str(survey.id),
+                "survey_title": survey.title,
+                "is_anonymous": False,
+                "answer_count": len(payload.answers),
+            },
+            summary=f"更新問卷「{survey.title}」填答",
+        )
+    await _invalidate_response_caches(user)
+    reloaded = await _response_with_answers(session, response.id)
+
+    if payload.email_copy and user and user.email:
+        subject, copy_context = survey_svc.render_response_copy_email(
+            survey, list(survey.questions), list(reloaded.answers)
+        )
+        with contextlib.suppress(Exception):
+            send_branded_email([user.email], subject, "generic", copy_context)
+
+    _ph = get_posthog_client()
+    if _ph and not survey.is_anonymous:
+        _ph.capture(
+            distinct_id=str(user.id) if user else "anonymous",
+            event="survey_response_updated",
+            properties={
+                "survey_id": str(survey.id),
+                "is_anonymous": survey.is_anonymous,
+                "answer_count": len(payload.answers),
+            },
+        )
     return reloaded
 
 
@@ -514,12 +675,65 @@ async def list_survey_responses(
     survey_id: str,
     session: DbDep,
     user: CurrentUser,
-    limit: int = Query(200, ge=1, le=1000),
+    limit: int = Query(1000, ge=1, le=1000),
     offset: int = Query(0, ge=0),
 ) -> list[SurveyResponse]:
     survey = await _survey_or_404(survey_id, session)
     await _require_survey_manager(session, user, survey.activity_id)
     return await survey_svc.list_responses(session, survey, limit=limit, offset=offset)
+
+
+@router.delete(
+    "/{survey_id}/responses/{response_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="刪除問卷單筆回應（survey:manage）",
+)
+async def delete_survey_response(
+    survey_id: str,
+    response_id: uuid.UUID,
+    session: DbDep,
+    user: CurrentUser,
+) -> None:
+    survey = await _survey_or_404(survey_id, session)
+    await _require_survey_manager(session, user, survey.activity_id)
+    deleted = await survey_svc.delete_response(session, survey, response_id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此問卷回應")
+    await audit_svc.record(
+        session,
+        entity_type="survey_response",
+        entity_id=str(response_id),
+        action="survey.response_delete",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        meta={"survey_id": str(survey.id), "survey_title": survey.title},
+        summary=f"刪除問卷「{survey.title}」單筆回應",
+    )
+
+
+@router.delete(
+    "/{survey_id}/responses",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="清除問卷全部回應（survey:manage）",
+)
+async def delete_all_survey_responses(
+    survey_id: str,
+    session: DbDep,
+    user: CurrentUser,
+) -> None:
+    survey = await _survey_or_404(survey_id, session)
+    await _require_survey_manager(session, user, survey.activity_id)
+    deleted_count = await survey_svc.delete_all_responses(session, survey)
+    await audit_svc.record(
+        session,
+        entity_type="survey",
+        entity_id=str(survey.id),
+        action="survey.responses_clear",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        meta={"survey_title": survey.title, "deleted_count": deleted_count},
+        summary=f"清除問卷「{survey.title}」全部回應（{deleted_count} 份）",
+    )
 
 
 @router.get(

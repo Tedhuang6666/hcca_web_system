@@ -1,0 +1,1033 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { toast } from "sonner";
+import { ApiError, orgsApi, petitionsApi } from "@/lib/api";
+import type { PetitionCaseListItem, PetitionCaseOut, PetitionEventOut, PetitionStatsOut, PetitionStatus } from "@/lib/types";
+import { cacheGet, cacheSet, cachePurge } from "@/lib/api-cache";
+import { PetitionStatusBadge } from "@/components/ui/StatusBadge";
+import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
+import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
+import PetitionAttachmentList from "@/components/petitions/PetitionAttachmentList";
+import PetitionQueueCards, { queueStatus, type PetitionQueueKey } from "@/components/petitions/PetitionQueueCards";
+import { orgDisplayName } from "@/lib/orgs";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { PetitionPublicDiff } from "@/components/petitions/PetitionPublicConsent";
+import { PetitionConfidentialBlocked } from "@/components/petitions/PetitionConfidentialBlocked";
+import { PetitionConfidentialReasonEditor } from "@/components/petitions/PetitionConfidentialReasonEditor";
+
+type ActionKey = "assign" | "handle" | "transfer" | "reject_close" | "public" | "attachments";
+
+const STATUS_OPTIONS: { value: PetitionStatus; label: string }[] = [
+  { value: "submitted", label: "已收件" },
+  { value: "assigned", label: "已分案" },
+  { value: "in_progress", label: "承辦中" },
+  { value: "needs_info", label: "等待補件" },
+  { value: "transferred", label: "已轉派" },
+  { value: "resolved", label: "已回覆" },
+  { value: "closed", label: "已結案" },
+  { value: "rejected", label: "不受理" },
+];
+
+const FLOW: PetitionStatus[] = ["submitted", "assigned", "in_progress", "needs_info", "resolved", "closed"];
+
+function fmt(iso: string | null) {
+  if (!iso) return "-";
+  return new Date(iso).toLocaleString("zh-TW", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+const PET_LIST_KEY = "petitions/manage/list:confidential-scope-v2";
+const PET_STATS_KEY = "petitions/manage/stats";
+const PET_ORGS_KEY = "petitions/manage/orgs";
+
+const ACTION_CONFIRM: Record<string, { title: string; description: string; confirmLabel: string; danger?: boolean }> = {
+  reject: { title: "駁回／不受理此案件？", description: "駁回原因會通知陳情人。", confirmLabel: "駁回", danger: true },
+  close: { title: "結案？", description: "陳情人會收到結案通知。", confirmLabel: "結案" },
+  reply: { title: "送出正式回覆並完成？", description: "回覆會通知陳情人，案件標示為完成。", confirmLabel: "送出回覆" },
+  transfer: { title: "轉派至其他機關？", description: "案件會移交給選定的機關。", confirmLabel: "確認轉派" },
+};
+
+export default function PetitionManagePage() {
+  const confirm = useConfirm();
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const hadSelectedCaseRef = useRef(false);
+  const [items, setItems] = useState<PetitionCaseListItem[]>(() => cacheGet<PetitionCaseListItem[]>(PET_LIST_KEY) ?? []);
+  const [selected, setSelected] = useState<PetitionCaseOut | null>(null);
+  const [stats, setStats] = useState<PetitionStatsOut | null>(() => cacheGet<PetitionStatsOut>(PET_STATS_KEY) ?? null);
+  const [queue, setQueue] = useState<PetitionQueueKey>("all");
+  const [status, setStatus] = useState<PetitionStatus | "">("");
+  const [keyword, setKeyword] = useState("");
+  const [users, setUsers] = useState<{ id: string; display_name: string; email: string }[]>([]);
+  const [orgs, setOrgs] = useState<{ id: string; name: string; parent_id?: string | null }[]>([]);
+  const [activeAction, setActiveAction] = useState<ActionKey>("assign");
+  const [assignee, setAssignee] = useState("");
+  const [targetOrg, setTargetOrg] = useState("");
+  const [publicText, setPublicText] = useState("");
+  const [publicTitle, setPublicTitle] = useState("");
+  const [publicContent, setPublicContent] = useState("");
+  const [internalNote, setInternalNote] = useState("");
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [editingEventTitle, setEditingEventTitle] = useState("");
+  const [editingEventContent, setEditingEventContent] = useState("");
+  const [editingSubmitter, setEditingSubmitter] = useState(false);
+  const [submitterName, setSubmitterName] = useState("");
+  const [submitterEmail, setSubmitterEmail] = useState("");
+  const [showExternalIntake, setShowExternalIntake] = useState(false);
+  const [intakeTypes, setIntakeTypes] = useState<{ id: string; name: string }[]>([]);
+  const [intakeTypeId, setIntakeTypeId] = useState("");
+  const [intakeName, setIntakeName] = useState("");
+  const [intakeEmail, setIntakeEmail] = useState("");
+  const [intakeTitle, setIntakeTitle] = useState("");
+  const [intakeContent, setIntakeContent] = useState("");
+  const [intakeBusy, setIntakeBusy] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [fileUploadKey, setFileUploadKey] = useState(0);
+  const [attachmentVisibility, setAttachmentVisibility] = useState<"public" | "internal">("internal");
+  const [pendingReplyAttachmentId, setPendingReplyAttachmentId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [confirmingConfidential, setConfirmingConfidential] = useState(false);
+  const [confidentialReason, setConfidentialReason] = useState("");
+  const { can } = usePermissions();
+  const selectedCaseId = selected?.id;
+
+  useEffect(() => {
+    if (selectedCaseId) {
+      hadSelectedCaseRef.current = true;
+      document.getElementById("petition-detail-title")?.focus();
+    } else if (hadSelectedCaseRef.current) {
+      hadSelectedCaseRef.current = false;
+      searchInputRef.current?.focus();
+    }
+  }, [selectedCaseId]);
+
+  const effectiveStatus = status || queueStatus(queue);
+  const assignedToMe = queue === "mine";
+
+  const load = useCallback(async () => {
+    const [list, s] = await Promise.all([
+      petitionsApi.manage({
+        status: effectiveStatus,
+        keyword: keyword || undefined,
+        assigned_to_me: assignedToMe || undefined,
+      }),
+      petitionsApi.stats().catch(() => null),
+    ]);
+    setItems(list);
+    if (s) {
+      setStats(s);
+      // 只在無篩選時快取
+      if (!effectiveStatus && !keyword && !assignedToMe) {
+        cacheSet(PET_LIST_KEY, list);
+        cacheSet(PET_STATS_KEY, s);
+      }
+    }
+  }, [assignedToMe, effectiveStatus, keyword]);
+
+  useEffect(() => { load().catch(() => toast.error("載入陳情工作台失敗")); }, [load]);
+  useEffect(() => {
+    const cached = cacheGet<typeof orgs>(PET_ORGS_KEY);
+    if (cached) { setOrgs(cached); return; }
+    orgsApi.list({ active_only: true }).then((list) => { setOrgs(list); cacheSet(PET_ORGS_KEY, list); }).catch(() => null);
+  }, []);
+
+  const resetForm = () => {
+    setPublicText("");
+    setPublicTitle("");
+    setPublicContent("");
+    setInternalNote("");
+    setTargetOrg("");
+    setFile(null);
+    setFileUploadKey((key) => key + 1);
+    setPendingReplyAttachmentId(null);
+    setEditingEventId(null);
+    setEditingEventTitle("");
+    setEditingEventContent("");
+    setConfidentialReason("");
+  };
+
+  const openExternalIntake = async () => {
+    if (showExternalIntake) {
+      setShowExternalIntake(false);
+      return;
+    }
+    setShowExternalIntake(true);
+    if (intakeTypes.length > 0) return;
+    try {
+      const types = await petitionsApi.listAdminTypes();
+      setIntakeTypes(types.map((type) => ({ id: type.id, name: type.name })));
+      setIntakeTypeId(types[0]?.id || "");
+    } catch (err) {
+      setShowExternalIntake(false);
+      toast.error(err instanceof ApiError ? err.message : "載入陳情類型失敗");
+    }
+  };
+
+  const submitExternalIntake = async () => {
+    if (
+      intakeBusy
+      || !intakeTypeId
+      || !intakeName.trim()
+      || !intakeEmail.trim()
+      || !intakeTitle.trim()
+      || !intakeContent.trim()
+    ) return;
+    setIntakeBusy(true);
+    try {
+      const created = await petitionsApi.createAdminCase({
+        type_id: intakeTypeId,
+        contact_name: intakeName.trim(),
+        contact_email: intakeEmail.trim(),
+        title: intakeTitle.trim(),
+        content: intakeContent.trim(),
+      });
+      setIntakeName("");
+      setIntakeEmail("");
+      setIntakeTitle("");
+      setIntakeContent("");
+      setShowExternalIntake(false);
+      toast.success(`已建立代收案件 #${created.case_number}`);
+      await load();
+      await open(created.id);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "建立代收案件失敗");
+    } finally {
+      setIntakeBusy(false);
+    }
+  };
+
+  const open = async (id: string) => {
+    try {
+      const detail = await petitionsApi.get(id);
+      setSelected(detail);
+      setConfirmingConfidential(false);
+      resetForm();
+      setEditingSubmitter(false);
+      setSubmitterName(detail.contact_name || detail.submitter?.contact_name || "");
+      setSubmitterEmail(detail.contact_email || detail.submitter?.contact_email || "");
+      setPublicTitle(detail.public_title || detail.title);
+      setPublicContent(detail.public_content || detail.content);
+      if (detail.confidential_blocked) {
+        setUsers([]);
+        setAssignee("");
+        return;
+      }
+      const assignable = await petitionsApi.assignableUsers(id).catch(() => []);
+      setUsers(assignable);
+      setAssignee(detail.assigned_to_id || assignable[0]?.id || "");
+      if (detail.public_status === "pending_user" || detail.public_status === "pending_handler") setActiveAction("public");
+      else if (detail.status === "closed" && detail.public_status !== "published") setActiveAction("public");
+      else if (detail.status === "submitted" || !detail.assigned_to_id) setActiveAction("assign");
+      else if (detail.status === "resolved" || detail.status === "closed") setActiveAction("reject_close");
+      else setActiveAction("handle");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "載入案件失敗");
+    }
+  };
+
+  const refreshSelected = async (updated: PetitionCaseOut) => {
+    setSelected(updated);
+    resetForm();
+    try {
+      setSelected(await petitionsApi.get(updated.id));
+      await load();
+    } catch {
+      toast.warning("案件已更新，但重新載入失敗；請重新整理確認最新內容");
+    }
+  };
+
+  const uploadStandaloneAttachment = async () => {
+    if (!selected || !file || busy) return;
+    setBusy(true);
+    try {
+      await petitionsApi.uploadAttachment(selected.id, file, { visibility: attachmentVisibility });
+      setFile(null);
+      setFileUploadKey((key) => key + 1);
+      try {
+        setSelected(await petitionsApi.get(selected.id));
+        await load();
+      } catch {
+        toast.error("附件已上傳，但案件重新載入失敗；請重新整理確認");
+        return;
+      }
+      toast.success(attachmentVisibility === "public" ? "附件已上傳，陳情人可查看" : "內部附件已上傳");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "附件上傳失敗");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveInternalNote = async () => {
+    if (!selected || !internalNote.trim() || busy) return;
+    setBusy(true);
+    try {
+      const updated = await petitionsApi.addNote(selected.id, internalNote.trim());
+      await refreshSelected(updated);
+      toast.success("內部備註已儲存");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "儲存備註失敗");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const startEventEdit = (event: PetitionEventOut) => {
+    setEditingEventId(event.id);
+    setEditingEventTitle(event.title);
+    setEditingEventContent(event.content || "");
+  };
+
+  const saveEventEdit = async () => {
+    if (!selected || !editingEventId || busy) return;
+    setBusy(true);
+    try {
+      const updated = await petitionsApi.editEvent(selected.id, editingEventId, {
+        title: editingEventTitle.trim() || undefined,
+        content: editingEventContent.trim() || null,
+      });
+      setSelected(updated);
+      setEditingEventId(null);
+      toast.success("公開訊息已更新");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "編輯訊息失敗");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveSubmitter = async () => {
+    if (!selected || busy || !submitterName.trim() || !submitterEmail.trim()) return;
+    setBusy(true);
+    try {
+      const updated = await petitionsApi.updateSubmitter(selected.id, {
+        contact_name: submitterName.trim(),
+        contact_email: submitterEmail.trim(),
+      });
+      setSelected(updated);
+      setEditingSubmitter(false);
+      toast.success("陳情人資料已登記，後續通知會寄到此信箱");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "登記陳情人失敗");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const setConfidential = async () => {
+    if (
+      !selected
+      || busy
+      || selected.is_confidential
+      || !selected.submitter_id
+      || !confidentialReason.trim()
+    ) return;
+    setBusy(true);
+    try {
+      await petitionsApi.setConfidential(selected.id, confidentialReason.trim());
+      setSelected(null);
+      setConfirmingConfidential(false);
+      await load();
+      toast.success("案件已標註為密件");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "標註密件失敗");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const run = async (action: string) => {
+    if (!selected || busy) return;
+    const confirmation = ACTION_CONFIRM[action];
+    if (confirmation && !(await confirm(confirmation))) return;
+    setBusy(true);
+    try {
+      let updated: PetitionCaseOut;
+      let replyAttachmentIds: string[] = [];
+      let stagedReplyAttachmentId = pendingReplyAttachmentId;
+      if (file && activeAction === "handle" && !stagedReplyAttachmentId) {
+        const uploaded = await petitionsApi.uploadAttachment(selected.id, file, { visibility: "internal" });
+        stagedReplyAttachmentId = uploaded.id;
+        setPendingReplyAttachmentId(stagedReplyAttachmentId);
+      }
+      if (action === "assign") {
+        updated = await petitionsApi.assign(selected.id, {
+          assigned_to_id: assignee,
+          internal_note: internalNote || null,
+        });
+      } else if (action === "progress") {
+        updated = await petitionsApi.updateStatus(selected.id, {
+          status: "in_progress",
+          public_message: publicText || "案件已進入承辦處理。",
+          internal_note: internalNote || null,
+        });
+      } else if (action === "needs_info") {
+        updated = await petitionsApi.updateStatus(selected.id, {
+          status: "needs_info",
+          public_message: publicText,
+          internal_note: internalNote || null,
+        });
+      } else if (action === "reply") {
+        if (file) {
+          if (!stagedReplyAttachmentId) throw new Error("附件尚未完成上傳，請重試");
+          replyAttachmentIds = [stagedReplyAttachmentId];
+        }
+        updated = await petitionsApi.reply(selected.id, {
+          public_content: publicText,
+          internal_note: internalNote || null,
+          attachment_ids: replyAttachmentIds,
+          resolve: true,
+          close: true,
+        });
+      } else if (action === "transfer") {
+        updated = await petitionsApi.transfer(selected.id, {
+          to_org_id: targetOrg,
+          reason: publicText,
+        });
+      } else if (action === "reject") {
+        updated = await petitionsApi.updateStatus(selected.id, {
+          status: "rejected",
+          public_message: publicText,
+          internal_note: internalNote || null,
+        });
+      } else if (action === "close") {
+        updated = await petitionsApi.updateStatus(selected.id, {
+          status: "closed",
+          public_message: publicText || "案件已結案。",
+          internal_note: internalNote || null,
+        });
+      } else if (action === "request_public") {
+        updated = await petitionsApi.requestPublic(selected.id, {
+          title: publicTitle.trim() || null,
+          content: publicContent.trim() || null,
+        });
+      } else if (action === "confirm_public") {
+        updated = await petitionsApi.confirmPublic(selected.id);
+      } else {
+        updated = await petitionsApi.addNote(selected.id, internalNote);
+      }
+      cachePurge("petitions/manage");
+      await refreshSelected(updated);
+      toast.success("案件已更新");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "操作失敗");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const queueCards = useMemo(
+    () => [
+      { key: "all" as const, label: "全部", value: stats?.total ?? items.length },
+      { key: "pending" as const, label: "待分案", value: stats?.pending_assignment ?? 0 },
+      { key: "mine" as const, label: "我承辦", value: stats?.my_assigned ?? 0 },
+      { key: "active" as const, label: "處理中", value: stats?.in_progress ?? 0 },
+      { key: "needs_info" as const, label: "補件中", value: stats?.needs_info ?? 0 },
+      { key: "done" as const, label: "已回覆", value: stats?.resolved ?? 0 },
+    ],
+    [items.length, stats],
+  );
+
+  return (
+    <div className="petition-manage-page min-w-0 max-w-7xl mx-auto space-y-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>陳情工作台</h1>
+        <div className="flex flex-wrap gap-2">
+          {can("petition:admin") && (
+            <button className="btn btn-primary" onClick={() => void openExternalIntake()}>
+              {showExternalIntake ? "收起代收表單" : "代收外部陳情"}
+            </button>
+          )}
+          {can("petition:type_manage") && (
+            <Link href="/petitions/admin/types" className="btn btn-ghost">陳情類型</Link>
+          )}
+        </div>
+      </div>
+
+      {showExternalIntake && can("petition:admin") && (
+        <section
+          className="card p-5 space-y-4"
+          aria-labelledby="external-petition-title">
+          <div>
+            <h2 id="external-petition-title" className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
+              代收外部陳情
+            </h2>
+            <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
+              案件更新通知會寄至登記的聯絡信箱。
+            </p>
+          </div>
+          <div className="grid md:grid-cols-2 gap-3">
+            <label className="space-y-1.5">
+              <span className="text-sm font-medium">陳情人姓名</span>
+              <input
+                className="input w-full"
+                value={intakeName}
+                onChange={(e) => setIntakeName(e.target.value)}
+                placeholder="例如：王小明"
+                autoComplete="name"
+              />
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-sm font-medium">聯絡 Email</span>
+              <input
+                className="input w-full"
+                type="email"
+                value={intakeEmail}
+                onChange={(e) => setIntakeEmail(e.target.value)}
+                placeholder="用於寄送案件進度通知"
+                autoComplete="email"
+              />
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-sm font-medium">陳情類型</span>
+              <select className="input w-full" value={intakeTypeId} onChange={(e) => setIntakeTypeId(e.target.value)}>
+                {intakeTypes.length === 0 && <option value="">沒有可用類型</option>}
+                {intakeTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}
+              </select>
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-sm font-medium">案件標題</span>
+              <input
+                className="input w-full"
+                value={intakeTitle}
+                onChange={(e) => setIntakeTitle(e.target.value)}
+                placeholder="簡短描述這件陳情"
+              />
+            </label>
+          </div>
+          <label className="block space-y-1.5">
+            <span className="text-sm font-medium">陳情內容</span>
+            <textarea
+              className="input w-full min-h-32"
+              value={intakeContent}
+              onChange={(e) => setIntakeContent(e.target.value)}
+              placeholder="記錄對方透過電話、現場或其他管道反映的完整內容"
+            />
+          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              className="btn btn-primary"
+              disabled={intakeBusy || !intakeTypeId || !intakeName.trim() || !intakeEmail.trim() || !intakeTitle.trim() || !intakeContent.trim()}
+              onClick={() => void submitExternalIntake()}>
+              {intakeBusy ? "建立中…" : "建立並加入工作台"}
+            </button>
+            <button className="btn btn-ghost" disabled={intakeBusy} onClick={() => setShowExternalIntake(false)}>
+              取消
+            </button>
+          </div>
+        </section>
+      )}
+
+      <PetitionQueueCards
+        cards={queueCards} queue={queue} hasStatus={Boolean(status)}
+        onSelect={(key) => { setQueue(key); setStatus(""); }}
+      />
+
+      <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(18rem,0.82fr)_minmax(0,1.35fr)] xl:gap-5">
+        <section className={`card min-w-0 space-y-4 p-4 sm:p-5 ${selected ? "hidden xl:block" : ""}`} aria-label="陳情案件清單">
+          <div className="grid sm:grid-cols-[1fr_auto] gap-2">
+            <input
+              className="input w-full"
+              ref={searchInputRef}
+              aria-label="搜尋案號或標題"
+              placeholder="搜尋案號或標題"
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+            />
+            <button className="btn btn-ghost" onClick={() => load()}>搜尋</button>
+          </div>
+          <select
+            className="input w-full"
+            aria-label="依案件狀態篩選"
+            value={status}
+            onChange={(e) => { setStatus(e.target.value as PetitionStatus | ""); setQueue("all"); }}>
+            <option value="">依佇列篩選</option>
+            {STATUS_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+
+          <div className="max-h-[72vh] space-y-2 overflow-auto">
+            {items.length === 0 ? (
+              <p className="text-sm" style={{ color: "var(--text-muted)" }}>目前沒有符合條件的案件。</p>
+            ) : items.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => open(item.id)}
+                className="w-full text-left rounded-lg p-3"
+                style={{
+                  border: "1px solid var(--border)",
+                  background: selected?.id === item.id ? "var(--primary-dim)" : "transparent",
+                }}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <p className="font-medium truncate" style={{ color: "var(--text-primary)" }}>{item.title}</p>
+                      {item.is_confidential && (
+                        <span className="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium" style={{ background: "var(--warning-dim)", color: "var(--warning)" }}>
+                          密件
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+                      #{item.case_number} · {item.current_org_name} · {item.assigned_to_name || "未分案"}
+                    </p>
+                    <p className="text-xs mt-1" style={{ color: "var(--text-disabled)" }}>{fmt(item.updated_at)} · {item.next_action}</p>
+                  </div>
+                  <PetitionStatusBadge status={item.status} />
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className={`card min-w-0 space-y-5 p-4 sm:p-5 ${!selected ? "hidden xl:block" : ""}`} aria-label="陳情案件詳情與處理">
+          {!selected ? (
+            <div className="text-sm" style={{ color: "var(--text-muted)" }}>
+              請選擇案件
+            </div>
+          ) : selected.confidential_blocked ? (
+            <>
+              <PetitionConfidentialBlocked item={selected} />
+              {can("petition:admin") && (
+                <PetitionConfidentialReasonEditor
+                  key={selected.id}
+                  caseId={selected.id}
+                  reason={selected.confidential_reason}
+                  onUpdated={(reason) => setSelected((current) =>
+                    current ? { ...current, confidential_reason: reason } : current
+                  )}
+                />
+              )}
+            </>
+          ) : (
+            <>
+              <button className="btn btn-ghost w-full xl:hidden" onClick={() => setSelected(null)}>
+                返回案件清單
+              </button>
+              <div className="flex min-w-0 items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm" style={{ color: "var(--text-muted)" }}>#{selected.case_number} · {selected.type_name}</p>
+                  <h2
+                    id="petition-detail-title"
+                    tabIndex={-1}
+                    className="break-words text-lg font-semibold"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    {selected.title}
+                  </h2>
+                  <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
+                    {selected.current_org_name} · {selected.assigned_to_name || "尚未分派承辦人"} · 更新 {fmt(selected.updated_at)}
+                  </p>
+                </div>
+                <div className="flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2">
+                  <AnimatedDownloadButton
+                    request={() => petitionsApi.printPdf(selected.id)}
+                    filename={`陳情案件_${selected.case_number}_案件詳情.pdf`}
+                    label="列印案件詳情"
+                    completeLabel="已下載"
+                    errorLabel="重試列印"
+                    className="btn btn-ghost"
+                  />
+                  {can("petition:admin") && !selected.is_confidential && selected.submitter_id && (
+                    confirmingConfidential ? (
+                      <div className="flex flex-wrap items-center justify-end gap-2" role="group" aria-label="確認標註密件">
+                        <label className="w-full text-left space-y-1" htmlFor="confidential-reason">
+                          <span className="text-xs font-medium" style={{ color: "var(--warning)" }}>密件原因（必填）</span>
+                          <textarea
+                            id="confidential-reason"
+                            className="input w-full min-h-20"
+                            value={confidentialReason}
+                            onChange={(e) => setConfidentialReason(e.target.value)}
+                            placeholder="請說明為何需要密件處理"
+                            maxLength={2000}
+                            autoFocus
+                          />
+                        </label>
+                        <p className="w-full text-xs text-left" style={{ color: "var(--text-muted)" }}>
+                          設定後只有陳情人本人、該案指派承辦人與網站擁有者能看完整內容，密件案件不能公開。
+                        </p>
+                        <button className="btn btn-primary" disabled={busy || !confidentialReason.trim()} onClick={() => void setConfidential()}>
+                          {busy ? "設定中…" : "確認設為密件"}
+                        </button>
+                        <button className="btn btn-ghost" disabled={busy} onClick={() => setConfirmingConfidential(false)}>
+                          取消
+                        </button>
+                      </div>
+                    ) : (
+                      <button className="btn btn-ghost" disabled={busy} onClick={() => setConfirmingConfidential(true)}>
+                        設為密件
+                      </button>
+                    )
+                  )}
+                  {selected.is_confidential && !selected.confidential_blocked && (
+                    <span className="rounded-full px-2.5 py-1 text-xs font-medium" style={{ background: "var(--warning-dim)", color: "var(--warning)" }}>
+                      密件處理
+                    </span>
+                  )}
+                  <PetitionStatusBadge status={selected.status} />
+                </div>
+              </div>
+
+              {selected.is_confidential && !selected.confidential_blocked && (
+                <div className="rounded-lg p-3 text-sm space-y-1" style={{ background: "var(--warning-dim)", border: "1px solid var(--warning-border)" }}>
+                  <p className="font-medium" style={{ color: "var(--warning)" }}>本案已密件處理</p>
+                  <p style={{ color: "var(--text-secondary)" }}>密件原因：{selected.confidential_reason || "未提供密件原因。"}</p>
+                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>完整內容僅陳情人本人、該案指派承辦人與網站擁有者可查看。</p>
+                  {can("petition:admin") && (
+                    <PetitionConfidentialReasonEditor
+                      key={selected.id}
+                      caseId={selected.id}
+                      reason={selected.confidential_reason}
+                      onUpdated={(reason) => setSelected((current) =>
+                        current ? { ...current, confidential_reason: reason } : current
+                      )}
+                    />
+                  )}
+                </div>
+              )}
+
+              <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                {FLOW.map((step, index) => {
+                  const currentIndex = FLOW.indexOf(selected.status);
+                  const active = selected.status === step;
+                  const done = currentIndex > index;
+                  return (
+                    <div key={step} className="min-w-0 rounded-lg px-2 py-2 text-center text-xs" style={{
+                      background: active ? "var(--primary-dim)" : done ? "var(--success-dim)" : "var(--bg-hover)",
+                      border: `1px solid ${active ? "var(--primary)" : done ? "var(--success-border)" : "var(--border)"}`,
+                      color: "var(--text-primary)",
+                    }}>
+                      {STATUS_OPTIONS.find((s) => s.value === step)?.label}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="rounded-lg p-4 space-y-2" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
+                <p className="text-sm font-medium">案件內容</p>
+                <p className="break-words whitespace-pre-wrap text-sm leading-7" style={{ color: "var(--text-muted)" }}>{selected.content}</p>
+              </div>
+
+              <section className="rounded-lg p-4 space-y-3" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
+                <h3 className="text-sm font-medium">案件附件（{selected.attachments.length}）</h3>
+                <PetitionAttachmentList caseId={selected.id} attachments={selected.attachments} showVisibility />
+              </section>
+
+              <div className="rounded-lg p-3 text-sm space-y-3" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-medium" style={{ color: "var(--text-primary)" }}>
+                      {selected.submitter_id ? "平台帳號陳情人" : "外部陳情人"}
+                    </p>
+                    <p className="mt-1" style={{ color: "var(--text-muted)" }}>
+                      {selected.submitter_id
+                        ? `${selected.submitter?.display_name || "未提供姓名"} · ${selected.submitter?.email || "無平台信箱"}`
+                        : selected.contact_name
+                          ? `${selected.contact_name} · ${selected.contact_email || "尚未登記 Email"}`
+                          : "尚未登記姓名與聯絡信箱"}
+                    </p>
+                  </div>
+                  {can("petition:admin") && !selected.submitter_id && (
+                    <button
+                      className="btn btn-ghost shrink-0"
+                      onClick={() => setEditingSubmitter((value) => !value)}>
+                      {editingSubmitter ? "取消編輯" : "登記陳情人"}
+                    </button>
+                  )}
+                </div>
+                {!selected.submitter_id && editingSubmitter && (
+                  <div className="grid sm:grid-cols-2 gap-3 pt-2" style={{ borderTop: "1px solid var(--border)" }}>
+                    <label className="space-y-1.5">
+                      <span className="text-xs font-medium">姓名</span>
+                      <input className="input w-full" value={submitterName} onChange={(e) => setSubmitterName(e.target.value)} autoComplete="name" />
+                    </label>
+                    <label className="space-y-1.5">
+                      <span className="text-xs font-medium">Email</span>
+                      <input className="input w-full" type="email" value={submitterEmail} onChange={(e) => setSubmitterEmail(e.target.value)} autoComplete="email" />
+                    </label>
+                    <div className="sm:col-span-2 flex items-center gap-2">
+                      <button className="btn btn-primary" disabled={busy || !submitterName.trim() || !submitterEmail.trim()} onClick={() => void saveSubmitter()}>
+                        {busy ? "儲存中…" : "儲存陳情人"}
+                      </button>
+                      <p className="text-xs" style={{ color: "var(--text-muted)" }}>後續案件通知會寄到此信箱。</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-2" role="tablist" aria-label="案件處理動作">
+                {[
+                  ["assign", "分派承辦"],
+                  ["handle", "處理/回覆"],
+                  ["transfer", "跨機關轉派"],
+                  ["reject_close", "駁回/結案"],
+                  ...(selected.status === "closed" ? [["public", "公開陳情"]] : []),
+                  ["attachments", "附件/備註"],
+                ].map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={activeAction === key ? "btn btn-primary" : "btn btn-ghost"}
+                    onClick={() => {
+                      setActiveAction(key as ActionKey);
+                      setFile(null);
+                      setPendingReplyAttachmentId(null);
+                      setFileUploadKey((value) => value + 1);
+                    }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {activeAction === "assign" && (
+                <div className="rounded-lg p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
+                  <div>
+                    <h3 className="font-medium">分派給機關內部承辦人</h3>
+                    <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>只會列出目前負責機關內有效任期的成員。</p>
+                  </div>
+                  <label className="block space-y-1.5">
+                    <span className="text-sm font-medium">承辦人</span>
+                    <select className="input w-full" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
+                      {users.length === 0 && <option value="">無可分派成員</option>}
+                      {users.map((u) => <option key={u.id} value={u.id}>{u.display_name} · {u.email}</option>)}
+                    </select>
+                  </label>
+                  <label className="block space-y-1.5">
+                    <span className="text-sm font-medium">分派備註（內部可見，選填）</span>
+                    <textarea className="input w-full min-h-20" value={internalNote} onChange={(e) => setInternalNote(e.target.value)} placeholder="補充分派背景或交接事項" />
+                  </label>
+                  <button className="btn btn-primary" disabled={!assignee || busy} onClick={() => run("assign")}>確認分派</button>
+                </div>
+              )}
+
+              {activeAction === "handle" && (
+                <div className="rounded-lg p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
+                  <div>
+                    <h3 className="font-medium">處理、要求補件或正式回覆</h3>
+                    <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>公開內容會顯示給陳情人；內部備註只給幹部看。</p>
+                  </div>
+                  <label className="block space-y-1.5">
+                    <span className="text-sm font-medium">公開說明、補件原因或正式回覆</span>
+                    <textarea className="input w-full min-h-32" value={publicText} onChange={(e) => setPublicText(e.target.value)} placeholder="輸入會提供給陳情人的內容" />
+                  </label>
+                  <label className="block space-y-1.5">
+                    <span className="text-sm font-medium">內部備註（選填）</span>
+                    <textarea className="input w-full min-h-20" value={internalNote} onChange={(e) => setInternalNote(e.target.value)} placeholder="僅供承辦人與幹部查看" />
+                  </label>
+                  <AnimatedFileUpload
+                    key={fileUploadKey}
+                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
+                    label="拖曳回覆附件到這裡"
+                    hint="正式回覆會把附件公開給陳情人，並一併附在回覆通知郵件"
+                    onFiles={(files) => {
+                      setFile(files[0] ?? null);
+                      setPendingReplyAttachmentId(null);
+                    }}
+                    onRemove={() => {
+                      setFile(null);
+                      setPendingReplyAttachmentId(null);
+                    }}
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <button className="btn btn-ghost" disabled={busy} onClick={() => run("progress")}>標記處理中</button>
+                    <button className="btn btn-ghost" disabled={!publicText.trim() || busy} onClick={() => run("needs_info")}>退回補件</button>
+                    <button className="btn btn-primary" disabled={!publicText.trim() || busy} onClick={() => run("reply")}>正式回覆並完成</button>
+                  </div>
+                </div>
+              )}
+
+              {activeAction === "transfer" && (
+                <div className="rounded-lg p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
+                  <div>
+                    <h3 className="font-medium">跨機關分案 / 轉派</h3>
+                    <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>轉派後案件會移到目標機關工作台，原承辦人會被清空，目標機關可重新分派。</p>
+                  </div>
+                  <label className="block space-y-1.5">
+                    <span className="text-sm font-medium">目標機關</span>
+                    <select className="input w-full" value={targetOrg} onChange={(e) => setTargetOrg(e.target.value)}>
+                      <option value="">選擇目標機關</option>
+                      {orgs.filter((o) => o.id !== selected.current_org_id).map((o) => <option key={o.id} value={o.id}>{orgDisplayName(o, orgs)}</option>)}
+                    </select>
+                  </label>
+                  <label className="block space-y-1.5">
+                    <span className="text-sm font-medium">轉派理由（會寫入公開處理事件）</span>
+                    <textarea className="input w-full min-h-28" value={publicText} onChange={(e) => setPublicText(e.target.value)} placeholder="說明轉派原因與後續承辦方向" />
+                  </label>
+                  <button className="btn btn-primary" disabled={!targetOrg || !publicText.trim() || busy} onClick={() => run("transfer")}>確認跨機關轉派</button>
+                </div>
+              )}
+
+              {activeAction === "reject_close" && (
+                <div className="rounded-lg p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
+                  <div>
+                    <h3 className="font-medium">駁回、不受理或結案</h3>
+                    <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>駁回/不受理必須填公開原因；結案可填結案說明。</p>
+                  </div>
+                  <label className="block space-y-1.5">
+                    <span className="text-sm font-medium">公開原因或結案說明</span>
+                    <textarea className="input w-full min-h-28" value={publicText} onChange={(e) => setPublicText(e.target.value)} placeholder="駁回時必填；結案時可補充說明" />
+                  </label>
+                  <label className="block space-y-1.5">
+                    <span className="text-sm font-medium">內部備註（選填）</span>
+                    <textarea className="input w-full min-h-20" value={internalNote} onChange={(e) => setInternalNote(e.target.value)} placeholder="僅供承辦人與幹部查看" />
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <button className="btn btn-ghost" disabled={!publicText.trim() || busy} onClick={() => run("reject")}>駁回 / 不受理</button>
+                    <button className="btn btn-primary" disabled={busy} onClick={() => run("close")}>結案</button>
+                  </div>
+                </div>
+              )}
+
+              {activeAction === "public" && (
+                <div className="rounded-lg p-4 space-y-4" style={{ border: "1px solid var(--border)" }}>
+                  <div>
+                    <h3 className="font-medium">公開陳情</h3>
+                    <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
+                      公開前會先徵詢陳情人；若陳情人修改內容，承辦需再次確認差異後才會發布。
+                    </p>
+                  </div>
+                  {selected.public_status === "pending_user" && (
+                    <p className="rounded-lg p-3 text-sm" style={{ background: "var(--primary-dim)", color: "var(--text-muted)" }}>
+                      已送出公開申請，等待陳情人同意、修改後同意或拒絕。
+                    </p>
+                  )}
+                  {selected.public_status === "pending_handler" && (
+                    <>
+                      <div>
+                        <p className="text-sm font-medium mb-2">標題差異</p>
+                        <PetitionPublicDiff before={selected.title} after={selected.public_title || selected.title} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium mb-2">內容差異</p>
+                        <PetitionPublicDiff before={selected.content} after={selected.public_content || selected.content} />
+                      </div>
+                      <button className="btn btn-primary" disabled={busy} onClick={() => run("confirm_public")}>確認差異並公開</button>
+                    </>
+                  )}
+                  {(selected.public_status === "not_requested" || selected.public_status === "declined") && (
+                    <>
+                      <label className="block space-y-1.5">
+                        <span className="text-sm font-medium">公開標題（可移除個資）</span>
+                        <input className="input w-full" value={publicTitle} onChange={(e) => setPublicTitle(e.target.value)} placeholder="輸入對外顯示的標題" />
+                      </label>
+                      <label className="block space-y-1.5">
+                        <span className="text-sm font-medium">公開內容（可移除個資）</span>
+                        <textarea className="input w-full min-h-40" value={publicContent} onChange={(e) => setPublicContent(e.target.value)} placeholder="輸入陳情人同意後公開的內容" />
+                      </label>
+                      <button className="btn btn-primary" disabled={busy || !publicTitle.trim() || !publicContent.trim()} onClick={() => run("request_public")}>要求陳情人確認公開</button>
+                    </>
+                  )}
+                  {selected.public_status === "published" && (
+                    <p className="rounded-lg p-3 text-sm" style={{ background: "var(--success-dim)", color: "var(--success)" }}>此案件已公開。</p>
+                  )}
+                </div>
+              )}
+
+              {activeAction === "attachments" && (
+                <div className="rounded-lg p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
+                  <h3 className="font-medium">上傳附件或新增內部備註</h3>
+                  <label className="block space-y-1.5">
+                    <span className="text-sm font-medium">附件可見對象</span>
+                    <select
+                      className="input w-full"
+                      value={attachmentVisibility}
+                      onChange={(event) => setAttachmentVisibility(event.target.value as "public" | "internal")}
+                    >
+                      <option value="internal">僅內部承辦可見</option>
+                      <option value="public">陳情人也可查看</option>
+                    </select>
+                  </label>
+                  <AnimatedFileUpload
+                    key={fileUploadKey}
+                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
+                    label="拖曳附件到這裡"
+                    hint="附件上傳和備註儲存是獨立操作，可分別完成"
+                    onFiles={(files) => setFile(files[0] ?? null)}
+                    onRemove={() => setFile(null)}
+                  />
+                  <label className="block space-y-1.5">
+                    <span className="text-sm font-medium">新增內部備註</span>
+                    <textarea className="input w-full min-h-24" value={internalNote} onChange={(e) => setInternalNote(e.target.value)} placeholder="僅供承辦人與幹部查看" />
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <button className="btn btn-primary" disabled={!file || busy} onClick={() => void uploadStandaloneAttachment()}>
+                      {busy ? "處理中…" : "上傳附件"}
+                    </button>
+                    <button className="btn btn-ghost" disabled={!internalNote.trim() || busy} onClick={() => void saveInternalNote()}>
+                      儲存內部備註
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-3 pt-3" style={{ borderTop: "1px solid var(--border)" }}>
+                <h3 className="font-medium">處理事件</h3>
+                {selected.events.map((event) => (
+                  <div key={event.id} className="text-sm pl-3 py-1" style={{ borderLeft: "2px solid var(--border)" }}>
+                    {editingEventId === event.id ? (
+                      <div className="space-y-2">
+                        <label className="block space-y-1.5">
+                          <span className="text-sm font-medium">事件標題</span>
+                          <input className="input w-full" value={editingEventTitle} onChange={(e) => setEditingEventTitle(e.target.value)} />
+                        </label>
+                        <label className="block space-y-1.5">
+                          <span className="text-sm font-medium">事件內容</span>
+                          <textarea className="input w-full min-h-24" value={editingEventContent} onChange={(e) => setEditingEventContent(e.target.value)} />
+                        </label>
+                        <div className="flex gap-2">
+                          <button className="btn btn-primary" disabled={busy || (!editingEventTitle.trim() && !editingEventContent.trim())} onClick={saveEventEdit}>儲存編輯</button>
+                          <button className="btn btn-ghost" disabled={busy} onClick={() => setEditingEventId(null)}>取消</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex min-w-0 items-start justify-between gap-2">
+                          <p className="min-w-0 break-words font-medium">{event.title}{event.updated_at !== event.created_at ? "（已編輯）" : ""}</p>
+                          {event.can_edit && <button className="text-xs" style={{ color: "var(--primary-text)" }} onClick={() => startEventEdit(event)}>編輯</button>}
+                        </div>
+                        {event.content && <p className="whitespace-pre-wrap mt-1" style={{ color: "var(--text-muted)" }}>{event.content}</p>}
+                        <p className="text-xs mt-1" style={{ color: "var(--text-disabled)" }}>{fmt(event.created_at)} · {event.visibility === "internal" ? "內部" : "公開"}</p>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </section>
+      </div>
+
+      {stats?.by_org?.length ? (
+        <section className="card p-5 space-y-3 overflow-x-auto">
+          <h2 className="font-semibold">各機關處理統計</h2>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left">
+                <th>機關</th><th>總數</th><th>完成</th><th>處理中</th><th>補件</th><th>駁回</th><th>平均首回覆</th><th>平均結案</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stats.by_org.map((org) => (
+                <tr key={org.org_id} style={{ borderTop: "1px solid var(--border)" }}>
+                  <td className="py-2">{org.org_name}</td>
+                  <td>{org.total}</td>
+                  <td>{org.completed}</td>
+                  <td>{org.in_progress}</td>
+                  <td>{org.needs_info}</td>
+                  <td>{org.rejected}</td>
+                  <td>{org.average_first_response_hours?.toFixed(1) ?? "-"} 小時</td>
+                  <td>{org.average_completion_hours?.toFixed(1) ?? "-"} 小時</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      ) : null}
+    </div>
+  );
+}

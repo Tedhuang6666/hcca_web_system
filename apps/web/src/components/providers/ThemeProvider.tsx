@@ -1,7 +1,14 @@
 "use client";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { flushSync } from "react-dom";
 
 export type Theme = "light" | "dark";
+
+export interface ThemeTransitionOrigin {
+  x: number;
+  y: number;
+  target?: HTMLElement;
+}
 
 export interface A11ySettings {
   /** 高對比模式：增強文字與背景對比度 */
@@ -14,16 +21,82 @@ export interface A11ySettings {
 
 const A11Y_DEFAULT: A11ySettings = { contrast: false, large: false, motion: false };
 const A11Y_STORAGE_KEY = "hcca-a11y";
+const THEME_STORAGE_KEY = "hcca-theme";
 
 interface ThemeContextValue {
   theme: Theme;
-  setTheme: (t: Theme) => void;
-  toggleTheme: () => void;
+  setTheme: (t: Theme, origin?: ThemeTransitionOrigin) => void;
+  toggleTheme: (origin?: ThemeTransitionOrigin) => void;
   a11y: A11ySettings;
   setA11y: (key: keyof A11ySettings, value: boolean) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
+
+function applyTheme(theme: Theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  localStorage.setItem(THEME_STORAGE_KEY, theme);
+}
+
+type ThemeViewTransition = {
+  ready: Promise<void>;
+};
+
+type DocumentWithViewTransition = Document & {
+  startViewTransition?: (update: () => void) => ThemeViewTransition;
+};
+
+function shouldReduceThemeMotion(a11yMotion: boolean) {
+  return a11yMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function hasReliableThemeTransitionOrigin() {
+  // iOS/iPadOS WebKit can offset the snapshot when browser chrome moves or the page scrolls.
+  const isTouchWebKit = navigator.maxTouchPoints > 0
+    && CSS.supports("-webkit-touch-callout", "none");
+  return !isTouchWebKit;
+}
+
+function animateThemeToggleControl(target: HTMLElement) {
+  window.requestAnimationFrame(() => {
+    const icon = target.querySelector("svg");
+    if (!icon) return;
+
+    icon.animate(
+      [
+        { opacity: 0.45, transform: "scale(0.72) rotate(-12deg)" },
+        { opacity: 1, transform: "scale(1) rotate(0deg)" },
+      ],
+      { duration: 180, easing: "cubic-bezier(0.16, 1, 0.3, 1)" },
+    );
+  });
+}
+
+async function animateThemeReveal(
+  transition: ThemeViewTransition,
+  x: number,
+  y: number,
+  radius: number,
+): Promise<void> {
+  try {
+    await transition.ready;
+    document.documentElement.animate(
+      {
+        clipPath: [
+          `circle(0 at ${x}px ${y}px)`,
+          `circle(${radius}px at ${x}px ${y}px)`,
+        ],
+      },
+      {
+        duration: 420,
+        easing: "cubic-bezier(0.16, 1, 0.3, 1)",
+        pseudoElement: "::view-transition-new(root)",
+      },
+    );
+  } catch {
+    // View transitions are progressive enhancement; the theme has already changed.
+  }
+}
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("light");
@@ -31,13 +104,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   // ── 初始化 theme（從 localStorage 或系統偏好） ──────────────────────────
   useEffect(() => {
-    const saved = localStorage.getItem("hcca-theme") as Theme | null;
-    if (saved === "light" || saved === "dark") {
-      setThemeState(saved);
-    } else {
-      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      setThemeState(prefersDark ? "dark" : "light");
-    }
+    const saved = localStorage.getItem(THEME_STORAGE_KEY) as Theme | null;
+    const nextTheme = saved === "light" || saved === "dark"
+      ? saved
+      : window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
+
+    setThemeState(nextTheme);
+    applyTheme(nextTheme);
   }, []);
 
   // ── 初始化 a11y（從 localStorage） ────────────────────────────────────
@@ -57,12 +132,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // ── 同步 theme 至 DOM ───────────────────────────────────────────────
-  useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
-    localStorage.setItem("hcca-theme", theme);
-  }, [theme]);
-
   // ── 同步 a11y 至 DOM + localStorage ────────────────────────────────
   useEffect(() => {
     const root = document.documentElement;
@@ -72,10 +141,44 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(A11Y_STORAGE_KEY, JSON.stringify(a11y));
   }, [a11y]);
 
-  const setTheme = useCallback((t: Theme) => setThemeState(t), []);
+  const setTheme = useCallback((t: Theme, origin?: ThemeTransitionOrigin) => {
+    const startViewTransition = (document as DocumentWithViewTransition).startViewTransition;
+    const shouldReduceMotion = shouldReduceThemeMotion(a11y.motion);
+    const canRevealFromOrigin = hasReliableThemeTransitionOrigin();
+
+    if (!origin || !startViewTransition || shouldReduceMotion || !canRevealFromOrigin) {
+      setThemeState(t);
+      applyTheme(t);
+      if (origin?.target && !shouldReduceMotion) animateThemeToggleControl(origin.target);
+      return;
+    }
+
+    const x = Math.min(Math.max(origin.x, 0), window.innerWidth);
+    const y = Math.min(Math.max(origin.y, 0), window.innerHeight);
+    const radius = Math.hypot(
+      Math.max(x, window.innerWidth - x),
+      Math.max(y, window.innerHeight - y),
+    );
+
+    try {
+      const transition = startViewTransition.call(document, () => {
+        flushSync(() => {
+          setThemeState(t);
+          applyTheme(t);
+        });
+      });
+      void animateThemeReveal(transition, x, y, radius);
+    } catch {
+      setThemeState(t);
+      applyTheme(t);
+    }
+  }, [a11y.motion]);
   const toggleTheme = useCallback(
-    () => setThemeState((prev) => (prev === "dark" ? "light" : "dark")),
-    [],
+    (origin?: ThemeTransitionOrigin) => {
+      const nextTheme = theme === "dark" ? "light" : "dark";
+      setTheme(nextTheme, origin);
+    },
+    [setTheme, theme],
   );
   const setA11y = useCallback((key: keyof A11ySettings, value: boolean) => {
     setA11yState((prev) => ({ ...prev, [key]: value }));

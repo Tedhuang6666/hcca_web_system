@@ -10,9 +10,10 @@ from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import load_only, noload, selectinload
 from sqlalchemy.sql.elements import ColumnElement
 
+from api.core.config import settings
 from api.models.announcement import (
     Announcement,
     AnnouncementAudience,
@@ -22,8 +23,10 @@ from api.models.announcement import (
     announcement_audience_users,
 )
 from api.models.org import Org
+from api.models.survey import Survey, SurveyResponse
 from api.models.user import User
 from api.schemas.announcement import AnnouncementCreate, AnnouncementStatsOut, AnnouncementUpdate
+from api.services.permission import get_user_org_ids
 from api.services.storage import StorageBackend
 
 _MEDIA_ALLOWED_TYPES = frozenset({"image/jpeg", "image/png", "image/gif", "image/webp"})
@@ -32,11 +35,28 @@ _MEDIA_MAX_SIZE = 10 * 1024 * 1024  # 10 MB
 
 @dataclass(frozen=True)
 class ViewerScope:
-    """檢視者的可見範圍判定依據（由 router 層組裝）。"""
+    """檢視者的可見範圍判定依據。"""
 
     user_id: uuid.UUID | None = None
     org_ids: frozenset[uuid.UUID] = field(default_factory=frozenset)
     is_school: bool = False
+
+
+def _is_school_email(email: str) -> bool:
+    domain = email.strip().lower().rsplit("@", maxsplit=1)[-1]
+    return domain in settings.LOGIN_ALLOWED_EMAIL_DOMAINS
+
+
+async def get_viewer_scope(db: AsyncSession, user: User | None) -> ViewerScope:
+    """建立公告列表與詳情共用的檢視範圍。"""
+    if user is None:
+        return ViewerScope()
+    org_ids = await get_user_org_ids(db, user.id)
+    return ViewerScope(
+        user_id=user.id,
+        org_ids=frozenset(org_ids),
+        is_school=_is_school_email(user.email),
+    )
 
 
 def _audience_clause(scope: ViewerScope) -> ColumnElement[bool]:
@@ -119,7 +139,14 @@ async def _get_or_404(ann_id: uuid.UUID, db: AsyncSession) -> Announcement:
     result = await db.execute(
         select(Announcement)
         .where(Announcement.id == ann_id)
-        .options(selectinload(Announcement.media), selectinload(Announcement.author))
+        .options(
+            selectinload(Announcement.media),
+            selectinload(Announcement.author),
+            # The popup response does not expose audience details. Avoid the
+            # default select-in queries for every org/member audience row.
+            noload(Announcement.audience_orgs),
+            noload(Announcement.audience_users),
+        )
     )
     ann = result.scalar_one_or_none()
     if ann is None:
@@ -140,6 +167,9 @@ async def create(
         content=body.content,
         is_urgent=body.is_urgent,
         urgent_until=body.urgent_until,
+        link_url=body.link_url,
+        link_label=body.link_label,
+        show_on_every_visit=body.show_on_every_visit,
         org_id=body.org_id,
         activity_id=body.activity_id,
         author_id=author.id,
@@ -169,8 +199,27 @@ async def list_announcements(
     scope: ViewerScope | None = None,
 ) -> list[Announcement]:
     """列出公告；傳入 scope 時依公告對象過濾可見範圍（None = 不過濾，管理端用）。"""
+    # 列表只需要摘要欄位；content 是可能很大的 Tiptap JSON，audience/media
+    # 也不會由 AnnouncementListItem 使用。避免列表端點把詳情資料一併載入。
     q = select(Announcement).options(
-        selectinload(Announcement.media), selectinload(Announcement.author)
+        load_only(
+            Announcement.id,
+            Announcement.title,
+            Announcement.is_urgent,
+            Announcement.urgent_until,
+            Announcement.is_published,
+            Announcement.published_at,
+            Announcement.org_id,
+            Announcement.activity_id,
+            Announcement.author_id,
+            Announcement.created_at,
+            Announcement.updated_at,
+            Announcement.audience_type,
+        ),
+        selectinload(Announcement.author).load_only(User.id, User.display_name),
+        noload(Announcement.media),
+        noload(Announcement.audience_orgs),
+        noload(Announcement.audience_users),
     )
     if published_only:
         q = q.where(Announcement.is_published == True)  # noqa: E712
@@ -209,6 +258,14 @@ async def update(
         ann.is_urgent = body.is_urgent
     if "urgent_until" in fields:
         ann.urgent_until = body.urgent_until
+    if "link_url" in fields:
+        ann.link_url = body.link_url
+        if body.link_url is None and "link_label" not in fields:
+            ann.link_label = None
+    if "link_label" in fields:
+        ann.link_label = body.link_label
+    if body.show_on_every_visit is not None:
+        ann.show_on_every_visit = body.show_on_every_visit
     if "activity_id" in fields:
         ann.activity_id = body.activity_id
     if body.audience_type is not None:
@@ -349,5 +406,17 @@ async def get_active_urgent(
     )
     if scope is not None:
         q = q.where(_audience_clause(scope))
+        if scope.user_id is not None:
+            completed_survey = (
+                select(SurveyResponse.id)
+                .join(Survey, Survey.id == SurveyResponse.survey_id)
+                .where(
+                    Survey.announcement_id == Announcement.id,
+                    Survey.allow_multiple.is_(False),
+                    SurveyResponse.respondent_id == scope.user_id,
+                )
+                .exists()
+            )
+            q = q.where(~completed_survey)
     result = await db.execute(q)
     return result.scalar_one_or_none()

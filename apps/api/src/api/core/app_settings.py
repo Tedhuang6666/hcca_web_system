@@ -33,31 +33,52 @@ DENYLIST: frozenset[str] = frozenset(
 )
 
 # 密鑰：UI 預設遮罩、明文與儲存須 MFA。
-# 用「明確清單 + 保守 substring」雙重認定，避免如 ACCESS_TOKEN_EXPIRE_MINUTES 等
-# 名稱含 TOKEN 但實為時長的欄位被誤判。
+# 採「預設視為秘密」：名稱任一段落是 KEY／TOKEN／SECRET 等字詞即遮罩，只有
+# 明確列入 _NON_SECRET_KEYS 或帶有時長／cookie 名稱等修飾詞的欄位才放行。
+# 新增的金鑰類設定因此不會因為漏列清單而以明文顯示。
 _SECRET_KEYS_EXPLICIT: frozenset[str] = frozenset(
     {
         "DATABASE_URL",
         "DATABASE_URL_SYNC",
         "REDIS_URL",
-        "GOOGLE_CLIENT_SECRET",
-        "RESEND_API_KEY",
-        "LINE_CHANNEL_SECRET",
-        "LINE_CHANNEL_ACCESS_TOKEN",
-        "DISCORD_CLIENT_SECRET",
-        "DISCORD_BOT_TOKEN",
-        "MEILISEARCH_API_KEY",
-        "VAPID_PRIVATE_KEY",
+        "REDIS_CACHE_URL",
+        "REDIS_REALTIME_URL",
+        "CELERY_BROKER_URL",
+        "CELERY_RESULT_BACKEND",
         "SENTRY_DSN",
     }
 )
-_SECRET_SUBSTRINGS: tuple[str, ...] = ("PASSWORD", "SECRET", "PRIVATE_KEY")
+_SECRET_WORDS: frozenset[str] = frozenset(
+    {
+        "KEY",
+        "KEYS",
+        "TOKEN",
+        "TOKENS",
+        "SECRET",
+        "SECRETS",
+        "PASSWORD",
+        "PASSPHRASE",
+        "DSN",
+        "CREDENTIAL",
+        "CREDENTIALS",
+    }
+)
+# 名稱含上列字詞但值不是秘密（時長、cookie 名稱、開關、公開金鑰）。
+_NON_SECRET_WORDS: frozenset[str] = frozenset(
+    {"EXPIRE", "COOKIE", "NAME", "TTL", "DAYS", "MINUTES", "SECONDS", "ENABLED", "COMPAT"}
+)
+_NON_SECRET_KEYS: frozenset[str] = frozenset({"VAPID_PUBLIC_KEY", "CELERY_DLQ_REDIS_KEY"})
 
 
 def is_secret_key(key: str) -> bool:
     if key in _SECRET_KEYS_EXPLICIT:
         return True
-    return any(token in key for token in _SECRET_SUBSTRINGS)
+    if key in _NON_SECRET_KEYS:
+        return False
+    words = set(key.split("_"))
+    if not words & _SECRET_WORDS:
+        return False
+    return not words & _NON_SECRET_WORDS
 
 
 # ── 分類 ────────────────────────────────────────────────────────────────────
@@ -95,8 +116,6 @@ def _classify(key: str) -> str:
         return "搜尋"
     if key.startswith("VAPID_"):
         return "Web Push"
-    if key.startswith("PASSKEY_"):
-        return "Passkeys"
     if key.startswith("LOAD_SHED_"):
         return "Load Shedding"
     if key.startswith("MODULE_CIRCUIT_"):
@@ -220,7 +239,6 @@ def write_env_changes(changes: Mapping[str, str], *, keep_backups: int = 5) -> l
         shutil.copy2(path, backup)
         _prune_backups(path, keep_backups)
 
-    # 就地替換
     remaining = dict(changes)
     new_lines: list[str] = []
     for line in existing_lines:
@@ -330,15 +348,25 @@ def validate_changes(changes: Mapping[str, str]) -> None:
     current = read_env_file()
     merged = {**current, **changes}
 
+    # pydantic-settings 的 os.environ 優先序高於 _env_file，若被改的 key 也存在於
+    # 程序環境變數（如部署/CI 注入的 DATABASE_URL），重建時會讀到舊的 env 值而非
+    # tmp 檔裡待驗證的新值，導致非法輸入矇混過關。驗證期間先移除這些 key，讓 tmp
+    # 檔成為唯一來源；驗證後還原。Settings case_sensitive=False，故以大寫比對。
+    changed_upper = {k.upper() for k in changes}
+    shadowed = {k: os.environ[k] for k in list(os.environ) if k.upper() in changed_upper}
+
     fd, tmp = tempfile.mkstemp(suffix=".env")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             for k, v in merged.items():
                 fh.write(f"{k}={_quote_if_needed(v)}\n")
+        for k in shadowed:
+            del os.environ[k]
         try:
             Settings(_env_file=tmp, _env_file_encoding="utf-8")
         except ValidationError:
             raise
     finally:
+        os.environ.update(shadowed)
         with contextlib.suppress(Exception):
             os.unlink(tmp)

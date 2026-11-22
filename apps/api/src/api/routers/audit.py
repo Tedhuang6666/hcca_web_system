@@ -14,8 +14,10 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.clock import local_today
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
+from api.core.spreadsheet import safe_row
 from api.dependencies.auth import get_current_active_user
 from api.models.audit_log import AuditLog
 from api.models.org import Position, UserPosition
@@ -75,8 +77,8 @@ async def _get_current_org_ids(session: AsyncSession, user_id: object) -> list[s
         .join(UserPosition, UserPosition.position_id == Position.id)
         .where(
             UserPosition.user_id == user_id,
-            UserPosition.start_date <= date.today(),
-            or_(UserPosition.end_date.is_(None), UserPosition.end_date >= date.today()),
+            UserPosition.start_date <= local_today(),
+            or_(UserPosition.end_date.is_(None), UserPosition.end_date >= local_today()),
         )
         .distinct()
     )
@@ -138,8 +140,8 @@ async def _list_filtered_audit_logs(
             return []
         q = q.where(
             or_(
-                AuditLog.meta["org_id"].astext.in_(org_ids),
-                AuditLog.meta["custom_permission_org_id"].astext.in_(org_ids),
+                AuditLog.meta["org_id"].as_string().in_(org_ids),
+                AuditLog.meta["custom_permission_org_id"].as_string().in_(org_ids),
                 (AuditLog.entity_type == "org") & AuditLog.entity_id.in_(org_ids),
             )
         )
@@ -229,17 +231,19 @@ async def export_audit_logs_csv(
     )
     for row in rows:
         writer.writerow(
-            [
-                row.created_at.isoformat(),
-                row.action,
-                row.entity_type,
-                row.entity_id,
-                row.actor_id or "",
-                row.actor_email or "",
-                row.ip_address or "",
-                row.summary or "",
-                json.dumps(row.meta or {}, ensure_ascii=False, sort_keys=True),
-            ]
+            safe_row(
+                [
+                    row.created_at.isoformat(),
+                    row.action,
+                    row.entity_type,
+                    row.entity_id,
+                    row.actor_id or "",
+                    row.actor_email or "",
+                    row.ip_address or "",
+                    row.summary or "",
+                    json.dumps(row.meta or {}, ensure_ascii=False, sort_keys=True),
+                ]
+            )
         )
 
     filename = f"audit_logs_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.csv"

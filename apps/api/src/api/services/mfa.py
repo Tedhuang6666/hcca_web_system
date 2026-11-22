@@ -1,21 +1,33 @@
 """2FA (TOTP) 服務 - 啟用/停用/驗證多因素認證"""
 
+import asyncio
 import base64
 import hashlib
 import hmac
 import logging
 import secrets
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import suppress
 
+from argon2 import PasswordHasher
+from argon2.exceptions import InvalidHash, VerificationError, VerifyMismatchError
 from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.config import settings
+from api.core.login_lockout import admin_unlock
+from api.core.security import redis_client
 from api.models.user import User
 
 logger = logging.getLogger(__name__)
 
 _ENCRYPTED_PREFIX = "enc:v1:"
 _BACKUP_CODE_COUNT = 8
+_BACKUP_CODE_SALT_BYTES = 16
+_ARGON2 = PasswordHasher()
+# Argon2 與舊版 scrypt 驗證都是同步且昂貴的 CPU 工作。固定兩個 worker 避免大量
+# MFA 請求同時建立 thread，並讓 API event loop 繼續服務其他請求。
+_MFA_HASH_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="mfa-hash")
 
 
 def _fernet() -> Fernet:
@@ -51,20 +63,19 @@ def _normalize_code(code: str) -> str:
 
 def _hash_backup_code(code: str) -> str:
     normalized = _normalize_code(code)
-    digest = hmac.new(
-        settings.SECRET_KEY.encode("utf-8"),
-        normalized.encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest()
-    return f"sha256:{digest}"
+    return f"argon2:{_ARGON2.hash(normalized)}"
 
 
 def _generate_backup_codes() -> list[str]:
-    return [secrets.token_hex(4).upper() for _ in range(_BACKUP_CODE_COUNT)]
+    return [secrets.token_hex(8).upper() for _ in range(_BACKUP_CODE_COUNT)]
 
 
-def _hashes_payload(codes: list[str]) -> dict[str, list[str]]:
-    return {"codes": [_hash_backup_code(code) for code in codes]}
+async def _hashes_payload(codes: list[str]) -> dict[str, list[str]]:
+    loop = asyncio.get_running_loop()
+    hashes = await asyncio.gather(
+        *(loop.run_in_executor(_MFA_HASH_EXECUTOR, _hash_backup_code, code) for code in codes)
+    )
+    return {"codes": list(hashes)}
 
 
 def backup_code_count(user: User) -> int:
@@ -101,13 +112,43 @@ def verify_totp_code(secret: str, code: str) -> bool:
     return totp.verify(code, valid_window=1)
 
 
-def _consume_backup_code(user: User, code: str) -> bool:
+def _matches_backup_code(item: str, normalized: str) -> bool:
+    if item.startswith("argon2:"):
+        try:
+            return _ARGON2.verify(item.removeprefix("argon2:"), normalized)
+        except (InvalidHash, VerificationError, VerifyMismatchError):
+            return False
+    try:
+        algorithm, salt_hex, digest_hex = item.split(":", 2)
+        if algorithm != "scrypt":
+            return False
+        candidate = hashlib.scrypt(
+            normalized.encode("utf-8"),
+            salt=bytes.fromhex(salt_hex),
+            n=2**14,
+            r=8,
+            p=1,
+        )
+        expected = bytes.fromhex(digest_hex)
+    except (ValueError, TypeError):
+        return False
+    return hmac.compare_digest(candidate, expected)
+
+
+async def _consume_backup_code(user: User, code: str) -> bool:
     stored = list((user.mfa_backup_code_hashes or {}).get("codes", []))
     if not stored:
         return False
-    candidate = _hash_backup_code(code)
-    for index, item in enumerate(stored):
-        if hmac.compare_digest(candidate, item):
+    normalized = _normalize_code(code)
+    loop = asyncio.get_running_loop()
+    matches = await asyncio.gather(
+        *(
+            loop.run_in_executor(_MFA_HASH_EXECUTOR, _matches_backup_code, item, normalized)
+            for item in stored
+        )
+    )
+    for index, matched in enumerate(matches):
+        if matched:
             del stored[index]
             user.mfa_backup_code_hashes = {"codes": stored}
             return True
@@ -124,7 +165,7 @@ async def setup_mfa(db: AsyncSession, user: User) -> dict:
     secret = generate_totp_secret()
     backup_codes = _generate_backup_codes()
     user.mfa_pending_secret = encrypt_mfa_secret(secret)
-    user.mfa_pending_backup_code_hashes = _hashes_payload(backup_codes)
+    user.mfa_pending_backup_code_hashes = await _hashes_payload(backup_codes)
 
     logger.info("MFA setup initiated", extra={"user_id": str(user.id)})
 
@@ -162,12 +203,16 @@ async def confirm_mfa(db: AsyncSession, user: User, code: str) -> bool:
 async def verify_mfa(db: AsyncSession, user: User, code: str) -> bool:
     """驗證使用者的 TOTP 或備用碼；備用碼成功後立即作廢。"""
     if not user.mfa_enabled or not user.mfa_secret:
-        return True  # 未啟用 2FA 的用戶直接通過
+        return False
 
     secret = decrypt_mfa_secret(user.mfa_secret)
     if secret and verify_totp_code(secret, code):
+        replay_key = f"mfa:totp:used:{user.id}:{_normalize_code(code)}"
+        with suppress(Exception):
+            if not await redis_client.set(replay_key, "1", ex=90, nx=True):
+                return False
         return True
-    if _consume_backup_code(user, code):
+    if await _consume_backup_code(user, code):
         await db.flush()
         return True
     return False
@@ -181,7 +226,7 @@ async def regenerate_backup_codes(db: AsyncSession, user: User, code: str) -> li
     if not secret or not verify_totp_code(secret, code):
         return None
     backup_codes = _generate_backup_codes()
-    user.mfa_backup_code_hashes = _hashes_payload(backup_codes)
+    user.mfa_backup_code_hashes = await _hashes_payload(backup_codes)
     await db.flush()
     logger.info("MFA backup codes regenerated", extra={"user_id": str(user.id)})
     return backup_codes
@@ -204,3 +249,17 @@ async def disable_mfa(db: AsyncSession, user: User, code: str) -> bool:
 
     logger.info("MFA disabled", extra={"user_id": str(user.id)})
     return True
+
+
+async def clear_mfa(db: AsyncSession, user: User) -> None:
+    """由管理員清除使用者的 TOTP 2FA 設定，讓使用者可重新註冊。"""
+    user.mfa_enabled = False
+    user.mfa_secret = None
+    user.mfa_pending_secret = None
+    user.mfa_backup_code_hashes = {}
+    user.mfa_pending_backup_code_hashes = {}
+
+    await db.flush()
+    await admin_unlock(f"mfa:{user.id}")
+    await admin_unlock(f"mfa_login:{user.id}")
+    logger.info("MFA cleared by administrator", extra={"user_id": str(user.id)})

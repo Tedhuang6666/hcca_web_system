@@ -4,9 +4,18 @@
 
 import * as Sentry from "@sentry/nextjs";
 
-if (process.env.NEXT_PUBLIC_SENTRY_DSN) {
+import { getServerSentryDsn } from "./src/lib/sentry-config";
+
+type SentryServerGlobal = typeof globalThis & {
+  __hccaSentryServerInitialized?: boolean;
+};
+
+const dsn = getServerSentryDsn();
+const sentryGlobal = globalThis as SentryServerGlobal;
+
+if (dsn && !sentryGlobal.__hccaSentryServerInitialized) {
   Sentry.init({
-    dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
+    dsn,
     environment: process.env.NEXT_PUBLIC_ENVIRONMENT || process.env.NODE_ENV,
 
     // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
@@ -18,4 +27,5 @@ if (process.env.NEXT_PUBLIC_SENTRY_DSN) {
     // 不主動上傳使用者 PII（IP / headers / 使用者資料）— 學生平台隱私考量
     sendDefaultPii: false,
   });
+  sentryGlobal.__hccaSentryServerInitialized = true;
 }

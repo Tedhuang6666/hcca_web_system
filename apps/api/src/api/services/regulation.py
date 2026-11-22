@@ -1,4 +1,4 @@
-"""法規服務層 - CRUD / 發布 / 停用 / 條文管理 / 全文搜尋 / 修訂歷程"""
+"""法規查詢、來源匯入、公布與修訂快照。"""
 
 from __future__ import annotations
 
@@ -9,60 +9,35 @@ from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, case, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import load_only, selectinload
 
 from api.models.document import Document, DocumentStatus
 from api.models.regulation import (
     ArticleType,
     Regulation,
-    RegulationAmendmentType,
     RegulationArticle,
     RegulationCategory,
     RegulationRevision,
-    RegulationWorkflowLog,
     RegulationWorkflowStatus,
 )
 from api.schemas.regulation import (
-    AmendmentComparisonRowOut,
-    ArticleReorderRequest,
     ReferenceWarningOut,
-    RegulationArticleCreate,
     RegulationArticleOut,
-    RegulationArticleUpdate,
-    RegulationCreate,
     RegulationPublishRequest,
     RegulationTimeMachineOut,
     RegulationTreeNodeOut,
-    RegulationUpdate,
 )
+from api.services.dashboard import invalidate_dashboard_cache
 from api.services.regulation_import import (
     ImportedRegulationDraft,
-    parse_history_date,
-    parse_regulation_text,
+    parse_history_date_info,
     split_history_events,
 )
 
 logger = logging.getLogger(__name__)
 _PUBLICATION_DOCUMENT_STATUSES = (DocumentStatus.APPROVED, DocumentStatus.ARCHIVED)
-# Service 層編輯保護：僅 DRAFT 或 REJECTED 可被 update_regulation 修改，
-# 其他狀態（UNDER_REVIEW / SCHEDULED / COUNCIL_APPROVED / PUBLISHED / ARCHIVED）
-# 必須先 fork_regulation_draft 開新草案。
-_EDITABLE_WORKFLOW_STATUSES: frozenset[RegulationWorkflowStatus] = frozenset(
-    {RegulationWorkflowStatus.DRAFT, RegulationWorkflowStatus.REJECTED}
-)
-_PARENT_RULES: dict[ArticleType | None, set[ArticleType]] = {
-    None: {ArticleType.VOLUME, ArticleType.CHAPTER, ArticleType.SECTION, ArticleType.ARTICLE},
-    ArticleType.VOLUME: {ArticleType.CHAPTER},
-    ArticleType.CHAPTER: {ArticleType.SECTION, ArticleType.ARTICLE},
-    ArticleType.SECTION: {ArticleType.ARTICLE},
-    ArticleType.ARTICLE: {ArticleType.PARAGRAPH},
-    ArticleType.PARAGRAPH: {ArticleType.SUBPARAGRAPH},
-    ArticleType.SUBPARAGRAPH: {ArticleType.ITEM},
-    ArticleType.ITEM: set(),
-    ArticleType.SPECIAL_CLAUSE: set(),
-}
 
 
 # ── 查詢輔助 ─────────────────────────────────────────────────────────────────
@@ -75,14 +50,34 @@ def _reg_query_with_relations():
         selectinload(Regulation.creator),
         selectinload(Regulation.articles),
         selectinload(Regulation.revisions).selectinload(RegulationRevision.amender),
+        selectinload(Regulation.revisions).selectinload(RegulationRevision.published_document),
         selectinload(Regulation.workflow_logs),
     )
+
+
+def _reg_query_for_public_detail():
+    """公開法規詳情查詢，載入版本所連結的公布公文摘要。"""
+    return select(Regulation).options(
+        selectinload(Regulation.creator),
+        selectinload(Regulation.articles),
+        selectinload(Regulation.revisions).selectinload(RegulationRevision.amender),
+        selectinload(Regulation.revisions).selectinload(RegulationRevision.published_document),
+        selectinload(Regulation.workflow_logs),
+    )
+
+
+def _reg_query_for_detail():
+    """登入後詳情同樣只載入回應需要的關聯，保留草稿資料本身。"""
+    return _reg_query_for_public_detail()
 
 
 def _attach_display_names(regs: list[Regulation]) -> list[Regulation]:
     for reg in regs:
         creator = reg.__dict__.get("creator")
-        reg.__dict__["created_by_name"] = getattr(creator, "display_name", None)
+        imported_from_file = (reg.proposal_metadata or "").startswith("__file_import__")
+        reg.__dict__["created_by_name"] = (
+            "不詳" if imported_from_file else getattr(creator, "display_name", None)
+        )
         revisions = reg.__dict__.get("revisions") or []
         for rev in revisions:
             amender = rev.__dict__.get("amender")
@@ -193,24 +188,6 @@ async def _add_imported_articles(
     return articles
 
 
-async def _structure_text_content_if_possible(
-    session: AsyncSession,
-    reg: Regulation,
-    *,
-    content: str,
-) -> bool:
-    if not content.strip():
-        return False
-    if any(not a.is_deleted for a in reg.articles):
-        return False
-    try:
-        parsed = parse_regulation_text(title=reg.title, content=content, preface=reg.preface)
-    except ValueError:
-        return False
-    reg.articles.extend(await _add_imported_articles(session, reg_id=reg.id, data=parsed))
-    return True
-
-
 # ── 查詢 ─────────────────────────────────────────────────────────────────────
 
 
@@ -250,6 +227,52 @@ async def get_regulation_by_identifier(
     return reg
 
 
+async def get_regulation_detail_by_identifier(
+    session: AsyncSession,
+    identifier: uuid.UUID | str,
+) -> Regulation | None:
+    """以 UUID 或法規中文全名取得詳情，避免載入未使用的公布公文關聯。"""
+    query = _reg_query_for_detail()
+    if isinstance(identifier, uuid.UUID):
+        query = query.where(Regulation.id == identifier)
+    else:
+        try:
+            query = query.where(Regulation.id == uuid.UUID(identifier))
+        except ValueError:
+            query = query.where(Regulation.title == identifier).order_by(
+                Regulation.is_active.desc(), Regulation.updated_at.desc()
+            )
+    result = await session.execute(query.limit(1))
+    reg = result.scalar_one_or_none()
+    if reg is None:
+        return None
+    _attach_display_names([reg])
+    return reg
+
+
+async def get_public_regulation_by_identifier(
+    session: AsyncSession,
+    identifier: uuid.UUID | str,
+) -> Regulation | None:
+    """取得可公開的現行法規，將公開條件併入主查詢避免額外狀態查詢。"""
+    query = _where_publicly_effective(_reg_query_for_public_detail())
+    if isinstance(identifier, uuid.UUID):
+        query = query.where(Regulation.id == identifier)
+    else:
+        try:
+            query = query.where(Regulation.id == uuid.UUID(identifier))
+        except ValueError:
+            query = query.where(Regulation.title == identifier).order_by(
+                Regulation.is_active.desc(), Regulation.updated_at.desc()
+            )
+    result = await session.execute(query.limit(1))
+    reg = result.scalar_one_or_none()
+    if reg is None:
+        return None
+    _attach_display_names([reg])
+    return reg
+
+
 async def list_regulations(
     session: AsyncSession,
     *,
@@ -263,7 +286,25 @@ async def list_regulations(
     offset: int = 0,
 ) -> list[Regulation]:
     """列表查詢，支援多條件過濾與關鍵字搜尋（全文搜尋）"""
-    q = select(Regulation)
+    q = select(Regulation).options(
+        load_only(
+            Regulation.id,
+            Regulation.title,
+            Regulation.category,
+            Regulation.version,
+            Regulation.is_active,
+            Regulation.is_repealed,
+            Regulation.workflow_status,
+            Regulation.org_id,
+            Regulation.published_at,
+            Regulation.effective_date,
+            Regulation.repealed_date,
+            Regulation.freeze_reason,
+            Regulation.freeze_at,
+            Regulation.created_at,
+            Regulation.updated_at,
+        )
+    )
     if org_id is not None:
         q = q.where(Regulation.org_id == org_id)
     if category is not None:
@@ -275,27 +316,8 @@ async def list_regulations(
     if published_only:
         q = _where_publicly_effective(q)
     if keyword:
-        # 使用 tsvector 全文搜尋；對包含特殊字符的查詢 fallback 到 LIKE
-        try:
-            # 簡單的 AND 查詢：keyword 的每個詞都必須出現
-            tsquery_str = " & ".join(word.strip() for word in keyword.split() if word.strip())
-            if tsquery_str:
-                q = q.where(
-                    Regulation.search_vector.op("@@")(func.to_tsquery("simple", tsquery_str))
-                )
-            else:
-                # keyword 為空或只有空格，fallback 到 LIKE
-                pattern = f"%{keyword}%"
-                q = q.where(
-                    or_(
-                        Regulation.title.ilike(pattern),
-                        Regulation.content.ilike(pattern),
-                        Regulation.preface.ilike(pattern),
-                    )
-                )
-        except Exception:
-            # 若 tsvector 查詢失敗（如特殊字符），fallback 到傳統 LIKE
-            pattern = f"%{keyword}%"
+        pattern = f"%{keyword}%"
+        if session.get_bind().dialect.name == "sqlite":
             q = q.where(
                 or_(
                     Regulation.title.ilike(pattern),
@@ -303,7 +325,34 @@ async def list_regulations(
                     Regulation.preface.ilike(pattern),
                 )
             )
-    q = q.order_by(Regulation.updated_at.desc()).limit(limit).offset(offset)
+        else:
+            # 一般輸入以 plainto_tsquery 解析，避免引號／括號變成 tsquery 語法。
+            # 保留多詞 AND 與原有空白查詢行為；SQL 仍使用綁定參數。
+            if keyword.strip():
+                q = q.where(
+                    Regulation.search_vector.op("@@")(func.plainto_tsquery("simple", keyword))
+                )
+            else:
+                q = q.where(
+                    or_(
+                        Regulation.title.ilike(pattern),
+                        Regulation.content.ilike(pattern),
+                        Regulation.preface.ilike(pattern),
+                    )
+                )
+    latest_history_date = (
+        select(func.max(RegulationRevision.amended_at))
+        .where(RegulationRevision.regulation_id == Regulation.id)
+        .scalar_subquery()
+    )
+    sort_date = func.coalesce(latest_history_date, Regulation.updated_at)
+    category_order = case(
+        (Regulation.category == RegulationCategory.CONSTITUTION, 0),
+        (Regulation.category == RegulationCategory.ORDINANCE, 1),
+        (Regulation.category == RegulationCategory.PROCEDURE, 2),
+        else_=3,
+    )
+    q = q.order_by(category_order, sort_date.desc(), Regulation.title).limit(limit).offset(offset)
     result = await session.execute(q)
     return list(result.scalars().all())
 
@@ -323,8 +372,36 @@ async def search_regulations(
     """
     pattern = f"%{keyword}%"
 
-    # 搜尋法規主體
-    q = _reg_query_with_relations()
+    # 搜尋法規主體。搜尋結果只需要列表欄位與命中條文，避免載入完整修訂歷程、
+    # 審議日誌、建立者與公布公文等詳情關聯。
+    article_match = and_(
+        RegulationArticle.is_deleted.is_(False),
+        or_(
+            RegulationArticle.title.ilike(pattern),
+            RegulationArticle.subtitle.ilike(pattern),
+            RegulationArticle.content.ilike(pattern),
+        ),
+    )
+    q = select(Regulation).options(
+        load_only(
+            Regulation.id,
+            Regulation.title,
+            Regulation.category,
+            Regulation.version,
+            Regulation.is_active,
+            Regulation.is_repealed,
+            Regulation.workflow_status,
+            Regulation.org_id,
+            Regulation.published_at,
+            Regulation.effective_date,
+            Regulation.repealed_date,
+            Regulation.freeze_reason,
+            Regulation.freeze_at,
+            Regulation.created_at,
+            Regulation.updated_at,
+        ),
+        selectinload(Regulation.articles.and_(article_match)),
+    )
     if org_id:
         q = q.where(Regulation.org_id == org_id)
     if active_only:
@@ -337,73 +414,33 @@ async def search_regulations(
             Regulation.content.ilike(pattern),
             Regulation.preface.ilike(pattern),
             # 子查詢：標題/副標題/內容含關鍵字的條文所屬法規
-            Regulation.id.in_(
-                select(RegulationArticle.regulation_id).where(
-                    or_(
-                        RegulationArticle.title.ilike(pattern),
-                        RegulationArticle.subtitle.ilike(pattern),
-                        RegulationArticle.content.ilike(pattern),
-                    ),
-                    RegulationArticle.is_deleted.is_(False),
-                )
-            ),
+            Regulation.id.in_(select(RegulationArticle.regulation_id).where(article_match)),
         )
     )
-    q = q.limit(limit)
+    latest_history_date = (
+        select(func.max(RegulationRevision.amended_at))
+        .where(RegulationRevision.regulation_id == Regulation.id)
+        .scalar_subquery()
+    )
+    category_order = case(
+        (Regulation.category == RegulationCategory.CONSTITUTION, 0),
+        (Regulation.category == RegulationCategory.ORDINANCE, 1),
+        (Regulation.category == RegulationCategory.PROCEDURE, 2),
+        else_=3,
+    )
+    q = q.order_by(
+        category_order,
+        func.coalesce(latest_history_date, Regulation.updated_at).desc(),
+        Regulation.title,
+    ).limit(limit)
     result = await session.execute(q)
-    regs = _attach_display_names(list(result.scalars().unique().all()))
-
-    # 挑出每部法規中命中關鍵字的條文，存入 matched_articles
-    # （不覆寫 reg.articles，列表頁仍需完整條文做其他用途）
-    needle = keyword.lower()
+    regs = list(result.scalars().unique().all())
     for reg in regs:
-        reg.__dict__["matched_articles"] = [
-            a
-            for a in reg.articles
-            if not a.is_deleted
-            and (
-                needle in (a.title or "").lower()
-                or needle in (a.subtitle or "").lower()
-                or needle in (a.content or "").lower()
-            )
-        ]
+        reg.__dict__["matched_articles"] = list(reg.articles)
     return regs
 
 
 # ── 建立 ─────────────────────────────────────────────────────────────────────
-
-
-async def create_regulation(
-    session: AsyncSession,
-    *,
-    data: RegulationCreate,
-    created_by: uuid.UUID,
-) -> Regulation:
-    """建立新法規（預設為草稿，is_active=True，version=1）"""
-    reg = Regulation(
-        title=data.title,
-        category=data.category,
-        content=data.content,
-        preface=data.preface,
-        amendment_type=data.amendment_type,
-        amended_articles=data.amended_articles,
-        effective_date=data.effective_date,
-        legislative_history=data.legislative_history,
-        legal_basis=data.legal_basis,
-        proposal_metadata=data.proposal_metadata,
-        org_id=data.org_id,
-        created_by=created_by,
-        version=1,
-        is_active=True,
-        workflow_status=RegulationWorkflowStatus.DRAFT,
-    )
-    session.add(reg)
-    await session.flush()
-    await _structure_text_content_if_possible(session, reg, content=data.content)
-    logger.info("法規建立 id=%s title=%s", reg.id, reg.title)
-    # 重新查詢以載入所有關聯（避免 async 環境下的 MissingGreenlet）
-    loaded = await get_regulation(session, reg.id)
-    return loaded or reg
 
 
 async def create_regulation_from_import(
@@ -421,6 +458,7 @@ async def create_regulation_from_import(
         content=data.content,
         preface=data.preface,
         legislative_history=data.legislative_history,
+        proposal_metadata="__file_import__",
         org_id=org_id,
         created_by=created_by,
         version=1,
@@ -441,6 +479,174 @@ async def create_regulation_from_import(
     )
     loaded = await get_regulation(session, reg.id)
     return loaded or reg
+
+
+def _history_dates(history: str | None) -> list[datetime]:
+    return [
+        parsed
+        for event in split_history_events(history)
+        if (parsed := parse_history_date_info(event)[0]) is not None
+    ]
+
+
+def _latest_regulation_history_date(reg: Regulation) -> datetime | None:
+    history_dates = _history_dates(reg.legislative_history)
+    if history_dates:
+        return max(history_dates)
+    revision_dates = [revision.amended_at for revision in reg.revisions if revision.amended_at]
+    if revision_dates:
+        return max(revision_dates)
+    return reg.published_at or reg.updated_at
+
+
+async def _find_current_regulation_for_import(
+    session: AsyncSession,
+    *,
+    title: str,
+    org_id: uuid.UUID,
+) -> Regulation | None:
+    result = await session.execute(
+        _reg_query_with_relations()
+        .where(
+            Regulation.title == title,
+            Regulation.org_id == org_id,
+            Regulation.is_active.is_(True),
+            Regulation.workflow_status == RegulationWorkflowStatus.PUBLISHED,
+        )
+        .order_by(Regulation.updated_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+async def _update_existing_regulation_from_import(
+    session: AsyncSession,
+    reg: Regulation,
+    *,
+    data: ImportedRegulationDraft,
+    category: RegulationCategory,
+    updated_by: uuid.UUID,
+) -> Regulation | None:
+    events = split_history_events(data.legislative_history)
+    history_info = [parse_history_date_info(event) for event in events]
+    imported_dates = [info[0] for info in history_info if info[0] is not None]
+    latest_imported_date = max(imported_dates, default=None)
+    latest_existing_date = _latest_regulation_history_date(reg)
+    if (
+        latest_imported_date is None
+        or latest_existing_date is None
+        or latest_imported_date <= latest_existing_date
+    ):
+        return None
+
+    new_events = [
+        (event, info)
+        for event, info in zip(events, history_info, strict=True)
+        if info[0] is not None and info[0] > latest_existing_date
+    ]
+    if not new_events:
+        return None
+
+    existing_history_dates = _history_dates(reg.legislative_history)
+    # 更新同名法規時保留既有分類；匯入表單的分類只適用於新建法規。
+    reg.content = data.content
+    reg.preface = data.preface
+    reg.legislative_history = data.legislative_history
+    reg.workflow_status = RegulationWorkflowStatus.PUBLISHED
+    reg.is_active = True
+    reg.published_at = min(existing_history_dates + imported_dates)
+
+    reg.articles.clear()
+    await session.flush()
+    imported_articles = await _add_imported_articles(session, reg_id=reg.id, data=data)
+    reg.articles.extend(imported_articles)
+    await session.flush()
+
+    base_version = max(
+        [reg.version, *(revision.version for revision in reg.revisions)],
+        default=reg.version,
+    )
+    article_snapshot = _article_snapshot_json(reg.articles)
+    for offset, (event, info) in enumerate(new_events, start=1):
+        version = base_version + offset
+        is_latest = offset == len(new_events)
+        reg.revisions.append(
+            RegulationRevision(
+                regulation_id=reg.id,
+                version=version,
+                change_brief=event[:500],
+                is_total_amendment=is_latest,
+                content_snapshot=data.content if is_latest else "",
+                article_snapshot=article_snapshot if is_latest else "[]",
+                proposal_metadata_snapshot=reg.proposal_metadata,
+                amended_at=info[0],
+                amended_at_precision=info[1],
+                amended_year=info[2],
+                amended_by=updated_by,
+            )
+        )
+    reg.version = base_version + len(new_events)
+    await session.flush()
+    await session.execute(
+        update(Regulation).where(Regulation.id == reg.id).values(updated_at=latest_imported_date)
+    )
+    await session.refresh(reg, attribute_names=["updated_at"])
+    logger.info(
+        "法規 DOCX 匯入更新既有法規 id=%s title=%s version=%d",
+        reg.id,
+        reg.title,
+        reg.version,
+    )
+    loaded = await get_regulation(session, reg.id)
+    return loaded or reg
+
+
+async def import_regulation_document(
+    session: AsyncSession,
+    *,
+    data: ImportedRegulationDraft,
+    category: RegulationCategory,
+    org_id: uuid.UUID,
+    created_by: uuid.UUID,
+    publish_immediately: bool,
+    change_brief: str = "匯入既有現行法規",
+    update_existing: bool = False,
+) -> Regulation:
+    """匯入一份法規；批量立即發布時可依沿革日期更新同名現行法規。"""
+    if update_existing and publish_immediately:
+        existing = await _find_current_regulation_for_import(
+            session,
+            title=data.title,
+            org_id=org_id,
+        )
+        if existing is not None:
+            updated = await _update_existing_regulation_from_import(
+                session,
+                existing,
+                data=data,
+                category=category,
+                updated_by=created_by,
+            )
+            if updated is not None:
+                return updated
+            # 同版或較舊的來源不應再建立第二筆同名現行法規。
+            return existing
+
+    reg = await create_regulation_from_import(
+        session,
+        data=data,
+        category=category,
+        org_id=org_id,
+        created_by=created_by,
+    )
+    if publish_immediately:
+        return await publish_imported_regulation(
+            session,
+            reg,
+            published_by=created_by,
+            change_brief=change_brief,
+        )
+    return reg
 
 
 def _resolve_history_dates(raw_dates: list[datetime | None], now: datetime) -> list[datetime]:
@@ -482,21 +688,27 @@ async def publish_imported_regulation(
     沿革摘要（因無逐版舊文本）。若文件無沿革，則退回建立單一初始快照。
     """
     now = datetime.now(UTC)
+    events = split_history_events(reg.legislative_history)
+    history_info = [parse_history_date_info(event) for event in events]
+    history_dates = [info[0] for info in history_info if info[0] is not None]
     reg.workflow_status = RegulationWorkflowStatus.PUBLISHED
-    reg.published_at = now
+    reg.published_at = min(history_dates, default=now)
+    reg.updated_at = max(history_dates, default=now)
 
     content_snapshot = reg.content
     article_snapshot = _article_snapshot_json(reg.articles)
-    events = split_history_events(reg.legislative_history)
 
     if events:
-        amended_dates = _resolve_history_dates([parse_history_date(event) for event in events], now)
+        amended_dates = _resolve_history_dates([item[0] for item in history_info], now)
         total = len(events)
         for version, (event, amended_at) in enumerate(
             zip(events, amended_dates, strict=True), start=1
         ):
             is_latest = version == total
-            session.add(
+            # reg.revisions.append 而非只 session.add：reg 傳入時通常已被呼叫端
+            # selectinload 過 revisions，只 session.add 不會反向同步這個已載入的
+            # in-memory collection，回傳物件的 revisions 會看不到剛建立的沿革快照。
+            reg.revisions.append(
                 RegulationRevision(
                     regulation_id=reg.id,
                     version=version,
@@ -507,13 +719,15 @@ async def publish_imported_regulation(
                     article_snapshot=article_snapshot if is_latest else "[]",
                     proposal_metadata_snapshot=reg.proposal_metadata if is_latest else None,
                     amended_at=amended_at,
+                    amended_at_precision=history_info[version - 1][1],
+                    amended_year=history_info[version - 1][2],
                     amended_by=published_by,
                 )
             )
         reg.version = total
     else:
         reg.version = 1
-        session.add(
+        reg.revisions.append(
             RegulationRevision(
                 regulation_id=reg.id,
                 version=1,
@@ -529,196 +743,11 @@ async def publish_imported_regulation(
 
     await session.flush()
     loaded = await get_regulation(session, reg.id)
+    await invalidate_dashboard_cache()
     return loaded or reg
-
-
-async def fork_regulation_draft(
-    session: AsyncSession,
-    reg: Regulation,
-    *,
-    created_by: uuid.UUID,
-) -> Regulation:
-    """
-    由既有法規分支出一份新草案（workflow_status=DRAFT）。
-    用於「已發布法規想新增草案」：避免對 published 直接做 workflow transition。
-
-    會複製條文結構（含 parent 關係）。
-    """
-    # fork 出的草案若來自已發布法規，預設為「修正」而非繼承原 amendment_type
-    # （避免修正案被誤判為新法）
-    forked_amendment_type = (
-        RegulationAmendmentType.AMEND if reg.published_at is not None else reg.amendment_type
-    )
-    new_reg = Regulation(
-        title=reg.title,
-        category=reg.category,
-        content=reg.content,
-        preface=reg.preface,
-        amendment_type=forked_amendment_type,
-        amended_articles=reg.amended_articles,
-        effective_date=reg.effective_date,
-        legislative_history=reg.legislative_history,
-        legal_basis=reg.legal_basis,
-        proposal_metadata=reg.proposal_metadata,
-        org_id=reg.org_id,
-        created_by=created_by,
-        version=reg.version,
-        is_active=True,
-        workflow_status=RegulationWorkflowStatus.DRAFT,
-        workflow_note=None,
-        published_at=None,
-        published_document_id=None,
-        freeze_reason=None,
-        freeze_at=None,
-        freeze_document_id=None,
-        source_regulation_id=reg.id,
-    )
-    session.add(new_reg)
-    await session.flush()
-
-    id_map: dict[uuid.UUID, uuid.UUID] = {}
-    new_articles: list[RegulationArticle] = []
-    src_articles = sorted([a for a in reg.articles if not a.is_deleted], key=lambda a: a.sort_index)
-    for a in src_articles:
-        na = RegulationArticle(
-            regulation_id=new_reg.id,
-            # 保留沿革識別碼：fork 出的條文與原條文視為同一條，
-            # 重新排序時才不會被誤判為刪除＋新建。
-            lineage_id=a.lineage_id,
-            sort_index=a.sort_index,
-            order_index=a.order_index,
-            parent_id=None,
-            article_type=_normalize_type(a.article_type),
-            title=a.title,
-            subtitle=a.subtitle,
-            legal_number=a.legal_number,
-            content=a.content,
-            is_deleted=False,
-            frozen_by=None,
-        )
-        session.add(na)
-        await session.flush()
-        id_map[a.id] = na.id
-        new_articles.append(na)
-
-    for na, old in zip(new_articles, src_articles, strict=True):
-        if old.parent_id is not None and old.parent_id in id_map:
-            na.parent_id = id_map[old.parent_id]
-
-    src_revisions = sorted(reg.revisions, key=lambda r: (r.version, r.amended_at))
-    for rev in src_revisions:
-        session.add(
-            RegulationRevision(
-                regulation_id=new_reg.id,
-                version=rev.version,
-                change_brief=rev.change_brief,
-                is_total_amendment=rev.is_total_amendment,
-                content_snapshot=rev.content_snapshot,
-                article_snapshot=rev.article_snapshot,
-                proposal_metadata_snapshot=rev.proposal_metadata_snapshot,
-                resolution_link=rev.resolution_link,
-                amended_at=rev.amended_at,
-                amended_by=rev.amended_by,
-            )
-        )
-    await session.flush()
-
-    loaded = await get_regulation(session, new_reg.id)
-    return loaded or new_reg
 
 
 # ── 更新 ─────────────────────────────────────────────────────────────────────
-
-
-async def update_regulation(
-    session: AsyncSession,
-    reg: Regulation,
-    *,
-    data: RegulationUpdate,
-    updated_by: uuid.UUID,
-) -> Regulation:
-    """更新法規內容，若有變更則遞增版本號並自動建立修訂快照草稿"""
-    if reg.workflow_status not in _EDITABLE_WORKFLOW_STATUSES:
-        raise ValueError(
-            f"法規目前狀態為「{reg.workflow_status.value}」不可編輯，"
-            "請改用 fork_regulation_draft 建立新草案"
-        )
-    changed = False
-    for field in (
-        "title",
-        "category",
-        "content",
-        "preface",
-        "amendment_type",
-        "amended_articles",
-        "effective_date",
-        "legislative_history",
-        "legal_basis",
-        "proposal_metadata",
-    ):
-        val = getattr(data, field, None)
-        if val is not None:
-            setattr(reg, field, val)
-            changed = True
-
-    if changed and data.autosave:
-        await session.flush()
-        return reg
-
-    if changed:
-        if "content" in data.model_fields_set and data.content is not None:
-            await _structure_text_content_if_possible(session, reg, content=data.content)
-        reg.version += 1
-        # 若有提供 change_brief，建立修訂快照記錄
-        if data.change_brief:
-            rev = RegulationRevision(
-                regulation_id=reg.id,
-                version=reg.version,
-                change_brief=data.change_brief,
-                is_total_amendment=False,
-                content_snapshot=reg.content,
-                article_snapshot=_article_snapshot_json(reg.articles),
-                proposal_metadata_snapshot=reg.proposal_metadata,
-                amended_at=datetime.now(UTC),
-                amended_by=updated_by,
-            )
-            session.add(rev)
-
-    await session.flush()
-    return reg
-
-
-async def structure_regulation_content(
-    session: AsyncSession,
-    reg: Regulation,
-    *,
-    content: str | None = None,
-    replace_existing: bool = False,
-) -> Regulation:
-    """將法規全文文字解析成結構化條文，供歷史資料補結構使用。"""
-    source_content = reg.content if content is None else content
-    if not source_content.strip():
-        raise ValueError("法規全文為空，無法建立結構化條文")
-
-    existing_articles = [a for a in reg.articles if not a.is_deleted]
-    if existing_articles and not replace_existing:
-        raise ValueError("此法規已有結構化條文；若要覆蓋請設定 replace_existing=true")
-
-    parsed = parse_regulation_text(
-        title=reg.title,
-        content=source_content,
-        preface=reg.preface,
-    )
-    if replace_existing:
-        for article in existing_articles:
-            article.is_deleted = True
-    if content is not None:
-        reg.content = content
-
-    await _add_imported_articles(session, reg_id=reg.id, data=parsed)
-    await session.flush()
-    loaded = await get_regulation(session, reg.id)
-    return loaded or reg
 
 
 # ── 發布 ─────────────────────────────────────────────────────────────────────
@@ -731,201 +760,51 @@ async def publish_regulation(
     data: RegulationPublishRequest,
     published_by: uuid.UUID,
 ) -> Regulation:
-    """
-    發布法規（設定 published_at）。
-    同時建立修訂歷程快照記錄。
-    """
-    _ = (session, reg, data, published_by)
-    raise ValueError("法規不可直接發布，請改用主席公布流程（president_publish）")
+    """公布既有來源資料，保留版本快照，不啟動起草或審議流程。"""
+    if reg.workflow_status == RegulationWorkflowStatus.PUBLISHED:
+        raise ValueError("此法規已公布")
+    if reg.is_repealed or reg.workflow_status == RegulationWorkflowStatus.ARCHIVED:
+        raise ValueError("已廢止或封存的法規不可公布")
+    if not (reg.content or "").strip() and not any(
+        not article.is_deleted and article.article_type == "article" for article in reg.articles
+    ):
+        raise ValueError("法規尚無可公布的內容")
+
+    change_brief = data.change_brief.strip() or "公布法規"
+    now = datetime.now(UTC)
+    reg.workflow_status = RegulationWorkflowStatus.PUBLISHED
+    reg.workflow_note = None
+    reg.is_active = True
+    reg.published_at = now
+    reg.version = max([reg.version, *(revision.version + 1 for revision in reg.revisions)])
+    reg.revisions.append(
+        RegulationRevision(
+            regulation_id=reg.id,
+            version=reg.version,
+            change_brief=change_brief,
+            is_total_amendment=data.is_total_amendment,
+            content_snapshot=reg.content,
+            article_snapshot=_article_snapshot_json(reg.articles),
+            proposal_metadata_snapshot=reg.proposal_metadata,
+            resolution_link=data.resolution_link,
+            amended_at=now,
+            amended_by=published_by,
+        )
+    )
+    await session.flush()
+    logger.info("法規公布 id=%s title=%s", reg.id, reg.title)
+    loaded = await get_regulation(session, reg.id)
+    await invalidate_dashboard_cache()
+    return loaded or reg
 
 
 # ── 停用 ─────────────────────────────────────────────────────────────────────
 
 
-async def archive_regulation(
-    session: AsyncSession,
-    reg: Regulation,
-) -> Regulation:
-    """停用（封存）法規：is_active=False"""
-    if not reg.is_active:
-        msg = "法規已停用"
-        raise ValueError(msg)
-    reg.is_active = False
-    reg.workflow_status = RegulationWorkflowStatus.ARCHIVED
-    await session.flush()
-    logger.info("法規停用 id=%s", reg.id)
-    return reg
-
-
-async def repeal_regulation(
-    session: AsyncSession,
-    reg: Regulation,
-    reason: str,
-    replacement_id: uuid.UUID | None = None,
-) -> Regulation:
-    """廢止法規"""
-    if reg.is_repealed:
-        msg = "法規已廢止"
-        raise ValueError(msg)
-    if not reg.is_active:
-        msg = "非現行有效的法規不可廢止，請先重新啟用"
-        raise ValueError(msg)
-
-    reg.is_repealed = True
-    reg.repealed_date = datetime.now(UTC)
-    reg.repeal_reason = reason
-    if replacement_id:
-        reg.repeal_replacement_id = replacement_id
-    reg.is_active = False
-
-    await session.flush()
-    logger.info("法規廢止 id=%s reason=%s", reg.id, reason)
-    return reg
-
-
 # ── 刪除 ─────────────────────────────────────────────────────────────────────
 
 
-async def delete_regulation(
-    session: AsyncSession,
-    reg: Regulation,
-) -> None:
-    """永久刪除法規（僅允許尚未發布的草稿）"""
-    if reg.published_at is not None:
-        msg = "已發布的法規不可直接刪除，請先停用"
-        raise ValueError(msg)
-    await session.delete(reg)
-    await session.flush()
-
-
 # ── 條文管理 ─────────────────────────────────────────────────────────────────
-
-
-async def add_article(
-    session: AsyncSession,
-    reg: Regulation,
-    *,
-    data: RegulationArticleCreate,
-) -> RegulationArticle:
-    """新增條文至法規"""
-    if data.parent_id is not None:
-        parent = next(
-            (a for a in reg.articles if a.id == data.parent_id and not a.is_deleted), None
-        )
-        if parent is None:
-            raise ValueError("父節點不存在")
-        allowed = _PARENT_RULES.get(_normalize_type(parent.article_type), set())
-        if _normalize_type(data.article_type) not in allowed:
-            raise ValueError("此父節點不允許該層級子節點")
-    else:
-        allowed_root = _PARENT_RULES[None]
-        if _normalize_type(data.article_type) not in allowed_root:
-            raise ValueError("根層級不允許該節點類型")
-
-    article = RegulationArticle(
-        regulation_id=reg.id,
-        sort_index=data.sort_index,
-        order_index=data.order_index,
-        parent_id=data.parent_id,
-        article_type=data.article_type,
-        title=data.title,
-        subtitle=data.subtitle,
-        legal_number=data.legal_number,
-        content=data.content,
-        is_deleted=False,
-    )
-    session.add(article)
-    await session.flush()
-    logger.info("條文新增 reg_id=%s sort_index=%d", reg.id, data.sort_index)
-    return article
-
-
-async def update_article(
-    session: AsyncSession,
-    article: RegulationArticle,
-    *,
-    data: RegulationArticleUpdate,
-) -> RegulationArticle:
-    """更新條文內容"""
-    for field in (
-        "sort_index",
-        "article_type",
-        "title",
-        "subtitle",
-        "content",
-        "is_deleted",
-        "frozen_by",
-    ):
-        val = getattr(data, field, None)
-        if val is not None:
-            setattr(article, field, val)
-    # parent_id 需區分「未提供」與「明確設為 null（移到頂層）」：
-    # 用 model_fields_set 判斷，否則條文無法被移出原父節點。
-    if "parent_id" in data.model_fields_set:
-        article.parent_id = data.parent_id
-    if data.order_index is not None:
-        article.order_index = data.order_index
-    if data.legal_number is not None:
-        article.legal_number = data.legal_number
-    await session.flush()
-    return article
-
-
-def _structural_level(article_type: object) -> int:
-    """返回結構層級：編=3, 章=2, 節=1，其他=0（條/項/款/目）"""
-    v = str(getattr(article_type, "value", article_type))
-    return {"volume": 3, "chapter": 2, "section": 1}.get(v, 0)
-
-
-async def delete_article(
-    session: AsyncSession,
-    article: RegulationArticle,
-    *,
-    hard_delete: bool = False,
-) -> None:
-    """
-    刪除條文。
-    hard_delete=False：軟刪除（is_deleted=True，保留歷史）。
-    hard_delete=True：硬刪除（物理移除）。
-    刪除編/章/節等結構性標題時，自動級聯刪除其下屬所有條文，
-    直到遇到同級或更高層級的標題為止。
-    """
-    sub_result = await session.execute(
-        select(RegulationArticle).where(
-            RegulationArticle.regulation_id == article.regulation_id,
-            RegulationArticle.is_deleted.is_(False),
-        )
-    )
-    all_nodes = list(sub_result.scalars().all())
-    child_map: dict[uuid.UUID, list[RegulationArticle]] = defaultdict(list)
-    for n in all_nodes:
-        if n.parent_id is not None:
-            child_map[n.parent_id].append(n)
-
-    stack = [article]
-    subtree: list[RegulationArticle] = []
-    while stack:
-        node = stack.pop()
-        subtree.append(node)
-        stack.extend(child_map.get(node.id, []))
-
-    for node in subtree:
-        if hard_delete:
-            await session.delete(node)
-        else:
-            node.is_deleted = True
-    await session.flush()
-
-
-async def get_article(
-    session: AsyncSession,
-    article_id: uuid.UUID,
-) -> RegulationArticle | None:
-    """以 ID 取得條文"""
-    result = await session.execute(
-        select(RegulationArticle).where(RegulationArticle.id == article_id)
-    )
-    return result.scalar_one_or_none()
 
 
 async def list_regulation_revisions(
@@ -935,6 +814,7 @@ async def list_regulation_revisions(
     """取得法規所有修訂歷程（按版本號排序）"""
     result = await session.execute(
         select(RegulationRevision)
+        .options(selectinload(RegulationRevision.published_document))
         .where(RegulationRevision.regulation_id == reg_id)
         .order_by(RegulationRevision.version)
     )
@@ -944,94 +824,9 @@ async def list_regulation_revisions(
 # ── 審議流程 ─────────────────────────────────────────────────────────────────
 
 # 合法的狀態轉移映射
-_ALLOWED_TRANSITIONS: dict[RegulationWorkflowStatus, set[RegulationWorkflowStatus]] = {
-    RegulationWorkflowStatus.DRAFT: {RegulationWorkflowStatus.UNDER_REVIEW},
-    RegulationWorkflowStatus.UNDER_REVIEW: {
-        RegulationWorkflowStatus.SCHEDULED,
-        RegulationWorkflowStatus.REJECTED,
-        RegulationWorkflowStatus.DRAFT,
-    },  # 再修正（撤回）
-    RegulationWorkflowStatus.SCHEDULED: {
-        RegulationWorkflowStatus.COUNCIL_APPROVED,
-        RegulationWorkflowStatus.REJECTED,
-    },
-    RegulationWorkflowStatus.COUNCIL_APPROVED: {
-        RegulationWorkflowStatus.PUBLISHED,
-        RegulationWorkflowStatus.REJECTED,
-        RegulationWorkflowStatus.DRAFT,
-    },  # 再修正（主席退回重新草擬）
-    RegulationWorkflowStatus.REJECTED: {
-        RegulationWorkflowStatus.DRAFT,
-        RegulationWorkflowStatus.UNDER_REVIEW,
-    },
-    RegulationWorkflowStatus.PUBLISHED: {RegulationWorkflowStatus.ARCHIVED},
-    RegulationWorkflowStatus.ARCHIVED: set(),
-}
-
-
-async def transition_workflow(
-    session: AsyncSession,
-    reg: Regulation,
-    *,
-    to_status: RegulationWorkflowStatus,
-    actor_id: uuid.UUID,
-    note: str | None = None,
-) -> Regulation:
-    """執行審議流程狀態轉移，並寫入流程日誌"""
-    allowed = _ALLOWED_TRANSITIONS.get(reg.workflow_status, set())
-    if to_status not in allowed:
-        msg = f"無法從 {reg.workflow_status} 轉移至 {to_status}"
-        raise ValueError(msg)
-    if to_status == RegulationWorkflowStatus.REJECTED and (note is None or not note.strip()):
-        raise ValueError("退回法規必須填寫退回原因")
-
-    log = RegulationWorkflowLog(
-        regulation_id=reg.id,
-        from_status=reg.workflow_status,
-        to_status=to_status,
-        actor_id=actor_id,
-        note=note,
-    )
-    session.add(log)
-
-    reg.workflow_status = to_status
-    reg.workflow_note = note
-    await session.flush()
-    logger.info("法規流程轉移 id=%s %s→%s", reg.id, log.from_status, to_status)
-    return reg
-
-
-async def list_workflow_logs(
-    session: AsyncSession,
-    reg_id: uuid.UUID,
-) -> list[RegulationWorkflowLog]:
-    result = await session.execute(
-        select(RegulationWorkflowLog)
-        .options(selectinload(RegulationWorkflowLog.actor))
-        .where(RegulationWorkflowLog.regulation_id == reg_id)
-        .order_by(RegulationWorkflowLog.created_at)
-    )
-    return list(result.scalars().all())
 
 
 # ── 條文批次重排 ─────────────────────────────────────────────────────────────
-
-
-async def reorder_articles(
-    session: AsyncSession,
-    reg: Regulation,
-    data: ArticleReorderRequest,
-) -> list[RegulationArticle]:
-    """批次更新條文 sort_index（前端拖曳排序後送出）"""
-    id_map = {a.id: a for a in reg.articles}
-    for item in data.items:
-        article = id_map.get(item.id)
-        if article is None:
-            msg = f"條文 {item.id} 不屬於此法規"
-            raise ValueError(msg)
-        article.sort_index = item.sort_index
-    await session.flush()
-    return sorted(reg.articles, key=lambda a: a.sort_index)
 
 
 async def get_article_tree(
@@ -1040,157 +835,6 @@ async def get_article_tree(
 ) -> list[RegulationTreeNodeOut]:
     _ = session
     return _build_tree_nodes(reg.articles)
-
-
-async def auto_renumber_articles(
-    session: AsyncSession,
-    reg: Regulation,
-    *,
-    include_special_number: bool = False,
-) -> list[RegulationArticle]:
-    articles = sorted(
-        [
-            a
-            for a in reg.articles
-            if not a.is_deleted and _normalize_type(a.article_type) == ArticleType.ARTICLE
-        ],
-        key=lambda a: (a.sort_index, a.order_index),
-    )
-    counter = 1
-    for article in articles:
-        if article.legal_number and "-" in article.legal_number and not include_special_number:
-            continue
-        article.legal_number = str(counter)
-        counter += 1
-    await session.flush()
-    return articles
-
-
-def _lineage_match_key(lineage_id: object, legal_number: object, title: object) -> str:
-    """跨版本比對鍵：優先用 lineage_id（重新排序時穩定），
-    舊快照無 lineage_id 時 fallback 到法號/標題。"""
-    if lineage_id:
-        return f"lin:{lineage_id}"
-    return f"num:{str(legal_number or '').strip() or str(title or '').strip()}"
-
-
-def _article_display_label(legal_number: object, title: object) -> str:
-    ln = str(legal_number or "").strip()
-    if ln:
-        return f"第 {ln} 條"
-    return str(title or "").strip() or "（未命名條文）"
-
-
-def _article_full_text(
-    *,
-    legal_number: object,
-    title: object,
-    content: object,
-) -> str:
-    label = _article_display_label(legal_number, title)
-    body = str(content or "").strip()
-    return f"{label}　{body}".strip() if body else label
-
-
-async def compare_amendment(
-    session: AsyncSession,
-    reg: Regulation,
-) -> list[AmendmentComparisonRowOut]:
-    """比對目前條文與最近一次修訂快照，產生逐條對照。
-
-    以 lineage_id 比對 → 重新排序（條號改變但仍為同一條）會正確標為「未變更」，
-    不再被誤判為刪除＋新增。
-    """
-    baseline_reg_id = reg.source_regulation_id or reg.id
-    result = await session.execute(
-        select(RegulationRevision)
-        .where(RegulationRevision.regulation_id == baseline_reg_id)
-        .order_by(RegulationRevision.amended_at.desc())
-        .limit(1)
-    )
-    latest = result.scalar_one_or_none()
-    if latest is None and reg.source_regulation_id is not None:
-        source = await get_regulation(session, reg.source_regulation_id)
-        if source is not None:
-            latest = max(source.revisions or [], key=lambda r: r.amended_at, default=None)
-    current_articles = [
-        a
-        for a in reg.articles
-        if not a.is_deleted and _normalize_type(a.article_type) == ArticleType.ARTICLE
-    ]
-
-    previous: dict[str, dict[str, str | int | None]] = {}
-    if latest:
-        import json
-
-        snapshot = json.loads(latest.article_snapshot or "[]")
-        for row in snapshot:
-            if row.get("is_deleted"):
-                continue
-            if row.get("article_type") != ArticleType.ARTICLE.value:
-                continue
-            key = _lineage_match_key(
-                row.get("lineage_id"), row.get("legal_number"), row.get("title")
-            )
-            previous[key] = {
-                "label": _article_display_label(row.get("legal_number"), row.get("title")),
-                "text": _article_full_text(
-                    legal_number=row.get("legal_number"),
-                    title=row.get("title"),
-                    content=row.get("content"),
-                ),
-                "title": row.get("title") or "",
-                "content": row.get("content") or "",
-                "legal_number": row.get("legal_number") or "",
-                "sort_index": row.get("sort_index"),
-                "parent_id": row.get("parent_id"),
-            }
-
-    rows: list[AmendmentComparisonRowOut] = []
-    seen: set[str] = set()
-    for a in current_articles:
-        key = _lineage_match_key(a.lineage_id, a.legal_number, a.title)
-        seen.add(key)
-        prev = previous.get(key)
-        cur_content = a.content or ""
-        cur_label = _article_display_label(a.legal_number, a.title)
-        if prev is None:
-            note = "新增"
-        elif (
-            str(prev["content"]).strip() != cur_content.strip()
-            or str(prev["title"]).strip() != (a.title or "").strip()
-        ):
-            note = "修正"
-        elif prev["label"] != cur_label or prev["sort_index"] != a.sort_index:
-            # 內容相同但條號變了（重新排序 / 插入造成）→ 條次調整，仍算一項變更
-            note = "條次調整"
-        else:
-            continue
-        rows.append(
-            AmendmentComparisonRowOut(
-                article_key=cur_label,
-                status=note,
-                revised_text=_article_full_text(
-                    legal_number=a.legal_number, title=a.title, content=cur_content
-                ),
-                current_text=str(prev["text"]) if prev else "",
-                note="" if note in {"新增", "修正"} else note,
-            )
-        )
-    for key, prev in previous.items():
-        if key in seen:
-            continue
-        rows.append(
-            AmendmentComparisonRowOut(
-                article_key=str(prev["label"]),
-                status="刪除",
-                revised_text="",
-                current_text=str(prev["text"]),
-                note="刪除",
-            )
-        )
-    _ = session
-    return rows
 
 
 async def validate_references(

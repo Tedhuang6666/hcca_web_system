@@ -43,10 +43,7 @@ class Domain(StrEnum):
     DOCUMENT = "document"
     ANNOUNCEMENT = "announcement"
     PETITION = "petition"
-    MEETING = "meeting"
-    CALENDAR = "calendar"
     SURVEY = "survey"
-    MEAL = "meal"
     SHOP = "shop"
     REGULATION = "regulation"
     TASK = "task"
@@ -69,10 +66,7 @@ _DOMAIN_EMOJI: dict[Domain, str] = {
     Domain.DOCUMENT: "📄",
     Domain.ANNOUNCEMENT: "📢",
     Domain.PETITION: "🗳️",
-    Domain.MEETING: "🤝",
-    Domain.CALENDAR: "📅",
     Domain.SURVEY: "📝",
-    Domain.MEAL: "🍱",
     Domain.SHOP: "🛒",
     Domain.REGULATION: "⚖️",
     Domain.TASK: "✅",
@@ -86,10 +80,7 @@ _DOMAIN_LABEL: dict[Domain, str] = {
     Domain.DOCUMENT: "公文",
     Domain.ANNOUNCEMENT: "公告",
     Domain.PETITION: "陳情",
-    Domain.MEETING: "會議",
-    Domain.CALENDAR: "行事曆",
     Domain.SURVEY: "問卷",
-    Domain.MEAL: "學餐",
     Domain.SHOP: "福利社",
     Domain.REGULATION: "法規",
     Domain.TASK: "待辦",
@@ -164,6 +155,7 @@ def build_embed(
     author_name: str | None = None,
     author_icon_url: str | None = None,
     thumbnail_url: str | None = None,
+    image_url: str | None = None,
 ) -> dict[str, Any]:
     """組裝 Discord embed dict。輸出可直接放進 outbox payload 或 REST API。"""
     dom = domain if isinstance(domain, Domain) else Domain(domain)
@@ -208,6 +200,11 @@ def build_embed(
 
     if thumbnail_url:
         embed["thumbnail"] = {"url": thumbnail_url}
+
+    if image_url:
+        absolute_image_url = _absolute_url(image_url)
+        if absolute_image_url:
+            embed["image"] = {"url": absolute_image_url}
 
     _enforce_total_limit(embed)
     return embed

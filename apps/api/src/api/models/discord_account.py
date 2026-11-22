@@ -7,18 +7,16 @@ from datetime import UTC, datetime, time
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Time, UniqueConstraint, text
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Time, UniqueConstraint
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
 from api.models.base import TimestampMixin
+from api.models.types import JSONDict, JSONList
 
 DEFAULT_DM_CATEGORIES: dict[str, bool] = {
     "document_pending": True,
-    "meeting_invited": True,
-    "calendar_reminder": True,
-    "meal_closing": True,
     "survey_closing": True,
     "shop_ready": True,
     "tenure": True,
@@ -165,6 +163,83 @@ class DiscordNicknamePrefixRule(Base, TimestampMixin):
     position: Mapped[Position | None] = relationship("Position")
 
 
+class DiscordRolePolicy(Base, TimestampMixin):
+    """Discord 身分組的治理映射、暱稱標籤與同步政策。"""
+
+    __tablename__ = "discord_role_policies"
+    __table_args__ = (
+        UniqueConstraint("guild_id", "role_id", name="uq_discord_role_policy_role"),
+        Index("ix_discord_role_policy_target", "org_id", "position_id"),
+        Index("ix_discord_role_policy_active", "guild_id", "is_active"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    guild_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    role_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    role_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    org_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("orgs.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    position_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("positions.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    nickname_label: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    priority: Mapped[int] = mapped_column(nullable=False, default=100, index=True)
+    manage_role: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    use_in_nickname: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true", index=True
+    )
+
+    org: Mapped[Org | None] = relationship("Org")
+    position: Mapped[Position | None] = relationship("Position")
+
+
+class DiscordMemberSyncState(Base, TimestampMixin):
+    """保存成員 Discord 實際狀態、暱稱基線與平台差異。"""
+
+    __tablename__ = "discord_member_sync_states"
+    __table_args__ = (
+        UniqueConstraint("guild_id", "discord_user_id", name="uq_discord_member_sync_state_member"),
+        Index("ix_discord_member_sync_state_drift", "guild_id", "has_role_drift"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    guild_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    discord_user_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    base_nickname: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    actual_nickname: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    expected_nickname: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    last_applied_prefix: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    actual_role_ids: Mapped[list] = mapped_column(
+        JSONList, nullable=False, default=list, server_default="[]"
+    )
+    desired_role_ids: Mapped[list] = mapped_column(
+        JSONList, nullable=False, default=list, server_default="[]"
+    )
+    has_role_drift: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false", index=True
+    )
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+    user: Mapped[User | None] = relationship("User")
+
+
 class DiscordNotificationPreference(Base, TimestampMixin):
     """使用者個人 Discord 通知偏好。預設所有 category True；可用 /notify 在 Discord 內調整。"""
 
@@ -177,7 +252,7 @@ class DiscordNotificationPreference(Base, TimestampMixin):
     )
     # 以 JSONB 存 {category: bool}，未列出視為 True（預設訂閱）
     preferences: Mapped[dict] = mapped_column(
-        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
+        JSONDict, nullable=False, default=dict, server_default="{}"
     )
     # 「免打擾」時段（台北時區）。落在此區間的 DM 會被靜默捨棄並計入 metrics
     quiet_hours_start: Mapped[time | None] = mapped_column(Time, nullable=True)
@@ -197,9 +272,11 @@ __all__ = [
     "DEFAULT_DM_CATEGORIES",
     "DiscordAccountLink",
     "DiscordGuildConfig",
+    "DiscordMemberSyncState",
     "DiscordNicknamePrefixRule",
     "DiscordNotificationPreference",
     "DiscordOrgChannelMapping",
+    "DiscordRolePolicy",
     "DiscordRoleMapping",
     "DiscordRoleMappingKind",
 ]

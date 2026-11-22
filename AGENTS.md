@@ -1,294 +1,91 @@
-# 校園自治整合平台 — 維護協作規範
+# HCCA 維護規範
 
-> 此檔案是專案維護與交接的上下文基礎。每次處理任務請先閱讀此檔案。
+本專案在同一台主機的 WSL `/home/ted98/projects/main` 維護。回覆使用繁體中文。
+先讀 [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md)，再讀修改目錄下的 `AGENTS.md`。
+本檔是跨模型共同規範；`CLAUDE.md` 只引用本檔。舊筆記、memory、稽核報告是線索，
+不是目前程式或驗證結果的替代品。使用者當次指示優先。
 
----
+## 任務從開始到交付
 
-## 一、專案願景與規則
+1. 執行 `git status --short`，辨識原有變更；只處理本次範圍。操作中若出現其他來源修改，保留它。
+   HCCA 任務直接在 `main` 工作，不建立任務分支或 worktree；不得讓多個任務共用同一工作樹提交。
+2. 用一句話確認預期行為與驗收方式。按目錄地圖找相似實作與測試，避免掃全庫。
+3. 先做 GitNexus 影響分析，再改既有函式／類別。流程見下節。
+4. 完成最小、可驗證的修改。遇到相同失敗兩次，改查假設／環境／呼叫鏈，勿反覆套同一修法。
+5. 依 [驗證矩陣](docs/AI_WORKFLOW.md) 實跑相應檢查；記錄通過、失敗、未跑及原因。
+6. 提交前跑 GitNexus `detect-changes`、`git diff --check`，再審閱最終差異與 stage 清單。
+7. **直接在 `main` 提交**；訊息用簡短中文，不附任何協作或作者署名。
+   只 stage 本次相關檔案；無關變動分開提交。相應驗證通過並完成 commit 後，自動執行
+   `git push origin main`。不得強制推送；不要自動開 PR 或部署。
+8. 最後回報：改了什麼、驗證證據與限制、commit 與分支。未跑的檢查不可寫成通過。
 
-**系統名稱**：校園自治整合平台（HCCA Campus Self-Governance Platform）
-**定位**：服務學生代表大會的數位治理工具，實現公文管理、法規維護、購票、餐訂與問卷的全平台整合。
-**協作定位**：協助維護校園自治平台（HCCA），並維持既有架構與程式風格一致。
-**行為規則：**
-1. 每次任務優先閱讀 PROJECT_CONTEXT.md，而非掃描所有原始碼。
-2. 需要閱讀程式碼時，依照「目錄地圖 → 邏輯核心」的順序定向閱讀，不掃描 alembic/versions/、快取目錄、鎖定檔。
-3. 回覆程式碼時只顯示變動的部分，不重複貼出未修改的程式碼。
-4. 架構建議必須符合 Router → Service → Model 單向依賴原則。
-5. 所有 DB 操作使用 AsyncSession，禁止同步阻塞呼叫。
-6. 若任務涉及資料庫 schema 變更，主動提醒需要建立 Alembic migration。
-7. 前端型別定義改動後，主動提醒同步更新 lib/types.ts。
-其他詳細規則查看 PROJECT_CONTEXT.md。
-### 開發藍圖（9 階段 41 模組）
+## 需要使用者另行明確核准的操作
 
-| 階段 | 狀態 | 核心功能 |
-|------|------|----------|
-| P0 基礎建設 | ✅ 完成 | uv Workspaces、Docker、CI/CD |
-| P1 身份驗證 | ✅ 完成 | Google OAuth2、JWT 雙 Token、Redis 黑名單 |
-| P2 組織與權限 | ✅ 完成 | 組織樹、職位、RBAC 時間任期 |
-| P3 共用服務 | ✅ 完成 | Celery、Email、WebSocket、LINE Bot |
-| P4 公文與法規 | ✅ 完成 | 簽核狀態機、字號生成、法規條文系統 |
-| P5 購票系統 | ✅ 完成 | 樂觀鎖訂單、Pandas 報表 |
-| P6 學餐系統 | ✅ 完成 | Celery Beat 定時結單、供應商/菜單/訂單管理 |
-| P7 問卷系統 | ✅ 完成 | 動態題型、匿名隔離、統計分析 |
-| P8 整合收尾 | ✅ 完成 | Gunicorn + UvicornWorker、Celery Beat、standalone Docker |
+即使任務已授權實作，下列操作仍須當次明確核准；`guard-dangerous` hook 會對其他推送、
+強制推送與部署提出確認，並攔截其他正式操作：
+正式部署與正式 compose 啟停、正式資料庫 migration／資料修改／刪除、金鑰與憑證輪替、
+推送到 `develop` 或 `main` 以外的分支、強制推送／改寫歷史／刪除分支，
+GitHub 設定與 secrets、改變既有業務政策（退款、庫存、座位、審核與覆核規則）。
+直接推送 `origin/main` 已預先授權，但必須先完成相應驗證與 commit。
+正式主機 MCP（hostinger-vps）預設已 deny。
+完整安全稽核報告、受影響帳號與正式環境處置紀錄不得提交到公開 repository 或公開 issue。
 
----
+## 架構與資料
 
-## 二、技術棧
+- 依賴方向 **Router → Service → Model**。FastAPI 入口 `api.main:app`，掛載在 `api/main.py`。
+- `require_permission` 等 RBAC 入口檢查在 router。不要把既有 service 的物件歸屬、組織範圍、
+  狀態轉移檢查當成重複權限刪掉；有登入／權限不代表能存取每一筆資料。
+- DB 業務操作用 `AsyncSession`；async 函式不可呼叫 `requests`、`time.sleep()` 等阻塞 API。
+  Alembic 與同步 Celery 入口沿用既有橋接方式，不機械改成 async。
+- Schema 直接回傳既有 `XxxOut`／列表格式，不新增 `{data, success}` 包裝。
+- schema 命名 `XxxCreate / XxxUpdate / XxxOut / XxxListItem`，ORM 回應設 `from_attributes=True`。
+  PATCH 要區分「未提供」與「明確設為 null」，沿用 `exclude_unset=True` 等現有慣例。
+- 變更持久化 schema 必須建立／檢查 Alembic migration，正確位置 `apps/api/alembic/`。
+  不改已套用的歷史 migration 來掩蓋問題；非結構 model 修改不盲目產空 migration。
+- API 契約變更：更新 OpenAPI 產物與 `apps/web/src/lib/types.ts` 相容層，檢查領域 API 呼叫端。
+  實際型別流程見前端規範，禁止直接手改 `api-types.ts`／`api-bridge.ts`。
+- 沿用 UUID、TimestampMixin、String 儲存 StrEnum 與既有軟刪除語意。Python 3.12、Ruff 行長 100。
+- 測試不 mock DB；使用 PostgreSQL 或 aiosqlite。SQLite 結果不等同 PostgreSQL／migration 驗證。
+  新增 router 行為至少覆蓋成功、未授權／禁止存取；權限變更還需跨使用者／組織案例。
 
-### 後端（`apps/api/`）
+## GitNexus（先確認主機上的正確工作樹）
 
-| 類別 | 技術 | 版本 |
-|------|------|------|
-| 語言 | Python | 3.12+ |
-| 框架 | FastAPI | 0.135+ |
-| ORM | SQLAlchemy | 2.0 async |
-| 遷移 | Alembic | 1.18+ |
-| 資料庫 | PostgreSQL | 16-alpine |
-| 快取/佇列 | Redis | 7-alpine |
-| 任務隊列 | Celery + Redis | 5.3+ |
-| 驗證 | Authlib + PyJWT | OAuth2 + HS256 |
-| Email | Resend API + httpx | 非同步 HTTP |
-| 通知 | LINE Bot SDK | 3.x |
-| 資料處理 | Pandas + Openpyxl | 報表匯出 |
-| 套件管理 | uv Workspaces | monorepo |
-| Lint/Format | Ruff | 行長 100 字符 |
-| 測試 | pytest + pytest-asyncio | asyncio_mode=auto |
-
-### 前端（`apps/web/`）
-
-| 類別 | 技術 |
-|------|------|
-| 框架 | Next.js 16 + React 19（App Router） |
-| 樣式 | Tailwind CSS 4 |
-| Markdown | react-markdown + remark-gfm |
-| 通知 | sonner（Toast） |
-
-### 共用函式庫（`libs/shared/`）
-
-- Pydantic BaseSchema、共用 response 結構
-- ORM-agnostic 模型定義
-
----
-
-## 三、核心架構原則
-
-### 3.1 五權分立映射
-
-本系統以五院制度作為模組職責邊界的設計哲學：
-
-| 職責 | 對應模組 | 關鍵模型/代碼 |
-|------|----------|--------------|
-| **立法**（規則制定） | 法規系統、文件範本 | `Regulation`, `DocumentSerialTemplate` |
-| **行政**（執行流轉） | 公文建立、承辦人管理 | `Document`, `handler_*` 欄位 |
-| **司法**（審核裁決） | 多層簽核流程 | `DocumentApproval`, `ApprovalStepStatus` |
-| **考試**（驗證合規） | 表單驗證、字號規則 | `Pydantic schemas`, `serial_template` |
-| **監察**（稽核追蹤） | 版本歷史、審計軌跡 | `DocumentRevision`, `RegulationRevision` |
-
-### 3.2 RBAC 權限引擎
-
-```
-Org（組織）
- └── Position（職位）
-      ├── Permission（代碼，如 document:create）
-      └── UserPosition（時間任期 start_date / end_date）
-```
-
-- **查詢**：`get_user_permission_codes(user_id, date)` → `frozenset[str]`
-- **注入**：`dependencies=[Depends(require_permission("xxx"))]` 僅在 **router 層**
-- **service 層**可假設權限已通過，不重複驗證
-
-已定義的主要 Permission 代碼：
-
-```
-document:create    document:approve    document:admin
-regulation:create  regulation:publish
-shop:manage
-doc.issue          （字號分配）
-finance:view       admin:all
-```
-
-### 3.3 分層架構
-
-```
-apps/api/src/api/
-├── core/         # 基礎設施（config, database, security, celery, ws_manager, oauth）
-├── dependencies/ # FastAPI 注入點（auth.py, permissions.py）
-├── models/       # SQLAlchemy ORM 定義（不含業務邏輯）
-├── schemas/      # Pydantic 請求/回應模型
-├── routers/      # HTTP 端點（只做路由與參數提取，業務邏輯交給 service）
-└── services/     # 業務邏輯（CRUD、狀態機、整合）
-```
-
-**鐵律**：
-- **Router → Service → Model**（單向依賴，禁止逆向）
-- **權限檢查只在 Router 層**：`dependencies=[Depends(require_permission("xxx"))]`
-- **Service 層假設權限已通過**，不重複驗證
-- **不在 async 函式中使用 time.sleep()** 或同步 HTTP（requests）
-- **Schema 回應不包裝**：直接回傳 `XxxOut`，不加 `{data: ..., success: true}`
-- **不 mock 資料庫**：測試用真實 PostgreSQL 或 aiosqlite
-
----
-
-## 四、啟動與開發指令
+本機曾有兩筆同名 `hcca_web_system` 索引。CLI **一律帶 `--repo .`**；MCP 先 `list_repos`，
+以實際路徑辨識，不憑名稱猜。索引資訊請即時查，不把符號數寫成常數。此主機的增量更新曾錯置符號，暫用下列完整重建入口。
 
 ```bash
-# 一鍵啟動（Docker + DB migrations + API + Web）
-bash dev.sh
-
-# 單獨啟動 API
-docker compose up db redis -d
-uv run --project apps/api alembic upgrade head
-uv run --project apps/api uvicorn api:app --reload --port 8000
-
-# 建立資料庫 migration（修改 models/ 後必做）
-uv run --project apps/api alembic revision --autogenerate -m "簡短描述變更"
-uv run --project apps/api alembic upgrade head
-
-# 執行測試
-uv run --project apps/api pytest apps/api/tests -v --asyncio-mode=auto
-
-# Lint 與格式化
-uv run --project apps/api ruff check apps/api/src libs/shared/src
-uv run --project apps/api ruff format apps/api/src libs/shared/src
-
-# 安裝/更新依賴
-uv add <package> --project apps/api
-uv sync
-
-# 前端開發（在 apps/web/）
-npm run dev    # Next.js dev server（port 3000）
-npm run build  # 生產建置
+node .gitnexus/run.cjs status
+node .gitnexus/run.cjs query '業務概念' --repo .
+node .gitnexus/run.cjs context 'symbolName' --repo .
+node .gitnexus/run.cjs impact 'symbolName' --direction upstream --repo .
+# 更新索引，保留手寫規範／技能
+bash scripts/refresh-code-index.sh
+# 每次 commit 前（涵蓋其他工作時要區分歸屬）
+node .gitnexus/run.cjs detect-changes --scope all --repo .
 ```
 
-**API 文件**：啟動後訪問 `http://localhost:8000/docs`（Swagger UI）
+- **既有函式、類別、方法在 impact 前不得編輯。** 回報直接呼叫者、受影響流程與風險。
+- 同名符號用 `--file` 或 `--uid` 定位；HIGH／CRITICAL 先告知風險，再按授權範圍處理。
+- `UNKNOWN`、空結果、工具失敗不是低風險；補查文字引用、入口與測試。
+  文件／設定若圖譜未收錄，同樣記錄 UNKNOWN，逐一驗證引用與設定格式。
+- 概念／流程用 query，已知符號用 context，影響用 impact；`rg` 用於字面量、圖譜缺漏的補查。
+- `partial: true`／`truncated: true` 的變更分析不能當通過，需重跑或處理限制並明示阻塞。
+- 索引出現不符路徑的符號時，先修索引，再用結果判斷。修復方式見 [本機工具](docs/ENVIRONMENT.md)。
+- 重命名用 GitNexus rename，不做全庫文字替換。沒有工具時先修好工具，不假造分析結果。
 
----
+## 操作邊界
 
-## 五、代碼風格規範
+- 不讀出／貼出 `.env`、token、cookie、私鑰或個資；只查所需設定名稱／是否存在。
+- 不覆寫、reset、stash、整檔 restore 其他來源變更。撤銷失敗嘗試只回退自己新增的 hunk。
+- 不因測試失敗而刪測試、降低 coverage、加 `any`、吞例外或移除權限檢查。
+- 任務已授權的可逆實作、驗證與修復直接完成。需要新增不可逆資料操作、正式部署、對外發送時，
+  先確認本次已有相應授權；未授權才提出具體方案請使用者決定。
+- 不假設可用更強模型或子代理。單一模型可以完成分析、實作與驗證；是否委派遵守當次工具規範。
+- 不預讀 `alembic/versions/`、lockfiles、快取或生成型別全文。需要時針對最新 revision／指定型別讀取。
 
-### 5.1 基本規則
+## 按需文件
 
-- 行長限制：**100 字符**（Ruff 設定）
-- Python 版本：3.12+，使用新語法（`X | Y` 替代 `Optional[X]`）
-- 所有 public 函式需型別標注
-- 不加不必要的 docstring、helper 或抽象層
-
-### 5.2 Async-first
-
-```python
-# ✅ 正確
-async def get_document(doc_id: UUID, db: AsyncSession) -> Document:
-    result = await db.execute(select(Document).where(Document.id == doc_id))
-    return result.scalar_one_or_none()
-
-# ❌ 錯誤：blocking call 在 async 函式中
-def get_document(doc_id: UUID):
-    time.sleep(1)   # 禁止
-```
-
-- DB 操作全部使用 `AsyncSession`
-- 禁止在 async 函式中使用 `time.sleep()`（改用 `asyncio.sleep()`）
-- Celery task 使用**同步函式**（Celery 自管 event loop）
-
-### 5.3 Pydantic Schema 命名慣例
-
-| 用途 | 命名 | 說明 |
-|------|------|------|
-| POST body | `XxxCreate` | 必填欄位 |
-| PATCH body | `XxxUpdate` | 所有欄位 `Optional` |
-| 回應（單筆） | `XxxOut` | 完整欄位 |
-| 回應（列表） | `XxxListItem` | 精簡欄位 |
-
-所有 schema 必須設定：
-```python
-model_config = ConfigDict(from_attributes=True)
-```
-
-### 5.4 依賴注入慣例
-
-```python
-# 標準型別別名
-DbDep = Annotated[AsyncSession, Depends(get_db)]
-CurrentUser = Annotated[User, Depends(get_current_active_user)]
-
-# 路由層權限注入
-@router.post("/documents", dependencies=[Depends(require_permission("document:create"))])
-async def create_document(body: DocumentCreate, db: DbDep, user: CurrentUser):
-    return await document_service.create(db, user, body)
-```
-
-### 5.5 SQLAlchemy Model 慣例
-
-- 主鍵：UUID（PostgreSQL `UUID` 類型，server_default=`gen_random_uuid()`）
-- 時間戳：繼承 `TimestampMixin`（`created_at`, `updated_at`）
-- 軟刪除：使用 `is_active: bool = True`，不做實體刪除
-- Enum：使用 Python `StrEnum`，存儲為 `String` 類型
-
----
-
-## 六、測試規範
-
-```python
-# 測試命名：test_<動作>_<情境>_<預期結果>
-async def test_create_document_without_permission_returns_403():
-    ...
-
-async def test_approve_document_by_valid_approver_changes_status():
-    ...
-```
-
-- 使用 pytest-asyncio，`asyncio_mode = "auto"`
-- **不 mock 資料庫**（使用真實 PostgreSQL test DB 或 aiosqlite）
-- 每個 router 至少：一個 happy path + 一個 auth 失敗案例
-- Celery task 測試：設定 `CELERY_TASK_ALWAYS_EAGER=True`
-
----
-
-## 七、環境變數速查
-
-`.env.example` 包含所有必要變數，關鍵項：
-
-```bash
-DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/campus_db
-REDIS_URL=redis://localhost:6379/0
-SECRET_KEY=<256-bit hex>
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
-LINE_CHANNEL_SECRET=...
-LINE_CHANNEL_ACCESS_TOKEN=...
-```
-
----
-
-## 八、常見模式速查
-
-### 新增一個 API 端點
-
-1. 在 `models/` 定義 SQLAlchemy model
-2. 建立 Alembic migration：`alembic revision --autogenerate -m "..."`
-3. 在 `schemas/` 定義 `XxxCreate / XxxOut`
-4. 在 `services/` 實作業務邏輯
-5. 在 `routers/` 新增端點（含 `require_permission`）
-6. 在 `api/__init__.py` 掛載 router（若新檔案）
-
-### 新增一個 Permission 代碼
-
-1. 在 `dependencies/permissions.py` 或文件中記錄新代碼
-2. 在目標 router 的 `dependencies=[Depends(require_permission("xxx"))]` 使用
-3. 透過 admin API 將代碼分配給對應的 Position
-
-### 資料庫 migration 流程
-
-```bash
-# 1. 修改 apps/api/src/api/models/*.py
-# 2. 自動生成 migration
-uv run --project apps/api alembic revision --autogenerate -m "add_xxx_table"
-# 3. 檢查生成的 migration 檔案（在 apps/api/alembic/versions/）
-# 4. 套用
-uv run --project apps/api alembic upgrade head
-```
-
----
-
-*最後更新：2026-04-18 | 作者：Ted Huang*
+- [操作與驗證矩陣](docs/AI_WORKFLOW.md)：改功能、排錯、schema、UI、更新依賴的具體步驟。
+- [本機工具與限制](docs/ENVIRONMENT.md)：Codex／Claude、技能、插件、索引與已知環境限制。
+- [交接檢查清單](docs/HANDOFF_CHECKLIST.md)：任務收尾與證據格式。
+- [文件索引](docs/README.md)：區分現行入口、主題文件與歷史報告。

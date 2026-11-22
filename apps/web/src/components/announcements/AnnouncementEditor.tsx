@@ -1,10 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { toast } from "sonner";
-import { announcementsApi, ApiError } from "@/lib/api";
+import { announcementsApi } from "@/lib/api";
 import type { AnnouncementMediaOut } from "@/lib/types";
-import AnnouncementMarkdown from "./AnnouncementMarkdown";
+import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
+const AnnouncementMarkdown = dynamic(() => import("./AnnouncementMarkdown"), {
+  loading: () => <p role="status">正在載入預覽…</p>,
+});
 
 export default function AnnouncementEditor({
   value,
@@ -25,7 +29,6 @@ export default function AnnouncementEditor({
   const [imageUrl, setImageUrl] = useState("");
   const [imageAlt, setImageAlt] = useState("");
   const [imageWidth, setImageWidth] = useState("720");
-  const [uploading, setUploading] = useState(false);
   const [showImageTools, setShowImageTools] = useState(false);
 
   const previewContent = useMemo(() => ({ markdown: value }), [value]);
@@ -42,19 +45,9 @@ export default function AnnouncementEditor({
     setImageAlt("");
   };
 
-  const handleUpload = async (file: File | null) => {
-    if (!file || !announcementId || !canManageMedia) return;
-    setUploading(true);
-    try {
-      const uploaded = await announcementsApi.uploadMedia(announcementId, file);
-      onMediaUploaded?.(uploaded);
-      insertImage(uploaded.url, uploaded.filename);
-      toast.success("圖片已插入公告");
-    } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "上傳失敗");
-    } finally {
-      setUploading(false);
-    }
+  const uploadImage = async (file: File, reportProgress: (progress: number) => void) => {
+    if (!announcementId || !canManageMedia) throw new Error("請先儲存公告草稿");
+    return announcementsApi.uploadMedia(announcementId, file, reportProgress);
   };
 
   return (
@@ -69,7 +62,7 @@ export default function AnnouncementEditor({
               onClick={() => setTab(key)}
               className="btn btn-sm"
               style={tab === key
-                ? { background: "var(--primary-dim)", color: "var(--primary)", borderColor: "var(--border-strong)" }
+                ? { background: "var(--primary-dim)", color: "var(--primary-text)", borderColor: "var(--border-strong)" }
                 : undefined}>
               {key === "write" ? "撰寫" : "預覽"}
             </button>
@@ -80,7 +73,7 @@ export default function AnnouncementEditor({
           onClick={() => setShowImageTools(v => !v)}
           className="btn btn-sm"
           style={showImageTools
-            ? { background: "var(--primary-dim)", color: "var(--primary)", borderColor: "var(--border-strong)" }
+            ? { background: "var(--primary-dim)", color: "var(--primary-text)", borderColor: "var(--border-strong)" }
             : undefined}
         >
           {showImageTools ? "收合圖片" : "圖片"}
@@ -115,16 +108,20 @@ export default function AnnouncementEditor({
             placeholder="圖片說明"
             aria-label="圖片說明"
           />
-          <label className={`btn btn-ghost ${(!announcementId || !canManageMedia) ? "opacity-50 cursor-not-allowed" : ""}`}>
-            {uploading ? "上傳中" : "本地上傳"}
-            <input
-              type="file"
+          <div className="md:col-span-3">
+            <AnimatedFileUpload
               accept="image/jpeg,image/png,image/gif,image/webp"
-              className="hidden"
-              disabled={!announcementId || !canManageMedia || uploading}
-              onChange={(e) => handleUpload(e.target.files?.[0] ?? null)}
+              label="拖曳圖片到這裡"
+              hint="支援點擊選取或貼上圖片；上傳進度會直接揭露在縮圖上"
+              disabled={!announcementId || !canManageMedia}
+              onUpload={uploadImage}
+              onUploaded={(uploaded) => {
+                onMediaUploaded?.(uploaded);
+                insertImage(uploaded.url, uploaded.filename);
+                toast.success("圖片已插入公告");
+              }}
             />
-          </label>
+          </div>
           {(!announcementId || !canManageMedia) && (
             <p className="text-xs md:col-span-3" style={{ color: "var(--text-muted)" }}>
               儲存公告草稿後，可從編輯頁使用本地上傳。

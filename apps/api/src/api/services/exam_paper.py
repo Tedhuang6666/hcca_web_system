@@ -24,15 +24,24 @@ from api.core.permission_codes import PermissionCode
 from api.models.exam_paper import ExamGradeTrack, ExamPaper, ExamPaperDownload
 from api.models.user import User
 from api.schemas.exam_paper import ExamPaperUpdate
+from api.services.electronic_credential import get_settings
 from api.services.official_print import render_print_pdf
 from api.services.permission import get_user_permission_codes
 from api.services.storage import get_storage
+from api.services.student_identity_rules import (
+    is_alumni_school_account,
+    is_g0_school_account_email,
+)
 
 _PDF_CONTENT_TYPE = "application/pdf"
 
 
-def is_school_member(user: User) -> bool:
+async def is_school_member(session: AsyncSession, user: User) -> bool:
     """校內成員：有學號，或 email 屬允許登入的校內網域。"""
+    if is_g0_school_account_email(user.email):
+        current_prefixes = (await get_settings(session)).student_id_prefixes
+        if is_alumni_school_account(user.email, current_prefixes):
+            return False
     if user.student_id:
         return True
     normalized = user.email.strip().lower()
@@ -48,7 +57,7 @@ async def can_manage_exam_papers(session: AsyncSession, user: User) -> bool:
 
 
 async def can_download_exam_papers(session: AsyncSession, user: User) -> bool:
-    if is_school_member(user) or await can_manage_exam_papers(session, user):
+    if await is_school_member(session, user) or await can_manage_exam_papers(session, user):
         return True
     codes = await get_user_permission_codes(session, user.id)
     return PermissionCode.EXAM_DOWNLOAD in codes
@@ -310,7 +319,7 @@ async def build_traced_pdf(
     writer = PdfWriter()
     downloaded_at = now.astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
     identity = _identity_label(user)
-    footer = f"HCCA Trace {trace_code} | {user.student_id or user.email} | {downloaded_at}"
+    footer = f"班聯會 Trace {trace_code} | {user.student_id or user.email} | {downloaded_at}"
 
     for index, page in enumerate(reader.pages, start=1):
         width = float(page.mediabox.width)
@@ -325,9 +334,9 @@ async def build_traced_pdf(
     writer.add_metadata(
         {
             "/Title": paper.title,
-            "/Subject": f"HCCA Exam Paper Trace {trace_code}",
+            "/Subject": f"班聯會 Exam Paper Trace {trace_code}",
             "/Keywords": f"{trace_code};{user.id};{user.student_id or user.email}",
-            "/Producer": f"HCCA Campus Self-Governance Platform {trace_code}",
+            "/Producer": f"新竹高中班聯會數位整合系統 {trace_code}",
         }
     )
 

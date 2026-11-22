@@ -57,7 +57,7 @@ def test_build_embed_basic_shape():
 
 def test_build_embed_does_not_double_prefix_emoji():
     embed = build_embed(
-        Domain.MEETING,
+        Domain.ANNOUNCEMENT,
         Severity.INFO,
         title="🤝 已包含 emoji 的標題",
     )
@@ -105,6 +105,19 @@ def test_build_embed_timestamp_is_iso8601():
     ts = datetime(2026, 6, 1, 8, 0, tzinfo=UTC)
     embed = build_embed(Domain.SYSTEM, Severity.INFO, title="t", timestamp=ts)
     assert embed["timestamp"].startswith("2026-06-01T08:00:00")
+
+
+def test_build_embed_adds_absolute_image_url():
+    embed = build_embed(
+        Domain.SHOP,
+        Severity.INFO,
+        title="校商投稿",
+        image_url="/merchandise-submissions/discord-images/file-1?token=abc",
+    )
+
+    assert embed["image"]["url"].endswith(
+        "/merchandise-submissions/discord-images/file-1?token=abc"
+    )
 
 
 def test_link_button_and_action_row():

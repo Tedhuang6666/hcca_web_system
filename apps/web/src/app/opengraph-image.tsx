@@ -1,6 +1,12 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
 import { ImageResponse } from "next/og";
 
 import { BRANDING } from "@/lib/branding";
+import { OG_FONT_FAMILY, ogFontOptions } from "@/lib/og-font";
+
+export const alt = BRANDING.appName;
 
 export const size = {
   width: 1200,
@@ -9,7 +15,13 @@ export const size = {
 
 export const contentType = "image/png";
 
-export default function Image() {
+export default async function Image() {
+  const [emblemData, fonts] = await Promise.all([
+    readFile(join(process.cwd(), "public/brand/hcca-emblem.png"), "base64"),
+    ogFontOptions(),
+  ]);
+  const emblemSrc = `data:image/png;base64,${emblemData}`;
+
   return new ImageResponse(
     (
       <div
@@ -22,7 +34,7 @@ export default function Image() {
           padding: 72,
           background: BRANDING.themeColor,
           color: "#f8fafc",
-          fontFamily: "sans-serif",
+          fontFamily: OG_FONT_FAMILY,
         }}
       >
         <div
@@ -34,36 +46,41 @@ export default function Image() {
         >
           <div
             style={{
-              width: 104,
-              height: 104,
-              borderRadius: 26,
+              width: 116,
+              height: 116,
+              borderRadius: 58,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              background: BRANDING.accentColor,
-              color: "#102033",
-              fontSize: 48,
-              fontWeight: 800,
+              background: "#f8fafc",
+              boxShadow: "0 12px 36px rgba(0, 0, 0, 0.22)",
+              overflow: "hidden",
             }}
           >
-            {BRANDING.acronym}
+            <img
+              src={emblemSrc}
+              alt={BRANDING.emblemAlt}
+              width={104}
+              height={104}
+              style={{ objectFit: "contain" }}
+            />
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <div style={{ fontSize: 38, fontWeight: 800 }}>{BRANDING.orgShortName}</div>
+            <div style={{ fontSize: 38, fontWeight: 700 }}>{BRANDING.orgShortName}</div>
             <div style={{ fontSize: 22, color: "#d9e8f7" }}>{BRANDING.englishName}</div>
           </div>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-          <div style={{ fontSize: 62, fontWeight: 900, lineHeight: 1.15 }}>
+          <div style={{ fontSize: 62, fontWeight: 700, lineHeight: 1.15 }}>
             {BRANDING.slogan}
           </div>
           <div style={{ fontSize: 28, color: "#cbd5e1", lineHeight: 1.45 }}>
-            {`${BRANDING.schoolName}公文、法規、公告與校園自治服務整合平台`}
+            {`${BRANDING.schoolName}公文、法規、公告與班聯會服務整合平台`}
           </div>
         </div>
       </div>
     ),
-    size,
+    { ...size, fonts },
   );
 }

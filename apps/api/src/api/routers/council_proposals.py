@@ -12,8 +12,13 @@ from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user, get_optional_user
 from api.dependencies.permissions import require_any
-from api.models.council_proposal import CouncilProposal, CouncilProposalStatus
+from api.models.council_proposal import (
+    CouncilProposal,
+    CouncilProposalCaseType,
+    CouncilProposalStatus,
+)
 from api.models.user import User
+from api.routers._common import or_404
 from api.schemas.council_proposal import (
     CouncilProposalCreate,
     CouncilProposalListItem,
@@ -33,9 +38,7 @@ OptionalUser = Annotated[User | None, Depends(get_optional_user)]
 
 async def _proposal_or_404(session: AsyncSession, proposal_id: uuid.UUID) -> CouncilProposal:
     proposal = await proposal_svc.get(session, proposal_id)
-    if proposal is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此議會提案")
-    return proposal
+    return or_404(proposal, "找不到此議會提案")
 
 
 @router.post(
@@ -57,7 +60,11 @@ async def create_proposal(
         action="council_proposal.create",
         actor_id=str(current_user.id) if current_user else None,
         actor_email=current_user.email if current_user else None,
-        meta={"serial_number": proposal.serial_number, "kind": proposal.kind},
+        meta={
+            "serial_number": proposal.serial_number,
+            "case_type": proposal.case_type,
+            "kind": proposal.kind,
+        },
         summary=f"建立議會提案 {proposal.serial_number}",
     )
     return proposal
@@ -68,6 +75,7 @@ async def list_my_proposals(
     session: DbDep,
     current_user: CurrentUser,
     status_filter: CouncilProposalStatus | None = Query(None, alias="status"),
+    case_type: CouncilProposalCaseType | None = Query(None),
     limit: int = Query(80, ge=1, le=300),
     offset: int = Query(0, ge=0),
 ) -> list[CouncilProposal]:
@@ -75,6 +83,7 @@ async def list_my_proposals(
         session,
         submitter_id=current_user.id,
         status=status_filter,
+        case_type=case_type,
         limit=limit,
         offset=offset,
     )
@@ -88,7 +97,6 @@ async def list_my_proposals(
         Depends(
             require_any(
                 PermissionCode.COUNCIL_PROPOSAL_MANAGE,
-                PermissionCode.MEETING_MANAGE,
                 PermissionCode.ADMIN_ALL,
             )
         )
@@ -98,26 +106,29 @@ async def list_proposals(
     session: DbDep,
     _: CurrentUser,
     status_filter: CouncilProposalStatus | None = Query(None, alias="status"),
+    case_type: CouncilProposalCaseType | None = Query(None),
     limit: int = Query(80, ge=1, le=300),
     offset: int = Query(0, ge=0),
 ) -> list[CouncilProposal]:
     return await proposal_svc.list_items(
         session,
         status=status_filter,
+        case_type=case_type,
         limit=limit,
         offset=offset,
     )
 
 
 @router.get("/{proposal_id}", response_model=CouncilProposalOut, summary="取得議會提案詳情")
-async def get_proposal(proposal_id: uuid.UUID, session: DbDep, user: CurrentUser) -> CouncilProposal:
+async def get_proposal(
+    proposal_id: uuid.UUID, session: DbDep, user: CurrentUser
+) -> CouncilProposal:
     proposal = await _proposal_or_404(session, proposal_id)
     if proposal.submitter_id == user.id or user.is_superuser:
         return proposal
     codes = await get_user_permission_codes(session, user.id)
     if codes & {
         str(PermissionCode.COUNCIL_PROPOSAL_MANAGE),
-        str(PermissionCode.MEETING_MANAGE),
         str(PermissionCode.ADMIN_ALL),
     }:
         return proposal
@@ -132,7 +143,6 @@ async def get_proposal(proposal_id: uuid.UUID, session: DbDep, user: CurrentUser
         Depends(
             require_any(
                 PermissionCode.COUNCIL_PROPOSAL_MANAGE,
-                PermissionCode.MEETING_MANAGE,
                 PermissionCode.ADMIN_ALL,
             )
         )
@@ -145,7 +155,7 @@ async def update_proposal_status(
     user: CurrentUser,
 ) -> CouncilProposal:
     proposal = await _proposal_or_404(session, proposal_id)
-    proposal = await proposal_svc.update_status(session, proposal, data=payload)
+    proposal = await proposal_svc.update_status(session, proposal, data=payload, actor=user)
     await audit_svc.record(
         session,
         entity_type="council_proposal",

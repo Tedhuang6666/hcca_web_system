@@ -1,0 +1,39 @@
+import MarkdownBlock from "@/components/site/MarkdownBlock";
+import PublicSiteShell from "@/components/site/PublicSiteShell";
+import { fetchPublicShellData } from "@/lib/serverFetch";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata = pageMetadata({
+  title: "聯絡我們",
+  description: "班聯會公開聯絡方式與聯繫說明。",
+  path: "/contact",
+  type: "website",
+});
+
+export default async function ContactPage() {
+  const { bundle, urgentAnnouncement } = await fetchPublicShellData();
+  const settings = bundle?.settings;
+  const markdown = settings?.contact_md?.trim() ?? "";
+
+  return (
+    <PublicSiteShell
+      navPages={bundle?.nav_pages ?? []}
+      settings={settings}
+      urgentAnnouncement={urgentAnnouncement}
+    >
+      <div className="mx-auto max-w-5xl px-4 pb-16 pt-10 sm:px-6 lg:pt-12">
+        <header className="public-page-head mb-8">
+          <h1 className="text-3xl font-bold">聯絡我們</h1>
+        </header>
+
+        <section className="card p-6 sm:p-8" data-reveal>
+          {markdown ? (
+            <MarkdownBlock markdown={markdown} />
+          ) : (
+            <p className="text-sm leading-7 text-[var(--text-secondary)]">聯絡方式尚未設定，請稍後再回來查看。</p>
+          )}
+        </section>
+      </div>
+    </PublicSiteShell>
+  );
+}

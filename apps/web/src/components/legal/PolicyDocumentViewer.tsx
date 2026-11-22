@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ApiError, policiesApi } from "@/lib/api";
+import { policiesApi, apiErrorMessage } from "@/lib/api";
 import { normalizeCouncilName } from "@/lib/copy";
+import remarkBreaks from "@/lib/remarkBreaks";
 import type { PolicyDocumentOut, PolicyKind } from "@/lib/types";
 
 export default function PolicyDocumentViewer({
@@ -31,7 +32,7 @@ export default function PolicyDocumentViewer({
       })
       .catch((e) => {
         if (!cancelled) {
-          setError(e instanceof ApiError ? e.message : "無法載入政策文件");
+          setError(apiErrorMessage(e, "無法載入政策文件"));
         }
       });
     return () => {
@@ -54,7 +55,7 @@ export default function PolicyDocumentViewer({
     return (
       <>
         <h1>{fallbackTitle}</h1>
-        <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
           正在載入目前生效版本…
         </p>
       </>
@@ -64,7 +65,7 @@ export default function PolicyDocumentViewer({
   return (
     <>
       <h1>{normalizeCouncilName(doc.title)}</h1>
-      <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+      <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
         生效版本：v{doc.version} · 生效日期：{new Date(doc.effective_at).toLocaleDateString("zh-TW")}
       </p>
       {doc.summary_md && (
@@ -78,12 +79,12 @@ export default function PolicyDocumentViewer({
           <p className="mb-1 font-semibold" style={{ color: "var(--text-primary)" }}>
             本版摘要
           </p>
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+          <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
             {normalizeCouncilName(doc.summary_md)}
           </ReactMarkdown>
         </section>
       )}
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{normalizeCouncilName(doc.content_md)}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{normalizeCouncilName(doc.content_md)}</ReactMarkdown>
     </>
   );
 }

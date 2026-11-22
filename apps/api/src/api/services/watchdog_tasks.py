@@ -13,14 +13,39 @@ from __future__ import annotations
 import asyncio
 import logging
 import shutil
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import redis.asyncio as aioredis
+
 from api.core.celery_app import celery_app
 from api.core.config import settings
+from api.core.database import task_session as _task_session
 
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def _task_redis() -> AsyncIterator[aioredis.Redis]:
+    """每次 asyncio.run() 以新 loop 專屬 redis client 開／關。
+
+    與 _task_session 同理：api.core.security.redis_client 是模組層級共享連線池，
+    首次 await 會把連線綁到當下 event loop。Celery 每次 asyncio.run() 都是新 loop，
+    沿用共享 client 會拋 "got Future attached to a different loop"。
+    """
+    client = aioredis.from_url(
+        str(settings.REDIS_URL),
+        encoding="utf-8",
+        decode_responses=True,
+    )
+    try:
+        yield client
+    finally:
+        await client.aclose()
+
 
 # 門檻
 _DISK_WARN_PCT = 80.0
@@ -63,74 +88,32 @@ async def _run() -> dict[str, Any]:
 
 async def _flag_state(key: str) -> bool:
     """回傳是否已在告警狀態。"""
-    from api.core.security import redis_client
-
     try:
-        v = await redis_client.get(_FLAG_PREFIX + key)
+        async with _task_redis() as client:
+            v = await client.get(_FLAG_PREFIX + key)
         return bool(v)
     except Exception:
         return False
 
 
 async def _set_flag(key: str, fired: bool) -> None:
-    from api.core.security import redis_client
-
     try:
-        if fired:
-            await redis_client.set(_FLAG_PREFIX + key, "1", ex=86400)
-        else:
-            await redis_client.delete(_FLAG_PREFIX + key)
+        async with _task_redis() as client:
+            if fired:
+                await client.set(_FLAG_PREFIX + key, "1", ex=86400)
+            else:
+                await client.delete(_FLAG_PREFIX + key)
     except Exception:
         logger.debug("set flag failed key=%s", key, exc_info=True)
-
-
-def _emit_alert_sync(*, title: str, body: str) -> None:
-    """同步 helper：寫 outbox event → Discord 告警頻道。"""
-    if not settings.MODULE_ALERT_DISCORD_CHANNEL_ID:
-        return
-
-    async def _go() -> None:
-        from api.core.database import AsyncSessionLocal
-        from api.services import outbox
-
-        async with AsyncSessionLocal() as session:
-            try:
-                await outbox.emit(
-                    session,
-                    event_type="discord.channel_alert",
-                    payload={
-                        "channel_id": settings.MODULE_ALERT_DISCORD_CHANNEL_ID,
-                        "title": title,
-                        "body": body,
-                    },
-                )
-                await session.commit()
-            except Exception:
-                logger.exception("emit watchdog alert failed")
-                await session.rollback()
-
-    try:
-        # 已在外層 asyncio.run 中，直接 await 而非再 run
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            asyncio.create_task(_go())
-        else:
-            asyncio.run(_go())
-    except RuntimeError:
-        # 沒有 running loop，建一個
-        asyncio.run(_go())
-    except Exception:
-        logger.exception("watchdog alert wrapper failed")
 
 
 async def _emit_alert(title: str, body: str) -> None:
     """async 版本：已在 _run 內，可直接 await。"""
     if not settings.MODULE_ALERT_DISCORD_CHANNEL_ID:
         return
-    from api.core.database import AsyncSessionLocal
     from api.services import outbox
 
-    async with AsyncSessionLocal() as session:
+    async with _task_session() as session:
         try:
             await outbox.emit(
                 session,
@@ -253,11 +236,10 @@ async def _check_outbox_dead() -> dict[str, Any]:
     """outbox dead letter 累積過多 → 告警。"""
     from sqlalchemy import func, select
 
-    from api.core.database import AsyncSessionLocal
     from api.models.outbox import OutboxEvent, OutboxStatus
 
     try:
-        async with AsyncSessionLocal() as session:
+        async with _task_session() as session:
             count = int(
                 (
                     await session.execute(

@@ -1,0 +1,1127 @@
+"use client";
+import NumberInput from "@/components/ui/NumberInput";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { GripVertical } from "lucide-react";
+import { toast } from "sonner";
+import { surveysApi, orgsApi, apiErrorMessage } from "@/lib/api";
+import type { OrgRead } from "@/lib/api";
+import type { QuestionType, ValidationRule, UserSummary } from "@/lib/types";
+import { useDraftAutosave } from "@/hooks/useDraftAutosave";
+import UserPicker from "@/components/surveys/UserPicker";
+import SurveyGradeSelector from "@/components/surveys/SurveyGradeSelector";
+import GuidedForm, { GuidedFormStep, type GuidedFormStepDefinition } from "@/components/ui/GuidedForm";
+import OptionImageFields from "@/components/surveys/OptionImageFields";
+import SurveyImageField from "@/components/surveys/SurveyImageField";
+import { SurveyMarkdownField } from "@/components/surveys/SurveyMarkdownField";
+import SurveyQuestionTypePicker from "@/components/surveys/SurveyQuestionTypePicker";
+import {
+  DEFAULT_MULTI_FIELD_LABELS,
+  SurveyMultiFieldEditor,
+  SurveyGridColumnsEditor,
+  SurveyGridRowsEditor,
+} from "@/components/surveys/SurveyQuestionFields";
+
+const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
+  { value: "section_text", label: "文字描述區塊" },
+  { value: "page_break",   label: "分頁" },
+  { value: "image",        label: "圖片" },
+  { value: "video",        label: "影片連結" },
+  { value: "text",     label: "簡答（單行）" },
+  { value: "textarea", label: "長答（多行）" },
+  { value: "single",   label: "單選" },
+  { value: "single_grid", label: "單選方格（每列選一欄）" },
+  { value: "multiple", label: "多選" },
+  { value: "multi_text", label: "多欄詳答" },
+  { value: "rating",   label: "評分" },
+  { value: "linear_scale", label: "線性刻度" },
+  { value: "date",     label: "日期" },
+];
+
+const DISPLAY_TYPES: QuestionType[] = ["section_text", "page_break", "image", "video"];
+const isDisplayType = (type: QuestionType | undefined) => Boolean(type && DISPLAY_TYPES.includes(type));
+
+const VALIDATION_RULES: { value: ValidationRule | ""; label: string }[] = [
+  { value: "",        label: "不限格式" },
+  { value: "email",   label: "電子郵件" },
+  { value: "number",  label: "數字（可含小數）" },
+  { value: "integer", label: "整數" },
+  { value: "url",     label: "網址" },
+  { value: "phone",   label: "電話號碼" },
+];
+
+const SURVEY_STEPS: GuidedFormStepDefinition[] = [
+  { label: "基本資料" },
+  { label: "填答對象" },
+  { label: "設計題目" },
+  { label: "確認發布" },
+];
+
+type CondRule = { question_id: string; operator: string; value: string; connector: string };
+
+interface DraftQuestion {
+  id: string;
+  question_text: string;
+  description: string;
+  question_type: QuestionType;
+  is_required: boolean;
+  options: string[];
+  grid_columns: string[];
+  option_image_sets: string[][];
+  min_value: number;
+  max_value: number;
+  placeholder: string;
+  image_url: string;
+  min_length: string;
+  max_length: string;
+  validation_rule: string;
+  min_label: string;
+  max_label: string;
+  rules: CondRule[];
+  order_index: number;
+}
+
+type SurveyAccessMode = "members" | "link" | "public";
+
+type SurveyDraft = {
+  title: string;
+  description: string;
+  announcement: string;
+  announcementTitle: string;
+  showAnnouncementPopup: boolean;
+  accessMode: SurveyAccessMode;
+  allowedDomains: string;
+  allowedUsers: UserSummary[];
+  allowedOrgIds: string[];
+  allowedGrades: number[];
+  isAnonymous: boolean;
+  allowMultiple: boolean;
+  closesAt: string;
+  orgId: string;
+  questions: DraftQuestion[];
+  newQ: Partial<DraftQuestion>;
+};
+
+function Label({ children }: { children: React.ReactNode }) {
+  return (
+    <label className="text-xs font-medium block mb-1.5" style={{ color: "var(--text-secondary)" }}>
+      {children}
+    </label>
+  );
+}
+
+/** 題目顯示條件編輯器（多規則、且／或、可排序）。 */
+function ConditionEditor({
+  rules, others, onChange,
+}: {
+  rules: CondRule[];
+  others: { id: string; label: string; type: QuestionType; options: string[] }[];
+  onChange: (rules: CondRule[]) => void;
+}) {
+  const update = (i: number, patch: Partial<CondRule>) =>
+    onChange(rules.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  const move = (i: number, dir: -1 | 1) => {
+    const t = i + dir;
+    if (t < 0 || t >= rules.length) return;
+    const next = [...rules];
+    [next[i], next[t]] = [next[t], next[i]];
+    onChange(next);
+  };
+  return (
+    <div className="space-y-1.5">
+      {rules.map((r, i) => (
+        <div key={i} className="space-y-1 rounded-lg p-2" style={{ background: "var(--bg-surface)" }}>
+          {i > 0 && (
+            <div className="flex gap-1">
+              {(["and", "or"] as const).map(c => (
+                <button key={c} type="button" onClick={() => update(i, { connector: c })}
+                  className="text-xs px-2 py-0.5 rounded"
+                  style={r.connector === c
+                    ? { background: "var(--primary)", color: "var(--primary-fg)" }
+                    : { background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
+                  {c === "and" ? "且" : "或"}
+                </button>
+              ))}
+            </div>
+          )}
+          <select value={r.question_id} onChange={e => update(i, { question_id: e.target.value })}
+            className="input text-sm">
+            <option value="">選擇來源題目…</option>
+            {others.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+          </select>
+          <div className="flex flex-wrap gap-1.5 items-center">
+            <select value={r.operator} onChange={e => update(i, { operator: e.target.value })}
+              className="input text-sm" style={{ flex: "1 1 6rem" }}>
+              <option value="equals">完全等於</option>
+              <option value="contains">包含</option>
+            </select>
+            {(() => {
+              const src = others.find(o => o.id === r.question_id);
+              const choices = src && (src.type === "single" || src.type === "multiple")
+                ? src.options : [];
+              return choices.length > 0 ? (
+                <select value={r.value} onChange={e => update(i, { value: e.target.value })}
+                  className="input text-sm" style={{ flex: "2 1 8rem" }}>
+                  <option value="">選擇答案…</option>
+                  {choices.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                </select>
+              ) : (
+                <input value={r.value} onChange={e => update(i, { value: e.target.value })}
+                  placeholder="答案文字" className="input text-sm" style={{ flex: "2 1 8rem" }} />
+              );
+            })()}
+            <div className="flex gap-1 ml-auto">
+              <button type="button" onClick={() => move(i, -1)} disabled={i === 0}
+                className="topbar-icon-btn" aria-label="上移" style={{ opacity: i === 0 ? 0.3 : 1 }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="3" strokeLinecap="round" aria-hidden="true"><polyline points="18 15 12 9 6 15" /></svg>
+              </button>
+              <button type="button" onClick={() => move(i, 1)} disabled={i === rules.length - 1}
+                className="topbar-icon-btn" aria-label="下移" style={{ opacity: i === rules.length - 1 ? 0.3 : 1 }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="3" strokeLinecap="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
+              </button>
+              <button type="button" onClick={() => onChange(rules.filter((_, idx) => idx !== i))}
+                className="topbar-icon-btn" aria-label="刪除條件" style={{ color: "var(--danger)" }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="3" strokeLinecap="round" aria-hidden="true">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      ))}
+      <button type="button"
+        onClick={() => onChange([...rules, { question_id: "", operator: "equals", value: "", connector: "and" }])}
+        className="btn btn-ghost w-full text-xs">＋ 新增顯示條件</button>
+    </div>
+  );
+}
+
+export default function NewSurveyPage() {
+  const router = useRouter();
+  const [saving, setSaving] = useState(false);
+  const [activeStep, setActiveStep] = useState(0);
+
+  // 問卷基本資料
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [announcement, setAnnouncement] = useState("");
+  const [announcementTitle, setAnnouncementTitle] = useState("");
+  const [showAnnouncementPopup, setShowAnnouncementPopup] = useState(false);
+  const [isAnonymous, setIsAnonymous] = useState(false);
+  const [allowMultiple, setAllowMultiple] = useState(false);
+  const [closesAt, setClosesAt] = useState("");
+  const [orgId, setOrgId] = useState("");
+  const [orgs, setOrgs] = useState<OrgRead[]>([]);
+
+  // 填答對象
+  const [accessMode, setAccessMode] = useState<SurveyAccessMode>("members");
+  const [allowedDomains, setAllowedDomains] = useState("");
+  const [allowedUsers, setAllowedUsers] = useState<UserSummary[]>([]);
+  const [allowedOrgIds, setAllowedOrgIds] = useState<string[]>([]);
+  const [allowedGrades, setAllowedGrades] = useState<number[]>([]);
+
+  // 題目列表
+  const [questions, setQuestions] = useState<DraftQuestion[]>([]);
+  const [newQ, setNewQ] = useState<Partial<DraftQuestion>>({
+    question_text: "", description: "", question_type: "text", is_required: true, options: [],
+    grid_columns: [], option_image_sets: [], min_value: 1, max_value: 5,
+    placeholder: "", image_url: "", min_length: "", max_length: "", validation_rule: "", min_label: "", max_label: "",
+  });
+  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
+  const [draggedQuestionId, setDraggedQuestionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const storedOrgId = localStorage.getItem("org_id") ?? "";
+    orgsApi.list({ active_only: true })
+      .then((items) => {
+        const usableStoredOrgId = items.some((org) => org.id === storedOrgId) ? storedOrgId : "";
+        setOrgs(items);
+        setOrgId((current) => {
+          if (current && items.some((org) => org.id === current)) return current;
+          return usableStoredOrgId || (items.length === 1 ? items[0].id : "");
+        });
+      })
+      .catch(() => {
+        // 建立時仍會由後端權限檢查；這裡只避免 UI 直接卡死。
+      });
+  }, []);
+
+  const draftValue = useMemo<SurveyDraft>(() => ({
+    title,
+    description,
+    announcement,
+    announcementTitle,
+    showAnnouncementPopup,
+    accessMode,
+    allowedDomains,
+    allowedUsers,
+    allowedOrgIds,
+    allowedGrades,
+    isAnonymous,
+    allowMultiple,
+    closesAt,
+    orgId,
+    questions,
+    newQ,
+  }), [
+    announcement,
+    announcementTitle,
+    accessMode,
+    allowMultiple,
+    allowedDomains,
+    allowedOrgIds,
+    allowedGrades,
+    allowedUsers,
+    closesAt,
+    description,
+    isAnonymous,
+    newQ,
+    orgId,
+    questions,
+    showAnnouncementPopup,
+    title,
+  ]);
+  const restoreDraft = useCallback((draft: SurveyDraft) => {
+    setTitle(draft.title ?? "");
+    setDescription(draft.description ?? "");
+    setAnnouncement(draft.announcement ?? "");
+    setAnnouncementTitle(draft.announcementTitle ?? "");
+    setShowAnnouncementPopup(Boolean(draft.showAnnouncementPopup));
+    setAccessMode(draft.accessMode ?? "members");
+    setAllowedDomains(draft.allowedDomains ?? "");
+    setAllowedUsers(draft.allowedUsers ?? []);
+    setAllowedOrgIds(draft.allowedOrgIds ?? []);
+    setAllowedGrades(draft.allowedGrades ?? []);
+    setIsAnonymous(Boolean(draft.isAnonymous));
+    setAllowMultiple(Boolean(draft.allowMultiple));
+    setClosesAt(draft.closesAt ?? "");
+    setOrgId(draft.orgId ?? localStorage.getItem("org_id") ?? "");
+    setQuestions((draft.questions ?? []).map(q => ({
+      ...q,
+      description: q.description ?? "",
+      grid_columns: q.grid_columns ?? [],
+      option_image_sets: q.option_image_sets ?? [],
+      rules: q.rules ?? [],
+    })));
+    setNewQ(draft.newQ ?? {
+      question_text: "",
+      description: "",
+      question_type: "text",
+      is_required: true,
+      options: [],
+      grid_columns: [],
+      option_image_sets: [],
+      min_value: 1,
+      max_value: 5,
+      placeholder: "",
+      image_url: "",
+      min_length: "",
+      max_length: "",
+      validation_rule: "",
+      min_label: "",
+      max_label: "",
+    });
+    toast.info("已復原未送出的問卷草稿");
+  }, []);
+  const { clearDraft, flushDraft, lastSavedAt } = useDraftAutosave({
+    key: "surveys:new",
+    value: draftValue,
+    onRestore: restoreDraft,
+    isEmpty: useCallback((draft: SurveyDraft) => (
+      !(draft.title ?? "").trim()
+      && !(draft.description ?? "").trim()
+      && !(draft.announcement ?? "").trim()
+      && !(draft.announcementTitle ?? "").trim()
+      && !draft.showAnnouncementPopup
+      && !draft.closesAt
+      && (draft.questions ?? []).length === 0
+      && !(draft.newQ.question_text ?? "").trim()
+      && !(draft.newQ.description ?? "").trim()
+      && !(draft.newQ.options ?? []).some((option) => option.trim())
+      && !(draft.newQ.grid_columns ?? []).some((column) => column.trim())
+      && !(draft.newQ.option_image_sets ?? []).some((images) => images.length > 0)
+    ), []),
+  });
+
+  const addQuestion = () => {
+    const qType = newQ.question_type ?? "text";
+    const isImg = qType === "image";
+    const isGrid = qType === "single_grid";
+    const isMultiText = qType === "multi_text";
+    const isRating = qType === "rating";
+    const isLinearScale = qType === "linear_scale";
+    if (isImg && !newQ.image_url) { toast.error("圖片題型請先上傳圖片"); return; }
+    if (!isImg && !newQ.question_text?.trim()) { toast.error("請輸入題目或區塊文字"); return; }
+    const needsOptions = qType === "single" || qType === "multiple";
+    const usesOptionLabels = needsOptions || isGrid || isMultiText;
+    const labels = (newQ.options ?? []).map(option => option.trim()).filter(Boolean);
+    const gridColumns = (newQ.grid_columns ?? []).map(column => column.trim()).filter(Boolean);
+    const optionEntries = (newQ.options ?? []).map((option, index) => ({
+      option: option.trim(),
+      images: newQ.option_image_sets?.[index] ?? [],
+    })).filter(({ option }) => Boolean(option));
+    if ((needsOptions || isGrid) && labels.length < 2) {
+      toast.error(isGrid ? "單選方格至少需要 2 列" : "選擇題至少需要 2 個選項"); return;
+    }
+    if (isGrid && (labels.length > 50 || gridColumns.length < 2 || gridColumns.length > 20)) {
+      toast.error("單選方格需要設定 2 至 50 列、2 至 20 欄"); return;
+    }
+    if (isGrid && (new Set(labels).size !== labels.length
+      || new Set(gridColumns).size !== gridColumns.length)) {
+      toast.error("單選方格的列與欄標籤不可重複"); return;
+    }
+    if (isMultiText && (labels.length < 2 || labels.length > 20)) {
+      toast.error("多欄詳答需要設定 2 至 20 個欄位名稱"); return;
+    }
+    if (isMultiText && new Set(labels).size !== labels.length) {
+      toast.error("多欄詳答欄位名稱不可重複"); return;
+    }
+    if ((isRating || isLinearScale)
+      && ((newQ.min_value ?? 1) > (newQ.max_value ?? 5)
+        || (isLinearScale && (newQ.min_value ?? 0) === (newQ.max_value ?? 5)))) {
+      toast.error(isLinearScale ? "最高刻度必須大於起始刻度" : "最高分數不可小於起始分數"); return;
+    }
+    if (qType === "multiple" && (newQ.max_value ?? 0) > optionEntries.length) {
+      toast.error("多選最多項數不可大於選項總數"); return;
+    }
+    const isText = qType === "text" || qType === "textarea";
+    setQuestions(prev => {
+      const draftQuestion: Omit<DraftQuestion, "id" | "order_index"> = {
+        question_text: newQ.question_text?.trim() ?? "",
+        description: newQ.description?.trim() ?? "",
+        question_type: qType,
+        is_required: isDisplayType(qType) ? false : (newQ.is_required ?? true),
+        options: usesOptionLabels ? labels : [],
+        grid_columns: isGrid ? gridColumns : [],
+        option_image_sets: needsOptions ? optionEntries.map(({ images }) => images) : [],
+        min_value: newQ.min_value ?? 1,
+        max_value: qType === "multiple" ? (newQ.max_value ?? 0) : (newQ.max_value ?? 5),
+        placeholder: newQ.placeholder ?? "",
+        image_url: newQ.image_url ?? "",
+        min_length: isText ? (newQ.min_length ?? "") : "",
+        max_length: isText ? (newQ.max_length ?? "") : "",
+        validation_rule: isText ? (newQ.validation_rule ?? "") : "",
+        min_label: qType === "rating" ? (newQ.min_label ?? "") : "",
+        max_label: qType === "rating" ? (newQ.max_label ?? "") : "",
+        rules: [],
+      };
+      if (editingQuestionId) {
+        return prev.map((question) => question.id === editingQuestionId
+          ? { ...draftQuestion, id: question.id, order_index: question.order_index }
+          : question);
+      }
+      return [...prev, { ...draftQuestion, id: crypto.randomUUID(), order_index: prev.length }];
+    });
+    // 保留上一題的題型與必填設定，方便連續新增同類型題目
+    setNewQ({
+      question_text: "",
+      description: "",
+      question_type: qType,
+      is_required: newQ.is_required ?? true,
+      options: isMultiText ? [...DEFAULT_MULTI_FIELD_LABELS] : [],
+      grid_columns: isGrid ? ["欄 1", "欄 2"] : [],
+      option_image_sets: [],
+      min_value: newQ.min_value ?? 1,
+      max_value: qType === "multiple" ? (newQ.max_value ?? 0) : (newQ.max_value ?? 5),
+      placeholder: "",
+      image_url: "",
+      min_length: "",
+      max_length: "",
+      validation_rule: "",
+      min_label: "",
+      max_label: "",
+    });
+    setEditingQuestionId(null);
+  };
+
+  const removeQuestion = (id: string) => {
+    if (id === editingQuestionId) setEditingQuestionId(null);
+    setQuestions(prev => prev.filter(q => q.id !== id));
+  };
+
+  const editQuestion = (question: DraftQuestion) => {
+    setNewQ({
+      ...question,
+      description: question.description ?? "",
+      options: [...question.options],
+      grid_columns: [...(question.grid_columns ?? [])],
+      option_image_sets: question.option_image_sets.map((images) => [...images]),
+      rules: question.rules.map((rule) => ({ ...rule })),
+    });
+    setEditingQuestionId(question.id);
+  };
+
+  const moveQuestion = (index: number, dir: -1 | 1) => {
+    setQuestions(prev => {
+      const t = index + dir;
+      if (t < 0 || t >= prev.length) return prev;
+      const next = [...prev];
+      [next[index], next[t]] = [next[t], next[index]];
+      return next.map((q, i) => ({ ...q, order_index: i }));
+    });
+  };
+
+  const reorderQuestion = (sourceId: string, targetId: string) => {
+    if (sourceId === targetId) return;
+    setQuestions((previous) => {
+      const sourceIndex = previous.findIndex((question) => question.id === sourceId);
+      const targetIndex = previous.findIndex((question) => question.id === targetId);
+      if (sourceIndex < 0 || targetIndex < 0) return previous;
+      const next = [...previous];
+      const [moved] = next.splice(sourceIndex, 1);
+      next.splice(targetIndex, 0, moved);
+      return next.map((question, index) => ({ ...question, order_index: index }));
+    });
+  };
+
+  const setQuestionRules = (id: string, rules: CondRule[]) => {
+    setQuestions(prev => prev.map(q => (q.id === id ? { ...q, rules } : q)));
+    if (id === editingQuestionId) setNewQ((question) => ({ ...question, rules }));
+  };
+
+  const save = async (publish = false) => {
+    if (!title.trim()) { toast.error("請輸入問卷標題"); return; }
+    if (!questions.some(q => !isDisplayType(q.question_type))) { toast.error("請至少新增一道可填答題目"); return; }
+    if (!orgId) { toast.error("無法取得組織資訊"); return; }
+    setSaving(true);
+    try {
+      const splitLines = (s: string) => s.split("\n").map(x => x.trim()).filter(Boolean);
+      const allowsAnonymous = accessMode !== "members";
+      const survey = await surveysApi.create({
+        title: title.trim(),
+        description: description.trim() || undefined,
+        announcement: announcement.trim() || null,
+        announcement_title: announcementTitle.trim() || null,
+        show_announcement_popup: showAnnouncementPopup,
+        is_anonymous: isAnonymous,
+        allow_multiple: allowMultiple,
+        closes_at: closesAt || undefined,
+        org_id: orgId,
+        is_public: allowsAnonymous,
+        is_listed: accessMode !== "link",
+        allowed_org_ids: allowsAnonymous ? [] : allowedOrgIds,
+        allowed_user_ids: allowsAnonymous ? [] : allowedUsers.map(u => u.id),
+        allowed_domains: allowsAnonymous ? [] : splitLines(allowedDomains),
+        allowed_grades: allowsAnonymous ? [] : allowedGrades,
+      });
+      // 第一輪：依序新增題目，建立「暫存 id → 真實 id」對應
+      const idMap: Record<string, string> = {};
+      for (const q of questions) {
+        const isText = q.question_type === "text" || q.question_type === "textarea";
+        const created = await surveysApi.addQuestion(survey.id, {
+          question_text: q.question_text,
+          description: q.description || undefined,
+          question_type: q.question_type,
+          is_required: q.is_required,
+          options: q.options,
+          grid_columns: q.grid_columns,
+          option_image_sets: q.option_image_sets,
+          min_value: q.question_type === "rating" || q.question_type === "linear_scale"
+            ? q.min_value
+            : undefined,
+          max_value: q.question_type === "rating" || q.question_type === "linear_scale"
+            ? q.max_value
+            : q.question_type === "multiple" && q.max_value > 0
+              ? q.max_value
+              : undefined,
+          placeholder: q.placeholder || undefined,
+          image_url: q.image_url || undefined,
+          min_length: isText && q.min_length ? parseInt(q.min_length) : undefined,
+          max_length: isText && q.max_length ? parseInt(q.max_length) : undefined,
+          validation_rule: isText && q.validation_rule ? q.validation_rule : undefined,
+          min_label: (q.question_type === "rating" || q.question_type === "linear_scale") && q.min_label
+            ? q.min_label
+            : undefined,
+          max_label: (q.question_type === "rating" || q.question_type === "linear_scale") && q.max_label
+            ? q.max_label
+            : undefined,
+          order_index: q.order_index,
+        });
+        idMap[q.id] = created.id;
+      }
+      // 第二輪：套用顯示條件（將暫存題目 id 轉成真實 id）
+      for (const q of questions) {
+        if (q.rules.length === 0) continue;
+        const rules = q.rules
+          .filter(r => r.question_id && idMap[r.question_id])
+          .map(r => ({ ...r, question_id: idMap[r.question_id] }));
+        if (rules.length > 0) {
+          await surveysApi.updateQuestion(idMap[q.id], { condition: { rules } });
+        }
+      }
+      if (publish) await surveysApi.open(survey.id);
+      clearDraft();
+      toast.success(publish ? "問卷已建立並開放填答" : "問卷草稿已建立");
+      router.push(`/surveys/${encodeURIComponent(survey.id)}`);
+    } catch (e) {
+      flushDraft();
+      toast.error(apiErrorMessage(e, "建立失敗"));
+    } finally { setSaving(false); }
+  };
+
+  const advanceStep = () => {
+    if (activeStep === 0 && (!title.trim() || !orgId)) {
+      toast.error(!title.trim() ? "請先輸入問卷標題" : "請先選擇所屬組織");
+      return;
+    }
+    if (activeStep === 2 && !questions.some((question) => !isDisplayType(question.question_type))) {
+      toast.error("請至少新增一道可填答題目");
+      return;
+    }
+    setActiveStep((step) => Math.min(step + 1, SURVEY_STEPS.length - 1));
+  };
+
+  const needsOptions = newQ.question_type === "single"
+    || newQ.question_type === "multiple";
+  const isRating = newQ.question_type === "rating";
+  const isLinearScale = newQ.question_type === "linear_scale";
+  const isGrid = newQ.question_type === "single_grid";
+  const isMultiText = newQ.question_type === "multi_text";
+  const isDisplay = isDisplayType(newQ.question_type);
+  const isImage = newQ.question_type === "image";
+  const isVideo = newQ.question_type === "video";
+  const isTextInput = newQ.question_type === "text" || newQ.question_type === "textarea";
+  const textLabel = isImage ? "圖片說明（選填）" : isDisplay ? "區塊內容 / 標題 *" : "題目文字 *";
+
+  return (
+    <div className="max-w-3xl mx-auto space-y-5">
+      {/* 頁首 */}
+      <div className="flex items-center gap-3">
+        <Link href="/surveys" className="topbar-icon-btn" aria-label="返回問卷列表">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+        </Link>
+        <div>
+          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>新增問卷</h1>
+        </div>
+      </div>
+
+      <GuidedForm
+        steps={SURVEY_STEPS}
+        activeStep={activeStep}
+        onStepChange={setActiveStep}
+        onBack={() => setActiveStep((step) => Math.max(step - 1, 0))}
+        onNext={advanceStep}
+        onSave={() => save(true)}
+        secondarySaveAction={{ label: "儲存草稿", onClick: () => save(false) }}
+        saveLabel="建立並發布"
+        saving={saving}
+        draftStatus={lastSavedAt
+          ? `已於 ${new Date(lastSavedAt).toLocaleTimeString("zh-TW", {
+            hour: "2-digit", minute: "2-digit",
+          })} 自動保存`
+          : "變更會自動保存到此裝置"}>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* 主欄 */}
+        <div className="lg:col-span-2 space-y-4">
+
+          <GuidedFormStep step={0} activeStep={activeStep}>
+          {/* 基本資訊 */}
+          <div className="card p-5 space-y-4">
+            <h3 className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>基本資訊</h3>
+            <div>
+              <Label>問卷標題 *</Label>
+              <input value={title} onChange={e => setTitle(e.target.value)}
+                placeholder="請輸入問卷標題…" className="input" />
+            </div>
+            <div>
+              <SurveyMarkdownField
+                label="表單說明"
+                value={description}
+                onChange={setDescription}
+                rows={3}
+                placeholder="問卷目的或填答說明…"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={isAnonymous} onChange={e => setIsAnonymous(e.target.checked)}
+                  className="accent-[var(--primary)]" />
+                <span className="text-sm" style={{ color: "var(--text-secondary)" }}>匿名填答</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={allowMultiple} onChange={e => setAllowMultiple(e.target.checked)}
+                  className="accent-[var(--primary)]" />
+                <span className="text-sm" style={{ color: "var(--text-secondary)" }}>允許重複填答</span>
+              </label>
+            </div>
+            <div>
+              <Label>截止時間（選填）</Label>
+              <input type="datetime-local" value={closesAt} onChange={e => setClosesAt(e.target.value)}
+                className="input" style={{ colorScheme: "dark" }} />
+            </div>
+            <div>
+              <Label>所屬組織 *</Label>
+              <select value={orgId} onChange={e => setOrgId(e.target.value)} className="input">
+                <option value="">選擇組織…</option>
+                {orgs.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
+              </select>
+            </div>
+            <div className="rounded-xl p-3 space-y-3" style={{ background: "var(--bg-elevated)" }}>
+              <div>
+                <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+                  公告設定（選填）
+                </p>
+                <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                  儲存後同步至公告。
+                </p>
+              </div>
+              <div>
+                <Label>公告標題</Label>
+                <input
+                  value={announcementTitle}
+                  onChange={e => setAnnouncementTitle(e.target.value)}
+                  placeholder={title.trim() || "例如：校園意見調查開始填答"}
+                  className="input"
+                />
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer text-sm" style={{ color: "var(--text-secondary)" }}>
+                <input
+                  type="checkbox"
+                  checked={showAnnouncementPopup}
+                  onChange={e => setShowAnnouncementPopup(e.target.checked)}
+                  className="accent-[var(--primary)]"
+                />
+                設為重要公告，進入系統時提示使用者
+              </label>
+              <div>
+                <Label>公告訊息（Markdown）</Label>
+                <textarea
+                  value={announcement}
+                  onChange={e => setAnnouncement(e.target.value)}
+                  rows={4}
+                  placeholder="例如：本次問卷開放填答，歡迎大家撥空完成。"
+                  className="input resize-y"
+                />
+              </div>
+            </div>
+          </div>
+          </GuidedFormStep>
+
+          <GuidedFormStep step={1} activeStep={activeStep}>
+          {/* 填答對象 */}
+          <div className="card p-5 space-y-3">
+            <h3 className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>
+              填答對象
+            </h3>
+            <div>
+              <label htmlFor="survey-access-mode"
+                className="text-xs font-medium block mb-1.5"
+                style={{ color: "var(--text-secondary)" }}>
+                問卷的填答方式
+              </label>
+              <select
+                id="survey-access-mode"
+                value={accessMode}
+                onChange={e => setAccessMode(e.target.value as SurveyAccessMode)}
+                aria-describedby="survey-access-description"
+                className="input"
+              >
+                <option value="members">登入後填答</option>
+                <option value="link">僅限連結填答（不公開）</option>
+                <option value="public">公開填答（列入公開列表）</option>
+              </select>
+              <p id="survey-access-description" className="text-xs mt-1.5"
+                style={{ color: "var(--text-muted)" }}>
+                {accessMode === "link"
+                  ? "不列於公開列表，持有連結者仍可填答。"
+                  : accessMode === "public"
+                    ? "所有人都能在公開問卷列表找到並填答。"
+                    : "需要登入後填答；可指定使用者、組織或校務信箱網域。"}
+              </p>
+            </div>
+            {accessMode === "members" && (
+              <>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  須符合所選年級；其餘資格條件符合任一項即可。
+                </p>
+                <SurveyGradeSelector value={allowedGrades} onChange={setAllowedGrades} />
+                <div>
+                  <Label>限定 email 網域（一行一個，例：hchs.hc.edu.tw 即限本校）</Label>
+                  <textarea value={allowedDomains} onChange={e => setAllowedDomains(e.target.value)}
+                    rows={2} placeholder="hchs.hc.edu.tw" className="input resize-y" />
+                </div>
+                <div>
+                  <Label>限定特定使用者</Label>
+                  <UserPicker value={allowedUsers} onChange={setAllowedUsers} />
+                </div>
+                {orgs.length > 0 && (
+                  <div>
+                    <Label>限定組織成員</Label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {orgs.map(org => {
+                        const on = allowedOrgIds.includes(org.id);
+                        return (
+                          <button key={org.id} type="button"
+                            onClick={() => setAllowedOrgIds(prev =>
+                              on ? prev.filter(x => x !== org.id) : [...prev, org.id])}
+                            className="text-xs px-2.5 py-1 rounded-full"
+                            style={on
+                              ? { background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--border-strong)" }
+                              : { background: "var(--bg-elevated)", color: "var(--text-muted)", border: "1px solid var(--border)" }}>
+                            {org.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+          </GuidedFormStep>
+
+          <GuidedFormStep step={2} activeStep={activeStep} className="space-y-4">
+          {/* 題目列表 */}
+          {questions.length > 0 && (
+            <div className="card overflow-hidden">
+              <div className="px-5 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
+                <h3 className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>
+                  已加入的題目（{questions.length}）
+                </h3>
+              </div>
+              <ul>
+                {questions.map((q, idx) => (
+                  <li key={q.id}
+                    className="px-5 py-3.5 space-y-2"
+                    draggable
+                    onDragStart={() => setDraggedQuestionId(q.id)}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={() => {
+                      if (draggedQuestionId) reorderQuestion(draggedQuestionId, q.id);
+                      setDraggedQuestionId(null);
+                    }}
+                    onDragEnd={() => setDraggedQuestionId(null)}
+                    style={{
+                      ...(idx < questions.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}),
+                      ...(editingQuestionId === q.id ? { background: "var(--primary-dim)" } : {}),
+                    }}>
+                    <div className="flex items-start gap-3">
+                      <span className="cursor-grab mt-0.5 flex-shrink-0" style={{ color: "var(--text-muted)" }} title="拖曳調整順序">
+                        <GripVertical size={16} aria-hidden="true" />
+                      </span>
+                      <span className="text-xs font-bold mt-0.5 w-5 flex-shrink-0" style={{ color: "var(--primary-text)" }}>
+                        Q{idx + 1}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm truncate" style={{ color: "var(--text-primary)" }}>
+                          {q.question_text || (q.question_type === "image" ? "（圖片區塊）" : "（未命名）")}
+                        </p>
+                        <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+                          {QUESTION_TYPES.find(t => t.value === q.question_type)?.label}
+                          {q.is_required && " · 必填"}
+                          {q.options.length > 0 && ` · ${q.options.length} 個選項`}
+                          {q.question_type === "multiple" && q.max_value > 0
+                            && ` · 最多選 ${q.max_value} 項`}
+                          {q.image_url && " · 含圖片"}
+                          {q.rules.length > 0 && ` · ${q.rules.length} 條顯示條件`}
+                        </p>
+                      </div>
+                      <div className="flex gap-1 flex-shrink-0">
+                        <button type="button" onClick={() => editQuestion(q)}
+                          className="btn btn-ghost min-h-11 px-2 text-xs" aria-label={`編輯第 ${idx + 1} 題`}>
+                          編輯
+                        </button>
+                        <button type="button" onClick={() => moveQuestion(idx, -1)} disabled={idx === 0}
+                          className="topbar-icon-btn" aria-label="上移題目" style={{ opacity: idx === 0 ? 0.3 : 1 }}>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><polyline points="18 15 12 9 6 15" /></svg>
+                        </button>
+                        <button type="button" onClick={() => moveQuestion(idx, 1)} disabled={idx === questions.length - 1}
+                          className="topbar-icon-btn" aria-label="下移題目" style={{ opacity: idx === questions.length - 1 ? 0.3 : 1 }}>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
+                        </button>
+                        <button type="button" onClick={() => removeQuestion(q.id)}
+                          className="topbar-icon-btn hover:text-red-400"
+                          style={{ color: "var(--text-muted)" }} aria-label="刪除題目">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                    {questions.length > 1 && (
+                      <details className="pl-1 sm:pl-8">
+                        <summary className="text-xs cursor-pointer" style={{ color: "var(--text-muted)" }}>
+                          顯示條件{q.rules.length > 0 ? `（已設 ${q.rules.length} 條）` : "（選填）"}
+                        </summary>
+                        <div className="pt-2">
+                          <ConditionEditor
+                            rules={q.rules}
+                            others={questions
+                              .filter(o => o.id !== q.id)
+                              .map(o => ({
+                                id: o.id,
+                                label: `Q${questions.findIndex(x => x.id === o.id) + 1}. ${
+                                  (o.question_text || QUESTION_TYPES.find(t => t.value === o.question_type)?.label || "").slice(0, 24)
+                                }`,
+                                type: o.question_type,
+                                options: o.options,
+                              }))}
+                            onChange={rules => setQuestionRules(q.id, rules)}
+                          />
+                        </div>
+                      </details>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* 新增題目 */}
+          <div className="card p-5 space-y-3">
+            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+              {editingQuestionId ? "編輯題目" : "新增題目"}
+            </h3>
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]">
+              <div>
+                <SurveyMarkdownField
+                  label={textLabel}
+                  value={newQ.question_text ?? ""}
+                  onChange={question_text => setNewQ(p => ({ ...p, question_text }))}
+                  rows={2}
+                  placeholder={isImage ? "圖片下方的說明文字…" : isDisplay ? "請輸入要顯示給填答者的內容…" : "請輸入題目…"}
+                />
+              </div>
+              <div>
+                <Label>題型</Label>
+                <SurveyQuestionTypePicker value={newQ.question_type ?? "text"} options={QUESTION_TYPES}
+                  onChange={question_type => {
+                    setNewQ(p => ({
+                      ...p,
+                      question_type,
+                      is_required: isDisplayType(question_type) ? false : p.is_required,
+                      options: question_type === "multi_text"
+                        ? [...DEFAULT_MULTI_FIELD_LABELS]
+                        : question_type === "single_grid" ? ["列 1", "列 2"] : [],
+                      grid_columns: question_type === "single_grid" ? ["欄 1", "欄 2"] : [],
+                      option_image_sets: [],
+                      max_value: question_type === "multiple" ? 0 : p.max_value,
+                      min_value: question_type === "linear_scale" ? 0 : p.min_value,
+                    }));
+                  }} />
+              </div>
+            </div>
+            <SurveyMarkdownField
+              label="題目描述（選填）"
+              value={newQ.description ?? ""}
+              onChange={description => setNewQ(p => ({ ...p, description }))}
+              rows={2}
+              placeholder="補充這題的作答說明…"
+            />
+            {!isDisplay && (
+              <label className="flex min-h-11 items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={newQ.is_required ?? true}
+                  onChange={e => setNewQ(p => ({ ...p, is_required: e.target.checked }))}
+                  className="accent-[var(--primary)]" />
+                <span className="text-sm" style={{ color: "var(--text-secondary)" }}>必填</span>
+              </label>
+            )}
+
+            {isVideo && (
+              <div>
+                <Label>影片 URL</Label>
+                <input
+                  value={newQ.placeholder ?? ""}
+                  onChange={e => setNewQ(p => ({ ...p, placeholder: e.target.value }))}
+                  placeholder="https://youtube.com/watch?v=..."
+                  className="input"
+                />
+              </div>
+            )}
+
+            {isImage && (
+              <SurveyImageField
+                label="圖片 *"
+                value={newQ.image_url ?? ""}
+                onChange={url => setNewQ(p => ({ ...p, image_url: url }))}
+                hint="從本地上傳，將單獨顯示為一個圖片區塊。"
+              />
+            )}
+
+            {!isDisplay && (
+              <SurveyImageField
+                label="附加圖片（選填）"
+                value={newQ.image_url ?? ""}
+                onChange={url => setNewQ(p => ({ ...p, image_url: url }))}
+                hint="上傳後圖片會與此題合併顯示在題目上方。"
+              />
+            )}
+
+            {/* 評分範圍與端點敘述 */}
+            {(isRating || isLinearScale) && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>{isLinearScale ? "起始刻度" : "起始分數"}</Label>
+                    <NumberInput type="number" min={0} max={100} value={newQ.min_value}
+                      onChange={e => setNewQ(p => ({
+                        ...p,
+                        min_value: e.target.value === "" ? 0 : Number.parseInt(e.target.value, 10),
+                      }))}
+                      className="input" />
+                  </div>
+                  <div>
+                    <Label>{isLinearScale ? "最大刻度" : "最大分數"}</Label>
+                    <NumberInput type="number" min={(newQ.min_value ?? 0) + (isLinearScale ? 1 : 0)} max={100} value={newQ.max_value}
+                      onChange={e => setNewQ(p => ({
+                        ...p,
+                        max_value: e.target.value === "" ? (p.min_value ?? 0) + 1 : Number.parseInt(e.target.value, 10),
+                      }))}
+                      className="input" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>{isLinearScale ? "起始刻度說明（選填）" : "最低分敘述（選填）"}</Label>
+                    <input value={newQ.min_label ?? ""}
+                      onChange={e => setNewQ(p => ({ ...p, min_label: e.target.value }))}
+                      placeholder="例：非常不滿意" className="input" />
+                  </div>
+                  <div>
+                    <Label>{isLinearScale ? "最高刻度說明（選填）" : "最高分敘述（選填）"}</Label>
+                    <input value={newQ.max_label ?? ""}
+                      onChange={e => setNewQ(p => ({ ...p, max_label: e.target.value }))}
+                      placeholder="例：非常滿意" className="input" />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 選項 */}
+            {needsOptions && (
+              <OptionImageFields
+                options={newQ.options ?? []}
+                value={newQ.option_image_sets ?? []}
+                onChange={option_image_sets => setNewQ(p => ({ ...p, option_image_sets }))}
+                onOptionsChange={options => setNewQ(p => ({ ...p, options }))}
+                selectionStyle={newQ.question_type === "multiple" ? "multiple" : "single"}
+              />
+            )}
+
+            {isGrid && (
+              <>
+                <SurveyGridRowsEditor
+                  rows={newQ.options ?? []}
+                  onChange={options => setNewQ(p => ({ ...p, options }))}
+                />
+                <SurveyGridColumnsEditor
+                  columns={newQ.grid_columns ?? []}
+                  onChange={grid_columns => setNewQ(p => ({ ...p, grid_columns }))}
+                />
+              </>
+            )}
+
+            {isMultiText && (
+              <SurveyMultiFieldEditor
+                labels={newQ.options ?? []}
+                onChange={options => setNewQ(p => ({ ...p, options }))}
+              />
+            )}
+
+            {newQ.question_type === "multiple" && (
+              <div className="rounded-xl p-3 space-y-2" style={{ background: "var(--bg-elevated)" }}>
+                <div>
+                  <Label>最多可選項數（選填）</Label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={Math.max(1, (newQ.options ?? []).filter(option => option.trim()).length)}
+                    value={newQ.max_value || ""}
+                    onChange={event => setNewQ(question => ({
+                      ...question,
+                      max_value: parseInt(event.target.value) || 0,
+                    }))}
+                    placeholder="不限制"
+                    className="input"
+                  />
+                </div>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  留空表示不限
+                </p>
+              </div>
+            )}
+
+            {/* 自訂驗證規則（簡答 / 長答題型） */}
+            {isTextInput && (
+              <div className="space-y-3 rounded-xl p-3" style={{ background: "var(--bg-elevated)" }}>
+                <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+                  自訂驗證規則（選填）
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>最少字數</Label>
+                    <input type="number" min={0} value={newQ.min_length ?? ""}
+                      onChange={e => setNewQ(p => ({ ...p, min_length: e.target.value }))}
+                      placeholder="不限" className="input" />
+                  </div>
+                  <div>
+                    <Label>最多字數</Label>
+                    <input type="number" min={1} value={newQ.max_length ?? ""}
+                      onChange={e => setNewQ(p => ({ ...p, max_length: e.target.value }))}
+                      placeholder="不限" className="input" />
+                  </div>
+                </div>
+                <div>
+                  <Label>格式限制</Label>
+                  <select value={newQ.validation_rule ?? ""}
+                    onChange={e => setNewQ(p => ({ ...p, validation_rule: e.target.value }))}
+                    className="input">
+                    {VALIDATION_RULES.map(r => (
+                      <option key={r.value} value={r.value}>{r.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+
+            <button onClick={addQuestion} className="btn btn-primary w-full">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              {editingQuestionId ? "儲存題目變更" : "加入此題目"}
+            </button>
+          </div>
+          </GuidedFormStep>
+        </div>
+
+        {/* 右欄：儲存 */}
+        <GuidedFormStep step={3} activeStep={activeStep} className="space-y-4">
+          <div className="card p-4 space-y-3 hidden md:block">
+            <button onClick={() => save(true)} disabled={saving} className="btn btn-primary w-full" aria-busy={saving}>
+              {saving ? "處理中…" : "建立並發布"}
+            </button>
+            <button onClick={() => save(false)} disabled={saving} className="btn btn-ghost w-full" aria-busy={saving}>
+              {saving ? "處理中…" : "儲存草稿"}
+            </button>
+            <p className="text-xs text-center" style={{ color: "var(--text-muted)" }}>
+              「建立並發布」立即開放填答；「儲存草稿」可稍後再開放
+            </p>
+          </div>
+
+          <div className="card p-4 space-y-2">
+            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>發布前確認</h3>
+            <div className="space-y-1 text-xs" style={{ color: "var(--text-secondary)" }}>
+              <p>{questions.length} 道題目</p>
+              <p>{isAnonymous ? "匿名填答" : "記名填答"}</p>
+              <p>{allowMultiple ? "允許重複填答" : "每人限填一次"}</p>
+              {closesAt && <p>截止：{new Date(closesAt).toLocaleString("zh-TW")}</p>}
+            </div>
+          </div>
+        </GuidedFormStep>
+      </div>
+      </GuidedForm>
+    </div>
+  );
+}

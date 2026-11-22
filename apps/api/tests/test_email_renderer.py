@@ -1,15 +1,24 @@
-"""Email 範本渲染與富文本清洗單元測試（Phase 1）"""
+"""Email 範本渲染與富文本清洗單元測試。"""
 
 from __future__ import annotations
 
 import uuid
 
+from api.core.config import settings
 from api.email.renderer import (
+    absolutize_url,
+    apply_conditional_rules,
+    build_personalization_context,
     make_unsubscribe_token,
     parse_unsubscribe_token,
     render_email,
+    render_personalized_text,
+    safe_link_url,
     sanitize_html,
+    validate_conditional_rules,
+    validate_variable_definitions,
 )
+from api.email.sender import render_generic_message
 
 
 def test_render_notification_includes_content_and_no_leftover_jinja() -> None:
@@ -32,6 +41,8 @@ def test_render_notification_includes_content_and_no_leftover_jinja() -> None:
     assert "嶺代議字第1150000001號" in html
     assert "前往審核" in html
     assert "不再接收此類通知" in html
+    assert settings.EMAIL_BRAND_LOGO_URL in html
+    assert f"{settings.EMAIL_LINK_BASE_URL.rstrip('/')}/settings/notifications" in html
     assert "公文已送達。<br>請至系統審核。" in html
     # 不得殘留未渲染的 Jinja 標記
     assert "{{" not in html
@@ -47,6 +58,28 @@ def test_render_notification_omits_optional_blocks_when_absent() -> None:
     assert "{%" not in html
 
 
+def test_render_email_masks_visible_urls_and_preserves_link_targets() -> None:
+    notification_html = render_email(
+        "notification",
+        {"body_text": "請前往 https://example.com/petitions/1 查看。"},
+    )
+    assert (
+        '<a href="https://example.com/petitions/1" '
+        'style="color:#9b7a18;text-decoration:underline;">查看連結</a> 查看。'
+    ) in notification_html
+
+    generic_html = render_email(
+        "generic",
+        {
+            "body_html": (
+                '<p><a href="https://example.com/petitions/1">'
+                "https://example.com/petitions/1</a></p>"
+            )
+        },
+    )
+    assert '<a href="https://example.com/petitions/1">查看連結</a>' in generic_html
+
+
 def test_render_generic_injects_body_html_verbatim() -> None:
     html = render_email(
         "generic",
@@ -55,6 +88,33 @@ def test_render_generic_injects_body_html_verbatim() -> None:
     assert "公告標題" in html
     assert "<p>第一段</p>" in html
     assert "<li>項目</li>" in html
+
+
+def test_render_generic_applies_body_spacing_settings() -> None:
+    html = render_generic_message(
+        "測試",
+        "第一段\n\n第二段",
+        {
+            "body_line_height": 1.5,
+            "paragraph_spacing": 6,
+        },
+    )
+
+    assert '<p style="margin:0;">第一段</p>' in html
+    assert '<p style="margin:6px 0 0;">第二段</p>' in html
+    assert 'class="hcca-body" style="color:#334155;line-height:1.5;word-break:break-word;"' in html
+
+
+def test_render_generic_distinguishes_line_breaks_from_paragraphs() -> None:
+    html = render_generic_message(
+        "測試",
+        "同段第一行  \n同段第二行\n\n下一段",
+        {"body_line_height": 1.4, "paragraph_spacing": 20},
+    )
+
+    assert '<p style="margin:0;">同段第一行<br>' in html
+    assert "同段第二行</p>" in html
+    assert '<p style="margin:20px 0 0;">下一段</p>' in html
 
 
 def test_render_escapes_plain_text_fields() -> None:
@@ -77,6 +137,112 @@ def test_sanitize_html_keeps_allowed_formatting() -> None:
     assert "<strong>粗</strong>" in clean
     assert 'href="https://x.com"' in clean
     assert "<li>a</li>" in clean
+
+
+def test_absolutize_url_uses_api_base_for_uploads() -> None:
+    assert absolutize_url("/uploads/email/poster.png") == (
+        f"{settings.API_PUBLIC_BASE_URL.rstrip('/')}/uploads/email/poster.png"
+    )
+    assert absolutize_url("/brand/hcca-emblem.png") == (
+        f"{settings.FRONTEND_BASE_URL.rstrip('/')}/brand/hcca-emblem.png"
+    )
+
+
+def test_safe_link_url_rejects_script_protocol_after_personalization() -> None:
+    assert safe_link_url("https://example.com/path") == "https://example.com/path"
+    assert safe_link_url("javascript:alert(1)") == ""
+
+    html = render_generic_message(
+        "測試",
+        "內容",
+        {"cta_url": "{{ target }}", "cta_label": "查看"},
+        {"target": "javascript:alert(1)"},
+    )
+    assert "javascript:" not in html
+
+
+def test_personalization_context_uses_email_link_base_for_unsubscribe() -> None:
+    uid = uuid.uuid4()
+    context = build_personalization_context(
+        user_id=uid,
+        name="測試",
+        email="test@example.com",
+        student_id=None,
+        custom_variables={},
+    )
+    assert str(context["unsubscribe_url"]).startswith(
+        f"{settings.EMAIL_LINK_BASE_URL.rstrip('/')}/unsubscribe?token="
+    )
+    assert context["frontend_base_url"] == settings.EMAIL_LINK_BASE_URL.rstrip("/")
+    assert context["姓名"] == "測試"
+    assert context["電子郵件"] == "test@example.com"
+
+
+def test_chinese_variable_name_can_be_validated_and_rendered() -> None:
+    definitions = validate_variable_definitions(
+        [{"key": "錄取部門", "label": "錄取部門", "required": True}]
+    )
+
+    assert definitions[0]["key"] == "錄取部門"
+    assert render_personalized_text("您已錄取 {{ 錄取部門 }}", {"錄取部門": "活動部"}) == (
+        "您已錄取 活動部"
+    )
+
+
+def test_conditional_rules_fill_multiple_variables_in_order() -> None:
+    definitions = validate_variable_definitions(
+        [
+            {"key": "第一志願"},
+            {"key": "面試時間"},
+            {"key": "面試地點"},
+        ]
+    )
+    rules = validate_conditional_rules(
+        definitions,
+        [
+            {
+                "condition_key": "第一志願",
+                "operator": "equals",
+                "condition_value": "攝影部",
+                "target_key": "面試時間",
+                "target_value": "115/06/20 14:00",
+            },
+            {
+                "condition_key": "第一志願",
+                "operator": "equals",
+                "condition_value": "攝影部",
+                "target_key": "面試地點",
+                "target_value": "行政大樓 302 室",
+            },
+        ],
+    )
+
+    resolved = apply_conditional_rules({"第一志願": "攝影部"}, rules)
+
+    assert resolved["面試時間"] == "115/06/20 14:00"
+    assert resolved["面試地點"] == "行政大樓 302 室"
+
+
+def test_generic_email_supports_custom_branding() -> None:
+    html = render_email(
+        "generic",
+        {
+            "subject": "錄取通知",
+            "heading": "恭喜錄取",
+            "body_html": "<p>歡迎加入</p>",
+            "accent_color": "#2563eb",
+            "background_color": "#f1f5f9",
+            "content_background_color": "#ffffff",
+            "footer_text": "資訊部 敬上",
+            "show_system_footer": False,
+        },
+    )
+
+    assert "background-color:#2563eb" not in html
+    assert "color:#2563eb" in html
+    assert "background-color:#f1f5f9" in html
+    assert "資訊部 敬上" in html
+    assert "通知偏好設定" not in html
 
 
 def test_unsubscribe_token_roundtrip() -> None:

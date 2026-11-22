@@ -3,7 +3,8 @@
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ApiError, notificationsApi } from "@/lib/api";
+import BrandEmblem from "@/components/brand/BrandEmblem";
+import { notificationsApi, apiErrorMessage } from "@/lib/api";
 
 type Status = "idle" | "loading" | "done" | "error";
 
@@ -19,7 +20,7 @@ function UnsubscribeInner() {
       setMessage(res.message);
       setStatus("done");
     } catch (e) {
-      setMessage(e instanceof ApiError ? e.message : "退訂失敗，連結可能已失效");
+      setMessage(apiErrorMessage(e, "退訂失敗，連結可能已失效"));
       setStatus("error");
     }
   };
@@ -34,16 +35,11 @@ function UnsubscribeInner() {
         style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
       >
         <div className="flex items-center gap-3 px-6 py-5" style={{ background: "#1a1a2e" }}>
-          <div
-            className="flex h-9 w-9 items-center justify-center rounded-xl text-base font-bold"
-            style={{ background: "linear-gradient(135deg, #c9a84c 0%, #b8962f 100%)", color: "#1a1a2e" }}
-          >
-            自
-          </div>
+          <BrandEmblem size={40} />
           <div>
-            <p className="text-sm font-semibold text-white">校園自治整合平台</p>
-            <p className="text-[10px] font-medium tracking-widest" style={{ color: "#c9a84c" }}>
-              HCCA
+            <p className="text-sm font-semibold text-white">新竹高中班聯會數位整合系統</p>
+            <p className="text-xs font-medium tracking-widest" style={{ color: "#c9a84c" }}>
+              新竹高中班聯會
             </p>
           </div>
         </div>
@@ -83,7 +79,7 @@ function UnsubscribeInner() {
           )}
 
           <div className="mt-6 flex gap-4 text-sm">
-            <Link href="/settings/notifications" style={{ color: "var(--primary)" }}>
+            <Link href="/settings/notifications" style={{ color: "var(--primary-text)" }}>
               通知設定
             </Link>
             <Link href="/" style={{ color: "var(--text-muted)" }}>

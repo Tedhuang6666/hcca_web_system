@@ -14,21 +14,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.config import settings
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
-from api.core.ws_manager import manager as ws_manager
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_permission
-from api.email.renderer import make_unsubscribe_token, parse_unsubscribe_token
-from api.email.sender import send_branded_email
+from api.email.renderer import parse_unsubscribe_token
+from api.models.email_message import EmailSuppression
 from api.models.notification import Notification
 from api.models.user import User
 from api.models.web_push import WebPushSubscription
 from api.services.mail import enqueue_email
 from api.services.notification_pref import (
     DIGEST_FREQUENCIES,
+    KNOWN_MODULES,
+    MODULE_LABELS,
     TYPE_LABELS,
     get_digest_frequency,
+    get_muted_modules,
     normalize_preferences,
     set_digest_frequency,
+    set_muted_modules,
 )
 from api.services.web_push import send_to_user, web_push_enabled
 
@@ -101,22 +104,19 @@ class NotificationPreferencesOut(BaseModel):
     document_approved: ChannelPref
     document_rejected: ChannelPref
     document_recalled: ChannelPref
-    meeting_invited: ChannelPref
-    meeting_today: ChannelPref
-    meeting_minutes_ready: ChannelPref
     regulation_review_assigned: ChannelPref
     regulation_publish_ready: ChannelPref
     regulation_published: ChannelPref
+    petition_received: ChannelPref
+    petition_updated: ChannelPref
     petition_assigned: ChannelPref
     petition_replied: ChannelPref
     petition_status_updated: ChannelPref
-    meal_class_collecting: ChannelPref
-    meal_pickup_ready: ChannelPref
+    merchandise_submission_received: ChannelPref
+    merchandise_submission_status: ChannelPref
     shop_order_paid: ChannelPref
     survey_invitation: ChannelPref
     announcement: ChannelPref
-    calendar_event_invited: ChannelPref
-    calendar_event_updated: ChannelPref
     work_item_assigned: ChannelPref
     work_item_due: ChannelPref
     system: ChannelPref
@@ -127,22 +127,19 @@ class NotificationPreferencesIn(BaseModel):
     document_approved: ChannelPref | None = None
     document_rejected: ChannelPref | None = None
     document_recalled: ChannelPref | None = None
-    meeting_invited: ChannelPref | None = None
-    meeting_today: ChannelPref | None = None
-    meeting_minutes_ready: ChannelPref | None = None
     regulation_review_assigned: ChannelPref | None = None
     regulation_publish_ready: ChannelPref | None = None
     regulation_published: ChannelPref | None = None
+    petition_received: ChannelPref | None = None
+    petition_updated: ChannelPref | None = None
     petition_assigned: ChannelPref | None = None
     petition_replied: ChannelPref | None = None
     petition_status_updated: ChannelPref | None = None
-    meal_class_collecting: ChannelPref | None = None
-    meal_pickup_ready: ChannelPref | None = None
+    merchandise_submission_received: ChannelPref | None = None
+    merchandise_submission_status: ChannelPref | None = None
     shop_order_paid: ChannelPref | None = None
     survey_invitation: ChannelPref | None = None
     announcement: ChannelPref | None = None
-    calendar_event_invited: ChannelPref | None = None
-    calendar_event_updated: ChannelPref | None = None
     work_item_assigned: ChannelPref | None = None
     work_item_due: ChannelPref | None = None
     system: ChannelPref | None = None
@@ -195,6 +192,7 @@ async def list_notifications(
     stmt = (
         select(Notification)
         .where(Notification.user_id == current_user.id)
+        .where(Notification.is_inapp_visible.is_(True))
         .order_by(Notification.created_at.desc())
     )
     if unread_only:
@@ -219,15 +217,17 @@ async def list_notifications(
 async def count_notifications(db: DbDep, current_user: CurrentUser) -> NotificationCountOut:
     from sqlalchemy import func
 
-    total_q = await db.scalar(
-        select(func.count(Notification.id)).where(Notification.user_id == current_user.id)
-    )
-    unread_q = await db.scalar(
+    counts = await db.execute(
         select(func.count(Notification.id))
         .where(Notification.user_id == current_user.id)
-        .where(Notification.is_read == False)  # noqa: E712
+        .where(Notification.is_inapp_visible.is_(True))
+        .with_only_columns(
+            func.count(Notification.id).label("total"),
+            func.count(Notification.id).filter(Notification.is_read.is_(False)).label("unread"),
+        )
     )
-    return NotificationCountOut(unread=int(unread_q or 0), total=int(total_q or 0))
+    total, unread = counts.one()
+    return NotificationCountOut(unread=int(unread or 0), total=int(total or 0))
 
 
 @router.patch(
@@ -242,6 +242,7 @@ async def mark_read(
         select(Notification)
         .where(Notification.id == notification_id)
         .where(Notification.user_id == current_user.id)
+        .where(Notification.is_inapp_visible.is_(True))
     )
     n = result.scalar_one_or_none()
     if not n:
@@ -256,6 +257,7 @@ async def mark_all_read(db: DbDep, current_user: CurrentUser) -> dict[str, int]:
     result = await db.execute(
         update(Notification)
         .where(Notification.user_id == current_user.id)
+        .where(Notification.is_inapp_visible.is_(True))
         .where(Notification.is_read == False)  # noqa: E712
         .values(is_read=True)
         .returning(Notification.id)
@@ -280,6 +282,7 @@ async def update_preferences(
     current_user: CurrentUser,
 ) -> NotificationPreferencesOut:
     merged = normalize_preferences(current_user.notification_preferences)
+    digest_frequency = get_digest_frequency(current_user.notification_preferences)
     for ntype, channel in body.model_dump(exclude_none=True).items():
         merged[ntype] = {
             "inapp": bool(channel["inapp"]),
@@ -287,6 +290,8 @@ async def update_preferences(
             "line": bool(channel["line"]),
             "discord": bool(channel["discord"]),
         }
+    if digest_frequency != "off":
+        merged["__digest_frequency"] = digest_frequency
     current_user.notification_preferences = merged
     await db.flush()
     return NotificationPreferencesOut(**merged)
@@ -331,6 +336,59 @@ async def update_digest_preference(
     )
     await db.flush()
     return DigestPreferenceOut(frequency=body.frequency)
+
+
+class MutedModulesOut(BaseModel):
+    muted_modules: list[str]
+    available_modules: dict[str, str] = Field(
+        default_factory=dict, description="模組代號 → 中文名稱"
+    )
+
+
+class MutedModulesIn(BaseModel):
+    muted_modules: list[str] = Field(..., description="要靜音的模組代號列表（空列表 = 全部開啟）")
+
+
+@router.get(
+    "/preferences/muted-modules",
+    response_model=MutedModulesOut,
+    summary="取得已靜音的通知模組",
+)
+async def get_muted_modules_preference(current_user: CurrentUser) -> MutedModulesOut:
+    return MutedModulesOut(
+        muted_modules=get_muted_modules(current_user.notification_preferences),
+        available_modules=dict(MODULE_LABELS),
+    )
+
+
+@router.put(
+    "/preferences/muted-modules",
+    response_model=MutedModulesOut,
+    summary="更新已靜音的通知模組",
+    description=(
+        "傳入要靜音的模組代號列表。靜音後，該模組所有通知類型的站內、Email、Line、Discord 管道"
+        "均同時關閉。傳空列表即解除全部靜音。取消靜音不會自動恢復細部設定。"
+    ),
+)
+async def update_muted_modules_preference(
+    body: MutedModulesIn,
+    db: DbDep,
+    current_user: CurrentUser,
+) -> MutedModulesOut:
+    invalid = [m for m in body.muted_modules if m not in KNOWN_MODULES]
+    if invalid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"未知的模組名稱：{', '.join(invalid)}；可用：{', '.join(sorted(KNOWN_MODULES))}",
+        )
+    current_user.notification_preferences = set_muted_modules(
+        current_user.notification_preferences, body.muted_modules
+    )
+    await db.flush()
+    return MutedModulesOut(
+        muted_modules=sorted(body.muted_modules),
+        available_modules=dict(MODULE_LABELS),
+    )
 
 
 @router.get("/web-push/config", response_model=WebPushConfigOut, summary="取得 Web Push 設定")
@@ -408,7 +466,7 @@ async def test_web_push(db: DbDep, current_user: CurrentUser) -> dict[str, int]:
     sent = await send_to_user(
         db,
         current_user.id,
-        {"title": "HCCA 推播測試", "body": "你的瀏覽器通知已成功啟用。", "url": "/notifications"},
+        {"title": "班聯會推播測試", "body": "你的瀏覽器通知已成功啟用。", "url": "/notifications"},
     )
     return {"sent": sent}
 
@@ -429,6 +487,23 @@ async def unsubscribe_via_token(body: UnsubscribeRequest, db: DbDep) -> dict[str
     if ntype in prefs:
         prefs[ntype]["email"] = False
     user.notification_preferences = prefs
+    if ntype == "email" and user.email:
+        normalized_email = user.email.strip().lower()
+        suppression = await db.scalar(
+            select(EmailSuppression).where(EmailSuppression.email == normalized_email)
+        )
+        if suppression is None:
+            suppression = EmailSuppression(
+                email=normalized_email,
+                reason="unsubscribe",
+                source="unsubscribe_link",
+                suppressed_at=datetime.now(UTC),
+            )
+            db.add(suppression)
+        else:
+            suppression.is_active = True
+            suppression.reason = "unsubscribe"
+            suppression.suppressed_at = datetime.now(UTC)
     await db.flush()
     return {
         "status": "ok",
@@ -471,142 +546,3 @@ async def get_task_status(
 
     result: AsyncResult = celery_app.AsyncResult(task_id)
     return {"task_id": task_id, "status": result.status}
-
-
-# ── 工具函式（供其他 router 呼叫）────────────────────────────────────────────
-
-
-def _send_notification_email(
-    user: User, ntype: str, title: str, body: str | None, link: str | None
-) -> None:
-    """渲染品牌通知信並排入寄送佇列（含退訂連結）。"""
-    base = settings.FRONTEND_BASE_URL.rstrip("/")
-    token = make_unsubscribe_token(user.id, ntype)
-    send_branded_email(
-        to=[user.email],
-        subject=f"【{TYPE_LABELS.get(ntype, '通知')}】{title}",
-        template="notification",
-        context={
-            "heading": title,
-            "body_text": body or "",
-            "preview_text": (body or title)[:80],
-            "cta_url": f"{base}{link}" if link else "",
-            "cta_label": "前往查看",
-            "unsubscribe_url": f"{base}/unsubscribe?token={token}",
-        },
-    )
-
-
-async def create_notification(
-    db: AsyncSession,
-    *,
-    user_id: uuid.UUID,
-    type: str,
-    title: str,
-    body: str | None = None,
-    link: str | None = None,
-    related_id: uuid.UUID | None = None,
-) -> None:
-    """依使用者偏好建立站內通知並（若開啟）寄送品牌 Email。
-
-    不 commit，由呼叫者控制 transaction。站內與 Email 兩管道分別依
-    notification_preferences 判定；Email 排程失敗只記錄、不影響業務交易。
-    """
-    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
-    if user is None:
-        return
-    channel = normalize_preferences(user.notification_preferences).get(
-        type, {"inapp": True, "email": False}
-    )
-    if channel["inapp"]:
-        notification = Notification(
-            user_id=user_id,
-            type=type,
-            title=title,
-            body=body,
-            link=link,
-            related_id=related_id,
-        )
-        db.add(notification)
-        await db.flush()
-        try:
-            from sqlalchemy import func
-
-            unread = await db.scalar(
-                select(func.count(Notification.id))
-                .where(Notification.user_id == user_id)
-                .where(Notification.is_read == False)  # noqa: E712
-            )
-            await ws_manager.broadcast_to_room(
-                f"user:{user_id}",
-                {
-                    "type": "notification.created",
-                    "notification": NotificationOut.from_orm_dt(notification).model_dump(
-                        mode="json"
-                    ),
-                    "unread": int(unread or 0),
-                },
-            )
-        except Exception:
-            logger.warning("通知 WebSocket 推送失敗 user=%s type=%s", user_id, type, exc_info=True)
-        try:
-            await send_to_user(
-                db,
-                user_id,
-                {"title": title, "body": body or "", "url": link or "/notifications"},
-            )
-        except Exception:
-            logger.warning("通知 Web Push 推送失敗 user=%s type=%s", user_id, type, exc_info=True)
-    if channel["email"] and user.email:
-        try:
-            _send_notification_email(user, type, title, body, link)
-        except Exception:
-            logger.warning("通知 Email 排程失敗 user=%s type=%s", user_id, type, exc_info=True)
-    if channel.get("line"):
-        try:
-            from api.models.line_account import LineAccountLink
-            from api.services.outbox import emit
-
-            line_user_id = await db.scalar(
-                select(LineAccountLink.line_user_id).where(
-                    LineAccountLink.user_id == user_id,
-                    LineAccountLink.is_active.is_(True),
-                )
-            )
-            if line_user_id:
-                await emit(
-                    db,
-                    event_type="line.push",
-                    payload={
-                        "line_user_id": line_user_id,
-                        "title": title,
-                        "body": body,
-                        "link": link,
-                    },
-                )
-        except Exception:
-            logger.warning("通知 LINE 排程失敗 user=%s type=%s", user_id, type, exc_info=True)
-    if channel.get("discord"):
-        try:
-            from api.models.discord_account import DiscordAccountLink
-            from api.services.outbox import emit
-
-            discord_user_id = await db.scalar(
-                select(DiscordAccountLink.discord_user_id).where(
-                    DiscordAccountLink.user_id == user_id,
-                    DiscordAccountLink.is_active.is_(True),
-                )
-            )
-            if discord_user_id:
-                await emit(
-                    db,
-                    event_type="discord.push",
-                    payload={
-                        "discord_user_id": discord_user_id,
-                        "title": title,
-                        "body": body,
-                        "link": link,
-                    },
-                )
-        except Exception:
-            logger.warning("通知 Discord 排程失敗 user=%s type=%s", user_id, type, exc_info=True)

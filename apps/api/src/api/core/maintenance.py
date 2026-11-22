@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -30,12 +31,11 @@ FEATURE_FLAGS_DEFAULT: dict[str, str] = {
     "feature:file_upload": "檔案上傳",
     "feature:document_export_pdf": "公文 PDF 匯出",
     "feature:document_export_excel": "公文 Excel 匯出",
-    "feature:meal_order_create": "建立學餐訂單",
     "feature:survey_submit": "送出問卷答覆",
-    "feature:meeting_vote": "議事投票",
 }
 
 _LOCAL_CACHE_TTL = 5.0
+_REDIS_READ_TIMEOUT_SECONDS = 0.25
 _cache: dict[str, tuple[float, Any]] = {}
 
 
@@ -68,8 +68,11 @@ async def get_maintenance_state() -> dict[str, Any]:
     if cached is not None:
         return cached
     try:
-        raw = await redis_client.get(MAINTENANCE_KEY)
-    except RedisError:
+        raw = await asyncio.wait_for(
+            redis_client.get(MAINTENANCE_KEY),
+            timeout=_REDIS_READ_TIMEOUT_SECONDS,
+        )
+    except (RedisError, TimeoutError):
         return {"enabled": False, "message": "", "until": None}
 
     if not raw:
@@ -92,7 +95,10 @@ async def set_maintenance_mode(
 ) -> dict[str, Any]:
     payload = json.dumps({"enabled": enabled, "message": message, "until": until})
     try:
-        await redis_client.set(MAINTENANCE_KEY, payload)
+        # 有 until 時設 Redis TTL，讓 key 在到期後 60 秒自動消失，
+        # 60 秒緩衝確保末次讀取仍能正確取得「已關閉」狀態。
+        ex = int(until - time.time()) + 60 if until and until > time.time() else None
+        await redis_client.set(MAINTENANCE_KEY, payload, ex=ex)
     except RedisError:
         logger.error("set_maintenance_mode failed", exc_info=True)
     _cache.pop(MAINTENANCE_KEY, None)
@@ -109,8 +115,11 @@ async def is_feature_enabled(key: str, *, default: bool = True) -> bool:
         return cached
 
     try:
-        raw = await redis_client.get(FEATURE_FLAG_PREFIX + key)
-    except RedisError:
+        raw = await asyncio.wait_for(
+            redis_client.get(FEATURE_FLAG_PREFIX + key),
+            timeout=_REDIS_READ_TIMEOUT_SECONDS,
+        )
+    except (RedisError, TimeoutError):
         return default
 
     enabled = default if raw is None else raw == "1"
@@ -162,8 +171,11 @@ async def get_load_shed_force_mode() -> str:
     if cached is not None:
         return cached
     try:
-        raw = await redis_client.get(LOAD_SHED_MODE_KEY)
-    except RedisError:
+        raw = await asyncio.wait_for(
+            redis_client.get(LOAD_SHED_MODE_KEY),
+            timeout=_REDIS_READ_TIMEOUT_SECONDS,
+        )
+    except (RedisError, TimeoutError):
         return "auto"
     mode = raw if raw in {"off", "auto", "on", "bypass"} else "auto"
     _cache_set(LOAD_SHED_MODE_KEY, mode)
@@ -185,9 +197,10 @@ async def set_load_shed_force_mode(mode: str) -> str:
 
 
 async def get_module_maintenance(module_id: str) -> dict[str, Any] | None:
-    """讀取單一模組維護狀態：{on, source, reason, since, until} 或 None（未維護）。
+    """讀取單一模組狀態：{on, mode, source, reason, since, until} 或 None（正常）。
 
     source: "manual"（管理員手動）| "auto"（斷路器自動）。
+    mode: "maintenance"（維護）| "closed"（管理員關閉）。
     until 到期或 key 不存在皆視為未維護（回 None）。
     """
     key = MODULE_MAINTENANCE_PREFIX + module_id
@@ -195,8 +208,11 @@ async def get_module_maintenance(module_id: str) -> dict[str, Any] | None:
     if cached is not None:
         return cached or None
     try:
-        raw = await redis_client.get(key)
-    except RedisError:
+        raw = await asyncio.wait_for(
+            redis_client.get(key),
+            timeout=_REDIS_READ_TIMEOUT_SECONDS,
+        )
+    except (RedisError, TimeoutError):
         return None
 
     state: dict[str, Any] | None
@@ -219,19 +235,36 @@ async def set_module_maintenance(
     module_id: str,
     *,
     on: bool,
+    mode: str = "maintenance",
     source: str = "manual",
     reason: str = "",
     ttl: int | None = None,
 ) -> dict[str, Any]:
-    """開關單一模組維護。auto 通常帶 ttl（到期自動恢復）；manual 不帶 ttl。"""
+    """設定單一模組狀態。closed 僅供管理員手動關閉；auto 只能進入 maintenance。"""
     key = MODULE_MAINTENANCE_PREFIX + module_id
     if not on:
         await clear_module_maintenance(module_id)
-        return {"on": False, "source": source, "reason": reason, "since": None, "until": None}
+        return {
+            "on": False,
+            "mode": "maintenance",
+            "source": source,
+            "reason": reason,
+            "since": None,
+            "until": None,
+        }
+    if mode not in {"maintenance", "closed"}:
+        raise ValueError(f"Invalid module mode: {mode}")
+    if mode == "closed" and source != "manual":
+        raise ValueError("Closed module mode must be manual")
+    if source == "auto":
+        existing = await get_module_maintenance(module_id)
+        if existing and existing.get("mode") == "closed":
+            return existing
 
     now = time.time()
     state = {
         "on": True,
+        "mode": mode,
         "source": source,
         "reason": reason,
         "since": now,
@@ -244,7 +277,12 @@ async def set_module_maintenance(
             await redis_client.set(key, json.dumps(state))
     except RedisError:
         logger.error("set_module_maintenance failed id=%s", module_id, exc_info=True)
-    _cache.pop(key, None)
+        _cache.pop(key, None)
+    else:
+        # The writing worker must observe its new state immediately. Besides
+        # avoiding a redundant Redis read, this keeps a just-closed module from
+        # briefly appearing open if that read hits the middleware timeout.
+        _cache_set(key, state)
     return state
 
 
@@ -261,10 +299,8 @@ async def list_module_maintenance() -> dict[str, dict[str, Any] | None]:
     """回傳所有已登錄模組的維護狀態（給 admin / public 端點）。"""
     from api.core.modules import MODULE_IDS
 
-    out: dict[str, dict[str, Any] | None] = {}
-    for mid in MODULE_IDS:
-        out[mid] = await get_module_maintenance(mid)
-    return out
+    states = await asyncio.gather(*(get_module_maintenance(mid) for mid in MODULE_IDS))
+    return dict(zip(MODULE_IDS, states, strict=True))
 
 
 async def set_module_reset(module_id: str, *, window_seconds: int) -> float:
@@ -286,8 +322,11 @@ async def get_module_reset(module_id: str) -> float:
     if cached is not None:
         return cached
     try:
-        raw = await redis_client.get(key)
-    except RedisError:
+        raw = await asyncio.wait_for(
+            redis_client.get(key),
+            timeout=_REDIS_READ_TIMEOUT_SECONDS,
+        )
+    except (RedisError, TimeoutError):
         return 0.0
     try:
         value = float(raw) if raw else 0.0

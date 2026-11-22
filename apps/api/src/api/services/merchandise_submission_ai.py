@@ -1,0 +1,964 @@
+"""校商投稿圖片的來源證據與像素層鑑識輔助。"""
+
+from __future__ import annotations
+
+import hashlib
+import io
+import math
+import re
+import zlib
+from collections.abc import Iterable
+from datetime import UTC, datetime
+from typing import Literal, TypedDict
+
+from PIL import Image, UnidentifiedImageError
+
+
+class MerchandiseSubmissionAIEvidence(TypedDict):
+    level: Literal["A", "B", "C"]
+    category: str
+    label: str
+    value: str
+    source: str
+
+
+class MerchandiseSubmissionAIMetadata(TypedDict):
+    source: str
+    key: str
+    value: str
+
+
+class MerchandiseSubmissionAIDetection(TypedDict):
+    status: Literal["detected", "supporting", "no_evidence", "not_applicable", "error"]
+    evidence: list[MerchandiseSubmissionAIEvidence]
+    metadata: list[MerchandiseSubmissionAIMetadata]
+    sha256: str
+    scanned_at: str
+
+
+AI_DETECTION_VERSION = "20260919.1"
+
+_PIXEL_ANALYSIS_SOURCE = "Pixel-level content analysis"
+_PIXEL_SAMPLE_EDGE = 96
+_PIXEL_ANALYSIS_MAX_PIXELS = 12_000_000
+_PIXEL_SIGNAL_MIN_PIXELS = 4_096
+
+
+_AI_TOOLS: tuple[tuple[str, str], ...] = (
+    ("openai images", "OpenAI Images"),
+    ("openai media generation api", "OpenAI Media Generation API"),
+    ("openai", "OpenAI"),
+    ("gpt-image", "OpenAI GPT Image"),
+    ("gpt image", "OpenAI GPT Image"),
+    ("dall-e", "OpenAI DALL·E"),
+    ("dall·e", "OpenAI DALL·E"),
+    ("midjourney", "Midjourney"),
+    ("adobe firefly", "Adobe Firefly"),
+    ("microsoft designer", "Microsoft Designer"),
+    ("bing image creator", "Bing Image Creator"),
+    ("google gemini", "Google Gemini"),
+    ("gemini image", "Google Gemini Image"),
+    ("dreamstudio", "DreamStudio"),
+    ("ideogram", "Ideogram"),
+    ("playground ai", "Playground AI"),
+    ("recraft", "Recraft"),
+    ("nightcafe", "NightCafe"),
+    ("novelai", "NovelAI"),
+    ("niji journey", "niji journey"),
+    ("runway", "Runway"),
+    ("canva magic media", "Canva Magic Media"),
+    ("leonardo ai", "Leonardo AI"),
+    ("comfyui", "ComfyUI"),
+    ("automatic1111", "AUTOMATIC1111"),
+    ("stable diffusion", "Stable Diffusion"),
+    ("sd.next", "SD.Next"),
+    ("fooocus", "Fooocus"),
+    ("invokeai", "InvokeAI"),
+)
+
+_PROMPT_MARKERS: tuple[str, ...] = (
+    "prompt:",
+    "negative prompt:",
+    "negative_prompt",
+    "steps:",
+    "cfg scale:",
+    "sampler:",
+    "seed:",
+    "model:",
+    "vae:",
+)
+_PROMPT_FIELDS: frozenset[str] = frozenset(
+    {
+        "parameters",
+        "prompt",
+        "negative_prompt",
+        "negativeprompt",
+        "steps",
+        "cfgscale",
+        "sampler",
+        "seed",
+        "model",
+        "vae",
+    }
+)
+_SOFTWARE_FIELDS: frozenset[str] = frozenset(
+    {
+        "software",
+        "softwareagent",
+        "processingsoftware",
+        "hostcomputer",
+        "creatortool",
+        "generator",
+        "claimgenerator",
+        "actionssoftwareagentname",
+    }
+)
+_C2PA_FIELDS: frozenset[str] = frozenset(
+    {
+        "claimgenerator",
+        "digitalsourcetype",
+        "actionsdigitalsourcetype",
+    }
+)
+_WORKFLOW_FIELDS: frozenset[str] = frozenset(
+    {"workflow", "comfy_prompt", "comfyprompt", "invokeai", "invokeai_metadata"}
+)
+_XMP_FIELDS: frozenset[str] = frozenset(
+    {
+        "creatortool",
+        "softwareagent",
+        "generator",
+        "derivedfrom",
+        "prompt",
+        "workflow",
+    }
+)
+_C2PA_MARKERS: tuple[str, ...] = (
+    "c2pa",
+    "jumbf",
+    "claim_generator",
+    "claimgenerator",
+    "trainedalgorithmicmedia",
+    "trained algorithmic media",
+    "digitalsourcetype",
+)
+_C2PA_AI_MARKERS: tuple[str, ...] = (
+    "trainedalgorithmicmedia",
+    "trained algorithmic media",
+    "generativeai",
+    "generative ai",
+)
+
+
+def _normalize_field_name(value: str) -> str:
+    return re.sub(r"[\s_-]", "", value.lower())
+
+
+def _clean_text(value: str, *, limit: int = 500) -> str:
+    cleaned = re.sub(r"\s+", " ", value.replace("\x00", " ")).strip()
+    return cleaned[:limit]
+
+
+def _decode_metadata(value: bytes) -> str:
+    text = value.decode("utf-8", errors="ignore")
+    if not text.strip():
+        text = value.decode("latin-1", errors="ignore")
+    text = text.replace("\x00", " ")
+    return "".join(char if char in "\r\n\t" or char.isprintable() else " " for char in text)[:4000]
+
+
+def _printable_fragments(value: bytes) -> str:
+    fragments = re.findall(rb"[ -~]{4,}", value)
+    return _clean_text(
+        " | ".join(fragment.decode("ascii", errors="ignore") for fragment in fragments)
+    )
+
+
+def _png_chunks(content: bytes) -> list[tuple[str, int, int, bytes]]:
+    if not content.startswith(b"\x89PNG\r\n\x1a\n"):
+        return []
+    result: list[tuple[str, int, int, bytes]] = []
+    offset = 8
+    while offset + 12 <= len(content):
+        length = int.from_bytes(content[offset : offset + 4], "big")
+        chunk_type = content[offset + 4 : offset + 8]
+        end = offset + 12 + length
+        if length > len(content) - offset - 12 or end > len(content):
+            break
+        result.append(
+            (
+                chunk_type.decode("ascii", errors="replace"),
+                length,
+                offset,
+                content[offset + 8 : offset + 8 + length],
+            )
+        )
+        offset = end
+        if chunk_type == b"IEND":
+            break
+    return result
+
+
+def _png_text_chunks(content: bytes) -> list[tuple[str, str]]:
+    result: list[tuple[str, str]] = []
+    for chunk_type, _, _, data in _png_chunks(content):
+        if chunk_type == "tEXt":
+            key, separator, value = data.partition(b"\x00")
+            if separator:
+                result.append(("PNG tEXt chunk", _decode_metadata(key + b": " + value)))
+        elif chunk_type == "zTXt":
+            key, separator, compressed = data.partition(b"\x00")
+            if separator and compressed[:1] == b"\x00":
+                try:
+                    value = zlib.decompress(compressed[1:])
+                except zlib.error:
+                    value = b""
+                if value:
+                    result.append(("PNG zTXt chunk", _decode_metadata(key + b": " + value)))
+        elif chunk_type == "iTXt":
+            parts = data.split(b"\x00", 5)
+            if len(parts) == 6:
+                keyword, compressed, compression_method, language, translated, value = parts
+                del language, translated
+                if compressed == b"\x01" and compression_method == b"\x00":
+                    try:
+                        value = zlib.decompress(value)
+                    except zlib.error:
+                        value = b""
+                if value:
+                    result.append(("PNG iTXt chunk", _decode_metadata(keyword + b": " + value)))
+        elif chunk_type == "caBX":
+            fragments = _printable_fragments(data)
+            result.append(
+                (
+                    "PNG caBX C2PA/JUMBF chunk",
+                    "C2PA/JUMBF binary manifest"
+                    + (f"；可讀片段：{fragments}" if fragments else ""),
+                )
+            )
+    return result
+
+
+def _jpeg_metadata_segments(content: bytes) -> list[tuple[str, str]]:
+    if not content.startswith(b"\xff\xd8"):
+        return []
+    result: list[tuple[str, str]] = []
+    offset = 2
+    while offset + 4 <= len(content):
+        if content[offset] != 0xFF:
+            offset += 1
+            continue
+        while offset < len(content) and content[offset] == 0xFF:
+            offset += 1
+        if offset >= len(content):
+            break
+        marker = content[offset]
+        offset += 1
+        if marker in {0xD8, 0xD9}:
+            continue
+        if marker == 0xDA:
+            break
+        length = int.from_bytes(content[offset : offset + 2], "big")
+        if length < 2 or offset + length > len(content):
+            break
+        payload = content[offset + 2 : offset + length]
+        if marker in {0xE1, 0xE2, 0xEC, 0xED, 0xEE}:
+            result.append((f"JPEG APP{marker - 0xE0} metadata", _decode_metadata(payload)))
+        elif marker == 0xEB and (b"jumb" in payload.lower() or b"c2pa" in payload.lower()):
+            fragments = _printable_fragments(payload)
+            result.append(
+                (
+                    "JPEG APP11 C2PA/JUMBF segment",
+                    "C2PA/JUMBF binary manifest"
+                    + (f"；可讀片段：{fragments}" if fragments else ""),
+                )
+            )
+        offset += length
+    return result
+
+
+def _webp_metadata_chunks(content: bytes) -> list[tuple[str, str]]:
+    if not (content.startswith(b"RIFF") and content[8:12] == b"WEBP"):
+        return []
+    result: list[tuple[str, str]] = []
+    offset = 12
+    while offset + 8 <= len(content):
+        chunk_type = content[offset : offset + 4]
+        length = int.from_bytes(content[offset + 4 : offset + 8], "little")
+        start = offset + 8
+        end = start + length
+        if end > len(content):
+            break
+        if chunk_type in {b"XMP ", b"EXIF", b"ICCP"}:
+            result.append(
+                (
+                    f"WEBP {chunk_type.decode('ascii', errors='ignore').strip()} metadata",
+                    _decode_metadata(content[start:end]),
+                )
+            )
+        offset = end + (length % 2)
+    return result
+
+
+def _metadata_texts(content: bytes, content_type: str) -> list[tuple[str, str]]:
+    if content_type == "image/png":
+        return _png_text_chunks(content)
+    if content_type == "image/jpeg":
+        return _jpeg_metadata_segments(content)
+    if content_type == "image/webp":
+        return _webp_metadata_chunks(content)
+    return []
+
+
+def _image_header_metadata(
+    content: bytes, content_type: str
+) -> list[MerchandiseSubmissionAIMetadata]:
+    result: list[MerchandiseSubmissionAIMetadata] = []
+    if content_type == "image/png" and content.startswith(b"\x89PNG\r\n\x1a\n"):
+        chunks = _png_chunks(content)
+        ihdr = next((data for chunk_type, _, _, data in chunks if chunk_type == "IHDR"), b"")
+        if len(ihdr) >= 13:
+            color_types = {
+                0: "灰階",
+                2: "真彩色",
+                3: "索引色",
+                4: "灰階含 alpha",
+                6: "真彩色含 alpha",
+            }
+            result.extend(
+                [
+                    {"source": "PNG IHDR", "key": "format", "value": "PNG"},
+                    {
+                        "source": "PNG IHDR",
+                        "key": "width",
+                        "value": str(int.from_bytes(ihdr[0:4], "big")),
+                    },
+                    {
+                        "source": "PNG IHDR",
+                        "key": "height",
+                        "value": str(int.from_bytes(ihdr[4:8], "big")),
+                    },
+                    {"source": "PNG IHDR", "key": "bit_depth", "value": str(ihdr[8])},
+                    {
+                        "source": "PNG IHDR",
+                        "key": "color_type",
+                        "value": color_types.get(ihdr[9], str(ihdr[9])),
+                    },
+                    {"source": "PNG IHDR", "key": "interlace_method", "value": str(ihdr[12])},
+                ]
+            )
+    elif content_type == "image/jpeg" and content.startswith(b"\xff\xd8"):
+        offset = 2
+        sof_markers = (
+            set(range(0xC0, 0xC4))
+            | set(range(0xC5, 0xC8))
+            | set(range(0xC9, 0xCC))
+            | set(range(0xCD, 0xD0))
+        )
+        while offset + 4 <= len(content):
+            if content[offset] != 0xFF:
+                offset += 1
+                continue
+            while offset < len(content) and content[offset] == 0xFF:
+                offset += 1
+            if offset >= len(content):
+                break
+            marker = content[offset]
+            offset += 1
+            if marker in {0xD8, 0xD9}:
+                continue
+            if marker == 0xDA:
+                break
+            length = int.from_bytes(content[offset : offset + 2], "big")
+            if length < 2 or offset + length > len(content):
+                break
+            payload = content[offset + 2 : offset + length]
+            if marker in sof_markers and len(payload) >= 6:
+                result.extend(
+                    [
+                        {"source": f"JPEG SOF{marker:02X}", "key": "format", "value": "JPEG"},
+                        {
+                            "source": f"JPEG SOF{marker:02X}",
+                            "key": "width",
+                            "value": str(int.from_bytes(payload[3:5], "big")),
+                        },
+                        {
+                            "source": f"JPEG SOF{marker:02X}",
+                            "key": "height",
+                            "value": str(int.from_bytes(payload[1:3], "big")),
+                        },
+                        {
+                            "source": f"JPEG SOF{marker:02X}",
+                            "key": "precision",
+                            "value": str(payload[0]),
+                        },
+                        {
+                            "source": f"JPEG SOF{marker:02X}",
+                            "key": "components",
+                            "value": str(payload[5]),
+                        },
+                    ]
+                )
+                break
+            offset += length
+    elif content_type == "image/webp" and content.startswith(b"RIFF") and content[8:12] == b"WEBP":
+        offset = 12
+        while offset + 8 <= len(content):
+            chunk_type = content[offset : offset + 4]
+            length = int.from_bytes(content[offset + 4 : offset + 8], "little")
+            start = offset + 8
+            end = start + length
+            if end > len(content):
+                break
+            data = content[start:end]
+            if chunk_type == b"VP8X" and len(data) >= 10:
+                result.extend(
+                    [
+                        {"source": "WEBP VP8X", "key": "format", "value": "WEBP"},
+                        {
+                            "source": "WEBP VP8X",
+                            "key": "width",
+                            "value": str(1 + int.from_bytes(data[4:7], "little")),
+                        },
+                        {
+                            "source": "WEBP VP8X",
+                            "key": "height",
+                            "value": str(1 + int.from_bytes(data[7:10], "little")),
+                        },
+                        {
+                            "source": "WEBP VP8X",
+                            "key": "alpha",
+                            "value": str(bool(data[0] & 0x10)).lower(),
+                        },
+                    ]
+                )
+                break
+            offset = end + (length % 2)
+    return result
+
+
+def _container_metadata(content: bytes, content_type: str) -> list[MerchandiseSubmissionAIMetadata]:
+    result: list[MerchandiseSubmissionAIMetadata] = []
+    if content_type == "image/png":
+        result.extend(
+            {
+                "source": "PNG chunk table",
+                "key": f"chunk[{index}]",
+                "value": f"type={chunk_type}, length={length}, offset={offset}",
+            }
+            for index, (chunk_type, length, offset, _) in enumerate(_png_chunks(content))
+        )
+    elif content_type == "image/webp" and content.startswith(b"RIFF") and content[8:12] == b"WEBP":
+        offset = 12
+        index = 0
+        while offset + 8 <= len(content):
+            chunk_type = content[offset : offset + 4].decode("ascii", errors="replace")
+            length = int.from_bytes(content[offset + 4 : offset + 8], "little")
+            end = offset + 8 + length
+            if end > len(content):
+                break
+            result.append(
+                {
+                    "source": "WEBP chunk table",
+                    "key": f"chunk[{index}]",
+                    "value": f"type={chunk_type}, length={length}, offset={offset}",
+                }
+            )
+            offset = end + (length % 2)
+            index += 1
+    return result
+
+
+def _metadata_details(
+    content: bytes,
+    content_type: str,
+    texts: list[tuple[str, str]],
+    fields: list[tuple[str, str, str]],
+) -> list[MerchandiseSubmissionAIMetadata]:
+    details = _image_header_metadata(content, content_type) + _container_metadata(
+        content, content_type
+    )
+    details.extend({"source": source, "key": "raw", "value": text} for source, text in texts)
+    details.extend({"source": source, "key": key, "value": value} for source, key, value in fields)
+    unique: list[MerchandiseSubmissionAIMetadata] = []
+    seen: set[tuple[str, str, str]] = set()
+    for item in details:
+        marker = (item["source"], item["key"], item["value"])
+        if marker not in seen:
+            seen.add(marker)
+            unique.append(item)
+    return unique
+
+
+def _metadata_fields(texts: Iterable[tuple[str, str]]) -> list[tuple[str, str, str]]:
+    """擷取有欄位語意的 metadata，避免把 prompt 內容中的普通字串當工具。"""
+    fields: list[tuple[str, str, str]] = []
+    for source, text in texts:
+        xml_matches = re.finditer(
+            r"<(?:(?:[\w.-]+):)?(?P<key>[A-Za-z][\w.-]*)[^>]*>"
+            r"(?P<value>.*?)</(?:(?:[\w.-]+):)?(?P=key)>",
+            text,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        for match in xml_matches:
+            fields.append(
+                (
+                    source,
+                    _normalize_field_name(match.group("key")),
+                    _clean_text(match.group("value")),
+                )
+            )
+
+        field_matches = re.finditer(
+            r"(?m)(?P<key>[A-Za-z][\w.-]{1,40})\s*[:=]\s*"
+            r"(?P<value>.*?)(?=\s+[A-Za-z][\w.-]{1,40}\s*[:=]|\s*$)",
+            text,
+        )
+        for match in field_matches:
+            fields.append(
+                (
+                    source,
+                    _normalize_field_name(match.group("key")),
+                    _clean_text(match.group("value")),
+                )
+            )
+
+        json_matches = re.finditer(
+            r"[\"'](?P<key>[A-Za-z][\w ._-]{1,40})[\"']\s*:\s*"
+            r"[\"'](?P<value>[^\"']{1,1200})[\"']",
+            text,
+        )
+        for match in json_matches:
+            fields.append(
+                (
+                    source,
+                    _normalize_field_name(match.group("key")),
+                    _clean_text(match.group("value")),
+                )
+            )
+    return fields
+
+
+def _matching_fields(
+    fields: Iterable[tuple[str, str, str]], names: Iterable[str]
+) -> list[tuple[str, str, str]]:
+    names_set = {_normalize_field_name(name) for name in names}
+    return [field for field in fields if field[1] in names_set]
+
+
+def _field_text(fields: Iterable[tuple[str, str, str]]) -> str:
+    return "\n".join(value for _, _, value in fields if value)
+
+
+def _parameter_fields(texts: Iterable[tuple[str, str]]) -> list[tuple[str, str, str]]:
+    result: list[tuple[str, str, str]] = []
+    for source, text in texts:
+        match = re.search(
+            r"(?:^|[\"'\s,{])parameters[\"']?\s*[:=]\s*(?P<value>.*)$",
+            text,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        if match:
+            result.append((source, "parameters", _clean_text(match.group("value"))))
+    return result
+
+
+def _source_for(texts: Iterable[tuple[str, str]], marker: str) -> str:
+    marker = marker.lower()
+    for source, text in texts:
+        if marker in text.lower():
+            return source
+    return "圖片 metadata"
+
+
+def _excerpt_for(texts: Iterable[tuple[str, str]], markers: Iterable[str]) -> str:
+    lowered = tuple(marker.lower() for marker in markers)
+    for _, text in texts:
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        for line in lines:
+            if any(marker in line.lower() for marker in lowered):
+                return _clean_text(line)
+    return "檢出相關 metadata 標記"
+
+
+def _add_evidence(
+    evidence: list[MerchandiseSubmissionAIEvidence],
+    *,
+    level: Literal["A", "B", "C"],
+    category: str,
+    label: str,
+    value: str,
+    source: str,
+) -> None:
+    item: MerchandiseSubmissionAIEvidence = {
+        "level": level,
+        "category": category,
+        "label": label,
+        "value": _clean_text(value),
+        "source": source,
+    }
+    if not item["value"]:
+        return
+    if any(
+        existing["category"] == item["category"] and existing["value"] == item["value"]
+        for existing in evidence
+    ):
+        return
+    evidence.append(item)
+
+
+def _entropy(values: Iterable[int]) -> float:
+    counts: dict[int, int] = {}
+    total = 0
+    for value in values:
+        counts[value] = counts.get(value, 0) + 1
+        total += 1
+    if not total:
+        return 0.0
+    return -sum(count / total * math.log2(count / total) for count in counts.values() if count)
+
+
+def _pixel_forensic_analysis(
+    content: bytes, content_type: str
+) -> tuple[list[MerchandiseSubmissionAIEvidence], list[MerchandiseSubmissionAIMetadata]]:
+    """Extract conservative pixel-level signals without calling them proof of AI generation.
+
+    Metadata can be stripped or rewritten.  This pass therefore decodes the actual image and
+    measures a small, deterministic sample of pixels.  The signals are deliberately emitted as
+    level C evidence: they can request human review, but they must not independently label a file
+    as AI-generated.  A reliable SynthID result still requires Google's detector.
+    """
+    expected_formats = {"image/jpeg": "JPEG", "image/png": "PNG", "image/webp": "WEBP"}
+    expected_format = expected_formats.get(content_type)
+    if expected_format is None:
+        return [], []
+
+    try:
+        with Image.open(io.BytesIO(content)) as image:
+            image.verify()
+        with Image.open(io.BytesIO(content)) as image:
+            width, height = image.size
+            actual_format = image.format or "unknown"
+            if width <= 0 or height <= 0 or width * height > _PIXEL_ANALYSIS_MAX_PIXELS:
+                return [], [
+                    {
+                        "source": _PIXEL_ANALYSIS_SOURCE,
+                        "key": "decode",
+                        "value": "skipped: image dimensions exceed safe analysis limits",
+                    }
+                ]
+            image.load()
+            sampled = image.convert("RGB")
+            sampled.thumbnail((_PIXEL_SAMPLE_EDGE, _PIXEL_SAMPLE_EDGE), Image.Resampling.BILINEAR)
+            pixels = list(sampled.get_flattened_data())
+    except (
+        Image.DecompressionBombError,
+        UnidentifiedImageError,
+        OSError,
+        IndexError,
+        RuntimeError,
+        ValueError,
+    ):
+        return [], []
+
+    if not pixels:
+        return [], []
+
+    sample_width, sample_height = sampled.size
+    luma = [round(0.299 * red + 0.587 * green + 0.114 * blue) for red, green, blue in pixels]
+    luma_bins = [value // 8 for value in luma]
+    quantized_colors = {(red // 16, green // 16, blue // 16) for red, green, blue in pixels}
+    adjacent_differences: list[int] = []
+    for row in range(sample_height):
+        row_start = row * sample_width
+        for column in range(sample_width):
+            index = row_start + column
+            if column + 1 < sample_width:
+                adjacent_differences.append(abs(luma[index] - luma[index + 1]))
+            if row + 1 < sample_height:
+                adjacent_differences.append(abs(luma[index] - luma[index + sample_width]))
+
+    smooth_ratio = (
+        sum(difference <= 2 for difference in adjacent_differences) / len(adjacent_differences)
+        if adjacent_differences
+        else 0.0
+    )
+    edge_density = (
+        sum(difference >= 24 for difference in adjacent_differences) / len(adjacent_differences)
+        if adjacent_differences
+        else 0.0
+    )
+    color_diversity = len(quantized_colors) / len(pixels)
+    luma_entropy = _entropy(luma_bins)
+
+    block_hashes: list[tuple[tuple[int, int, int], ...]] = []
+    block_size = 8
+    for top in range(0, sample_height - block_size + 1, block_size):
+        for left in range(0, sample_width - block_size + 1, block_size):
+            block_hashes.append(
+                tuple(
+                    (
+                        pixels[(top + offset_y) * sample_width + left + offset_x][0] // 16,
+                        pixels[(top + offset_y) * sample_width + left + offset_x][1] // 16,
+                        pixels[(top + offset_y) * sample_width + left + offset_x][2] // 16,
+                    )
+                    for offset_y in range(block_size)
+                    for offset_x in range(block_size)
+                )
+            )
+    repeated_block_ratio = 1 - len(set(block_hashes)) / len(block_hashes) if block_hashes else 0.0
+
+    metadata: list[MerchandiseSubmissionAIMetadata] = [
+        {"source": _PIXEL_ANALYSIS_SOURCE, "key": "decoded", "value": "true"},
+        {"source": _PIXEL_ANALYSIS_SOURCE, "key": "format", "value": actual_format},
+        {"source": _PIXEL_ANALYSIS_SOURCE, "key": "width", "value": str(width)},
+        {"source": _PIXEL_ANALYSIS_SOURCE, "key": "height", "value": str(height)},
+        {
+            "source": _PIXEL_ANALYSIS_SOURCE,
+            "key": "sample_size",
+            "value": f"{sample_width}x{sample_height}",
+        },
+        {
+            "source": _PIXEL_ANALYSIS_SOURCE,
+            "key": "luma_entropy",
+            "value": f"{luma_entropy:.3f}",
+        },
+        {
+            "source": _PIXEL_ANALYSIS_SOURCE,
+            "key": "edge_density",
+            "value": f"{edge_density:.3f}",
+        },
+        {
+            "source": _PIXEL_ANALYSIS_SOURCE,
+            "key": "smooth_ratio",
+            "value": f"{smooth_ratio:.3f}",
+        },
+        {
+            "source": _PIXEL_ANALYSIS_SOURCE,
+            "key": "color_diversity",
+            "value": f"{color_diversity:.3f}",
+        },
+        {
+            "source": _PIXEL_ANALYSIS_SOURCE,
+            "key": "repeated_block_ratio",
+            "value": f"{repeated_block_ratio:.3f}",
+        },
+    ]
+    if actual_format != expected_format:
+        return [], metadata + [
+            {
+                "source": _PIXEL_ANALYSIS_SOURCE,
+                "key": "container_mismatch",
+                "value": f"宣告 {expected_format}，實際解析為 {actual_format}",
+            }
+        ]
+
+    signals: list[str] = []
+    if (
+        len(pixels) >= _PIXEL_SIGNAL_MIN_PIXELS
+        and repeated_block_ratio >= 0.55
+        and color_diversity >= 0.002
+    ):
+        signals.append(f"重複 8×8 區塊比例 {repeated_block_ratio:.1%}")
+    if (
+        len(pixels) >= _PIXEL_SIGNAL_MIN_PIXELS
+        and smooth_ratio >= 0.995
+        and edge_density <= 0.01
+        and luma_entropy >= 4.0
+    ):
+        signals.append(f"高平滑／低邊緣比例（smooth {smooth_ratio:.1%}，edge {edge_density:.1%}）")
+    if not signals:
+        return [], metadata
+
+    evidence: list[MerchandiseSubmissionAIEvidence] = []
+    _add_evidence(
+        evidence,
+        level="C",
+        category="Pixel-level Forensic Signal",
+        label="像素內容出現需人工複核的統計特徵",
+        value=("；".join(signals) + "。這是內容鑑識輔助線索，不能單獨證明圖片由 AI 生成。"),
+        source=_PIXEL_ANALYSIS_SOURCE,
+    )
+    return evidence, metadata
+
+
+def analyze_image_ai_evidence(
+    content: bytes, content_type: str
+) -> MerchandiseSubmissionAIDetection:
+    """Analyse provenance metadata plus conservative pixel-level forensic signals."""
+    scanned_at = datetime.now(UTC).isoformat()
+    digest = hashlib.sha256(content).hexdigest()
+    if not content_type.lower().startswith("image/"):
+        return {
+            "status": "not_applicable",
+            "evidence": [],
+            "metadata": [],
+            "sha256": digest,
+            "scanned_at": scanned_at,
+        }
+
+    normalized_content_type = content_type.lower()
+    metadata = _metadata_texts(content, normalized_content_type)
+    fields = _metadata_fields(metadata)
+    metadata_details = _metadata_details(content, normalized_content_type, metadata, fields)
+    metadata_text = "\n".join(text for _, text in metadata)
+    lowered = metadata_text.lower()
+    evidence: list[MerchandiseSubmissionAIEvidence] = []
+    pixel_evidence, pixel_metadata = _pixel_forensic_analysis(content, normalized_content_type)
+    evidence.extend(pixel_evidence)
+    metadata_details.extend(pixel_metadata)
+
+    c2pa_hits = [marker for marker in _C2PA_MARKERS if marker in lowered]
+    c2pa_fields = _matching_fields(fields, _C2PA_FIELDS)
+    c2pa_ai = any(marker in _field_text(c2pa_fields).lower() for marker in _C2PA_AI_MARKERS)
+    if c2pa_hits:
+        c2pa_value = _field_text(c2pa_fields) or _excerpt_for(metadata, c2pa_hits)
+        _add_evidence(
+            evidence,
+            level="A",
+            category="C2PA / Content Credentials",
+            label="C2PA / JUMBF provenance metadata",
+            value=c2pa_value,
+            source=_source_for(metadata, c2pa_hits[0]),
+        )
+        integrity_markers = tuple(
+            marker
+            for marker in ("signature", "certificate", "assertion hash", "manifest hash")
+            if marker in lowered
+        )
+        if integrity_markers:
+            _add_evidence(
+                evidence,
+                level="A",
+                category="C2PA Integrity Assertion",
+                label="C2PA signature / certificate / hash 欄位",
+                value="、".join(integrity_markers) + "（僅表示欄位存在，尚未在此服務驗證簽章）",
+                source=_source_for(metadata, integrity_markers[0]),
+            )
+
+    tool_hits: list[str] = []
+    software_fields = _matching_fields(fields, _SOFTWARE_FIELDS)
+    workflow_fields = _matching_fields(fields, _WORKFLOW_FIELDS)
+    c2pa_texts = [(source, text) for source, text in metadata if "C2PA" in source]
+    c2pa_ai_text = "\n".join(text for _, text in c2pa_texts).lower()
+    c2pa_ai = c2pa_ai or any(marker in c2pa_ai_text for marker in _C2PA_AI_MARKERS)
+    tool_fields = [*software_fields, *workflow_fields]
+    tool_fields.extend((source, "c2pa", text) for source, text in c2pa_texts)
+    for source, _, value in tool_fields:
+        value_lower = value.lower()
+        for marker, label in _AI_TOOLS:
+            if marker in value_lower and label not in tool_hits:
+                tool_hits.append(label)
+                _add_evidence(
+                    evidence,
+                    level="A",
+                    category="Software Agent / Generator",
+                    label="明確指向 AI 生成工具",
+                    value=label,
+                    source=source,
+                )
+
+    prompt_fields = _matching_fields(fields, _PROMPT_FIELDS)
+    parameter_fields = _parameter_fields(metadata)
+    prompt_text = (_field_text(prompt_fields) + "\n" + _field_text(parameter_fields)).lower()
+    prompt_hits = [marker for marker in _PROMPT_MARKERS if marker in prompt_text]
+    parameter_text = _field_text(parameter_fields).lower()
+    parameter_hits = [marker for marker in _PROMPT_MARKERS if marker in parameter_text]
+    has_prompt_metadata = (
+        len(set(parameter_hits)) >= 2
+        or ("prompt:" in prompt_text and len(set(prompt_hits)) >= 2)
+        or (
+            any(field[1] in {"prompt", "negativeprompt"} for field in prompt_fields)
+            and len(set(prompt_hits)) >= 2
+        )
+    )
+    if has_prompt_metadata:
+        _add_evidence(
+            evidence,
+            level="A",
+            category="Prompt Metadata",
+            label="生成提示詞／生成參數",
+            value=_field_text(parameter_fields or prompt_fields),
+            source=(parameter_fields or prompt_fields)[0][0],
+        )
+
+    has_workflow_structure = any(
+        re.search(r"[\"'](?:class_type|nodes|links)[\"']\s*:", text, re.IGNORECASE)
+        for _, text in metadata
+    )
+    if workflow_fields or has_workflow_structure:
+        _add_evidence(
+            evidence,
+            level="B",
+            category="Workflow Metadata",
+            label="工作流程 metadata",
+            value=_field_text(workflow_fields) or "檢出 workflow / class_type / nodes 結構",
+            source=workflow_fields[0][0]
+            if workflow_fields
+            else _source_for(metadata, "class_type"),
+        )
+
+    text_chunk_fields = [
+        field
+        for field in fields
+        if field[0].startswith("PNG ")
+        and (field[1] in _PROMPT_FIELDS or field[1] in _WORKFLOW_FIELDS)
+    ]
+    if text_chunk_fields:
+        _add_evidence(
+            evidence,
+            level="B",
+            category="PNG Text Chunk",
+            label="PNG tEXt / iTXt / zTXt metadata",
+            value=_field_text(text_chunk_fields),
+            source=text_chunk_fields[0][0],
+        )
+
+    xmp_fields = [
+        field
+        for field in fields
+        if field[1] in _XMP_FIELDS and ("XMP" in field[0] or "APP1" in field[0])
+    ]
+    if xmp_fields:
+        xmp_value = _field_text(xmp_fields)
+        _add_evidence(
+            evidence,
+            level="B",
+            category="XMP Metadata",
+            label="XMP CreatorTool / Generator / workflow metadata",
+            value=xmp_value,
+            source=xmp_fields[0][0],
+        )
+
+    explicit_ai = bool(tool_hits or has_prompt_metadata or has_workflow_structure or c2pa_ai)
+    status: Literal["detected", "supporting", "no_evidence"] = (
+        "detected" if explicit_ai else "supporting" if evidence else "no_evidence"
+    )
+    return {
+        "status": status,
+        "evidence": evidence,
+        "metadata": metadata_details,
+        "sha256": digest,
+        "scanned_at": scanned_at,
+    }
+
+
+def analysis_error() -> MerchandiseSubmissionAIDetection:
+    """讀取失敗時仍保留可用的錯誤狀態，不阻擋投稿流程。"""
+    return {
+        "status": "error",
+        "evidence": [],
+        "metadata": [],
+        "sha256": "",
+        "scanned_at": datetime.now(UTC).isoformat(),
+    }
+
+
+__all__ = [
+    "MerchandiseSubmissionAIDetection",
+    "MerchandiseSubmissionAIEvidence",
+    "MerchandiseSubmissionAIMetadata",
+    "AI_DETECTION_VERSION",
+    "analyze_image_ai_evidence",
+    "analysis_error",
+]

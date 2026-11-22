@@ -6,7 +6,40 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from api.services.mail import enqueue_email, send_email, send_email_now
+from api.services.mail import ResendAPIError, enqueue_email, send_email
+
+
+@pytest.mark.parametrize(
+    "code,message,expected",
+    [
+        ("validation_error", "The example.test domain is not verified", "寄件網域尚未驗證"),
+        (
+            "validation_error",
+            "You can only send testing emails to your own email address",
+            "僅允許測試收件人",
+        ),
+        ("suspended_api_key", "This API key is suspended", "金鑰已停權"),
+        ("restricted_api_key", "API key is not active", "金鑰未啟用"),
+        ("invalid_permission", "Access token is missing required scopes", "檢查金鑰權限"),
+    ],
+)
+async def test_resend_403_distinguishes_provider_failures(monkeypatch, code, message, expected):
+    import httpx
+
+    from api.services import mail
+
+    monkeypatch.setattr(mail.settings, "RESEND_API_KEY", "test-key")
+    client_class = httpx.AsyncClient
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(403, json={"name": code, "message": message})
+    )
+    monkeypatch.setattr(
+        mail.httpx, "AsyncClient", lambda **kwargs: client_class(transport=transport)
+    )
+    with pytest.raises(ResendAPIError, match=expected) as caught:
+        await mail._send_via_resend(["recipient@example.org"], "test", "<p>test</p>")
+    assert caught.value.retryable is False
+    assert f"provider_code={code}" in str(caught.value)
 
 
 def _close_coro_and_return(coro, value: str = "email-id") -> str:  # noqa: ANN001
@@ -25,7 +58,7 @@ def test_send_email_task_calls_resend(monkeypatch: pytest.MonkeyPatch) -> None:
 
     with patch("api.services.mail.asyncio.run", side_effect=_close_coro_and_return) as mock_run:
         send_email(["test@example.com"], "測試主旨", "<p>測試內容</p>")
-        assert mock_run.call_count == 2
+        assert mock_run.call_count == 3
 
 
 def test_send_email_returns_sent_status(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -45,12 +78,26 @@ def test_enqueue_email_returns_task_id() -> None:
     mock_task_result = MagicMock()
     mock_task_result.id = "fake-task-id-12345"
 
-    with patch("api.services.mail.send_email.delay", return_value=mock_task_result) as mock_delay:
+    with (
+        patch("api.services.mail.send_email.delay", return_value=mock_task_result) as mock_delay,
+        patch(
+            "api.services.mail.render_generic_message",
+            return_value="<html>body</html>",
+        ),
+    ):
         task_id = enqueue_email("to@example.com", "subject", "body")
 
     assert task_id == "fake-task-id-12345"
     # delay 應以 list 型態呼叫（單一收件人也轉換成 list）
-    mock_delay.assert_called_once_with(["to@example.com"], "subject", "body", "html")
+    mock_delay.assert_called_once_with(
+        ["to@example.com"],
+        "subject",
+        "<html>body</html>",
+        "html",
+        email_message_id=None,
+        email_recipient_id=None,
+        attachments=None,
+    )
 
 
 def test_enqueue_email_accepts_list_of_recipients() -> None:
@@ -74,7 +121,13 @@ def test_enqueue_email_accepts_message_id() -> None:
         enqueue_email("to@example.com", "subject", "body", email_message_id="message-id")
 
     mock_delay.assert_called_once_with(
-        ["to@example.com"], "subject", "body", "html", "message-id", None
+        ["to@example.com"],
+        "subject",
+        "body",
+        "html",
+        email_message_id="message-id",
+        email_recipient_id=None,
+        attachments=None,
     )
 
 
@@ -93,7 +146,13 @@ def test_enqueue_email_accepts_campaign_recipient_id() -> None:
         )
 
     mock_delay.assert_called_once_with(
-        ["to@example.com"], "subject", "body", "html", "message-id", "recipient-id"
+        ["to@example.com"],
+        "subject",
+        "body",
+        "html",
+        email_message_id="message-id",
+        email_recipient_id="recipient-id",
+        attachments=None,
     )
 
 
@@ -108,30 +167,98 @@ def test_send_email_retries_on_failure() -> None:
         send_email(["x@y.com"], "s", "b")
 
     mock_retry.assert_called_once()
+    retry_call = mock_retry.call_args.kwargs
+    assert retry_call["args"] == ()
+    assert retry_call["kwargs"]["to"] == ["x@y.com"]
+    assert retry_call["kwargs"]["subject"] == "s"
+    assert retry_call["kwargs"]["body"] == "b"
 
 
-async def test_send_email_now_posts_to_resend(monkeypatch: pytest.MonkeyPatch) -> None:
-    """send_email_now 應以 Resend API payload 寄送 HTML 郵件"""
+def test_send_email_does_not_retry_invalid_api_key() -> None:
+    error = ResendAPIError(401, "Resend API 金鑰無效")
+
+    def run_side_effect(coro):  # noqa: ANN001
+        coro.close()
+        if run_side_effect.calls == 0:
+            run_side_effect.calls += 1
+            raise error
+        return None
+
+    run_side_effect.calls = 0
+    with (
+        patch.object(send_email, "retry") as mock_retry,
+        patch("api.services.mail.asyncio.run", side_effect=run_side_effect),
+        pytest.raises(ResendAPIError, match="金鑰無效"),
+    ):
+        send_email(["x@y.com"], "s", "b")
+
+    mock_retry.assert_not_called()
+
+
+async def test_resend_provider_posts_rendered_html(monkeypatch: pytest.MonkeyPatch) -> None:
+    """現行 provider 以 Resend API payload 寄送已渲染的郵件。"""
     monkeypatch.setattr("api.services.mail.settings.RESEND_API_KEY", "re_test")
     monkeypatch.setattr("api.services.mail.settings.MAIL_FROM", "noreply@hct.works")
     monkeypatch.setattr("api.services.mail.settings.MAIL_FROM_NAME", "HCCA")
     mock_response = MagicMock()
+    mock_response.is_error = False
     mock_response.json.return_value = {"id": "email-id"}
-    mock_response.raise_for_status = MagicMock()
     mock_client = MagicMock()
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=None)
     mock_client.post = AsyncMock(return_value=mock_response)
 
-    with patch("api.services.mail.httpx.AsyncClient", return_value=mock_client):
-        await send_email_now("user@example.com", "主旨", "<p>內容</p>")
+    with (
+        patch(
+            "api.services.mail._create_automatic_email_message",
+            new=AsyncMock(return_value="message-id"),
+        ),
+        patch("api.services.mail._update_email_message_status", new=AsyncMock()),
+        patch("api.services.mail.httpx.AsyncClient", return_value=mock_client),
+    ):
+        from api.email.generic import render_generic_message
+        from api.services.mail import _send_via_resend
+
+        body = render_generic_message(
+            "主旨", "<p>內容 https://example.com/petitions/1</p>", {"body_format": "html"}
+        )
+        await _send_via_resend(["user@example.com"], "主旨", body, "html")
 
     mock_client.post.assert_awaited_once()
     _url, kwargs = mock_client.post.call_args
     assert kwargs["headers"]["Authorization"] == "Bearer re_test"
-    assert kwargs["json"] == {
-        "from": "HCCA <noreply@hct.works>",
-        "to": ["user@example.com"],
-        "subject": "主旨",
-        "html": "<p>內容</p>",
-    }
+    assert kwargs["json"]["from"] == "HCCA <noreply@hct.works>"
+    assert kwargs["json"]["to"] == ["user@example.com"]
+    assert kwargs["json"]["subject"] == "主旨"
+    assert "內容" in kwargs["json"]["html"]
+    assert (
+        '<a href="https://example.com/petitions/1" '
+        'style="color:#9b7a18;text-decoration:underline;">查看連結</a>'
+    ) in kwargs["json"]["html"]
+
+
+async def test_resend_provider_explains_invalid_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("api.services.mail.settings.RESEND_API_KEY", "re_invalid")
+    mock_response = MagicMock()
+    mock_response.is_error = True
+    mock_response.status_code = 401
+    mock_response.json.return_value = {"message": "Invalid API key"}
+    mock_client = MagicMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
+    mock_client.post = AsyncMock(return_value=mock_response)
+
+    with (
+        patch(
+            "api.services.mail._create_automatic_email_message",
+            new=AsyncMock(return_value="message-id"),
+        ),
+        patch("api.services.mail._update_email_message_status", new=AsyncMock()),
+        patch("api.services.mail.httpx.AsyncClient", return_value=mock_client),
+        pytest.raises(ResendAPIError, match="更新 RESEND_API_KEY 並重啟 email worker"),
+    ):
+        from api.services.mail import _send_via_resend
+
+        await _send_via_resend(["user@example.com"], "主旨", "<p>內容</p>", "html")

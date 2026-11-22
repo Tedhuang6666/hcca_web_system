@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import ipaddress
 import json
+import logging
 import time
 from typing import Any
 
@@ -13,6 +14,8 @@ from redis.exceptions import RedisError
 
 from api.core.config import settings
 from api.core.security import redis_client
+
+logger = logging.getLogger(__name__)
 
 DEFENSE_RULES_KEY = "defense:rules:v1"
 RATE_LIMIT_CONFIG_KEY = "defense:rate_limit:v1"
@@ -24,11 +27,13 @@ _rate_config_cache: tuple[float, dict[str, Any]] | None = None
 _REDIS_TIMEOUT_SECONDS = 0.8
 
 DEFAULT_RATE_LIMIT_OVERRIDES: list[dict[str, int | str]] = [
+    {"path_prefix": "/internal/discord", "requests": 600, "window_seconds": 60},
     {"path_prefix": "/auth/refresh", "requests": 20, "window_seconds": 60},
     {"path_prefix": "/auth/google/login", "requests": 20, "window_seconds": 60},
     {"path_prefix": "/auth/google/callback", "requests": 20, "window_seconds": 60},
     {"path_prefix": "/admin/", "requests": 90, "window_seconds": 60},
     {"path_prefix": "/notifications/email", "requests": 10, "window_seconds": 60},
+    {"path_prefix": "/email/preview", "requests": 120, "window_seconds": 60},
     {"path_prefix": "/email", "requests": 20, "window_seconds": 60},
     {"path_prefix": "/documents/attachments", "requests": 15, "window_seconds": 60},
     {"path_prefix": "/surveys", "requests": 40, "window_seconds": 60},
@@ -55,11 +60,13 @@ async def publish_rules(rules: list[dict[str, Any]]) -> None:
     global _rate_config_cache, _rules_cache
     try:
         await asyncio.wait_for(
-            redis_client.set(DEFENSE_RULES_KEY, json.dumps(rules, ensure_ascii=False)),
+            redis_client.set(DEFENSE_RULES_KEY, json.dumps(rules, ensure_ascii=False), ex=86400),
             timeout=_REDIS_TIMEOUT_SECONDS,
         )
     except (RedisError, TimeoutError):
-        return
+        # 測試／Redis 短暫中斷時仍保留本程序的最新 policy；否則管理者剛
+        # 發布的 IP block 會在下一個 request 被誤當成「沒有規則」。
+        logger.warning("防禦規則寫入 Redis 失敗，暫存於 process cache", exc_info=True)
     _rules_cache = (time.monotonic() + _LOCAL_CACHE_TTL, rules)
     _rate_config_cache = None
 
@@ -213,6 +220,36 @@ async def is_ip_blocked(ip: str) -> bool:
         if _ip_matches(str(rule.get("target", "")), ip):
             return True
     return False
+
+
+async def find_ip_block(ip: str) -> dict[str, Any] | None:
+    if await is_ip_allowed(ip):
+        return None
+    for rule in await get_rules():
+        rule_type = rule.get("rule_type")
+        if rule_type not in {"ip_block", "cidr_block"} or not _rule_not_expired(rule):
+            continue
+        if _ip_matches(str(rule.get("target", "")), ip):
+            return rule
+    return None
+
+
+async def find_identity_block(
+    *,
+    user_id: str | None = None,
+    emails: set[str] | None = None,
+) -> dict[str, Any] | None:
+    normalized_emails = {email.strip().lower() for email in emails or set() if email.strip()}
+    for rule in await get_rules():
+        if not _rule_not_expired(rule):
+            continue
+        rule_type = rule.get("rule_type")
+        target = str(rule.get("target", "")).strip()
+        if rule_type == "user_block" and user_id and target == user_id:
+            return rule
+        if rule_type == "email_block" and target.lower() in normalized_emails:
+            return rule
+    return None
 
 
 async def endpoint_lockdown_reason(path: str) -> str | None:

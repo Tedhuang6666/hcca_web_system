@@ -1,22 +1,28 @@
-"""校商訂購系統 ORM 模型 - 分類階層 / 商品 / 變體 / 購物車 / 訂單"""
+"""商品訂購系統 ORM 模型 - 分類階層 / 商品 / 變體 / 購物車 / 訂單"""
 
 from __future__ import annotations
 
 import enum
 import uuid
-from datetime import datetime
-from typing import TYPE_CHECKING
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
+    JSON,
     Boolean,
+    CheckConstraint,
+    Column,
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     String,
+    Table,
     Text,
+    text,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
@@ -26,7 +32,6 @@ from api.models.types import JSONDict
 
 if TYPE_CHECKING:
     from api.models.activity import Activity
-    from api.models.org import Org
     from api.models.school_class import SchoolClass
     from api.models.user import User
 
@@ -34,8 +39,23 @@ if TYPE_CHECKING:
 # ── 狀態枚舉 ──────────────────────────────────────────────────────────────────
 
 
+def effective_product_deadline(
+    sale_end: datetime | None, activity_end: datetime | None
+) -> datetime | None:
+    deadlines = [value for value in (sale_end, activity_end) if value is not None]
+    return (
+        min(
+            deadlines,
+            key=lambda value: value.replace(tzinfo=UTC) if value.tzinfo is None else value,
+        )
+        if deadlines
+        else None
+    )
+
+
 class ProductStatus(enum.StrEnum):
     DRAFT = "draft"  # 草稿（尚未上架）
+    TESTING = "testing"  # 測試中（僅授權者可查看與訂購）
     ACTIVE = "active"  # 上架中（可購買）
     SOLD_OUT = "sold_out"  # 售罄（庫存歸零）
     CANCELLED = "cancelled"  # 已下架
@@ -48,18 +68,22 @@ class OrderStatus(enum.StrEnum):
     REFUNDED = "refunded"  # 已退款
 
 
+class ShopDiscountType(enum.StrEnum):
+    PERCENTAGE = "percentage"
+    FIXED = "fixed"
+    PRICE_OVERRIDE = "price_override"
+    BUNDLE_PRICE = "bundle_price"
+
+
 # ── 分類階層：主題 → 系列 ──────────────────────────────────────────────────────
 
 
 class ProductCategory(Base, TimestampMixin):
-    """商品主題（最上層分類，如「校商」）"""
+    """商品主題（最上層分類，如「商品」）"""
 
     __tablename__ = "product_categories"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("orgs.id", ondelete="RESTRICT"), nullable=False, index=True
-    )
     activity_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("activities.id", ondelete="SET NULL"),
@@ -74,14 +98,14 @@ class ProductCategory(Base, TimestampMixin):
         Boolean, nullable=False, default=True, server_default="true", index=True
     )
     created_by: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True
     )
 
-    org: Mapped[Org] = relationship("Org")
     activity: Mapped[Activity | None] = relationship("Activity")
     series: Mapped[list[ProductSeries]] = relationship(
         "ProductSeries", back_populates="category", cascade="all, delete-orphan"
     )
+    products: Mapped[list[Product]] = relationship("Product", back_populates="category")
 
 
 class ProductSeries(Base, TimestampMixin):
@@ -119,6 +143,43 @@ class Product(Base, TimestampMixin):
     """
 
     __tablename__ = "products"
+    __table_args__ = (
+        CheckConstraint(
+            "max_quantity_per_user IS NULL OR max_quantity_per_user >= 1",
+            name="ck_products_max_quantity_per_user_positive",
+        ),
+        CheckConstraint(
+            "category_id IS NOT NULL OR series_id IS NOT NULL",
+            name="ck_products_category_or_series",
+        ),
+        CheckConstraint(
+            "original_price IS NULL OR original_price >= price",
+            name="ck_products_original_price",
+        ),
+        CheckConstraint(
+            "unit_cost IS NULL OR unit_cost >= 0", name="ck_products_unit_cost_nonnegative"
+        ),
+        CheckConstraint(
+            "procurement_minimum >= 0 AND procurement_stock >= 0 "
+            "AND procurement_reserve >= 0 AND procurement_extra_cost >= 0",
+            name="ck_products_procurement_nonnegative",
+        ),
+        CheckConstraint(
+            "procurement_supplier_gift >= 0", name="ck_products_supplier_gift_nonnegative"
+        ),
+        Index(
+            "ix_products_category_status_created",
+            "category_id",
+            "status",
+            text("created_at DESC"),
+        ),
+        Index(
+            "ix_products_series_status_created",
+            "series_id",
+            "status",
+            text("created_at DESC"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     # ── 樂觀鎖版本欄位（必須在 __mapper_args__ 之前宣告）──────────────────────
@@ -129,11 +190,33 @@ class Product(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    size_chart: Mapped[dict | None] = mapped_column(JSONDict, nullable=True)
     # 售價（新台幣，整數）；變體加價另計於 ProductVariantOption.price_delta
     price: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # 原價僅供價差呈現；訂單及促銷仍以 price 計算。
+    original_price: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 內部單位成本；不包含於公開商品與訂單回應。None 表示尚未設定。
+    unit_cost: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 內部整批採購規劃；不改變可售庫存或學生訂單。
+    procurement_minimum: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    procurement_stock: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    procurement_reserve: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    procurement_supplier_gift: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    procurement_extra_cost: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    procurement_note: Mapped[str] = mapped_column(Text, default="", server_default="")
+    # 選項 ID（舊快照則依名稱）對應額外單位成本，保留已刪除選項的內部成本設定。
+    procurement_option_costs: Mapped[dict[str, int | None]] = mapped_column(
+        JSONDict, nullable=False, default=dict, server_default="{}"
+    )
     # 庫存數量（-1 = 無限量）
     stock_quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_unlimited: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # 每位使用者累計購買上限；None 表示不限購。
+    max_quantity_per_user: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 名單僅供商品管理端讀取；公開回應只提供目前購買者的資格判定。
+    purchase_rules: Mapped[dict] = mapped_column(
+        JSONDict, nullable=False, default=dict, server_default="{}"
+    )
     status: Mapped[ProductStatus] = mapped_column(
         Enum(ProductStatus, name="productstatus"),
         nullable=False,
@@ -144,16 +227,23 @@ class Product(Base, TimestampMixin):
     # 截止時間：過後不再接受新訂單，並依班級結單
     sale_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    series_id: Mapped[uuid.UUID] = mapped_column(
+    # ── 劃位（票券）擴充 ─────────────────────────────────────────────────────
+    # 是否需劃位（電影 / 演唱會等）。預設 False = 一般商品。
+    requires_seating: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    # 劃位時機：at_purchase / scheduled / admin_assign（見 SeatingMode）
+    seating_mode: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    category_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("product_categories.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    series_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("product_series.id", ondelete="RESTRICT"),
-        nullable=False,
-        index=True,
-    )
-    org_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("orgs.id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     created_by: Mapped[uuid.UUID] = mapped_column(
@@ -163,16 +253,62 @@ class Product(Base, TimestampMixin):
         index=True,
     )
 
-    org: Mapped[Org] = relationship("Org")
     creator: Mapped[User] = relationship("User")
-    series: Mapped[ProductSeries] = relationship("ProductSeries", back_populates="products")
+    category: Mapped[ProductCategory | None] = relationship(
+        "ProductCategory", back_populates="products"
+    )
+    series: Mapped[ProductSeries | None] = relationship("ProductSeries", back_populates="products")
     variant_groups: Mapped[list[ProductVariantGroup]] = relationship(
         "ProductVariantGroup",
         back_populates="product",
         cascade="all, delete-orphan",
         order_by="ProductVariantGroup.sort_order",
     )
+    media: Mapped[list[ProductMedia]] = relationship(
+        "ProductMedia",
+        back_populates="product",
+        cascade="all, delete-orphan",
+        order_by="(ProductMedia.sort_order, ProductMedia.id)",
+    )
     order_items: Mapped[list[OrderItem]] = relationship("OrderItem", back_populates="product")
+    seating_zones: Mapped[list[Any]] = relationship(
+        "SeatingZone",
+        back_populates="product",
+        cascade="all, delete-orphan",
+        order_by="SeatingZone.sort_order",
+    )
+
+    @property
+    def effective_sale_end(self) -> datetime | None:
+        """單品可提前截止，不能晚於班聯統一期限。"""
+        category = self.category
+        if category is None and self.series is not None:
+            category = self.series.category
+        activity_end = category.activity.order_closes_at if category and category.activity else None
+        return effective_product_deadline(self.sale_end, activity_end)
+
+
+class ProductMedia(Base):
+    """商品詳情圖片，包含一般商品照與模特兒宣傳照。"""
+
+    __tablename__ = "product_media"
+    __table_args__ = (
+        CheckConstraint("kind IN ('product', 'model')", name="ck_product_media_kind"),
+        Index("ix_product_media_product_sort", "product_id", "sort_order"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    product_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("products.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    image_url: Mapped[str] = mapped_column(Text, nullable=False)
+    label: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False, default="product")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    product: Mapped[Product] = relationship("Product", back_populates="media")
 
 
 # ── 變體：群組（尺寸 / 顏色）→ 選項（中 / 黑）──────────────────────────────────
@@ -206,6 +342,12 @@ class ProductVariantOption(Base, TimestampMixin):
     """變體選項（如「黑」「中」），可附圖片並設定加價"""
 
     __tablename__ = "product_variant_options"
+    __table_args__ = (
+        CheckConstraint(
+            "original_price_delta IS NULL OR original_price_delta >= price_delta",
+            name="ck_product_variant_options_original_price_delta",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     group_id: Mapped[uuid.UUID] = mapped_column(
@@ -218,6 +360,7 @@ class ProductVariantOption(Base, TimestampMixin):
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 加價（新台幣，整數，可為 0）
     price_delta: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    original_price_delta: Mapped[int | None] = mapped_column(Integer, nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="true"
@@ -291,20 +434,41 @@ class Order(Base, TimestampMixin, ClassConsolidationMixin):
     """
 
     __tablename__ = "orders"
+    __table_args__ = (
+        CheckConstraint(
+            "user_id IS NOT NULL OR (assistance_scope = 'sheet_import' "
+            "AND buyer_name IS NOT NULL AND buyer_office IS NOT NULL)",
+            name="ck_orders_external_buyer",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     # 字號：ORD-YYYY-NNNNNN
     serial_number: Mapped[str] = mapped_column(String(30), unique=True, nullable=False, index=True)
-    user_id: Mapped[uuid.UUID] = mapped_column(
+    # 測試訂單依商品獨立保存，正式開放時只清除該商品的測試資料。
+    test_product_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="RESTRICT"),
-        nullable=False,
+        ForeignKey("products.id", ondelete="RESTRICT"),
+        nullable=True,
         index=True,
     )
-    org_id: Mapped[uuid.UUID] = mapped_column(
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("orgs.id", ondelete="RESTRICT"),
-        nullable=False,
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    activity_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("activities.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    # 未綁活動的分類仍各自成單；保留快照供清空／取消後歸類。
+    category_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("product_categories.id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
     )
     assistance_scope: Mapped[str] = mapped_column(
@@ -313,6 +477,20 @@ class Order(Base, TimestampMixin, ClassConsolidationMixin):
     assisted_by_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    # 補收款暫不歸入 class_id；確認收款後依此快照歸回原班級。
+    supplement_class_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("school_classes.id", ondelete="RESTRICT"), nullable=True
+    )
+    # 班代個人收款備忘；正式入帳仍由班聯會設定 is_paid。
+    is_class_collected: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false", index=True
+    )
+    class_collected_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    class_collected_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     status: Mapped[OrderStatus] = mapped_column(
         Enum(OrderStatus, name="orderstatus"),
         nullable=False,
@@ -320,21 +498,86 @@ class Order(Base, TimestampMixin, ClassConsolidationMixin):
         index=True,
     )
     # 訂單總金額（新台幣，整數）
+    subtotal_price: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    # 優惠折抵後的訂單總金額（新台幣，整數）
+    discount_amount: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     total_price: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    received_amount: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    # 班級尾款保留班級歸屬，補收款介面按班級與活動合併顯示。
+    is_class_balance: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    promotion_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("shop_promotions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    promotion_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    payment_method: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="cash_on_pickup", server_default="cash_on_pickup"
+    )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    user: Mapped[User] = relationship("User", foreign_keys=[user_id])
+    # 教師訂購快照；不隨本人資料或後台處室更名改動歷史訂單。
+    buyer_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    buyer_office: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    user: Mapped[User | None] = relationship("User", foreign_keys=[user_id])
+    activity: Mapped[Activity | None] = relationship("Activity")
+    category: Mapped[ProductCategory | None] = relationship("ProductCategory")
     assisted_by: Mapped[User | None] = relationship("User", foreign_keys=[assisted_by_id])
-    org: Mapped[Org] = relationship("Org")
     school_class: Mapped[SchoolClass | None] = relationship(
         "SchoolClass", foreign_keys="Order.class_id"
+    )
+    promotion: Mapped[ShopPromotion | None] = relationship(
+        "ShopPromotion", foreign_keys=[promotion_id]
     )
     items: Mapped[list[OrderItem]] = relationship(
         "OrderItem", back_populates="order", cascade="all, delete-orphan"
     )
+    applied_promotions: Mapped[list[ShopOrderPromotion]] = relationship(
+        "ShopOrderPromotion",
+        back_populates="order",
+        cascade="all, delete-orphan",
+        order_by="ShopOrderPromotion.promotion_id",
+        lazy="selectin",
+    )
+    seat_assignments: Mapped[list[Any]] = relationship(
+        "SeatAssignment", back_populates="order", cascade="all, delete-orphan"
+    )
 
 
 # ── 訂單明細 ──────────────────────────────────────────────────────────────────
+
+
+class ShopDelegationLink(Base, TimestampMixin):
+    """學生授權的具名連結；僅保存秘密的雜湊，首次使用綁定帳號。"""
+
+    __tablename__ = "shop_delegation_links"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    category_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("product_categories.id", ondelete="RESTRICT")
+    )
+    activity_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("activities.id", ondelete="RESTRICT"), nullable=True
+    )
+    name: Mapped[str] = mapped_column(String(80))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    bound_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class OrderItem(Base, TimestampMixin):
@@ -358,6 +601,23 @@ class OrderItem(Base, TimestampMixin):
     quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     # 下單時的單價快照（= 商品價 + 變體加價總和，不受日後調價影響）
     unit_price: Mapped[int] = mapped_column(Integer, nullable=False)
+    gift_quantity: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    gift_discount_amount: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    ordered_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    ordered_by_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    delegation_link_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("shop_delegation_links.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    delegation_name: Mapped[str | None] = mapped_column(String(80), nullable=True)
     # 所選變體快照：list[{group_id, group_name, option_id, value, price_delta}]
     selected_options: Mapped[list] = mapped_column(
         JSONDict, nullable=False, default=list, server_default="[]"
@@ -367,16 +627,252 @@ class OrderItem(Base, TimestampMixin):
     product: Mapped[Product] = relationship("Product", back_populates="order_items")
 
 
+class ShopOrderPromotion(Base):
+    """折抵分配：一筆訂單可以同時套用優惠碼與自動優惠。"""
+
+    __tablename__ = "shop_order_promotions"
+
+    order_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("orders.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    promotion_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("shop_promotions.id", ondelete="RESTRICT"),
+        primary_key=True,
+        index=True,
+    )
+    discount_amount: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+
+    order: Mapped[Order] = relationship("Order", back_populates="applied_promotions")
+    promotion: Mapped[ShopPromotion] = relationship("ShopPromotion")
+
+
+class ShopOrderClose(Base, TimestampMixin):
+    """班級訂購結單紀錄（per category × per class）。
+
+    is_active=True 表示設定有效；closes_at 有值時到點才截止，空值立即截止。
+    重新開單時設為 False（保留歷程）。
+    class_id=None 表示全局關閉（僅管理員使用）。
+    """
+
+    __tablename__ = "shop_order_closes"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    category_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("product_categories.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    class_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("school_classes.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    closed_by_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    reopened_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    reopened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    closes_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true", index=True
+    )
+
+    category: Mapped[ProductCategory] = relationship("ProductCategory")
+    school_class: Mapped[SchoolClass | None] = relationship("SchoolClass")
+    closed_by: Mapped[User] = relationship("User", foreign_keys=[closed_by_id])
+    reopened_by: Mapped[User | None] = relationship("User", foreign_keys=[reopened_by_id])
+
+
+shop_promotion_users = Table(
+    "shop_promotion_users",
+    Base.metadata,
+    Column(
+        "promotion_id",
+        UUID(as_uuid=True),
+        ForeignKey("shop_promotions.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "user_id",
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+)
+Index("ix_shop_promotion_users_user_id", shop_promotion_users.c.user_id)
+
+
+shop_promotion_products = Table(
+    "shop_promotion_products",
+    Base.metadata,
+    Column(
+        "promotion_id",
+        UUID(as_uuid=True),
+        ForeignKey("shop_promotions.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "product_id",
+        UUID(as_uuid=True),
+        ForeignKey("products.id", ondelete="RESTRICT"),
+        primary_key=True,
+    ),
+)
+Index("ix_shop_promotion_products_product_id", shop_promotion_products.c.product_id)
+
+
+class ShopPromotionProductPrice(Base):
+    """優惠指定商品的優惠後單價。"""
+
+    __tablename__ = "shop_promotion_product_prices"
+    __table_args__ = (
+        CheckConstraint("unit_price >= 0", name="ck_shop_promotion_product_prices_nonnegative"),
+        Index("ix_shop_promotion_product_prices_product_id", "product_id"),
+    )
+
+    promotion_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("shop_promotions.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    product_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("products.id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    unit_price: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    promotion: Mapped[ShopPromotion] = relationship(
+        "ShopPromotion", back_populates="product_price_overrides"
+    )
+
+
+class ShopPromotion(Base, TimestampMixin):
+    """校商優惠：可依帳號、金額與商品組合自動套用，或建立優惠碼。"""
+
+    __tablename__ = "shop_promotions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    activity_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("activities.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    # null 保留舊活動範圍；空列表代表不限主題，非空列表限定商品主題。
+    target_category_ids: Mapped[list[str] | None] = mapped_column(
+        JSON(none_as_null=True).with_variant(JSONB(none_as_null=True), "postgresql"),
+        nullable=True,
+    )
+    code: Mapped[str | None] = mapped_column(String(80), nullable=True, unique=True, index=True)
+    target_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    discount_type: Mapped[ShopDiscountType] = mapped_column(
+        Enum(ShopDiscountType, name="shopdiscounttype"), nullable=False
+    )
+    discount_value: Mapped[int] = mapped_column(Integer, nullable=False)
+    min_order_price: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    min_quantity: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    gift_quantity: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    max_uses: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    used_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true", index=True
+    )
+    is_public: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+
+    target_user: Mapped[User | None] = relationship("User", foreign_keys=[target_user_id])
+    activity: Mapped[Activity | None] = relationship("Activity")
+    target_users: Mapped[list[User]] = relationship(
+        "User", secondary=shop_promotion_users, lazy="selectin"
+    )
+    student_id_targets: Mapped[list[ShopPromotionStudentTarget]] = relationship(
+        "ShopPromotionStudentTarget",
+        back_populates="promotion",
+        cascade="all, delete-orphan",
+        order_by="ShopPromotionStudentTarget.student_id",
+        lazy="selectin",
+    )
+    target_products: Mapped[list[Product]] = relationship(
+        "Product", secondary=shop_promotion_products, lazy="selectin"
+    )
+    product_price_overrides: Mapped[list[ShopPromotionProductPrice]] = relationship(
+        "ShopPromotionProductPrice",
+        back_populates="promotion",
+        cascade="all, delete-orphan",
+        order_by="ShopPromotionProductPrice.product_id",
+        lazy="selectin",
+    )
+    creator: Mapped[User] = relationship("User", foreign_keys=[created_by])
+
+
+class ShopPromotionStudentTarget(Base):
+    """優惠指定的學號，可在對應帳號註冊前先建立。"""
+
+    __tablename__ = "shop_promotion_student_targets"
+    __table_args__ = (Index("ix_shop_promotion_student_targets_student_id", "student_id"),)
+
+    promotion_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("shop_promotions.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    student_id: Mapped[str] = mapped_column(String(20), primary_key=True)
+
+    promotion: Mapped[ShopPromotion] = relationship(
+        "ShopPromotion", back_populates="student_id_targets"
+    )
+
+
 __all__ = [
     "Cart",
     "CartItem",
     "Order",
     "OrderItem",
     "OrderStatus",
+    "ShopDiscountType",
     "Product",
     "ProductCategory",
+    "ProductMedia",
     "ProductSeries",
     "ProductStatus",
     "ProductVariantGroup",
     "ProductVariantOption",
+    "ShopOrderClose",
+    "ShopOrderPromotion",
+    "ShopPromotion",
+    "ShopPromotionProductPrice",
+    "ShopPromotionStudentTarget",
 ]

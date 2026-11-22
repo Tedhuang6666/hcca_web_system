@@ -19,9 +19,6 @@ class PermissionCode(StrEnum):
     AUDIT_VIEW_ALL = "audit:view_all"
     AUDIT_VIEW = "audit:view"
 
-    ACTIVITY_MANAGE = "activity:manage"
-    ACTIVITY_APPOINT = "activity:appoint"
-
     ORG_MANAGE = "org:manage"
     ORG_MANAGE_POSITIONS = "org:manage_positions"
     ORG_MANAGE_MEMBERS = "org:manage_members"
@@ -40,6 +37,7 @@ class PermissionCode(StrEnum):
     DOCUMENT_ISSUE = "document:issue"
     DOCUMENT_ISSUE_DIRECT = "document:issue_direct"
     DOCUMENT_ARCHIVE = "document:archive"
+    DOCUMENT_ARCHIVE_SETTINGS = "document:archive_settings"
     DOCUMENT_EXPORT = "document:export"
     DOCUMENT_VIEW_ALL = "document:view_all"
     DOCUMENT_ADMIN = "document:admin"
@@ -66,12 +64,6 @@ class PermissionCode(StrEnum):
     REGULATION_COUNCIL_APPROVE = "regulation:council_approve"
     REGULATION_PRESIDENT_PUBLISH = "regulation:president_publish"
 
-    MEAL_MANAGE = "meal:manage"
-    MEAL_MANAGE_SCHEDULE = "meal:manage_schedule"
-    MEAL_CONFIRM_ORDER = "meal:confirm_order"
-    MEAL_COMPLETE_ORDER = "meal:complete_order"
-    MEAL_EXPORT = "meal:export"
-
     SURVEY_CREATE = "survey:create"
     SURVEY_MANAGE = "survey:manage"
     SURVEY_VIEW_ALL = "survey:view_all"
@@ -88,20 +80,31 @@ class PermissionCode(StrEnum):
     PETITION_ADMIN = "petition:admin"
 
     SHOP_MANAGE = "shop:manage"
+    SHOP_TEST = "shop:test"
     SHOP_MANAGE_ORDERS = "shop:manage_orders"
     SHOP_VIEW_ALL = "shop:view_all"
+
+    MERCHANDISE_SUBMISSION_VIEW = "merchandise_submission:view"
+    MERCHANDISE_SUBMISSION_MANAGE = "merchandise_submission:manage"
+    MERCHANDISE_SUBMISSION_REVIEW = "merchandise_submission:review"
+
     FINANCE_VIEW = "finance:view"
+    FINANCE_EXPENSE_CLAIM = "finance:expense_claim"
+    FINANCE_RECORD = "finance:record"
+    FINANCE_REVIEW = "finance:review"
+    FINANCE_MANAGE = "finance:manage"
+    FINANCE_PROCUREMENT = "finance:procurement"
+    FINANCE_SCHOOL_PAYMENT = "finance:school_payment"
+    FINANCE_DUES_PAYMENT = "finance:dues_payment"
+    FINANCE_BUDGET = "finance:budget"
+    FINANCE_BUDGET_PROPOSE = "finance:budget_propose"
+    FINANCE_BUDGET_REVIEW = "finance:budget_review"
 
     CLASS_MANAGE = "class:manage"
     CLASS_VIEW_MEMBERS = "class:view_members"
     CLASS_MANAGE_MEMBERS = "class:manage_members"
     CLASS_MANAGE_ROLES = "class:manage_roles"
     CLASS_SHOP_COLLECT = "class:shop_collect"
-    CLASS_SHOP_CLOSE = "class:shop_close"
-    CLASS_MEAL_COLLECT = "class:meal_collect"
-    CLASS_MEAL_CLOSE = "class:meal_close"
-    CLASS_MEAL_PICKUP = "class:meal_pickup"
-
     ANNOUNCEMENT_CREATE = "announcement:create"
     ANNOUNCEMENT_PUBLISH = "announcement:publish"
     ANNOUNCEMENT_EDIT = "announcement:edit"
@@ -113,41 +116,36 @@ class PermissionCode(StrEnum):
     ANNOUNCEMENT_PUBLIC_LAYOUT = "announcement:public_layout"
 
     ANALYTICS_VIEW = "analytics:view"
+    ELECTION_MANAGE = "election:manage"
 
     EMAIL_SEND = "email:send"
     EMAIL_SEND_BULK = "email:send_bulk"
     EMAIL_VIEW_LOGS = "email:view_logs"
+    EMAIL_TEMPLATE_MANAGE = "email:template_manage"
 
     EXAM_MANAGE = "exam:manage"
     EXAM_DOWNLOAD = "exam:download"
 
-    MEETING_CREATE = "meeting:create"
-    MEETING_MANAGE = "meeting:manage"
-    MEETING_CHAIR = "meeting:chair"
-    MEETING_VOTE = "meeting:vote"
-    MEETING_VIEW_ALL = "meeting:view_all"
-    MEETING_EXPORT = "meeting:export"
-
     COUNCIL_PROPOSAL_MANAGE = "council_proposal:manage"
     JUDICIAL_PETITION_MANAGE = "judicial_petition:manage"
 
-    CALENDAR_CREATE = "calendar:create"
-    CALENDAR_MANAGE = "calendar:manage"
-    CALENDAR_VIEW_ALL = "calendar:view_all"
-    CALENDAR_ADMIN = "calendar:admin"
-
     PARTNER_MAP_MANAGE = "partner_map:manage"
+    PARTNER_MAP_BUSINESS_MANAGE = "partner_map:business_manage"
+    PARTNER_MAP_SUBMISSION_REVIEW = "partner_map:submission_review"
+    PARTNER_MAP_APPLICATION_MANAGE = "partner_map:application_manage"
+    PARTNER_MAP_APPLICATION_REVIEW = "partner_map:application_review"
     PARTNER_MAP_VIEW_STATS = "partner_map:view_stats"
+
+    ELECTRONIC_CREDENTIAL_MANAGE = "electronic_credential:manage"
+    RECOMMENDED_VENDOR_MANAGE = "recommended_vendor:manage"
 
     SITE_MANAGE = "site:manage"
 
-    # Phase B1 / D2（企業級升級路線圖、ADR-003 / ADR-005 / Phase D2）
+    QR_CODE_MANAGE = "qr_code:manage"
+
     POLICY_ADMIN = "policy:admin"
     API_KEY_ADMIN = "api_key:admin"
     WEBHOOK_ADMIN = "webhook:admin"
-    # Phase C3 客服工具
-    ADMIN_IMPERSONATE = "admin:impersonate"
-    # Phase D3 Feature flags
     FEATURE_FLAG_ADMIN = "feature_flag:admin"
 
 
@@ -214,21 +212,15 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
     },
     {
         "group": "系統管理",
+        "code": PermissionCode.AUDIT_VIEW,
+        "label": "查看稽核日誌（相容）",
+        "desc": "舊版完整稽核檢視權限；新職位請依範圍使用 audit:view_org 或 audit:view_all",
+    },
+    {
+        "group": "系統管理",
         "code": PermissionCode.AUDIT_VIEW_ALL,
         "label": "查看所有稽核日誌",
         "desc": "查看全站所有操作軌跡與稽核事件",
-    },
-    {
-        "group": "活動系統",
-        "code": PermissionCode.ACTIVITY_MANAGE,
-        "label": "管理活動",
-        "desc": "建立、編輯、封存活動基本資料",
-    },
-    {
-        "group": "活動系統",
-        "code": PermissionCode.ACTIVITY_APPOINT,
-        "label": "任命活動總召",
-        "desc": "指派、調整與卸任活動總召任期",
     },
     {
         "group": "組織管理",
@@ -331,6 +323,12 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "code": PermissionCode.DOCUMENT_ARCHIVE,
         "label": "歸檔公文",
         "desc": "封存已核准的公文",
+    },
+    {
+        "group": "公文系統",
+        "code": PermissionCode.DOCUMENT_ARCHIVE_SETTINGS,
+        "label": "設定公文歸檔",
+        "desc": "設定或取消已核准公文的預約歸檔時間",
     },
     {
         "group": "公文系統",
@@ -465,36 +463,6 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "desc": "主席正式公布法規",
     },
     {
-        "group": "學餐系統",
-        "code": PermissionCode.MEAL_MANAGE,
-        "label": "學餐完整管理",
-        "desc": "管理商家/菜單（含以下所有學餐權限）",
-    },
-    {
-        "group": "學餐系統",
-        "code": PermissionCode.MEAL_MANAGE_SCHEDULE,
-        "label": "管理排程",
-        "desc": "僅建立/修改/結單排程（不含商家/菜單）",
-    },
-    {
-        "group": "學餐系統",
-        "code": PermissionCode.MEAL_CONFIRM_ORDER,
-        "label": "確認訂單",
-        "desc": "將 pending 訂單改為 confirmed",
-    },
-    {
-        "group": "學餐系統",
-        "code": PermissionCode.MEAL_COMPLETE_ORDER,
-        "label": "完成訂單",
-        "desc": "將 confirmed 訂單改為 completed（核銷）",
-    },
-    {
-        "group": "學餐系統",
-        "code": PermissionCode.MEAL_EXPORT,
-        "label": "匯出報表",
-        "desc": "下載訂單/領餐名單 Excel",
-    },
-    {
         "group": "問卷系統",
         "code": PermissionCode.SURVEY_CREATE,
         "label": "建立問卷",
@@ -534,13 +502,13 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "group": "陳情系統",
         "code": PermissionCode.PETITION_ASSIGN,
         "label": "陳情分案",
-        "desc": "將本機關陳情案件指派給內部承辦人",
+        "desc": "可分派本機關案件；上級機關可分派直屬下級機關案件並指派給自身成員",
     },
     {
         "group": "陳情系統",
         "code": PermissionCode.PETITION_HANDLE,
         "label": "處理陳情",
-        "desc": "回覆、退回補件、結案、不受理與新增內部備註",
+        "desc": "處理本機關及直屬下級機關案件：回覆、退回補件、結案、不受理與新增內部備註",
     },
     {
         "group": "陳情系統",
@@ -580,6 +548,12 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
     },
     {
         "group": "商品系統",
+        "code": PermissionCode.SHOP_TEST,
+        "label": "測試商品",
+        "desc": "查看與訂購測試中的商品；正式開放時清除測試訂單及相關紀錄",
+    },
+    {
+        "group": "商品系統",
         "code": PermissionCode.SHOP_MANAGE_ORDERS,
         "label": "管理訂單",
         "desc": "查看/取消所有訂單",
@@ -591,10 +565,88 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "desc": "財務用，唯讀查看所有訂單",
     },
     {
-        "group": "商品系統",
+        "group": "校商投稿",
+        "code": PermissionCode.MERCHANDISE_SUBMISSION_VIEW,
+        "label": "查看校商投稿",
+        "desc": "查看後台投稿清單、投稿附件與審核所需資料（唯讀）",
+    },
+    {
+        "group": "校商投稿",
+        "code": PermissionCode.MERCHANDISE_SUBMISSION_MANAGE,
+        "label": "管理校商投稿",
+        "desc": "管理投稿設定、投稿品項、範本圖片與後台附件",
+    },
+    {
+        "group": "校商投稿",
+        "code": PermissionCode.MERCHANDISE_SUBMISSION_REVIEW,
+        "label": "審核校商投稿",
+        "desc": "審核投稿、要求補件、決定採用結果與準備全校票選",
+    },
+    {
+        "group": "財務系統",
         "code": PermissionCode.FINANCE_VIEW,
-        "label": "財務查閱",
-        "desc": "查看財務報表與統計",
+        "label": "查看財務帳本",
+        "desc": "查看帳本、餘額、傳票與財務報表，不能建立或覆核傳票",
+    },
+    {
+        "group": "財務系統",
+        "code": PermissionCode.FINANCE_EXPENSE_CLAIM,
+        "label": "登錄支出／報帳",
+        "desc": "建立支出與報帳傳票並送覆核；另需「查看財務帳本」以使用帳本頁面",
+    },
+    {
+        "group": "財務系統",
+        "code": PermissionCode.FINANCE_RECORD,
+        "label": "登錄一般財務傳票",
+        "desc": "登錄期初餘額、收入與資金移轉並送覆核；包含支出／報帳權限",
+    },
+    {
+        "group": "財務系統",
+        "code": PermissionCode.FINANCE_REVIEW,
+        "label": "覆核財務傳票",
+        "desc": "覆核並過帳他人登錄的財務傳票",
+    },
+    {
+        "group": "財務系統",
+        "code": PermissionCode.FINANCE_MANAGE,
+        "label": "財務設定",
+        "desc": "管理帳本、會計期間、科目與資金帳戶",
+    },
+    {
+        "group": "財務系統",
+        "code": PermissionCode.FINANCE_PROCUREMENT,
+        "label": "管理校商請購",
+        "desc": "更新報帳的校商請購、下單與收貨狀態",
+    },
+    {
+        "group": "財務系統",
+        "code": PermissionCode.FINANCE_SCHOOL_PAYMENT,
+        "label": "登錄校方付款",
+        "desc": "將已覆核報帳標記為校方已支付",
+    },
+    {
+        "group": "財務系統",
+        "code": PermissionCode.FINANCE_DUES_PAYMENT,
+        "label": "登錄會費付款",
+        "desc": "將已覆核報帳標記為會費已支付",
+    },
+    {
+        "group": "財務系統",
+        "code": PermissionCode.FINANCE_BUDGET,
+        "label": "管理預算",
+        "desc": "建立共同預算、送審、修正已核准額度與處理預算列管",
+    },
+    {
+        "group": "財務系統",
+        "code": PermissionCode.FINANCE_BUDGET_PROPOSE,
+        "label": "編列部門預算",
+        "desc": "在共同預算草案中新增與編輯所屬部門的預算條目",
+    },
+    {
+        "group": "財務系統",
+        "code": PermissionCode.FINANCE_BUDGET_REVIEW,
+        "label": "審核預算案",
+        "desc": "核准、退回或否決共同預算與追加預算案",
     },
     {
         "group": "班級管理",
@@ -607,18 +659,6 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "code": PermissionCode.CLASS_VIEW_MEMBERS,
         "label": "查看本班成員",
         "desc": "查看任職班級的名冊與訂購彙整",
-    },
-    {
-        "group": "班級管理",
-        "code": PermissionCode.CLASS_MEAL_PICKUP,
-        "label": "本班學餐領取",
-        "desc": "取得本班同商家同時段的班級領取碼並處理領餐",
-    },
-    {
-        "group": "班級管理",
-        "code": PermissionCode.CLASS_MEAL_COLLECT,
-        "label": "本班學餐收款",
-        "desc": "標示本班學餐訂單收款狀態",
     },
     {
         "group": "班級管理",
@@ -637,18 +677,6 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "code": PermissionCode.CLASS_MANAGE_ROLES,
         "label": "管理本班職位",
         "desc": "任命或調整任職班級的職位",
-    },
-    {
-        "group": "班級管理",
-        "code": PermissionCode.CLASS_SHOP_CLOSE,
-        "label": "本班商品結單",
-        "desc": "處理本班商品結單彙整",
-    },
-    {
-        "group": "班級管理",
-        "code": PermissionCode.CLASS_MEAL_CLOSE,
-        "label": "本班學餐結單",
-        "desc": "處理本班學餐結單彙整",
     },
     {
         "group": "公告系統",
@@ -711,6 +739,12 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "desc": "查看公文效率統計、部門排名與待辦警告",
     },
     {
+        "group": "即時開票",
+        "code": PermissionCode.ELECTION_MANAGE,
+        "label": "管理即時開票",
+        "desc": "建立選舉、控制票匭狀態、記票、更正與鎖定結果",
+    },
+    {
         "group": "通知與郵件",
         "code": PermissionCode.EMAIL_SEND,
         "label": "寄送 Email（個別）",
@@ -729,6 +763,12 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "desc": "查看所有寄信稽核紀錄與實際收件清單",
     },
     {
+        "group": "通知與郵件",
+        "code": PermissionCode.EMAIL_TEMPLATE_MANAGE,
+        "label": "管理組織郵件範本",
+        "desc": "建立、修改與停用所屬組織共享的郵件範本與名單",
+    },
+    {
         "group": "段考題庫",
         "code": PermissionCode.EXAM_MANAGE,
         "label": "管理段考題庫",
@@ -742,45 +782,9 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
     },
     {
         "group": "議事系統",
-        "code": PermissionCode.MEETING_CREATE,
-        "label": "建立會議",
-        "desc": "建立議會會議與基本門檻設定",
-    },
-    {
-        "group": "議事系統",
-        "code": PermissionCode.MEETING_MANAGE,
-        "label": "管理議程與出席",
-        "desc": "管理議程、出列席、投影大屏與現場名冊",
-    },
-    {
-        "group": "議事系統",
-        "code": PermissionCode.MEETING_CHAIR,
-        "label": "主席場控",
-        "desc": "開始/暫停/結束會議，開啟與關閉現場表決",
-    },
-    {
-        "group": "議事系統",
-        "code": PermissionCode.MEETING_VOTE,
-        "label": "議員表決",
-        "desc": "列入預設表決權名冊並可在現場投票",
-    },
-    {
-        "group": "議事系統",
-        "code": PermissionCode.MEETING_VIEW_ALL,
-        "label": "查看所有會議",
-        "desc": "跨組織查看會議資料",
-    },
-    {
-        "group": "議事系統",
-        "code": PermissionCode.MEETING_EXPORT,
-        "label": "匯出會議紀錄",
-        "desc": "查看會後紀錄、匯出或轉成公文草稿",
-    },
-    {
-        "group": "議事系統",
         "code": PermissionCode.COUNCIL_PROPOSAL_MANAGE,
         "label": "管理議會提案",
-        "desc": "審查議會提案、記錄常委審查與排入議程狀態",
+        "desc": "審查與更新議會提案狀態",
     },
     {
         "group": "評議委員會",
@@ -789,34 +793,34 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "desc": "收案、審查與更新評議委員會訴訟或法規範審查聲請",
     },
     {
-        "group": "行事曆",
-        "code": PermissionCode.CALENDAR_CREATE,
-        "label": "建立行程",
-        "desc": "建立活動、準備、彩排、他校會議與截止日",
-    },
-    {
-        "group": "行事曆",
-        "code": PermissionCode.CALENDAR_MANAGE,
-        "label": "管理行程",
-        "desc": "管理本平台行事曆事件、參與者、準備清單與關聯連結",
-    },
-    {
-        "group": "行事曆",
-        "code": PermissionCode.CALENDAR_VIEW_ALL,
-        "label": "查看組織行程",
-        "desc": "跨組織查看組織可見的行事曆事件",
-    },
-    {
-        "group": "行事曆",
-        "code": PermissionCode.CALENDAR_ADMIN,
-        "label": "行事曆管理員",
-        "desc": "跨組織查看與管理所有行事曆事件",
+        "group": "特約地圖",
+        "code": PermissionCode.PARTNER_MAP_MANAGE,
+        "label": "管理特約地圖（完整）",
+        "desc": "完整管理特約地圖；包含店家、投稿審核與申請流程等子權限",
     },
     {
         "group": "特約地圖",
-        "code": PermissionCode.PARTNER_MAP_MANAGE,
-        "label": "管理特約地圖",
-        "desc": "建立/修改/刪除特約店家、點位、標籤與優惠",
+        "code": PermissionCode.PARTNER_MAP_BUSINESS_MANAGE,
+        "label": "管理特約店家內容",
+        "desc": "建立/修改/刪除店家、點位、標籤、優惠與宣傳素材",
+    },
+    {
+        "group": "特約地圖",
+        "code": PermissionCode.PARTNER_MAP_SUBMISSION_REVIEW,
+        "label": "審核特約店家投稿",
+        "desc": "查看與審核學生送出的特約店家投稿",
+    },
+    {
+        "group": "特約地圖",
+        "code": PermissionCode.PARTNER_MAP_APPLICATION_MANAGE,
+        "label": "管理特約申請設定",
+        "desc": "開關特約申請、調整申請表單欄位與設定",
+    },
+    {
+        "group": "特約地圖",
+        "code": PermissionCode.PARTNER_MAP_APPLICATION_REVIEW,
+        "label": "審核特約商家申請",
+        "desc": "查看、處理與核准或退回特約商家合作申請",
     },
     {
         "group": "特約地圖",
@@ -825,17 +829,28 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "desc": "查看特約店家點擊、瀏覽與互動統計（預留）",
     },
     {
+        "group": "電子證件",
+        "code": PermissionCode.ELECTRONIC_CREDENTIAL_MANAGE,
+        "label": "管理電子證件授權",
+        "desc": "建立、調整與停用特殊身分的電子證件授權",
+    },
+    {
+        "group": "推薦商家",
+        "code": PermissionCode.RECOMMENDED_VENDOR_MANAGE,
+        "label": "管理推薦商家",
+        "desc": "建立/修改/上下架推薦商家與選填菜單商品資訊",
+    },
+    {
         "group": "公開網站",
         "code": PermissionCode.SITE_MANAGE,
         "label": "管理公開網站",
         "desc": "管理官網首頁、公開頁面、平台連結與公開幹部顯示設定",
     },
-    # ── 企業級升級（Phase B1 / D2 / C3 / D3）──────────────────────────
     {
         "group": "企業級治理",
         "code": PermissionCode.POLICY_ADMIN,
         "label": "政策版本管理",
-        "desc": "建立 / 編輯 / 啟用隱私政策、ToS、無障礙等公開政策版本（ADR-003）",
+        "desc": "建立 / 編輯 / 啟用隱私政策、ToS、無障礙等公開政策版本",
     },
     {
         "group": "企業級治理",
@@ -851,23 +866,66 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
     },
     {
         "group": "企業級治理",
-        "code": PermissionCode.ADMIN_IMPERSONATE,
-        "label": "代理登入（客服）",
-        "desc": "以目標使用者身分檢視介面（read-only、有時效、完整 audit log）",
-    },
-    {
-        "group": "企業級治理",
         "code": PermissionCode.FEATURE_FLAG_ADMIN,
         "label": "Feature Flag 管理",
         "desc": "管理新功能灰度開關、依角色 / 比例切流量",
     },
+    {
+        "group": "工具",
+        "code": PermissionCode.QR_CODE_MANAGE,
+        "label": "經營工具",
+        "desc": "管理班聯短網址並使用 QR Code 產生器",
+    },
 ]
 
-KNOWN_PERMISSION_CODES: frozenset[str] = frozenset(
-    item["code"] for item in ALL_PERMISSION_CODES
-) | {
-    PermissionCode.AUDIT_VIEW,
+PERMISSION_CATEGORY_BY_GROUP: dict[str, str] = {
+    "系統管理": "系統與安全",
+    "企業級治理": "系統與安全",
+    "工具": "系統與安全",
+    "組織管理": "組織與人員",
+    "班級管理": "組織與人員",
+    "公文系統": "治理與法規",
+    "字號系統": "治理與法規",
+    "法規系統": "治理與法規",
+    "法規審議": "治理與法規",
+    "陳情系統": "治理與法規",
+    "議事系統": "治理與法規",
+    "評議委員會": "治理與法規",
+    "即時開票": "治理與法規",
+    "商品系統": "校園營運",
+    "校商投稿": "校園營運",
+    "財務系統": "校園營運",
+    "問卷系統": "校園營運",
+    "段考題庫": "校園營運",
+    "特約地圖": "校園營運",
+    "推薦商家": "校園營運",
+    "電子證件": "校園營運",
+    "數據分析": "校園營運",
+    "公告系統": "發布與溝通",
+    "公開網站": "發布與溝通",
+    "通知與郵件": "發布與溝通",
 }
+
+PERMISSION_CATEGORY_ORDER: tuple[str, ...] = (
+    "系統與安全",
+    "組織與人員",
+    "治理與法規",
+    "校園營運",
+    "發布與溝通",
+)
+
+for _permission in ALL_PERMISSION_CODES:
+    _permission["category"] = PERMISSION_CATEGORY_BY_GROUP[_permission["group"]]
+
+# 已移除功能的權限碼：不再顯示於權限目錄，但既有職位可能仍保存這些字串；
+# 視為已知可避免管理員重新儲存該職位時被判定為未知權限而失敗。
+RETIRED_PERMISSION_CODES: frozenset[str] = frozenset({"seating:manage", "seating:assign"})
+
+KNOWN_PERMISSION_CODES: frozenset[str] = (
+    frozenset(item["code"] for item in ALL_PERMISSION_CODES)
+    | {PermissionCode.AUDIT_VIEW}
+    | RETIRED_PERMISSION_CODES
+)
 
 
 def validate_permission_codes(codes: list[str]) -> list[str]:

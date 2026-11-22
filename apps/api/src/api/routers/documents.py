@@ -12,8 +12,10 @@ BackgroundTasks 在狀態變更時非同步推送 Email 與 WebSocket 通知。
 
 from __future__ import annotations
 
+import contextlib
+import json
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 from urllib.parse import quote
 
@@ -26,12 +28,13 @@ from fastapi import (
 )
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
-from sqlalchemy import and_, extract, or_, select
+from sqlalchemy import and_, extract, func, literal, or_, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.core.posthog import get_posthog_client
+from api.core.security import redis_client
 from api.dependencies.auth import get_current_active_user, get_optional_user
 from api.models.document import (
     ApprovalStepStatus,
@@ -45,26 +48,26 @@ from api.models.document import (
     DocumentVisibility,
 )
 from api.models.user import User
-from api.routers.documents_helpers import (
-    assert_access as _assert_access,
-)
-from api.routers.documents_helpers import (
-    attach_approval_titles as _attach_approval_titles,
-)
-from api.routers.documents_helpers import (
-    get_doc_or_404 as _get_doc_or_404,
-)
+from api.routers.documents_helpers import assert_access as _assert_access
+from api.routers.documents_helpers import attach_approval_titles as _attach_approval_titles
+from api.routers.documents_helpers import get_doc_or_404 as _get_doc_or_404
+from api.schemas.context import DocumentApprovalContextOut
 from api.schemas.document import (
     DocumentCreate,
     DocumentListItem,
     DocumentOut,
+    DocumentPetitionLinkUpdate,
     DocumentUpdate,
+    DocumentVisibilityUpdate,
     RecipientCreate,
     RecipientDownloadVariant,
 )
 from api.services import activity as activity_svc
 from api.services import audit as audit_svc
+from api.services import context as context_svc
 from api.services import document as doc_svc
+from api.services import petition as petition_svc
+from api.services.document._access import decode_document_cursor, encode_document_cursor
 from api.services.permission import (
     get_user_permission_codes,
     get_user_permission_codes_for_org,
@@ -72,14 +75,10 @@ from api.services.permission import (
 )
 
 router = APIRouter(prefix="/documents", tags=["公文系統"])
-# template_router / serial_router 由 documents_serial.py 提供（透過檔案底部 re-export 帶入）
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
 OptionalUser = Annotated[User | None, Depends(get_optional_user)]
-
-
-# 輔助函式（取公文 / 存取守衛 / 批次回應 / WS 廣播）已搬到 documents_helpers.py。
 
 
 # ── 統計 ──────────────────────────────────────────────────────────────────────
@@ -93,24 +92,46 @@ async def get_document_stats(session: DbDep, current_user: CurrentUser) -> dict:
     """回傳當前使用者相關的公文計數，供儀表板顯示（計數限制以避免 full table scan）。"""
     from datetime import UTC, datetime
 
+    permission_codes = await get_user_permission_codes(session, current_user.id)
+    can_approve = (
+        current_user.is_superuser
+        or "admin:all" in permission_codes
+        or "document:approve" in permission_codes
+    )
+    cache_key = f"doc_stats:{current_user.id}"
+    try:
+        raw = await redis_client.get(cache_key)
+        if raw:
+            cached = json.loads(raw)
+            if not can_approve:
+                cached["pending_my_approval"] = 0
+            return cached
+    except Exception:
+        pass
+
     now = datetime.now(UTC)
     base = select(Document.id).where(Document.created_by == current_user.id)
     COUNT_THRESHOLD = 100  # 限制計數至 100；超過則返回 "99+"
 
-    async def safe_count(q) -> int | str:
-        """計數至閾值；若超過，返回 "99+"""
-        result = await session.execute(q.limit(COUNT_THRESHOLD + 1))
-        rows = list(result.scalars().all())
-        return "99+" if len(rows) > COUNT_THRESHOLD else len(rows)
+    def capped_count(label: str, query) -> object:
+        """單次 UNION 查詢中的 capped count；超過門檻即可回傳 99+。"""
+        limited = query.limit(COUNT_THRESHOLD + 1).subquery()
+        return select(
+            literal(label).label("metric"),
+            func.count().label("total"),
+        ).select_from(limited)
 
-    draft_count = await safe_count(base.where(Document.status == DocumentStatus.DRAFT))
-    pending_count = await safe_count(base.where(Document.status == DocumentStatus.PENDING))
-    rejected_count = await safe_count(base.where(Document.status == DocumentStatus.REJECTED))
-    approved_month = await safe_count(
-        base.where(Document.status == DocumentStatus.APPROVED)
-        .where(extract("year", Document.updated_at) == now.year)
-        .where(extract("month", Document.updated_at) == now.month)
-    )
+    count_queries = [
+        capped_count("draft", base.where(Document.status == DocumentStatus.DRAFT)),
+        capped_count("pending_submitted", base.where(Document.status == DocumentStatus.PENDING)),
+        capped_count("rejected", base.where(Document.status == DocumentStatus.REJECTED)),
+        capped_count(
+            "approved_this_month",
+            base.where(Document.status == DocumentStatus.APPROVED)
+            .where(extract("year", Document.updated_at) == now.year)
+            .where(extract("month", Document.updated_at) == now.month),
+        ),
+    ]
 
     # 待我審核（分配給我且尚未決定的 approval step）
     active_assignment = select(DocumentApprovalDelegation.id).where(
@@ -124,32 +145,42 @@ async def get_document_stats(session: DbDep, current_user: CurrentUser) -> dict:
             DocumentApprovalDelegation.end_at >= now,
         ),
     )
-    my_pending = await safe_count(
-        select(DocumentApproval.id)
-        .join(Document, DocumentApproval.document_id == Document.id)
-        .where(DocumentApproval.status == ApprovalStepStatus.PENDING)
-        .where(
-            or_(
-                DocumentApproval.approver_id == current_user.id,
-                and_(
-                    DocumentApproval.delegate_source == DelegateSource.MANUAL,
-                    DocumentApproval.delegate_id == current_user.id,
-                ),
-                and_(
-                    DocumentApproval.delegate_source == DelegateSource.ASSIGNMENT,
-                    active_assignment.exists(),
+    if can_approve:
+        count_queries.append(
+            capped_count(
+                "pending_my_approval",
+                select(DocumentApproval.id)
+                .join(Document, DocumentApproval.document_id == Document.id)
+                .where(DocumentApproval.status == ApprovalStepStatus.PENDING)
+                .where(
+                    or_(
+                        DocumentApproval.approver_id == current_user.id,
+                        and_(
+                            DocumentApproval.delegate_source == DelegateSource.MANUAL,
+                            DocumentApproval.delegate_id == current_user.id,
+                        ),
+                        and_(
+                            DocumentApproval.delegate_source == DelegateSource.ASSIGNMENT,
+                            active_assignment.exists(),
+                        ),
+                    )
                 ),
             )
         )
-    )
 
-    return {
-        "draft": draft_count,
-        "pending_submitted": pending_count,
-        "pending_my_approval": my_pending,
-        "approved_this_month": approved_month,
-        "rejected": rejected_count,
+    rows = (await session.execute(union_all(*count_queries))).all()
+    counts = {metric: "99+" if total > COUNT_THRESHOLD else int(total) for metric, total in rows}
+
+    result = {
+        "draft": counts.get("draft", 0),
+        "pending_submitted": counts.get("pending_submitted", 0),
+        "pending_my_approval": counts.get("pending_my_approval", 0),
+        "approved_this_month": counts.get("approved_this_month", 0),
+        "rejected": counts.get("rejected", 0),
     }
+    with contextlib.suppress(Exception):
+        await redis_client.set(cache_key, json.dumps(result), ex=60)
+    return result
 
 
 # ── CRUD ──────────────────────────────────────────────────────────────────────
@@ -186,7 +217,18 @@ async def create_document(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="您在此組織或活動下無草擬公文的權限（需 document:draft/document:create 或活動總召）",
             )
-    doc = await doc_svc.create_document(session, data=payload, created_by=current_user.id)
+    if payload.petition_case_id is not None:
+        case_obj = await petition_svc.get_case(session, payload.petition_case_id)
+        if case_obj is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="找不到陳情案件"
+            )
+        if not await petition_svc.can_view_case(session, case_obj, current_user):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權關聯此陳情案件")
+    try:
+        doc = await doc_svc.create_document(session, data=payload, created_by=current_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     await audit_svc.record(
         session,
         entity_type="document",
@@ -214,10 +256,11 @@ async def create_document(
 @router.get(
     "",
     response_model=list[DocumentListItem],
-    summary="列出公文（未登入僅顯示 is_public=True 的公文）",
+    summary="列出公文（未登入僅顯示公開公文）",
 )
 async def list_documents(
     session: DbDep,
+    response: Response,
     current_user: OptionalUser,
     org_id: uuid.UUID | None = Query(None, description="過濾組織（不填則依使用者所在組織）"),
     activity_id: uuid.UUID | None = Query(None, description="過濾活動"),
@@ -232,18 +275,32 @@ async def list_documents(
     roc_year: int | None = Query(
         None, ge=1, le=999, description="民國年（以發文日期為準，如 115）"
     ),
-    serial_prefix: str | None = Query(None, max_length=30, description="字號前綴（prefix match）"),
-    handler_keyword: str | None = Query(
-        None, max_length=100, description="承辦人/單位/聯絡資訊關鍵字"
+    serial_prefix: str | None = Query(
+        None, max_length=30, pattern=r"^[^\x00]*$", description="字號前綴（prefix match）"
     ),
-    recipient_keyword: str | None = Query(None, max_length=100, description="受文者關鍵字"),
+    handler_keyword: str | None = Query(
+        None, max_length=100, pattern=r"^[^\x00]*$", description="承辦人/單位/聯絡資訊關鍵字"
+    ),
+    recipient_keyword: str | None = Query(
+        None, max_length=100, pattern=r"^[^\x00]*$", description="受文者關鍵字"
+    ),
     keyword: str | None = Query(
-        None, max_length=100, description="關鍵字（搜尋字號、標題、主旨、說明）"
+        None,
+        max_length=100,
+        pattern=r"^[^\x00]*$",
+        description="關鍵字（搜尋字號、標題、主旨、說明）",
     ),
     my_only: bool = Query(False, description="僅顯示我建立的公文"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    cursor: str | None = Query(None, max_length=300, description="上一頁最後一筆的 opaque cursor"),
 ) -> list[DocumentListItem]:
+    if cursor:
+        try:
+            decode_document_cursor(cursor)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     can_view_all = False
     if current_user is not None:
         codes = await get_user_permission_codes(session, current_user.id)
@@ -276,9 +333,12 @@ async def list_documents(
         created_by=current_user.id if (my_only and current_user) else None,
         limit=limit,
         offset=offset,
+        cursor=cursor,
         public_only=(current_user is None),  # 未登入僅顯示公開公文
         viewer_id=None if can_view_all else (current_user.id if current_user else None),
     )
+    if len(docs) == limit:
+        response.headers["X-Next-Cursor"] = encode_document_cursor(docs[-1])
     return await doc_svc.build_document_list_items(
         session,
         docs,
@@ -288,9 +348,22 @@ async def list_documents(
 
 
 @router.get(
+    "/{doc_id}/approval-context",
+    response_model=DocumentApprovalContextOut,
+    summary="取得公文簽核脈絡",
+)
+async def document_approval_context(
+    doc_id: str, session: DbDep, current_user: CurrentUser
+) -> DocumentApprovalContextOut:
+    doc = await _get_doc_or_404(doc_id, session)
+    await _assert_access(session, doc, current_user)
+    return await context_svc.document_approval_context(session, doc.id)
+
+
+@router.get(
     "/{doc_id}",
     response_model=DocumentOut,
-    summary="取得公文詳細（未登入僅可查看 is_public=True 的公文）",
+    summary="取得公文詳細（未登入僅可查看公開公文）",
     responses={
         200: {"description": "公文詳細資料"},
         403: {"description": "無查看權限"},
@@ -298,7 +371,9 @@ async def list_documents(
     },
 )
 async def get_document(doc_id: str, session: DbDep, current_user: OptionalUser) -> Document:
-    doc = await _get_doc_or_404(doc_id, session)
+    doc = await doc_svc.get_document_detail_by_identifier(session, doc_id)
+    if doc is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此公文")
     if current_user is None:
         if not doc_svc.can_anonymous_access_document(doc):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此公文")
@@ -309,14 +384,136 @@ async def get_document(doc_id: str, session: DbDep, current_user: OptionalUser) 
     return doc
 
 
+@router.put(
+    "/{doc_id}/visibility",
+    response_model=DocumentOut,
+    summary="調整公文可見度（不受發文狀態限制）",
+    responses={
+        200: {"description": "可見度更新成功"},
+        403: {"description": "無調整可見度權限"},
+    },
+)
+async def update_document_visibility(
+    doc_id: str,
+    payload: DocumentVisibilityUpdate,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> Document:
+    doc = await _get_doc_or_404(doc_id, session)
+    if doc.petition_case_id is not None and payload.visibility_level in {
+        DocumentVisibility.PUBLIC,
+        DocumentVisibility.PUBLICLY_OPEN,
+    }:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="關聯陳情原文的公文不可設為公開",
+        )
+    if not current_user.is_superuser:
+        codes = await get_user_permission_codes_for_org(session, current_user.id, doc.org_id)
+        is_activity_manager = await activity_svc.can_manage_activity_resource(
+            session, current_user, doc.activity_id
+        )
+        is_org_leader = await user_is_org_leader(session, current_user.id, doc.org_id)
+        if not (
+            doc.created_by == current_user.id
+            or is_org_leader
+            or {"document:admin", "document:edit", "document:create"} & set(codes)
+            or is_activity_manager
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="只有建立者、機關管理者、機關編輯者或活動管理者可以調整公文可見度",
+            )
+
+    previous_visibility = doc.visibility_level
+    updated = await doc_svc.update_document_visibility(
+        session, doc, visibility=payload.visibility_level
+    )
+    await audit_svc.record(
+        session,
+        entity_type="document",
+        entity_id=str(updated.id),
+        action="visibility.update",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={
+            "from": previous_visibility.value,
+            "to": updated.visibility_level.value,
+        },
+        summary=f"調整公文「{updated.title}」可見度為 {updated.visibility_level.value}",
+    )
+    await _attach_approval_titles(session, updated)
+    return updated
+
+
+@router.put(
+    "/{doc_id}/petition-link",
+    response_model=DocumentOut,
+    summary="連結公文與陳情案件",
+)
+async def update_document_petition_link(
+    doc_id: str,
+    payload: DocumentPetitionLinkUpdate,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> Document:
+    doc = await _get_doc_or_404(doc_id, session)
+    if not current_user.is_superuser:
+        codes = await get_user_permission_codes_for_org(session, current_user.id, doc.org_id)
+        is_activity_manager = await activity_svc.can_manage_activity_resource(
+            session, current_user, doc.activity_id
+        )
+        is_org_leader = await user_is_org_leader(session, current_user.id, doc.org_id)
+        if not (
+            doc.created_by == current_user.id
+            or is_org_leader
+            or "document:admin" in codes
+            or {"document:draft", "document:edit", "document:create"} & set(codes)
+            or is_activity_manager
+        ):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權更新公文關聯")
+    if payload.petition_case_id is not None:
+        case_obj = await petition_svc.get_case(session, payload.petition_case_id)
+        if case_obj is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="找不到陳情案件"
+            )
+        if not await petition_svc.can_view_case(session, case_obj, current_user):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權關聯此陳情案件")
+    try:
+        updated = await doc_svc.link_document_to_petition(
+            session,
+            doc,
+            petition_case_id=payload.petition_case_id,
+            linked_by=current_user.id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    await audit_svc.record(
+        session,
+        entity_type="document",
+        entity_id=str(updated.id),
+        action="petition.link",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={
+            "petition_case_id": str(payload.petition_case_id) if payload.petition_case_id else None
+        },
+        summary=f"更新公文「{updated.title}」的陳情關聯",
+    )
+    return updated
+
+
 @router.patch(
     "/{doc_id}",
     response_model=DocumentOut,
-    summary="更新草稿公文（自動建立版本快照）",
+    summary="更新公文（發文超過六小時仍可修改，並留下稽核紀錄）",
     responses={
         200: {"description": "更新成功，版本號遞增"},
         403: {"description": "非建立者"},
-        409: {"description": "非草稿狀態"},
+        409: {"description": "非草稿狀態或目前不可編輯"},
     },
 )
 async def update_document(
@@ -343,22 +540,49 @@ async def update_document(
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="只有草擬者、部門最高權限者、document:edit/document:admin 或活動總召可以編輯",
+                detail="只有建立者、部門最高權限者、document:edit/document:admin 或活動總召可以編輯",
             )
+    issued_at = doc.issued_at
+    if issued_at is not None and issued_at.tzinfo is None:
+        issued_at = issued_at.replace(tzinfo=UTC)
+    is_after_edit_deadline = (
+        doc.status == DocumentStatus.APPROVED
+        and issued_at is not None
+        and datetime.now(UTC) > issued_at + timedelta(hours=6)
+    )
     try:
-        return await doc_svc.update_document(session, doc, data=payload, changed_by=current_user.id)
+        updated = await doc_svc.update_document(
+            session, doc, data=payload, changed_by=current_user.id
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    if is_after_edit_deadline:
+        await audit_svc.record(
+            session,
+            entity_type="document",
+            entity_id=str(updated.id),
+            action="update.after_6_hours",
+            actor_id=str(current_user.id),
+            actor_email=current_user.email,
+            meta={
+                "issued_at": issued_at.isoformat(),
+                "requested_fields": sorted(payload.model_fields_set - {"change_note", "autosave"}),
+                "change_note": payload.change_note,
+                "autosave": payload.autosave,
+            },
+            summary=f"公文「{updated.title}」發文超過六小時後修改",
+        )
+    return updated
 
 
 @router.delete(
     "/{doc_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="刪除草稿公文",
+    summary="刪除草稿或發出六小時內的公文",
     responses={
         204: {"description": "刪除成功"},
         403: {"description": "僅建立者或有 document:delete 權限者可刪除"},
-        409: {"description": "非草稿狀態不可刪除"},
+        409: {"description": "僅草稿或發出六小時內可刪除"},
     },
 )
 async def delete_document(
@@ -390,10 +614,6 @@ async def delete_document(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
 
 
-# 簽核 workflow / 批次 / 代理授權 / 直接發文 端點已搬移至
-# [documents_approve.py](apps/api/src/api/routers/documents_approve.py)。
-
-
 @router.get(
     "/{doc_id}/suggest-approvers",
     summary="建議審核人（依公文組織，擁有 document:approve 權限的現任成員）",
@@ -409,10 +629,6 @@ async def suggest_approvers(
     await _assert_access(session, doc, current_user)
     users = await doc_svc.suggest_approvers(session, doc.org_id)
     return [{"id": str(u.id), "display_name": u.display_name, "email": u.email} for u in users]
-
-
-# 附件管理端點（list / upload / link / delete / rename / download / preview）
-# 已搬移至 [documents_attachments.py](apps/api/src/api/routers/documents_attachments.py)。
 
 
 # ── 受文者管理 ────────────────────────────────────────────────────────────────
@@ -478,10 +694,10 @@ async def _is_document_admin(session: AsyncSession, doc: Document, user: User) -
 @router.get(
     "/{doc_id}/print",
     response_class=Response,
-    summary="下載公文 PDF（管理員可指定受文者版本）",
+    summary="下載公文 PDF（製作者可選正本、副本或影本）",
     responses={
         200: {"description": "PDF 公文檔案"},
-        403: {"description": "無查看權限或非管理員不得指定受文者"},
+        403: {"description": "無查看權限或無權指定受文者／公文版本"},
         404: {"description": "公文不存在或受文者不存在"},
     },
 )
@@ -495,13 +711,13 @@ async def print_document(
     ),
     variant: RecipientDownloadVariant | None = Query(
         None,
-        description="管理員強制指定下載正本或影本；一般使用者不可使用",
+        description="製作者或管理員指定下載正本、副本或影本；一般受文者不可使用",
     ),
 ) -> Response:
     """直接產生並下載中華民國公文格式 PDF。
 
-    一般使用者：依其身份自動判定下「正本」或「影本」。
-    管理員：可額外指定 recipient_id 或 variant 任意挑一份印。
+    一般使用者：依其身份自動判定「正本」、「副本」或「影本」。
+    製作者：可使用 variant 選擇版本；管理員可再指定 recipient_id。
     """
     from api.services.official_print import render_document_print_html, render_print_pdf
 
@@ -509,10 +725,15 @@ async def print_document(
     await _assert_access(session, doc, current_user)
 
     is_admin = await _is_document_admin(session, doc, current_user)
-    if (recipient_id or variant) and not is_admin:
+    if recipient_id and not is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="僅公文管理員可指定受文者或版本",
+            detail="僅公文管理員可指定受文者",
+        )
+    if variant and not (is_admin or doc.created_by == current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="僅公文製作者或管理員可指定下載版本",
         )
 
     addressed_recipient_name: str | None = None
@@ -525,11 +746,15 @@ async def print_document(
             variant = (
                 RecipientDownloadVariant.PRIMARY
                 if doc_svc.is_primary_variant(target)
-                else RecipientDownloadVariant.COPY
+                else RecipientDownloadVariant.DUPLICATE
             )
 
     if variant is not None:
-        copy_mark = "正本" if variant == RecipientDownloadVariant.PRIMARY else "影本"
+        copy_mark = {
+            RecipientDownloadVariant.PRIMARY: "正本",
+            RecipientDownloadVariant.DUPLICATE: "副本",
+            RecipientDownloadVariant.COPY: "影本",
+        }[variant]
     else:
         # 一般使用者：依身份判定
         if is_admin:
@@ -538,6 +763,9 @@ async def print_document(
             matched = await doc_svc.resolve_recipient_match(session, doc, current_user.id)
             if matched is not None and doc_svc.is_primary_variant(matched):
                 copy_mark = "正本"
+                addressed_recipient_name = matched.name
+            elif matched is not None:
+                copy_mark = "副本"
                 addressed_recipient_name = matched.name
             else:
                 copy_mark = "影本"
@@ -565,17 +793,7 @@ async def print_document(
     )
 
 
-# 公文範本庫 (template_router) 與字號模板 (serial_router) 已搬移至
-# [documents_serial.py](apps/api/src/api/routers/documents_serial.py)。
-#
-# 簽核 workflow / 批次 / 代理授權 / 直接發文 已搬移至
-# [documents_approve.py](apps/api/src/api/routers/documents_approve.py)。
-#
-# 附件 / 上傳 / 下載 / 預覽 已搬移至
-# [documents_attachments.py](apps/api/src/api/routers/documents_attachments.py)。
-#
-# 以下 re-export 保留歷史 import 路徑（例如測試直接 `from api.routers.documents
-# import batch_approve_documents`），避免重構破壞既有測試與外部呼叫。
+# 維持 api.routers.documents 的公開匯入介面。
 from api.routers.documents_approve import (  # noqa: E402, F401
     approve_document,
     archive_document,

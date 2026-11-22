@@ -20,7 +20,7 @@ class AuditLog(Base):
     action:      操作動詞，如 "create", "approve", "reject", "publish", "archive"
     meta:        任意附帶資訊（前後狀態差異、IP、備註等），不存放敏感憑證
 
-    雜湊鏈（Phase B2 / ADR-004）：
+    雜湊鏈（ADR-004）：
       prev_hash: 前一筆紀錄的 self_hash；首筆為 GENESIS_HASH
       self_hash: 本筆內容 + prev_hash 的 SHA-256
     prev_hash / self_hash 由 audit_chain.write_audit_log_with_chain 自動填入。

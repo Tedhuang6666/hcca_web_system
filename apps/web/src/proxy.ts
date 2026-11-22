@@ -1,8 +1,78 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  isIndexablePublicPath,
+  isMaintenanceExempt,
+} from "@/lib/route-access";
+import { BRANDING } from "@/lib/branding";
 
 const API_INTERNAL_BASE =
   process.env.API_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const MAINTENANCE_CHECK_TIMEOUT_MS = 800;
+const MAINTENANCE_CHECK_TIMEOUT_MS = 450;
+// /auth/me 會查 Redis、使用者資料與 RBAC 權限；300ms 在 production 容易把超管誤判成一般使用者。
+const MAINTENANCE_BYPASS_TIMEOUT_MS = 1_500;
+
+// 模組級快取：在同一 edge worker 實例內跨 request 共用，避免每次換頁都打 API。
+// 鍵值：maintenance 用 "global"，access-status 用 IP，bypass 用 cookie 前 64 字元。
+interface CacheEntry<T> {
+  value: T;
+  ts: number;
+}
+// 維護開關變更後必須很快反映，否則管理員關閉後仍會被舊狀態送回維護頁。
+const CACHE_TTL_MS = 5_000;
+
+class BoundedTtlCache<T> {
+  private readonly entries = new Map<string, CacheEntry<T>>();
+
+  constructor(private readonly maxEntries: number) {}
+
+  get(key: string): T | undefined {
+    const entry = this.entries.get(key);
+    if (!entry) return undefined;
+    if (Date.now() - entry.ts > CACHE_TTL_MS) {
+      this.entries.delete(key);
+      return undefined;
+    }
+    // Map insertion order is used as a small LRU queue.
+    this.entries.delete(key);
+    this.entries.set(key, entry);
+    return entry.value;
+  }
+
+  set(key: string, value: T): void {
+    const now = Date.now();
+    for (const [entryKey, entry] of this.entries) {
+      if (now - entry.ts > CACHE_TTL_MS) this.entries.delete(entryKey);
+    }
+    this.entries.delete(key);
+    this.entries.set(key, { value, ts: now });
+    while (this.entries.size > this.maxEntries) {
+      const oldestKey = this.entries.keys().next().value as string | undefined;
+      if (!oldestKey) break;
+      this.entries.delete(oldestKey);
+    }
+  }
+}
+
+type MaintenanceState = { enabled: false } | { enabled: true; message?: string; until?: number | null };
+type AccessState = { blocked: false } | { blocked: true; reason?: string; expires_at?: number | null };
+
+const maintenanceCache = new BoundedTtlCache<MaintenanceState>(4);
+const accessStatusCache = new BoundedTtlCache<AccessState>(2_048);
+const bypassCache = new BoundedTtlCache<boolean>(2_048);
+const inFlightChecks = new Map<string, Promise<unknown>>();
+
+function dedupeCheck<T>(key: string, check: () => Promise<T>): Promise<T> {
+  const existing = inFlightChecks.get(key);
+  if (existing) return existing as Promise<T>;
+
+  const pending = check();
+  inFlightChecks.set(key, pending);
+  const clear = () => {
+    if (inFlightChecks.get(key) === pending) inFlightChecks.delete(key);
+  };
+  void pending.then(clear, clear);
+  return pending;
+}
 
 /**
  * 識別中文公文字號格式，例如：
@@ -11,70 +81,165 @@ const MAINTENANCE_CHECK_TIMEOUT_MS = 800;
  * 規則：至少含有一個中文字 + 「字」 + 「第」（可選）+ 數字 + 「號」
  */
 const SERIAL_RE = /^[一-鿿]+字(?:第)?(\d+)號$/;
-const MAINTENANCE_EXEMPT_PREFIXES = [
-  "/maintenance",
-  "/admin/system",
-  "/login",
-  "/auth",
-  "/public",
-];
-const MAINTENANCE_EXEMPT_PATHS = new Set([
-  "/apple-icon.svg",
-  "/favicon.ico",
-  "/icon.svg",
-  "/manifest.webmanifest",
-  "/robots.txt",
-  "/sw.js",
-]);
-
-function isMaintenanceExempt(pathname: string) {
-  return MAINTENANCE_EXEMPT_PATHS.has(pathname)
-    || MAINTENANCE_EXEMPT_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+/** 產生 per-request CSP nonce（Edge runtime：用 Web Crypto，不可用 Buffer）。 */
+function generateNonce(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary);
 }
 
 /**
- * 內容安全政策（CSP）+ 基礎安全標頭。
+ * 前端 HTML 的 Content-Security-Policy。
  *
- * 前端頁面原本完全沒有 CSP；這裡補上 nonce-based 政策：inline <script> 必須帶當次
- * 請求的 nonce 才能執行，藉此擋下 stored / reflected XSS。樣式因 CSS-in-JS 與站台
- * custom_css 仍保留 unsafe-inline（樣式注入風險遠低於腳本，且 custom_css 已於後端清洗）。
- *
- * 上線策略：預設 `Content-Security-Policy-Report-Only`（只回報、不阻斷），確保正式站
- * 不會因政策不全而壞掉（Google 登入 / 地圖 / 內嵌影片）。各頁點過、確認 console 無
- * CSP 違規後，設環境變數 `CSP_ENFORCE=true` 即切成強制。
+ * 所有頁面都採 per-request nonce；Next.js App Router 會在 HTML 中輸出
+ * inline bootstrap/RSC script，不能只靠外部 script 的 SRI 保護。
+ *   - Next.js 會自動把此 nonce 套到框架腳本與 <Script> 元件（含 Google One Tap）。
+ *   - 'strict-dynamic' 讓已信任（帶 nonce）的腳本可載入其子腳本（GSI、PostHog 錄製）。
+ *   - 明列的 https 來源是給支援 nonce 但不支援 strict-dynamic 的舊瀏覽器的後備。
+ *   - script-src-elem 允許同源 Next.js 動態 chunk；Next.js 某些 client dynamic
+ *     preload 會沒有 nonce，但 inline script 仍由 script-src 的 nonce 保護。
+ * React 行內 style attribute 透過 style-src-attr 明確隔離；script/style element
+ * 仍要求 nonce，避免公開頁回退到 unsafe-inline。
  */
-function buildCsp(nonce: string): string {
-  const directives = [
-    "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' https://accounts.google.com https://app.posthog.com https://cdn.jsdelivr.net`,
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net",
-    "img-src 'self' data: blob: https://*.googleusercontent.com https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://img.youtube.com https://i.ytimg.com",
-    "font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net",
-    "connect-src 'self' https://*.ingest.us.sentry.io https://app.posthog.com https://accounts.google.com",
-    "frame-src 'self' https://accounts.google.com https://www.youtube.com https://youtube.com https://calendar.google.com https://drive.google.com",
-    "worker-src 'self' blob:",
-    "manifest-src 'self'",
-    "object-src 'none'",
-    "base-uri 'self'",
-    "form-action 'self' https://accounts.google.com",
-    "frame-ancestors 'none'",
-  ];
-  if (process.env.NODE_ENV === "production") {
-    directives.push("upgrade-insecure-requests");
+function webSocketSources(): string[] {
+  const sources = new Set<string>();
+  if (process.env.NODE_ENV !== "production") {
+    sources.add("ws://localhost:8000");
+    sources.add("wss://localhost:8000");
   }
-  return directives.join("; ");
+  const configuredWsUrl = process.env.NEXT_PUBLIC_WS_URL;
+  let configuredSourceAdded = false;
+  if (configuredWsUrl) {
+    try {
+      const parsed = new URL(configuredWsUrl.replace(/^http/, "ws"));
+      const isProductionLocalhost = process.env.NODE_ENV === "production"
+        && ["localhost", "127.0.0.1"].includes(parsed.hostname);
+      if (!isProductionLocalhost) {
+        sources.add(`${parsed.protocol}//${parsed.host}`);
+        configuredSourceAdded = true;
+      }
+    } catch {
+      // 無效的公開 WebSocket URL 由前端設定檢查處理，不讓 CSP 建立失敗。
+    }
+  }
+  if (process.env.NODE_ENV === "production" && !configuredSourceAdded) {
+    // wsBase() falls back to the public site origin when no public WS URL is set.
+    sources.add(`wss://${BRANDING.domain}`);
+  }
+  return [...sources];
 }
 
-function applySecurityHeaders(response: NextResponse, csp: string): NextResponse {
-  const enforce = process.env.CSP_ENFORCE === "true";
-  response.headers.set(
-    enforce ? "Content-Security-Policy" : "Content-Security-Policy-Report-Only",
-    csp,
-  );
+function firstPartyHostAliases(): string[] {
+  const domain = BRANDING.domain.trim().toLowerCase().replace(/^www\./, "");
+  return domain ? [...new Set([domain, `www.${domain}`])] : [];
+}
+
+function postHogSources(): string[] {
+  const sources = new Set([
+    "https://us.i.posthog.com",
+    "https://us-assets.i.posthog.com",
+  ]);
+  const configuredPostHogHost = process.env.NEXT_PUBLIC_POSTHOG_HOST;
+  if (configuredPostHogHost) {
+    try {
+      sources.add(new URL(configuredPostHogHost).origin);
+    } catch {
+      // 無效的 PostHog endpoint 不應讓整份 CSP 建立失敗。
+    }
+  }
+  return [...sources];
+}
+
+function buildCsp(nonce: string): string {
+  // 開發模式 Next.js Fast Refresh (HMR) 需要 eval；正式環境不含 'unsafe-eval'。
+  const devEval = process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'";
+  // Turbopack 開發模式會注入無 nonce 的 <style>；正式環境仍要求 nonce。
+  const styleNonce = process.env.NODE_ENV === "production" ? ` 'nonce-${nonce}'` : "";
+  // Turbopack 在開發模式會以 <style> 注入 HMR CSS；正式環境仍只接受 nonce。
+  const devStyle = process.env.NODE_ENV === "production" ? "" : " 'unsafe-inline'";
+  const httpsAliases = firstPartyHostAliases().map((host) => `https://${host}`);
+  const wssAliases = firstPartyHostAliases().map((host) => `wss://${host}`);
+  const httpsSources = httpsAliases.join(" ");
+  const connectSources = [...new Set([
+    "'self'",
+    ...httpsAliases,
+    ...webSocketSources(),
+    ...wssAliases,
+    "https://accounts.google.com",
+    ...postHogSources(),
+    "https://cdn.jsdelivr.net",
+    "https://fonts.googleapis.com",
+    "https://tiles.openfreemap.org",
+  ])].join(" ");
+  return [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' ${httpsSources} https://accounts.google.com https://us-assets.i.posthog.com${devEval}`,
+    `script-src-elem 'self' 'nonce-${nonce}' ${httpsSources} https://accounts.google.com https://us-assets.i.posthog.com`,
+    `style-src 'self'${styleNonce}${devStyle} ${httpsSources} https://fonts.googleapis.com https://accounts.google.com`,
+    `style-src-elem 'self'${styleNonce}${devStyle} ${httpsSources} https://fonts.googleapis.com https://accounts.google.com`,
+    "style-src-attr 'unsafe-inline'",
+    "font-src 'self' https://fonts.gstatic.com data:",
+    `img-src 'self' ${httpsSources} data: blob: https://tiles.openfreemap.org https://server.arcgisonline.com https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://*.googleusercontent.com https://hcca.buckets.hct.works`,
+    `connect-src ${connectSources}`,
+    `frame-src 'self' https://accounts.google.com https://hcca.buckets.hct.works blob: ${httpsSources}`,
+    `worker-src 'self' blob: ${httpsSources}`,
+    `manifest-src 'self' ${httpsSources}`,
+  ].join("; ");
+}
+
+function isSecureRequest(req: NextRequest): boolean {
+  const forwardedProto = req.headers.get("x-forwarded-proto")?.split(",", 1)[0]?.trim();
+  return forwardedProto === "https" || req.nextUrl.protocol === "https:";
+}
+
+/**
+ * CSP 只適用 HTML，但其他瀏覽器層保護也必須涵蓋公開資產與非 App Router 回應。
+ * HTTPS 終結於反向代理時，x-forwarded-proto 讓 HSTS 仍只在安全連線上送出。
+ */
+function applyFrontendSecurityHeaders(req: NextRequest, response: NextResponse): void {
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("X-Frame-Options", "DENY");
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  return response;
+  response.headers.set(
+    "Permissions-Policy",
+    "accelerometer=(), camera=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=()",
+  );
+  response.headers.set("Cross-Origin-Opener-Policy", "same-origin");
+  if (process.env.NODE_ENV === "production" && isSecureRequest(req)) {
+    response.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+}
+
+/**
+ * 把 nonce 經 request header 傳給 Next，讓框架產生的 inline script
+ * 帶上同一個 nonce；回應也必須禁止快取，避免 nonce 與 HTML 脫鉤。
+ */
+function withCsp(req: NextRequest): NextResponse {
+  const nonce = generateNonce();
+  const csp = buildCsp(nonce);
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("content-security-policy", csp);
+  const res = NextResponse.next({ request: { headers: requestHeaders } });
+  res.headers.set("content-security-policy", csp);
+  applyFrontendSecurityHeaders(req, res);
+  return res;
+}
+
+function cacheKey(value: string): string {
+  // Do not retain raw cookies or IP addresses in a long-lived worker heap.
+  let hash = 2_166_136_261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return (hash >>> 0).toString(16);
 }
 
 function decodePathPart(value: string) {
@@ -92,77 +257,231 @@ function decodePathPart(value: string) {
 }
 
 async function canBypassMaintenance(req: NextRequest) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), MAINTENANCE_CHECK_TIMEOUT_MS);
-  try {
-    const res = await fetch(`${API_INTERNAL_BASE}/auth/me`, {
-      headers: { cookie: req.headers.get("cookie") ?? "" },
-      cache: "no-store",
-      signal: controller.signal,
-    });
-    if (!res.ok) return false;
-    const me = (await res.json()) as {
-      is_superuser?: boolean;
-      is_owner?: boolean;
-      permissions?: string[];
-    };
-    const permissions = new Set(me.permissions ?? []);
-    return Boolean(
-      me.is_superuser
-      || me.is_owner
-      || permissions.has("admin:all")
-      || permissions.has("system:maintenance_bypass"),
-    );
-  } catch {
-    return false;
-  } finally {
-    clearTimeout(timeout);
-  }
+  const cookie = req.headers.get("cookie") ?? "";
+  const authorization = req.headers.get("authorization") ?? "";
+  if (!cookie && !authorization) return false;
+
+  const cookieKey = cacheKey(`${cookie}\n${authorization}`);
+  const cached = bypassCache.get(cookieKey);
+  if (cached !== undefined) return cached;
+
+  return dedupeCheck(`bypass:${cookieKey}`, async () => {
+    const cachedAgain = bypassCache.get(cookieKey);
+    if (cachedAgain !== undefined) return cachedAgain;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), MAINTENANCE_BYPASS_TIMEOUT_MS);
+    try {
+      const res = await fetch(`${API_INTERNAL_BASE}/auth/me`, {
+        headers: {
+          ...(cookie ? { cookie } : {}),
+          ...(authorization ? { authorization } : {}),
+        },
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      if (!res.ok) { bypassCache.set(cookieKey, false); return false; }
+      const me = (await res.json()) as {
+        is_superuser?: boolean;
+        is_owner?: boolean;
+        permissions?: string[];
+      };
+      const permissions = new Set(me.permissions ?? []);
+      const result = Boolean(
+        me.is_superuser
+        || me.is_owner
+        || permissions.has("admin:all")
+        || permissions.has("system:maintenance_bypass"),
+      );
+      bypassCache.set(cookieKey, result);
+      return result;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timeout);
+    }
+  });
 }
 
 async function maintenanceRedirect(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (isMaintenanceExempt(pathname)) return null;
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), MAINTENANCE_CHECK_TIMEOUT_MS);
-  try {
-    const res = await fetch(`${API_INTERNAL_BASE}/system/maintenance`, {
-      cache: "no-store",
-      signal: controller.signal,
-    });
-    if (!res.ok) return null;
-    const state = (await res.json()) as {
-      enabled?: boolean;
-      message?: string;
-      until?: number | null;
-    };
-    if (!state.enabled || await canBypassMaintenance(req)) return null;
+  let state = maintenanceCache.get("global");
+  if (!state) {
+    const loadedState = await dedupeCheck("maintenance", async () => {
+      const cachedAgain = maintenanceCache.get("global");
+      if (cachedAgain) return cachedAgain;
 
-    const url = req.nextUrl.clone();
-    url.pathname = "/maintenance";
-    url.search = "";
-    url.searchParams.set("kind", "maintenance");
-    url.searchParams.set("retry", "60");
-    if (state.message) url.searchParams.set("detail", state.message);
-    if (state.until) url.searchParams.set("until", String(state.until));
-    return NextResponse.redirect(url);
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timeout);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), MAINTENANCE_CHECK_TIMEOUT_MS);
+      try {
+        const res = await fetch(`${API_INTERNAL_BASE}/system/maintenance`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!res.ok) return null;
+        const raw = (await res.json()) as { enabled?: boolean; message?: string; until?: number | null };
+        const nextState = raw.enabled
+          ? { enabled: true, message: raw.message, until: raw.until }
+          : { enabled: false };
+        maintenanceCache.set("global", nextState);
+        return nextState;
+      } catch {
+        // fail-open：API 不可達時放行。維護模式需要 API 運作才有意義；
+        // API 整體掛掉時不應連帶讓前端對所有人回傳 503。
+        return null;
+      } finally {
+        clearTimeout(timeout);
+      }
+    });
+    if (!loadedState) return null;
+    state = loadedState;
   }
+
+  if (!state.enabled || await canBypassMaintenance(req)) return null;
+
+  const url = req.nextUrl.clone();
+  url.pathname = "/maintenance";
+  url.search = "";
+  url.searchParams.set("kind", "maintenance");
+  url.searchParams.set("retry", "60");
+  if (state.message) url.searchParams.set("detail", state.message);
+  if (state.until) url.searchParams.set("until", String(state.until));
+  const response = NextResponse.redirect(url);
+  response.headers.set("Retry-After", "60");
+  return response;
 }
 
-export async function proxy(req: NextRequest) {
+async function blockedRedirect(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+  if (pathname === "/blocked" || pathname.startsWith("/blocked/")) return null;
+
+  const ip = req.headers.get("cf-connecting-ip")
+    ?? req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+    ?? req.headers.get("x-real-ip")
+    ?? "local";
+
+  const ipKey = cacheKey(ip);
+  let state = accessStatusCache.get(ipKey);
+  if (!state) {
+    const loadedState = await dedupeCheck(`access:${ipKey}`, async () => {
+      const cachedAgain = accessStatusCache.get(ipKey);
+      if (cachedAgain) return cachedAgain;
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), MAINTENANCE_CHECK_TIMEOUT_MS);
+      try {
+        const fetchHeaders: Record<string, string> = {
+          cookie: req.headers.get("cookie") ?? "",
+        };
+        for (const name of ["cf-connecting-ip", "x-forwarded-for", "x-real-ip"]) {
+          const value = req.headers.get(name);
+          if (value) fetchHeaders[name] = value;
+        }
+        const res = await fetch(`${API_INTERNAL_BASE}/system/access-status`, {
+          headers: fetchHeaders,
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!res.ok) return null;
+        const raw = (await res.json()) as { blocked?: boolean; reason?: string; expires_at?: number | null };
+        const nextState = raw.blocked
+          ? { blocked: true, reason: raw.reason, expires_at: raw.expires_at }
+          : { blocked: false };
+        accessStatusCache.set(ipKey, nextState);
+        return nextState;
+      } catch {
+        // fail-open：API 不可達時放行。封鎖檢查依賴 API；API 整體掛掉時
+        // 以 503 封鎖所有人（包含正常使用者）的代價高於放行少數被封鎖 IP。
+        return null;
+      } finally {
+        clearTimeout(timeout);
+      }
+    });
+    if (!loadedState) return null;
+    state = loadedState;
+  }
+
+  if (!state.blocked) return null;
+
+  const url = req.nextUrl.clone();
+  url.pathname = "/blocked";
+  url.search = "";
+  if (state.reason) url.searchParams.set("reason", state.reason);
+  if (state.expires_at) url.searchParams.set("until", String(state.expires_at));
+  return NextResponse.redirect(url);
+}
+
+function publicAssetCacheControl(pathname: string): string | null {
+  if (pathname === "/sw.js") return "public, max-age=0, must-revalidate";
+  if (pathname === "/theme.v1.js") return "public, max-age=31536000, immutable";
+  // Public product images must never receive a maintenance/block HTML redirect.
+  // Keep the match within the versioned public asset directory, away from shop pages.
+  if (/^\/shop\/\d+\/[\w-]+\.(?:avif|webp|png|jpe?g)$/i.test(pathname)) {
+    return "public, max-age=86400, stale-while-revalidate=604800";
+  }
+  // Social crawlers must be able to fetch OG images without depending on the
+  // maintenance/access checks used by HTML pages. Cache the generated PNG at
+  // the edge so repeated crawler retries do not rerun Satori and the API read.
+  if (pathname === "/opengraph-image" || pathname.startsWith("/og/")) {
+    return "public, max-age=300, s-maxage=86400, stale-while-revalidate=3600";
+  }
+  if (
+    pathname === "/robots.txt"
+    || pathname === "/manifest.webmanifest"
+    || pathname === "/llms.txt"
+  ) {
+    return "public, max-age=86400, stale-while-revalidate=604800";
+  }
+  if (pathname.startsWith("/brand/") || pathname.startsWith("/fonts/")) {
+    return "public, max-age=2592000, stale-while-revalidate=86400";
+  }
+  return null;
+}
+
+export default async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // 每次請求產生一次性 nonce，組出 CSP
-  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
-  const csp = buildCsp(nonce);
+  const forwardedHost = req.headers.get("x-forwarded-host");
+  const host = (forwardedHost ?? req.headers.get("host") ?? "").split(":")[0].toLowerCase();
+  if (process.env.NODE_ENV === "production" && host === "www.hcca.tw") {
+    const url = req.nextUrl.clone();
+    url.host = "hcca.tw";
+    return NextResponse.redirect(url, 308);
+  }
 
-  const redirect = await maintenanceRedirect(req);
-  if (redirect) return applySecurityHeaders(redirect, csp);
+  // Public assets must not wait for maintenance/access API checks. This is
+  // especially important for robots.txt and the pre-paint theme script.
+  const assetCacheControl = publicAssetCacheControl(pathname);
+  if (assetCacheControl) {
+    const response = NextResponse.next();
+    response.headers.set("Cache-Control", assetCacheControl);
+    applyFrontendSecurityHeaders(req, response);
+    return response;
+  }
+
+  // Next.js App Router 的客戶端換頁是 RSC payload request（帶 "RSC: 1" header），
+  // 不代表新使用者到達網站，不需要每次都打 blocked/maintenance API。
+  // 這些檢查在全頁載入（無 RSC header）時仍會執行，封鎖與維護控制不受影響。
+  const isRscNav = req.headers.get("RSC") === "1";
+
+  if (!isRscNav) {
+    // 匿名登入頁只負責提供 OAuth 入口；IP 封鎖會在 API load-shed 與
+    // OAuth callback 再次驗證，避免首屏為了同一個判斷額外等待一次 API。
+    const skipLoginBlockCheck =
+      pathname === "/login"
+      && !req.headers.get("cookie")
+      && !req.headers.get("authorization");
+
+    // 兩個 check 並行，避免串行等待
+    const [blocked, redirect] = await Promise.all([
+      skipLoginBlockCheck ? Promise.resolve(null) : blockedRedirect(req),
+      maintenanceRedirect(req),
+    ]);
+    if (blocked) return blocked;
+    if (redirect) return redirect;
+  }
 
   // 注意：法規條文深度連結 /regulations/{id}/第N章/第N條 由
   // app/regulations/[id]/[...refs]/page.tsx 原生路由處理，
@@ -174,18 +493,33 @@ export async function proxy(req: NextRequest) {
     if (SERIAL_RE.test(segment)) {
       const url = req.nextUrl.clone();
       url.pathname = `/documents/${encodeURIComponent(segment)}`;
-      return applySecurityHeaders(NextResponse.redirect(url), csp);
+      return NextResponse.redirect(url);
     }
   }
 
-  // 把 nonce 與 CSP 放進「請求」標頭：Next 會據此自動為框架腳本注入 nonce，
-  // 我們的 inline script（ThemeScript / JsonLd）也能透過 headers() 讀到同一個 nonce。
-  const requestHeaders = new Headers(req.headers);
-  requestHeaders.set("x-nonce", nonce);
-  requestHeaders.set("Content-Security-Policy", csp);
-
-  const response = NextResponse.next({ request: { headers: requestHeaders } });
-  return applySecurityHeaders(response, csp);
+  // nonce 會隨每個 request 改變；不可讓 CDN 或一般 HTTP cache 重用 HTML。匿名的
+  // indexable 公開頁改用 no-cache：每次一般導覽仍會重新驗證，但瀏覽器可安全保留
+  // 同一份文件供上一頁／下一頁的 bfcache 還原，避免把返回導覽變成完整重載。
+  const response = withCsp(req);
+  const isAnonymousPublicPage =
+    isIndexablePublicPath(pathname)
+    && !req.headers.get("cookie")
+    && !req.headers.get("authorization");
+  response.headers.set(
+    "Cache-Control",
+    assetCacheControl
+      ?? (isAnonymousPublicPage
+        ? "private, no-cache, max-age=0, must-revalidate"
+        : "private, no-store"),
+  );
+  const isSearchMetadataRoute = pathname === "/robots.txt" || pathname === "/sitemap.xml";
+  if (!isSearchMetadataRoute && !isIndexablePublicPath(pathname)) {
+    response.headers.set("X-Robots-Tag", "noindex, nofollow");
+  }
+  if (pathname === "/maintenance" || pathname.startsWith("/maintenance/")) {
+    response.headers.set("Retry-After", "60");
+  }
+  return response;
 }
 
 export const config = {

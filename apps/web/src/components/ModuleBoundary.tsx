@@ -48,20 +48,7 @@ class ModuleErrorBoundary extends Component<
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error(`[ModuleBoundary:${this.props.scope}]`, error, info);
-    // 上報到後端 error_audit（best-effort，失敗不影響）
-    try {
-      void fetch("/admin/system/errors/client", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          scope: this.props.scope,
-          message: String(error?.message ?? error),
-          stack: String(error?.stack ?? ""),
-        }),
-      }).catch(() => {});
-    } catch {
-      /* swallow */
-    }
+    void info;
   }
 
   reset = () => this.setState({ error: null });

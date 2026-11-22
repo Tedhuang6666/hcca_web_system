@@ -2,7 +2,9 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { ArrowLeft, Home, RotateCcw, ShieldAlert, Wrench } from "lucide-react";
+import BrandEmblem from "@/components/brand/BrandEmblem";
 
 type MaintenanceState = {
   enabled: boolean;
@@ -69,11 +71,11 @@ function MaintenanceContent() {
   const title = kind === "maintenance" ? "系統維護中" : "全站防護模式啟動";
   const subtitle =
     kind === "maintenance"
-      ? "管理員正在進行系統維護或緊急處置，一般請求暫時停止服務。"
+      ? "管理員正在進行系統維護"
       : "系統偵測到高流量或端點保護策略，已優先保留管理員與緊急處理通道。";
   const Icon = kind === "maintenance" ? Wrench : ShieldAlert;
   const statusRows = [
-    ["入口網站", kind === "maintenance" ? "暫停一般流量" : "防護策略生效"],
+    ["入口網站", kind === "maintenance" ? "暫時暫停瀏覽" : "防護策略生效"],
     ["管理通道", "保留"],
     ["預計恢復", liveUntil ? new Date(liveUntil * 1000).toLocaleString() : "待管理員確認"],
     ["自動重試", `${countdown}s`],
@@ -84,12 +86,10 @@ function MaintenanceContent() {
       <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-6xl flex-col justify-between">
         <header className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--primary)] shadow-sm">
-              <Icon size={20} aria-hidden />
-            </div>
+            <BrandEmblem size={42} priority />
             <div>
-              <div className="text-sm font-semibold text-[var(--text-primary)]">校園自治平台</div>
-              <div className="text-xs text-[var(--text-muted)]">HCCA System Status</div>
+              <div className="text-sm font-semibold text-[var(--text-primary)]">數位整合系統</div>
+              <div className="text-xs text-[var(--text-muted)]">服務狀態</div>
             </div>
           </div>
           <div className="rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)]">
@@ -101,7 +101,7 @@ function MaintenanceContent() {
           <div className="max-w-2xl">
             <div className="mb-4 inline-flex items-center gap-2 rounded-md border border-[var(--warning-border)] bg-[var(--warning-dim)] px-3 py-1.5 text-sm font-medium text-[var(--warning)]">
               <Icon size={16} aria-hidden />
-              服務狀態更新
+              資訊部正在爆肝修改網站...
             </div>
             <h1 className="text-4xl font-semibold leading-tight text-[var(--text-primary)] md:text-5xl">
               {title}
@@ -133,6 +133,9 @@ function MaintenanceContent() {
                 返回首頁
               </button>
             </div>
+            <Link href="/admin/system" className="btn btn-ghost mt-3 w-full sm:w-auto">
+              控制台
+            </Link>
           </div>
 
           <aside className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-sm">
@@ -144,7 +147,7 @@ function MaintenanceContent() {
                   <span className="ml-1 text-base text-[var(--text-muted)]">s</span>
                 </div>
               </div>
-              <div className="grid h-14 w-14 place-items-center rounded-lg bg-[var(--primary-dim)] text-[var(--primary)]">
+              <div className="grid h-14 w-14 place-items-center rounded-lg bg-[var(--primary-dim)] text-[var(--primary-text)]">
                 <Icon size={24} aria-hidden />
               </div>
             </div>
@@ -170,16 +173,24 @@ function MaintenanceContent() {
         </section>
 
         <footer className="border-t border-[var(--border)] py-4 text-xs text-[var(--text-muted)]">
-          HCCA Campus Self-Governance Platform
+          新竹高中班聯會數位整合系統
         </footer>
       </div>
     </main>
   );
 }
 
+function MaintenanceFallback() {
+  return (
+    <main className="grid min-h-screen place-items-center bg-[var(--bg-base)] px-5 text-[var(--text-primary)]">
+      <p className="text-sm text-[var(--text-muted)]">正在載入系統狀態…</p>
+    </main>
+  );
+}
+
 export default function MaintenancePage() {
   return (
-    <Suspense fallback={<div className="min-h-screen" />}>
+    <Suspense fallback={<MaintenanceFallback />}>
       <MaintenanceContent />
     </Suspense>
   );

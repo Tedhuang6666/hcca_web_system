@@ -1,0 +1,77 @@
+name: public-performance
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "47 */6 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  # Public/authenticated synthetic workflows share this gate so scheduled or
+  # manual scans do not run two browser fleets against production at once.
+  group: production-performance
+  cancel-in-progress: false
+
+jobs:
+  lighthouse:
+    name: Public Lighthouse (shard ${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Route synthetic monitor to origin
+        env:
+          PERFORMANCE_MONITOR_ORIGIN_IP: ${{ secrets.PERFORMANCE_MONITOR_ORIGIN_IP }}
+        run: |
+          test -n "$PERFORMANCE_MONITOR_ORIGIN_IP"
+          printf '%s hcca.tw\n' "$PERFORMANCE_MONITOR_ORIGIN_IP" | sudo tee -a /etc/hosts >/dev/null
+
+      - name: Install browser dependencies
+        working-directory: apps/web
+        run: |
+          npm ci
+          npx playwright install chromium
+          npm install --no-save --ignore-scripts lighthouse@13.4.0
+
+      - name: Validate monitor secret
+        env:
+          PERFORMANCE_MONITOR_TOKEN: ${{ secrets.PERFORMANCE_MONITOR_TOKEN }}
+        run: test -n "$PERFORMANCE_MONITOR_TOKEN"
+
+      - name: Run public Lighthouse and persist results
+        env:
+          BASE_URL: https://hcca.tw
+          AUTHENTICATED: "false"
+          PERFORMANCE_MONITOR_TOKEN: ${{ secrets.PERFORMANCE_MONITOR_TOKEN }}
+          GITHUB_SHA: ${{ github.sha }}
+          TARGET_SHARD_INDEX: ${{ matrix.shard }}
+          TARGET_SHARD_COUNT: "4"
+          LIGHTHOUSE_ATTEMPTS: "3"
+          MIN_SCORE: "95"
+          OUTPUT_FILE: .lighthouseci/public-summary-${{ matrix.shard }}.json
+        run: node scripts/authenticated-lighthouse.mjs
+
+      - name: Upload public performance report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: public-lighthouse-report-${{ matrix.shard }}
+          path: .lighthouseci/public-summary-${{ matrix.shard }}.json
+          if-no-files-found: ignore
+          retention-days: 30

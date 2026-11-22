@@ -1,0 +1,131 @@
+import { NextRequest } from "next/server";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import proxy from "./proxy";
+
+describe("proxy search metadata routes", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it.each(["GET", "HEAD"])("serves public shop images without page checks for %s", async (method) => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error("page checks unavailable"));
+    vi.stubGlobal("fetch", fetchMock);
+    const response = await proxy(new NextRequest(
+      "https://hcca.tw/shop/104/cotton-01-1440.webp", { method },
+    ));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(response.headers.get("Location")).toBeNull();
+    expect(response.headers.get("Cache-Control")).toContain("public, max-age=86400");
+    expect(response.headers.get("Content-Security-Policy")).toBeNull();
+    expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
+  });
+
+  it.each(["/shop", "/shop/orders", "/shop/products/example.webp"])(
+    "keeps HTML page controls on %s", async (pathname) => {
+      const response = await proxy(new NextRequest(`https://hcca.tw${pathname}`, {
+        headers: { RSC: "1" },
+      }));
+
+      expect(response.headers.get("Cache-Control")).toMatch(/^private, no-(?:cache|store)/);
+      expect(response.headers.get("Content-Security-Policy")).toContain("default-src 'self'");
+    },
+  );
+
+  it.each(["/robots.txt", "/sitemap.xml"])("does not add noindex to %s", async (pathname) => {
+    const request = new NextRequest(`https://hcca.tw${pathname}`, {
+      headers: { RSC: "1" },
+    });
+
+    const response = await proxy(request);
+
+    expect(response.headers.get("X-Robots-Tag")).toBeNull();
+  });
+
+  it("keeps anonymous indexable pages eligible for bfcache", async () => {
+    const request = new NextRequest("https://hcca.tw/", {
+      headers: { RSC: "1" },
+    });
+
+    const response = await proxy(request);
+
+    expect(response.headers.get("Cache-Control")).toBe(
+      "private, no-cache, max-age=0, must-revalidate",
+    );
+  });
+
+  it("does not relax cache controls for signed-in visitors", async () => {
+    const request = new NextRequest("https://hcca.tw/", {
+      headers: { RSC: "1", cookie: "access_token=secret" },
+    });
+
+    const response = await proxy(request);
+
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+  });
+
+  it("adds browser security headers to HTML responses", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const request = new NextRequest("https://hcca.tw/", { headers: { RSC: "1" } });
+
+    const response = await proxy(request);
+
+    expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    expect(response.headers.get("X-Frame-Options")).toBe("DENY");
+    expect(response.headers.get("Referrer-Policy")).toBe("strict-origin-when-cross-origin");
+    expect(response.headers.get("Permissions-Policy")).toContain("camera=()");
+    expect(response.headers.get("Cross-Origin-Opener-Policy")).toBe("same-origin");
+    expect(response.headers.get("Strict-Transport-Security")).toBe("max-age=31536000; includeSubDomains");
+  });
+
+  it("allows the first-party host aliases and blob attachment previews in CSP", async () => {
+    const request = new NextRequest("https://hcca.tw/login", {
+      headers: { RSC: "1" },
+    });
+
+    const response = await proxy(request);
+    const csp = response.headers.get("Content-Security-Policy") ?? "";
+
+    expect(csp).toContain("https://hcca.tw https://www.hcca.tw");
+    expect(csp).toContain("wss://hcca.tw wss://www.hcca.tw");
+    expect(csp.match(/wss:\/\/hcca\.tw/g)).toHaveLength(1);
+    expect(csp).toContain("frame-src 'self' https://accounts.google.com https://hcca.buckets.hct.works blob:");
+    expect(csp).toContain("worker-src 'self' blob: https://hcca.tw https://www.hcca.tw");
+  });
+
+  it("allows raster map tiles as images without granting script access", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const response = await proxy(new NextRequest("https://hcca.tw/partner-map", { headers: { RSC: "1" } }));
+    const directives = (response.headers.get("Content-Security-Policy") ?? "").split(";");
+    expect(directives.find(value => value.trim().startsWith("img-src "))).toContain("https://tile.openstreetmap.org");
+    expect(directives.find(value => value.trim().startsWith("script-src "))).not.toContain("tile.openstreetmap.org");
+    expect(directives.find(value => value.trim().startsWith("script-src "))).toContain("'nonce-");
+  });
+
+  it("keeps security headers on cacheable public assets", async () => {
+    const request = new NextRequest("https://hcca.tw/brand/hcca-emblem-192.png");
+
+    const response = await proxy(request);
+
+    expect(response.headers.get("Cache-Control")).toContain("max-age=2592000");
+    expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    expect(response.headers.get("Permissions-Policy")).toContain("microphone=()");
+  });
+
+  it("keeps social preview images public and outside HTML access checks", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = new NextRequest("https://hcca.tw/og/news/example-id");
+    const response = await proxy(request);
+
+    expect(response.headers.get("Cache-Control")).toBe(
+      "public, max-age=300, s-maxage=86400, stale-while-revalidate=3600",
+    );
+    expect(response.headers.get("X-Robots-Tag")).toBeNull();
+    expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-15T08:23:19Z",
+  "title": "HCCA 首頁與影像紀事局部規範",
+  "extensions": {
+    "motion": [
+      {
+        "name": "gallery-viewer-open",
+        "value": "440ms cubic-bezier(.16,1,.3,1)",
+        "purpose": "全螢幕照片從原位置展開；偏好減少動態時停用。"
+      },
+      {
+        "name": "gallery-viewer-close",
+        "value": "240ms cubic-bezier(.4,0,1,1)",
+        "purpose": "仍停在原照片時收合至原位置；偏好減少動態時停用。"
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "home-gallery-mobile",
+        "value": "767px"
+      },
+      {
+        "name": "home-compact",
+        "value": "639px"
+      }
+    ]
+  },
+  "narrative": {
+    "northStar": "真實活動照片先行",
+    "overview": "僅記錄首頁與影像紀事的局部設計：活動實照負責色彩與情緒，文字、分隔與操作保持安靜。全站其他頁面及既有導覽、頁尾沿用 DESIGN.md 的共用與品牌規範。",
+    "keyCharacteristics": [
+      "首頁短主標接大幅活動實照，公告與常用服務優先於文章與商品。",
+      "活動詳頁實照直接接導覽，日期、名稱與署名靠近照片。",
+      "編輯選輯與平直照片總覽共用全螢幕檢視。"
+    ],
+    "rules": [
+      {
+        "name": "實照先行",
+        "body": "開場優先使用真實活動照；正式海報完整放在活動主視覺區，沒有可用實照時才用海報開場。",
+        "section": "layout"
+      },
+      {
+        "name": "平直照片",
+        "body": "照片總覽保留原始比例，每次呈現 36 張；不使用紙框陰影、透視、旋轉或視差。",
+        "section": "elevation"
+      },
+      {
+        "name": "局部例外",
+        "body": "首頁與影像紀事的深色內容、字級與版寬不自動套用其他頁面或既有導覽、頁尾。",
+        "section": "layout"
+      }
+    ],
+    "dos": [
+      "Do 使用正式活動資料，逐張署名優先於活動預設；未知日期或作者省略。",
+      "Do 保留原生 dialog、方向鍵、滑動、Escape、下載、分享與焦點返回。",
+      "Do 對圖片失敗重試原圖或同活動其他照片；全部失敗顯示緊湊文字狀態。"
+    ],
+    "donts": [
+      "Don't 在首頁活動照上疊圓形會徽或大型操作按鈕。",
+      "Don't 恢復影像紀事的滿版展示大字或立體攝影牆。"
+    ]
+  }
+}

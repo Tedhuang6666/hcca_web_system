@@ -1,4 +1,4 @@
-"""備份檔案 GPG 加密 + sha256 校驗 helper。對應 Phase A3。
+"""備份檔案 GPG 加密與 sha256 校驗 helper。
 
 不取代既有 [apps/api/src/api/services/backup_tasks.py] 的 pg_dump 與上傳邏輯，
 而是補強：
@@ -109,7 +109,7 @@ def encrypt_file(
         try:
             src.unlink()
         except OSError:
-            logger.warning("無法刪除原始備份檔（明文）：%s", src, exc_info=True)
+            logger.warning("無法刪除原始備份檔（明文）", exc_info=True)
 
     return out
 

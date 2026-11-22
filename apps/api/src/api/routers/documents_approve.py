@@ -27,7 +27,7 @@ from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.core.posthog import get_posthog_client
 from api.dependencies.auth import get_current_active_user
-from api.dependencies.permissions import require_permission
+from api.dependencies.permissions import require_any, require_permission
 from api.models.document import Document, DocumentStatus
 from api.models.user import User
 from api.routers.documents_helpers import (
@@ -38,7 +38,6 @@ from api.routers.documents_helpers import (
     unique_doc_ids,
     ws_broadcast_bg,
 )
-from api.routers.notifications import create_notification
 from api.schemas.document import (
     ApproveRequest,
     BatchApproveRequest,
@@ -50,22 +49,145 @@ from api.schemas.document import (
     DocumentApprovalDelegationCreate,
     DocumentApprovalDelegationOut,
     DocumentApprovalDelegationUpdate,
+    DocumentArchiveSettingsUpdate,
+    DocumentDispatchCreate,
+    DocumentDispatchOut,
+    DocumentEmailResendOut,
     DocumentOut,
     RecallRequest,
-    RejectMode,
     RejectRequest,
     SubmitRequest,
 )
 from api.services import activity as activity_svc
 from api.services import audit as audit_svc
 from api.services import document as doc_svc
-from api.services.discord_bot import emit_public_document_notice
 from api.services.permission import get_user_permission_codes_for_org, user_is_org_leader
 
 router = APIRouter(prefix="/documents", tags=["公文系統"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
+
+
+@router.post(
+    "/{doc_id}/resend-email",
+    response_model=DocumentEmailResendOut,
+    summary="手動重寄公文受文者 Email",
+    responses={
+        200: {"description": "已依目前公文內容排入重寄佇列"},
+        403: {"description": "無權限重寄此公文"},
+        409: {"description": "公文尚未正式發文"},
+    },
+)
+async def resend_document_email(
+    doc_id: str,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> DocumentEmailResendOut:
+    """只在使用者明確操作時，依目前版本重寄正式公文 Email。"""
+    doc = await get_doc_or_404(doc_id, session)
+    if doc.status != DocumentStatus.APPROVED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="只有已核准公文可以重寄 Email",
+        )
+    if not current_user.is_superuser:
+        codes = await get_user_permission_codes_for_org(session, current_user.id, doc.org_id)
+        is_activity_manager = await activity_svc.can_manage_activity_resource(
+            session, current_user, doc.activity_id
+        )
+        is_org_leader = await user_is_org_leader(session, current_user.id, doc.org_id)
+        if not (
+            doc.created_by == current_user.id
+            or is_org_leader
+            or {"document:admin", "document:edit", "document:create"} & set(codes)
+            or is_activity_manager
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="只有建立者、部門最高權限者、文件編輯者或活動管理者可以重寄 Email",
+            )
+
+    queued = await doc_svc.queue_document_recipient_emails(session, doc, force=True)
+    await audit_svc.record(
+        session,
+        entity_type="document",
+        entity_id=str(doc.id),
+        action="email.resend",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={"recipient_count": queued},
+        summary=f"手動重寄公文「{doc.title}」Email",
+    )
+    return DocumentEmailResendOut(queued=queued)
+
+
+@router.post(
+    "/{doc_id}/dispatch",
+    response_model=DocumentDispatchOut,
+    summary="已發文公文指定派送至使用者或 Email",
+    responses={
+        200: {"description": "已新增派送對象並排入寄送佇列"},
+        403: {"description": "無權派送此公文"},
+        409: {"description": "公文尚未正式發文"},
+    },
+)
+async def dispatch_document(
+    doc_id: str,
+    payload: DocumentDispatchCreate,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> DocumentDispatchOut:
+    """派送副本，不會重寄既有受文者；指定平台使用者同時取得此公文查閱權。"""
+    doc = await get_doc_or_404(doc_id, session)
+    if doc.status != DocumentStatus.APPROVED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="只有已核准公文可以指定派送",
+        )
+    if not current_user.is_superuser:
+        codes = await get_user_permission_codes_for_org(session, current_user.id, doc.org_id)
+        is_activity_manager = await activity_svc.can_manage_activity_resource(
+            session, current_user, doc.activity_id
+        )
+        is_org_leader = await user_is_org_leader(session, current_user.id, doc.org_id)
+        if not (
+            doc.created_by == current_user.id
+            or is_org_leader
+            or {"document:admin", "document:edit", "document:create"} & set(codes)
+            or is_activity_manager
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="只有建立者、部門最高權限者、文件編輯者或活動管理者可以指定派送",
+            )
+
+    try:
+        recipient = await doc_svc.dispatch_document(session, doc, data=payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    queued = await doc_svc.queue_document_recipient_emails(
+        session,
+        doc,
+        recipient_ids={recipient.id},
+        include_document_pdf=True,
+    )
+    await audit_svc.record(
+        session,
+        entity_type="document",
+        entity_id=str(doc.id),
+        action="document.dispatch",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={
+            "recipient_id": str(recipient.id),
+            "target_user_id": str(recipient.target_user_id) if recipient.target_user_id else None,
+            "queued": queued,
+        },
+        summary=f"指定派送公文「{doc.title}」至「{recipient.name}」",
+    )
+    return DocumentDispatchOut(recipient=recipient, queued=queued)
 
 
 # ── 批量操作端點 ──────────────────────────────────────────────────────────────
@@ -94,7 +216,7 @@ async def batch_approve_documents(
             )
             continue
         try:
-            updated = await doc_svc.approve_step(
+            updated = await doc_svc.approve_document(
                 session,
                 doc,
                 approver_id=current_user.id,
@@ -113,8 +235,6 @@ async def batch_approve_documents(
                 },
                 summary=f"批量核准公文「{updated.title}」",
             )
-            if updated.status == DocumentStatus.APPROVED:
-                await emit_public_document_notice(session, updated)
             bg.add_task(ws_broadcast_bg, updated)
             results.append(batch_result(doc_id, ok=True, doc=updated))
         except (PermissionError, ValueError) as exc:
@@ -145,20 +265,13 @@ async def batch_reject_documents(
             )
             continue
         try:
-            if payload.mode == RejectMode.TO_PREVIOUS:
-                updated = await doc_svc.reject_to_previous_step(
-                    session,
-                    doc,
-                    approver_id=current_user.id,
-                    comment=payload.comment,
-                )
-            else:
-                updated = await doc_svc.reject_step(
-                    session,
-                    doc,
-                    approver_id=current_user.id,
-                    comment=payload.comment,
-                )
+            updated = await doc_svc.reject_document(
+                session,
+                doc,
+                approver_id=current_user.id,
+                comment=payload.comment,
+                mode=payload.mode,
+            )
             await audit_svc.record(
                 session,
                 entity_type="document",
@@ -296,21 +409,10 @@ async def submit_document(
                 detail="只有部門最高權限者、建立者 + document:submit、document:admin 或活動總召可以送審",
             )
     try:
-        updated = await doc_svc.submit_document(session, doc, approver_ids=payload.approver_ids)
+        updated = await doc_svc.submit_for_approval(session, doc, approver_ids=payload.approver_ids)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
 
-    if updated.approvals:
-        approver = updated.approvals[0].delegate or updated.approvals[0].approver
-        await create_notification(
-            session,
-            user_id=approver.id,
-            type="document_pending",
-            title=f"公文待你審核：{updated.title}",
-            body=f"字號：{updated.serial_number}",
-            link=f"/documents/{updated.id}",
-            related_id=updated.id,
-        )
     _ph = get_posthog_client()
     if _ph:
         _ph.capture(
@@ -342,7 +444,7 @@ async def approve_document(
 ) -> Document:
     doc = await get_doc_or_404(doc_id, session)
     try:
-        updated = await doc_svc.approve_step(
+        updated = await doc_svc.approve_document(
             session, doc, approver_id=current_user.id, comment=payload.comment
         )
     except PermissionError as e:
@@ -360,33 +462,6 @@ async def approve_document(
         meta={"step": updated.current_step, "final": updated.status == DocumentStatus.APPROVED},
         summary=f"核准公文「{updated.title}」步驟 {updated.current_step}",
     )
-
-    if updated.status == DocumentStatus.APPROVED:
-        await create_notification(
-            session,
-            user_id=updated.created_by,
-            type="document_approved",
-            title=f"公文已核准：{updated.title}",
-            body=f"字號：{updated.serial_number}",
-            link=f"/documents/{updated.id}",
-            related_id=updated.id,
-        )
-        await emit_public_document_notice(session, updated)
-    else:
-        next_step = next(
-            (a for a in updated.approvals if a.step_order == updated.current_step), None
-        )
-        if next_step:
-            recipient = next_step.delegate or next_step.approver
-            await create_notification(
-                session,
-                user_id=recipient.id,
-                type="document_pending",
-                title=f"公文待你審核：{updated.title}",
-                body=f"字號：{updated.serial_number}",
-                link=f"/documents/{updated.id}",
-                related_id=updated.id,
-            )
 
     _ph = get_posthog_client()
     if _ph and updated.status == DocumentStatus.APPROVED:
@@ -423,14 +498,13 @@ async def reject_document(
     """
     doc = await get_doc_or_404(doc_id, session)
     try:
-        if payload.mode == RejectMode.TO_PREVIOUS:
-            updated = await doc_svc.reject_to_previous_step(
-                session, doc, approver_id=current_user.id, comment=payload.comment
-            )
-        else:
-            updated = await doc_svc.reject_step(
-                session, doc, approver_id=current_user.id, comment=payload.comment
-            )
+        updated = await doc_svc.reject_document(
+            session,
+            doc,
+            approver_id=current_user.id,
+            comment=payload.comment,
+            mode=payload.mode,
+        )
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except ValueError as e:
@@ -447,31 +521,6 @@ async def reject_document(
         summary=f"退件公文「{updated.title}」（{payload.mode}）",
     )
 
-    if payload.mode == RejectMode.TO_CREATOR:
-        await create_notification(
-            session,
-            user_id=updated.created_by,
-            type="document_rejected",
-            title=f"公文被退件：{updated.title}",
-            body=f"字號：{updated.serial_number}",
-            link=f"/documents/{updated.id}",
-            related_id=updated.id,
-        )
-    else:
-        prev_step = next(
-            (a for a in updated.approvals if a.step_order == updated.current_step), None
-        )
-        if prev_step:
-            recipient = prev_step.delegate or prev_step.approver
-            await create_notification(
-                session,
-                user_id=recipient.id,
-                type="document_pending",
-                title=f"公文退回待你重審：{updated.title}",
-                body=f"字號：{updated.serial_number}",
-                link=f"/documents/{updated.id}",
-                related_id=updated.id,
-            )
     bg.add_task(ws_broadcast_bg, updated)
     return updated
 
@@ -513,7 +562,7 @@ async def set_step_delegate(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
-    return await doc_svc.get_document(session, doc_id)  # type: ignore[return-value]
+    return await doc_svc.get_document(session, doc.id)  # type: ignore[return-value]
 
 
 # ── 簽核代理授權 (management/delegations) ─────────────────────────────────────
@@ -682,6 +731,106 @@ async def archive_document(
     return updated
 
 
+@router.post(
+    "/{doc_id}/unarchive",
+    response_model=DocumentOut,
+    summary="解除封存公文（封存 → 已核准）",
+    responses={
+        200: {"description": "解除封存成功"},
+        403: {"description": "非建立者或管理員"},
+        409: {"description": "公文非已封存狀態"},
+    },
+)
+async def unarchive_document(
+    doc_id: str,
+    session: DbDep,
+    current_user: Annotated[User, Depends(require_permission(PermissionCode.DOCUMENT_ARCHIVE))],
+    bg: BackgroundTasks,
+) -> Document:
+    doc = await get_doc_or_404(doc_id, session)
+    if doc.created_by != current_user.id and not current_user.is_superuser:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="只有建立者可以解除封存公文"
+        )
+    try:
+        updated = await doc_svc.unarchive_document(session, doc, requested_by=current_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+
+    await audit_svc.record(
+        session,
+        entity_type="document",
+        entity_id=str(doc.id),
+        action="unarchive",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        summary=f"解除封存公文「{updated.title}」",
+    )
+    bg.add_task(ws_broadcast_bg, updated)
+    return updated
+
+
+@router.put(
+    "/{doc_id}/archive-settings",
+    response_model=DocumentOut,
+    summary="設定或取消公文預約歸檔",
+    responses={
+        403: {"description": "無設定歸檔權限"},
+        409: {"description": "公文非已核准狀態或時間無效"},
+    },
+)
+async def update_archive_settings(
+    doc_id: str,
+    payload: DocumentArchiveSettingsUpdate,
+    session: DbDep,
+    current_user: Annotated[
+        User,
+        Depends(
+            require_any(
+                PermissionCode.DOCUMENT_ARCHIVE_SETTINGS,
+                PermissionCode.DOCUMENT_ADMIN,
+                PermissionCode.ADMIN_ALL,
+            )
+        ),
+    ],
+    bg: BackgroundTasks,
+) -> Document:
+    doc = await get_doc_or_404(doc_id, session)
+    if not current_user.is_superuser:
+        codes = await get_user_permission_codes_for_org(session, current_user.id, doc.org_id)
+        can_manage = bool(
+            {
+                str(PermissionCode.ADMIN_ALL),
+                str(PermissionCode.DOCUMENT_ADMIN),
+                str(PermissionCode.DOCUMENT_ARCHIVE_SETTINGS),
+            }
+            & set(codes)
+        )
+        if not can_manage:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="您無權設定此公文的歸檔",
+            )
+
+    try:
+        updated = await doc_svc.update_archive_settings(session, doc, data=payload)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+
+    await audit_svc.record(
+        session,
+        entity_type="document",
+        entity_id=str(doc.id),
+        action="archive_schedule_updated",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={"archive_at": updated.archive_at.isoformat() if updated.archive_at else None},
+        summary=f"更新公文「{updated.title}」預約歸檔設定",
+    )
+    bg.add_task(ws_broadcast_bg, updated)
+    return updated
+
+
 class IssuedDirectRequest(BaseModel):
     comment: str | None = None
 
@@ -713,24 +862,11 @@ async def issue_document_directly(
     if doc.created_by != current_user.id and not current_user.is_superuser:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有建立者可直接發文")
     try:
-        updated = await doc_svc.issue_document_directly(
+        updated = await doc_svc.issue_document(
             session, doc, issued_by=current_user.id, comment=payload.comment
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
 
-    loaded = await doc_svc.get_document(session, updated.id)
-    assert loaded is not None
-
-    await create_notification(
-        session,
-        user_id=loaded.created_by,
-        type="document_approved",
-        title=f"公文已直接發文：{loaded.title}",
-        body=f"字號：{loaded.serial_number}",
-        link=f"/documents/{loaded.id}",
-        related_id=loaded.id,
-    )
-    await emit_public_document_notice(session, loaded)
-    bg.add_task(ws_broadcast_bg, loaded)
-    return loaded
+    bg.add_task(ws_broadcast_bg, updated)
+    return updated

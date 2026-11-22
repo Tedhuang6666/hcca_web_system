@@ -7,10 +7,13 @@ export const BRANDING = {
   domain: "hcca.tw",
   themeColor: "#1f3a5f",
   accentColor: "#c9a84c",
-  slogan: "丞勢啟航，鎧創竹中",
-  appName: "新竹高中班聯會 HCCA 校園自治整合平台",
-  platformName: "校園自治整合平台",
-  description: "新竹高中班聯會 HCCA 的數位治理工具，整合公文、法規、公告、會議、購票、學餐與問卷。",
+  slogan: "新竹高中班聯會數位整合系統",
+  appName: "新竹高中班聯會數位整合系統",
+  platformName: "新竹高中班聯會數位整合系統",
+  description: "新竹高中班聯會數位整合系統，提供公文、法規、會議、公告、陳情與學生服務，讓每個人都能找到資訊與參與入口。",
+  emblemPath: "/brand/hcca-emblem.png",
+  publicEmblemUrl: "/brand/hcca-emblem-512.png",
+  emblemAlt: "新竹高中班聯會會徽",
 } as const;
 
-export const BRAND_TITLE = `${BRANDING.orgShortName} ${BRANDING.acronym}`;
+export const BRAND_TITLE = BRANDING.appName;

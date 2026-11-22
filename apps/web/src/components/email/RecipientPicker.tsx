@@ -11,12 +11,13 @@ import {
 } from "@/components/ui/targeting";
 import type { RecipientSelector } from "@/lib/types";
 
-type Mode = "users" | "positions" | "orgs" | "all";
+type Mode = "users" | "emails" | "positions" | "orgs" | "all";
 
 const EMPTY: RecipientSelector = {
   user_ids: [],
   position_ids: [],
   org_ids: [],
+  external_emails: [],
   include_all: false,
   include_school: false,
 };
@@ -25,20 +26,48 @@ type AllScope = "school" | "everyone";
 
 const MODES: { key: Mode; label: string }[] = [
   { key: "users", label: "個別使用者" },
+  { key: "emails", label: "外部信箱" },
   { key: "positions", label: "依職位" },
   { key: "orgs", label: "依組織" },
   { key: "all", label: "全體成員" },
 ];
 
+function selectorKey(sel: RecipientSelector): string {
+  return JSON.stringify({
+    user_ids: [...(sel.user_ids ?? [])].sort(),
+    position_ids: [...(sel.position_ids ?? [])].sort(),
+    org_ids: [...(sel.org_ids ?? [])].sort(),
+    external_emails: [...(sel.external_emails ?? [])].sort(),
+    include_all: sel.include_all,
+    include_school: sel.include_school,
+  });
+}
+
+function selectorForPicker(sel: RecipientSelector): RecipientSelector {
+  if (sel.include_all) return { ...EMPTY, include_all: true };
+  if (sel.include_school) return { ...EMPTY, include_school: true };
+  if ((sel.external_emails ?? []).length > 0) {
+    return { ...EMPTY, external_emails: sel.external_emails };
+  }
+  if ((sel.position_ids ?? []).length > 0) {
+    return { ...EMPTY, position_ids: sel.position_ids };
+  }
+  if ((sel.org_ids ?? []).length > 0) return { ...EMPTY, org_ids: sel.org_ids };
+  if ((sel.user_ids ?? []).length > 0) return { ...EMPTY, user_ids: sel.user_ids };
+  return EMPTY;
+}
+
 interface RecipientPickerProps {
+  value?: RecipientSelector;
   onChange: (sel: RecipientSelector) => void;
   disabled?: boolean;
 }
 
-export default function RecipientPicker({ onChange, disabled = false }: RecipientPickerProps) {
+export default function RecipientPicker({ value, onChange, disabled = false }: RecipientPickerProps) {
   const [mode, setMode] = useState<Mode>("users");
   const [allScope, setAllScope] = useState<AllScope>("school");
   const [selectedUsers, setSelectedUsers] = useState<ComboboxOption[]>([]);
+  const [externalEmailsText, setExternalEmailsText] = useState("");
   const { results: userResults, search: searchUsers } = useUserSearch();
   const orgOptions = useOrgOptions();
   const [selectedOrgs, setSelectedOrgs] = useState<ComboboxOption[]>([]);
@@ -48,12 +77,62 @@ export default function RecipientPicker({ onChange, disabled = false }: Recipien
 
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const valueKey = value ? selectorKey(value) : "";
+  const synchronizedValueKeyRef = useRef<string | null>(null);
+  const pendingSyncKeyRef = useRef<string | null>(null);
+  const lastEmittedValueKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!value) return;
+    if (synchronizedValueKeyRef.current === valueKey) return;
+    synchronizedValueKeyRef.current = valueKey;
+    if (lastEmittedValueKeyRef.current === valueKey) {
+      lastEmittedValueKeyRef.current = null;
+      return;
+    }
+
+    // 外部套用名單時，先同步內部控制項，避免用舊模式回寫覆蓋新值。
+    pendingSyncKeyRef.current = selectorKey(selectorForPicker(value));
+    if (value.include_all) {
+      setMode("all");
+      setAllScope("everyone");
+    } else if (value.include_school) {
+      setMode("all");
+      setAllScope("school");
+    } else if ((value.external_emails ?? []).length > 0) {
+      setMode("emails");
+      setExternalEmailsText((value.external_emails ?? []).join("\n"));
+    } else if ((value.position_ids ?? []).length > 0) {
+      setMode("positions");
+      setSelectedPos((value.position_ids ?? []).map((id) => ({ value: id, label: id })));
+    } else if ((value.org_ids ?? []).length > 0) {
+      setMode("orgs");
+      setSelectedOrgs((value.org_ids ?? []).map((id) => ({ value: id, label: id })));
+    } else if ((value.user_ids ?? []).length > 0) {
+      setMode("users");
+      setSelectedUsers((value.user_ids ?? []).map((id) => ({ value: id, label: id })));
+    } else {
+      setSelectedUsers([]);
+      setExternalEmailsText("");
+      setSelectedPos([]);
+      setSelectedOrgs([]);
+      setMode("users");
+    }
+  }, [value, valueKey]);
 
   // 任一模式/選擇變動 → 發出對應的 RecipientSelector
   useEffect(() => {
     let sel: RecipientSelector;
     if (mode === "users") {
       sel = { ...EMPTY, user_ids: selectedUsers.map((u) => u.value) };
+    } else if (mode === "emails") {
+      sel = {
+        ...EMPTY,
+        external_emails: externalEmailsText
+          .split(/[\s,;]+/)
+          .map((email) => email.trim())
+          .filter(Boolean),
+      };
     } else if (mode === "positions") {
       sel = { ...EMPTY, position_ids: selectedPos.map((p) => p.value) };
     } else if (mode === "orgs") {
@@ -63,8 +142,15 @@ export default function RecipientPicker({ onChange, disabled = false }: Recipien
     } else {
       sel = { ...EMPTY, include_school: true };
     }
+    const nextValueKey = selectorKey(sel);
+    if (pendingSyncKeyRef.current !== null) {
+      if (pendingSyncKeyRef.current === nextValueKey) pendingSyncKeyRef.current = null;
+      return;
+    }
+    if (nextValueKey === valueKey || lastEmittedValueKeyRef.current === nextValueKey) return;
+    lastEmittedValueKeyRef.current = nextValueKey;
     onChangeRef.current(sel);
-  }, [mode, allScope, selectedUsers, selectedPos, selectedOrgs]);
+  }, [mode, allScope, selectedUsers, externalEmailsText, selectedPos, selectedOrgs, valueKey]);
 
   return (
     <div className="space-y-3">
@@ -79,6 +165,18 @@ export default function RecipientPicker({ onChange, disabled = false }: Recipien
           disabled={disabled}
           placeholder="輸入姓名或 Email 搜尋（至少 2 字）"
           emptyText="找不到使用者"
+        />
+      )}
+
+      {mode === "emails" && (
+        <textarea
+          className="input min-h-28"
+          value={externalEmailsText}
+          onChange={(e) => setExternalEmailsText(e.target.value)}
+          disabled={disabled}
+          placeholder={
+            "輸入完整 Email，可用換行、逗號或分號分隔\nexample@gmail.com\npartner@example.org"
+          }
         />
       )}
 

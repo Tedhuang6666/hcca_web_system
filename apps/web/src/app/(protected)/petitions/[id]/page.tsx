@@ -1,0 +1,182 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { useParams } from "next/navigation";
+import Link from "next/link";
+import { toast } from "sonner";
+import { ApiError, petitionsApi } from "@/lib/api";
+import type { PetitionCaseOut } from "@/lib/types";
+import { PetitionStatusBadge } from "@/components/ui/StatusBadge";
+import PetitionPublicConsent from "@/components/petitions/PetitionPublicConsent";
+import PetitionContentEditor from "@/components/petitions/PetitionContentEditor";
+import PetitionAttachmentList from "@/components/petitions/PetitionAttachmentList";
+import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
+import { PetitionConfidentialBlocked } from "@/components/petitions/PetitionConfidentialBlocked";
+
+function fmt(iso: string | null) {
+  if (!iso) return "未設定";
+  return new Date(iso).toLocaleString("zh-TW");
+}
+
+export default function PetitionDetailPage() {
+  const params = useParams<{ id: string }>();
+  const [item, setItem] = useState<PetitionCaseOut | null>(null);
+  const [supplement, setSupplement] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setItem(await petitionsApi.get(params.id));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "載入失敗，請從案件查詢進入");
+    } finally {
+      setLoading(false);
+    }
+  }, [params.id]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const submitSupplement = async () => {
+    if (!item) return;
+    try {
+      const updated = await petitionsApi.supplement(item.id, {
+        content: supplement,
+      });
+      if (file) await petitionsApi.uploadAttachment(item.id, file);
+      setItem(updated);
+      setSupplement("");
+      setFile(null);
+      toast.success("補件已送出");
+      load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "補件失敗");
+    }
+  };
+
+  if (loading) return <div className="max-w-4xl mx-auto card p-5">載入中...</div>;
+  if (!item) {
+    return (
+      <div className="max-w-2xl mx-auto card p-5 space-y-3">
+        <p style={{ color: "var(--text-muted)" }}>無法直接查看此案件。</p>
+        <Link className="btn btn-primary" href="/petitions">回我的案件</Link>
+      </div>
+    );
+  }
+  if (item.confidential_blocked) {
+    return (
+      <div className="max-w-2xl mx-auto">
+        <PetitionConfidentialBlocked item={item} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-5xl mx-auto space-y-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>案號 {item.case_number}</p>
+          <h1 className="text-xl font-semibold mt-1" style={{ color: "var(--text-primary)" }}>{item.title}</h1>
+          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>{item.current_org_name} · {item.type_name}</p>
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {item.is_confidential && (
+            <span className="rounded-full px-2.5 py-1 text-xs font-medium" style={{ background: "var(--warning-dim)", color: "var(--warning)" }}>
+              密件處理
+            </span>
+          )}
+          <PetitionStatusBadge status={item.status} />
+        </div>
+      </div>
+
+      {item.is_confidential && (
+        <div className="rounded-lg p-4 space-y-1" style={{ background: "var(--warning-dim)", border: "1px solid var(--warning-border)" }}>
+          <p className="font-medium" style={{ color: "var(--warning)" }}>本案已密件處理</p>
+          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>密件原因：{item.confidential_reason || "未提供密件原因。"}</p>
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>完整內容僅案件擁有者與目前承辦人可查看，案件無法公開。</p>
+        </div>
+      )}
+
+      <section className="card p-5 space-y-4">
+        <div className="grid sm:grid-cols-4 gap-3">
+          <div><p className="text-xs text-muted">目前階段</p><p className="font-medium">{item.status_label}</p></div>
+          <div><p className="text-xs text-muted">負責機關</p><p className="font-medium">{item.current_org_name}</p></div>
+          <div><p className="text-xs text-muted">承辦人</p><p className="font-medium">{item.assigned_to_name || "尚未分案"}</p></div>
+          <div><p className="text-xs text-muted">最後更新</p><p className="font-medium">{fmt(item.updated_at)}</p></div>
+        </div>
+        <p className="rounded-lg p-3 text-sm" style={{ background: "var(--bg-hover)", color: "var(--text-muted)" }}>
+          {item.status_public_message} 下一步：{item.next_action}
+        </p>
+      </section>
+
+      <div className="grid lg:grid-cols-[1.2fr_0.8fr] gap-5">
+        <section className="card p-5 space-y-4">
+          <h2 className="font-semibold">陳情內容</h2>
+          <p className="whitespace-pre-wrap text-sm leading-7" style={{ color: "var(--text-primary)" }}>{item.content}</p>
+          {item.public_reply && (
+            <div className="rounded-lg p-4" style={{ background: "var(--success-dim)", border: "1px solid var(--success-border)" }}>
+              <p className="font-medium mb-2" style={{ color: "var(--success)" }}>承辦回覆</p>
+              <p className="whitespace-pre-wrap text-sm">{item.public_reply}</p>
+            </div>
+          )}
+          {item.rejection_reason && (
+            <div className="rounded-lg p-4" style={{ background: "var(--danger-dim)", border: "1px solid var(--danger-border)" }}>
+              <p className="font-medium mb-2" style={{ color: "var(--danger)" }}>不受理原因</p>
+              <p className="whitespace-pre-wrap text-sm">{item.rejection_reason}</p>
+            </div>
+          )}
+        </section>
+
+        <aside className="space-y-5">
+          <section className="card p-5 space-y-3">
+            <h2 className="font-semibold">附件（{item.attachments.length}）</h2>
+            <PetitionAttachmentList caseId={item.id} attachments={item.attachments} />
+          </section>
+
+          {item.can_supplement && (
+            <section className="card p-5 space-y-3">
+              <h2 className="font-semibold">補充資料</h2>
+              {item.supplement_request && <p className="text-sm" style={{ color: "var(--danger)" }}>{item.supplement_request}</p>}
+              <textarea className="input w-full min-h-28" value={supplement} onChange={(e) => setSupplement(e.target.value)} placeholder="請補充承辦機關要求的資料" />
+              <AnimatedFileUpload
+                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
+                label="拖曳補件附件到這裡"
+                hint="檔案會和補充內容一起送出"
+                onFiles={(files) => setFile(files[0] ?? null)}
+                onRemove={() => setFile(null)}
+              />
+              <button className="btn btn-primary w-full" disabled={!supplement.trim()} onClick={submitSupplement}>送出補件</button>
+            </section>
+          )}
+        </aside>
+      </div>
+
+      <PetitionContentEditor item={item} onUpdated={setItem} />
+
+      {item.can_respond_public && <PetitionPublicConsent item={item} onUpdated={setItem} />}
+
+      <section className="card p-5 space-y-4">
+        <h2 className="font-semibold">處理時間軸</h2>
+        <div className="space-y-3">
+          {item.events.map((event) => (
+            <div key={event.id} className="pl-4 py-1" style={{ borderLeft: "2px solid var(--border)" }}>
+              <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{event.title}</p>
+              {event.content && <p className="text-sm whitespace-pre-wrap mt-1" style={{ color: "var(--text-muted)" }}>{event.content}</p>}
+              {event.related_document_id && (
+                <Link
+                  href={`/documents/${event.related_document_id}`}
+                  className="mt-2 inline-flex text-xs font-medium hover:underline"
+                  style={{ color: "var(--primary-text)" }}
+                >
+                  查看關聯公文
+                </Link>
+              )}
+              <p className="text-xs mt-1" style={{ color: "var(--text-disabled)" }}>{fmt(event.created_at)}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}

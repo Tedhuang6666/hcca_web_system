@@ -5,11 +5,12 @@
  * 支援格式：粗體、斜體、刪除線、底線、行內程式碼、
  *           H1/H2/H3、有序/無序清單、引言、水平線、程式碼區塊
  */
-import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, type CSSProperties } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
+import { Extension } from "@tiptap/core";
 import { Markdown } from "tiptap-markdown";
 
 // ── CSS for editor ──────────────────────────────────────────────────────────
@@ -19,11 +20,11 @@ const editorStyles = `
   min-height: 160px;
   padding: 0.625rem 0.75rem;
   font-size: 0.875rem;
-  line-height: 1.7;
+  line-height: var(--rich-line-height, 1.6);
   color: var(--text-primary);
   background: var(--bg-surface);
 }
-.tiptap-editor .ProseMirror p { margin: 0 0 0.5em; }
+.tiptap-editor .ProseMirror p { margin: 0 0 var(--rich-paragraph-spacing, 18px); }
 .tiptap-editor .ProseMirror p:last-child { margin-bottom: 0; }
 .tiptap-editor .ProseMirror h1 { font-size: 1.25rem; font-weight: 700; margin: 0.75em 0 0.25em; }
 .tiptap-editor .ProseMirror h2 { font-size: 1.1rem; font-weight: 600; margin: 0.65em 0 0.2em; }
@@ -74,7 +75,49 @@ type ToolbarBtn = {
   code?: boolean;
 };
 
+const ListEnterKeymap = Extension.create({
+  name: "listEnterKeymap",
+  priority: 1000,
+  addKeyboardShortcuts() {
+    return {
+      Enter: () => {
+        if (!this.editor.isActive("listItem")) return false;
+        return this.editor.commands.splitListItem("listItem");
+      },
+    };
+  },
+});
+
 const TOOLBAR: (ToolbarBtn | "divider")[] = [
+  {
+    label: "P", title: "正文格式",
+    isActive: e => e.isActive("paragraph") ?? false,
+    action: e => e.chain().focus().setParagraph().run(),
+  },
+  {
+    label: "¶+", title: "新增下一段／清單項目 (Enter)",
+    action: e => {
+      if (e.isActive("listItem")) {
+        e.chain().focus().splitListItem("listItem").run();
+        return;
+      }
+      e.chain().focus().splitBlock().run();
+    },
+  },
+  {
+    label: "×¶", title: "刪除目前段落／清單項目",
+    action: e => {
+      if (e.isActive("listItem")) {
+        e.chain().focus().deleteNode("listItem").run();
+        return;
+      }
+      if (e.isActive("paragraph")) e.chain().focus().deleteNode("paragraph").run();
+    },
+  },
+  {
+    label: "↵", title: "段內換行 (Shift+Enter)",
+    action: e => e.chain().focus().setHardBreak().run(),
+  },
   {
     label: "H1", title: "標題一",
     isActive: e => e.isActive("heading", { level: 1 }) ?? false,
@@ -152,6 +195,8 @@ interface RichTextareaProps {
   minRows?: number;
   placeholder?: string;
   className?: string;
+  lineHeight?: number;
+  paragraphSpacing?: number;
 }
 
 /** 命令式介面：供外部（例如「插入變數」）在游標處插入文字。 */
@@ -164,6 +209,8 @@ const RichTextarea = forwardRef<RichTextareaHandle, RichTextareaProps>(function 
   onChange,
   minRows = 4,
   placeholder = "",
+  lineHeight = 1.6,
+  paragraphSpacing = 18,
 }, ref) {
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
@@ -176,6 +223,7 @@ const RichTextarea = forwardRef<RichTextareaHandle, RichTextareaProps>(function 
       // Tiptap v3 StarterKit 已內建 underline，停用以避免 "Duplicate extension names" 警告
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       StarterKit.configure({ underline: false } as any),
+      ListEnterKeymap,
       Underline,
       Placeholder.configure({ placeholder }),
       Markdown.configure({ html: false, tightLists: true }),
@@ -232,6 +280,10 @@ const RichTextarea = forwardRef<RichTextareaHandle, RichTextareaProps>(function 
   }, []);
 
   const minHeight = `${minRows * 1.7 * 14 + 20}px`;
+  const spacingStyle = {
+    "--rich-line-height": String(lineHeight),
+    "--rich-paragraph-spacing": `${paragraphSpacing}px`,
+  } as CSSProperties;
 
   return (
     <div
@@ -244,7 +296,6 @@ const RichTextarea = forwardRef<RichTextareaHandle, RichTextareaProps>(function 
         style={{ background: "var(--bg-elevated)", borderBottom: "1px solid var(--border)" }}
         role="toolbar"
         aria-label="文字格式工具列"
-        onMouseDown={e => e.preventDefault()}   // 防止工具列點擊搶走 editor focus
       >
         {TOOLBAR.map((item, i) => {
           if (item === "divider") {
@@ -261,10 +312,13 @@ const RichTextarea = forwardRef<RichTextareaHandle, RichTextareaProps>(function 
               title={item.title}
               aria-label={item.title}
               aria-pressed={active}
-              onMouseDown={() => editor && item.action(editor)}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                if (editor) item.action(editor);
+              }}
               className="w-7 h-7 rounded flex items-center justify-center text-xs transition-colors"
               style={active
-                ? { color: "var(--primary)", background: "var(--primary-dim)" }
+                ? { color: "var(--primary-text)", background: "var(--primary-dim)" }
                 : { color: "var(--text-muted)", background: "transparent" }}
             >
               <span className={[
@@ -277,15 +331,21 @@ const RichTextarea = forwardRef<RichTextareaHandle, RichTextareaProps>(function 
             </button>
           );
         })}
-        <span className="ml-auto text-[10px] pr-1 flex-shrink-0" style={{ color: "var(--text-disabled)" }}>
+        <span className="ml-auto text-xs pr-1 flex-shrink-0" style={{ color: "var(--text-disabled)" }}>
           Markdown
         </span>
       </div>
 
       {/* ── 編輯區 ───────────────────────────────────────────────────────── */}
-      <div style={{ minHeight }} className="tiptap-editor">
+      <div style={{ minHeight, ...spacingStyle }} className="tiptap-editor">
         <EditorContent editor={editor} />
       </div>
+      <p
+        className="border-t px-3 py-1.5 text-xs"
+        style={{ borderColor: "var(--border)", color: "var(--text-disabled)" }}
+      >
+        Enter 或 ¶+ 建立下一段／清單項目；Shift+Enter 或 ↵ 在同一段內換行
+      </p>
     </div>
   );
 });

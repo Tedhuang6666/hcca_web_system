@@ -5,31 +5,33 @@ from __future__ import annotations
 import enum
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
     DateTime,
     Enum,
+    FetchedValue,
     ForeignKey,
     Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
 from api.models.base import TimestampMixin
-from api.models.types import JSONDict
+from api.models.types import JSONDict, JSONList
 
 if TYPE_CHECKING:
     from api.models.activity import Activity
     from api.models.org import Org
-    from api.models.regulation import Regulation
+    from api.models.school_class import SchoolClass
     from api.models.user import User
 
 
@@ -74,6 +76,8 @@ class DocumentClassification(enum.StrEnum):
     NORMAL = "normal"  # 普通
     CONFIDENTIAL = "confidential"  # 密
     SECRET = "secret"  # 機密
+    HIGHLY_CONFIDENTIAL = "highly_confidential"  # 極機密
+    ABSOLUTELY_CONFIDENTIAL = "absolutely_confidential"  # 絕對機密
 
 
 class DeclassificationCondition(enum.StrEnum):
@@ -90,10 +94,25 @@ class DocumentCategory(enum.StrEnum):
     DECREE = "decree"  # 令
     LETTER = "letter"  # 函
     ANNOUNCEMENT = "announcement"  # 公告
+    PRESENTATION = "presentation"  # 呈
     REPORT = "report"  # 報告
     RECORD = "record"  # 紀錄
     CONSULTATION = "consultation"  # 咨
     MEETING_NOTICE = "meeting_notice"  # 開會通知單
+    INSPECTION_NOTICE = "inspection_notice"  # 會勘通知單
+    PHONE_RECORD = "phone_record"  # 公務電話紀錄
+    BOOK_LETTER = "book_letter"  # 書函
+    DIRECTIVE = "directive"  # 手令／手諭
+    SIGNATURE = "signature"  # 簽
+    MEMO = "memo"  # 箋函／便簽
+    APPOINTMENT = "appointment"  # 聘書
+    CERTIFICATE = "certificate"  # 證明書
+    LICENSE = "license"  # 證書／執照
+    CONTRACT = "contract"  # 契約書
+    PROPOSAL = "proposal"  # 提案
+    SUMMARY = "summary"  # 節略
+    BRIEFING = "briefing"  # 說帖
+    FORM = "form"  # 定型化表單
     OTHER = "other"  # 其他
 
 
@@ -103,10 +122,12 @@ class RecipientType(enum.StrEnum):
     MAIN = "main"  # 受文者（主旨對象）
     PRIMARY = "primary"  # 正本
     COPY = "copy"  # 副本
+    ATTENDEE = "attendee"  # 出席者
+    OBSERVER = "observer"  # 列席者
 
 
 class DeliveryMethod(enum.StrEnum):
-    """遞送方式（系統僅儲存與顯示，不直接觸發寄送行為）"""
+    """遞送方式。Email 會在公文核准或直接發文後排入寄送佇列。"""
 
     NONE = "none"  # 未指定 / 不適用
     SYSTEM = "system"  # 線上系統下載
@@ -118,10 +139,10 @@ class DeliveryMethod(enum.StrEnum):
 class DocumentVisibility(enum.StrEnum):
     """公文可見度"""
 
-    SUBJECT_ONLY = "subject_only"  # 僅當事人（受文者 + 建立者 + 審核人）可見
-    ORG_ONLY = "org_only"  # 僅所屬機關成員可見
-    PUBLIC = "public"  # 全體登入使用者可見
-    PUBLICLY_OPEN = "publicly_open"  # 未登入亦可查看
+    SUBJECT_ONLY = "subject_only"  # 密件：建立者、建立機關上層成員與收件者可見
+    ORG_ONLY = "org_only"  # 機關可見：所屬機關全體成員可見
+    PUBLIC = "public"  # 登入後可見
+    PUBLICLY_OPEN = "publicly_open"  # 公開：未登入亦可查看（相容舊版值）
 
 
 class YearMode(enum.StrEnum):
@@ -162,6 +183,10 @@ class DocumentSerialTemplate(Base, TimestampMixin):
     )
     # 組織代碼前綴，如「嶺代」「嶺學」「嶺議」
     org_prefix: Mapped[str] = mapped_column(String(20), nullable=False)
+    # 是否沿組織樹串接上級前綴；非隸屬單位可只使用本組織前綴
+    inherit_parent_prefix: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
     # 類別字，如「生」「議」「評」
     category_char: Mapped[str] = mapped_column(String(10), nullable=False)
     # 年份制度：ROC（民國）或 CE（西元）
@@ -224,6 +249,8 @@ class DocumentTemplate(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
 
     issuer_full_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    issuer_postal_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    issuer_address: Mapped[str | None] = mapped_column(String(300), nullable=True)
     urgency: Mapped[DocumentUrgency] = mapped_column(
         Enum(
             DocumentUrgency,
@@ -251,6 +278,9 @@ class DocumentTemplate(Base, TimestampMixin):
         nullable=False,
         default=DeclassificationCondition.NONE,
     )
+    confidentiality_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     category: Mapped[DocumentCategory] = mapped_column(
         Enum(
             DocumentCategory,
@@ -262,6 +292,7 @@ class DocumentTemplate(Base, TimestampMixin):
         index=True,
     )
     subject: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    basis: Mapped[str | None] = mapped_column(Text, nullable=True)  # 依據（公告等文別使用）
     doc_description: Mapped[str | None] = mapped_column(Text, nullable=True)
     action_required: Mapped[str | None] = mapped_column(Text, nullable=True)
     content: Mapped[str] = mapped_column(Text, nullable=False, default="")
@@ -271,7 +302,9 @@ class DocumentTemplate(Base, TimestampMixin):
     meeting_chairperson: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     handler_unit: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    handler_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     file_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    classification_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     retention_period: Mapped[str | None] = mapped_column(String(100), nullable=True)
     visibility_level: Mapped[DocumentVisibility] = mapped_column(
         Enum(
@@ -318,6 +351,7 @@ class Document(Base, TimestampMixin):
         Index("ix_documents_org_status", "org_id", "status"),
         Index("ix_documents_created_by_status", "created_by", "status"),
         Index("ix_documents_status_created_at", "status", "created_at"),
+        Index("ix_documents_status_archive_at", "status", "archive_at"),
         Index("ix_documents_created_at_desc", "created_at"),
         # 全文搜尋 GIN 索引（PostgreSQL tsvector，generated column 由 migration 建立）
         Index("ix_documents_search_vector", "search_vector", postgresql_using="gin"),
@@ -330,8 +364,10 @@ class Document(Base, TimestampMixin):
     # ── 基本屬性 ────────────────────────────────────────────────────────────
     # title：系統顯示標題（可由主旨自動帶入）
     title: Mapped[str] = mapped_column(String(200), nullable=False)
-    # 發文機關全銜
+    # 發文機關全銜、地址與郵遞區號
     issuer_full_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    issuer_postal_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    issuer_address: Mapped[str | None] = mapped_column(String(300), nullable=True)
     # 速別
     urgency: Mapped[DocumentUrgency] = mapped_column(
         Enum(
@@ -380,6 +416,8 @@ class Document(Base, TimestampMixin):
 
     # ── 公文本文結構 ─────────────────────────────────────────────────────────
     subject: Mapped[str | None] = mapped_column(String(500), nullable=True)  # 主旨
+    summary: Mapped[str | None] = mapped_column(String(500), nullable=True)  # 列表摘要
+    basis: Mapped[str | None] = mapped_column(Text, nullable=True)  # 依據（公告等文別使用）
     doc_description: Mapped[str | None] = mapped_column(Text, nullable=True)  # 說明
     action_required: Mapped[str | None] = mapped_column(Text, nullable=True)  # 辦法
     # 整合性文字內容（Markdown 格式）
@@ -397,8 +435,15 @@ class Document(Base, TimestampMixin):
     handler_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
     handler_unit: Mapped[str | None] = mapped_column(String(100), nullable=True)
     handler_email: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    handler_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     # 檔號
     file_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # 分類號與收文日期字號
+    classification_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    source_document_date: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    source_document_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     # 保存年限
     retention_period: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
@@ -419,24 +464,31 @@ class Document(Base, TimestampMixin):
     issued_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )  # 發文日期
+    # 首次正式公文 Email 排入 outbox 的時間；後續修改不自動重寄，手動重寄除外。
+    recipient_email_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     due_date: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )  # 限辦日期
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    # 自動催辦（Phase C1）：每次催辦遞增、用以判斷升級時機
+    # 預約歸檔時間；到期後由 Celery 將已核准公文轉為已封存。
+    archive_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # 每次自動催辦後遞增，用以判斷升級時機。
     reminder_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )
-    # 全文搜尋向量（PostgreSQL GENERATED column，由 migration 維護，ORM 唯讀，勿賦值）
-    search_vector: Mapped[str | None] = mapped_column(TSVECTOR(), nullable=True)
+    # 全文搜尋向量（PostgreSQL GENERATED ALWAYS column，由 migration 維護，ORM 唯讀）。
+    # FetchedValue：DB 端產生，INSERT/UPDATE 不可帶值，否則 GeneratedAlwaysError。
+    search_vector: Mapped[str | None] = mapped_column(TSVECTOR(), FetchedValue(), nullable=True)
     last_reminded_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     # 頁次資訊（列印後可回填）
     page_info: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
-    # 可見度控制（主欄位；service 層須同步 is_public = visibility_level == PUBLICLY_OPEN）
+    # 可見度控制（主欄位；service 層須同步公開值至 is_public）
     visibility_level: Mapped[DocumentVisibility] = mapped_column(
         Enum(
             DocumentVisibility,
@@ -447,7 +499,7 @@ class Document(Base, TimestampMixin):
         default=DocumentVisibility.ORG_ONLY,
         index=True,
     )
-    # 唯讀欄位（由 service 層在寫入 visibility_level 時同步維持一致）
+    # 唯讀欄位（公開值與舊版 is_public 相容旗標）
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
 
     # ── 關聯鍵 ───────────────────────────────────────────────────────────────
@@ -460,6 +512,13 @@ class Document(Base, TimestampMixin):
     activity_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("activities.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    # 關聯的陳情案件；列印與寄送正式公文時會將陳情原文附於文後。
+    petition_case_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("petition_cases.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
@@ -479,7 +538,25 @@ class Document(Base, TimestampMixin):
     # 此公文公布的法規（令類公文專用，其他類型為 None）
     regulation_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("regulations.id", ondelete="SET NULL"),
+        # use_alter：documents 與 regulations 互相參照（regulations.*_document_id），打破循環。
+        ForeignKey(
+            "regulations.id",
+            ondelete="SET NULL",
+            name="fk_documents_regulation_id",
+            use_alter=True,
+        ),
+        nullable=True,
+        index=True,
+    )
+    # 此公文對應的法規修訂沿革（可用於補登既有法規的公布令）
+    regulation_revision_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "regulation_revisions.id",
+            ondelete="SET NULL",
+            name="fk_documents_regulation_revision_id",
+            use_alter=True,
+        ),
         nullable=True,
         index=True,
     )
@@ -487,8 +564,16 @@ class Document(Base, TimestampMixin):
     # ── Relationships ────────────────────────────────────────────────────────
     org: Mapped[Org] = relationship("Org")
     activity: Mapped[Activity | None] = relationship("Activity")
+    petition_case: Mapped[Any | None] = relationship(
+        "PetitionCase", foreign_keys=[petition_case_id]
+    )
     creator: Mapped[User] = relationship("User", foreign_keys=[created_by])
-    regulation: Mapped[Regulation | None] = relationship("Regulation", foreign_keys=[regulation_id])
+    regulation: Mapped[Any] = relationship("Regulation", foreign_keys=[regulation_id])
+    regulation_revision: Mapped[Any] = relationship(
+        "RegulationRevision",
+        foreign_keys=[regulation_revision_id],
+        back_populates="published_document",
+    )
     serial_template: Mapped[DocumentSerialTemplate | None] = relationship(
         "DocumentSerialTemplate", foreign_keys=[serial_template_id]
     )
@@ -496,15 +581,18 @@ class Document(Base, TimestampMixin):
         "DocumentRevision",
         back_populates="document",
         order_by="DocumentRevision.revision_number",
+        cascade="all, delete-orphan",
     )
     approvals: Mapped[list[DocumentApproval]] = relationship(
         "DocumentApproval",
         back_populates="document",
         order_by="DocumentApproval.step_order",
+        cascade="all, delete-orphan",
     )
     attachments: Mapped[list[DocumentAttachment]] = relationship(
         "DocumentAttachment",
         back_populates="document",
+        cascade="all, delete-orphan",
     )
     recipients: Mapped[list[DocumentRecipient]] = relationship(
         "DocumentRecipient",
@@ -551,6 +639,14 @@ class DocumentApproval(Base, TimestampMixin):
     __table_args__ = (
         UniqueConstraint("document_id", "step_order", name="uq_doc_approval_step"),
         Index("ix_document_approvals_status", "status"),
+        Index("ix_document_approvals_status_approver", "status", "approver_id"),
+        Index("ix_document_approvals_status_delegate", "status", "delegate_id"),
+        Index(
+            "ix_doc_approvals_pending_approver",
+            "status",
+            "approver_id",
+            postgresql_where=text("status = 'pending'"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -596,7 +692,7 @@ class DocumentApproval(Base, TimestampMixin):
         Boolean, nullable=False, default=False
     )  # 是否以代理身份操作
 
-    # 並簽 / 會辦（Phase C1）
+    # 並簽 / 會辦
     # 同 document 內共用同 parallel_group 的多筆 row 視為一組會辦
     # approval_mode: "any" = 任一通過該組推進；"all" = 全簽才推進
     parallel_group: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -613,6 +709,15 @@ class DocumentApprovalDelegation(Base, TimestampMixin):
     """公文簽核代理授權（請假代行職權）。"""
 
     __tablename__ = "document_approval_delegations"
+    __table_args__ = (
+        Index(
+            "ix_doc_approval_delegation_lookup",
+            "principal_user_id",
+            "org_id",
+            "is_active",
+            "start_at",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     org_id: Mapped[uuid.UUID] = mapped_column(
@@ -646,14 +751,16 @@ class DocumentApprovalDelegation(Base, TimestampMixin):
 class DocumentRecipient(Base, TimestampMixin):
     """受文者清單（正本 / 副本 / 主旨對象）。
 
-    可指向特定使用者（target_user_id）或機關（target_org_id），
-    若兩者皆 None 則 name 為純文字外部單位（如：教育部）。
+    可指向特定使用者、自治組織或班級；若三者皆 None 則 name 為純文字
+    外部單位（如：教育部）。
     """
 
     __tablename__ = "document_recipients"
     __table_args__ = (
         Index("ix_document_recipients_target_user", "target_user_id"),
         Index("ix_document_recipients_target_org", "target_org_id"),
+        Index("ix_document_recipients_target_class", "target_class_id"),
+        Index("ix_document_recipients_doc_type", "document_id", "recipient_type"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -671,8 +778,12 @@ class DocumentRecipient(Base, TimestampMixin):
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)  # 單位或個人名稱
     email: Mapped[str | None] = mapped_column(String(200), nullable=True)  # 發文後寄送聯絡信箱
+    # target_org_id 對應的職位 ID；公文核准時解析該職位當日有效且有信箱的成員。
+    email_position_ids: Mapped[list[str]] = mapped_column(
+        JSONList, nullable=False, default=list, server_default="[]"
+    )
 
-    # 結構化目標：擇一指定（兩者皆 None 即為純文字外部單位）
+    # 結構化目標：擇一指定（三者皆 None 即為純文字外部單位）
     target_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -681,6 +792,11 @@ class DocumentRecipient(Base, TimestampMixin):
     target_org_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("orgs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    target_class_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("school_classes.id", ondelete="SET NULL"),
         nullable=True,
     )
     delivery_method: Mapped[DeliveryMethod] = mapped_column(
@@ -697,6 +813,9 @@ class DocumentRecipient(Base, TimestampMixin):
     document: Mapped[Document] = relationship("Document", back_populates="recipients")
     target_user: Mapped[User | None] = relationship("User", foreign_keys=[target_user_id])
     target_org: Mapped[Org | None] = relationship("Org", foreign_keys=[target_org_id])
+    target_class: Mapped[SchoolClass | None] = relationship(
+        "SchoolClass", foreign_keys=[target_class_id]
+    )
 
 
 # ── 附件 ──────────────────────────────────────────────────────────────────────
@@ -723,6 +842,7 @@ class DocumentAttachment(Base, TimestampMixin):
     )  # 本地路徑 or S3 key
     content_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     file_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)  # bytes
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     link_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)  # 外部連結 URL
     uploaded_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False

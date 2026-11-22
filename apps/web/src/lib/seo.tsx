@@ -4,11 +4,32 @@ import { headers } from "next/headers";
 import { BRAND_TITLE, BRANDING } from "@/lib/branding";
 import { SOCIAL_IMAGE, SOCIAL_SITE_NAME } from "@/lib/social-metadata";
 
-export const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL || process.env.FRONTEND_BASE_URL || "http://localhost:3000";
+const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "0.0.0.0"]);
+
+function resolveSiteUrl(configuredUrl: string | undefined): string {
+  const productionFallback = `https://${BRANDING.domain}`;
+  const developmentFallback = "http://localhost:3000";
+  const fallback = process.env.NODE_ENV === "development" ? developmentFallback : productionFallback;
+  const value = configuredUrl?.trim();
+  if (!value) return fallback;
+
+  try {
+    const url = new URL(value);
+    if (!["http:", "https:"].includes(url.protocol)) return fallback;
+    if (process.env.NODE_ENV !== "development" && LOCAL_HOSTNAMES.has(url.hostname)) {
+      return productionFallback;
+    }
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return fallback;
+  }
+}
+
+export const SITE_URL = resolveSiteUrl(
+  process.env.NEXT_PUBLIC_SITE_URL || process.env.FRONTEND_BASE_URL,
+);
 
 export const SITE_BRAND = BRAND_TITLE;
-export const DEFAULT_SEO_DESCRIPTION = BRANDING.description;
 
 export function absoluteUrl(path: string) {
   return new URL(path, SITE_URL).toString();
@@ -64,13 +85,12 @@ export function pageMetadata({
       card: "summary_large_image",
       title: fullTitle,
       description,
-      images: [image],
+      images: [{ url: image, alt: title }],
     },
   };
 }
 
 export async function JsonLd({ data }: { data: Record<string, unknown> }) {
-  // 帶上 middleware 的當次 nonce，這樣 enforce CSP 時這段 ld+json 不會被擋。
   const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <script

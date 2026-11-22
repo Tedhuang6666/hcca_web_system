@@ -6,10 +6,13 @@ import asyncio
 import contextlib
 import json
 import logging
+import uuid
 from collections import defaultdict
 from datetime import UTC, datetime
 
+import redis.asyncio as aioredis
 from fastapi import WebSocket
+from redis.asyncio.client import PubSub
 
 from api.core.config import settings
 
@@ -55,7 +58,9 @@ class ConnectionManager:
     ) -> None:
         self._rooms: dict[str, set[WebSocket]] = defaultdict(set)
         self._ip_connections: dict[str, set[WebSocket]] = defaultdict(set)
-        self._ws_meta: dict[WebSocket, tuple[str, str]] = {}  # ws -> (room, ip)
+        # ws -> (room, ip, auth session id, access token expiry timestamp)
+        self._ws_meta: dict[WebSocket, tuple[str, str, str | None, int | None]] = {}
+        self._seen_session_rooms: set[tuple[str, str]] = set()
         self._last_pong: dict[WebSocket, float] = {}
         self._heartbeat_tasks: dict[WebSocket, asyncio.Task] = {}
 
@@ -90,13 +95,29 @@ class ConnectionManager:
         if len(self._rooms.get(room, ())) >= self._per_room_max:
             raise WSCapacityError("per_room", f"此房間連線數已達上限 ({self._per_room_max})")
 
-    async def connect(self, websocket: WebSocket, room: str, client_ip: str) -> None:
+    async def connect(
+        self,
+        websocket: WebSocket,
+        room: str,
+        client_ip: str,
+        *,
+        session_id: str | None = None,
+        access_expires_at: int | None = None,
+    ) -> None:
         """檢查上限 → accept → 註冊 → 啟動心跳任務。"""
         self._check_capacity(room, client_ip)
         await websocket.accept()
         self._rooms[room].add(websocket)
         self._ip_connections[client_ip].add(websocket)
-        self._ws_meta[websocket] = (room, client_ip)
+        self._ws_meta[websocket] = (room, client_ip, session_id, access_expires_at)
+        if session_id:
+            session_room = (session_id, room)
+            if session_room in self._seen_session_rooms:
+                from api.core.prometheus_metrics import record_websocket_reconnect
+
+                record_websocket_reconnect()
+            else:
+                self._seen_session_rooms.add(session_room)
         self._last_pong[websocket] = asyncio.get_event_loop().time()
         self._heartbeat_tasks[websocket] = asyncio.create_task(self._heartbeat_loop(websocket))
         logger.debug(
@@ -107,16 +128,22 @@ class ConnectionManager:
             self.room_count(room),
             len(self._ip_connections[client_ip]),
         )
+        from api.core.prometheus_metrics import set_websocket_connections
+
+        set_websocket_connections(self.total_connections())
 
     def disconnect(self, websocket: WebSocket, room: str) -> None:
         """移除連線並停心跳任務；若房間/IP 集合空了則清除 key。"""
-        self._rooms[room].discard(websocket)
-        if not self._rooms[room]:
+        room_connections = self._rooms.get(room)
+        if room_connections is None:
+            return
+        room_connections.discard(websocket)
+        if not room_connections:
             del self._rooms[room]
 
         meta = self._ws_meta.pop(websocket, None)
         if meta:
-            _, client_ip = meta
+            _, client_ip, _, _ = meta
             self._ip_connections[client_ip].discard(websocket)
             if not self._ip_connections[client_ip]:
                 del self._ip_connections[client_ip]
@@ -127,6 +154,9 @@ class ConnectionManager:
             hb_task.cancel()
 
         logger.debug("WS 連線中斷 room=%s remaining=%d", room, self.room_count(room))
+        from api.core.prometheus_metrics import set_websocket_connections
+
+        set_websocket_connections(self.total_connections())
 
     def notify_pong(self, websocket: WebSocket) -> None:
         """前端回 pong 時呼叫，更新最後活躍時間。"""
@@ -142,6 +172,12 @@ class ConnectionManager:
                     return
                 last = self._last_pong.get(websocket, 0.0)
                 now = asyncio.get_event_loop().time()
+                meta = self._ws_meta.get(websocket)
+                if meta and meta[3] is not None and datetime.now(UTC).timestamp() >= meta[3]:
+                    logger.info("WS access token expired; closing for refresh")
+                    with contextlib.suppress(Exception):
+                        await websocket.close(code=4002, reason="access token expired")
+                    return
                 if now - last > self._hb_timeout:
                     logger.info("WS 心跳超時，主動斷線 idle=%.0fs", now - last)
                     with contextlib.suppress(Exception):
@@ -159,7 +195,7 @@ class ConnectionManager:
     # 多 worker / 多節點環境下，本機 dict 只看得到自己的連線。
     # broadcast_to_room / broadcast_all 預設經 Redis pub/sub 重新分發，讓所有
     # worker 都有機會把訊息傳給自己持有的連線。WS_PUBSUB_BACKEND=memory 時
-    # （單 worker 開發 / 測試）走原本的 local-only 路徑。
+    # 僅廣播至目前 worker，供單 worker 開發與測試使用。
 
     async def broadcast_to_room(self, room: str, message: dict) -> None:
         """廣播給指定房間：經 Redis 跨 worker；無 broker 時退回本機。"""
@@ -193,6 +229,19 @@ class ConnectionManager:
     async def send_personal(self, websocket: WebSocket, message: dict) -> None:
         """傳送訊息給單一連線（不經 pub/sub）。"""
         await websocket.send_json(message)
+
+    async def disconnect_session(self, session_id: str, *, reason: str = "session revoked") -> int:
+        """主動關閉指定 auth session 的所有本機 WebSocket 連線。"""
+        targets = [
+            (websocket, meta[0])
+            for websocket, meta in self._ws_meta.items()
+            if meta[2] == session_id
+        ]
+        for websocket, room in targets:
+            with contextlib.suppress(Exception):
+                await websocket.close(code=4001, reason=reason)
+            self.disconnect(websocket, room)
+        return len(targets)
 
     # ── 統計 ────────────────────────────────────────────────────────────────
 
@@ -232,6 +281,7 @@ class ConnectionManager:
     ) -> dict:
         """建立標準化 WebSocket 訊息格式"""
         return {
+            "event_id": uuid.uuid4().hex,
             "type": msg_type,
             "room": room,
             "sender": sender,
@@ -257,16 +307,31 @@ class _RedisBroker:
 
     def __init__(self, mgr: ConnectionManager) -> None:
         self._mgr = mgr
-        self._pubsub = None
+        self._pubsub: PubSub | None = None
+        self._redis_client: aioredis.Redis | None = None
         self._task: asyncio.Task | None = None
         self._stopping = asyncio.Event()
 
     async def start(self) -> None:
-        from api.core.security import redis_client
-
-        self._pubsub = redis_client.pubsub()
+        self._redis_client = aioredis.from_url(
+            str(settings.REDIS_REALTIME_URL or settings.REDIS_URL),
+            encoding="utf-8",
+            decode_responses=True,
+            max_connections=settings.REDIS_REALTIME_MAX_CONNECTIONS,
+            socket_timeout=settings.REDIS_SOCKET_TIMEOUT,
+            socket_connect_timeout=settings.REDIS_SOCKET_TIMEOUT,
+            health_check_interval=settings.REDIS_HEALTH_CHECK_INTERVAL,
+        )
+        self._pubsub = self._redis_client.pubsub()
         await self._pubsub.subscribe(_PUBSUB_CHANNEL)
         self._task = asyncio.create_task(self._listen(), name="ws_pubsub_listener")
+        from api.core.prometheus_metrics import (
+            set_redis_client_healthy,
+            set_websocket_broker_healthy,
+        )
+
+        set_redis_client_healthy("realtime", True)
+        set_websocket_broker_healthy(True)
         logger.debug("WS Redis pub/sub listener started")
 
     async def stop(self) -> None:
@@ -279,25 +344,48 @@ class _RedisBroker:
             with contextlib.suppress(Exception):
                 await self._pubsub.unsubscribe(_PUBSUB_CHANNEL)
                 await self._pubsub.aclose()
+        if self._redis_client is not None:
+            with contextlib.suppress(Exception):
+                await self._redis_client.aclose()
+            self._redis_client = None
+        from api.core.prometheus_metrics import (
+            set_redis_client_healthy,
+            set_websocket_broker_healthy,
+        )
+
+        set_redis_client_healthy("realtime", False)
+        set_websocket_broker_healthy(False)
         logger.debug("WS Redis pub/sub listener stopped")
 
     async def publish(self, payload: dict) -> None:
-        from api.core.security import redis_client
-
         try:
-            await redis_client.publish(_PUBSUB_CHANNEL, json.dumps(payload))
+            if self._redis_client is None:
+                raise RuntimeError("WS realtime Redis 尚未初始化")
+            await self._redis_client.publish(_PUBSUB_CHANNEL, json.dumps(payload))
         except Exception:
-            # publish 失敗：退回本機廣播以維持單機可用性
-            logger.warning("WS pub/sub publish failed, falling back to local", exc_info=True)
+            # 僅送目前 worker，絕不宣稱已送到其他 worker；客戶端會以 REST 重取權威資料。
+            logger.warning(
+                "WS realtime degraded; publishing local-only notification", exc_info=True
+            )
+            from api.core.prometheus_metrics import (
+                set_redis_client_healthy,
+                set_websocket_broker_healthy,
+            )
+
+            set_redis_client_healthy("realtime", False)
+            set_websocket_broker_healthy(False)
             target = payload.get("target")
             message = payload.get("message", {})
             if target == "room":
                 await self._mgr._local_broadcast_to_room(payload.get("room", ""), message)
             elif target == "all":
                 await self._mgr._local_broadcast_all(message)
+            elif target == "session_disconnect":
+                await self._mgr.disconnect_session(str(payload.get("session_id", "")))
 
     async def _listen(self) -> None:
-        assert self._pubsub is not None
+        if self._pubsub is None:
+            raise RuntimeError("WebSocket pubsub 尚未初始化")
         try:
             while not self._stopping.is_set():
                 msg = await self._pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
@@ -318,13 +406,47 @@ class _RedisBroker:
                     await self._mgr._local_broadcast_to_room(payload.get("room", ""), message)
                 elif target == "all":
                     await self._mgr._local_broadcast_all(message)
+                elif target == "session_disconnect":
+                    await self._mgr.disconnect_session(str(payload.get("session_id", "")))
         except asyncio.CancelledError:
             pass
         except Exception:
+            from api.core.prometheus_metrics import (
+                set_redis_client_healthy,
+                set_websocket_broker_healthy,
+            )
+
+            set_redis_client_healthy("realtime", False)
+            set_websocket_broker_healthy(False)
             logger.exception("WS pub/sub listener crashed")
 
 
 _broker: _RedisBroker | None = None
+
+
+async def publish_room_from_worker(room: str, message: dict) -> None:
+    """背景工作直接發布至 API 的房間頻道，不依賴 FastAPI lifespan 初始化。
+
+    Celery 不持有瀏覽器連線，也不應在每個 asyncio.run 中啟動訂閱 listener。
+    獨立的短生命週期 publisher 讓 Redis 故障向上傳播，由 outbox 保留重試。
+    """
+    if settings.WS_PUBSUB_BACKEND != "redis":
+        await manager.broadcast_to_room(room, message)
+        return
+    client = aioredis.from_url(
+        str(settings.REDIS_REALTIME_URL or settings.REDIS_URL),
+        encoding="utf-8",
+        decode_responses=True,
+        max_connections=1,
+        socket_timeout=settings.REDIS_SOCKET_TIMEOUT,
+        socket_connect_timeout=settings.REDIS_SOCKET_TIMEOUT,
+    )
+    try:
+        await client.publish(
+            _PUBSUB_CHANNEL, json.dumps({"target": "room", "room": room, "message": message})
+        )
+    finally:
+        await client.aclose()
 
 
 async def setup_broker() -> None:
@@ -340,6 +462,13 @@ async def setup_broker() -> None:
         await broker.start()
     except Exception:
         logger.exception("Failed to start WS pub/sub broker; falling back to local-only")
+        from api.core.prometheus_metrics import (
+            set_redis_client_healthy,
+            set_websocket_broker_healthy,
+        )
+
+        set_redis_client_healthy("realtime", False)
+        set_websocket_broker_healthy(False)
         return
     _broker = broker
 
@@ -350,3 +479,11 @@ async def shutdown_broker() -> None:
         return
     await _broker.stop()
     _broker = None
+
+
+async def disconnect_session_websockets(session_id: str) -> None:
+    """將 session 撤銷訊號傳給所有 worker；realtime 故障時只保證本機斷線。"""
+    if _broker is not None:
+        await _broker.publish({"target": "session_disconnect", "session_id": session_id})
+        return
+    await manager.disconnect_session(session_id)

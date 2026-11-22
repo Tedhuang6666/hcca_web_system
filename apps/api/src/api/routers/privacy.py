@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from typing import Annotated
 
@@ -26,8 +27,12 @@ from api.dependencies.permissions import require_permission
 from api.models.user import User
 from api.services import audit as audit_svc
 from api.services import privacy as svc
+from api.services.account_protection import protected_target
 
 router = APIRouter(prefix="/admin/privacy", tags=["管理員 / 個資處理"])
+
+# 匯出檔命名見 services/privacy.py 的 export_user_data：export_{user_id}_{yyyymmdd_HHMMSS}.zip
+_EXPORT_FILENAME_USER_ID = re.compile(r"^export_([0-9a-fA-F-]{36})_")
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 PrivacyUser = Annotated[User, Depends(require_permission(PermissionCode.SYSTEM_PRIVACY))]
@@ -49,7 +54,7 @@ class ExportFileOut(BaseModel):
 
 class AnonymizeBody(BaseModel):
     # 二次確認；前端要求使用者打字「假名化」才送出
-    confirm_token: str = Field(..., min_length=1, max_length=64)
+    confirm_phrase: str = Field(..., min_length=1, max_length=64)
 
 
 class AnonymizeOut(BaseModel):
@@ -103,10 +108,16 @@ async def download_export(
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="找不到匯出檔") from exc
 
+    # entity_id 欄位是 String(36)，只夠放 UUID；filename 本身（含時間戳）會超長
+    # 而讓這支端點永遠以 500 失敗（曾是真實 bug）。從固定命名格式取回目標
+    # user_id，格式不符時退回截斷字串，至少不讓下載功能整個壞掉。
+    match = _EXPORT_FILENAME_USER_ID.match(filename)
+    entity_id = match.group(1) if match else filename[:36]
+
     await audit_svc.record(
         db,
         entity_type="user",
-        entity_id=filename,
+        entity_id=entity_id,
         action="privacy.export_download",
         actor_id=str(requester.id),
         actor_email=requester.email,
@@ -129,11 +140,12 @@ async def anonymize_user(
     user_id: uuid.UUID, body: AnonymizeBody, db: DbDep, requester: PrivacyUser
 ) -> AnonymizeOut:
     # 二次確認：前端 UI 要求使用者打字「假名化」
-    if body.confirm_token != "假名化":
+    if body.confirm_phrase != "假名化":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="confirm_token 必須為「假名化」字串",
+            detail="confirm_phrase 必須為「假名化」字串",
         )
+    await protected_target(db, requester=requester, target_id=user_id, action_label="假名化")
     try:
         result = await svc.anonymize_user(db, user_id=user_id, requested_by_email=requester.email)
     except ValueError as exc:

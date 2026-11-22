@@ -1,29 +1,45 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { recentActionPoint, shouldReduceMotion } from "@/lib/motion";
+import styles from "./InteractionMotion.module.css";
 
-type ModalSize = "sm" | "md" | "lg" | "xl" | "full";
+const FOCUSABLE_SELECTOR = [
+  "button:not([disabled])",
+  "[href]",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[tabindex]:not([tabindex='-1'])",
+].join(",");
+
+/** 目前開啟中的對話框（由下而上），只有最上層回應 Esc 與 Tab。 */
+const openDialogStack: HTMLElement[] = [];
+
+function focusableElements(container: HTMLElement): HTMLElement[] {
+  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
+    .filter((element) => element.getClientRects().length > 0 || element === document.activeElement);
+}
+
+type ModalSize = "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "full";
 
 interface ModalProps {
   title: string;
   onClose: () => void;
   children: ReactNode;
-  /** 標準尺寸（會自動對應 max-width）。優先於 maxWidthClassName。 */
   size?: ModalSize;
-  /** 行動裝置（<640px）自動全屏（預設 true）。 */
   mobileFullscreen?: boolean;
-  /** 底部 sticky 動作列。 */
   footer?: ReactNode;
-  /** @deprecated 使用 size 取代。為了不破壞既有 callers 而保留。 */
-  maxWidthClassName?: string;
 }
 
 const SIZE_CLASS: Record<ModalSize, string> = {
   sm: "max-w-sm",
   md: "max-w-md",
   lg: "max-w-lg",
-  xl: "max-w-2xl",
+  xl: "max-w-xl",
+  "2xl": "max-w-2xl",
+  "3xl": "max-w-3xl",
   full: "max-w-full",
 };
 
@@ -34,59 +50,151 @@ export default function Modal({
   size,
   mobileFullscreen = true,
   footer,
-  maxWidthClassName,
 }: ModalProps) {
   const [mounted, setMounted] = useState(false);
+  const [entered, setEntered] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const surfaceRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     setMounted(true);
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
   }, []);
 
-  // ESC 鍵關閉
+  // 進場前量出觸發點：公文紙從使用者按下的位置展開，而不是憑空出現在畫面中央。
+  useLayoutEffect(() => {
+    const surface = surfaceRef.current;
+    if (!mounted || !surface || shouldReduceMotion()) return;
+    const point = recentActionPoint();
+    if (!point) return;
+    const rect = surface.getBoundingClientRect();
+    surface.style.setProperty("--sheet-origin", `${Math.round(point.x - rect.left)}px ${Math.round(point.y - rect.top)}px`);
+    surface.dataset.origin = "trigger";
+  }, [mounted]);
+
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    if (!mounted) return;
+    const frame = requestAnimationFrame(() => setEntered(true));
+    return () => cancelAnimationFrame(frame);
+  }, [mounted]);
+
+  useEffect(() => {
+    if (!mounted || !dialogRef.current) return;
+    const dialog = dialogRef.current;
+    previousFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    const previousOverflow = document.body.style.overflow;
+    const inertSiblings = new Map<HTMLElement, { inert: boolean; ariaHidden: string | null }>();
+    document.body.style.overflow = "hidden";
+    for (const child of Array.from(document.body.children)) {
+      if (child === dialog) continue;
+      const element = child as HTMLElement;
+      inertSiblings.set(element, {
+        inert: element.hasAttribute("inert"),
+        ariaHidden: element.getAttribute("aria-hidden"),
+      });
+      element.setAttribute("inert", "");
+      element.setAttribute("aria-hidden", "true");
+    }
+    const focusTarget = dialog.querySelector<HTMLElement>("[data-autofocus]")
+      ?? closeButtonRef.current
+      ?? focusableElements(dialog)[0]
+      ?? dialog;
+    const focusFrame = requestAnimationFrame(() => focusTarget.focus());
+
+    return () => {
+      cancelAnimationFrame(focusFrame);
+      document.body.style.overflow = previousOverflow;
+      for (const [element, previous] of inertSiblings) {
+        if (previous.inert) element.setAttribute("inert", "");
+        else element.removeAttribute("inert");
+        if (previous.ariaHidden === null) element.removeAttribute("aria-hidden");
+        else element.setAttribute("aria-hidden", previous.ariaHidden);
+      }
+      if (previousFocusRef.current?.isConnected) previousFocusRef.current.focus();
+      previousFocusRef.current = null;
+    };
+  }, [mounted]);
+
+  useEffect(() => {
+    if (!mounted || !dialogRef.current) return;
+    const dialog = dialogRef.current;
+    openDialogStack.push(dialog);
+    const handler = (e: KeyboardEvent) => {
+      // 疊開的對話框（例如 Modal 內再開確認框）只由最上層處理按鍵，避免一次 Esc 全部關閉。
+      if (openDialogStack[openDialogStack.length - 1] !== dialog) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const focusable = focusableElements(dialog);
+      if (focusable.length === 0) {
+        e.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
     document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
+    return () => {
+      document.removeEventListener("keydown", handler);
+      const index = openDialogStack.lastIndexOf(dialog);
+      if (index !== -1) openDialogStack.splice(index, 1);
+    };
+  }, [mounted, onClose]);
 
   if (!mounted) return null;
 
-  const widthClass = size ? SIZE_CLASS[size] : (maxWidthClassName ?? "max-w-lg");
+  const widthClass = SIZE_CLASS[size ?? "lg"];
 
-  // 行動裝置全屏：sm: 之下用 100% / 100vh
   const mobileClass = mobileFullscreen
-    ? "h-full max-h-full sm:my-auto sm:h-auto sm:max-h-[calc(100vh-2rem)]"
-    : "my-auto max-h-[calc(100vh-2rem)]";
+    ? "h-full max-h-full sm:my-auto sm:h-auto sm:max-h-[calc(100dvh-2rem)]"
+    : "my-auto max-h-[calc(100dvh-2rem)]";
   const mobileRadius = mobileFullscreen ? "rounded-none sm:rounded-2xl" : "rounded-2xl";
 
   return createPortal(
     <div
-      className={`fixed inset-0 z-50 flex justify-center overflow-y-auto sm:items-center ${mobileFullscreen ? "items-stretch p-0 sm:p-4" : "items-start p-4"}`}
+      ref={dialogRef}
+      data-modal-root="true"
+      data-entered={entered ? "true" : "false"}
+      className={`${styles.modalRoot} modal-root fixed inset-0 z-50 flex justify-center overflow-y-auto sm:items-center ${mobileFullscreen ? "items-stretch p-0 sm:p-4" : "items-start p-4"}`}
       style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}
       role="dialog"
       aria-modal="true"
-      aria-label={title}
+      aria-labelledby={titleId}
+      tabIndex={-1}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
-        className={`flex w-full ${widthClass} flex-col shadow-2xl ${mobileClass} ${mobileRadius}`}
+        ref={surfaceRef}
+        className={`${styles.modalSurface} modal-surface ${mobileFullscreen ? "modal-surface-mobile" : ""} flex w-full ${widthClass} flex-col shadow-2xl ${mobileClass} ${mobileRadius}`}
         style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
       >
         <div
-          className="flex flex-shrink-0 items-center justify-between gap-3 p-5 pb-3"
+          className={`${styles.modalHeader} modal-header flex flex-shrink-0 items-center justify-between gap-3 p-5 pb-3`}
           style={{ borderBottom: "1px solid var(--border)" }}
         >
-          <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+          <h2 id={titleId} className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
             {title}
           </h2>
           <button
+            ref={closeButtonRef}
+            type="button"
             onClick={onClose}
-            className="w-7 h-7 flex items-center justify-center rounded-lg transition-colors hover:opacity-70"
+            className="modal-close-button flex h-11 w-11 items-center justify-center rounded-lg transition-colors"
             style={{ color: "var(--text-muted)" }}
             aria-label="關閉"
           >
@@ -105,10 +213,10 @@ export default function Modal({
             </svg>
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-5 pt-4">{children}</div>
+        <div className={`${styles.modalContent} modal-content min-h-0 flex-1 overflow-y-auto p-5 pt-4`}>{children}</div>
         {footer && (
           <div
-            className="flex flex-shrink-0 items-center justify-end gap-2 px-5 py-3 flex-wrap"
+            className={`${styles.modalFooter} modal-footer flex flex-shrink-0 items-center justify-end gap-2 px-5 py-3 flex-wrap`}
             style={{ borderTop: "1px solid var(--border)", background: "var(--bg-elevated)" }}
           >
             {footer}

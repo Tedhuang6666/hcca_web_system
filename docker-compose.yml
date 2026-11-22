@@ -1,3 +1,10 @@
+# Shared development database/Redis connections. Production uses docker-compose.runtime.yml.
+x-development-environment: &development-env
+  ENVIRONMENT: development
+  DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
+  DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
+  REDIS_URL: redis://:${REDIS_PASSWORD:-dev-redis-change-in-prod}@redis:6379/0
+
 # ── 共用 API 設定（anchor） ────────────────────────────────────────────────────
 x-api-common: &api-common
   build:
@@ -6,32 +13,41 @@ x-api-common: &api-common
   env_file:
     - .env
   environment:
-    ENVIRONMENT: development
+    <<: *development-env
+    PRIVACY_EXPORT_DIR: /app/privacy-exports
     DEBUG: "true"
     ENABLE_API_DOCS: "true"
     ALLOWED_ORIGINS: '["http://localhost:3000","http://127.0.0.1:3000"]'
     ALLOWED_HOSTS: '["localhost","127.0.0.1","api"]'
     COOKIE_SECURE: "false"
-    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
-    DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
     DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
     DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-20}
     DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
     DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
     HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
-    REDIS_URL: redis://redis:6379/0
+    SENTRY_DSN: ${SENTRY_DSN:-}
+    SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.1}
+    SENTRY_PROFILES_SAMPLE_RATE: ${SENTRY_PROFILES_SAMPLE_RATE:-0.0}
+    SENTRY_AUTH_TOKEN: ${SENTRY_AUTH_TOKEN:-}
+    SENTRY_ORG: ${SENTRY_ORG:-}
+    SENTRY_PROJECT: ${SENTRY_PROJECT:-}
+    POSTHOG_API_KEY: ${POSTHOG_API_KEY:-}
+    POSTHOG_HOST: ${POSTHOG_HOST:-https://us.i.posthog.com}
+    POSTHOG_PERSONAL_API_KEY: ${POSTHOG_PERSONAL_API_KEY:-}
+    OTEL_ENABLED: ${OTEL_ENABLED:-false}
+    OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+    APP_RELEASE: ${APP_RELEASE:-}
+    # Bot secrets belong only to the standalone discord-bot service.
+    DISCORD_BOT_TOKEN: ""
+    HCCA_DISCORD_BOT_API_KEY: ""
   depends_on:
     db:
       condition: service_healthy
     redis:
       condition: service_healthy
   volumes:
-    # PDF generation uses direct @font-face file URLs. STKAITI avoids the KaiU
-    # glyph component offset bug in WeasyPrint while keeping a Kai-style face.
-    - /mnt/c/Windows/Fonts/STKAITI.TTF:/usr/share/fonts/truetype/hcca/STKAITI.TTF:ro
-    - /mnt/c/Windows/Fonts/SIMLI.TTF:/usr/share/fonts/truetype/hcca/SIMLI.TTF:ro
-    - /usr/share/fonts/opentype/noto-custom:/usr/share/fonts/opentype/noto-custom:ro
     - ./uploads:/app/uploads
+    - privacy-exports:/app/privacy-exports
 
 services:
   # ── PostgreSQL ────────────────────────────────────────────────
@@ -48,6 +64,7 @@ services:
       -c effective_cache_size=512MB
       -c work_mem=16MB
       -c maintenance_work_mem=64MB
+      -c log_min_duration_statement=1000
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
@@ -67,24 +84,31 @@ services:
     image: redis:7-alpine
     container_name: campus_redis
     restart: unless-stopped
+    # SECURITY: 開發環境也啟用密碼認證，避免 container 逃脫後可無認證存取 session/queue。
+    # 正式環境請在 .env 設定 REDIS_PASSWORD（prod compose 已強制 :?）。
+    command: redis-server --appendonly yes --requirepass "${REDIS_PASSWORD:-dev-redis-change-in-prod}"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-dev-redis-change-in-prod}
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
       - redisdata:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"${REDIS_PASSWORD:-dev-redis-change-in-prod}\" ping"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   # ── Meilisearch（全站搜尋；未設定時 API 會自動 fallback DB 搜尋） ───────
   meilisearch:
-    image: getmeili/meilisearch:v1.13
+    image: getmeili/meilisearch:v1.14.0
     container_name: campus_meilisearch
     restart: unless-stopped
     environment:
       MEILI_ENV: development
-      MEILI_MASTER_KEY: ${MEILISEARCH_API_KEY:-}
+      # SECURITY: 即使在開發環境也設定 master key，避免 container 逃脫後可無認證存取搜尋索引。
+      # 未設定時使用開發用預設值；正式環境請在 .env 明確覆寫。
+      MEILI_MASTER_KEY: ${MEILISEARCH_API_KEY:-dev-meili-key-change-in-prod}
     ports:
       - "127.0.0.1:7700:7700"
     volumes:
@@ -96,20 +120,17 @@ services:
     container_name: campus_api
     restart: unless-stopped
     environment:
-      ENVIRONMENT: development
+      <<: *development-env
       DEBUG: "true"
       ENABLE_API_DOCS: "true"
       ALLOWED_ORIGINS: '["http://localhost:3000","http://127.0.0.1:3000"]'
       ALLOWED_HOSTS: '["localhost","127.0.0.1","api"]'
       COOKIE_SECURE: "false"
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
-      DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
       DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
       DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-20}
       DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
       DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
-      REDIS_URL: redis://redis:6379/0
       REDIS_MAX_CONNECTIONS: ${REDIS_MAX_CONNECTIONS:-50}
       REDIS_SOCKET_TIMEOUT: ${REDIS_SOCKET_TIMEOUT:-2.0}
       REDIS_HEALTH_CHECK_INTERVAL: ${REDIS_HEALTH_CHECK_INTERVAL:-30}
@@ -125,15 +146,16 @@ services:
       SENTRY_DSN: ${SENTRY_DSN:-}
       SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.1}
       SENTRY_PROFILES_SAMPLE_RATE: ${SENTRY_PROFILES_SAMPLE_RATE:-0.0}
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-hcca-api}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+      APP_RELEASE: ${APP_RELEASE:-}
       MEILISEARCH_URL: http://meilisearch:7700
       MEILISEARCH_API_KEY: ${MEILISEARCH_API_KEY:-}
       MEILISEARCH_INDEX_PREFIX: ${MEILISEARCH_INDEX_PREFIX:-hcca}
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@example.com}
-      PASSKEY_RP_ID: ${PASSKEY_RP_ID:-localhost}
-      PASSKEY_RP_NAME: ${PASSKEY_RP_NAME:-HCCA 校園自治整合平台}
-      PASSKEY_ORIGIN: ${PASSKEY_ORIGIN:-http://localhost:3000}
       GUNICORN_WORKERS: "4"
       GUNICORN_KEEPALIVE: "5"
       GUNICORN_TIMEOUT: "60"
@@ -142,14 +164,22 @@ services:
     healthcheck:
       test:
         [
-          "CMD-SHELL",
-          "python -c \"import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3).status == 200 else 1)\"",
+          "CMD",
+          "curl",
+          "--fail",
+          "--silent",
+          "--show-error",
+          "--max-time",
+          "5",
+          "--output",
+          "/dev/null",
+          "http://127.0.0.1:8000/ready",
         ]
       interval: 15s
       timeout: 5s
       retries: 5
       start_period: 30s
-    # 開發模式可 override CMD 為：uvicorn api:app --reload --host 0.0.0.0 --port 8000
+    # 開發模式可 override CMD 為：uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 
   # ── FastAPI Admin 通道（管理員優先 / Load Shed 關閉） ─────────
   # 與 api 共用 image 與 DB/Redis，但綁不同 port、worker 數較少、永遠不 shed。
@@ -159,17 +189,18 @@ services:
     container_name: campus_api_admin
     restart: unless-stopped
     environment:
-      ENVIRONMENT: development
+      <<: *development-env
       DEBUG: "true"
       ENABLE_API_DOCS: "true"
       ALLOWED_ORIGINS: '["http://localhost:3000","http://127.0.0.1:3000"]'
       ALLOWED_HOSTS: '["localhost","127.0.0.1","api-admin"]'
       COOKIE_SECURE: "false"
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
-      DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
       DB_POOL_SIZE: ${ADMIN_DB_POOL_SIZE:-5}
       DB_MAX_OVERFLOW: ${ADMIN_DB_MAX_OVERFLOW:-5}
-      REDIS_URL: redis://redis:6379/0
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: hcca-api-admin
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+      APP_RELEASE: ${APP_RELEASE:-}
       REDIS_MAX_CONNECTIONS: ${REDIS_MAX_CONNECTIONS:-50}
       TRUST_CLOUDFLARE_PROXY: ${TRUST_CLOUDFLARE_PROXY:-false}
       CF_TRUSTED_PROXIES: ${CF_TRUSTED_PROXIES:-[]}
@@ -186,16 +217,24 @@ services:
     healthcheck:
       test:
         [
-          "CMD-SHELL",
-          "python -c \"import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8001/ready', timeout=3).status == 200 else 1)\"",
+          "CMD",
+          "curl",
+          "--fail",
+          "--silent",
+          "--show-error",
+          "--max-time",
+          "5",
+          "--output",
+          "/dev/null",
+          "http://127.0.0.1:8001/ready",
         ]
       interval: 15s
       timeout: 5s
       retries: 5
       start_period: 30s
 
-  # ── Celery Worker（核心 queue：default + documents） ───────────
-  # 多 queue 隔離：email retry 卡住不會拖累 meal close、模組 recovery 等流程。
+  # ── Celery Worker（核心 queue：default） ───────────
+  # 多 queue 隔離：email retry 卡住不會拖累備份與模組 recovery 等流程。
   celery-worker:
     <<: *api-common
     container_name: campus_celery_worker
@@ -204,28 +243,25 @@ services:
       python -m celery -A api.core.celery_app.celery_app worker
       --loglevel=info
       --concurrency=4
-      --queues=default,documents
+      --queues=default
       -n core@%h
     environment:
-      ENVIRONMENT: development
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
-      DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
+      <<: *development-env
       DB_POOL_SIZE: ${CELERY_DB_POOL_SIZE:-5}
       DB_MAX_OVERFLOW: ${CELERY_DB_MAX_OVERFLOW:-10}
       DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
       DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
-      REDIS_URL: redis://redis:6379/0
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: hcca-celery-core
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+      APP_RELEASE: ${APP_RELEASE:-}
+      PROMETHEUS_METRICS_PORT: "9100"
+    # 不設 healthcheck：`inspect ping` 每 30s 起重量級 python 行程、等 broker 回覆，
+    # 忙時 ping 卡住會堆積吃光 CPU；且 Docker 判 unhealthy 自動重啟反而打掉忙碌 worker。
+    # 存活交給 restart: unless-stopped。
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "python -m celery -A api.core.celery_app.celery_app inspect ping -d core@$$HOSTNAME -t 5 >/dev/null",
-        ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+      disable: true
 
   # ── Celery Worker（email queue：信件 + 摘要） ─────────────────
   celery-worker-email:
@@ -239,27 +275,22 @@ services:
       --queues=email
       -n email@%h
     environment:
-      ENVIRONMENT: development
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
-      DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
+      <<: *development-env
       DB_POOL_SIZE: ${CELERY_DB_POOL_SIZE:-3}
       DB_MAX_OVERFLOW: ${CELERY_DB_MAX_OVERFLOW:-5}
       DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
       DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
-      REDIS_URL: redis://redis:6379/0
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: hcca-celery-email
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+      APP_RELEASE: ${APP_RELEASE:-}
+      PROMETHEUS_METRICS_PORT: "9101"
+    # 同 worker：不設 healthcheck，避免 inspect ping 堆積與 unhealthy 自動重啟。
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "python -m celery -A api.core.celery_app.celery_app inspect ping -d email@$$HOSTNAME -t 5 >/dev/null",
-        ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+      disable: true
 
-  # ── Celery Worker（util queue：學餐 / 備份 / 模組恢復） ───────
+  # ── Celery Worker（util queue：備份 / 模組恢復） ───────
   celery-worker-util:
     <<: *api-common
     container_name: campus_celery_worker_util
@@ -268,87 +299,85 @@ services:
       python -m celery -A api.core.celery_app.celery_app worker
       --loglevel=info
       --concurrency=2
-      --queues=meal,backup,recovery
+      --queues=backup,recovery
       -n util@%h
     environment:
-      ENVIRONMENT: development
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
-      DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
+      <<: *development-env
       DB_POOL_SIZE: ${CELERY_DB_POOL_SIZE:-3}
       DB_MAX_OVERFLOW: ${CELERY_DB_MAX_OVERFLOW:-5}
       DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
       DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
-      REDIS_URL: redis://redis:6379/0
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: hcca-celery-util
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+      APP_RELEASE: ${APP_RELEASE:-}
+      PROMETHEUS_METRICS_PORT: "9102"
+    # 同 worker：不設 healthcheck，避免 inspect ping 堆積與 unhealthy 自動重啟。
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "python -m celery -A api.core.celery_app.celery_app inspect ping -d util@$$HOSTNAME -t 5 >/dev/null",
-        ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+      disable: true
 
   # ── Celery Beat（定時排程） ───────────────────────────────────
   celery-beat:
     <<: *api-common
     container_name: campus_celery_beat
     restart: unless-stopped
-    command: >
-      python -m celery -A api.core.celery_app.celery_app beat
-      --loglevel=info
-      --scheduler celery.beat:PersistentScheduler
-      --pidfile=/tmp/celerybeat.pid
+    # --schedule 必須指到可寫的 /tmp（celerybeat volume）；預設會寫在 CWD /app，
+    # 而映像中 /app 對非 root 執行使用者唯讀 → beat 啟動即 _gdbm Permission denied 崩潰。
+    # pidfile 則放非持久化的 /dev/shm：beat 以 PID 1 執行會把「1」寫進 pidfile，若放在
+    # 持久化 volume，重啟後 celery 讀到舊「1」→ 誤判「已在執行（pid: 1）」卡重啟迴圈。
+    # 啟動清理 pidfile 與舊排程檔，避免已刪除的任務從持久化狀態重新投遞。
+    # exec 讓 celery 接手 PID 1。
+    command:
+      - sh
+      - -c
+      - >
+        rm -f /dev/shm/celerybeat.pid /tmp/celerybeat.pid /tmp/celerybeat-schedule* &&
+        exec python -m celery -A api.core.celery_app.celery_app beat
+        --loglevel=INFO
+        --scheduler celery.beat:PersistentScheduler
+        --schedule=/tmp/celerybeat-schedule
+        --pidfile=/dev/shm/celerybeat.pid
     environment:
-      ENVIRONMENT: development
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
-      DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
+      <<: *development-env
       DB_POOL_SIZE: ${CELERY_BEAT_DB_POOL_SIZE:-2}
       DB_MAX_OVERFLOW: ${CELERY_BEAT_DB_MAX_OVERFLOW:-2}
       DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
       DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
-      REDIS_URL: redis://redis:6379/0
     volumes:
       - celerybeat:/tmp  # 持久化 beat schedule 狀態
+    # beat 不設 healthcheck：pidfile 存在不代表排程仍在運作，且判 unhealthy 自動重啟
+    # 反而易與 PID 1 殘留 pidfile 互相作用觸發重啟迴圈。存活交給 restart: unless-stopped。
     healthcheck:
-      test: ["CMD-SHELL", "test -f /tmp/celerybeat.pid && kill -0 \"$$(cat /tmp/celerybeat.pid)\""]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
+      disable: true
 
   # ── Discord Bot Worker ───────────────────────────────────────
   discord-bot:
-    <<: *api-common
+    build:
+      context: .
+      dockerfile: apps/discord-bot/Dockerfile
     container_name: campus_discord_bot
     restart: unless-stopped
     command: >
-      sh -c 'if [ -z "$$DISCORD_BOT_TOKEN" ]; then
-      echo "DISCORD_BOT_TOKEN not set; discord-bot idle";
+      sh -c 'if [ -z "$$DISCORD_BOT_TOKEN" ] || [ -z "$$HCCA_API_KEY" ]; then
+      echo "DISCORD_BOT_TOKEN or HCCA_API_KEY not set; discord-bot idle";
       tail -f /dev/null;
-      else python -m api.discord_worker;
+      else python -m hcca_discord_bot;
       fi'
+    env_file:
+      - .env
     environment:
-      ENVIRONMENT: development
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
-      DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
-      DB_POOL_SIZE: ${DISCORD_DB_POOL_SIZE:-3}
-      DB_MAX_OVERFLOW: ${DISCORD_DB_MAX_OVERFLOW:-5}
-      REDIS_URL: redis://redis:6379/0
+      HCCA_API_URL: ${HCCA_DISCORD_BOT_API_URL:-http://api:8000}
+      HCCA_API_KEY: ${HCCA_DISCORD_BOT_API_KEY:-}
+      HCCA_API_CF_ACCESS_CLIENT_ID: ${HCCA_DISCORD_BOT_CF_ACCESS_CLIENT_ID:-}
+      HCCA_API_CF_ACCESS_CLIENT_SECRET: ${HCCA_DISCORD_BOT_CF_ACCESS_CLIENT_SECRET:-}
       FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:3000}
-      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
-      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
       DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:-}
-      DISCORD_REDIRECT_URI: ${DISCORD_REDIRECT_URI:-http://localhost:8000/discord/callback}
       DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-}
       DISCORD_COMMAND_SYNC_GUILD_ID: ${DISCORD_COMMAND_SYNC_GUILD_ID:-}
     depends_on:
       api:
-        condition: service_healthy
-      redis:
         condition: service_healthy
 
   # ── Next.js（standalone 生產模式） ───────────────────────────
@@ -359,7 +388,12 @@ services:
       args:
         # 留空時瀏覽器使用同源 /api，由 Next.js 轉發到 API
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
-        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-ws://localhost:8000}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-}
+        NEXT_PUBLIC_SHOP_LOOKBOOK_BASE_URL: ${NEXT_PUBLIC_SHOP_LOOKBOOK_BASE_URL:-}
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
+        NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE: ${NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE:-0.05}
+        NEXT_PUBLIC_POSTHOG_KEY: ${NEXT_PUBLIC_POSTHOG_KEY:-}
+        NEXT_PUBLIC_POSTHOG_HOST: ${NEXT_PUBLIC_POSTHOG_HOST:-https://us.i.posthog.com}
     container_name: campus_web
     restart: unless-stopped
     ports:
@@ -367,6 +401,15 @@ services:
     environment:
       NODE_ENV: production
       API_INTERNAL_URL: http://api:8000
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE: ${NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE:-0.05}
+      NEXT_PUBLIC_POSTHOG_HOST: ${NEXT_PUBLIC_POSTHOG_HOST:-https://us.i.posthog.com}
+      NEXT_PUBLIC_ENVIRONMENT: ${ENVIRONMENT:-production}
+      APP_RELEASE: ${APP_RELEASE:-}
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: ${OTEL_WEB_SERVICE_NAME:-hcca-web}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_WEB_OTLP_ENDPOINT:-http://otel-collector:4318}
+      OTEL_WEB_TRACES_SAMPLE_RATE: ${OTEL_WEB_TRACES_SAMPLE_RATE:-0.05}
     depends_on:
       api:
         condition: service_healthy
@@ -391,9 +434,181 @@ services:
       celery --broker=redis://redis:6379/0 flower
       --port=5555
       --url-prefix=flower
-      --basic-auth=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-changeme}
+      --basic-auth=${FLOWER_USER:?FLOWER_USER must be set}:${FLOWER_PASSWORD:?FLOWER_PASSWORD must be set}
     ports:
       - "127.0.0.1:5555:5555"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ── 可觀測性堆疊（docker compose --profile observability up -d） ────────
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    container_name: campus_prometheus
+    restart: unless-stopped
+    profiles: ["observability"]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-15d}
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./observability/prometheus/development/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheusdata:/prometheus
+    depends_on:
+      alertmanager:
+        condition: service_started
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    container_name: campus_alertmanager
+    restart: unless-stopped
+    profiles: ["observability"]
+    command:
+      - sh
+      - -c
+      - >-
+        sed "s|__ALERTMANAGER_DISCORD_WEBHOOK_URL__|$${ALERTMANAGER_DISCORD_WEBHOOK_URL:-http://127.0.0.1/disabled}|g"
+        /etc/alertmanager/alertmanager.yml.tmpl > /tmp/alertmanager.yml &&
+        exec /bin/alertmanager --config.file=/tmp/alertmanager.yml
+    environment:
+      ALERTMANAGER_DISCORD_WEBHOOK_URL: ${ALERTMANAGER_DISCORD_WEBHOOK_URL:-}
+    ports:
+      - "127.0.0.1:9093:9093"
+    volumes:
+      - ./observability/alertmanager/alertmanager.yml.tmpl:/etc/alertmanager/alertmanager.yml.tmpl:ro
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    container_name: campus_grafana
+    restart: unless-stopped
+    profiles: ["observability"]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-change-me}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "127.0.0.1:3001:3000"
+    volumes:
+      - grafanadata:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+
+  loki:
+    image: grafana/loki:3.5.0
+    container_name: campus_loki
+    restart: unless-stopped
+    profiles: ["observability"]
+    command: -config.file=/etc/loki/loki-config.yml
+    ports:
+      - "127.0.0.1:3100:3100"
+    volumes:
+      - ./observability/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - lokidata:/loki
+
+  promtail:
+    image: grafana/promtail:3.5.0
+    container_name: campus_promtail
+    restart: unless-stopped
+    profiles: ["observability"]
+    command: -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./observability/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - promtailpositions:/tmp
+    depends_on:
+      - loki
+
+  tempo:
+    image: grafana/tempo:2.8.2
+    container_name: campus_tempo
+    restart: unless-stopped
+    profiles: ["observability"]
+    command: -config.file=/etc/tempo/tempo.yml
+    ports:
+      - "127.0.0.1:3200:3200"
+      - "127.0.0.1:4320:4317"
+      - "127.0.0.1:4321:4318"
+    volumes:
+      - ./observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - tempodata:/var/tempo
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.134.0
+    container_name: campus_otel_collector
+    restart: unless-stopped
+    profiles: ["observability"]
+    command: --config=/etc/otelcol-contrib/config.yml
+    ports:
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+      - "127.0.0.1:8889:8889"
+    volumes:
+      - ./observability/otel-collector/config.yml:/etc/otelcol-contrib/config.yml:ro
+    depends_on:
+      - tempo
+
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    container_name: campus_node_exporter
+    restart: unless-stopped
+    profiles: ["observability"]
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/rootfs
+    ports:
+      - "127.0.0.1:9103:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.52.1
+    container_name: campus_cadvisor
+    restart: unless-stopped
+    profiles: ["observability"]
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.17.1
+    container_name: campus_postgres_exporter
+    restart: unless-stopped
+    profiles: ["observability"]
+    environment:
+      DATA_SOURCE_NAME: >-
+        postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}?sslmode=disable
+    ports:
+      - "127.0.0.1:9187:9187"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.75.0
+    container_name: campus_redis_exporter
+    restart: unless-stopped
+    profiles: ["observability"]
+    environment:
+      REDIS_ADDR: redis://redis:6379
+      REDIS_USER: default
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-dev-redis-change-in-prod}
+    ports:
+      - "127.0.0.1:9121:9121"
     depends_on:
       redis:
         condition: service_healthy
@@ -402,4 +617,10 @@ volumes:
   pgdata:
   redisdata:
   meilidata:
+  privacy-exports:
   celerybeat:
+  prometheusdata:
+  grafanadata:
+  lokidata:
+  promtailpositions:
+  tempodata:

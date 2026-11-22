@@ -1,0 +1,2258 @@
+"use client";
+
+import NumberInput from "@/components/ui/NumberInput";
+
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
+import { toast } from "sonner";
+import Modal from "@/components/ui/Modal";
+import { usePrompt } from "@/components/ui/ConfirmDialog";
+import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
+import type { RichTextareaHandle } from "@/components/ui/RichTextarea";
+const RichTextarea = dynamic(() => import("@/components/ui/RichTextarea"), { ssr: false });
+import RecipientPicker from "@/components/email/RecipientPicker";
+import { EmailRecipientDataTable } from "@/components/email/EmailRecipientDataTable";
+import { EmailAttachmentList } from "@/components/email/EmailAttachmentList";
+import { EmailLivePreview } from "@/components/email/EmailLivePreview";
+import SafeImagePreview from "@/components/email/SafeImagePreview";
+import { useDraftAutosave } from "@/hooks/useDraftAutosave";
+import { ApiError, emailApi, apiErrorMessage } from "@/lib/api";
+import { prepareEmailPreviewHtml } from "@/lib/email-preview";
+import type {
+  EmailAttachmentOut,
+  EmailBlock,
+  EmailButton,
+  EmailButtonStyle,
+  EmailCardRow,
+  EmailConditionalRule,
+  EmailComposePayload,
+  EmailMessageDetailOut,
+  EmailMessageOut,
+  EmailPreflightOut,
+  EmailRecipientListOut,
+  EmailRecipientVariableInput,
+  EmailTemplateOut,
+  EmailVariableDefinition,
+  RecipientSelector,
+} from "@/lib/types";
+
+import {
+  AUTOSAVE_KEY,
+  BUTTON_STYLE_OPTIONS,
+  COMPOSE_STEPS,
+  CONDITIONAL_OPERATOR_OPTIONS,
+  CONFIRM_THRESHOLD,
+  EMPTY_RECIPIENTS,
+  PRESETS,
+  SYSTEM_VARIABLES,
+  TEMPLATE_KEY,
+  buildRecipientVariablesFromRows,
+  countAdditionalRecipientRows,
+  normalizeVariableKey,
+  type ComposeDraft,
+  type RecipientRow,
+  type SavedTemplate,
+  type TemplateContent,
+} from "./emailComposeConfig";
+
+function ComposeInner() {
+  const router = useRouter();
+  const prompt = usePrompt();
+  const searchParams = useSearchParams();
+  const draftId = searchParams.get("draft");
+  const [activeDraftId, setActiveDraftId] = useState<string | null>(draftId);
+  const requestedTemplateId = searchParams.get("template");
+  const requestedListId = searchParams.get("list");
+
+  const [subject, setSubject] = useState("");
+  const [currentStep, setCurrentStep] = useState(1);
+  const [heading, setHeading] = useState("");
+  const [previewText, setPreviewText] = useState("");
+  const [accentColor, setAccentColor] = useState("#111827");
+  const [backgroundColor, setBackgroundColor] = useState("#eef2f7");
+  const [contentBackgroundColor, setContentBackgroundColor] = useState("#ffffff");
+  const [bodyLineHeight, setBodyLineHeight] = useState(1.6);
+  const [paragraphSpacing, setParagraphSpacing] = useState(18);
+  const [footerText, setFooterText] = useState("");
+  const [showSystemFooter, setShowSystemFooter] = useState(true);
+  const [bannerImageUrl, setBannerImageUrl] = useState("");
+  const [bannerImageAlt, setBannerImageAlt] = useState("");
+  const [body, setBody] = useState("");
+  const [cardRows, setCardRows] = useState<EmailCardRow[]>([]);
+  const [buttons, setButtons] = useState<EmailButton[]>([]);
+  const [blocks, setBlocks] = useState<EmailBlock[]>([]);
+  const [variableDefinitions, setVariableDefinitions] = useState<EmailVariableDefinition[]>([]);
+  const [conditionalRules, setConditionalRules] = useState<EmailConditionalRule[]>([]);
+  const [previewVariables, setPreviewVariables] = useState<Record<string, string>>({});
+  const [recipientRows, setRecipientRows] = useState<RecipientRow[]>([
+    { email: "", name: "", variables: {} },
+  ]);
+  const [pasteTableOpen, setPasteTableOpen] = useState(false);
+  const [pasteTableText, setPasteTableText] = useState("");
+  const [previewRecipientIndex, setPreviewRecipientIndex] = useState(0);
+  const [recipients, setRecipients] = useState<RecipientSelector>(EMPTY_RECIPIENTS);
+
+  // 「插入變數」用：記住最後聚焦的文字欄位，將 {{ key }} 插入游標處
+  const subjectRef = useRef<HTMLInputElement>(null);
+  const headingRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<RichTextareaHandle>(null);
+  const recipientTableBottomRef = useRef<HTMLDivElement>(null);
+  const lastFocusRef = useRef<"subject" | "heading" | "body">("body");
+  const [scheduledAt, setScheduledAt] = useState("");
+
+  const [count, setCount] = useState<number | null>(null);
+  const [sampleNames, setSampleNames] = useState<string[]>([]);
+  const [previewHtml, setPreviewHtml] = useState("");
+  const [previewError, setPreviewError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [savedTemplates, setSavedTemplates] = useState<SavedTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [platformTemplates, setPlatformTemplates] = useState<EmailTemplateOut[]>([]);
+  const [recentMessages, setRecentMessages] = useState<EmailMessageOut[]>([]);
+  const [draftMessages, setDraftMessages] = useState<EmailMessageOut[]>([]);
+  const [recentMessageId, setRecentMessageId] = useState("");
+  const [recipientLists, setRecipientLists] = useState<EmailRecipientListOut[]>([]);
+  const [platformTemplateId, setPlatformTemplateId] = useState("");
+  const [recipientListId, setRecipientListId] = useState("");
+  const [attachments, setAttachments] = useState<EmailAttachmentOut[]>([]);
+  const [retainedAttachmentIds, setRetainedAttachmentIds] = useState<string[]>([]);
+  const [trackOpens, setTrackOpens] = useState(true);
+  const [trackClicks, setTrackClicks] = useState(true);
+  const [preflightResult, setPreflightResult] = useState<EmailPreflightOut | null>(null);
+  const [sanitizedPreviewHtml, setSanitizedPreviewHtml] = useState("");
+  useEffect(() => {
+    if (!previewHtml || typeof window === "undefined") {
+      setSanitizedPreviewHtml("");
+      return;
+    }
+    let cancelled = false;
+    prepareEmailPreviewHtml(previewHtml)
+      .then((html) => { if (!cancelled) setSanitizedPreviewHtml(html); })
+      .catch(() => { if (!cancelled) setSanitizedPreviewHtml(""); });
+    return () => { cancelled = true; };
+  }, [previewHtml]);
+
+  const loadPlatformResources = useCallback(() => {
+    Promise.all([
+      emailApi.listTemplates(),
+      emailApi.listRecipientLists(),
+      emailApi.listMessages({ limit: 30 }),
+    ])
+      .then(([templates, lists, messages]) => {
+        setPlatformTemplates(templates);
+        setRecipientLists(lists);
+        setRecentMessages(messages);
+      })
+      .catch((e) =>
+        toast.error(apiErrorMessage(e, "載入郵件資源失敗")),
+      );
+    emailApi
+      .listDrafts()
+      .then(setDraftMessages)
+      .catch((e) =>
+        toast.error(apiErrorMessage(e, "載入草稿失敗")),
+      );
+  }, []);
+
+  useEffect(() => {
+    loadPlatformResources();
+  }, [loadPlatformResources]);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(TEMPLATE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as SavedTemplate[];
+      if (Array.isArray(parsed)) setSavedTemplates(parsed);
+    } catch {
+      setSavedTemplates([]);
+    }
+  }, []);
+
+  const persistTemplates = useCallback((rows: SavedTemplate[]) => {
+    setSavedTemplates(rows);
+    window.localStorage.setItem(TEMPLATE_KEY, JSON.stringify(rows));
+  }, []);
+
+  // 載入帳號同步草稿並完整還原內容與收件資料。
+  useEffect(() => {
+    setActiveDraftId(draftId);
+    if (!draftId) return;
+    emailApi
+      .getMessage(draftId)
+      .then((m) => {
+        setSubject(m.subject);
+        setHeading(m.heading);
+        setPreviewText(m.preview_text ?? "");
+        setAccentColor(m.accent_color ?? "#111827");
+        setBackgroundColor(m.background_color ?? "#eef2f7");
+        setContentBackgroundColor(m.content_background_color ?? "#ffffff");
+        setBodyLineHeight(m.body_line_height ?? 1.6);
+        setParagraphSpacing(m.paragraph_spacing ?? 18);
+        setFooterText(m.footer_text ?? "");
+        setShowSystemFooter(m.show_system_footer ?? true);
+        setBannerImageUrl(m.banner_image_url ?? "");
+        setBannerImageAlt(m.banner_image_alt ?? "");
+        setBody(m.body);
+        setCardRows(m.card_rows as unknown as EmailCardRow[]);
+        // 舊草稿可能只有單一 CTA，無 buttons：自動轉成一顆主要按鈕。
+        const mButtons = m.buttons as unknown as EmailButton[] | undefined;
+        if (mButtons && mButtons.length > 0) {
+          setButtons(mButtons);
+        } else if (m.cta_url || m.cta_label) {
+          setButtons([{ label: m.cta_label ?? "", url: m.cta_url ?? "", style: "primary" }]);
+        } else {
+          setButtons([]);
+        }
+        setBlocks(m.blocks as unknown as EmailBlock[] ?? []);
+        setConditionalRules(m.conditional_rules ?? []);
+        setRecipients((m.recipient_spec as RecipientSelector) ?? EMPTY_RECIPIENTS);
+        setRetainedAttachmentIds(m.attachment_ids ?? []);
+        setVariableDefinitions(m.variable_definitions as unknown as EmailVariableDefinition[]);
+        const rows = (m.recipient_variables ?? []).map((r) => ({
+          email: (r.email as string | null | undefined) ?? "",
+          name: (r.name as string | null | undefined) ?? "",
+          variables: { ...(r.variables as Record<string, string> ?? {}) },
+          userId: (r.user_id as string | null | undefined) ?? undefined,
+        }));
+        setRecipientRows(rows);
+      })
+      .catch((e) => toast.error(apiErrorMessage(e, "載入草稿失敗")));
+  }, [draftId]);
+
+  // 離開頁面或非自然關閉（關閉分頁、重新整理、切到背景）時自動暫存草稿至本機；
+  // useDraftAutosave 內建 pagehide / beforeunload / visibilitychange 監聽。
+  const restoreDraft = useCallback((d: ComposeDraft) => {
+    setSubject(d.subject);
+    setHeading(d.heading);
+    setPreviewText(d.previewText ?? "");
+    setAccentColor(d.accentColor ?? "#111827");
+    setBackgroundColor(d.backgroundColor ?? "#eef2f7");
+    setContentBackgroundColor(d.contentBackgroundColor ?? "#ffffff");
+    setBodyLineHeight(d.bodyLineHeight ?? 1.6);
+    setParagraphSpacing(d.paragraphSpacing ?? 18);
+    setFooterText(d.footerText ?? "");
+    setShowSystemFooter(d.showSystemFooter ?? true);
+    setBannerImageUrl(d.bannerImageUrl ?? "");
+    setBannerImageAlt(d.bannerImageAlt ?? "");
+    setBody(d.body);
+    setCardRows(d.cardRows);
+    setButtons(d.buttons ?? []);
+    setBlocks(d.blocks ?? []);
+    setVariableDefinitions(d.variableDefinitions);
+    setConditionalRules(d.conditionalRules ?? []);
+    setPreviewVariables(d.previewVariables);
+    setRecipientRows(d.recipientRows ?? []);
+    toast.info("已還原上次未送出的內容");
+  }, []);
+
+  const isDraftEmpty = useCallback(
+    (d: ComposeDraft) =>
+      !d.subject.trim() &&
+      !d.heading.trim() &&
+      !d.bannerImageUrl.trim() &&
+      !d.bannerImageAlt.trim() &&
+      !d.body.trim() &&
+      d.cardRows.length === 0 &&
+      (d.buttons?.length ?? 0) === 0 &&
+      (d.blocks?.length ?? 0) === 0 &&
+      d.variableDefinitions.length === 0 &&
+      (d.conditionalRules?.length ?? 0) === 0 &&
+      (d.recipientRows?.length ?? 0) === 0,
+    [],
+  );
+
+  const { clearDraft, lastSavedAt } = useDraftAutosave<ComposeDraft>({
+    key: AUTOSAVE_KEY,
+    value: {
+      subject,
+      heading,
+      previewText,
+      accentColor,
+      backgroundColor,
+      contentBackgroundColor,
+      bodyLineHeight,
+      paragraphSpacing,
+      footerText,
+      showSystemFooter,
+      bannerImageUrl,
+      bannerImageAlt,
+      body,
+      cardRows,
+      buttons,
+      blocks,
+      variableDefinitions,
+      conditionalRules,
+      previewVariables,
+      recipientRows,
+    },
+    enabled: !draftId,
+    onRestore: restoreDraft,
+    isEmpty: isDraftEmpty,
+  });
+
+  const buildTemplateContent = useCallback(
+    (): TemplateContent => ({
+      subject,
+      heading,
+      previewText,
+      accentColor,
+      backgroundColor,
+      contentBackgroundColor,
+      bodyLineHeight,
+      paragraphSpacing,
+      footerText,
+      showSystemFooter,
+      bannerImageUrl,
+      bannerImageAlt,
+      body,
+      cardRows,
+      buttons,
+      blocks,
+      variableDefinitions,
+      conditionalRules,
+      previewVariables,
+    }),
+    [
+      subject,
+      heading,
+      previewText,
+      accentColor,
+      backgroundColor,
+      contentBackgroundColor,
+      bodyLineHeight,
+      paragraphSpacing,
+      footerText,
+      showSystemFooter,
+      bannerImageUrl,
+      bannerImageAlt,
+      body,
+      cardRows,
+      buttons,
+      blocks,
+      variableDefinitions,
+      conditionalRules,
+      previewVariables,
+    ],
+  );
+
+  const buildRecipientVariables = useCallback(
+    (): EmailRecipientVariableInput[] =>
+      buildRecipientVariablesFromRows(recipientRows, variableDefinitions),
+    [recipientRows, variableDefinitions],
+  );
+
+  const buildPayload = useCallback(
+    (): EmailComposePayload => ({
+      subject: subject.trim(),
+      heading: heading.trim(),
+      preview_text: previewText.trim(),
+      accent_color: accentColor,
+      background_color: backgroundColor,
+      content_background_color: contentBackgroundColor,
+      body_line_height: bodyLineHeight,
+      paragraph_spacing: paragraphSpacing,
+      footer_text: footerText.trim(),
+      show_system_footer: showSystemFooter,
+      banner_image_url: bannerImageUrl.trim(),
+      banner_image_alt: bannerImageAlt.trim(),
+      body,
+      card_rows: cardRows.filter((r) => r.label.trim() && r.value.trim()),
+      cta_label: "",
+      cta_url: "",
+      buttons: buttons
+        .filter((b) => b.url.trim())
+        .map((b) => ({ label: b.label.trim(), url: b.url.trim(), style: b.style })),
+      blocks: blocks.filter(
+        (b) =>
+          b.type === "divider" ||
+          (b.type === "image" && (b.url ?? "").trim()) ||
+          (b.type === "text" && (b.md ?? "").trim()),
+      ),
+      recipients,
+      variable_definitions: variableDefinitions.filter((v) => v.key.trim()),
+      conditional_rules: conditionalRules,
+      preview_variables: {
+        ...previewVariables,
+        ...(recipientRows[previewRecipientIndex]?.variables ?? {}),
+      },
+      preview_recipient: recipientRows[previewRecipientIndex]
+        ? {
+            user_id: recipientRows[previewRecipientIndex].userId ?? null,
+            email: recipientRows[previewRecipientIndex].email,
+            name: recipientRows[previewRecipientIndex].name,
+            variables: recipientRows[previewRecipientIndex].variables,
+          }
+        : null,
+      recipient_variables: buildRecipientVariables(),
+      template_id: platformTemplateId || null,
+      recipient_list_id: recipientListId || null,
+      attachment_ids: Array.from(
+        new Set([...retainedAttachmentIds, ...attachments.map((item) => item.id)]),
+      ),
+      track_opens: trackOpens,
+      track_clicks: trackClicks,
+    }),
+    [
+      subject,
+      heading,
+      previewText,
+      accentColor,
+      backgroundColor,
+      contentBackgroundColor,
+      bodyLineHeight,
+      paragraphSpacing,
+      footerText,
+      showSystemFooter,
+      bannerImageUrl,
+      bannerImageAlt,
+      body,
+      cardRows,
+      buttons,
+      blocks,
+      recipients,
+      variableDefinitions,
+      conditionalRules,
+      previewVariables,
+      recipientRows,
+      previewRecipientIndex,
+      platformTemplateId,
+      recipientListId,
+      attachments,
+      retainedAttachmentIds,
+      trackOpens,
+      trackClicks,
+      buildRecipientVariables,
+    ],
+  );
+
+  // 收件人預覽（debounce）
+  useEffect(() => {
+    const t = setTimeout(() => {
+      emailApi
+        .previewRecipients(recipients)
+        .then((r) => {
+          setCount(r.recipient_count);
+          setSampleNames(r.sample_names);
+        })
+        .catch(() => {
+          setCount(null);
+          setSampleNames([]);
+        });
+    }, 400);
+    return () => clearTimeout(t);
+  }, [recipients]);
+
+  // 信件預覽 HTML（debounce）
+  useEffect(() => {
+    const controller = new AbortController();
+    if (!subject.trim()) {
+      setPreviewHtml("");
+      setPreviewError("");
+      return () => controller.abort();
+    }
+    const t = setTimeout(() => {
+      emailApi
+        .preview(buildPayload(), controller.signal)
+        .then((r) => {
+          setPreviewHtml(r.html);
+          setPreviewError("");
+        })
+        .catch((error) => {
+          if (controller.signal.aborted) return;
+          setPreviewHtml("");
+          setPreviewError(error instanceof ApiError ? error.message : "預覽產生失敗");
+        });
+    }, 900);
+    return () => {
+      clearTimeout(t);
+      controller.abort();
+    };
+  }, [subject, heading, bannerImageUrl, bannerImageAlt, body, cardRows, buttons, blocks, buildPayload]);
+
+  const addRow = () => setCardRows((rows) => [...rows, { label: "", value: "" }]);
+  const updateRow = (i: number, patch: Partial<EmailCardRow>) =>
+    setCardRows((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  const removeRow = (i: number) =>
+    setCardRows((rows) => rows.filter((_, idx) => idx !== i));
+
+  const addVariable = () =>
+    setVariableDefinitions((rows) => [
+      ...rows,
+      { key: "", label: "", required: true, default_value: "" },
+    ]);
+  const updateVariableName = (i: number, rawName: string) => {
+    const oldKey = variableDefinitions[i]?.key ?? "";
+    const key = normalizeVariableKey(rawName);
+    setVariableDefinitions((rows) =>
+      rows.map((row, idx) => (idx === i ? { ...row, key, label: key } : row)),
+    );
+    if (oldKey === key) return;
+    setPreviewVariables((vars) => {
+      const next = { ...vars };
+      if (oldKey && oldKey in next) {
+        next[key] = next[oldKey];
+        delete next[oldKey];
+      }
+      return next;
+    });
+    setRecipientRows((rows) =>
+      rows.map((row) => {
+        const variables = { ...row.variables };
+        if (oldKey && oldKey in variables) {
+          variables[key] = variables[oldKey];
+          delete variables[oldKey];
+        }
+        return { ...row, variables };
+      }),
+    );
+    setConditionalRules((rules) =>
+      rules.map((rule) => ({
+        ...rule,
+        condition_key: rule.condition_key === oldKey ? key : rule.condition_key,
+        target_key: rule.target_key === oldKey ? key : rule.target_key,
+      })),
+    );
+  };
+  const removeVariable = (i: number) => {
+    const key = variableDefinitions[i]?.key;
+    setVariableDefinitions((rows) => rows.filter((_, idx) => idx !== i));
+    if (key) {
+      setPreviewVariables((vars) => {
+        const next = { ...vars };
+        delete next[key];
+        return next;
+      });
+      setRecipientRows((rows) =>
+        rows.map((row) => {
+          const variables = { ...row.variables };
+          delete variables[key];
+          return { ...row, variables };
+        }),
+      );
+      setConditionalRules((rules) =>
+        rules.filter((rule) => rule.condition_key !== key && rule.target_key !== key),
+      );
+    }
+  };
+
+  const addConditionalRule = () => {
+    const firstKey = variableDefinitions.find((variable) => variable.key.trim())?.key ?? "";
+    setConditionalRules((rules) => [
+      ...rules,
+      {
+        condition_key: firstKey,
+        operator: "equals",
+        condition_value: "",
+        target_key: firstKey,
+        target_value: "",
+      },
+    ]);
+  };
+
+  const updateConditionalRule = (index: number, patch: Partial<EmailConditionalRule>) => {
+    setConditionalRules((rules) =>
+      rules.map((rule, ruleIndex) => (ruleIndex === index ? { ...rule, ...patch } : rule)),
+    );
+  };
+
+  const applyPreset = (key: string) => {
+    const preset = PRESETS.find((p) => p.key === key);
+    if (!preset) return;
+    setHeading(preset.heading);
+    setCardRows(preset.rows);
+    // 套用情境時保留既有按鈕網址（若有），只在尚無按鈕時放一顆主要按鈕。
+    setButtons((prev) =>
+      prev.length > 0 ? prev : [{ label: preset.ctaLabel, url: "", style: "primary" }],
+    );
+  };
+
+  const applyTemplate = (template: SavedTemplate) => {
+    setSubject(template.subject);
+    setHeading(template.heading);
+    setPreviewText(template.previewText ?? "");
+    setAccentColor(template.accentColor ?? "#111827");
+    setBackgroundColor(template.backgroundColor ?? "#eef2f7");
+    setContentBackgroundColor(template.contentBackgroundColor ?? "#ffffff");
+    setBodyLineHeight(template.bodyLineHeight ?? 1.6);
+    setParagraphSpacing(template.paragraphSpacing ?? 18);
+    setFooterText(template.footerText ?? "");
+    setShowSystemFooter(template.showSystemFooter ?? true);
+    setBannerImageUrl(template.bannerImageUrl);
+    setBannerImageAlt(template.bannerImageAlt);
+    setBody(template.body);
+    setCardRows(template.cardRows);
+    setButtons(template.buttons);
+    setBlocks(template.blocks);
+    setVariableDefinitions(template.variableDefinitions);
+    setConditionalRules(template.conditionalRules ?? []);
+    setPreviewVariables(template.previewVariables);
+    setRecipientRows([]);
+    toast.success(`已套用範本：${template.name}`);
+  };
+
+  const handleApplyTemplate = (id: string) => {
+    setSelectedTemplateId(id);
+    const template = savedTemplates.find((row) => row.id === id);
+    if (template) applyTemplate(template);
+  };
+
+  const handleSaveTemplate = async () => {
+    const fallbackName = subject.trim() || heading.trim() || "未命名範本";
+    const name = (await prompt({
+      title: "儲存本機範本",
+      description: "範本只會儲存在目前瀏覽器。",
+      inputLabel: "範本名稱",
+      defaultValue: fallbackName,
+      required: true,
+      confirmLabel: "儲存範本",
+    }))?.trim();
+    if (!name) return;
+    const now = new Date().toISOString();
+    const template: SavedTemplate = {
+      ...buildTemplateContent(),
+      id: crypto.randomUUID(),
+      name,
+      createdAt: now,
+      updatedAt: now,
+    };
+    persistTemplates([template, ...savedTemplates]);
+    setSelectedTemplateId(template.id);
+    toast.success("範本已儲存");
+  };
+
+  const handleDeleteTemplate = () => {
+    if (!selectedTemplateId) return;
+    const next = savedTemplates.filter((row) => row.id !== selectedTemplateId);
+    persistTemplates(next);
+    setSelectedTemplateId("");
+    toast.success("範本已刪除");
+  };
+
+  const applyPlatformTemplate = (id: string) => {
+    setPlatformTemplateId(id);
+    const template = platformTemplates.find((item) => item.id === id);
+    if (!template) return;
+    const content = template.content as EmailComposePayload;
+    setSubject(content.subject ?? "");
+    setHeading(content.heading ?? "");
+    setPreviewText(content.preview_text ?? "");
+    setAccentColor(content.accent_color ?? "#111827");
+    setBackgroundColor(content.background_color ?? "#eef2f7");
+    setContentBackgroundColor(content.content_background_color ?? "#ffffff");
+    setBodyLineHeight(content.body_line_height ?? 1.6);
+    setParagraphSpacing(content.paragraph_spacing ?? 18);
+    setFooterText(content.footer_text ?? "");
+    setShowSystemFooter(content.show_system_footer ?? true);
+    setBannerImageUrl(content.banner_image_url ?? "");
+    setBannerImageAlt(content.banner_image_alt ?? "");
+    setBody(content.body ?? "");
+    setCardRows(content.card_rows ?? []);
+    setButtons(content.buttons ?? []);
+    setBlocks(content.blocks ?? []);
+    setVariableDefinitions(template.variable_definitions as EmailVariableDefinition[] ?? []);
+    setConditionalRules(content.conditional_rules ?? []);
+    setTrackOpens(content.track_opens ?? true);
+    setTrackClicks(content.track_clicks ?? true);
+    toast.success(`已套用平台範本：${template.name}`);
+  };
+
+  const applyRecentMessage = async (id: string) => {
+    if (!id) return;
+    try {
+      const message = await emailApi.getMessage(id);
+      setSubject(message.subject);
+      setHeading(message.heading);
+      setPreviewText(message.preview_text ?? "");
+      setAccentColor(message.accent_color ?? "#111827");
+      setBackgroundColor(message.background_color ?? "#eef2f7");
+      setContentBackgroundColor(message.content_background_color ?? "#ffffff");
+      setBodyLineHeight(message.body_line_height ?? 1.6);
+      setParagraphSpacing(message.paragraph_spacing ?? 18);
+      setFooterText(message.footer_text ?? "");
+      setShowSystemFooter(message.show_system_footer ?? true);
+      setBannerImageUrl(message.banner_image_url ?? "");
+      setBannerImageAlt(message.banner_image_alt ?? "");
+      setBody(message.body);
+      setCardRows(message.card_rows as unknown as EmailCardRow[] ?? []);
+      setButtons(message.buttons as unknown as EmailButton[] ?? []);
+      setBlocks(message.blocks as unknown as EmailBlock[] ?? []);
+      setVariableDefinitions(message.variable_definitions as EmailVariableDefinition[] ?? []);
+      setConditionalRules(message.conditional_rules ?? []);
+      setPreviewVariables(message.default_variables as Record<string, string> ?? {});
+      setTrackOpens(message.track_opens);
+      setTrackClicks(message.track_clicks);
+      toast.success("已套用過去郵件格式，未帶入舊收件人");
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "載入過去郵件失敗"));
+    }
+  };
+
+  const applyMessageRecipients = (message: EmailMessageDetailOut) => {
+    setRecipients((message.recipient_spec as RecipientSelector) ?? EMPTY_RECIPIENTS);
+    setRecipientListId("");
+    setVariableDefinitions(message.variable_definitions as EmailVariableDefinition[] ?? []);
+    setPreviewVariables(message.default_variables as Record<string, string> ?? {});
+    setRecipientRows(
+      (message.recipient_variables ?? []).map((row) => ({
+        email: (row.email as string | null | undefined) ?? "",
+        name: (row.name as string | null | undefined) ?? "",
+        variables: { ...(row.variables as Record<string, string> ?? {}) },
+        userId: (row.user_id as string | null | undefined) ?? undefined,
+      })),
+    );
+    setPreviewRecipientIndex(0);
+  };
+
+  const copyRecentMessageRecipients = async () => {
+    if (!recentMessageId) {
+      toast.error("請先選擇一封過去郵件");
+      return;
+    }
+    try {
+      const message = await emailApi.getMessage(recentMessageId);
+      applyMessageRecipients(message);
+      setCurrentStep(2);
+      toast.success("已複製過去郵件的收件人");
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "複製收件人失敗"));
+    }
+  };
+
+  const hasRecipientSelection = (selector: RecipientSelector) =>
+    selector.include_all ||
+    selector.include_school ||
+    (selector.user_ids?.length ?? 0) > 0 ||
+    (selector.position_ids?.length ?? 0) > 0 ||
+    (selector.org_ids?.length ?? 0) > 0 ||
+    (selector.external_emails?.length ?? 0) > 0;
+
+  const savePlatformTemplate = async () => {
+    const name = (await prompt({
+      title: "另存平台範本",
+      inputLabel: "平台範本名稱",
+      defaultValue: subject || heading || "未命名範本",
+      required: true,
+      confirmLabel: "儲存範本",
+    }))?.trim();
+    if (!name) return;
+    try {
+      const template = await emailApi.createTemplate({
+        name,
+        visibility: "private",
+        content: buildPayload(),
+        variable_definitions: variableDefinitions,
+      });
+      setPlatformTemplates((rows) => [template, ...rows]);
+      setPlatformTemplateId(template.id);
+      toast.success("平台範本已儲存");
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "儲存平台範本失敗"));
+    }
+  };
+
+  const applyRecipientList = (id: string) => {
+    setRecipientListId(id);
+    const list = recipientLists.find((item) => item.id === id);
+    if (!list) return;
+    setVariableDefinitions(list.variable_definitions as EmailVariableDefinition[] ?? []);
+    setRecipientRows(
+      list.members.map((member) => ({
+        email: member.email,
+        name: member.name ?? "",
+        variables: { ...member.variables as Record<string, string> },
+      })),
+    );
+    toast.success(`已套用收件名單：${list.name}`);
+  };
+
+  const saveCurrentRecipientList = async () => {
+    if (invalidRecipientRows.length > 0) {
+      toast.error(`有 ${invalidRecipientRows.length} 列電子郵件格式錯誤，請先修正`);
+      return;
+    }
+    const members = buildRecipientVariables().flatMap(({ email, name, variables }) =>
+      email?.trim() ? [{ email: email.trim(), name, variables }] : [],
+    );
+    if (!hasRecipientSelection(recipients) && members.length === 0) {
+      toast.error("目前沒有可儲存的收件人");
+      return;
+    }
+    const defaultName = subject.trim() ? `${subject.trim()}收件名單` : "未命名收件名單";
+    const name = (await prompt({
+      title: "儲存收件名單",
+      inputLabel: "收件名單名稱",
+      defaultValue: defaultName,
+      required: true,
+      confirmLabel: "儲存名單",
+    }))?.trim();
+    if (!name) return;
+    try {
+      const list = await emailApi.createRecipientList({
+        name,
+        visibility: "private",
+        org_id: null,
+        recipient_spec: recipients,
+        variable_definitions: variableDefinitions.filter((variable) => variable.key.trim()),
+        members,
+      });
+      setRecipientLists((rows) => [list, ...rows.filter((row) => row.id !== list.id)]);
+      setRecipientListId(list.id);
+      toast.success(`已儲存收件名單：${list.name}`);
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "儲存收件名單失敗"));
+    }
+  };
+
+  useEffect(() => {
+    if (requestedTemplateId && platformTemplates.length > 0 && !platformTemplateId) {
+      applyPlatformTemplate(requestedTemplateId);
+    }
+    if (requestedListId && recipientLists.length > 0 && !recipientListId) {
+      applyRecipientList(requestedListId);
+    }
+    // 套用 URL 指定資源只需在資源首次載入時執行。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedTemplateId, requestedListId, platformTemplates, recipientLists]);
+
+  const uploadAttachment = async (file: File, reportProgress: (progress: number) => void) => {
+    const attachment = await emailApi.uploadAttachment(file, platformTemplateId || undefined, reportProgress);
+    setAttachments((rows) => [...rows, attachment]);
+    toast.success(
+      attachment.delivery_mode === "attachment"
+        ? "附件已加入郵件"
+        : "檔案較大，將以安全下載連結寄送",
+    );
+    return attachment;
+  };
+
+  const removeAttachment = async (attachment: EmailAttachmentOut) => {
+    try {
+      await emailApi.revokeAttachment(attachment.id);
+      setAttachments((rows) => rows.filter((item) => item.id !== attachment.id));
+      setRetainedAttachmentIds((ids) => ids.filter((id) => id !== attachment.id));
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "移除附件失敗"));
+    }
+  };
+
+  // ── 行動按鈕（可多顆、可調樣式）────────────────────────────────────────────
+  const addButton = () =>
+    setButtons((prev) => [...prev, { label: "查看詳情", url: "", style: "primary" }]);
+  const updateButton = (i: number, patch: Partial<EmailButton>) =>
+    setButtons((prev) => prev.map((b, idx) => (idx === i ? { ...b, ...patch } : b)));
+  const removeButton = (i: number) => setButtons((prev) => prev.filter((_, idx) => idx !== i));
+  const moveButton = (i: number, dir: -1 | 1) =>
+    setButtons((prev) => {
+      const next = [...prev];
+      const j = i + dir;
+      if (j < 0 || j >= next.length) return prev;
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+
+  // ── 自由內容區塊（文字 / 圖片 / 分隔線）────────────────────────────────────
+  const addBlock = (type: EmailBlock["type"]) =>
+    setBlocks((prev) => [...prev, { type, md: "", url: "", alt: "" }]);
+  const updateBlock = (i: number, patch: Partial<EmailBlock>) =>
+    setBlocks((prev) => prev.map((b, idx) => (idx === i ? { ...b, ...patch } : b)));
+  const removeBlock = (i: number) => setBlocks((prev) => prev.filter((_, idx) => idx !== i));
+  const moveBlock = (i: number, dir: -1 | 1) =>
+    setBlocks((prev) => {
+      const next = [...prev];
+      const j = i + dir;
+      if (j < 0 || j >= next.length) return prev;
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  const uploadBlockImage = async (i: number, file: File, reportProgress: (progress: number) => void) => {
+    const result = await emailApi.uploadImage(file, reportProgress);
+    updateBlock(i, { url: result.url });
+    toast.success("圖片已上傳");
+    return result;
+  };
+  const uploadBannerImage = async (file: File, reportProgress: (progress: number) => void) => {
+    const result = await emailApi.uploadImage(file, reportProgress);
+    setBannerImageUrl(result.url);
+    if (!bannerImageAlt.trim()) setBannerImageAlt(result.filename);
+    toast.success("主圖已上傳");
+    return result;
+  };
+
+  // ── 個人化變數 ─────────────────────────────────────────────────────────────
+  const definedVariables = variableDefinitions.filter((v) => v.key.trim());
+
+  /** 把 {{ token }} 插入最後聚焦的欄位（主旨/主標題游標處，否則插入內文）。 */
+  const insertVariable = (token: string) => {
+    const target = lastFocusRef.current;
+    if (target === "subject" || target === "heading") {
+      const el = target === "subject" ? subjectRef.current : headingRef.current;
+      const setter = target === "subject" ? setSubject : setHeading;
+      if (el) {
+        const start = el.selectionStart ?? el.value.length;
+        const end = el.selectionEnd ?? el.value.length;
+        setter(el.value.slice(0, start) + token + el.value.slice(end));
+        requestAnimationFrame(() => {
+          el.focus();
+          const pos = start + token.length;
+          el.setSelectionRange(pos, pos);
+        });
+        return;
+      }
+    }
+    bodyRef.current?.insertText(token);
+  };
+
+  const addVariableDefinition = () => {
+    addVariable();
+  };
+
+  // ── 逐收件人不同內容（表格編輯）──────────────────────────────────────────────
+  const addRecipientRow = () => {
+    setRecipientRows((prev) => [...prev, { email: "", name: "", variables: {} }]);
+    requestAnimationFrame(() => {
+      recipientTableBottomRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
+    });
+  };
+  const updateRecipientRow = (i: number, patch: Partial<RecipientRow>) =>
+    setRecipientRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  const updateRecipientVar = (i: number, key: string, value: string) =>
+    setRecipientRows((prev) =>
+      prev.map((r, idx) =>
+        idx === i ? { ...r, variables: { ...r.variables, [key]: value } } : r,
+      ),
+    );
+  const removeRecipientRow = (i: number) =>
+    setRecipientRows((prev) => prev.filter((_, idx) => idx !== i));
+
+  const importPastedTable = () => {
+    const lines = pasteTableText
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (lines.length < 2) {
+      toast.error("請貼上欄位名稱與至少一列資料");
+      return;
+    }
+
+    const delimiter = lines[0].includes("\t") ? "\t" : ",";
+    const cells = lines.map((line) => line.split(delimiter).map((cell) => cell.trim()));
+    const headers = cells[0];
+    const emailIndex = headers.findIndex((header) =>
+      ["電子郵件", "email", "e-mail"].includes(header.toLowerCase()),
+    );
+    const nameIndex = headers.findIndex((header) =>
+      ["姓名", "用戶姓名", "name"].includes(header.toLowerCase()),
+    );
+    if (emailIndex < 0 && nameIndex < 0) {
+      toast.error("第一列至少需要包含「電子郵件」或「姓名」欄位");
+      return;
+    }
+
+    const pastedCustomColumns = headers
+      .map((header, index) => ({ index, key: normalizeVariableKey(header) }))
+      .filter(({ index, key }) => index !== emailIndex && index !== nameIndex && key);
+    const keys = pastedCustomColumns.map(({ key }) => key);
+    if (new Set(keys).size !== keys.length) {
+      toast.error("欄位名稱不可重複");
+      return;
+    }
+
+    const existingKeys = new Set(variableDefinitions.map((definition) => definition.key));
+    const newDefinitions = pastedCustomColumns
+      .filter(({ key }) => !existingKeys.has(key))
+      .map(({ key }) => ({
+        key,
+        label: key,
+        required: false,
+        default_value: "",
+      }));
+    setVariableDefinitions((definitions) => [...definitions, ...newDefinitions]);
+
+    const importedRows = cells.slice(1).map((row) => ({
+        email: emailIndex >= 0 ? (row[emailIndex] ?? "") : "",
+        name: nameIndex >= 0 ? (row[nameIndex] ?? "") : "",
+        variables: Object.fromEntries(
+          pastedCustomColumns.map(({ index, key }) => [key, row[index] ?? ""]),
+        ),
+      }));
+    setRecipientRows((rows) => {
+      const meaningfulRows = rows.filter(
+        (row) =>
+          row.email.trim() ||
+          row.name.trim() ||
+          Object.values(row.variables).some((value) => value.trim()),
+      );
+      return [...meaningfulRows, ...importedRows];
+    });
+    setPreviewRecipientIndex(0);
+    setPasteTableText("");
+    setPasteTableOpen(false);
+    toast.success(`已追加 ${importedRows.length} 列資料`);
+  };
+
+  const importedRecipientCount = countAdditionalRecipientRows(recipientRows, recipients);
+  const estimatedRecipientCount = (count ?? 0) + importedRecipientCount;
+  const invalidRecipientRows = recipientRows
+    .map((row, index) => ({ row, index }))
+    .filter(
+      ({ row }) =>
+        row.email.trim() &&
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email.trim()),
+    );
+
+  const validate = (needRecipients: boolean): boolean => {
+    if (!subject.trim()) {
+      toast.error("請填寫信件主旨");
+      return false;
+    }
+    if (variableDefinitions.some((variable) => !variable.key.trim())) {
+      toast.error("請填寫所有表格欄位名稱，或移除空白欄位");
+      return false;
+    }
+    const keys = variableDefinitions.map((variable) => variable.key.trim());
+    if (new Set(keys).size !== keys.length) {
+      toast.error("表格欄位名稱不可重複");
+      return false;
+    }
+    const availableKeys = new Set(keys);
+    if (conditionalRules.some(
+      (rule) => !availableKeys.has(rule.condition_key) || !availableKeys.has(rule.target_key),
+    )) {
+      toast.error("條件規則使用了不存在的欄位，請重新選擇或移除規則");
+      return false;
+    }
+    if (invalidRecipientRows.length > 0) {
+      toast.error(`有 ${invalidRecipientRows.length} 列電子郵件格式錯誤`);
+      return false;
+    }
+    const importedRecipients = buildRecipientVariables();
+    if (needRecipients && !count && !importedRecipients.some((row) => row.email?.trim() || row.user_id)) {
+      toast.error("請選擇至少一位有效收件人");
+      return false;
+    }
+    return true;
+  };
+
+  const handleTest = async () => {
+    if (!validate(false)) return;
+    setBusy(true);
+    try {
+      const res = await emailApi.test(buildPayload());
+      toast.success(`測試信已寄出至 ${res.sent_to}`);
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "測試寄送失敗"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    setBusy(true);
+    try {
+      const payload = buildPayload();
+      const draftPayload = {
+        ...payload,
+        subject: payload.subject || "未命名草稿",
+      };
+      const saved = activeDraftId
+        ? await emailApi.updateMessage(activeDraftId, draftPayload)
+        : await emailApi.createMessage({ ...draftPayload, action: "draft" });
+      if (!activeDraftId) {
+        setActiveDraftId(saved.id);
+        router.replace(`/email?draft=${saved.id}`);
+      }
+      setDraftMessages((drafts) => [
+        saved,
+        ...drafts.filter((draft) => draft.id !== saved.id),
+      ]);
+      clearDraft();
+      toast.success(activeDraftId ? "草稿已更新並同步" : "草稿已永久儲存並同步");
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "儲存草稿失敗"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runPreflight = async (): Promise<EmailPreflightOut | null> => {
+    try {
+      const payload = buildPayload();
+      const result = await emailApi.preflight({
+        recipient_spec: recipients,
+        variable_definitions: payload.variable_definitions,
+        conditional_rules: payload.conditional_rules,
+        default_variables: payload.default_variables,
+        recipient_variables: payload.recipient_variables,
+        attachment_ids: payload.attachment_ids,
+      });
+      setPreflightResult(result);
+      if (!result.valid) {
+        toast.error("寄送預檢未通過，請先修正收件資料或附件");
+        return null;
+      }
+      return result;
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "寄送預檢失敗"));
+      return null;
+    }
+  };
+
+  const handleSchedule = async () => {
+    if (!validate(true)) return;
+    if (!scheduledAt) {
+      toast.error("請選擇預約寄送時間");
+      return;
+    }
+    setBusy(true);
+    try {
+      if (!(await runPreflight())) return;
+      await emailApi.createMessage({
+        ...buildPayload(),
+        action: "schedule",
+        scheduled_at: new Date(scheduledAt).toISOString(),
+      });
+      clearDraft();
+      toast.success("已排定預約寄送");
+      router.push("/email/logs");
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "預約寄送失敗"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doSend = async () => {
+    setConfirmOpen(false);
+    setBusy(true);
+    try {
+      if (activeDraftId) {
+        await emailApi.updateMessage(activeDraftId, buildPayload());
+        await emailApi.sendMessage(activeDraftId);
+      } else {
+        await emailApi.createMessage({
+          ...buildPayload(),
+          action: "send",
+          idempotency_key: crypto.randomUUID(),
+        });
+      }
+      clearDraft();
+      toast.success("信件已排入寄送佇列");
+      router.push("/email/logs");
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "寄送失敗"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSend = async () => {
+    if (!validate(true)) return;
+    setBusy(true);
+    const result = await runPreflight();
+    setBusy(false);
+    if (!result) return;
+    if (result.unique_count > CONFIRM_THRESHOLD) {
+      setConfirmOpen(true);
+      return;
+    }
+    void doSend();
+  };
+
+  const goToNextStep = async () => {
+    if (currentStep === 2 && !validate(true)) return;
+    if (currentStep === 3 && !validate(false)) return;
+    if (currentStep === 4) {
+      setBusy(true);
+      const result = await runPreflight();
+      setBusy(false);
+      if (!result) return;
+    }
+    setCurrentStep((step) => Math.min(5, step + 1));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  return (
+    <div className="mx-auto max-w-6xl space-y-5">
+      <header className="flex flex-col gap-1">
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-xl font-semibold">寄送電子郵件</h1>
+          <div className="flex flex-wrap gap-1">
+            <Link href="/email/templates" className="btn btn-ghost btn-sm">範本</Link>
+            <Link href="/email/lists" className="btn btn-ghost btn-sm">名單</Link>
+            <Link href="/email/analytics" className="btn btn-ghost btn-sm">分析</Link>
+            <Link href="/email/logs" className="btn btn-ghost btn-sm">寄信紀錄</Link>
+          </div>
+        </div>
+        {activeDraftId && (
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+            正在編輯雲端草稿
+          </p>
+        )}
+      </header>
+
+      <nav className="card overflow-x-auto p-2" aria-label="寄信步驟">
+        <ol className="grid grid-cols-5 gap-1">
+          {COMPOSE_STEPS.map((step) => {
+            const active = currentStep === step.number;
+            const completed = currentStep > step.number;
+            return (
+              <li key={step.number}>
+                <button
+                  type="button"
+                  className="min-h-11 w-full rounded-lg px-2 py-2 text-left transition-colors"
+                  disabled={step.number > currentStep + 1}
+                  style={{
+                    background: active ? "var(--primary-dim)" : "transparent",
+                    color: active ? "var(--primary-text)" : "var(--text-secondary)",
+                    border: `1px solid ${active ? "var(--primary)" : "transparent"}`,
+                    opacity: step.number > currentStep + 1 ? 0.45 : 1,
+                  }}
+                  onClick={() => setCurrentStep(step.number)}
+                >
+                  <span className="block text-xs font-semibold">
+                    <span className="tabular-nums">{step.number}</span> {step.label}
+                    {completed && <span className="sr-only">（已完成）</span>}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+      </nav>
+
+      <div className={`grid gap-5 ${currentStep >= 3 ? "lg:grid-cols-2" : ""}`}>
+        {/* ── 編輯區 ─────────────────────────────────────────── */}
+        <div className="min-w-0 space-y-4">
+          <section className={`card space-y-3 p-4 ${currentStep === 1 ? "" : "hidden"}`}>
+            <div>
+              <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                情境預設
+              </label>
+              <select
+                className="input"
+                defaultValue=""
+                onChange={(e) => {
+                  applyPreset(e.target.value);
+                  e.currentTarget.value = "";
+                }}
+              >
+                <option value="" disabled>
+                  選擇情境以快速套用版型…
+                </option>
+                {PRESETS.map((p) => (
+                  <option key={p.key} value={p.key}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--primary)" }}>
+              <label className="block text-xs font-semibold" style={{ color: "var(--primary-text)" }}>
+                我的草稿
+              </label>
+              <select
+                className="input"
+                value={activeDraftId ?? ""}
+                onChange={(event) => {
+                  const id = event.target.value;
+                  if (id) router.push(`/email?draft=${id}`);
+                }}
+              >
+                <option value="">選擇永久儲存的草稿繼續編輯…</option>
+                {draftMessages.map((draft) => (
+                  <option key={draft.id} value={draft.id}>
+                    {draft.subject || "未命名草稿"} · 更新於{" "}
+                    {new Date(draft.updated_at).toLocaleString("zh-TW")}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                草稿依帳號同步，選擇後會載入原本的內容與收件資料。
+              </p>
+            </div>
+            <div className="space-y-2">
+              <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                平台範本
+              </label>
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                <select
+                  className="input min-w-0"
+                  value={platformTemplateId}
+                  onChange={(e) => applyPlatformTemplate(e.target.value)}
+                >
+                  <option value="">選擇私人或組織共享範本…</option>
+                  {platformTemplates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.is_favorite ? "★ " : ""}
+                      {template.name}
+                      {template.visibility === "org" ? "（組織）" : ""}
+                    </option>
+                  ))}
+                </select>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={savePlatformTemplate}>
+                  另存平台範本
+                </button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                套用過去郵件格式
+              </label>
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+                <select
+                  className="input min-w-0"
+                  value={recentMessageId}
+                  onChange={(event) => setRecentMessageId(event.target.value)}
+                >
+                  <option value="">選擇以前寄發或儲存的郵件…</option>
+                  {recentMessages.map((message) => (
+                    <option key={message.id} value={message.id}>
+                      {message.subject} · {new Date(message.created_at).toLocaleDateString("zh-TW")}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={!recentMessageId}
+                  onClick={() => void applyRecentMessage(recentMessageId)}
+                >
+                  套用格式
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  disabled={!recentMessageId}
+                  onClick={() => void copyRecentMessageRecipients()}
+                >
+                  複製收件人
+                </button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                舊版瀏覽器範本
+              </label>
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+                <select
+                  className="input min-w-0"
+                  value={selectedTemplateId}
+                  onChange={(e) => handleApplyTemplate(e.target.value)}
+                >
+                  <option value="">選擇已儲存範本…</option>
+                  {savedTemplates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name}
+                    </option>
+                  ))}
+                </select>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={handleSaveTemplate}>
+                  儲存目前內容
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={!selectedTemplateId}
+                  onClick={handleDeleteTemplate}
+                >
+                  刪除
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                信件主旨 <span style={{ color: "var(--danger)" }}>*</span>
+              </label>
+              <input
+                ref={subjectRef}
+                className="input"
+                value={subject}
+                maxLength={255}
+                onFocus={() => (lastFocusRef.current = "subject")}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder="例：第 75 屆第 3 次院會通知"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                主標題
+              </label>
+              <input
+                ref={headingRef}
+                className="input"
+                value={heading}
+                maxLength={200}
+                onFocus={() => (lastFocusRef.current = "heading")}
+                onChange={(e) => setHeading(e.target.value)}
+                placeholder="顯示於信件內容最上方的大標題"
+              />
+            </div>
+            <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                先點選主旨或主標題中的插入位置，再點選欄位。
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {SYSTEM_VARIABLES.map((variable) => (
+                  <button
+                    key={variable.token}
+                    type="button"
+                    className="rounded-full px-2.5 py-1 text-xs"
+                    style={{
+                      background: "var(--primary-dim)",
+                      color: "var(--primary-text)",
+                      border: "1px solid var(--border)",
+                    }}
+                    onClick={() => insertVariable(variable.token)}
+                  >
+                    + {variable.label}
+                  </button>
+                ))}
+                {definedVariables.map((variable) => (
+                  <button
+                    key={variable.key}
+                    type="button"
+                    className="rounded-full px-2.5 py-1 text-xs"
+                    style={{
+                      background: "var(--bg-elevated)",
+                      color: "var(--text-secondary)",
+                      border: "1px solid var(--border)",
+                    }}
+                    onClick={() => insertVariable(`{{ ${variable.key} }}`)}
+                  >
+                    + {variable.label || variable.key}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                信件主圖
+              </label>
+              <div className="grid gap-2">
+                <input
+                  className="input"
+                  value={bannerImageUrl}
+                  maxLength={500}
+                  onChange={(e) => setBannerImageUrl(e.target.value)}
+                  placeholder="圖片網址，或點右側上傳"
+                />
+                <AnimatedFileUpload
+                  accept="image/png,image/jpeg,image/gif,image/webp"
+                  label="拖曳主圖到這裡"
+                  hint="支援點擊選取或貼上圖片"
+                  onUpload={uploadBannerImage}
+                />
+              </div>
+              <input
+                className="input"
+                value={bannerImageAlt}
+                maxLength={200}
+                onChange={(e) => setBannerImageAlt(e.target.value)}
+                placeholder="圖片替代文字（選填）"
+              />
+              {bannerImageUrl ? (
+                <SafeImagePreview
+                  url={bannerImageUrl}
+                  alt={bannerImageAlt || "信件主圖預覽"}
+                  height={160}
+                  className="max-h-40 rounded-lg object-contain"
+                />
+              ) : null}
+            </div>
+          </section>
+
+          <section className={`card space-y-2 p-4 ${currentStep === 3 ? "" : "hidden"}`}>
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold">重點卡片</h2>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={addRow}>
+                + 新增欄位
+              </button>
+            </div>
+            {cardRows.length === 0 ? (
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                例如：時間、地點、狀態。
+              </p>
+            ) : (
+              cardRows.map((row, i) => (
+                <div key={i} className="flex gap-2">
+                  <input
+                    className="input flex-[2]"
+                    value={row.label}
+                    maxLength={50}
+                    placeholder="欄位名稱"
+                    onChange={(e) => updateRow(i, { label: e.target.value })}
+                  />
+                  <input
+                    className="input flex-[3]"
+                    value={row.value}
+                    maxLength={200}
+                    placeholder="內容"
+                    onChange={(e) => updateRow(i, { value: e.target.value })}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    aria-label="移除欄位"
+                    onClick={() => removeRow(i)}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))
+            )}
+          </section>
+
+          <section className={`card space-y-2 p-4 ${currentStep === 3 ? "" : "hidden"}`}>
+            <div>
+              <h2 className="text-sm font-semibold">內文</h2>
+              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                點選下方欄位即可插入目前游標位置。
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {SYSTEM_VARIABLES.map((variable) => (
+                <button
+                  key={variable.token}
+                  type="button"
+                  className="rounded-full px-2.5 py-1 text-xs"
+                  style={{
+                    background: "var(--primary-dim)",
+                    color: "var(--primary-text)",
+                    border: "1px solid var(--border)",
+                  }}
+                  onClick={() => insertVariable(variable.token)}
+                >
+                  + {variable.label}
+                </button>
+              ))}
+              {definedVariables.map((variable) => (
+                <button
+                  key={variable.key}
+                  type="button"
+                  className="rounded-full px-2.5 py-1 text-xs"
+                  style={{
+                    background: "var(--bg-elevated)",
+                    color: "var(--text-secondary)",
+                    border: "1px solid var(--border)",
+                  }}
+                  onClick={() => insertVariable(`{{ ${variable.key} }}`)}
+                >
+                  + {variable.label || variable.key}
+                </button>
+              ))}
+            </div>
+            <div onFocus={() => (lastFocusRef.current = "body")}>
+              <RichTextarea
+                ref={bodyRef}
+                value={body}
+                onChange={setBody}
+                placeholder="撰寫信件內文…"
+                lineHeight={bodyLineHeight}
+                paragraphSpacing={paragraphSpacing}
+              />
+            </div>
+            <div className="space-y-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-xs font-semibold">在內文後加入內容</h3>
+                  <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
+                    適合插入獨立圖片、補充段落或視覺分隔線。
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => addBlock("text")}>
+                    + 補充文字
+                  </button>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => addBlock("image")}>
+                    + 圖片
+                  </button>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => addBlock("divider")}>
+                    + 分隔線
+                  </button>
+                </div>
+              </div>
+              {blocks.map((block, index) => (
+                <div
+                  key={index}
+                  className="space-y-2 rounded-lg border p-2"
+                  style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
+                      {block.type === "text" ? "補充文字" : block.type === "image" ? "圖片" : "分隔線"}
+                    </span>
+                    <div className="flex gap-1">
+                      <button type="button" className="btn btn-ghost btn-sm" disabled={index === 0} onClick={() => moveBlock(index, -1)}>↑</button>
+                      <button type="button" className="btn btn-ghost btn-sm" disabled={index === blocks.length - 1} onClick={() => moveBlock(index, 1)}>↓</button>
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => removeBlock(index)}>×</button>
+                    </div>
+                  </div>
+                  {block.type === "text" && (
+                    <textarea
+                      className="input min-h-20"
+                      value={block.md ?? ""}
+                      placeholder="補充段落，支援 Markdown"
+                      onChange={(event) => updateBlock(index, { md: event.target.value })}
+                    />
+                  )}
+                  {block.type === "image" && (
+                    <div className="space-y-2">
+                      <div className="grid gap-2">
+                        <input
+                          className="input min-w-0 flex-1"
+                          value={block.url ?? ""}
+                          placeholder="圖片網址，或使用右側上傳"
+                          onChange={(event) => updateBlock(index, { url: event.target.value })}
+                        />
+                        <AnimatedFileUpload
+                          accept="image/png,image/jpeg,image/gif,image/webp"
+                          label="拖曳圖片到這裡"
+                          hint="支援點擊選取或貼上圖片"
+                          onUpload={(file, reportProgress) => uploadBlockImage(index, file, reportProgress)}
+                        />
+                      </div>
+                      <input
+                        className="input"
+                        value={block.alt ?? ""}
+                        placeholder="圖片替代文字"
+                        onChange={(event) => updateBlock(index, { alt: event.target.value })}
+                      />
+                    </div>
+                  )}
+                  {block.type === "divider" && (
+                    <div className="border-t" style={{ borderColor: "var(--border-strong)" }} />
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <details className={`card p-4 ${currentStep === 3 ? "" : "hidden"}`}>
+            <summary className="cursor-pointer text-sm font-semibold">
+              進階外觀與品牌設定
+            </summary>
+            <div className="mt-4 space-y-4">
+              <div>
+                <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                  收件匣預覽文字
+                </label>
+                <input
+                  className="input"
+                  value={previewText}
+                  maxLength={200}
+                  onChange={(event) => setPreviewText(event.target.value)}
+                  placeholder="顯示在主旨旁的摘要文字"
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                {[
+                  ["品牌主色", accentColor, setAccentColor],
+                  ["郵件背景", backgroundColor, setBackgroundColor],
+                  ["內容背景", contentBackgroundColor, setContentBackgroundColor],
+                ].map(([label, value, setter]) => (
+                  <label key={String(label)} className="text-xs">
+                    <span className="mb-1 block" style={{ color: "var(--text-muted)" }}>{String(label)}</span>
+                    <span className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        className="h-10 w-12 cursor-pointer rounded border p-1"
+                        style={{ borderColor: "var(--border)" }}
+                        value={String(value)}
+                        onChange={(event) => (setter as (value: string) => void)(event.target.value)}
+                      />
+                      <input
+                        className="input min-w-0 font-mono text-xs"
+                        value={String(value)}
+                        maxLength={7}
+                        onChange={(event) => (setter as (value: string) => void)(event.target.value)}
+                      />
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="text-xs">
+                  <span className="mb-1 block" style={{ color: "var(--text-muted)" }}>
+                    段內行距
+                  </span>
+                  <NumberInput
+                    type="number"
+                    className="input"
+                    min={1.2}
+                    max={2.5}
+                    step={0.05}
+                    value={bodyLineHeight}
+                    onChange={(event) => {
+                      if (event.target.value) setBodyLineHeight(Number(event.target.value));
+                    }}
+                  />
+                </label>
+                <label className="text-xs">
+                  <span className="mb-1 block" style={{ color: "var(--text-muted)" }}>
+                    段落間距（px）
+                  </span>
+                  <NumberInput
+                    type="number"
+                    className="input"
+                    min={0}
+                    max={40}
+                    step={1}
+                    value={paragraphSpacing}
+                    onChange={(event) => {
+                      if (event.target.value) setParagraphSpacing(Number(event.target.value));
+                    }}
+                  />
+                </label>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                  自訂頁尾文字
+                </label>
+                <textarea
+                  className="input min-h-20"
+                  value={footerText}
+                  maxLength={500}
+                  onChange={(event) => setFooterText(event.target.value)}
+                  placeholder="例如：資訊部 敬上"
+                />
+              </div>
+              <label className="flex items-center gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={showSystemFooter}
+                  onChange={(event) => setShowSystemFooter(event.target.checked)}
+                />
+                顯示系統名稱、退訂連結與通知偏好頁尾
+              </label>
+            </div>
+          </details>
+
+          <section className={`card space-y-3 p-4 ${currentStep === 2 ? "" : "hidden"}`}>
+            <EmailRecipientDataTable
+              pasteTableOpen={pasteTableOpen}
+              onPasteTableOpenChange={setPasteTableOpen}
+              pasteTableText={pasteTableText}
+              onPasteTableTextChange={setPasteTableText}
+              onImportPastedTable={importPastedTable}
+              variableDefinitions={variableDefinitions}
+              onAddVariableDefinition={addVariableDefinition}
+              onUpdateVariableName={updateVariableName}
+              onRemoveVariable={removeVariable}
+              recipientRows={recipientRows}
+              invalidRecipientRows={invalidRecipientRows}
+              recipientTableBottomRef={recipientTableBottomRef}
+              onAddRecipientRow={addRecipientRow}
+              onUpdateRecipientRow={updateRecipientRow}
+              onUpdateRecipientVariable={updateRecipientVar}
+              onRemoveRecipientRow={removeRecipientRow}
+            />
+            <div className="space-y-3 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <h3 className="text-xs font-semibold">條件式佔位符</h3>
+                  <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                    依收件資料自動填入欄位；後面的規則優先。
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  disabled={definedVariables.length === 0}
+                  onClick={addConditionalRule}
+                >
+                  + 新增條件
+                </button>
+              </div>
+              {definedVariables.length === 0 && (
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  請先新增至少兩個自訂欄位，例如「第一志願」和「面試時間」。
+                </p>
+              )}
+              {conditionalRules.length === 0 && definedVariables.length > 0 && (
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  尚未設定條件
+                </p>
+              )}
+              {conditionalRules.map((rule, index) => {
+                const operator = CONDITIONAL_OPERATOR_OPTIONS.find(
+                  (option) => option.value === rule.operator,
+                );
+                return (
+                  <div
+                    key={index}
+                    className="space-y-2 rounded-lg p-3"
+                    style={{ background: "var(--bg-elevated)" }}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
+                        條件 {index + 1}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        aria-label={`移除條件 ${index + 1}`}
+                        onClick={() => setConditionalRules((rules) => rules.filter((_, i) => i !== index))}
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <div className="grid items-center gap-2 lg:grid-cols-[auto_minmax(9rem,1fr)_minmax(8rem,1fr)_minmax(9rem,1.2fr)]">
+                      <span className="text-xs font-medium">如果</span>
+                      <select
+                        className="input min-w-0"
+                        value={rule.condition_key}
+                        aria-label={`條件 ${index + 1} 的判斷欄位`}
+                        onChange={(event) => updateConditionalRule(index, { condition_key: event.target.value })}
+                      >
+                        <option value="">選擇欄位</option>
+                        {definedVariables.map((variable) => (
+                          <option key={variable.key} value={variable.key}>{variable.label || variable.key}</option>
+                        ))}
+                      </select>
+                      <select
+                        className="input min-w-0"
+                        value={rule.operator}
+                        aria-label={`條件 ${index + 1} 的判斷方式`}
+                        onChange={(event) => {
+                          const nextOperator = event.target.value as EmailConditionalRule["operator"];
+                          updateConditionalRule(index, {
+                            operator: nextOperator,
+                            condition_value: CONDITIONAL_OPERATOR_OPTIONS.find(
+                              (option) => option.value === nextOperator,
+                            )?.requiresValue ? rule.condition_value : "",
+                          });
+                        }}
+                      >
+                        {CONDITIONAL_OPERATOR_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                      {operator?.requiresValue ? (
+                        <input
+                          className="input min-w-0"
+                          value={rule.condition_value}
+                          maxLength={500}
+                          placeholder="符合的內容，例如：攝影部"
+                          aria-label={`條件 ${index + 1} 的比對內容`}
+                          onChange={(event) => updateConditionalRule(index, { condition_value: event.target.value })}
+                        />
+                      ) : (
+                        <span className="text-xs" style={{ color: "var(--text-muted)" }}>不需要填寫比對內容</span>
+                      )}
+                    </div>
+                    <div className="grid items-center gap-2 lg:grid-cols-[auto_minmax(9rem,1fr)_minmax(0,1.2fr)]">
+                      <span className="text-xs font-medium">就將</span>
+                      <select
+                        className="input min-w-0"
+                        value={rule.target_key}
+                        aria-label={`條件 ${index + 1} 的設定欄位`}
+                        onChange={(event) => updateConditionalRule(index, { target_key: event.target.value })}
+                      >
+                        <option value="">選擇要填入的欄位</option>
+                        {definedVariables.map((variable) => (
+                          <option key={variable.key} value={variable.key}>{variable.label || variable.key}</option>
+                        ))}
+                      </select>
+                      <input
+                        className="input min-w-0"
+                        value={rule.target_value}
+                        maxLength={500}
+                        placeholder="自動填入的內容，例如：115/06/20 14:00"
+                        aria-label={`條件 ${index + 1} 的自動填入內容`}
+                        onChange={(event) => updateConditionalRule(index, { target_value: event.target.value })}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className={`card space-y-3 p-4 ${currentStep === 3 ? "" : "hidden"}`}>
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold">行動按鈕（選填，可多顆）</h2>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={addButton}>
+                + 新增按鈕
+              </button>
+            </div>
+            {buttons.length === 0 ? null : (
+              buttons.map((btn, i) => (
+                <div key={i} className="space-y-2 rounded-lg p-2" style={{ background: "var(--bg-elevated)" }}>
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_8rem]">
+                    <input
+                      className="input min-w-0"
+                      value={btn.label}
+                      maxLength={40}
+                      placeholder="按鈕文字，例：查看詳情"
+                      onChange={(e) => updateButton(i, { label: e.target.value })}
+                    />
+                    <select
+                      className="input w-32 shrink-0"
+                      value={btn.style}
+                      onChange={(e) => updateButton(i, { style: e.target.value as EmailButtonStyle })}
+                    >
+                      {BUTTON_STYLE_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                    <input
+                      className="input min-w-0"
+                      value={btn.url}
+                      maxLength={500}
+                      placeholder="連結網址 https://… 或 mailto:"
+                      onChange={(e) => updateButton(i, { url: e.target.value })}
+                    />
+                    <div className="flex gap-1">
+                      <button type="button" className="btn btn-ghost btn-sm" aria-label="上移" disabled={i === 0} onClick={() => moveButton(i, -1)}>↑</button>
+                      <button type="button" className="btn btn-ghost btn-sm" aria-label="下移" disabled={i === buttons.length - 1} onClick={() => moveButton(i, 1)}>↓</button>
+                      <button type="button" className="btn btn-ghost btn-sm" aria-label="移除按鈕" onClick={() => removeButton(i)}>×</button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </section>
+
+          <section className="hidden">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold">內容區塊（選填）</h2>
+              <div className="flex gap-1.5">
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => addBlock("text")}>+ 文字</button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => addBlock("image")}>+ 圖片</button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => addBlock("divider")}>+ 分隔線</button>
+              </div>
+            </div>
+            {blocks.length === 0 ? null : (
+              blocks.map((blk, i) => (
+                <div key={i} className="space-y-2 rounded-lg p-2" style={{ background: "var(--bg-elevated)" }}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
+                      {blk.type === "text" ? "文字段落" : blk.type === "image" ? "圖片" : "分隔線"}
+                    </span>
+                    <div className="flex gap-1">
+                      <button type="button" className="btn btn-ghost btn-sm" aria-label="上移" disabled={i === 0} onClick={() => moveBlock(i, -1)}>↑</button>
+                      <button type="button" className="btn btn-ghost btn-sm" aria-label="下移" disabled={i === blocks.length - 1} onClick={() => moveBlock(i, 1)}>↓</button>
+                      <button type="button" className="btn btn-ghost btn-sm" aria-label="移除區塊" onClick={() => removeBlock(i)}>×</button>
+                    </div>
+                  </div>
+                  {blk.type === "text" && (
+                    <textarea
+                      className="input min-h-20"
+                      value={blk.md ?? ""}
+                      maxLength={5000}
+                      placeholder="支援 Markdown（粗體、清單、連結…）"
+                      onChange={(e) => updateBlock(i, { md: e.target.value })}
+                    />
+                  )}
+                  {blk.type === "image" && (
+                    <div className="space-y-2">
+                      <div className="grid gap-2">
+                        <input
+                          className="input flex-1"
+                          value={blk.url ?? ""}
+                          maxLength={500}
+                          placeholder="圖片網址，或點右側上傳"
+                          onChange={(e) => updateBlock(i, { url: e.target.value })}
+                        />
+                        <AnimatedFileUpload
+                          accept="image/png,image/jpeg,image/gif,image/webp"
+                          label="拖曳圖片到這裡"
+                          hint="支援點擊選取或貼上圖片"
+                          onUpload={(file, reportProgress) => uploadBlockImage(i, file, reportProgress)}
+                        />
+                      </div>
+                      <input
+                        className="input"
+                        value={blk.alt ?? ""}
+                        maxLength={200}
+                        placeholder="圖片替代文字（無障礙用）"
+                        onChange={(e) => updateBlock(i, { alt: e.target.value })}
+                      />
+                      {blk.url ? (
+                        <SafeImagePreview
+                          url={blk.url}
+                          alt={blk.alt || "圖片預覽"}
+                          height={128}
+                          className="max-h-32 rounded-lg object-contain"
+                        />
+                      ) : null}
+                    </div>
+                  )}
+                  {blk.type === "divider" && (
+                    <div className="border-t" style={{ borderColor: "var(--border-strong)" }} />
+                  )}
+                </div>
+              ))
+            )}
+          </section>
+
+          <section className={`card space-y-2 p-4 ${currentStep === 2 ? "" : "hidden"}`}>
+            <h2 className="text-sm font-semibold">收件對象</h2>
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+              <select
+                className="input min-w-0"
+                value={recipientListId}
+                onChange={(e) => applyRecipientList(e.target.value)}
+              >
+                <option value="">套用已儲存名單（選填）…</option>
+                {recipientLists.map((list) => (
+                  <option key={list.id} value={list.id}>
+                    {list.name}（{list.members.length} 人）
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => void saveCurrentRecipientList()}
+              >
+                儲存目前名單
+              </button>
+            </div>
+            <RecipientPicker value={recipients} onChange={setRecipients} disabled={busy} />
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+              {count === null
+                ? importedRecipientCount > 0
+                  ? `已從表格匯入 ${importedRecipientCount} 人`
+                  : "尚未選擇收件人"
+                : `預計寄送約 ${estimatedRecipientCount} 人`}
+              {sampleNames.length > 0 && `（${sampleNames.join("、")}${count && count > sampleNames.length ? " …" : ""}）`}
+            </p>
+          </section>
+
+          <section className={`card space-y-3 p-4 ${currentStep === 3 ? "" : "hidden"}`}>
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-semibold">附件</h2>
+                <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                  小檔直接附加；較大檔案自動改為限時安全下載連結。
+                </p>
+              </div>
+              <AnimatedFileUpload
+                accept=".pdf,.doc,.docx,.xls,.xlsx,image/png,image/jpeg,image/webp"
+                label="拖曳附件到這裡"
+                hint="支援 PDF、Office 與圖片"
+                onUpload={uploadAttachment}
+              />
+            </div>
+            <EmailAttachmentList attachments={attachments} onRemove={removeAttachment} />
+          </section>
+        </div>
+
+        {/* ── 預覽與動作 ─────────────────────────────────────── */}
+        <div className={`min-w-0 space-y-4 ${currentStep >= 3 ? "" : "hidden"}`}>
+          <EmailLivePreview
+            recipientRows={recipientRows}
+            previewRecipientIndex={previewRecipientIndex}
+            onPreviewRecipientChange={setPreviewRecipientIndex}
+            sanitizedPreviewHtml={sanitizedPreviewHtml}
+            previewHtml={previewHtml}
+            previewError={previewError}
+            subject={subject}
+          />
+
+          <section className={`card space-y-3 p-4 ${currentStep >= 4 ? "" : "hidden"}`}>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <label className="flex items-center gap-2 text-xs">
+                <input type="checkbox" checked={trackOpens} onChange={(e) => setTrackOpens(e.target.checked)} />
+                追蹤開信率（估計值）
+              </label>
+              <label className="flex items-center gap-2 text-xs">
+                <input type="checkbox" checked={trackClicks} onChange={(e) => setTrackClicks(e.target.checked)} />
+                追蹤連結點擊
+              </label>
+            </div>
+            {preflightResult && (
+              <div className="rounded-lg border p-3 text-xs" style={{ borderColor: preflightResult.valid ? "var(--success)" : "var(--danger)" }}>
+                <p className="font-semibold">
+                  預檢{preflightResult.valid ? "通過" : "未通過"} · 去重後 {preflightResult.unique_count} 人 · 預計 {preflightResult.estimated_batches} 批
+                </p>
+                {preflightResult.duplicate_emails.length > 0 && (
+                  <div className="mt-2 space-y-2">
+                    <p>
+                      重複電子郵件地址：{preflightResult.duplicate_emails.length}
+                    </p>
+                    <div className="max-h-64 space-y-3 overflow-y-auto border-t pt-2">
+                      <p>同一地址只會寄送一次。請核對姓名與名單資料，再回到「收件資料」修正重複列。</p>
+                      <ul className="space-y-3">
+                        {(preflightResult.duplicate_recipients ??
+                          preflightResult.duplicate_emails.map((email) => ({ email, recipients: [] })))
+                          .map((group) => (
+                            <li key={group.email}>
+                              <p className="break-all font-semibold">{group.email}</p>
+                              {group.recipients.length > 0 ? (
+                                <ul className="mt-1 divide-y pl-2">
+                                  {group.recipients.map((recipient, index) => (
+                                    <li key={`${recipient.source}-${recipient.name ?? "unnamed"}-${index}`} className="py-1.5">
+                                      <p>
+                                        <span className="break-words font-medium">{recipient.name?.trim() || "未提供姓名"}</span>
+                                        <span style={{ color: "var(--text-muted)" }}>
+                                          {recipient.source === "account" ? " · 系統帳號" : " · 名單資料"}
+                                          {recipient.student_id ? ` · 學號 ${recipient.student_id}` : ""}
+                                        </span>
+                                      </p>
+                                      {Object.entries(recipient.variables ?? {}).length > 0 && (
+                                        <dl className="mt-1 grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-x-2 gap-y-1 pl-2">
+                                          {Object.entries(recipient.variables ?? {}).map(([key, value]) => (
+                                            <div key={key} className="contents">
+                                              <dt className="min-w-0 break-words" style={{ color: "var(--text-muted)" }}>{key}</dt>
+                                              <dd className="min-w-0 whitespace-pre-wrap break-words">{value || "（空白）"}</dd>
+                                            </div>
+                                          ))}
+                                        </dl>
+                                      )}
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <p className="mt-1" style={{ color: "var(--text-muted)" }}>
+                                  目前沒有可顯示的收件明細。
+                                </p>
+                              )}
+                            </li>
+                          ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+                {preflightResult.suppressed_emails.length > 0 && <p>已排除退訂／退信：{preflightResult.suppressed_emails.length}</p>}
+                {preflightResult.missing_variables.length > 0 && <p style={{ color: "var(--danger)" }}>缺少必要欄位：{preflightResult.missing_variables.length}</p>}
+              </div>
+            )}
+            {currentStep === 5 && <div>
+              <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                預約寄送時間（選填）
+              </label>
+              <input
+                type="datetime-local"
+                className="input"
+                value={scheduledAt}
+                onChange={(e) => setScheduledAt(e.target.value)}
+              />
+            </div>}
+            <div className="flex flex-wrap gap-2">
+              {currentStep === 4 && <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                disabled={busy}
+                onClick={handleTest}
+              >
+                測試寄給我
+              </button>}
+              {currentStep === 4 && <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                disabled={busy}
+                onClick={async () => {
+                  try {
+                    const result = await emailApi.testSample({
+                      ...buildPayload(),
+                      recipient_indexes: recipientRows.slice(0, 3).map((_, index) => index),
+                      test_emails: [],
+                    });
+                    toast.success(`已排入 ${result.queued} 封抽樣測試信`);
+                  } catch (e) {
+                    toast.error(apiErrorMessage(e, "抽樣測試失敗"));
+                  }
+                }}
+              >
+                抽樣測試
+              </button>}
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                disabled={busy}
+                onClick={handleSaveDraft}
+              >
+                永久儲存草稿
+              </button>
+              {currentStep === 5 && <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                disabled={busy || !scheduledAt}
+                onClick={handleSchedule}
+              >
+                預約寄送
+              </button>}
+              {currentStep === 5 && <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                disabled={busy}
+                onClick={handleSend}
+              >
+                立即寄送
+              </button>}
+            </div>
+            {lastSavedAt && (
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                已暫存於此裝置
+              </p>
+            )}
+          </section>
+        </div>
+      </div>
+
+      <div className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-20 flex items-center justify-between rounded-lg border p-3 lg:bottom-3" style={{ background: "var(--bg-surface)", borderColor: "var(--border-strong)" }}>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          disabled={currentStep === 1 || busy}
+          onClick={() => setCurrentStep((step) => Math.max(1, step - 1))}
+        >
+          上一步
+        </button>
+        <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+          {COMPOSE_STEPS[currentStep - 1].label}
+        </span>
+        {currentStep < 5 ? (
+          <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => void goToNextStep()}>
+            {currentStep === 4 ? "完成檢查" : "下一步"}
+          </button>
+        ) : (
+          <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={handleSend}>
+            立即寄送
+          </button>
+        )}
+      </div>
+
+      {confirmOpen && (
+        <Modal title="確認大量寄送" onClose={() => setConfirmOpen(false)} size="md">
+          <p className="text-sm" style={{ color: "var(--text-primary)" }}>
+            這封信將寄送給 <strong>{preflightResult?.unique_count ?? estimatedRecipientCount}</strong> 位收件人，
+            共 {preflightResult?.estimated_batches ?? 1} 批，確定要立即送出嗎？
+          </p>
+          <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+            開信追蹤：{trackOpens ? "開啟" : "關閉"} · 點擊追蹤：{trackClicks ? "開啟" : "關閉"} · 附件 {attachments.length} 個
+          </p>
+          <div className="mt-5 flex justify-end gap-2">
+            <button className="btn btn-ghost btn-sm" onClick={() => setConfirmOpen(false)}>
+              取消
+            </button>
+            <button className="btn btn-primary btn-sm" disabled={busy} onClick={doSend}>
+              確認寄送
+            </button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+export default function EmailComposePage() {
+  return (
+    <Suspense fallback={null}>
+      <ComposeInner />
+    </Suspense>
+  );
+}

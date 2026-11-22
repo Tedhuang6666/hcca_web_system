@@ -1,31 +1,44 @@
 import type { NextConfig } from "next";
-import path from "node:path";
 import { withSentryConfig } from "@sentry/nextjs";
+import { resolve } from "node:path";
 
 const apiInternalUrl = process.env.API_INTERNAL_URL || "http://localhost:8000";
+const webRoot = resolve(__dirname);
 
 const nextConfig: NextConfig = {
   devIndicators: false,
+  poweredByHeader: false,
   output: "standalone",
-  outputFileTracingRoot: __dirname,
+  outputFileTracingRoot: webRoot,
   allowedDevOrigins: [
     "*.trycloudflare.com",
     "*.devtunnels.ms",
   ],
   turbopack: {
-    root: path.resolve(__dirname),
+    root: webRoot,
   },
-  // 圖片優化：自動轉 WebP/AVIF、長 CDN 快取（1 天）；
+  // Webpack production 對外部 script 加上 SRI integrity；CSP 仍使用 per-request nonce，
+  // 因為 Next.js App Router 會輸出必須由 nonce 授權的 inline bootstrap script。
+  experimental: {
+    optimizePackageImports: ["lucide-react"],
+    sri: {
+      algorithm: "sha384",
+    },
+  },
+  // WebP 降低原圖首次縮放的編碼成本，沿用 30 天快取；
   // remotePatterns 允許後端 /uploads 路徑與 Cloudflare 隧道測試環境。
   images: {
-    formats: ["image/avif", "image/webp"],
-    minimumCacheTTL: 86400,
-    deviceSizes: [640, 750, 828, 1080, 1200, 1920],
-    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+    // 舊路徑曾被 CDN 長期快取 500；換路徑讓部署後避開既有錯誤快取。
+    path: "/_next/image/v2",
+    formats: ["image/webp"],
+    minimumCacheTTL: 2592000,
+    deviceSizes: [384, 640, 750, 828, 1080, 1200, 1920],
+    imageSizes: [16, 32, 48, 64, 96, 128, 192, 256, 320, 384, 512],
     remotePatterns: [
       { protocol: "https", hostname: "**.trycloudflare.com" },
       { protocol: "https", hostname: "**.devtunnels.ms" },
       { protocol: "https", hostname: "lh3.googleusercontent.com" },
+      { protocol: "https", hostname: "hcca.buckets.hct.works" },
       // 本機後端（dev / docker compose）
       { protocol: "http", hostname: "localhost" },
       { protocol: "http", hostname: "127.0.0.1" },
@@ -34,29 +47,77 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "*.s3.amazonaws.com" },
     ],
   },
-  async rewrites() {
+  async redirects() {
     return [
       {
-        source: "/auth/google/:path*",
-        destination: `${apiInternalUrl}/auth/google/:path*`,
+        source: "/admin/system/observability",
+        destination: "/admin/system?tab=observability",
+        permanent: false,
       },
       {
-        source: "/discord/:path*",
-        destination: `${apiInternalUrl}/discord/:path*`,
-      },
-      {
-        source: "/api/:path*",
-        destination: `${apiInternalUrl}/:path*`,
-      },
-      {
-        source: "/ws/:path*",
-        destination: `${apiInternalUrl}/ws/:path*`,
-      },
-      {
-        source: "/public/meetings/:path*",
-        destination: `${apiInternalUrl}/public/meetings/:path*`,
+        source: "/finance/receivables",
+        destination: "/finance",
+        permanent: true,
       },
     ];
+  },
+  async headers() {
+    return [
+      {
+        source: "/brand/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=2592000, stale-while-revalidate=86400",
+          },
+        ],
+      },
+      {
+        source: "/api/dashboard/composite",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "private, max-age=30, stale-while-revalidate=60",
+          },
+        ],
+      },
+    ];
+  },
+  async rewrites() {
+    return {
+      // images.path 改變產生的網址，仍須轉交給 Next 內建的 optimizer 路由。
+      beforeFiles: [
+        {
+          source: "/_next/image/v2",
+          destination: "/_next/image",
+        },
+      ],
+      afterFiles: [
+        {
+          source: "/auth/google/:path*",
+          destination: `${apiInternalUrl}/auth/google/:path*`,
+        },
+        {
+          source: "/auth/discord/:path*",
+          destination: `${apiInternalUrl}/auth/discord/:path*`,
+        },
+        {
+          source: "/discord/:path*",
+          destination: `${apiInternalUrl}/discord/:path*`,
+        },
+        {
+          source: "/ws/:path*",
+          destination: `${apiInternalUrl}/ws/:path*`,
+        },
+      ],
+      // Dynamic public image handlers must resolve before the build-time API proxy.
+      fallback: [
+        {
+          source: "/api/:path*",
+          destination: `${apiInternalUrl}/:path*`,
+        },
+      ],
+    };
   },
 };
 
@@ -89,6 +150,17 @@ export default withSentryConfig(configWithAnalyzer, {
   // Upload a larger set of source maps for prettier stack traces (increases build time)
   widenClientFileUpload: true,
 
+  // Build telemetry is not part of application error monitoring. Disable the
+  // plugin's outbound build-time event so CI/local builds remain deterministic
+  // when the build environment intentionally restricts external telemetry.
+  telemetry: false,
+
+  // Source-map upload belongs in the reproducible production image workflow.
+  // Local builds should not fail merely because Sentry is unreachable.
+  sourcemaps: {
+    disable: process.env.CI !== "true",
+  },
+
   // Route browser requests to Sentry through a Next.js rewrite to circumvent ad-blockers.
   // This can increase your server load as well as your hosting bill.
   // Note: Check that the configured route will not match with your Next.js middleware, otherwise reporting of client-
@@ -96,6 +168,10 @@ export default withSentryConfig(configWithAnalyzer, {
   tunnelRoute: "/monitoring",
 
   webpack: {
+    unstable_sentryWebpackPluginOptions: {
+      disable: process.env.CI !== "true",
+    },
+
     // Enables automatic instrumentation of Vercel Cron Monitors. (Does not yet work with App Router route handlers.)
     // See the following for more information:
     // https://docs.sentry.io/product/crons/

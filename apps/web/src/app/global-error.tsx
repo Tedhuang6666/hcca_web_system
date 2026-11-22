@@ -1,18 +1,20 @@
 "use client";
 
-import * as Sentry from "@sentry/nextjs";
-import NextError from "next/error";
 import { useEffect } from "react";
+
+import RouteErrorState from "@/components/ui/RouteErrorState";
 
 export default function GlobalError({ error }: { error: Error & { digest?: string } }) {
   useEffect(() => {
-    Sentry.captureException(error);
+    void import("@sentry/nextjs")
+      .then((Sentry) => Sentry.captureException(error))
+      .catch(() => undefined);
   }, [error]);
 
   return (
     <html lang="zh-TW">
       <body>
-        <NextError statusCode={0} />
+        <RouteErrorState error={error} reset={() => window.location.reload()} scope="global-error" />
       </body>
     </html>
   );

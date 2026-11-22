@@ -180,6 +180,22 @@ async def test_heartbeat_closes_idle_connection() -> None:
     mgr.disconnect(ws, "r")
 
 
+@pytest.mark.asyncio
+async def test_disconnect_session_closes_only_matching_connections() -> None:
+    mgr = _mgr()
+    matched, other = _make_ws(), _make_ws()
+    await mgr.connect(matched, "r", "1.1.1.1", session_id="session-a")
+    await mgr.connect(other, "r", "2.2.2.2", session_id="session-b")
+
+    closed = await mgr.disconnect_session("session-a")
+
+    assert closed == 1
+    matched.close.assert_awaited_once_with(code=4001, reason="session revoked")
+    other.close.assert_not_awaited()
+    assert mgr.room_count("r") == 1
+    mgr.disconnect(other, "r")
+
+
 def test_total_connections() -> None:
     """total_connections 應回傳跨所有房間的總連線數"""
     mgr = _mgr()
@@ -210,4 +226,5 @@ def test_build_message_format() -> None:
     assert msg["room"] == "test"
     assert msg["sender"] == "u1"
     assert msg["data"] == {"text": "Hello"}
+    assert isinstance(msg["event_id"], str)
     assert "timestamp" in msg

@@ -43,6 +43,7 @@ class WorkItemOut(BaseModel):
     completed_at: datetime | None
     discord_channel_id: str | None
     discord_message_id: str | None
+    google_task_id: str | None
     is_active: bool
     created_at: datetime
     updated_at: datetime

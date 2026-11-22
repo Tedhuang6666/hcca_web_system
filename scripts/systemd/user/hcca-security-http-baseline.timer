@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly HCCA HTTP access-control baseline
+
+[Timer]
+OnCalendar=Sun *-*-* 06:11:00
+AccuracySec=1min
+Unit=hcca-security@http-baseline.service
+
+[Install]
+WantedBy=timers.target

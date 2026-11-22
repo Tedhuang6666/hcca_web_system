@@ -1,4 +1,4 @@
-"""Feature Flag schemas。Phase D3。"""
+"""Feature Flag schemas。"""
 
 from __future__ import annotations
 

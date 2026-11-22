@@ -6,22 +6,29 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.cache import cache_get, cache_invalidate, cache_set
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_any
 from api.models.site import PublicLinkCategory, PublicSitePage
 from api.models.user import User
+from api.routers.gallery_sync import router as gallery_sync_router
+from api.schemas.analytics import PublicArticleViewCreate
 from api.schemas.site import (
     PublicLinkCategoryCreate,
     PublicLinkCategoryOut,
     PublicLinkCategoryUpdate,
     PublicLinkCreate,
     PublicLinkOut,
+    PublicLinkReorder,
+    PublicLinkTreeOut,
+    PublicLinkTreeUpdate,
     PublicLinkUpdate,
     PublicOfficerCandidateOut,
     PublicOfficerOut,
@@ -37,9 +44,11 @@ from api.schemas.site import (
 )
 from api.services import audit as audit_svc
 from api.services import site as site_svc
-from api.services.storage import get_storage
+from api.services.analytics import record_public_article_view
+from api.services.storage import get_storage, validate_storage_key
 
 router = APIRouter(prefix="/site", tags=["公開官網"])
+router.include_router(gallery_sync_router)
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
@@ -48,7 +57,19 @@ SiteAdminDep = Depends(require_any(PermissionCode.SITE_MANAGE, PermissionCode.AD
 
 @router.get("/public", response_model=PublicSiteBundleOut, summary="公開官網首頁資料")
 async def get_public_site(db: DbDep) -> PublicSiteBundleOut:
-    return PublicSiteBundleOut(
+    cached = await cache_get("site:public")
+    if isinstance(cached, dict):
+        try:
+            bundle = PublicSiteBundleOut.model_validate(cached)
+        except Exception:
+            pass
+        else:
+            bundle.links = [
+                PublicLinkOut.model_validate(item) for item in await site_svc.list_links(db, True)
+            ]
+            return bundle
+
+    bundle = PublicSiteBundleOut(
         settings=PublicSiteSettingsOut.model_validate(await site_svc.get_settings(db)),
         links=[PublicLinkOut.model_validate(item) for item in await site_svc.list_links(db, True)],
         link_categories=[
@@ -61,6 +82,8 @@ async def get_public_site(db: DbDep) -> PublicSiteBundleOut:
             for item in await site_svc.list_pages(db, published_only=True, nav_only=True)
         ],
     )
+    await cache_set("site:public", bundle.model_dump(mode="json"), ttl=60)
+    return bundle
 
 
 @router.get("/links", response_model=list[PublicLinkOut], summary="公開 Linktree 連結")
@@ -100,6 +123,16 @@ async def get_public_page(slug: str, db: DbDep) -> object:
     return page
 
 
+@router.post(
+    "/pages/{slug}/view",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="記錄公開文章閱讀",
+)
+async def create_public_article_view(slug: str, data: PublicArticleViewCreate, db: DbDep) -> None:
+    await record_public_article_view(db, slug, data)
+    await db.commit()
+
+
 @router.get("/admin/settings", response_model=PublicSiteSettingsOut, dependencies=[SiteAdminDep])
 async def admin_get_settings(db: DbDep, _: CurrentUser) -> object:
     return await site_svc.get_settings(db)
@@ -133,6 +166,78 @@ class UploadedImageOut(BaseModel):
 
 
 _IMAGE_TYPES = frozenset({"image/jpeg", "image/png", "image/gif", "image/webp"})
+_PUBLIC_FILE_TYPES = frozenset(
+    {
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-powerpoint",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        *_IMAGE_TYPES,
+    }
+)
+
+
+class UploadedPublicFileOut(BaseModel):
+    url: str
+    filename: str
+    content_type: str
+    file_size: int
+
+
+_PUBLIC_IMAGE_MEDIA_TYPES = {
+    ".gif": "image/gif",
+    ".jpeg": "image/jpeg",
+    ".jpg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+}
+_PUBLIC_IMAGE_EXTENSIONS = frozenset(_PUBLIC_IMAGE_MEDIA_TYPES)
+
+
+def _public_site_image_url(storage_key: str) -> str:
+    """回傳不會暴露儲存後端細節、可長期使用的公開圖片路徑。"""
+    return f"/site/public/images/{storage_key}"
+
+
+def _public_image_key(storage_key: str) -> str:
+    try:
+        key = validate_storage_key(storage_key)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="圖片不存在") from exc
+    if not key.startswith("public-site/") or "." not in key:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="圖片不存在")
+    suffix = "." + key.rsplit(".", 1)[-1].lower()
+    if suffix not in _PUBLIC_IMAGE_EXTENSIONS:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="圖片不存在")
+    return key
+
+
+@router.get(
+    "/public/images/{storage_key:path}",
+    summary="讀取公開官網圖片",
+    response_class=Response,
+)
+async def get_public_site_image(storage_key: str) -> Response:
+    """以同源網址提供官網圖片，讓本地與 S3 儲存都能嵌入公開文章。"""
+    key = _public_image_key(storage_key)
+    storage = get_storage()
+    local_path = storage.local_path(key)
+    media_type = _PUBLIC_IMAGE_MEDIA_TYPES["." + key.rsplit(".", 1)[-1].lower()]
+    headers = {"Cache-Control": "public, max-age=31536000, immutable"}
+
+    if local_path is not None:
+        if not local_path.is_file():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="圖片不存在")
+        return FileResponse(local_path, media_type=media_type, headers=headers)
+
+    try:
+        content = await storage.read_bytes(key)
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="圖片不存在") from exc
+    return Response(content=content, media_type=media_type, headers=headers)
 
 
 @router.post(
@@ -155,8 +260,40 @@ async def admin_upload_image(
     try:
         stored = await storage.save(file, prefix="public-site")
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
     return UploadedImageOut(
+        url=_public_site_image_url(stored.storage_key),
+        filename=stored.filename,
+        content_type=stored.content_type,
+        file_size=stored.file_size,
+    )
+
+
+@router.post(
+    "/admin/files",
+    response_model=UploadedPublicFileOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[SiteAdminDep],
+    summary="上傳公開官網參考文件，回傳可直接填入公開頁附件的 URL",
+)
+async def admin_upload_public_file(
+    _: CurrentUser,
+    file: UploadFile = File(...),
+) -> UploadedPublicFileOut:
+    storage = get_storage()
+    try:
+        stored = await storage.save(
+            file,
+            prefix="public-site",
+            allowed_content_types=_PUBLIC_FILE_TYPES,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    return UploadedPublicFileOut(
         url=stored.url or f"/uploads/{stored.storage_key}",
         filename=stored.filename,
         content_type=stored.content_type,
@@ -292,6 +429,61 @@ async def admin_create_link(
     return link
 
 
+@router.patch(
+    "/admin/links/reorder",
+    response_model=list[PublicLinkOut],
+    dependencies=[SiteAdminDep],
+)
+async def admin_reorder_links(
+    data: PublicLinkReorder,
+    db: DbDep,
+    current_user: CurrentUser,
+) -> list[PublicLinkOut]:
+    try:
+        links = await site_svc.reorder_links(db, data.link_ids)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await audit_svc.record(
+        db,
+        entity_type="public_link",
+        entity_id="bulk",
+        action="site.links.reorder",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta=data.model_dump(mode="json"),
+        summary=f"調整公開連結排序（{len(links)} 筆）",
+    )
+    return links
+
+
+@router.patch(
+    "/admin/links/tree",
+    response_model=PublicLinkTreeOut,
+    dependencies=[SiteAdminDep],
+)
+async def admin_update_link_tree(
+    data: PublicLinkTreeUpdate,
+    db: DbDep,
+    current_user: CurrentUser,
+) -> PublicLinkTreeOut:
+    try:
+        categories, links = await site_svc.update_link_tree(db, data)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await audit_svc.record(
+        db,
+        entity_type="public_link",
+        entity_id="tree",
+        action="site.links.tree.update",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta=data.model_dump(mode="json"),
+        summary=f"更新公開連結分類與排序（{len(links)} 筆）",
+    )
+    await cache_invalidate("site:public")
+    return PublicLinkTreeOut(categories=categories, links=links)
+
+
 @router.patch("/admin/links/{link_id}", response_model=PublicLinkOut, dependencies=[SiteAdminDep])
 async def admin_update_link(
     link_id: uuid.UUID,
@@ -302,7 +494,10 @@ async def admin_update_link(
     link = await site_svc.get_link(db, link_id)
     if not link:
         raise HTTPException(status_code=404, detail="連結不存在")
-    link = await site_svc.update_link(db, link, data)
+    try:
+        link = await site_svc.update_link(db, link, data)
+    except site_svc.InvalidPublicLinkSchedule as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     await audit_svc.record(
         db,
         entity_type="public_link",

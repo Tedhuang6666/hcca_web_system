@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import uuid
 from typing import Annotated
-from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse, RedirectResponse
@@ -20,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.dependencies.auth import get_current_active_user, get_optional_user
-from api.models.document import DocumentAttachment
+from api.models.document import Document, DocumentAttachment, DocumentStatus
 from api.models.user import User
 from api.routers.documents_helpers import (
     assert_access,
@@ -29,6 +28,8 @@ from api.routers.documents_helpers import (
 )
 from api.schemas.document import AttachmentLinkCreate, AttachmentOut
 from api.services import document as doc_svc
+from api.services import outbox
+from api.services.file_delivery import FileDisposition, deliver_stored_file
 from api.services.storage import StorageBackend, get_storage
 
 router = APIRouter(prefix="/documents", tags=["公文系統"])
@@ -38,35 +39,40 @@ CurrentUser = Annotated[User, Depends(get_current_active_user)]
 OptionalUser = Annotated[User | None, Depends(get_optional_user)]
 
 
+def _attachment_download_path(doc_id: uuid.UUID, att_id: uuid.UUID) -> str:
+    """已授權的附件下載端點路徑（取代原始 /uploads 靜態路徑）。"""
+    return f"/documents/{doc_id}/attachments/{att_id}/download"
+
+
 class AttachmentRenameRequest(BaseModel):
     filename: str
+
+
+async def _assert_attachment_mutable(session: AsyncSession, doc: Document) -> None:
+    # 等待正在進行的送審／發文交易並重新讀取狀態；鎖持續到此附件交易結束。
+    await session.refresh(doc, attribute_names=["status"], with_for_update=True)
+    if doc.status != DocumentStatus.DRAFT:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="只有草稿公文可修改附件")
 
 
 async def _serve_attachment(
     storage: StorageBackend,
     att: DocumentAttachment,
-    disposition: str,
+    disposition: FileDisposition,
 ) -> FileResponse | RedirectResponse:
     """依儲存後端提供附件：本機後端直接 serve 檔案，遠端後端重導向至 presigned URL。
 
     disposition 為 "attachment"（下載）或 "inline"（預覽）。集中此邏輯以免
     將後端類型寫死在各端點（見 [services/storage.py](../services/storage.py)）。
     """
-    filename = att.display_name or att.filename
-    encoded_filename = quote(filename.encode("utf-8"))
-    local = storage.local_path(att.storage_key)
-    if local is not None:
-        if not local.exists():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="附件檔案不存在")
-        headers = {"Content-Disposition": f"{disposition}; filename*=UTF-8''{encoded_filename}"}
-        media_type = att.content_type or "application/octet-stream"
-        if disposition == "attachment":
-            return FileResponse(
-                path=str(local), filename=filename, media_type=media_type, headers=headers
-            )
-        return FileResponse(path=str(local), media_type=media_type, headers=headers)
-    url = await storage.get_url(att.storage_key, disposition=disposition, download_name=filename)
-    return RedirectResponse(url=url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+    return await deliver_stored_file(
+        storage,
+        att.storage_key,
+        filename=att.display_name or att.filename,
+        content_type=att.content_type or "application/octet-stream",
+        disposition=disposition,
+        missing_detail="附件檔案不存在",
+    )
 
 
 @router.get(
@@ -83,10 +89,11 @@ async def list_attachments(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此公文")
     else:
         await assert_access(session, doc, current_user)
-    storage = get_storage()
     for att in doc.attachments:
+        # 一律指向已授權的下載端點，不暴露原始 /uploads 靜態路徑（該路徑已不再服務
+        # 公文附件，且會繞過存取控制）。外部連結附件（無 storage_key）維持空字串。
         if att.storage_key:
-            att.__dict__["url"] = await storage.get_url(att.storage_key)
+            att.__dict__["url"] = _attachment_download_path(doc.id, att.id)
         else:
             att.__dict__["url"] = ""
     return doc.attachments
@@ -112,6 +119,7 @@ async def upload_attachment(
     doc = await get_doc_or_404(doc_id, session)
     await assert_access(session, doc, current_user)
     await assert_can_edit(session, doc, current_user)
+    await _assert_attachment_mutable(session, doc)
 
     storage = get_storage()
     try:
@@ -125,11 +133,12 @@ async def upload_attachment(
         storage_key=stored.storage_key,
         content_type=stored.content_type,
         file_size=stored.file_size,
+        quantity=1,
         uploaded_by=current_user.id,
     )
     session.add(attachment)
     await session.flush()
-    attachment.__dict__["url"] = stored.url
+    attachment.__dict__["url"] = _attachment_download_path(doc.id, attachment.id)
     return attachment
 
 
@@ -148,6 +157,7 @@ async def add_link_attachment(
     doc = await get_doc_or_404(doc_id, session)
     await assert_access(session, doc, current_user)
     await assert_can_edit(session, doc, current_user)
+    await _assert_attachment_mutable(session, doc)
     display = (
         body.display_text.strip() if body.display_text and body.display_text.strip() else body.url
     )
@@ -155,6 +165,7 @@ async def add_link_attachment(
         document_id=doc.id,
         filename=display,
         link_url=str(body.url),
+        quantity=1,
         uploaded_by=current_user.id,
     )
     session.add(attachment)
@@ -192,9 +203,16 @@ async def delete_attachment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此附件")
     if att.uploaded_by != current_user.id and doc.created_by != current_user.id:
         await assert_can_edit(session, doc, current_user)
+    await _assert_attachment_mutable(session, doc)
 
-    storage = get_storage()
-    await storage.delete(att.storage_key)
+    # 刪除意圖與附件紀錄同交易提交；worker 只會看到已提交的事件。
+    if att.storage_key:
+        await outbox.emit(
+            session,
+            event_type="document.attachment_delete",
+            payload={"storage_key": att.storage_key},
+        )
+        outbox.request_processing_after_commit(session)
     await session.delete(att)
 
 
@@ -213,6 +231,7 @@ async def rename_attachment(
     doc = await get_doc_or_404(doc_id, session)
     await assert_access(session, doc, current_user)
     await assert_can_edit(session, doc, current_user)
+    await _assert_attachment_mutable(session, doc)
     result = await session.execute(
         select(DocumentAttachment).where(
             DocumentAttachment.id == att_id,

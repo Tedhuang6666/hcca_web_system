@@ -1,0 +1,15 @@
+/* Login-only styles stay out of the shared application stylesheet. */
+.login-aside {
+  position: relative;
+  isolation: isolate;
+}
+
+.login-brand-stage {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+}
+
+.login-oauth {
+  position: relative;
+}

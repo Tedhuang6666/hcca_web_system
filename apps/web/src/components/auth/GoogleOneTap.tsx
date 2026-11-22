@@ -7,9 +7,15 @@ import { toast } from "sonner";
 
 import { authApi } from "@/lib/api";
 import { cacheCurrentUser } from "@/lib/auth-cache";
+import { isPublicRoute } from "@/lib/route-access";
+import { loginDestination } from "@/lib/login-destination";
 
 declare global {
   interface Window {
+    __hccaGoogleOneTap?: {
+      clientId: string;
+      handleCredential: (response: { credential?: string }) => void;
+    };
     google?: {
       accounts: {
         id: {
@@ -28,14 +34,11 @@ declare global {
 }
 
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-const BARE_PATH_PREFIXES = ["/auth", "/profile/complete", "/public", "/unsubscribe"];
-
 function canShowOneTap(pathname: string): boolean {
   if (!GOOGLE_CLIENT_ID) return false;
   if (typeof window === "undefined") return false;
   if (localStorage.getItem("user_id")) return false;
-  if (pathname === "/login") return true;
-  return !BARE_PATH_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+  return !isPublicRoute(pathname);
 }
 
 export default function GoogleOneTap() {
@@ -51,14 +54,14 @@ export default function GoogleOneTap() {
 
       try {
         const result = await authApi.googleOneTap(response.credential, nextPath);
-        if (result.mfa_required && result.challenge) {
+        if (result.mfa_required) {
           const next = encodeURIComponent(result.next || nextPath || "/");
-          router.replace(`/auth/mfa?challenge=${encodeURIComponent(result.challenge)}&next=${next}`);
+          router.replace(`/auth/mfa?next=${next}`);
           return;
         }
         if (result.user) {
           cacheCurrentUser(result.user);
-          window.location.replace(result.next || nextPath || "/");
+          window.location.replace(loginDestination(result.next || nextPath));
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : "Google 快速登入失敗";
@@ -69,18 +72,36 @@ export default function GoogleOneTap() {
   );
 
   useEffect(() => {
-    if (!scriptReady || !canShowOneTap(pathname)) return;
+    if (!scriptReady) return;
     const clientId = GOOGLE_CLIENT_ID;
     if (!clientId) return;
-    window.google?.accounts.id.initialize({
-      client_id: clientId,
-      callback: handleCredential,
-      cancel_on_tap_outside: true,
-      context: "signin",
-    });
-    window.google?.accounts.id.prompt();
-    return () => window.google?.accounts.id.cancel();
-  }, [handleCredential, pathname, scriptReady]);
+
+    if (!window.__hccaGoogleOneTap) {
+      window.__hccaGoogleOneTap = { clientId, handleCredential };
+      window.google?.accounts.id.initialize({
+        client_id: clientId,
+        callback: (response) => window.__hccaGoogleOneTap?.handleCredential(response),
+        cancel_on_tap_outside: true,
+        context: "signin",
+      });
+    } else {
+      window.__hccaGoogleOneTap.handleCredential = handleCredential;
+    }
+  }, [handleCredential, scriptReady]);
+
+  useEffect(() => {
+    if (!scriptReady || !canShowOneTap(pathname)) return;
+    let prompted = false;
+    const promptTimer = window.setTimeout(() => {
+      prompted = true;
+      window.google?.accounts.id.prompt();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(promptTimer);
+      if (prompted) window.google?.accounts.id.cancel();
+    };
+  }, [pathname, scriptReady]);
 
   if (!GOOGLE_CLIENT_ID) return null;
 
@@ -88,7 +109,7 @@ export default function GoogleOneTap() {
     <Script
       id="google-identity-services"
       src="https://accounts.google.com/gsi/client"
-      strategy="afterInteractive"
+      strategy="lazyOnload"
       onLoad={() => setScriptReady(true)}
     />
   );

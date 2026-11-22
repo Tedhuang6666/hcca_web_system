@@ -1,0 +1,225 @@
+"""校商投稿 API schemas。"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from api.models.merchandise_submission import MerchandiseSubmissionStatus
+
+
+class TemplateImage(BaseModel):
+    url: str = Field(..., min_length=1, max_length=1000)
+    label: str = Field(..., min_length=1, max_length=100)
+
+
+class SubmissionCustomField(BaseModel):
+    key: str = Field(..., pattern=r"^[a-z][a-z0-9_]{0,49}$")
+    label: str = Field(..., min_length=1, max_length=100)
+    field_type: Literal["text", "textarea"] = "text"
+    required: bool = False
+    placeholder: str | None = Field(None, max_length=200)
+    help_text: str | None = Field(None, max_length=500)
+    max_length: int = Field(200, ge=1, le=2000)
+
+
+class MerchandiseSubmissionSettingsUpdate(BaseModel):
+    is_open: bool | None = None
+    opens_at: datetime | None = None
+    closes_at: datetime | None = None
+    max_file_size_mb: int | None = Field(None, ge=1, le=250)
+    require_school_email: bool | None = None
+    announcement: str | None = Field(None, max_length=3000)
+    announcement_title: str | None = Field(None, max_length=200)
+    submission_intro: str | None = Field(None, max_length=10000)
+    global_fields: list[SubmissionCustomField] | None = Field(None, max_length=20)
+    show_announcement_popup: bool | None = None
+    notification_enabled: bool | None = None
+    notification_recipient_ids: list[uuid.UUID] | None = Field(None, max_length=100)
+
+    @field_validator("global_fields")
+    @classmethod
+    def global_field_keys_are_unique(
+        cls, values: list[SubmissionCustomField] | None
+    ) -> list[SubmissionCustomField] | None:
+        if values is not None and len({field.key for field in values}) != len(values):
+            raise ValueError("全域投稿欄位代碼不可重複")
+        return values
+
+
+class MerchandiseSubmissionSettingsOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    is_open: bool
+    opens_at: datetime | None
+    closes_at: datetime | None
+    max_file_size_mb: int
+    require_school_email: bool
+    announcement: str | None
+    announcement_title: str | None
+    submission_intro: str | None
+    global_fields: list[SubmissionCustomField]
+    show_announcement_popup: bool
+    announcement_id: uuid.UUID | None
+    updated_at: datetime
+
+
+class MerchandiseSubmissionSettingsAdminOut(MerchandiseSubmissionSettingsOut):
+    notification_enabled: bool
+    notification_recipient_ids: list[uuid.UUID]
+
+
+class MerchandiseSubmissionItemCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    description: str | None = Field(None, max_length=3000)
+    specification: str | None = Field(None, max_length=10000)
+    template_images: list[TemplateImage] = Field(default_factory=list, max_length=12)
+    custom_fields: list[SubmissionCustomField] = Field(default_factory=list, max_length=20)
+    sort_order: int = 0
+    is_active: bool = True
+    is_open_override: bool | None = None
+    opens_at_override: datetime | None = None
+    closes_at_override: datetime | None = None
+    max_file_size_mb_override: int | None = Field(None, ge=1, le=250)
+    notification_enabled: bool | None = None
+    notification_recipient_ids: list[uuid.UUID] | None = Field(None, max_length=100)
+
+    @field_validator("custom_fields")
+    @classmethod
+    def custom_field_keys_are_unique(
+        cls, values: list[SubmissionCustomField]
+    ) -> list[SubmissionCustomField]:
+        if len({field.key for field in values}) != len(values):
+            raise ValueError("自訂欄位代碼不可重複")
+        return values
+
+
+class MerchandiseSubmissionItemUpdate(MerchandiseSubmissionItemCreate):
+    name: str | None = Field(None, min_length=1, max_length=200)
+    template_images: list[TemplateImage] | None = Field(None, max_length=12)
+    custom_fields: list[SubmissionCustomField] | None = Field(None, max_length=20)
+    is_active: bool | None = None
+
+
+class MerchandiseSubmissionItemOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    description: str | None
+    specification: str | None
+    template_images: list[TemplateImage] = []
+    custom_fields: list[SubmissionCustomField] = []
+    sort_order: int
+    is_active: bool
+    is_open_override: bool | None
+    opens_at_override: datetime | None
+    closes_at_override: datetime | None
+    max_file_size_mb_override: int | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class MerchandiseSubmissionItemAdminOut(MerchandiseSubmissionItemOut):
+    notification_enabled: bool | None
+    notification_recipient_ids: list[uuid.UUID] | None
+
+
+class MerchandiseSubmissionItemPortalOut(MerchandiseSubmissionItemOut):
+    is_accepting: bool
+    effective_opens_at: datetime | None
+    effective_closes_at: datetime | None
+    effective_max_file_size_mb: int
+
+
+class MerchandiseSubmissionUploadOut(BaseModel):
+    storage_key: str
+    filename: str
+    content_type: str
+    file_size: int
+    url: str
+
+
+class MerchandiseSubmissionFileOut(MerchandiseSubmissionUploadOut):
+    id: uuid.UUID
+
+
+class MerchandiseSubmissionAIEvidenceOut(BaseModel):
+    level: Literal["A", "B", "C"]
+    category: str
+    label: str
+    value: str
+    source: str
+
+
+class MerchandiseSubmissionAIMetadataOut(BaseModel):
+    source: str
+    key: str
+    value: str
+
+
+class MerchandiseSubmissionAdminFileOut(MerchandiseSubmissionFileOut):
+    ai_detection_status: (
+        Literal["detected", "supporting", "no_evidence", "not_applicable", "error"] | None
+    )
+    ai_detection_evidence: list[MerchandiseSubmissionAIEvidenceOut]
+    ai_detection_metadata: list[MerchandiseSubmissionAIMetadataOut]
+    ai_detection_version: str | None
+    ai_detection_sha256: str | None
+    ai_detection_scanned_at: datetime | None
+
+
+class MerchandiseSubmissionSave(BaseModel):
+    item_id: uuid.UUID
+    field_values: dict[str, str] = Field(default_factory=dict)
+    files: list[MerchandiseSubmissionUploadOut] = Field(default_factory=list, max_length=10)
+
+
+class MerchandiseSubmissionReview(BaseModel):
+    status: Literal["reviewing", "review_completed", "approved", "revision_requested", "rejected"]
+    voting_survey_id: uuid.UUID | None = None
+    review_note: str | None = Field(None, max_length=3000)
+
+
+class MerchandiseSubmissionVotingSurveyCreate(BaseModel):
+    org_id: uuid.UUID
+    title: str = Field("校商投稿全校票選", min_length=1, max_length=300)
+    description: str | None = Field(None, max_length=2000)
+
+
+class MerchandiseSubmissionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    item_id: uuid.UUID
+    item_name: str
+    status: MerchandiseSubmissionStatus
+    account_snapshot: dict[str, str]
+    field_values: dict[str, str]
+    files: list[MerchandiseSubmissionFileOut] = []
+    submitted_at: datetime | None
+    reviewed_at: datetime | None
+    reviewer_name: str | None = None
+    voting_survey_id: uuid.UUID | None = None
+    voting_survey_title: str | None = None
+    voting_survey_status: str | None = None
+    review_note: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class MerchandiseSubmissionPortalOut(BaseModel):
+    settings: MerchandiseSubmissionSettingsOut
+    items: list[MerchandiseSubmissionItemPortalOut]
+    is_eligible_submitter: bool
+
+
+class MerchandiseSubmissionAdminListItem(MerchandiseSubmissionOut):
+    files: list[MerchandiseSubmissionAdminFileOut] = []
+    submitter_name: str
+    submitter_email: str
+    submitter_student_id: str | None

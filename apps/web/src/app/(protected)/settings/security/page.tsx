@@ -1,0 +1,509 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
+import QRCode from "qrcode";
+import { toast } from "sonner";
+import { discordApi, mfaApi, apiErrorMessage } from "@/lib/api";
+import type { DiscordBindingOut, MFASetupOut, MFAStatusOut, PasskeyOut } from "@/lib/types";
+import OtpInput from "@/components/auth/OtpInput";
+import { SectionSkeleton } from "@/components/ui/Skeleton";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { safeNextPath } from "@/lib/safe-redirect";
+
+export default function SecuritySettingsPage() {
+  const router = useRouter();
+  const confirm = useConfirm();
+  const searchParams = useSearchParams();
+  const mfaRequired = searchParams.get("mfa_required") === "1";
+  const nextPath = safeNextPath(searchParams.get("next"), "/dashboard");
+  const autoStarted = useRef(false);
+
+  const [status, setStatus] = useState<MFAStatusOut | null>(null);
+  const [setup, setSetup] = useState<MFASetupOut | null>(null);
+  const [confirmCode, setConfirmCode] = useState("");
+  const [disableCode, setDisableCode] = useState("");
+  const [regenerateCode, setRegenerateCode] = useState("");
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
+  const [qrDataUrl, setQrDataUrl] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [discordBinding, setDiscordBinding] = useState<DiscordBindingOut | null>(null);
+  const [discordBusy, setDiscordBusy] = useState(false);
+  const [passkeys, setPasskeys] = useState<PasskeyOut[]>([]);
+  const [passkeyName, setPasskeyName] = useState("");
+  const [passkeyCode, setPasskeyCode] = useState("");
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
+
+  const loadStatus = () => {
+    setLoading(true);
+    mfaApi.status()
+      .then(setStatus)
+      .catch((e) => toast.error(apiErrorMessage(e, "載入安全設定失敗")))
+      .finally(() => setLoading(false));
+  };
+
+  // 被 MFA 守衛攔截後自動展開設定流程
+  useEffect(() => {
+    if (mfaRequired && !autoStarted.current && status !== null && !status.mfa_enabled && !setup) {
+      autoStarted.current = true;
+      startSetup();
+    }
+  }, [mfaRequired, status, setup]);
+
+  useEffect(() => {
+    loadStatus();
+    mfaApi.passkeys().then(setPasskeys).catch(() => setPasskeys([]));
+    discordApi.me().then(setDiscordBinding).catch(() => setDiscordBinding({
+      linked: false,
+      discord_user_id: null,
+      username: null,
+      global_name: null,
+      linked_at: null,
+    }));
+  }, []);
+
+  const registerPasskey = async () => {
+    setPasskeyBusy(true);
+    try {
+      const optionResult = await mfaApi.registrationOptions();
+      const credential = await startRegistration({
+        optionsJSON: optionResult.options as unknown as Parameters<typeof startRegistration>[0]["optionsJSON"],
+      });
+      await mfaApi.verifyRegistration(optionResult.transaction_id, credential, passkeyName.trim() || undefined);
+      localStorage.setItem("hcca_passkey_enabled", "1");
+      toast.success("Passkey 已新增");
+      setPasskeyName("");
+      setPasskeys(await mfaApi.passkeys());
+      loadStatus();
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "Passkey 新增失敗，請確認瀏覽器支援並重試"));
+    } finally {
+      setPasskeyBusy(false);
+    }
+  };
+
+  const removePasskey = async (credentialId: string) => {
+    setPasskeyBusy(true);
+    try {
+      if (!status?.mfa_enabled) {
+        const optionResult = await mfaApi.authenticationOptions();
+        const assertion = await startAuthentication({
+          optionsJSON: optionResult.options as unknown as Parameters<typeof startAuthentication>[0]["optionsJSON"],
+        });
+        await mfaApi.verifyAuthentication(optionResult.transaction_id, assertion);
+      }
+      await mfaApi.deletePasskey(credentialId, passkeyCode.trim() || undefined);
+      toast.success("Passkey 已刪除");
+      setPasskeyCode("");
+      setPasskeys(await mfaApi.passkeys());
+      loadStatus();
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "Passkey 刪除失敗；若已啟用 TOTP，請輸入目前驗證碼"));
+    } finally {
+      setPasskeyBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!setup?.qr_uri) {
+      setQrDataUrl("");
+      return;
+    }
+    let cancelled = false;
+    QRCode.toDataURL(setup.qr_uri, {
+      width: 220,
+      margin: 2,
+      color: { dark: "#111827", light: "#ffffff" },
+    })
+      .then((url) => {
+        if (!cancelled) setQrDataUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) setQrDataUrl("");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [setup?.qr_uri]);
+
+  const startSetup = async () => {
+    setBusy(true);
+    try {
+      const result = await mfaApi.setup();
+      setSetup(result);
+      setConfirmCode("");
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "建立 2FA 設定失敗"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmSetup = async () => {
+    setBusy(true);
+    try {
+      await mfaApi.confirm(confirmCode.trim());
+      toast.success("2FA 已啟用");
+      setRecoveryCodes(setup?.backup_codes ?? []);
+      setSetup(null);
+      setConfirmCode("");
+      if (mfaRequired) {
+        // 從 MFA 守衛引導而來：設定完畢後回原頁
+        setTimeout(() => router.replace(nextPath), 1200);
+      } else {
+        loadStatus();
+      }
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "驗證碼錯誤"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const disableMfa = async () => {
+    setBusy(true);
+    try {
+      await mfaApi.disable(disableCode.trim());
+      toast.success("2FA 已停用");
+      setDisableCode("");
+      loadStatus();
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "停用失敗"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const regenerateBackupCodes = async () => {
+    setBusy(true);
+    try {
+      const result = await mfaApi.regenerateBackupCodes(regenerateCode.trim());
+      setRecoveryCodes(result.backup_codes);
+      setRegenerateCode("");
+      toast.success("備用碼已重新產生");
+      loadStatus();
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "重產備用碼失敗"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const linkDiscord = () => {
+    window.location.href = discordApi.loginUrl("/settings/security");
+  };
+
+  const unlinkDiscord = async () => {
+    if (!(await confirm({
+      title: "解除 Discord 綁定？",
+      description: "解除後將無法使用 Discord 登入，也不會再收到 Bot 通知。",
+      confirmLabel: "解除綁定",
+      danger: true,
+    }))) return;
+    setDiscordBusy(true);
+    try {
+      await discordApi.unlink();
+      setDiscordBinding({
+        linked: false,
+        discord_user_id: null,
+        username: null,
+        global_name: null,
+        linked_at: null,
+      });
+      toast.success("Discord 綁定已解除");
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "解除 Discord 綁定失敗"));
+    } finally {
+      setDiscordBusy(false);
+    }
+  };
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-5">
+      {/* MFA 守衛引導橫幅 */}
+      {mfaRequired && (
+        <div
+          className="flex items-start gap-3 rounded-md px-4 py-3 text-sm"
+          style={{
+            background: "var(--warning-dim)",
+            border: "1px solid var(--warning-border)",
+            color: "var(--warning)",
+          }}
+        >
+          <div>
+            <p className="font-semibold">需要設定兩步驟驗證才能繼續</p>
+            <p className="mt-0.5 text-xs opacity-80">
+              完成下方設定後會自動返回。
+            </p>
+          </div>
+        </div>
+      )}
+
+      <header>
+        <h1 className="text-xl font-semibold">安全設定</h1>
+      </header>
+
+      <section className="card overflow-hidden">
+        <div className="flex items-center justify-between gap-3 px-5 py-4"
+          style={{ borderBottom: "1px solid var(--border)" }}>
+          <div>
+            <h2 className="text-sm font-semibold">兩步驟驗證</h2>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              {loading ? "讀取中" : status?.mfa_enabled ? "已啟用" : "未啟用"}
+            </p>
+          </div>
+          <span
+            className="rounded-full px-2.5 py-1 text-xs font-medium"
+            style={status?.mfa_enabled
+              ? { background: "var(--success-dim)", color: "var(--success)" }
+              : { background: "var(--bg-hover)", color: "var(--text-muted)" }}>
+            {status?.mfa_enabled ? "保護中" : "未設定"}
+          </span>
+        </div>
+
+        {loading ? (
+          <div className="p-5"><SectionSkeleton lines={4} /></div>
+        ) : status?.mfa_enabled ? (
+          <div className="space-y-4 p-5">
+            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+              目前登入後的敏感操作可使用 TOTP 驗證碼做二次確認。
+            </p>
+            <div className="rounded-lg p-3" style={{ background: "var(--bg-hover)" }}>
+              <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                剩餘備用碼
+              </p>
+              <p className="mt-1 text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
+                {status.backup_code_count} 組
+              </p>
+            </div>
+            {recoveryCodes.length > 0 && (
+              <div className="rounded-lg p-4" style={{ background: "var(--warning-dim)", border: "1px solid var(--warning-border)" }}>
+                <p className="text-sm font-semibold" style={{ color: "var(--warning)" }}>
+                  請立即保存新的備用碼
+                </p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {recoveryCodes.map((item) => (
+                    <code key={item} className="rounded-md px-2 py-1 text-center font-mono text-sm"
+                      style={{ background: "var(--bg-surface)", color: "var(--text-primary)", border: "1px solid var(--border)" }}>
+                      {item}
+                    </code>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="rounded-lg p-4" style={{ border: "1px solid var(--border)" }}>
+              <div className="block space-y-1.5">
+                <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                  重新產生備用碼
+                </span>
+                <OtpInput
+                  value={regenerateCode}
+                  onChange={setRegenerateCode}
+                  label="重新產生備用碼的 2FA 驗證碼"
+                  disabled={busy}
+                />
+              </div>
+              <button
+                className="btn btn-secondary mt-3"
+                disabled={busy || regenerateCode.trim().length < 6}
+                onClick={regenerateBackupCodes}>
+                重新產生備用碼
+              </button>
+            </div>
+            <div className="block space-y-1.5">
+              <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                停用驗證碼
+              </span>
+              <OtpInput
+                value={disableCode}
+                onChange={setDisableCode}
+                label="停用 2FA 驗證碼"
+                disabled={busy}
+              />
+            </div>
+            <button
+              className="btn btn-danger"
+              disabled={busy || disableCode.trim().length < 6}
+              onClick={disableMfa}>
+              停用 2FA
+            </button>
+          </div>
+        ) : setup ? (
+          <div className="space-y-4 p-5">
+            <div className="grid gap-4 sm:grid-cols-[240px_1fr]">
+              <div className="rounded-lg p-4" style={{ background: "var(--bg-hover)" }}>
+                <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>掃描 QRCode</p>
+                <div
+                  className="mt-3 flex min-h-[220px] items-center justify-center rounded-lg bg-white p-2"
+                  style={{ border: "1px solid var(--border)" }}>
+                  {qrDataUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={qrDataUrl} alt="2FA TOTP QRCode" width={220} height={220}
+                      className="h-[220px] w-[220px]" />
+                  ) : (
+                    <span className="text-xs" style={{ color: "var(--text-muted)" }}>產生中</span>
+                  )}
+                </div>
+              </div>
+              <div className="rounded-lg p-4" style={{ background: "var(--bg-hover)" }}>
+                <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>手動輸入密鑰</p>
+                <p className="mt-2 break-all font-mono text-sm" style={{ color: "var(--text-primary)" }}>
+                  {setup.secret}
+                </p>
+              </div>
+            </div>
+            <div className="block space-y-1.5">
+              <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                Authenticator URI
+              </span>
+              <textarea className="input min-h-24 resize-none font-mono text-xs" readOnly value={setup.qr_uri} />
+            </div>
+            <div className="block space-y-1.5">
+              <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                驗證碼
+              </span>
+              <OtpInput
+                value={confirmCode}
+                onChange={setConfirmCode}
+                label="啟用 2FA 的驗證碼"
+                disabled={busy}
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button className="btn btn-primary" disabled={busy || confirmCode.trim().length < 6} onClick={confirmSetup}>
+                啟用 2FA
+              </button>
+              <button className="btn btn-ghost" disabled={busy} onClick={() => setSetup(null)}>
+                取消
+              </button>
+            </div>
+            <div className="rounded-lg p-4" style={{ background: "var(--warning-dim)", border: "1px solid var(--warning-border)" }}>
+              <p className="text-sm font-semibold" style={{ color: "var(--warning)" }}>
+                啟用後請保存這些備用碼
+              </p>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {setup.backup_codes.map((item) => (
+                  <code key={item} className="rounded-md px-2 py-1 text-center font-mono text-sm"
+                    style={{ background: "var(--bg-surface)", color: "var(--text-primary)", border: "1px solid var(--border)" }}>
+                    {item}
+                  </code>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4 p-5">
+            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+              使用支援 TOTP 的驗證器 App 產生一次性驗證碼。
+            </p>
+            <button className="btn btn-primary" disabled={busy} onClick={startSetup}>
+              設定 2FA
+            </button>
+          </div>
+        )}
+      </section>
+
+      <section className="card overflow-hidden">
+        <div
+          className="flex items-center justify-between gap-3 px-5 py-4"
+          style={{ borderBottom: "1px solid var(--border)" }}
+        >
+          <div>
+            <h2 className="text-sm font-semibold">Passkey</h2>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              使用指紋、臉部辨識、裝置 PIN 或安全金鑰完成登入與驗證。
+            </p>
+          </div>
+          <span className="rounded-full px-2.5 py-1 text-xs font-medium"
+            style={passkeys.length > 0
+              ? { background: "var(--success-dim)", color: "var(--success)" }
+              : { background: "var(--bg-hover)", color: "var(--text-muted)" }}>
+            {passkeys.length} 組
+          </span>
+        </div>
+        <div className="space-y-4 p-5">
+          {passkeys.length > 0 && (
+            <div className="space-y-2">
+              {passkeys.map((item) => (
+                <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg p-3"
+                  style={{ background: "var(--bg-hover)" }}>
+                  <div>
+                    <p className="text-sm font-medium">{item.device_name}</p>
+                    <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                      新增於 {new Date(item.created_at).toLocaleString()}
+                      {item.last_used_at ? ` · 上次使用 ${new Date(item.last_used_at).toLocaleString()}` : ""}
+                    </p>
+                  </div>
+                  <button className="btn btn-ghost btn-sm" disabled={passkeyBusy}
+                    onClick={() => removePasskey(item.credential_id)}>
+                    刪除
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {status?.mfa_enabled && passkeys.length > 0 && (
+            <OtpInput
+              value={passkeyCode}
+              onChange={setPasskeyCode}
+              label="刪除 Passkey 時的 TOTP 驗證碼"
+              disabled={passkeyBusy}
+            />
+          )}
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input className="input" maxLength={100} value={passkeyName}
+              onChange={(e) => setPasskeyName(e.target.value)} placeholder="裝置名稱（例如：Windows Hello）" />
+            <button className="btn btn-primary whitespace-nowrap" disabled={passkeyBusy} onClick={registerPasskey}>
+              {passkeyBusy ? "處理中" : "新增 Passkey"}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="card overflow-hidden">
+        <div
+          className="flex items-center justify-between gap-3 px-5 py-4"
+          style={{ borderBottom: "1px solid var(--border)" }}
+        >
+          <div>
+            <h2 className="text-sm font-semibold">Discord 登入</h2>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              綁定後可直接使用 Discord 登入平台，並接收 Bot 通知。
+            </p>
+          </div>
+          {discordBinding?.linked ? (
+            <button
+              className="btn btn-ghost btn-sm"
+              disabled={discordBusy}
+              onClick={unlinkDiscord}
+            >
+              解除綁定
+            </button>
+          ) : (
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={discordBusy}
+              onClick={linkDiscord}
+            >
+              連結 Discord
+            </button>
+          )}
+        </div>
+        <div className="px-5 py-5">
+          <p className="text-sm" style={{ color: "var(--text-primary)" }}>
+            {discordBinding?.linked
+              ? `已綁定 ${discordBinding.global_name || discordBinding.username || "Discord 帳號"}`
+              : "尚未綁定 Discord"}
+          </p>
+          {discordBinding?.linked_at && (
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              綁定時間：{new Date(discordBinding.linked_at).toLocaleString()}
+            </p>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}

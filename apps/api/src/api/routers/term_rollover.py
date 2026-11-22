@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.cache import cache_invalidate_user_permissions
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.permissions import require_permission
@@ -43,7 +44,7 @@ class DryRunBody(BaseModel):
 
 
 class ExecuteBody(DryRunBody):
-    confirm_token: str = Field(..., min_length=1)
+    confirm_phrase: str = Field(..., min_length=1)
 
 
 class TerminationOut(BaseModel):
@@ -124,10 +125,10 @@ async def dry_run(body: DryRunBody, db: DbDep, _u: RolloverUser) -> DryRunOut:
 
 @router.post("/execute", response_model=ExecuteOut, summary="實際執行換屆")
 async def execute_rollover(body: ExecuteBody, db: DbDep, user: RolloverUser) -> ExecuteOut:
-    if body.confirm_token != "換屆":
+    if body.confirm_phrase != "換屆":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="confirm_token 必須為「換屆」字串",
+            detail="confirm_phrase 必須為「換屆」字串",
         )
     try:
         result, snapshot = await svc.execute(
@@ -154,6 +155,9 @@ async def execute_rollover(body: ExecuteBody, db: DbDep, user: RolloverUser) -> 
             f"新增 {result.created_count}"
         ),
     )
+    await db.commit()
+    for user_id in result.affected_user_ids:
+        await cache_invalidate_user_permissions(str(user_id))
 
     return ExecuteOut(
         batch_id=result.batch_id,
@@ -165,17 +169,17 @@ async def execute_rollover(body: ExecuteBody, db: DbDep, user: RolloverUser) -> 
 
 
 class RollbackBody(BaseModel):
-    confirm_token: str = Field(..., min_length=1)
+    confirm_phrase: str = Field(..., min_length=1)
 
 
 @router.post("/rollback/{batch_id}", response_model=RollbackOut, summary="復原某次換屆")
 async def rollback_rollover(
     batch_id: str, body: RollbackBody, db: DbDep, user: RolloverUser
 ) -> RollbackOut:
-    if body.confirm_token != "復原":
+    if body.confirm_phrase != "復原":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="confirm_token 必須為「復原」字串",
+            detail="confirm_phrase 必須為「復原」字串",
         )
     try:
         result: dict[str, Any] = await svc.rollback(db, batch_id=batch_id)
@@ -195,6 +199,9 @@ async def rollback_rollover(
             f"刪除 {result['deleted_new_assignments']}"
         ),
     )
+    await db.commit()
+    for user_id in result["affected_user_ids"]:
+        await cache_invalidate_user_permissions(str(user_id))
 
     return RollbackOut(
         batch_id=batch_id,

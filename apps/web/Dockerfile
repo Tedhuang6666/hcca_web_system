@@ -1,39 +1,53 @@
 # ==============================================================================
-# Stage 1: deps — 安裝 Node.js 依賴
+# Stage 1: builder — 安裝依賴並建置 Next.js 生產版本
 # ==============================================================================
-FROM node:20-alpine AS deps
+FROM node:24-alpine@sha256:fb71d01345f11b708a3553c66e7c74074f2d506400ea81973343d915cb64eef0 AS builder
 
 WORKDIR /app
 
-COPY apps/web/package.json apps/web/package-lock.json* ./
-RUN npm ci --omit=dev
-
-# ==============================================================================
-# Stage 2: builder — 建置 Next.js 生產版本
-# ==============================================================================
-FROM node:20-alpine AS builder
-
-WORKDIR /app
-
-COPY apps/web/package.json apps/web/package-lock.json* ./
+COPY apps/web/package.json apps/web/package-lock.json* apps/web/.npmrc* ./
 RUN npm ci
 
 COPY apps/web/ .
+COPY fonts/LXGWWenKaiTC-Regular.ttf ./fonts/LXGWWenKaiTC-Regular.ttf
 
 # 建置時注入公開環境變數；API 空值代表使用同源 /api 代理
+# Next rewrites 在建置時固化；圖片優化的內部請求也必須能連到 API 容器。
+ARG API_INTERNAL_URL=http://api:8000
+ENV API_INTERNAL_URL=$API_INTERNAL_URL
 ARG NEXT_PUBLIC_API_URL=
 ARG NEXT_PUBLIC_WS_URL=
+ARG NEXT_PUBLIC_SHOP_LOOKBOOK_BASE_URL=
 ARG NEXT_PUBLIC_SITE_URL=
+ARG NEXT_PUBLIC_SENTRY_DSN=
+ARG NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE=0.05
+ARG NEXT_PUBLIC_POSTHOG_KEY=
+ARG NEXT_PUBLIC_POSTHOG_HOST=https://us.i.posthog.com
+ARG NEXT_PUBLIC_BUILD_COMMIT=
+ARG NEXT_PUBLIC_BUILD_REF=
+ARG NEXT_PUBLIC_BUILD_TIME=
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
+ENV NEXT_PUBLIC_SHOP_LOOKBOOK_BASE_URL=$NEXT_PUBLIC_SHOP_LOOKBOOK_BASE_URL
 ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
+ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
+ENV NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE=$NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE
+ENV NEXT_PUBLIC_POSTHOG_KEY=$NEXT_PUBLIC_POSTHOG_KEY
+ENV NEXT_PUBLIC_POSTHOG_HOST=$NEXT_PUBLIC_POSTHOG_HOST
+ENV NEXT_PUBLIC_BUILD_COMMIT=$NEXT_PUBLIC_BUILD_COMMIT
+ENV NEXT_PUBLIC_BUILD_REF=$NEXT_PUBLIC_BUILD_REF
+ENV NEXT_PUBLIC_BUILD_TIME=$NEXT_PUBLIC_BUILD_TIME
 
 RUN npm run build
 
 # ==============================================================================
-# Stage 3: runtime — 最小化生產映像檔
+# Stage 2: runtime — 最小化生產映像檔
 # ==============================================================================
-FROM node:20-alpine AS runtime
+FROM node:24-alpine@sha256:fb71d01345f11b708a3553c66e7c74074f2d506400ea81973343d915cb64eef0 AS runtime
+
+# Runtime only needs the Node.js binary. Upgrade Alpine security fixes and remove bundled npm.
+RUN apk upgrade --no-cache && \
+    rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 # 建立非 root 使用者
 RUN addgroup --system --gid 1001 nodejs && \
@@ -43,6 +57,7 @@ WORKDIR /app
 
 # 複製建置產出
 COPY --from=builder /app/public ./public
+COPY --from=builder /app/fonts/LXGWWenKaiTC-Regular.ttf ./fonts/LXGWWenKaiTC-Regular.ttf
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 

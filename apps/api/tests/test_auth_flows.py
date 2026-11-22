@@ -1,0 +1,692 @@
+"""身份驗證路由 HTTP 層測試（apps/api/src/api/routers/auth.py）。
+
+test_auth_policy.py 只測 `_email_can_login` 這個純函式；本檔補上真正經過
+FastAPI 路由層的行為：refresh token 輪替與黑名單、/me、/logout、
+Google One Tap（mock Google 端驗證，不打真實網路）、OAuth 入口重導向組裝。
+"""
+
+from __future__ import annotations
+
+import uuid
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Any
+from unittest.mock import AsyncMock
+
+import pytest
+from authlib.integrations.base_client import MismatchingStateError
+from fastapi import HTTPException
+from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import Request
+
+from api.core.config import settings
+from api.core.defense import publish_rules
+from api.core.security import (
+    RedisUnavailableError,
+    create_access_token,
+    create_refresh_token,
+    decode_token,
+)
+from api.models.user import User
+from api.models.user_identity import UserIdentity
+
+# ---------------------------------------------------------------------------
+# /auth/refresh
+# ---------------------------------------------------------------------------
+
+
+async def test_refresh_with_valid_cookie_token_rotates_and_sets_new_cookies(
+    client: AsyncClient, member_user: User
+) -> None:
+    """合法 refresh token（走 cookie）應換發新 token pair 並輪替（舊 token 加黑名單）。"""
+    old_refresh = create_refresh_token(str(member_user.id))
+    client.cookies.set(settings.REFRESH_TOKEN_COOKIE_NAME, old_refresh)
+
+    response = await client.post("/auth/refresh")
+
+    assert response.status_code == 200
+    assert response.json() == {"message": "ok"}
+    assert settings.ACCESS_TOKEN_COOKIE_NAME in response.cookies
+    assert settings.REFRESH_TOKEN_COOKIE_NAME in response.cookies
+    # 新 refresh token 應與舊的不同（輪替）
+    assert response.cookies[settings.REFRESH_TOKEN_COOKIE_NAME] != old_refresh
+
+
+async def test_refresh_rejects_request_body_token(client: AsyncClient, member_user: User) -> None:
+    """一般使用者 refresh 僅接受 HttpOnly cookie，不能由 body 帶入。"""
+    old_refresh = create_refresh_token(str(member_user.id))
+
+    response = await client.post("/auth/refresh", json={"refresh_token": old_refresh})
+
+    assert response.status_code == 401
+
+
+async def test_refresh_without_any_token_returns_401(client: AsyncClient) -> None:
+    response = await client.post("/auth/refresh")
+    assert response.status_code == 401
+
+
+async def test_refresh_returns_503_when_blacklist_store_is_unavailable(
+    client: AsyncClient, member_user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import api.routers.auth as auth_module
+
+    async def _raise_unavailable(*args: Any, **kwargs: Any) -> bool:
+        raise RedisUnavailableError("redis unavailable")
+
+    monkeypatch.setattr(auth_module, "is_blacklisted", _raise_unavailable)
+    client.cookies.set(
+        settings.REFRESH_TOKEN_COOKIE_NAME, create_refresh_token(str(member_user.id))
+    )
+
+    response = await client.post("/auth/refresh")
+
+    assert response.status_code == 503
+    assert response.headers["Retry-After"] == "3"
+
+
+async def test_refresh_reused_old_token_returns_401_after_rotation(
+    client: AsyncClient, member_user: User
+) -> None:
+    """Token Rotation：refresh 後舊 token 被加入黑名單，重放應被拒絕。"""
+    old_refresh = create_refresh_token(str(member_user.id))
+    client.cookies.set(settings.REFRESH_TOKEN_COOKIE_NAME, old_refresh)
+
+    first = await client.post("/auth/refresh")
+    assert first.status_code == 200
+
+    # 用同一支舊 cookie token 重放（模擬攻擊者截獲 cookie）
+    csrf_token = client.cookies.get("csrf_token")
+    replay = await client.post(
+        "/auth/refresh",
+        headers={
+            "Cookie": (
+                f"{settings.REFRESH_TOKEN_COOKIE_NAME}={old_refresh}; csrf_token={csrf_token}"
+            )
+        },
+    )
+    assert replay.status_code == 401
+
+
+async def test_refresh_with_access_token_type_returns_401(
+    client: AsyncClient, member_user: User
+) -> None:
+    """type=access 的 token 不該被 /auth/refresh 接受（型別檢查）。"""
+    access = create_access_token(str(member_user.id))
+    client.cookies.set(settings.REFRESH_TOKEN_COOKIE_NAME, access)
+
+    response = await client.post("/auth/refresh")
+
+    assert response.status_code == 401
+
+
+async def test_refresh_for_inactive_user_returns_401(
+    client: AsyncClient, make_user: Callable[..., Any]
+) -> None:
+    user = await make_user(is_active=False)
+    refresh = create_refresh_token(str(user.id))
+    client.cookies.set(settings.REFRESH_TOKEN_COOKIE_NAME, refresh)
+
+    response = await client.post("/auth/refresh")
+
+    assert response.status_code == 401
+
+
+async def test_refresh_for_blocked_user_returns_403(client: AsyncClient, member_user: User) -> None:
+    """user_block 防禦規則命中時，refresh 應回 403 而非放行。"""
+    await publish_rules(
+        [
+            {
+                "rule_type": "user_block",
+                "target": str(member_user.id),
+                "reason": "測試封鎖",
+                "expires_at": None,
+            }
+        ]
+    )
+    refresh = create_refresh_token(str(member_user.id))
+    client.cookies.set(settings.REFRESH_TOKEN_COOKIE_NAME, refresh)
+
+    try:
+        response = await client.post("/auth/refresh")
+        assert response.status_code == 403
+        assert response.json()["detail"]["blocked"] is True
+    finally:
+        await publish_rules([])
+
+
+async def test_refresh_rejects_superuser_outside_admin_ip_whitelist(
+    client: AsyncClient,
+    make_user: Callable[..., Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    superuser = await make_user(is_superuser=True)
+    monkeypatch.setattr(settings, "ADMIN_IP_WHITELIST", ["10.9.8.7"])
+    client.cookies.set(settings.REFRESH_TOKEN_COOKIE_NAME, create_refresh_token(str(superuser.id)))
+
+    response = await client.post("/auth/refresh")
+
+    assert response.status_code == 403
+    assert settings.ACCESS_TOKEN_COOKIE_NAME not in response.cookies
+    assert settings.REFRESH_TOKEN_COOKIE_NAME not in response.cookies
+
+
+async def test_issue_auth_tokens_rejects_superuser_outside_admin_ip_whitelist(
+    db_session: AsyncSession,
+    make_user: Callable[..., Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import api.routers.auth as auth_module
+
+    superuser = await make_user(is_superuser=True)
+    monkeypatch.setattr(settings, "ADMIN_IP_WHITELIST", ["10.9.8.7"])
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/auth/callback",
+            "headers": [],
+            "client": ("198.51.100.10", 12345),
+        }
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await auth_module._issue_auth_tokens(db_session, superuser, request, auth_method="google")
+
+    assert exc_info.value.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# /auth/me
+# ---------------------------------------------------------------------------
+
+
+async def test_get_me_without_login_returns_401(client: AsyncClient) -> None:
+    response = await client.get("/auth/me")
+    assert response.status_code == 401
+
+
+async def test_get_me_returns_current_user_payload(
+    authed_client_factory: Callable[[User], AsyncClient], member_user: User
+) -> None:
+    ac = authed_client_factory(member_user)
+    response = await ac.get("/auth/me")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["id"] == str(member_user.id)
+    assert payload["email"] == member_user.email
+    assert payload["is_superuser"] is False
+    assert "permissions" in payload
+
+
+async def test_get_me_flags_superuser_and_owner(
+    authed_client_factory: Callable[[User], AsyncClient],
+    make_user: Callable[..., Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    admin = await make_user(email="owner-flag@school.edu", display_name="Owner", is_superuser=True)
+    monkeypatch.setattr(settings, "OWNER_EMAILS", [admin.email.lower()])
+    ac = authed_client_factory(admin)
+
+    response = await ac.get("/auth/me")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["is_superuser"] is True
+    assert payload["is_owner"] is True
+
+
+@pytest.mark.parametrize(
+    ("email", "student_id", "linked_email", "owns_identity", "expected"),
+    [
+        ("g0510001@hchs.hc.edu.tw", "510001", None, True, True),
+        ("g0510001@hchs.hc.edu.tw", None, None, True, True),
+        ("private@example.test", "510001", "g0510001@hchs.hc.edu.tw", True, True),
+        ("private@example.test", None, "g0510001@hchs.hc.edu.tw", True, True),
+        ("g0110001@hchs.hc.edu.tw", "110001", None, True, False),
+        ("private@example.test", None, "g0110001@hchs.hc.edu.tw", True, False),
+        ("private@example.test", None, "teacher@hchs.hc.edu.tw", True, False),
+        ("teacher@hchs.hc.edu.tw", None, None, True, False),
+        ("private@example.test", None, "g0991001@hchs.hc.edu.tw", False, False),
+        ("private@example.test", None, "g0991001@hchs.hc.edu.tw.evil.test", True, False),
+        ("private@example.test", None, None, True, False),
+    ],
+)
+async def test_get_me_exposes_delegation_eligibility_for_verified_student_identities(
+    db_session: AsyncSession,
+    authed_client_factory,
+    make_user,
+    email,
+    student_id,
+    linked_email,
+    owns_identity,
+    expected,
+):
+    user = await make_user(email=email, student_id=student_id)
+    if linked_email:
+        owner = user if owns_identity else await make_user(email="other@example.test")
+        db_session.add(
+            UserIdentity(
+                user_id=owner.id,
+                provider="email",
+                external_id=linked_email,
+                email=linked_email,
+                linked_at=datetime.now(UTC),
+            )
+        )
+        await db_session.flush()
+    response = await authed_client_factory(user).get("/auth/me")
+    assert response.status_code == 200
+    assert response.json()["can_create_shop_delegation"] is expected
+
+
+# ---------------------------------------------------------------------------
+# /auth/logout
+# ---------------------------------------------------------------------------
+
+
+async def test_logout_blacklists_cookies_and_clears_them(
+    client: AsyncClient, member_user: User
+) -> None:
+    access = create_access_token(str(member_user.id))
+    refresh = create_refresh_token(str(member_user.id))
+    client.cookies.set(settings.ACCESS_TOKEN_COOKIE_NAME, access)
+    client.cookies.set(settings.REFRESH_TOKEN_COOKIE_NAME, refresh)
+
+    response = await client.post("/auth/logout")
+
+    assert response.status_code == 200
+    assert response.json() == {"message": "已成功登出"}
+    # Set-Cookie 應包含刪除指令（值清空）
+    set_cookie_headers = response.headers.get_list("set-cookie")
+    assert any(
+        settings.ACCESS_TOKEN_COOKIE_NAME in h and "=;" in h.replace(" ", "")
+        for h in set_cookie_headers
+    ) or any(settings.ACCESS_TOKEN_COOKIE_NAME in h for h in set_cookie_headers)
+
+    # 已登出的 access token 應變成黑名單（refresh 端點會拒絕沿用同一支 refresh token 是另一回事，
+    # 這裡直接驗證 add_to_blacklist 有確實被呼叫：舊 refresh token 現在應該也是黑名單狀態）
+    from api.core.security import is_blacklisted
+
+    assert await is_blacklisted(refresh) is True
+
+
+async def test_logout_without_any_cookie_still_returns_200(client: AsyncClient) -> None:
+    """未登入狀態呼叫 logout 應優雅返回，不因缺少 cookie 而 500。"""
+    response = await client.post("/auth/logout")
+    assert response.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# /auth/google/one-tap
+# ---------------------------------------------------------------------------
+
+
+async def test_google_one_tap_disabled_when_client_id_missing(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", "")
+
+    response = await client.post("/auth/google/one-tap", json={"credential": "whatever"})
+
+    assert response.status_code == 503
+
+
+async def test_google_one_tap_rejects_invalid_credential(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import api.routers.auth as auth_module
+
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", "fake-client-id")
+
+    def _raise_invalid(*args: Any, **kwargs: Any) -> dict:
+        raise ValueError("bad token")
+
+    monkeypatch.setattr(auth_module.google_id_token, "verify_oauth2_token", _raise_invalid)
+
+    response = await client.post("/auth/google/one-tap", json={"credential": "garbage"})
+
+    assert response.status_code == 401
+
+
+async def test_google_one_tap_rejects_unverified_email(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import api.routers.auth as auth_module
+
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", "fake-client-id")
+
+    def _fake_verify(*args: Any, **kwargs: Any) -> dict:
+        return {
+            "sub": "google-sub-unverified",
+            "email": "unverified@school.edu",
+            "email_verified": False,
+        }
+
+    monkeypatch.setattr(auth_module.google_id_token, "verify_oauth2_token", _fake_verify)
+
+    response = await client.post("/auth/google/one-tap", json={"credential": "token"})
+
+    assert response.status_code == 403
+
+
+async def test_google_one_tap_creates_user_and_logs_in(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """完整走一次新使用者建立流程（LOGIN_ALLOW_EXTERNAL_USERS=True 避免網域白名單卡關）。"""
+    import api.routers.auth as auth_module
+
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", "fake-client-id")
+    monkeypatch.setattr(settings, "LOGIN_ALLOW_EXTERNAL_USERS", True)
+
+    unique_sub = f"google-sub-{uuid.uuid4().hex[:8]}"
+    unique_email = f"onetap-{uuid.uuid4().hex[:8]}@school.edu"
+
+    def _fake_verify(*args: Any, **kwargs: Any) -> dict:
+        return {
+            "sub": unique_sub,
+            "email": unique_email,
+            "email_verified": True,
+            "name": "One Tap 使用者",
+            "picture": None,
+        }
+
+    monkeypatch.setattr(auth_module.google_id_token, "verify_oauth2_token", _fake_verify)
+
+    response = await client.post("/auth/google/one-tap", json={"credential": "token"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["mfa_required"] is False
+    assert payload["user"]["email"] == unique_email
+    assert settings.ACCESS_TOKEN_COOKIE_NAME in response.cookies
+
+
+async def test_google_one_tap_mfa_enabled_user_returns_challenge(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch, db_session: AsyncSession
+) -> None:
+    """已啟用 MFA 的使用者透過 One Tap 登入時，不應直接發放正式 token，而是回傳 challenge。"""
+    import api.routers.auth as auth_module
+
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", "fake-client-id")
+    monkeypatch.setattr(settings, "LOGIN_ALLOW_EXTERNAL_USERS", True)
+
+    unique_sub = f"google-sub-mfa-{uuid.uuid4().hex[:8]}"
+    unique_email = f"onetap-mfa-{uuid.uuid4().hex[:8]}@school.edu"
+    existing = User(
+        email=unique_email,
+        display_name="MFA One Tap",
+        is_active=True,
+        is_verified=True,
+        mfa_enabled=True,
+        google_sub=unique_sub,
+    )
+    db_session.add(existing)
+    await db_session.flush()
+
+    def _fake_verify(*args: Any, **kwargs: Any) -> dict:
+        return {
+            "sub": unique_sub,
+            "email": unique_email,
+            "email_verified": True,
+            "name": "MFA One Tap",
+        }
+
+    monkeypatch.setattr(auth_module.google_id_token, "verify_oauth2_token", _fake_verify)
+
+    response = await client.post("/auth/google/one-tap", json={"credential": "token"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["mfa_required"] is True
+    # 正式 token 不應被設置
+    assert settings.ACCESS_TOKEN_COOKIE_NAME not in response.cookies
+
+
+# ---------------------------------------------------------------------------
+# /auth/google/login /auth/discord/login（OAuth 入口重導向）
+# ---------------------------------------------------------------------------
+
+
+async def test_google_login_redirects_to_google_authorize_endpoint(client: AsyncClient) -> None:
+    response = await client.get("/auth/google/login", follow_redirects=False)
+
+    assert response.status_code in (302, 307)
+    assert "accounts.google.com" in response.headers["location"]
+
+
+async def test_google_login_uses_configured_redirect_uri(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        settings, "GOOGLE_REDIRECT_URI", "https://auth.example.com/auth/google/callback"
+    )
+
+    response = await client.get(
+        "/auth/google/login?frontend_origin=http://localhost:3000", follow_redirects=False
+    )
+
+    assert response.status_code in (302, 307)
+    assert (
+        "redirect_uri=https%3A%2F%2Fauth.example.com%2Fauth%2Fgoogle%2Fcallback"
+        in response.headers["location"]
+    )
+
+
+async def test_google_callback_retries_over_https_origin(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import api.routers.auth as auth_module
+
+    monkeypatch.setattr(settings, "ALLOWED_ORIGINS", ["https://hcca.tw"])
+    monkeypatch.setattr(
+        auth_module.google,
+        "authorize_access_token",
+        AsyncMock(side_effect=MismatchingStateError()),
+    )
+
+    response = await client.get(
+        "/auth/google/callback?code=stale&state=stale",
+        follow_redirects=False,
+        headers={"x-forwarded-host": "hcca.tw", "x-forwarded-proto": "https"},
+    )
+
+    assert response.status_code in (302, 307)
+    assert response.headers["location"].startswith("https://hcca.tw/auth/google/login?")
+
+
+async def test_google_callback_rejects_unverified_email(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import api.routers.auth as auth_module
+
+    existing = User(email="owner@school.edu", display_name="既有帳號", is_active=True)
+    db_session.add(existing)
+    await db_session.flush()
+    monkeypatch.setattr(
+        auth_module.google,
+        "authorize_access_token",
+        AsyncMock(
+            return_value={
+                "userinfo": {
+                    "sub": "attacker-sub",
+                    "email": "owner@school.edu",
+                    "email_verified": False,
+                }
+            }
+        ),
+    )
+
+    response = await client.get("/auth/google/callback?code=c&state=s", follow_redirects=False)
+
+    assert response.status_code in (302, 307)
+    assert "/login?error=" in response.headers["location"]
+    assert settings.ACCESS_TOKEN_COOKIE_NAME not in response.cookies
+    identity = await db_session.scalar(
+        select(UserIdentity).where(UserIdentity.external_id == "attacker-sub")
+    )
+    assert identity is None
+
+
+async def test_discord_login_returns_503_when_not_configured(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import api.routers.auth as auth_module
+
+    monkeypatch.setattr(auth_module, "discord_is_configured", lambda: False)
+
+    response = await client.get("/auth/discord/login", follow_redirects=False)
+
+    assert response.status_code == 503
+
+
+async def test_discord_login_redirects_when_configured(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import api.routers.auth as auth_module
+
+    monkeypatch.setattr(auth_module, "discord_is_configured", lambda: True)
+    monkeypatch.setattr(settings, "DISCORD_LOGIN_REDIRECT_URI", "http://test/auth/discord/callback")
+
+    response = await client.get("/auth/discord/login", follow_redirects=False)
+
+    assert response.status_code in (302, 307)
+    assert "discord.com" in response.headers["location"]
+
+
+# ---------------------------------------------------------------------------
+# helper：確認黑名單 token 的 payload 型別（間接驗證 decode_token 仍可用）
+# ---------------------------------------------------------------------------
+
+
+def test_decode_token_roundtrip_sanity() -> None:
+    token = create_access_token("sanity-check-subject")
+    payload = decode_token(token)
+    assert payload["sub"] == "sanity-check-subject"
+    assert payload["type"] == "access"
+
+
+async def test_logout_clears_oauth_session_state(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """登出後不得保留 OAuth state／MFA 暫存，避免共用瀏覽器沿用前一位的狀態。"""
+    import api.routers.auth as auth_module
+
+    async def fake_redirect(request, redirect_uri, **kwargs):
+        request.session["oauth_marker"] = "previous-user"
+        from fastapi.responses import RedirectResponse
+
+        return RedirectResponse("https://accounts.google.com/o/oauth2/auth")
+
+    monkeypatch.setattr(auth_module.google, "authorize_redirect", fake_redirect)
+    login = await client.get("/auth/google/login", follow_redirects=False)
+    cookie_name = settings.SESSION_COOKIE_NAME
+    assert any(h.startswith(f"{cookie_name}=") for h in login.headers.get_list("set-cookie"))
+
+    response = await client.post("/auth/logout")
+
+    cleared = [
+        h for h in response.headers.get_list("set-cookie") if h.startswith(f"{cookie_name}=")
+    ]
+    assert cleared, "logout 應覆寫 session cookie"
+    assert (
+        "null" in cleared[0]
+        or "Max-Age=0" in cleared[0]
+        or "expires=Thu, 01 Jan 1970" in cleared[0]
+    )
+
+
+async def test_audit_middleware_records_authenticated_actor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    from uuid import uuid4
+
+    from starlette.types import Message, Receive, Scope, Send
+
+    from api.core.audit import SecurityAuditMiddleware
+    from api.core.audit import logger as audit_logger
+    from api.main import app
+
+    log_info = Mock()
+    monkeypatch.setattr(audit_logger, "info", log_info)
+    assert any(item.cls is SecurityAuditMiddleware for item in app.user_middleware)
+
+    user = SimpleNamespace(id=uuid4(), email="member@school.edu")
+
+    async def endpoint(scope: Scope, receive: Receive, send: Send) -> None:
+        scope["state"]["user"] = user
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b""})
+
+    scope = {
+        "type": "http",
+        "method": "PATCH",
+        "path": "/users/me",
+        "query_string": b"",
+        "client": ("127.0.0.1", 12345),
+        "state": {},
+    }
+    messages: list[Message] = []
+
+    async def receive() -> Message:
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message: Message) -> None:
+        messages.append(message)
+
+    await SecurityAuditMiddleware(endpoint)(scope, receive, send)
+
+    log_info.assert_called_once()
+    assert log_info.call_args is not None
+    assert log_info.call_args.args == ("Security audit: sensitive operation",)
+    assert log_info.call_args.kwargs["extra"]["user_id"] == str(user.id)
+    assert log_info.call_args.kwargs["extra"]["user_email"] == user.email
+    assert any(message["type"] == "http.response.start" for message in messages)
+
+
+async def test_authenticated_profile_patch_succeeds(
+    member_user: User,
+    authed_client_factory: Callable[[User], AsyncClient],
+) -> None:
+    client = authed_client_factory(member_user)
+    response = await client.patch("/users/me", json={})
+
+    assert response.status_code == 200
+
+
+async def test_admin_ip_whitelist_applies_to_every_superuser_request(
+    make_user: Callable[..., Any],
+    member_user: User,
+    authed_client_factory: Callable[[User], AsyncClient],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """不論以哪種方式取得 session，白名單外 IP 的超級管理員請求都要被拒。"""
+    superuser = await make_user(is_superuser=True, mfa_enabled=True)
+    monkeypatch.setattr(settings, "ADMIN_IP_WHITELIST", ["10.9.8.7"])
+
+    blocked = await authed_client_factory(superuser).get("/auth/me")
+    member = await authed_client_factory(member_user).get("/auth/me")
+    monkeypatch.setattr(settings, "ADMIN_IP_WHITELIST", ["10.9.8.7", "127.0.0.1"])
+    allowed = await authed_client_factory(superuser).get("/auth/me")
+
+    assert blocked.status_code == 403
+    assert member.status_code == 200
+    assert allowed.status_code == 200
+
+
+async def test_security_headers_present_on_csrf_rejection() -> None:
+    """提早被 middleware 拒絕的回應也要帶安全標頭。"""
+    from httpx import ASGITransport
+
+    from api.main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as raw:
+        response = await raw.post("/receivables", json={})
+
+    assert response.status_code == 403
+    assert response.headers.get("x-content-type-options") == "nosniff"

@@ -1,29 +1,62 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/ui/IntentLink";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Globe2, Search } from "lucide-react";
+import BrandEmblem from "@/components/brand/BrandEmblem";
+import LocationMark, { useLocationMarkScope } from "@/components/ui/LocationMark";
 import { usePermissions } from "@/hooks/usePermissions";
+import { AUTH_CACHE_EVENT } from "@/lib/auth-cache";
 import { useModuleStatus } from "@/contexts/ModuleStatusContext";
 import { BRANDING } from "@/lib/branding";
+import { navigationProfilesApi } from "@/lib/api/navigation-profiles";
 import { NAV_ID_TO_MODULE } from "@/lib/modules";
 import NavIcon from "./NavIcon";
+import { OPEN_COMMAND_MENU_EVENT } from "./CommandMenu";
 import {
-  filterNavItems,
   hasSavedNavPreferences,
+  isNavItemVisible,
+  DEFAULT_NAV_PREFERENCES,
   isSection,
-  NAV_DEF,
   NAV_DEF_LOGGED_OUT,
+  navProfileFromApi,
   NAV_PREF_EVENT,
+  navDefinitionForProfile,
   orderedItems,
   readNavPreferences,
+  resolveNavigationProfile,
   type NavEntry,
   type NavItem,
+  type NavigationProfileConfig,
 } from "@/lib/navigation";
 
 /* ── 折疊狀態：localStorage 持久化 ─────────────────────────────────────── */
 const COLLAPSED_KEY = "sidebar.collapsed-sections";
+const NAV_PROFILE_CACHE_TTL_MS = 5 * 60 * 1000;
+
+function readCachedProfile(key: string): NavigationProfileConfig | null | undefined {
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return undefined;
+    const cached = JSON.parse(raw) as { savedAt: number; profile: NavigationProfileConfig | null };
+    if (!Number.isFinite(cached.savedAt) || Date.now() - cached.savedAt > NAV_PROFILE_CACHE_TTL_MS) {
+      sessionStorage.removeItem(key);
+      return undefined;
+    }
+    return cached.profile;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeCachedProfile(key: string, profile: NavigationProfileConfig | null) {
+  try {
+    sessionStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), profile }));
+  } catch {
+    /* storage may be unavailable */
+  }
+}
 
 function readCollapsed(): Set<string> {
   if (typeof window === "undefined") return new Set();
@@ -46,22 +79,26 @@ function writeCollapsed(set: Set<string>) {
   }
 }
 
+const SIDEBAR_MARK_GROUP = "app-sidebar-nav";
+
 /* ── NavLink ──────────────────────────────────────────────────────────────── */
 function NavLink({ item, pathname, down }: { item: NavItem; pathname: string; down?: boolean }) {
+  const href = item.id === "about" || item.id === "publicAbout" ? "/system-info" : item.href;
   const active = item.end
-    ? pathname === item.href
-    : pathname === item.href || pathname.startsWith(item.href + "/");
+    ? pathname === href
+    : pathname === href || pathname.startsWith(href + "/");
 
   return (
     <Link
-      href={item.href}
-      className="sidebar-nav-item"
+      href={href}
+      className="sidebar-nav-item motion-nav-link"
       aria-current={active ? "page" : undefined}>
+      {active && <LocationMark group={SIDEBAR_MARK_GROUP} className="sidebar-location-mark" />}
       <span className="flex-shrink-0"><NavIcon iconKey={item.iconKey} size={15} /></span>
       <span className="flex-1 truncate">{item.label}</span>
       {down && (
         <span
-          className="ml-1 flex-shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium"
+          className="ml-1 flex-shrink-0 rounded px-1.5 py-0.5 text-xs font-medium"
           style={{
             background: "var(--warning-dim)",
             color: "var(--warning)",
@@ -75,40 +112,125 @@ function NavLink({ item, pathname, down }: { item: NavItem; pathname: string; do
   );
 }
 
+function SidebarNavSkeleton() {
+  const groups = [4, 7, 5];
+
+  return (
+    <div className="space-y-4 px-1" role="status" aria-label="正在載入導覽">
+      <span className="sr-only">正在載入導覽</span>
+      {groups.map((itemCount, groupIndex) => (
+        <div key={groupIndex} className="space-y-1.5" aria-hidden="true">
+          <div className="mx-3 h-3 w-16 rounded" style={{ background: "var(--sidebar-hover)" }} />
+          {Array.from({ length: itemCount }, (_, itemIndex) => (
+            <div key={itemIndex} className="flex h-8 items-center gap-2.5 px-3">
+              <div className="h-4 w-4 flex-shrink-0 rounded" style={{ background: "var(--sidebar-hover)" }} />
+              <div
+                className="h-3 rounded"
+                style={{
+                  width: `${56 + ((groupIndex + itemIndex) % 4) * 12}px`,
+                  background: "var(--sidebar-hover)",
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* ── Sidebar ──────────────────────────────────────────────────────────────── */
 export default function Sidebar() {
   const pathname = usePathname();
   const { can, isAdmin, permissions } = usePermissions();
-  const { isModuleDown } = useModuleStatus();
+  const { isModuleDown, isModuleClosed, ready: moduleStatusReady } = useModuleStatus();
   const [userName, setUserName] = useState("使用者");
   const [userEmail, setUserEmail] = useState("");
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
-  const [desktopPrefs, setDesktopPrefs] = useState(() => readNavPreferences());
+  const [desktopPrefs, setDesktopPrefs] = useState(() => DEFAULT_NAV_PREFERENCES);
   const [hasCustomNav, setHasCustomNav] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [serverProfile, setServerProfile] = useState<NavigationProfileConfig | null>(null);
+  const [publicProfile, setPublicProfile] = useState<NavigationProfileConfig | null>(null);
+  const [authVersion, setAuthVersion] = useState(0);
+  const navigationProfile = useMemo(
+    () => resolveNavigationProfile(permissions, isAdmin),
+    [isAdmin, permissions],
+  );
+  const activeNavDef = useMemo(
+    () => {
+      if (!isLoggedIn) return publicProfile?.desktopSections ?? NAV_DEF_LOGGED_OUT;
+      // 管理員必須保留完整後台入口；自訂視角只套用到一般使用者。
+      if (isAdmin || permissions.has("admin:all")) return navDefinitionForProfile("default");
+      return serverProfile?.desktopSections ?? navDefinitionForProfile(navigationProfile);
+    },
+    [isAdmin, isLoggedIn, navigationProfile, permissions, publicProfile, serverProfile],
+  );
 
   useEffect(() => {
-    const userId = localStorage.getItem("user_id");
-    setIsLoggedIn(!!userId);
-    setUserName(localStorage.getItem("user_name") ?? "使用者");
-    setUserEmail(localStorage.getItem("user_email") ?? "");
-    setUserAvatar(localStorage.getItem("user_avatar"));
-    setHasCustomNav(hasSavedNavPreferences());
+    if (!hydrated) return;
+
+    let alive = true;
+    if (!isLoggedIn) {
+      setServerProfile(null);
+      navigationProfilesApi.public("public")
+        .then((profile) => {
+          if (!alive) return;
+          setPublicProfile(navProfileFromApi(profile));
+        })
+        .catch(() => {
+          if (!alive) return;
+          setPublicProfile(null);
+        });
+      return () => {
+        alive = false;
+      };
+    }
+    setPublicProfile(null);
+    const cacheKey = `hcca:navigation-profile:${localStorage.getItem("user_id") ?? "anonymous"}`;
+    const cached = readCachedProfile(cacheKey);
+    if (cached !== undefined) {
+      setServerProfile(cached);
+      return () => {
+        alive = false;
+      };
+    }
+    navigationProfilesApi.me()
+      .then((result) => {
+        if (!alive) return;
+        const profile = result.source === "default" || !result.profile
+          ? null
+          : navProfileFromApi(result.profile);
+        setServerProfile(profile);
+        writeCachedProfile(cacheKey, profile);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setServerProfile(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [authVersion, hydrated, isLoggedIn]);
+
+  // 初始化：讀 localStorage、設定 event listener，僅在 mount 時執行一次
+  useEffect(() => {
+    const syncAuth = () => {
+      const userId = localStorage.getItem("user_id");
+      setIsLoggedIn(!!userId);
+      setUserName(localStorage.getItem("user_name") ?? "使用者");
+      setUserEmail(localStorage.getItem("user_email") ?? "");
+      setUserAvatar(localStorage.getItem("user_avatar"));
+      setDesktopPrefs(readNavPreferences());
+      setHasCustomNav(hasSavedNavPreferences());
+      setAuthVersion((version) => version + 1);
+    };
+    syncAuth();
 
     const persisted = readCollapsed();
-    if (persisted.size === 0) {
-      const defaults = new Set<string>();
-      for (const entry of NAV_DEF) {
-        if (isSection(entry) && entry.collapsible && entry.defaultCollapsed) {
-          defaults.add(entry.heading);
-        }
-      }
-      setCollapsed(defaults);
-    } else {
-      setCollapsed(persisted);
-    }
+    setCollapsed(new Set(persisted));
     setHydrated(true);
 
     const syncPrefs = () => {
@@ -116,12 +238,35 @@ export default function Sidebar() {
       setHasCustomNav(hasSavedNavPreferences());
     };
     window.addEventListener(NAV_PREF_EVENT, syncPrefs);
+    window.addEventListener(AUTH_CACHE_EVENT, syncAuth);
     window.addEventListener("storage", syncPrefs);
     return () => {
       window.removeEventListener(NAV_PREF_EVENT, syncPrefs);
+      window.removeEventListener(AUTH_CACHE_EVENT, syncAuth);
       window.removeEventListener("storage", syncPrefs);
     };
+    // This is mount-only initialization. Profile changes are handled by the
+    // activeNavDef effect below and must not re-run auth/profile requests.
   }, []);
+
+  // 切頁時自動展開當前路徑所在分組（不寫 localStorage、不覆蓋手動設定）
+  useEffect(() => {
+    setCollapsed((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const entry of activeNavDef) {
+        if (isSection(entry) && next.has(entry.heading)) {
+          if (entry.items.some(
+            (item) => pathname === item.href || pathname.startsWith(item.href + "/"),
+          )) {
+            next.delete(entry.heading);
+            changed = true;
+          }
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [activeNavDef, pathname]);
 
   const toggleSection = (heading: string) => {
     setCollapsed((prev) => {
@@ -144,9 +289,26 @@ export default function Sidebar() {
     };
   }, [isAdmin, permissions]);
 
+  useEffect(() => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      for (const entry of activeNavDef) {
+        if (isSection(entry) && entry.collapsible && entry.defaultCollapsed) {
+          next.add(entry.heading);
+        }
+      }
+      return next;
+    });
+  }, [activeNavDef]);
+
   const itemVisible = (item: NavItem): boolean => {
-    if (item.id === "systemDefense" && !isAdmin) return false;
-    return filterNavItems([item], can, hasPrefix).length > 0;
+    return isNavItemVisible(item, {
+      can,
+      hasPrefix,
+      isAdmin,
+      navigationProfile,
+      isModuleClosed: (current) => isModuleClosed(NAV_ID_TO_MODULE[current.id] ?? null),
+    });
   };
 
   const navSections = useMemo(
@@ -158,7 +320,7 @@ export default function Sidebar() {
             .map((item) => item.id),
         );
         const orderIndex = new Map(desktopPrefs.desktopOrder.map((id, index) => [id, index]));
-        return NAV_DEF.map((entry) => {
+        return activeNavDef.map((entry) => {
           if (!isSection(entry)) return visibleItems.has(entry.id) ? entry : null;
           const items = entry.items
             .filter((item) => visibleItems.has(item.id))
@@ -166,15 +328,29 @@ export default function Sidebar() {
           return items.length > 0 ? { ...entry, items } : null;
         }).filter(Boolean) as NavEntry[];
       }
-      return (isLoggedIn ? NAV_DEF : NAV_DEF_LOGGED_OUT).map((entry) => {
+      return activeNavDef.map((entry) => {
         if (!isSection(entry)) return entry;
         const items = entry.items.filter(itemVisible);
         return items.length > 0 ? { ...entry, items } : null;
       }).filter(Boolean) as NavEntry[];
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [desktopPrefs, hasCustomNav, hydrated, isLoggedIn, isAdmin, permissions],
+    [
+      desktopPrefs,
+      hasCustomNav,
+      hydrated,
+      isLoggedIn,
+      isAdmin,
+      permissions,
+      isModuleClosed,
+      activeNavDef,
+    ],
   );
+
+  // 模組狀態首輪回應前保持 skeleton，避免先顯示已關閉入口、回應抵達後再把側欄推回去。
+  // 訪客使用公開 fallback，沿用原本不等待登入後模組狀態的行為。
+  const navigationReady = hydrated && (!isLoggedIn || moduleStatusReady);
+  useLocationMarkScope(SIDEBAR_MARK_GROUP, navigationReady);
 
   const initials = userName.charAt(0).toUpperCase();
 
@@ -192,18 +368,11 @@ export default function Sidebar() {
       <div
         className="flex items-center gap-3 px-5 flex-shrink-0"
         style={{ height: "60px", borderBottom: "1px solid var(--sidebar-border)" }}>
-        <Link href="/" className="flex items-center gap-3 min-w-0" aria-label="回到儀表板">
-          <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-base"
-            style={{
-              background: "linear-gradient(135deg, #c9a84c 0%, #b8962f 100%)",
-              color: "#1a1a2e",
-              fontWeight: 700,
-              boxShadow: "0 2px 10px rgba(201,168,76,0.35)",
-              letterSpacing: "0.02em",
-            }}>
-            {BRANDING.acronym}
-          </div>
+        <Link
+          href={isLoggedIn ? "/dashboard" : "/"}
+          className="flex items-center gap-3 min-w-0"
+          aria-label={isLoggedIn ? "平台首頁" : "公開網站首頁"}>
+          <BrandEmblem size={40} priority />
           <div className="min-w-0">
             <p
               className="text-sm leading-tight truncate"
@@ -211,7 +380,7 @@ export default function Sidebar() {
               {BRANDING.orgShortName}
             </p>
             <p
-              className="text-[10px] leading-tight mt-0.5 tracking-widest font-medium"
+              className="text-xs leading-tight mt-0.5 tracking-widest font-medium"
               style={{ color: "var(--primary-text)" }}>
               {BRANDING.acronym}
             </p>
@@ -223,61 +392,84 @@ export default function Sidebar() {
       <nav
         className="flex-1 overflow-y-auto py-3 px-2"
         style={{ scrollbarWidth: "none" }}
-        aria-label="主要導覽">
-        <div className="space-y-0.5">
-          {navSections.map((entry, i) => {
-            if (!isSection(entry)) {
-              return (
-                <NavLink
-                  key={entry.href}
-                  item={entry}
-                  pathname={pathname}
-                  down={isModuleDown(NAV_ID_TO_MODULE[entry.id] ?? null)}
-                />
-              );
-            }
-            const isCollapsed = hydrated && collapsed.has(entry.heading);
-            const sectionId = `nav-section-${i}`;
-            return (
-              <div key={entry.heading + i} className="pt-4 first:pt-0">
-                {entry.collapsible ? (
-                  <button
-                    type="button"
-                    onClick={() => toggleSection(entry.heading)}
-                    className="w-full flex items-center justify-between px-3 mb-1.5 cursor-pointer"
-                    aria-expanded={!isCollapsed}
-                    aria-controls={sectionId}
-                    style={{ background: "transparent", border: "none" }}>
-                    <span className="sidebar-section-label">{entry.heading}</span>
-                    <ChevronDown
-                      size={12}
-                      aria-hidden={true}
-                      style={{
-                        color: "var(--sidebar-section-label)",
-                        transform: isCollapsed ? "rotate(-90deg)" : "rotate(0deg)",
-                        transition: "transform 150ms",
-                      }}
+        aria-label="主要導覽"
+        aria-busy={!navigationReady}>
+        {!navigationReady ? (
+          <SidebarNavSkeleton />
+        ) : (
+          <>
+            {isLoggedIn && (
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new Event(OPEN_COMMAND_MENU_EVENT))}
+                className="sidebar-search-trigger"
+                aria-keyshortcuts="Control+K Meta+K">
+                <Search size={15} aria-hidden={true} />
+                <span className="flex-1 truncate text-left">搜尋功能或資料</span>
+                <kbd aria-hidden="true">Ctrl K</kbd>
+              </button>
+            )}
+            <div className="space-y-0.5">
+              {navSections.map((entry, i) => {
+                if (!isSection(entry)) {
+                  return (
+                    <NavLink
+                      key={entry.href}
+                      item={entry}
+                      pathname={pathname}
+                      down={isModuleDown(NAV_ID_TO_MODULE[entry.id] ?? null)}
                     />
-                  </button>
-                ) : (
-                  <p className="sidebar-section-label px-3 mb-1.5">{entry.heading}</p>
-                )}
-                {!isCollapsed && (
-                  <div id={sectionId} className="space-y-0.5">
-                    {entry.items.map((item) => (
-                      <NavLink
-                        key={item.href}
-                        item={item}
-                        pathname={pathname}
-                        down={isModuleDown(NAV_ID_TO_MODULE[item.id] ?? null)}
-                      />
-                    ))}
+                  );
+                }
+                const isCollapsed = collapsed.has(entry.heading);
+                const sectionId = `nav-section-${i}`;
+                return (
+                  <div key={entry.heading + i} className="sidebar-section pt-4 first:pt-0">
+                    {entry.collapsible ? (
+                      <button
+                        type="button"
+                        onClick={() => toggleSection(entry.heading)}
+                        className="sidebar-section-toggle"
+                        aria-expanded={!isCollapsed}
+                        aria-controls={sectionId}>
+                        <span className="sidebar-section-label">{entry.heading}</span>
+                        <ChevronDown
+                          size={12}
+                          aria-hidden={true}
+                          style={{
+                            color: "var(--sidebar-section-label)",
+                            transform: isCollapsed ? "rotate(-90deg)" : "rotate(0deg)",
+                            transition: "transform 150ms",
+                          }}
+                        />
+                      </button>
+                    ) : (
+                      <p className="sidebar-section-label px-3 pb-1">{entry.heading}</p>
+                    )}
+                    {!isCollapsed && (
+                      <div id={sectionId} className="sidebar-section-content space-y-0.5">
+                        {entry.items.map((item) => (
+                          <NavLink
+                            key={item.href}
+                            item={item}
+                            pathname={pathname}
+                            down={isModuleDown(NAV_ID_TO_MODULE[item.id] ?? null)}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                );
+              })}
+            </div>
+            <div className="sidebar-section pt-4">
+              <Link href="/" className="sidebar-nav-item motion-nav-link">
+                <span className="flex-shrink-0"><Globe2 size={15} aria-hidden={true} /></span>
+                <span className="flex-1 truncate">公開網站</span>
+              </Link>
+            </div>
+          </>
+        )}
       </nav>
 
       {/* User footer */}
@@ -286,7 +478,7 @@ export default function Sidebar() {
         style={{ borderTop: "1px solid var(--sidebar-border)" }}>
         {isLoggedIn ? (
           <Link
-            href="/profile"
+            href="/settings/account"
             className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg cursor-pointer"
             style={{ background: "transparent", textDecoration: "none", transition: "background var(--transition)" }}
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--sidebar-hover)")}
@@ -306,7 +498,7 @@ export default function Sidebar() {
                 className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0"
                 style={{
                   background: "linear-gradient(135deg, rgba(201,168,76,0.18) 0%, rgba(201,168,76,0.08) 100%)",
-                  color: "var(--primary)",
+                  color: "var(--primary-text)",
                   border: "1.5px solid rgba(201,168,76,0.35)",
                 }}
                 aria-hidden="true">
@@ -318,15 +510,15 @@ export default function Sidebar() {
                 style={{ color: "var(--sidebar-text-hover)" }}>
                 {userName}
               </p>
-              <p className="text-[11px] truncate mt-0.5" style={{ color: "var(--sidebar-text)" }}>
+              <p className="text-xs truncate mt-0.5" style={{ color: "var(--sidebar-text)" }}>
                 {userEmail || "個人設定"}
               </p>
             </div>
             {isAdmin && (
               <span
-                className="text-[10px] px-1.5 py-0.5 rounded font-medium flex-shrink-0"
+                className="text-xs px-1.5 py-0.5 rounded font-medium flex-shrink-0"
                 style={{
-                  background: "rgba(245,158,11,0.12)",
+                  background: "var(--warning-dim)",
                   color: "var(--warning)",
                   border: "1px solid var(--warning-border)",
                 }}>
@@ -352,7 +544,7 @@ export default function Sidebar() {
               <polyline points="10 17 15 12 10 7" />
               <line x1="15" y1="12" x2="3" y2="12" />
             </svg>
-            <span className="text-[13px] font-medium">登入系統</span>
+            <span className="text-[13px] font-medium">登入平台</span>
           </Link>
         )}
       </div>

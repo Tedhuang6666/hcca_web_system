@@ -1,0 +1,185 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import ShopPromotionPanel from "@/app/(protected)/shop/admin/ShopPromotionPanel";
+import type { ShopPromotionOut } from "@/lib/types";
+
+const api = vi.hoisted(() => ({
+  listPromotions: vi.fn(),
+  listProducts: vi.fn(),
+  catalog: vi.fn(),
+  listCategories: vi.fn(),
+  listSeries: vi.fn(),
+  updatePromotion: vi.fn(),
+  createPromotion: vi.fn(),
+  lookupTargets: vi.fn(),
+}));
+
+vi.mock("@/lib/api", () => ({
+  shopApi: api,
+  apiErrorMessage: (_error: unknown, fallback: string) => fallback,
+}));
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+
+const pendingStudentTarget = {
+  id: "promotion-1",
+  name: "新生註冊優惠",
+  activity_id: null,
+  code: null,
+  target_user_id: null,
+  target_email: null,
+  target_users: [{ email: null, student_id: "410999" }],
+  target_products: [],
+  product_price_overrides: [],
+  discount_type: "percentage",
+  discount_value: 10,
+  min_order_price: 0,
+  min_quantity: 1,
+  starts_at: null,
+  ends_at: null,
+  max_uses: null,
+  used_count: 0,
+  is_active: true,
+  is_public: true,
+  description: null,
+} as unknown as ShopPromotionOut;
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  vi.stubGlobal("matchMedia", () => ({ matches: false }));
+  HTMLElement.prototype.scrollIntoView = vi.fn();
+  api.listPromotions.mockResolvedValue([pendingStudentTarget]);
+  api.listProducts.mockResolvedValue([]);
+  api.catalog.mockResolvedValue([]);
+  api.listCategories.mockResolvedValue([]);
+  api.listSeries.mockResolvedValue([]);
+  api.updatePromotion.mockResolvedValue(pendingStudentTarget);
+  api.lookupTargets.mockResolvedValue([]);
+});
+
+describe("優惠管理的預先指定學號", () => {
+  it("搜尋姓名後核對班級並加入，建立優惠時送出對應學號", async () => {
+    api.lookupTargets.mockResolvedValue([{ identifier: "310001", display_name: "測試同學", student_id: "310001", class_label: "三年一班", seat_number: 1, matched: true, account_active: true }]);
+    api.createPromotion.mockResolvedValue({});
+    render(<ShopPromotionPanel />);
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "測試同學" } });
+    fireEvent.click(await screen.findByRole("button", { name: /加入 測試同學（學號 310001 · 三年一班 · 1 號）/ }));
+    fireEvent.change(screen.getByRole("textbox", { name: "優惠名稱" }), { target: { value: "測試名單優惠" } });
+    fireEvent.click(screen.getByRole("button", { name: "建立優惠" }));
+    await waitFor(() => expect(api.createPromotion).toHaveBeenCalledWith(expect.objectContaining({ target_identifiers: ["310001"] })));
+  });
+
+  it("批次欄位誤貼姓名時提示改用搜尋，避免將姓名存成學號", async () => {
+    render(<ShopPromotionPanel />);
+    fireEvent.change(screen.getByRole("textbox", { name: "優惠名稱" }), { target: { value: "測試優惠" } });
+    fireEvent.change(screen.getByLabelText("可使用帳號（選填）（批次輸入）"), { target: { value: "測試同學" } });
+    expect(screen.getByRole("alert")).toHaveTextContent("姓名請用上方搜尋後選取");
+    fireEvent.click(screen.getByRole("button", { name: "建立優惠" }));
+    expect(api.createPromotion).not.toHaveBeenCalled();
+  });
+
+  it("可建立指定得獎者與商品的贈票優惠，編輯時保留贈送選項", async () => {
+    api.listProducts.mockResolvedValue([{ id: "ticket", name: "校慶門票", price: 200 }]);
+    api.createPromotion.mockResolvedValue({});
+    render(<ShopPromotionPanel />);
+    await screen.findByRole("checkbox", { name: "校慶門票" });
+    fireEvent.change(screen.getByRole("textbox", { name: "優惠名稱" }), { target: { value: "抽獎贈票" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "優惠內容" }), { target: { value: "gift" } });
+    expect(screen.getByRole("spinbutton", { name: /每項贈送數量/ })).toHaveValue(1);
+    fireEvent.change(screen.getByRole("spinbutton", { name: /每項贈送數量/ }), { target: { value: "2" } });
+    fireEvent.click(screen.getByText("批次輸入學號或 Email"));
+    fireEvent.change(screen.getByRole("textbox", { name: /可使用帳號/ }), { target: { value: "11520\n11521" } });
+    fireEvent.click(screen.getByRole("button", { name: "建立優惠" }));
+    expect(api.createPromotion).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("checkbox", { name: "校慶門票" }));
+    api.listPromotions.mockResolvedValue([{
+      ...pendingStudentTarget, discount_value: 100, gift_quantity: 2,
+      target_products: [{ id: "ticket", name: "校慶門票" }],
+    }]);
+    fireEvent.click(screen.getByRole("button", { name: "建立優惠" }));
+    await waitFor(() => expect(api.createPromotion).toHaveBeenCalledWith(expect.objectContaining({
+      target_identifiers: ["11520", "11521"], target_product_ids: ["ticket"],
+      discount_type: "percentage", discount_value: 100, gift_quantity: 2,
+    })));
+    await screen.findByText(/每項贈送 2 件（可加購，規格加價自付）/);
+    fireEvent.click(screen.getByRole("button", { name: "編輯" }));
+    expect(screen.getByRole("combobox", { name: "優惠內容" })).toHaveValue("gift");
+    expect(screen.getByRole("spinbutton", { name: /每項贈送數量/ })).toHaveValue(2);
+    expect(screen.getByText(/受贈者自行選規格/)).toBeVisible();
+    fireEvent.change(screen.getByRole("spinbutton", { name: /每項贈送數量/ }), { target: { value: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: "儲存變更" }));
+    await waitFor(() => expect(api.updatePromotion).toHaveBeenCalledWith("promotion-1",
+      expect.objectContaining({ discount_type: "percentage", discount_value: 100, gift_quantity: 3,
+        target_product_ids: ["ticket"], target_identifiers: ["410999"] })));
+  });
+
+  it("可建立每項各一件的固定套組價", async () => {
+    const products = [
+      { id: "shirt", name: "衣服", price: 300 },
+      { id: "pants", name: "褲子", price: 500 },
+    ];
+    api.listProducts.mockResolvedValue(products);
+    api.catalog.mockResolvedValue([{ id: "goods", name: "商品", products, series: [] }]);
+    api.createPromotion.mockResolvedValue({});
+    render(<ShopPromotionPanel />);
+    await screen.findByText(/學號 410999/);
+    fireEvent.change(screen.getByRole("textbox", { name: "優惠名稱" }), { target: { value: "衣褲套組" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "優惠內容" }), { target: { value: "bundle_price" } });
+    fireEvent.change(screen.getByRole("spinbutton", { name: /每套組合價/ }), { target: { value: "650" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "衣服" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "褲子" }));
+    fireEvent.click(screen.getByRole("button", { name: "建立優惠" }));
+    await waitFor(() => expect(api.createPromotion).toHaveBeenCalledWith(expect.objectContaining({
+      discount_type: "bundle_price", discount_value: 650, target_product_ids: ["shirt", "pants"],
+    })));
+  });
+
+  it("可為尚未上架的商品預先設定優惠", async () => {
+    const draftProduct = {
+      id: "draft-shirt",
+      name: "新款 T-shirt",
+      price: 300,
+      status: "draft",
+      category_id: "goods",
+      series_id: null,
+    };
+    api.listProducts.mockResolvedValue([draftProduct]);
+    api.listCategories.mockResolvedValue([
+      { id: "goods", name: "一般商品", activity_id: null },
+    ]);
+    api.createPromotion.mockResolvedValue({});
+    render(<ShopPromotionPanel />);
+
+    const productCheckbox = await screen.findByRole("checkbox", { name: /新款 T-shirt.*尚未上架/ });
+    expect(api.listProducts).toHaveBeenCalledWith({ limit: "100", offset: "0" });
+    fireEvent.change(screen.getByRole("textbox", { name: "優惠名稱" }), {
+      target: { value: "新款預購優惠" },
+    });
+    fireEvent.click(productCheckbox);
+    fireEvent.click(screen.getByRole("button", { name: "建立優惠" }));
+
+    await waitFor(() => expect(api.createPromotion).toHaveBeenCalledWith(expect.objectContaining({
+      name: "新款預購優惠",
+      target_product_ids: ["draft-shirt"],
+    })));
+  });
+
+  it("顯示尚未註冊的學號，並在編輯時保留該學號", async () => {
+    render(<ShopPromotionPanel />);
+
+    expect(await screen.findByText(/學號 410999/)).toBeVisible();
+    expect(screen.getByText(/學號可預先指定；Email 須已註冊/)).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "編輯" }));
+    fireEvent.click(screen.getByText("批次輸入學號或 Email"));
+    expect(screen.getByRole("textbox", { name: /可使用帳號（選填）/ })).toHaveValue("410999");
+
+    fireEvent.click(screen.getByRole("button", { name: "儲存變更" }));
+    await waitFor(() => {
+      expect(api.updatePromotion).toHaveBeenCalledWith(
+        "promotion-1",
+        expect.objectContaining({ target_identifiers: ["410999"] }),
+      );
+    });
+  });
+});

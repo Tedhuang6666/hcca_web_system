@@ -1,8 +1,10 @@
 <mj-section background-color="#f8fafc" padding="22px 32px" border-top="1px solid #e2e8f0">
   <mj-column>
     <mj-text align="center" font-size="12px" color="#94a3b8" line-height="1.8" padding="0">
+      {% if show_system_footer %}
       本信由「{{ app_name }}」系統自動發送，請勿直接回覆。<br>
       {% if unsubscribe_url %}<a href="{{ unsubscribe_url }}" style="color:#94a3b8;text-decoration:underline;">不再接收此類通知</a><span style="color:#cbd5e1;"> · </span>{% endif %}<a href="{{ frontend_base_url }}/settings/notifications" style="color:#94a3b8;text-decoration:underline;">通知偏好設定</a>
+      {% endif %}
     </mj-text>
   </mj-column>
 </mj-section>

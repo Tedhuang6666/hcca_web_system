@@ -8,14 +8,21 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.clock import roc_year
+from api.core.database import advisory_xact_lock
 from api.models.judicial_petition import JudicialPetition, JudicialPetitionStatus
 from api.models.user import User
 from api.schemas.judicial_petition import JudicialPetitionCreate, JudicialPetitionStatusUpdate
+from api.services import workflow as workflow_svc
+
+# advisory lock key（任取穩定常數，與其他臨界區不同即可）
+_DOCKET_LOCK_KEY = 0x6A70_6574  # "jpet"
 
 
 async def _next_docket_number(session: AsyncSession) -> str:
-    year = datetime.now(UTC).year - 1911
+    year = roc_year()
     prefix = f"評訴{year:03d}"
+    await advisory_xact_lock(session, _DOCKET_LOCK_KEY)
     result = await session.execute(
         select(JudicialPetition.docket_number)
         .where(JudicialPetition.docket_number.like(f"{prefix}%"))
@@ -40,6 +47,21 @@ async def create(
     )
     session.add(petition)
     await session.flush()
+    await workflow_svc.ensure_instance(
+        session,
+        workflow_type="judicial_petition",
+        source_type="judicial_petition",
+        source_id=petition.id,
+        title=petition.title,
+        status=str(petition.status),
+        created_by_id=submitter.id if submitter else None,
+        actor_email=submitter.email if submitter else None,
+        meta={
+            "docket_number": petition.docket_number,
+            "petition_type": str(petition.petition_type),
+            "summary": petition.petition_claim,
+        },
+    )
     return petition
 
 
@@ -74,13 +96,29 @@ async def update_status(
     petition: JudicialPetition,
     *,
     data: JudicialPetitionStatusUpdate,
+    actor: User | None = None,
 ) -> JudicialPetition:
     petition.status = data.status
     if data.docketing_note is not None:
         petition.docketing_note = data.docketing_note
     if data.decision_summary is not None:
         petition.decision_summary = data.decision_summary
-    if data.status in {JudicialPetitionStatus.DECIDED, JudicialPetitionStatus.DISMISSED}:
+    if data.status in {
+        JudicialPetitionStatus.DECIDED,
+        JudicialPetitionStatus.DISMISSED,
+        JudicialPetitionStatus.PUBLISHED,
+    }:
         petition.decided_at = petition.decided_at or datetime.now(UTC)
+    await workflow_svc.transition_by_source(
+        session,
+        source_type="judicial_petition",
+        source_id=petition.id,
+        status=str(data.status),
+        title=petition.title,
+        actor_id=actor.id if actor else None,
+        actor_email=actor.email if actor else None,
+        note=data.docketing_note,
+        payload={"decision_summary": data.decision_summary},
+    )
     await session.flush()
     return petition

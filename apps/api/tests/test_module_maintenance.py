@@ -3,33 +3,42 @@
 from __future__ import annotations
 
 import contextlib
+from unittest.mock import AsyncMock
 
+import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api import app
 from api.core import maintenance as maint
 from api.core import module_health
 from api.core.config import settings
-from api.core.load_shed import _can_bypass_protection
+from api.core.load_shed import _can_bypass_protection, _is_path_exempt
 from api.core.modules import MODULE_IDS, match_module
 from api.core.security import create_access_token, redis_client
 from api.dependencies.auth import get_current_active_user
+from api.main import app
 from api.models.user import User
 
 
 @pytest_asyncio.fixture(autouse=True)
 async def _clean_module_state():
-    """每個 test 後清掉所有模組維護 / 重置旗標與 per-worker 計數，避免跨 test 污染。"""
+    """每個 test 前後清掉模組狀態，避免 Redis 與 per-worker 計數跨執行污染。"""
+
+    async def clear() -> None:
+        for mid in MODULE_IDS:
+            await maint.clear_module_maintenance(mid)
+            await module_health.clear_trip_count(mid)
+            with contextlib.suppress(Exception):
+                await redis_client.delete(maint.MODULE_RESET_PREFIX + mid)
+        maint.clear_cache()
+        module_health._events.clear()
+        module_health._tripped_until.clear()
+        module_health._trip_history.clear()
+
+    await clear()
     yield
-    for mid in MODULE_IDS:
-        await maint.clear_module_maintenance(mid)
-        with contextlib.suppress(Exception):
-            await redis_client.delete(maint.MODULE_RESET_PREFIX + mid)
-    maint.clear_cache()
-    module_health._events.clear()
-    module_health._tripped_until.clear()
+    await clear()
 
 
 def _override_user(user: User) -> None:
@@ -46,6 +55,7 @@ async def _seed_users(db: AsyncSession) -> tuple[User, User]:
         is_active=True,
         is_verified=True,
         is_superuser=True,
+        mfa_enabled=True,
     )
     member = User(
         email="mod-member@school.edu",
@@ -66,11 +76,35 @@ def test_match_module_respects_segment_boundary() -> None:
     assert match_module("/documents-approve/5") == "documents"
     assert match_module("/shop") == "shop"
     assert match_module("/shop/cart") == "shop"
+    assert match_module("/merchandise-submissions/admin") == "merchandiseSubmissions"
+    assert match_module("/finance/receivables") == "finance"
+    assert match_module("/receivables") == "finance"
+    assert match_module("/publications") == "publications"
+    assert match_module("/email") == "email"
+    assert "elections" in MODULE_IDS
+    assert match_module("/elections/public") == "elections"
     # 邊界：非 segment 邊界不命中
     assert match_module("/shop-other") is None
     # 核心通道不屬於任何可維護模組
     assert match_module("/auth/me") is None
     assert match_module("/admin/system/status") is None
+
+
+def test_authentication_paths_are_exempt_from_protective_503() -> None:
+    for path in (
+        "/auth/google/login",
+        "/auth/discord/callback",
+        "/auth/google/one-tap",
+        "/auth/mfa/exchange-challenge",
+        "/auth/mfa/login/verify",
+        "/auth/mfa/passkeys/authentication/options",
+        "/auth/mfa/passkeys/authentication/verify",
+        "/internal/observability/auth-session",
+    ):
+        assert _is_path_exempt(path)
+
+    assert _is_path_exempt("/auth/mfa/status")
+    assert not _is_path_exempt("/authentic")
 
 
 async def test_module_maintenance_blocks_target_module_returns_503(
@@ -83,11 +117,26 @@ async def test_module_maintenance_blocks_target_module_returns_503(
     assert resp.status_code == 503
     body = resp.json()
     assert body["module_maintenance"] is True
+    assert resp.headers["X-HCCA-Protective-Response"] == "1"
     assert body["module"] == "shop"
 
     # 其他模組不受影響
     other = await client.get("/surveys")
     assert other.status_code != 503
+
+
+async def test_election_module_maintenance_blocks_public_api_returns_503(
+    client: AsyncClient,
+) -> None:
+    await maint.set_module_maintenance("elections", on=True, source="manual")
+    maint.clear_cache()
+
+    resp = await client.get("/elections/public")
+
+    assert resp.status_code == 503
+    body = resp.json()
+    assert body["module_maintenance"] is True
+    assert body["module"] == "elections"
 
 
 async def test_module_maintenance_blocks_non_admin_but_admin_bypasses(
@@ -108,6 +157,102 @@ async def test_module_maintenance_blocks_non_admin_but_admin_bypasses(
     anon_scope = {"type": "http", "headers": []}
     assert _can_bypass_protection(admin_scope) is True
     assert _can_bypass_protection(anon_scope) is False
+
+
+async def test_logged_out_admin_token_no_longer_bypasses_protection() -> None:
+    from api.core.load_shed import _bypass_token_still_valid
+    from api.core.security import add_to_blacklist
+
+    token = create_access_token("admin-subject", {"is_admin": True})
+    scope = {
+        "type": "http",
+        "headers": [(b"cookie", f"{settings.ACCESS_TOKEN_COOKIE_NAME}={token}".encode())],
+    }
+
+    assert await _bypass_token_still_valid(scope) is True
+    await add_to_blacklist(token)
+    assert await _bypass_token_still_valid(scope) is False
+
+
+async def test_closed_module_blocks_admin_and_reports_closed(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await maint.set_module_maintenance(
+        "shop",
+        on=True,
+        mode="closed",
+        source="manual",
+        reason="本學期停用",
+    )
+    maint.clear_cache()
+    token = create_access_token("admin-subject", {"is_admin": True})
+
+    resp = await client.get(
+        "/shop",
+        cookies={settings.ACCESS_TOKEN_COOKIE_NAME: token},
+    )
+
+    assert resp.status_code == 503
+    body = resp.json()
+    assert body["module_closed"] is True
+    assert body["mode"] == "closed"
+    assert "系統關閉中" in body["detail"]
+
+
+async def test_set_module_maintenance_caches_successful_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    redis_set = AsyncMock()
+    redis_get = AsyncMock()
+    monkeypatch.setattr(maint.redis_client, "set", redis_set)
+    monkeypatch.setattr(maint.redis_client, "get", redis_get)
+    maint.clear_cache()
+
+    expected = await maint.set_module_maintenance(
+        "shop",
+        on=True,
+        mode="closed",
+        source="manual",
+        reason="本學期停用",
+    )
+
+    assert await maint.get_module_maintenance("shop") == expected
+    redis_set.assert_awaited_once()
+    redis_get.assert_not_awaited()
+
+
+async def test_closed_module_browser_navigation_redirects_to_status_page(
+    client: AsyncClient,
+) -> None:
+    await maint.set_module_maintenance("shop", on=True, mode="closed", source="manual")
+    maint.clear_cache()
+
+    resp = await client.get(
+        "/shop",
+        headers={
+            "accept": "text/html,application/xhtml+xml",
+            "sec-fetch-dest": "document",
+        },
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 303
+    assert resp.headers["location"].endswith("/module-status?module=shop")
+
+
+async def test_closed_module_is_not_overwritten_by_auto_maintenance() -> None:
+    await maint.set_module_maintenance("surveys", on=True, mode="closed", source="manual")
+
+    state = await maint.set_module_maintenance(
+        "surveys",
+        on=True,
+        source="auto",
+        reason="自動健康檢查失敗",
+        ttl=60,
+    )
+
+    assert state["mode"] == "closed"
+    assert state["source"] == "manual"
 
 
 async def test_set_module_maintenance_requires_superuser_returns_403(
@@ -148,6 +293,12 @@ async def test_module_circuit_trips_after_threshold_5xx() -> None:
     assert state is not None
     assert state["on"] is True
     assert state["source"] == "auto"
+    events = module_health.recent_trip_events(mod)
+    assert len(events) == 1
+    assert events[0]["severity"] == "NORMAL"
+    assert events[0]["trip_count"] == 1
+    assert events[0]["cooldown_s"] == settings.MODULE_CIRCUIT_COOLDOWN_BASE_SECONDS
+    assert events[0]["escalated"] is False
 
 
 async def test_restart_module_clears_maintenance_and_resets_window(
@@ -156,13 +307,13 @@ async def test_restart_module_clears_maintenance_and_resets_window(
     admin, _ = await _seed_users(db_session)
     _override_user(admin)
 
-    await maint.set_module_maintenance("meal", on=True, source="manual", reason="x")
+    await maint.set_module_maintenance("shop", on=True, source="manual", reason="x")
     maint.clear_cache()
 
-    resp = await client.post("/admin/system/modules/meal/restart")
+    resp = await client.post("/admin/system/modules/shop/restart")
     assert resp.status_code == 200
     assert resp.json()["ok"] is True
 
     maint.clear_cache()
-    assert await maint.get_module_maintenance("meal") is None
-    assert await maint.get_module_reset("meal") > 0
+    assert await maint.get_module_maintenance("shop") is None
+    assert await maint.get_module_reset("shop") > 0

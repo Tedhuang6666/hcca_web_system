@@ -1,0 +1,125 @@
+.offers {
+  color: var(--public-text);
+}
+
+.disclosure {
+  border-block: 1px solid var(--public-border);
+}
+
+.summary {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-block: 0.75rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.summary::-webkit-details-marker {
+  display: none;
+}
+
+.summary:focus-visible {
+  outline: 2px solid var(--public-focus);
+  outline-offset: 3px;
+}
+
+.summary > svg {
+  flex-shrink: 0;
+  color: var(--public-secondary);
+}
+
+.disclosure[open] > .summary > svg {
+  transform: rotate(180deg);
+}
+
+.overview {
+  display: block;
+  color: var(--public-secondary);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.offers h4 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.offers .note {
+  margin: 0 0 0.75rem;
+  color: var(--public-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.list {
+  display: grid;
+  gap: 0.875rem;
+  margin: 0;
+  padding: 0 0 0.875rem;
+  list-style: none;
+}
+
+.offer {
+  display: grid;
+  min-width: 0;
+  gap: 0.35rem;
+  border-top: 1px solid var(--public-border);
+  padding-top: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.offer[data-gift] {
+  border: 1px solid var(--public-accent);
+  border-radius: 12px;
+  background: var(--public-accent-soft);
+  padding: 1rem;
+}
+
+.heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.heading h5 {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.offer p {
+  margin: 0;
+  color: var(--public-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.65;
+}
+
+.giftLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--public-accent-text);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.offer .state,
+.offer .giftName {
+  color: var(--public-text);
+  font-weight: 600;
+}
+
+.offer .state[data-applied="true"],
+.offer .saving {
+  color: var(--public-accent-text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}

@@ -2,18 +2,22 @@
 
 from __future__ import annotations
 
+import asyncio
 import html
 import io
 import json
 import re
 import uuid
 from datetime import UTC, datetime
+from urllib.parse import quote
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import load_only, selectinload
 
-from api.models.org import Position, UserPosition
+from api.email.renderer import absolutize_url, safe_link_url
+from api.models.announcement import Announcement, AnnouncementAudience
+from api.models.school_class import SchoolClass
 from api.models.survey import (
     QuestionType,
     Survey,
@@ -23,15 +27,26 @@ from api.models.survey import (
     SurveyStatus,
     ValidationRule,
 )
+from api.models.user import User
+from api.models.user_identity import UserIdentity
 from api.schemas.survey import (
     DISPLAY_QUESTION_TYPES,
     QuestionStats,
     SurveyCreate,
     SurveyQuestionCreate,
     SurveyQuestionUpdate,
+    SurveyRespondentSummary,
     SurveyStats,
     SurveySubmit,
     SurveyUpdate,
+)
+from api.services.electronic_credential import get_settings
+from api.services.permission import get_user_org_ids
+from api.services.school_class import get_user_active_class_ids
+from api.services.student_identity_rules import (
+    SCHOOL_EMAIL_DOMAIN,
+    is_alumni_school_account,
+    is_g0_school_account_email,
 )
 
 # 可編輯題目／基本資料的問卷狀態：草稿與開放中皆可（已截止／封存則鎖定）
@@ -55,16 +70,51 @@ def _load_str_list(raw: str | None) -> list[str]:
     return [str(x) for x in parsed] if isinstance(parsed, list) else []
 
 
-# ── 問卷 CRUD ─────────────────────────────────────────────────────────────────
+def _dump_grade_list(values: list[int] | None) -> str | None:
+    grades = sorted(set(values or []))
+    return json.dumps(grades) if grades else None
 
 
-async def _survey_with_questions(session: AsyncSession, survey_id: uuid.UUID) -> Survey | None:
-    result = await session.execute(
-        select(Survey)
-        .options(selectinload(Survey.questions).selectinload(SurveyQuestion.answers))
-        .where(Survey.id == survey_id)
+def _load_grade_list(raw: str | None) -> list[int]:
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return sorted({grade for grade in parsed if type(grade) is int and grade in (1, 2, 3)})
+
+
+async def _get_user_active_grades(session: AsyncSession, user_id: uuid.UUID) -> set[int]:
+    class_ids = await get_user_active_class_ids(session, user_id)
+    if not class_ids:
+        return set()
+    result = await session.scalars(
+        select(SchoolClass.grade).where(
+            SchoolClass.id.in_(class_ids),
+            SchoolClass.is_active.is_(True),
+        )
     )
-    return result.scalar_one_or_none()
+    return set(result.all())
+
+
+def _grade_labels(grades: set[int] | list[int]) -> str:
+    labels = {1: "高一", 2: "高二", 3: "高三"}
+    return "、".join(labels[grade] for grade in sorted(grades))
+
+
+def _school_account_required_message(grades: set[int] | list[int], *, login: bool = False) -> str:
+    action = "請登入本校校務帳號後重新載入。" if login else "請切換校務帳號後重新載入。"
+    return f"本問卷僅限本校{_grade_labels(grades)}填寫，{action}"
+
+
+def _grade_restricted_message(grades: set[int] | list[int]) -> str:
+    return f"本問卷僅限{_grade_labels(grades)}填寫。"
+
+
+# ── 問卷 CRUD ─────────────────────────────────────────────────────────────────
 
 
 async def get_survey(session: AsyncSession, survey_id: uuid.UUID) -> Survey | None:
@@ -109,10 +159,36 @@ async def list_surveys(
     limit: int = 20,
     offset: int = 0,
 ) -> list[Survey]:
+    # 先取列表需要的欄位，再用每筆問卷的 survey_id 索引計數；避免先把整張
+    # survey_responses 聚合完才套用 LIMIT/OFFSET。
+    response_count = (
+        select(func.count(SurveyResponse.id))
+        .where(SurveyResponse.survey_id == Survey.id)
+        .correlate(Survey)
+        .scalar_subquery()
+    )
     q = (
-        select(Survey, func.count(SurveyResponse.id))
-        .outerjoin(SurveyResponse, SurveyResponse.survey_id == Survey.id)
-        .group_by(Survey.id)
+        select(Survey, response_count.label("response_count"))
+        .options(
+            load_only(
+                Survey.id,
+                Survey.title,
+                Survey.status,
+                Survey.is_anonymous,
+                Survey.opens_at,
+                Survey.closes_at,
+                Survey.org_id,
+                Survey.activity_id,
+                Survey.created_by,
+                Survey.created_at,
+                Survey.is_public,
+                Survey.is_listed,
+                Survey.allowed_org_ids_json,
+                Survey.allowed_user_ids_json,
+                Survey.allowed_domains_json,
+                Survey.allowed_grades_json,
+            )
+        )
         .order_by(Survey.created_at.desc())
         .limit(limit)
         .offset(offset)
@@ -122,9 +198,11 @@ async def list_surveys(
     if activity_id:
         q = q.where(Survey.activity_id == activity_id)
     if public_only:
-        # 公開列表：僅顯示標記為公開且已開放/已截止的問卷（不含草稿、封存）
+        # 年級限制需要登入並確認本校班級，不出現在未登入可填答的公開列表。
         q = q.where(
             Survey.is_public == True,  # noqa: E712
+            Survey.is_listed == True,  # noqa: E712
+            Survey.allowed_grades_json.is_(None),
             Survey.status.in_([SurveyStatus.OPEN, SurveyStatus.CLOSED]),
         )
     if status:
@@ -158,65 +236,246 @@ async def create_survey(
         activity_id=data.activity_id,
         created_by=created_by,
         is_public=data.is_public,
+        is_listed=data.is_listed,
         allowed_org_ids_json=_dump_str_list(data.allowed_org_ids),
         allowed_user_ids_json=_dump_str_list(data.allowed_user_ids),
         allowed_domains_json=_dump_str_list(data.allowed_domains),
+        allowed_grades_json=_dump_grade_list(data.allowed_grades),
+        announcement=data.announcement,
+        announcement_title=data.announcement_title,
+        show_announcement_popup=data.show_announcement_popup,
     )
     session.add(survey)
     await session.flush()
+    await sync_announcement(session, survey, author_id=created_by)
     return survey
 
 
-async def update_survey(session: AsyncSession, survey: Survey, *, data: SurveyUpdate) -> Survey:
+async def update_survey(
+    session: AsyncSession,
+    survey: Survey,
+    *,
+    data: SurveyUpdate,
+    updated_by_id: uuid.UUID | None = None,
+) -> Survey:
     if survey.status not in _EDITABLE_STATUSES:
         raise ValueError("已截止或封存的問卷無法修改")
-    fields = data.model_dump(exclude_none=True)
+    fields = data.model_dump(exclude_unset=True)
+    next_is_public = fields.get("is_public", survey.is_public)
+    next_allowed_grades = fields.get("allowed_grades", _load_grade_list(survey.allowed_grades_json))
+    if next_is_public and next_allowed_grades:
+        raise ValueError("年級限制僅適用登入後填答，請先將填答方式設為「登入後填答」。")
     for key in ("allowed_org_ids", "allowed_user_ids", "allowed_domains"):
         if key in fields:
             setattr(survey, f"{key}_json", _dump_str_list(fields.pop(key)))
+    if "allowed_grades" in fields:
+        survey.allowed_grades_json = _dump_grade_list(fields.pop("allowed_grades"))
     for field, value in fields.items():
         setattr(survey, field, value)
+    await sync_announcement(session, survey, author_id=updated_by_id or survey.created_by)
     await session.flush()
     return survey
+
+
+def _announcement_content(message: str) -> dict:
+    return {"format": "markdown", "markdown": message}
+
+
+async def sync_announcement(
+    session: AsyncSession,
+    survey: Survey,
+    *,
+    author_id: uuid.UUID,
+) -> None:
+    """同步問卷公告；草稿不公開，開放後依設定顯示一般／重要公告。"""
+    message = (survey.announcement or "").strip()
+    announcement = (
+        await session.get(Announcement, survey.announcement_id) if survey.announcement_id else None
+    )
+    if not message:
+        if announcement:
+            announcement.is_published = False
+            announcement.is_urgent = False
+            announcement.urgent_until = None
+            announcement.show_on_every_visit = False
+        return
+
+    if announcement is None:
+        announcement = Announcement(id=uuid.uuid4(), author_id=author_id)
+        session.add(announcement)
+        survey.announcement_id = announcement.id
+
+    was_published = announcement.is_published
+    announcement.title = (survey.announcement_title or survey.title).strip() or survey.title
+    announcement.content = _announcement_content(message)
+    announcement.is_published = survey.is_listed and survey.status in {
+        SurveyStatus.OPEN,
+        SurveyStatus.CLOSED,
+    }
+    announcement.is_urgent = announcement.is_published and survey.show_announcement_popup
+    announcement.urgent_until = survey.closes_at if announcement.is_urgent else None
+    announcement.link_url = f"/surveys/{quote(survey.title, safe='')}"
+    announcement.link_label = "前往填答"
+    announcement.show_on_every_visit = announcement.is_urgent
+    announcement.org_id = None
+    announcement.activity_id = survey.activity_id
+    announcement.audience_type = AnnouncementAudience.ALL.value
+    if announcement.is_published and (not was_published or announcement.published_at is None):
+        announcement.published_at = datetime.now(UTC)
 
 
 def _email_domain(email: str | None) -> str:
     return email.rsplit("@", 1)[-1].lower() if email and "@" in email else ""
 
 
-async def check_survey_access(session: AsyncSession, survey: Survey, user: object | None) -> None:
+async def _linked_emails(session: AsyncSession, user: User) -> set[str]:
+    """取得帳號主信箱與所有已連結身分的信箱。"""
+    emails = {user.email.strip().lower()}
+    rows = await session.scalars(
+        select(UserIdentity.email).where(
+            UserIdentity.user_id == user.id,
+            UserIdentity.email.is_not(None),
+        )
+    )
+    emails.update(email.strip().lower() for email in rows.all() if email)
+    emails.discard("")
+    return emails
+
+
+def _domain_access_message(domains: set[str]) -> str:
+    rendered = "、".join(f"@{domain}" for domain in sorted(domains))
+    return (
+        f"此問卷僅限使用 {rendered} 的校務帳號填答。"
+        "請切換到符合資格的帳號，或先在帳號設定完成校務帳號連結後再重新載入。"
+    )
+
+
+async def check_survey_access(
+    session: AsyncSession,
+    survey: Survey,
+    user: User | None,
+    *,
+    active_org_ids: set[str] | None = None,
+    linked_emails: set[str] | None = None,
+    active_grades: set[int] | None = None,
+) -> None:
     """驗證填答者是否在問卷開放對象內；不符時拋出 PermissionError。"""
-    if survey.is_public:
+    allowed_grades = set(_load_grade_list(survey.allowed_grades_json))
+    if survey.is_public and not allowed_grades:
         return
-    if user is None:
-        raise PermissionError("此問卷需登入後才能填答")
     org_ids = set(_load_str_list(survey.allowed_org_ids_json))
     user_ids = set(_load_str_list(survey.allowed_user_ids_json))
     domains = {d.lower().lstrip("@") for d in _load_str_list(survey.allowed_domains_json)}
+    if user and SCHOOL_EMAIL_DOMAIN in domains and is_g0_school_account_email(user.email):
+        current_prefixes = (await get_settings(session)).student_id_prefixes
+        if is_alumni_school_account(user.email, current_prefixes):
+            raise PermissionError("此問卷限現行在校學生帳號填答")
+    if user is None:
+        if allowed_grades:
+            raise PermissionError(_school_account_required_message(allowed_grades, login=True))
+        if domains:
+            raise PermissionError(_domain_access_message(domains))
+        raise PermissionError("此問卷需登入後才能填答")
+    emails = linked_emails
+    if allowed_grades:
+        emails = emails if emails is not None else await _linked_emails(session, user)
+        if not any(_email_domain(email) == SCHOOL_EMAIL_DOMAIN for email in emails):
+            raise PermissionError(_school_account_required_message(allowed_grades))
+        if active_grades is None:
+            active_grades = await _get_user_active_grades(session, user.id)
+        if not active_grades & allowed_grades:
+            raise PermissionError(_grade_restricted_message(allowed_grades))
     if not org_ids and not user_ids and not domains:
         return  # 未設限制名單 → 任何登入者皆可填
-    if user_ids and str(getattr(user, "id", "")) in user_ids:
+    if user_ids and str(user.id) in user_ids:
         return
-    email = (getattr(user, "email", "") or "").lower()
-    if domains and _email_domain(email) in domains:
-        return
-    if org_ids:
-        result = await session.execute(
-            select(Position.org_id)
-            .join(UserPosition, UserPosition.position_id == Position.id)
-            .where(UserPosition.user_id == user.id)
-        )
-        if {str(o) for o in result.scalars().all()} & org_ids:
+    if domains:
+        emails = emails if emails is not None else await _linked_emails(session, user)
+        if any(_email_domain(email) in domains for email in emails):
             return
+    if org_ids:
+        if active_org_ids is None:
+            active_org_ids = {str(org_id) for org_id in await get_user_org_ids(session, user.id)}
+        if active_org_ids & org_ids:
+            return
+    if domains:
+        raise PermissionError(_domain_access_message(domains))
     raise PermissionError("您不在此問卷的開放填答對象範圍內")
 
 
+async def list_respondable_surveys(
+    session: AsyncSession,
+    user: User,
+    *,
+    org_id: uuid.UUID | None = None,
+    activity_id: uuid.UUID | None = None,
+    status: SurveyStatus | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> list[Survey]:
+    """列出目前使用者符合資格的開放／已截止問卷。"""
+    if status not in (None, SurveyStatus.OPEN, SurveyStatus.CLOSED):
+        return []
+    if limit <= 0:
+        return []
+
+    active_org_ids = {str(org_id) for org_id in await get_user_org_ids(session, user.id)}
+    linked_emails = await _linked_emails(session, user)
+    active_grades: set[int] | None = None
+    page: list[Survey] = []
+    visible_count = 0
+    candidate_offset = 0
+    page_size = 100
+
+    while len(page) < limit:
+        candidates = await list_surveys(
+            session,
+            org_id=org_id,
+            activity_id=activity_id,
+            status=status,
+            limit=page_size,
+            offset=candidate_offset,
+        )
+        if not candidates:
+            break
+        candidate_offset += len(candidates)
+
+        for survey in candidates:
+            if survey.status not in (SurveyStatus.OPEN, SurveyStatus.CLOSED):
+                continue
+            if _load_grade_list(survey.allowed_grades_json) and active_grades is None:
+                active_grades = await _get_user_active_grades(session, user.id)
+            try:
+                await check_survey_access(
+                    session,
+                    survey,
+                    user,
+                    active_org_ids=active_org_ids,
+                    linked_emails=linked_emails,
+                    active_grades=active_grades,
+                )
+            except PermissionError:
+                continue
+            if visible_count >= offset:
+                page.append(survey)
+            visible_count += 1
+            if len(page) >= limit:
+                break
+
+    return page
+
+
 async def open_survey(session: AsyncSession, survey: Survey) -> Survey:
-    if survey.status != SurveyStatus.DRAFT:
-        raise ValueError("只有草稿可以開放填答")
+    if survey.status not in {SurveyStatus.DRAFT, SurveyStatus.CLOSED}:
+        raise ValueError("只有草稿或已截止的問卷可以開放填答")
     if not any(q.question_type not in DISPLAY_QUESTION_TYPES for q in survey.questions):
         raise ValueError("問卷至少需要一個可填答題目才能開放")
+    # 手動關閉後重新開放時，若原截止時間已過，必須移除過期限制，否則
+    # 狀態雖然變成 open，填答仍會被 _check_can_respond 判定為已截止。
+    if survey.closes_at and survey.closes_at <= datetime.now(UTC):
+        survey.closes_at = None
     survey.status = SurveyStatus.OPEN
+    await sync_announcement(session, survey, author_id=survey.created_by)
     await session.flush()
     return survey
 
@@ -225,16 +484,30 @@ async def close_survey(session: AsyncSession, survey: Survey) -> Survey:
     if survey.status != SurveyStatus.OPEN:
         raise ValueError("只有開放中的問卷才能關閉")
     survey.status = SurveyStatus.CLOSED
+    await sync_announcement(session, survey, author_id=survey.created_by)
     await session.flush()
     return survey
 
 
-async def archive_survey(session: AsyncSession, survey: Survey) -> Survey:
-    if survey.status == SurveyStatus.ARCHIVED:
-        raise ValueError("問卷已封存")
-    survey.status = SurveyStatus.ARCHIVED
-    await session.flush()
-    return survey
+async def close_expired_surveys(session: AsyncSession, *, now: datetime | None = None) -> int:
+    """關閉所有已超過截止時間的開放問卷，回傳本次關閉數量。"""
+    cutoff = now or datetime.now(UTC)
+    result = await session.execute(
+        select(Survey)
+        .where(
+            Survey.status == SurveyStatus.OPEN,
+            Survey.closes_at.is_not(None),
+            Survey.closes_at <= cutoff,
+        )
+        .with_for_update(skip_locked=True)
+    )
+    surveys = list(result.scalars().all())
+    for survey in surveys:
+        survey.status = SurveyStatus.CLOSED
+        await sync_announcement(session, survey, author_id=survey.created_by)
+    if surveys:
+        await session.flush()
+    return len(surveys)
 
 
 # ── 題目 CRUD ─────────────────────────────────────────────────────────────────
@@ -250,6 +523,23 @@ def _serialize_option_config(cfg, options: list[str] | None) -> str | None:
     if not exclusive and not other:
         return None
     return json.dumps({"exclusive": exclusive, "other": other}, ensure_ascii=False)
+
+
+def _validate_question_configuration(
+    question_type: QuestionType, options: list[str], grid_columns: list[str]
+) -> None:
+    if question_type == QuestionType.SINGLE_GRID:
+        if len(options) < 2 or len(options) > 50:
+            raise ValueError("單選方格需要 2 至 50 列")
+        if len(grid_columns) < 2 or len(grid_columns) > 20:
+            raise ValueError("單選方格需要 2 至 20 欄")
+        if len(set(options)) != len(options) or len(set(grid_columns)) != len(grid_columns):
+            raise ValueError("單選方格的列與欄標籤不可重複")
+    if question_type == QuestionType.MULTI_TEXT:
+        if len(options) < 2 or len(options) > 20:
+            raise ValueError("多欄詳答需要設定 2 至 20 個欄位名稱")
+        if len(set(options)) != len(options):
+            raise ValueError("多欄詳答欄位名稱不可重複")
 
 
 def _load_option_config(raw: str | None) -> dict[str, list[str]]:
@@ -270,12 +560,22 @@ async def add_question(
 ) -> SurveyQuestion:
     if survey.status not in _EDITABLE_STATUSES:
         raise ValueError("已截止或封存的問卷無法新增題目")
+    _validate_question_configuration(data.question_type, data.options, data.grid_columns)
     question = SurveyQuestion(
         survey_id=survey.id,
         question_text=data.question_text,
+        description=data.description,
         question_type=data.question_type,
         is_required=False if data.question_type in DISPLAY_QUESTION_TYPES else data.is_required,
         options_json=json.dumps(data.options, ensure_ascii=False) if data.options else None,
+        grid_columns_json=(
+            json.dumps(data.grid_columns, ensure_ascii=False) if data.grid_columns else None
+        ),
+        option_image_sets_json=(
+            json.dumps(data.option_image_sets, ensure_ascii=False)
+            if data.option_image_sets
+            else None
+        ),
         option_config_json=_serialize_option_config(data.option_config, data.options),
         min_value=data.min_value,
         max_value=data.max_value,
@@ -302,9 +602,60 @@ async def update_question(
         raise ValueError("已截止或封存的問卷無法修改題目")
     # exclude_unset：只更新呼叫端明確提供的欄位（含明確設為 null 以清除設定）
     fields = data.model_dump(exclude_unset=True)
+    next_question_type = fields.get("question_type", question.question_type)
+    if next_question_type is None:
+        raise ValueError("題型不可為空")
+    next_options = fields.get("options", _load_str_list(question.options_json))
+    if next_options is None:
+        next_options = []
+    next_grid_columns = fields.get("grid_columns", _load_str_list(question.grid_columns_json))
+    if next_grid_columns is None:
+        next_grid_columns = []
+    _validate_question_configuration(next_question_type, next_options, next_grid_columns)
+    next_min_value = fields.get(
+        "min_value",
+        None if next_question_type != question.question_type else question.min_value,
+    )
+    next_max_value = fields.get("max_value", question.max_value)
+    if next_question_type in (QuestionType.RATING, QuestionType.LINEAR_SCALE):
+        minimum = (
+            next_min_value
+            if next_min_value is not None
+            else (0 if next_question_type == QuestionType.LINEAR_SCALE else 1)
+        )
+        maximum = next_max_value if next_max_value is not None else 5
+        if minimum > maximum or (
+            next_question_type == QuestionType.LINEAR_SCALE and minimum == maximum
+        ):
+            raise ValueError(
+                "最高刻度必須大於起始刻度"
+                if next_question_type == QuestionType.LINEAR_SCALE
+                else "最高分數不可小於起始分數"
+            )
+    elif next_question_type == QuestionType.RANKING:
+        if next_min_value is not None and next_min_value < 1:
+            raise ValueError("排序最少項數不可小於 1")
+        if next_max_value is not None and next_max_value < 1:
+            raise ValueError("排序最多項數不可小於 1")
+    elif next_question_type == QuestionType.MULTIPLE and next_max_value == 0:
+        raise ValueError("多選最多項數不可設定為 0")
+    if (
+        next_question_type == QuestionType.MULTIPLE
+        and next_max_value is not None
+        and next_max_value > len(next_options)
+    ):
+        raise ValueError("多選最多項數不可大於選項總數")
     if "options" in fields:
         opts = fields.pop("options")
         question.options_json = json.dumps(opts, ensure_ascii=False) if opts else None
+    if "grid_columns" in fields:
+        columns = fields.pop("grid_columns")
+        question.grid_columns_json = json.dumps(columns, ensure_ascii=False) if columns else None
+    if "option_image_sets" in fields:
+        image_sets = fields.pop("option_image_sets")
+        question.option_image_sets_json = (
+            json.dumps(image_sets, ensure_ascii=False) if image_sets else None
+        )
     if "option_config" in fields:
         raw_cfg = fields.pop("option_config")
         # 此處取用 dict（model_dump 已將 OptionConfig 攤平）
@@ -428,6 +779,7 @@ async def _check_can_respond(
     survey: Survey,
     respondent_id: uuid.UUID | None,
     anon_token: str | None,
+    response_id: uuid.UUID | None = None,
 ) -> None:
     """驗證是否可以填答（檢查重複、時間範圍）"""
     now = datetime.now(UTC)
@@ -436,11 +788,14 @@ async def _check_can_respond(
         raise ValueError("此問卷目前不開放填答")
     if survey.opens_at and now < survey.opens_at:
         raise ValueError("問卷尚未開放")
-    if survey.closes_at and now > survey.closes_at:
+    if survey.closes_at and now >= survey.closes_at:
         raise ValueError("問卷已截止")
 
-    if survey.allow_multiple:
+    if response_id is not None or survey.allow_multiple:
         return  # 允許重複填答，不做唯一性檢查
+
+    # 單次填答以問卷資料列做序列化鎖，避免兩個同時送出的請求都通過重複檢查。
+    await session.execute(select(Survey.id).where(Survey.id == survey.id).with_for_update())
 
     # 非匿名：檢查 user 是否已填答
     if not survey.is_anonymous and respondent_id:
@@ -465,17 +820,9 @@ async def _check_can_respond(
             raise ValueError("此 token 已填答過此問卷")
 
 
-async def submit_response(
-    session: AsyncSession,
-    survey: Survey,
-    *,
-    respondent_id: uuid.UUID | None,
-    data: SurveySubmit,
-    respondent_email: str | None = None,
-) -> SurveyResponse:
-    await _check_can_respond(session, survey, respondent_id, data.anon_token)
-
-    # 載入問題
+async def _validate_submission(
+    session: AsyncSession, survey: Survey, data: SurveySubmit
+) -> dict[uuid.UUID, SurveyQuestion]:
     q_result = await session.execute(
         select(SurveyQuestion).where(SurveyQuestion.survey_id == survey.id)
     )
@@ -488,7 +835,15 @@ async def submit_response(
             continue
         if not _evaluate_condition(q.condition_json, answers_by_q):
             continue
-        if q.is_required and q.id not in answers_by_q:
+        answer = answers_by_q.get(q.id)
+        has_answer = bool(
+            answer
+            and (
+                (answer.answer_text or "").strip()
+                or any((value or "").strip() for value in answer.answer_options)
+            )
+        )
+        if q.is_required and not has_answer:
             raise ValueError(f"題目「{q.question_text[:30]}」為必填")
 
     # 驗證文字題型的自訂規則（字數、格式）
@@ -503,7 +858,34 @@ async def submit_response(
         ans = answers_by_q.get(q.id)
         if ans is None:
             continue
-        if q.question_type == QuestionType.MULTIPLE:
+        if q.question_type == QuestionType.SINGLE_GRID:
+            rows = _load_str_list(q.options_json)
+            columns = _load_str_list(q.grid_columns_json)
+            selected = [value.strip() for value in (ans.answer_options or [])]
+            if not any(selected) and not q.is_required:
+                ans.answer_options = []
+                continue
+            if len(selected) != len(rows):
+                raise ValueError(f"題目「{q.question_text[:30]}」每一列都需要一個欄位答案")
+            if any(value and value not in columns for value in selected):
+                raise ValueError(f"題目「{q.question_text[:30]}」包含無效的欄位答案")
+            if q.is_required and any(not value for value in selected):
+                raise ValueError(f"題目「{q.question_text[:30]}」每一列都必須作答")
+            ans.answer_options = selected
+        elif q.question_type == QuestionType.MULTI_TEXT:
+            values = [value.strip() for value in (ans.answer_options or [])]
+            expected_count = len(_load_str_list(q.options_json))
+            if not any(values) and not q.is_required:
+                ans.answer_options = []
+                continue
+            if len(values) != expected_count:
+                raise ValueError(
+                    f"題目「{q.question_text[:30]}」需要提供 {expected_count} 個欄位的答案"
+                )
+            if q.is_required and any(not value for value in values):
+                raise ValueError(f"題目「{q.question_text[:30]}」的所有欄位都必須作答")
+            ans.answer_options = values
+        elif q.question_type == QuestionType.MULTIPLE:
             cfg = _load_option_config(q.option_config_json)
             chosen = list(ans.answer_options or [])
             excl_chosen = [o for o in chosen if o in cfg["exclusive"]]
@@ -513,6 +895,8 @@ async def submit_response(
                 )
             if cfg["other"] and ans.other_text and not any(o in cfg["other"] for o in chosen):
                 ans.other_text = None
+            if q.max_value is not None and len(chosen) > q.max_value:
+                raise ValueError(f"題目「{q.question_text[:30]}」最多可選 {q.max_value} 個選項")
         elif q.question_type == QuestionType.RANKING:
             options_list = _load_str_list(q.options_json)
             chosen = [o for o in (ans.answer_options or []) if o in options_list]
@@ -527,30 +911,46 @@ async def submit_response(
                 raise ValueError(f"題目「{q.question_text[:30]}」至少需排序 {min_n} 個項目")
             if len(unique) > max_n:
                 raise ValueError(f"題目「{q.question_text[:30]}」最多只能排序 {max_n} 個項目")
+        elif q.question_type in (QuestionType.RATING, QuestionType.LINEAR_SCALE):
+            raw_value = (ans.answer_text or "").strip()
+            if not raw_value:
+                continue
+            try:
+                value = int(raw_value)
+            except ValueError as exc:
+                raise ValueError(f"題目「{q.question_text[:30]}」請輸入有效分數") from exc
+            minimum = (
+                q.min_value
+                if q.min_value is not None
+                else (0 if q.question_type == QuestionType.LINEAR_SCALE else 1)
+            )
+            maximum = q.max_value if q.max_value is not None else 5
+            if value < minimum or value > maximum:
+                raise ValueError(f"題目「{q.question_text[:30]}」分數需介於 {minimum} 至 {maximum}")
+            ans.answer_text = str(value)
+    return questions
 
-    # 建立回應（匿名問卷不記錄 email，保障匿名性）
-    response = SurveyResponse(
-        survey_id=survey.id,
-        respondent_id=None if survey.is_anonymous else respondent_id,
-        anon_token=data.anon_token if survey.is_anonymous else None,
-        respondent_email=None if survey.is_anonymous else respondent_email,
-        submitted_at=datetime.now(UTC),
-    )
-    session.add(response)
-    await session.flush()
 
-    # 儲存各題答案
+async def _store_answers(
+    session: AsyncSession,
+    response: SurveyResponse,
+    questions: dict[uuid.UUID, SurveyQuestion],
+    data: SurveySubmit,
+) -> None:
     for ans in data.answers:
         q = questions.get(ans.question_id)
-        if q is None:
+        if q is None or q.question_type in DISPLAY_QUESTION_TYPES:
             continue
-        if q.question_type in DISPLAY_QUESTION_TYPES:
+        if (
+            not q.is_required
+            and q.question_type in (QuestionType.SINGLE_GRID, QuestionType.MULTI_TEXT)
+            and not any((value or "").strip() for value in (ans.answer_options or []))
+        ):
             continue
-        answer = SurveyAnswer(
-            response_id=response.id,
-            question_id=ans.question_id,
-        )
-        if q.question_type == QuestionType.MULTIPLE:
+        answer = SurveyAnswer(response_id=response.id, question_id=ans.question_id)
+        if q.question_type in (QuestionType.SINGLE_GRID, QuestionType.MULTI_TEXT):
+            answer.answer_json = json.dumps(ans.answer_options, ensure_ascii=False)
+        elif q.question_type == QuestionType.MULTIPLE:
             answer.answer_json = json.dumps(ans.answer_options, ensure_ascii=False)
             cfg = _load_option_config(q.option_config_json)
             if cfg["other"] and any(o in cfg["other"] for o in ans.answer_options):
@@ -563,6 +963,102 @@ async def submit_response(
             answer.answer_text = ans.answer_text
         session.add(answer)
 
+
+async def submit_response(
+    session: AsyncSession,
+    survey: Survey,
+    *,
+    respondent_id: uuid.UUID | None,
+    data: SurveySubmit,
+    respondent_email: str | None = None,
+) -> SurveyResponse:
+    await _check_can_respond(session, survey, respondent_id, data.anon_token)
+    questions = await _validate_submission(session, survey, data)
+
+    # 建立回應（匿名問卷不記錄 email，保障匿名性）
+    response = SurveyResponse(
+        survey_id=survey.id,
+        respondent_id=None if survey.is_anonymous else respondent_id,
+        anon_token=data.anon_token if survey.is_anonymous else None,
+        respondent_email=None if survey.is_anonymous else respondent_email,
+        submitted_at=datetime.now(UTC),
+    )
+    session.add(response)
+    await session.flush()
+    await _store_answers(session, response, questions, data)
+    await session.flush()
+    return response
+
+
+async def list_my_responses(
+    session: AsyncSession,
+    survey: Survey,
+    *,
+    respondent_id: uuid.UUID | None,
+    anon_token: str | None = None,
+) -> list[SurveyResponse]:
+    """列出目前填答者可存取的回應，匿名問卷需持有原本的 token。"""
+    if survey.is_anonymous:
+        if not anon_token:
+            return []
+        conditions = (
+            SurveyResponse.survey_id == survey.id,
+            SurveyResponse.anon_token == anon_token,
+        )
+    else:
+        if respondent_id is None:
+            return []
+        conditions = (
+            SurveyResponse.survey_id == survey.id,
+            SurveyResponse.respondent_id == respondent_id,
+        )
+    result = await session.execute(
+        select(SurveyResponse)
+        .options(selectinload(SurveyResponse.answers))
+        .where(*conditions)
+        .order_by(SurveyResponse.submitted_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+async def get_my_response(
+    session: AsyncSession,
+    survey: Survey,
+    response_id: uuid.UUID,
+    *,
+    respondent_id: uuid.UUID | None,
+    anon_token: str | None = None,
+) -> SurveyResponse | None:
+    responses = await list_my_responses(
+        session,
+        survey,
+        respondent_id=respondent_id,
+        anon_token=anon_token,
+    )
+    return next((response for response in responses if response.id == response_id), None)
+
+
+async def update_response(
+    session: AsyncSession,
+    survey: Survey,
+    response: SurveyResponse,
+    *,
+    respondent_id: uuid.UUID | None,
+    data: SurveySubmit,
+) -> SurveyResponse:
+    """以同一份回應覆寫答案；所有權由 get_my_response 先驗證。"""
+    await _check_can_respond(
+        session,
+        survey,
+        respondent_id,
+        data.anon_token,
+        response_id=response.id,
+    )
+    questions = await _validate_submission(session, survey, data)
+    await session.execute(delete(SurveyAnswer).where(SurveyAnswer.response_id == response.id))
+    session.expire(response, ["answers"])
+    response.updated_at = datetime.now(UTC)
+    await _store_answers(session, response, questions, data)
     await session.flush()
     return response
 
@@ -586,19 +1082,27 @@ async def get_survey_stats(session: AsyncSession, survey: Survey) -> SurveyStats
     )
     total = total_result.scalar_one()
 
+    question_ids = [q.id for q in questions if q.question_type not in DISPLAY_QUESTION_TYPES]
+    answers_by_question: dict[uuid.UUID, list[SurveyAnswer]] = {}
+    if question_ids:
+        a_result = await session.execute(
+            select(SurveyAnswer)
+            .options(selectinload(SurveyAnswer.response).selectinload(SurveyResponse.respondent))
+            .join(SurveyResponse, SurveyAnswer.response_id == SurveyResponse.id)
+            .where(
+                SurveyResponse.survey_id == survey.id,
+                SurveyAnswer.question_id.in_(question_ids),
+            )
+        )
+        for answer in a_result.scalars():
+            answers_by_question.setdefault(answer.question_id, []).append(answer)
+
     # 各題統計
     question_stats: list[QuestionStats] = []
     for q in questions:
         if q.question_type in DISPLAY_QUESTION_TYPES:
             continue
-        # 此題所有答案
-        a_result = await session.execute(
-            select(SurveyAnswer)
-            .join(SurveyResponse, SurveyAnswer.response_id == SurveyResponse.id)
-            .where(SurveyResponse.survey_id == survey.id)
-            .where(SurveyAnswer.question_id == q.id)
-        )
-        answers = list(a_result.scalars().all())
+        answers = answers_by_question.get(q.id, [])
 
         qs = QuestionStats(
             question_id=q.id,
@@ -607,19 +1111,80 @@ async def get_survey_stats(session: AsyncSession, survey: Survey) -> SurveyStats
             total_responses=len(answers),
         )
 
-        if q.question_type in (QuestionType.SINGLE, QuestionType.MULTIPLE):
+        if q.question_type == QuestionType.SINGLE_GRID:
+            rows = _load_str_list(q.options_json)
+            columns = _load_str_list(q.grid_columns_json)
             counts: dict[str, int] = {}
+            for answer in answers:
+                if not answer.answer_json:
+                    continue
+                try:
+                    selected = json.loads(answer.answer_json)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(selected, list):
+                    continue
+                for row, column in zip(rows, selected, strict=False):
+                    if column in columns:
+                        label = f"{row}：{column}"
+                        counts[label] = counts.get(label, 0) + 1
+            qs.option_counts = counts
+            qs.suggested_chart = "bar"
+            qs.available_charts = ["bar", "list"]
+
+        elif q.question_type == QuestionType.MULTI_TEXT:
+            labels = _load_str_list(q.options_json)
+            qs.text_answers = []
+            for answer in answers:
+                if not answer.answer_json:
+                    continue
+                try:
+                    values = json.loads(answer.answer_json)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(values, list):
+                    continue
+                text = "\n".join(
+                    f"{label}：{value}"
+                    for label, value in zip(labels, values, strict=False)
+                    if isinstance(value, str) and value.strip()
+                )
+                if text:
+                    qs.text_answers.append(text)
+            qs.suggested_chart = "list"
+            qs.available_charts = ["list"]
+
+        elif q.question_type in (QuestionType.SINGLE, QuestionType.MULTIPLE):
+            counts: dict[str, int] = {}
+            respondents: dict[str, list[SurveyRespondentSummary]] = {}
             for a in answers:
                 if a.answer_json:
                     try:
                         opts = json.loads(a.answer_json)
                         for opt in opts:
                             counts[opt] = counts.get(opt, 0) + 1
+                            if a.response.respondent is not None:
+                                respondents.setdefault(opt, []).append(
+                                    SurveyRespondentSummary(
+                                        user_id=a.response.respondent.id,
+                                        display_name=a.response.respondent.display_name,
+                                        email=a.response.respondent.email,
+                                    )
+                                )
                     except json.JSONDecodeError:
                         pass
                 elif a.answer_text:
                     counts[a.answer_text] = counts.get(a.answer_text, 0) + 1
+                    if a.response.respondent is not None:
+                        respondents.setdefault(a.answer_text, []).append(
+                            SurveyRespondentSummary(
+                                user_id=a.response.respondent.id,
+                                display_name=a.response.respondent.display_name,
+                                email=a.response.respondent.email,
+                            )
+                        )
             qs.option_counts = counts
+            qs.option_respondents = respondents
             qs.suggested_chart = "pie" if len(counts) <= 5 else "bar"
             qs.available_charts = ["bar", "pie"]
             # 多選題若有「其他」自由輸入，彙整為文字回答清單供管理員瀏覽
@@ -631,6 +1196,7 @@ async def get_survey_stats(session: AsyncSession, survey: Survey) -> SurveyStats
             # 計算各選項平均排名：第 1 名 = 1 分，越小越優先
             rank_sums: dict[str, float] = {}
             rank_counts: dict[str, int] = {}
+            respondents: dict[str, list[SurveyRespondentSummary]] = {}
             for a in answers:
                 if not a.answer_json:
                     continue
@@ -641,9 +1207,18 @@ async def get_survey_stats(session: AsyncSession, survey: Survey) -> SurveyStats
                 for idx, opt in enumerate(ordered):
                     rank_sums[opt] = rank_sums.get(opt, 0.0) + idx + 1
                     rank_counts[opt] = rank_counts.get(opt, 0) + 1
+                    if a.response.respondent is not None:
+                        respondents.setdefault(opt, []).append(
+                            SurveyRespondentSummary(
+                                user_id=a.response.respondent.id,
+                                display_name=a.response.respondent.display_name,
+                                email=a.response.respondent.email,
+                            )
+                        )
             # 以平均排名（越低越好）反向轉成「分數」用於長條圖
             # 沿用 option_counts 結構：值為被選次數，方便管理員看「最常被排入名單」
             qs.option_counts = dict(rank_counts)
+            qs.option_respondents = respondents
             qs.text_answers = [
                 f"{opt}：平均第 {rank_sums[opt] / rank_counts[opt]:.2f} 名（{rank_counts[opt]} 票）"
                 for opt in sorted(rank_sums, key=lambda o: rank_sums[o] / rank_counts[o])
@@ -653,19 +1228,49 @@ async def get_survey_stats(session: AsyncSession, survey: Survey) -> SurveyStats
 
         elif q.question_type == QuestionType.RATING:
             values = []
+            respondents: dict[str, list[SurveyRespondentSummary]] = {}
             for a in answers:
                 try:
                     v = float(a.answer_text or "")
                     values.append(v)
+                    if a.response.respondent is not None:
+                        respondents.setdefault(str(int(v)), []).append(
+                            SurveyRespondentSummary(
+                                user_id=a.response.respondent.id,
+                                display_name=a.response.respondent.display_name,
+                                email=a.response.respondent.email,
+                            )
+                        )
                 except (ValueError, TypeError):
                     pass
             qs.average_rating = sum(values) / len(values) if values else None
             qs.option_counts = {
                 str(n): sum(1 for value in values if int(value) == n)
-                for n in range(q.min_value or 1, (q.max_value or 5) + 1)
+                for n in range(
+                    q.min_value if q.min_value is not None else 1,
+                    (q.max_value if q.max_value is not None else 5) + 1,
+                )
             }
+            qs.option_respondents = respondents
             qs.suggested_chart = "bar"
             qs.available_charts = ["bar", "pie"]
+
+        elif q.question_type == QuestionType.LINEAR_SCALE:
+            values = []
+            for answer in answers:
+                try:
+                    values.append(float(answer.answer_text or ""))
+                except (ValueError, TypeError):
+                    continue
+            qs.average_rating = sum(values) / len(values) if values else None
+            minimum = q.min_value if q.min_value is not None else 0
+            maximum = q.max_value if q.max_value is not None else 5
+            qs.option_counts = {
+                str(value): sum(1 for answer in values if int(answer) == value)
+                for value in range(minimum, maximum + 1)
+            }
+            qs.suggested_chart = "bar"
+            qs.available_charts = ["bar", "list"]
 
         elif q.question_type == QuestionType.DATE:
             qs.text_answers = [a.answer_text for a in answers if a.answer_text]
@@ -690,7 +1295,7 @@ async def get_survey_stats(session: AsyncSession, survey: Survey) -> SurveyStats
 # ── 試算表匯出 ────────────────────────────────────────────────────────────────
 
 
-def _answer_display(answer: SurveyAnswer | None) -> str:
+def _answer_display(answer: SurveyAnswer | None, question: SurveyQuestion | None = None) -> str:
     """把單一答案轉成試算表儲存格的文字。"""
     if answer is None:
         return ""
@@ -698,19 +1303,60 @@ def _answer_display(answer: SurveyAnswer | None) -> str:
         try:
             opts = json.loads(answer.answer_json)
             if isinstance(opts, list):
-                text = "、".join(str(o) for o in opts)
+                if question and question.question_type == QuestionType.MULTI_TEXT:
+                    labels = _load_str_list(question.options_json)
+                    text = "\n".join(
+                        f"{label}：{value}"
+                        for label, value in zip(labels, opts, strict=False)
+                        if isinstance(value, str) and value.strip()
+                    )
+                elif question and question.question_type == QuestionType.SINGLE_GRID:
+                    rows = _load_str_list(question.options_json)
+                    text = "\n".join(
+                        f"{row}：{column}"
+                        for row, column in zip(rows, opts, strict=False)
+                        if isinstance(column, str) and column
+                    )
+                else:
+                    text = "、".join(str(o) for o in opts)
                 if answer.other_text:
                     text += f"（其他：{answer.other_text}）"
-                return text
+                return _spreadsheet_safe_text(text)
         except json.JSONDecodeError:
             pass
-    return answer.answer_text or ""
+    return _spreadsheet_safe_text(answer.answer_text or "")
+
+
+def _spreadsheet_safe_text(value: str) -> str:
+    """確保使用者提供的文字匯出後不會被試算表當成公式。"""
+    if value.lstrip(" \t\r\n").startswith(("=", "+", "-", "@")):
+        return f"'{value}"
+    return value
+
+
+def _render_survey_export(
+    detail_rows: list[dict[str, object]],
+    detail_columns: list[str],
+    summary_rows: list[dict[str, object]],
+) -> bytes:
+    import pandas as pd  # 延遲匯入，避免未安裝時影響啟動
+
+    detail_df = pd.DataFrame(detail_rows, columns=detail_columns)
+    summary_df = pd.DataFrame(summary_rows, columns=["題目", "項目", "次數", "百分比"])
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        detail_df.to_excel(writer, index=False, sheet_name="回應明細")
+        summary_df.to_excel(writer, index=False, sheet_name="統計摘要")
+        for sheet_name in ("回應明細", "統計摘要"):
+            ws = writer.sheets[sheet_name]
+            for col in ws.columns:
+                max_len = max((len(str(cell.value or "")) for cell in col), default=10)
+                ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 60)
+    return buf.getvalue()
 
 
 async def build_survey_export(session: AsyncSession, survey: Survey) -> bytes:
     """匯出問卷回應為 Excel（.xlsx），含「回應明細」與「統計摘要」兩個工作表。"""
-    import pandas as pd  # 延遲匯入，避免未安裝時影響啟動
-
     # 可填答題目（排除純顯示區塊），依顯示順序
     q_result = await session.execute(
         select(SurveyQuestion)
@@ -720,7 +1366,10 @@ async def build_survey_export(session: AsyncSession, survey: Survey) -> bytes:
     questions = [
         q for q in q_result.scalars().all() if q.question_type not in DISPLAY_QUESTION_TYPES
     ]
-    col_labels = {q.id: f"Q{i}. {q.question_text}" for i, q in enumerate(questions, start=1)}
+    col_labels = {
+        q.id: _spreadsheet_safe_text(f"Q{i}. {q.question_text}")
+        for i, q in enumerate(questions, start=1)
+    }
 
     # 回應（含答案）
     r_result = await session.execute(
@@ -740,9 +1389,9 @@ async def build_survey_export(session: AsyncSession, survey: Survey) -> bytes:
             "提交時間": resp.submitted_at.strftime("%Y-%m-%d %H:%M") if resp.submitted_at else "",
         }
         for q in questions:
-            row[col_labels[q.id]] = _answer_display(answers_by_q.get(q.id))
+            row[col_labels[q.id]] = _answer_display(answers_by_q.get(q.id), q)
         detail_rows.append(row)
-    detail_df = pd.DataFrame(detail_rows, columns=["#", "提交時間", *col_labels.values()])
+    detail_columns = ["#", "提交時間", *col_labels.values()]
 
     # 工作表 2：統計摘要
     stats = await get_survey_stats(session, survey)
@@ -751,12 +1400,17 @@ async def build_survey_export(session: AsyncSession, survey: Survey) -> bytes:
         for opt, count in qs.option_counts.items():
             pct = round(count / qs.total_responses * 100, 1) if qs.total_responses else 0
             summary_rows.append(
-                {"題目": qs.question_text, "項目": opt, "次數": count, "百分比": f"{pct}%"}
+                {
+                    "題目": _spreadsheet_safe_text(qs.question_text),
+                    "項目": _spreadsheet_safe_text(opt),
+                    "次數": count,
+                    "百分比": f"{pct}%",
+                }
             )
         if qs.average_rating is not None:
             summary_rows.append(
                 {
-                    "題目": qs.question_text,
+                    "題目": _spreadsheet_safe_text(qs.question_text),
                     "項目": "平均分",
                     "次數": round(qs.average_rating, 2),
                     "百分比": "",
@@ -765,7 +1419,7 @@ async def build_survey_export(session: AsyncSession, survey: Survey) -> bytes:
         if qs.text_answers:
             summary_rows.append(
                 {
-                    "題目": qs.question_text,
+                    "題目": _spreadsheet_safe_text(qs.question_text),
                     "項目": "文字回答則數",
                     "次數": len(qs.text_answers),
                     "百分比": "",
@@ -774,42 +1428,70 @@ async def build_survey_export(session: AsyncSession, survey: Survey) -> bytes:
         if not qs.option_counts and qs.average_rating is None and not qs.text_answers:
             summary_rows.append(
                 {
-                    "題目": qs.question_text,
+                    "題目": _spreadsheet_safe_text(qs.question_text),
                     "項目": "回答數",
                     "次數": qs.total_responses,
                     "百分比": "",
                 }
             )
-    summary_df = pd.DataFrame(summary_rows, columns=["題目", "項目", "次數", "百分比"])
-
-    buf = io.BytesIO()
-    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-        detail_df.to_excel(writer, index=False, sheet_name="回應明細")
-        summary_df.to_excel(writer, index=False, sheet_name="統計摘要")
-        for sheet_name in ("回應明細", "統計摘要"):
-            ws = writer.sheets[sheet_name]
-            for col in ws.columns:
-                max_len = max((len(str(cell.value or "")) for cell in col), default=10)
-                ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 60)
-    return buf.getvalue()
+    return await asyncio.to_thread(_render_survey_export, detail_rows, detail_columns, summary_rows)
 
 
 # ── 後台檢視 / 回答副本 ───────────────────────────────────────────────────────
 
 
 async def list_responses(
-    session: AsyncSession, survey: Survey, *, limit: int = 200, offset: int = 0
+    session: AsyncSession, survey: Survey, *, limit: int = 1000, offset: int = 0
 ) -> list[SurveyResponse]:
     """後台檢視用：列出問卷所有填答記錄（含答案，依提交時間新到舊）。"""
     result = await session.execute(
         select(SurveyResponse)
-        .options(selectinload(SurveyResponse.answers))
+        .options(
+            selectinload(SurveyResponse.answers),
+            selectinload(SurveyResponse.respondent),
+        )
         .where(SurveyResponse.survey_id == survey.id)
         .order_by(SurveyResponse.submitted_at.desc())
         .limit(limit)
         .offset(offset)
     )
     return list(result.scalars().all())
+
+
+async def delete_response(session: AsyncSession, survey: Survey, response_id: uuid.UUID) -> bool:
+    """刪除指定問卷的一筆回應；回應不屬於該問卷時回傳 False。"""
+    result = await session.execute(
+        select(SurveyResponse).where(
+            SurveyResponse.id == response_id,
+            SurveyResponse.survey_id == survey.id,
+        )
+    )
+    response = result.scalar_one_or_none()
+    if response is None:
+        return False
+    await session.delete(response)
+    await session.flush()
+    return True
+
+
+async def delete_all_responses(session: AsyncSession, survey: Survey) -> int:
+    """刪除問卷全部回應與答案，回傳刪除的回應數。"""
+    response_ids = list(
+        (
+            await session.scalars(
+                select(SurveyResponse.id).where(SurveyResponse.survey_id == survey.id)
+            )
+        ).all()
+    )
+    if not response_ids:
+        return 0
+
+    await session.execute(delete(SurveyAnswer).where(SurveyAnswer.response_id.in_(response_ids)))
+    result = await session.execute(
+        delete(SurveyResponse).where(SurveyResponse.id.in_(response_ids))
+    )
+    await session.flush()
+    return result.rowcount or 0
 
 
 def render_response_copy_email(
@@ -822,16 +1504,89 @@ def render_response_copy_email(
     題目/回答以排版區塊呈現，套用平台品牌 email 版型（api.email）。
     """
     answers_by_q = {a.question_id: a for a in answers}
-    blocks: list[str] = ["<p>感謝您的填答，以下是您本次提交的回答副本。</p>"]
+    blocks: list[str] = ["<p>感謝您的填答，以下是您本次提交的完整問卷與回答副本。</p>"]
+    question_number = 0
+
+    def image_markup(url: str | None, alt: str) -> str:
+        src = absolutize_url(url)
+        if not src:
+            return ""
+        return (
+            '<img src="'
+            f'{html.escape(src, quote=True)}" alt="{html.escape(alt, quote=True)}" width="520" '
+            'style="display:block;max-width:100%;height:auto;margin:10px 0;border-radius:10px;" />'
+        )
+
     for q in questions:
-        if q.question_type in DISPLAY_QUESTION_TYPES:
+        if q.question_type == QuestionType.PAGE_BREAK:
+            blocks.append('<hr style="border:0;border-top:1px solid #e2e8f0;margin:24px 0;" />')
             continue
-        value = _answer_display(answers_by_q.get(q.id)) or "—"
+        if q.question_type in DISPLAY_QUESTION_TYPES:
+            blocks.append(
+                '<div style="margin:22px 0 8px;">'
+                f'<p style="margin:0;color:#1a1a2e;font-weight:600;">{html.escape(q.question_text)}</p>'
+                f"{image_markup(q.image_url or q.placeholder, q.question_text)}"
+            )
+            if q.question_type == QuestionType.VIDEO:
+                video_url = safe_link_url(q.placeholder)
+                if video_url:
+                    blocks.append(
+                        f'<p style="margin:8px 0 0;"><a href="{html.escape(video_url, quote=True)}">'
+                        "開啟影片</a></p>"
+                    )
+            blocks.append("</div>")
+            continue
+
+        question_number += 1
+        answer = answers_by_q.get(q.id)
+        value = _answer_display(answers_by_q.get(q.id), q) or "—"
+        options = _load_str_list(q.options_json)
+        try:
+            raw_image_sets = json.loads(q.option_image_sets_json or "[]")
+        except (json.JSONDecodeError, TypeError):
+            raw_image_sets = []
+        image_sets = (
+            [
+                [str(image) for image in images if isinstance(image, str)]
+                for images in raw_image_sets
+                if isinstance(images, list)
+            ]
+            if isinstance(raw_image_sets, list)
+            else []
+        )
+        selected_options: set[str] = set()
+        if answer and answer.answer_json:
+            selected_options.update(_load_str_list(answer.answer_json))
+        if answer and answer.answer_text:
+            selected_options.add(answer.answer_text)
+
         blocks.append(
-            '<p style="margin:18px 0 2px;color:#64748b;font-size:13px;">'
-            f"{html.escape(q.question_text)}</p>"
+            '<div style="margin:22px 0 0;padding:16px;border:1px solid #e2e8f0;border-radius:10px;">'
+            '<p style="margin:0 0 4px;color:#64748b;font-size:13px;">'
+            f"第 {question_number} 題{'（必填）' if q.is_required else ''}</p>"
             '<p style="margin:0;color:#1a1a2e;font-weight:600;">'
-            f"{html.escape(value)}</p>"
+            f"{html.escape(q.question_text)}</p>"
+            f"{image_markup(q.image_url, q.question_text)}"
+        )
+        if options and q.question_type not in (QuestionType.SINGLE_GRID, QuestionType.MULTI_TEXT):
+            blocks.append(
+                '<div style="margin:12px 0 0;padding-top:10px;border-top:1px solid #e2e8f0;">'
+            )
+            blocks.append('<p style="margin:0 0 6px;color:#64748b;font-size:13px;">選項</p>')
+            for index, option in enumerate(options):
+                selected_label = "（你的選擇）" if option in selected_options else ""
+                blocks.append(
+                    '<div style="margin:8px 0;color:#334155;">'
+                    f"{html.escape(option)}{selected_label}"
+                )
+                for image_url in image_sets[index] if index < len(image_sets) else []:
+                    blocks.append(image_markup(image_url, f"{q.question_text}：{option}"))
+                blocks.append("</div>")
+            blocks.append("</div>")
+        blocks.append(
+            '<p style="margin:14px 0 2px;color:#64748b;font-size:13px;">你的回答</p>'
+            '<p style="margin:0;color:#1a1a2e;font-weight:600;white-space:pre-wrap;">'
+            f"{html.escape(value)}</p></div>"
         )
     context = {
         "heading": f"問卷「{survey.title}」回答副本",

@@ -26,6 +26,7 @@ class JudicialPetitionStatus(StrEnum):
     DECIDED = "decided"
     DISMISSED = "dismissed"
     WITHDRAWN = "withdrawn"
+    PUBLISHED = "published"
 
 
 class JudicialPetitionType(StrEnum):

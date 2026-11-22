@@ -9,45 +9,49 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-import httpx
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.clock import local_today
 from api.core.config import settings
 from api.core.security import redis_client
 from api.models.announcement import Announcement, AnnouncementAudience, announcement_audience_orgs
 from api.models.discord_account import (
     DiscordAccountLink,
     DiscordGuildConfig,
+    DiscordMemberSyncState,
     DiscordNicknamePrefixRule,
     DiscordOrgChannelMapping,
     DiscordRoleMapping,
     DiscordRoleMappingKind,
+    DiscordRolePolicy,
 )
 from api.models.document import Document, DocumentStatus, DocumentVisibility
 from api.models.org import Position, UserPosition
 from api.models.petition import PetitionCase
 from api.models.user import User
+from api.services.discord_delivery import emit_user_dm
 from api.services.discord_embeds import (
     Domain,
+    EmbedField,
     Severity,
     build_embed,
     default_action_row,
+)
+from api.services.discord_notification_routes import emit_routed_notification
+from api.services.discord_roles import (
+    list_active_role_ids_for_user as list_mapped_role_ids_for_user,
 )
 from api.services.permission import active_tenure_filter
 
 logger = logging.getLogger(__name__)
 
-_OPEN_TOKEN_PREFIX = "discord:open:"
+_OPEN_LINK_PREFIX = "discord:open:"
 _OPEN_TOKEN_TTL_SECONDS = 5 * 60
 
 
 def is_configured() -> bool:
     return bool(settings.DISCORD_CLIENT_ID and settings.DISCORD_CLIENT_SECRET)
-
-
-def bot_configured() -> bool:
-    return bool(settings.DISCORD_BOT_TOKEN)
 
 
 def _safe_frontend_path(path: str | None) -> str:
@@ -68,19 +72,24 @@ def _absolute_url(path: str | None) -> str:
 async def create_open_url(user_id: uuid.UUID, path: str | None) -> str:
     token = secrets.token_urlsafe(32)
     await redis_client.setex(
-        f"{_OPEN_TOKEN_PREFIX}{token}",
+        f"{_OPEN_LINK_PREFIX}{token}",
         _OPEN_TOKEN_TTL_SECONDS,
         json.dumps({"user_id": str(user_id), "path": _safe_frontend_path(path)}),
     )
     return _absolute_url(f"/discord/open?token={token}")
 
 
+def plain_frontend_url(path: str | None) -> str:
+    """不含登入 token 的站內網址；給不可使用免密碼連結的帳號。"""
+    return _absolute_url(_safe_frontend_path(path))
+
+
 async def consume_open_token(token: str) -> tuple[uuid.UUID, str] | None:
-    key = f"{_OPEN_TOKEN_PREFIX}{token}"
-    raw = await redis_client.get(key)
+    key = f"{_OPEN_LINK_PREFIX}{token}"
+    # GETDEL 讓讀取與刪除在 Redis 內原子完成，避免同一 token 被並行請求兌換兩次。
+    raw = await redis_client.getdel(key)
     if not raw:
         return None
-    await redis_client.delete(key)
     try:
         payload = json.loads(raw)
         return uuid.UUID(payload["user_id"]), _safe_frontend_path(payload.get("path"))
@@ -154,39 +163,18 @@ async def upsert_user_link(
 async def list_active_role_ids_for_user(
     db: AsyncSession, user_id: uuid.UUID
 ) -> dict[str, set[str]]:
-    today = datetime.now(UTC).date()
-    result = await db.execute(
-        select(DiscordRoleMapping)
-        .join(
-            Position,
-            or_(
-                and_(
-                    DiscordRoleMapping.mapping_kind == DiscordRoleMappingKind.POSITION,
-                    DiscordRoleMapping.position_id == Position.id,
-                ),
-                and_(
-                    DiscordRoleMapping.mapping_kind == DiscordRoleMappingKind.ORG,
-                    DiscordRoleMapping.org_id == Position.org_id,
-                ),
-            ),
-        )
-        .join(UserPosition, UserPosition.position_id == Position.id)
-        .where(UserPosition.user_id == user_id)
-        .where(DiscordRoleMapping.is_active.is_(True))
-        .where(*active_tenure_filter(today))
-        .distinct()
-    )
-    rows = result.scalars().all()
-    by_guild: dict[str, set[str]] = {}
-    for row in rows:
-        by_guild.setdefault(row.guild_id, set()).add(row.role_id)
+    from api.services.discord_governance import desired_policy_role_ids_for_user
+
+    by_guild = await list_mapped_role_ids_for_user(db, user_id)
+    for guild_id, role_ids in (await desired_policy_role_ids_for_user(db, user_id)).items():
+        by_guild.setdefault(guild_id, set()).update(role_ids)
     return by_guild
 
 
 async def list_active_nickname_prefixes_for_user(
     db: AsyncSession, user_id: uuid.UUID
 ) -> dict[str, str]:
-    today = datetime.now(UTC).date()
+    today = local_today()
     result = await db.execute(
         select(DiscordNicknamePrefixRule)
         .join(
@@ -220,6 +208,11 @@ async def list_active_nickname_prefixes_for_user(
 
 
 async def enqueue_role_sync(db: AsyncSession, user_id: uuid.UUID) -> None:
+    from api.services.discord_governance import (
+        compose_nickname,
+        policies_for_roles,
+        select_prefix_labels,
+    )
     from api.services.outbox import emit
 
     link = await get_user_link(db, user_id)
@@ -233,6 +226,19 @@ async def enqueue_role_sync(db: AsyncSession, user_id: uuid.UUID) -> None:
     all_mapped_by_guild: dict[str, set[str]] = {}
     for guild_id, role_id in mapped_rows:
         all_mapped_by_guild.setdefault(guild_id, set()).add(role_id)
+    policy_rows = (
+        await db.execute(
+            select(
+                DiscordRolePolicy.guild_id,
+                DiscordRolePolicy.role_id,
+            ).where(
+                DiscordRolePolicy.is_active.is_(True),
+                DiscordRolePolicy.manage_role.is_(True),
+            )
+        )
+    ).all()
+    for guild_id, role_id in policy_rows:
+        all_mapped_by_guild.setdefault(guild_id, set()).add(role_id)
     prefix_rows = (
         await db.execute(
             select(DiscordNicknamePrefixRule.guild_id, DiscordNicknamePrefixRule.prefix).where(
@@ -243,9 +249,33 @@ async def enqueue_role_sync(db: AsyncSession, user_id: uuid.UUID) -> None:
     all_prefixes_by_guild: dict[str, set[str]] = {}
     for guild_id, prefix in prefix_rows:
         all_prefixes_by_guild.setdefault(guild_id, set()).add(prefix)
-    for guild_id in sorted(set(all_mapped_by_guild) | set(all_prefixes_by_guild)):
+    policy_guilds = set(
+        (
+            await db.execute(
+                select(DiscordRolePolicy.guild_id).where(DiscordRolePolicy.is_active.is_(True))
+            )
+        ).scalars()
+    )
+    for guild_id in sorted(set(all_mapped_by_guild) | set(all_prefixes_by_guild) | policy_guilds):
         managed_role_ids = all_mapped_by_guild.get(guild_id, set())
         role_ids = desired.get(guild_id, set())
+        state = await db.scalar(
+            select(DiscordMemberSyncState).where(
+                DiscordMemberSyncState.guild_id == guild_id,
+                DiscordMemberSyncState.discord_user_id == link.discord_user_id,
+            )
+        )
+        actual_role_ids = set(state.actual_role_ids if state else [])
+        nickname_role_ids = role_ids | (actual_role_ids - managed_role_ids)
+        policies = await policies_for_roles(db, guild_id, nickname_role_ids)
+        policy_nickname, policy_prefix = compose_nickname(
+            select_prefix_labels(policies),
+            (state.base_nickname if state and state.base_nickname else link.global_name)
+            or link.username
+            or "Discord member",
+        )
+        legacy_prefix = nickname_prefixes.get(guild_id)
+        nickname_prefix = policy_prefix or legacy_prefix
         await emit(
             db,
             event_type="discord.role_sync",
@@ -254,8 +284,12 @@ async def enqueue_role_sync(db: AsyncSession, user_id: uuid.UUID) -> None:
                 "discord_user_id": link.discord_user_id,
                 "role_ids": sorted(role_ids),
                 "managed_role_ids": sorted(managed_role_ids),
-                "nickname_prefix": nickname_prefixes.get(guild_id),
+                "nickname_prefix": nickname_prefix,
                 "managed_nickname_prefixes": sorted(all_prefixes_by_guild.get(guild_id, set())),
+                "base_nickname": state.base_nickname if state else None,
+                "expected_nickname": policy_nickname if policy_prefix else None,
+                "previous_prefix": state.last_applied_prefix if state else None,
+                "apply_roles": True,
             },
         )
 
@@ -389,17 +423,17 @@ async def emit_public_document_notice(db: AsyncSession, doc: Document) -> None:
 
     if doc.status != DocumentStatus.APPROVED:
         return
-    if doc.visibility_level not in {DocumentVisibility.PUBLIC, DocumentVisibility.PUBLICLY_OPEN}:
+    if doc.visibility_level != DocumentVisibility.PUBLICLY_OPEN and not doc.is_public:
         return
     channel_ids = await _publication_channel_ids_for_orgs(db, {doc.org_id})
     if not channel_ids:
         return
     link = (
         f"/public/documents/{doc.id}"
-        if doc.visibility_level == DocumentVisibility.PUBLICLY_OPEN
+        if doc.visibility_level == DocumentVisibility.PUBLICLY_OPEN or doc.is_public
         else f"/documents/{doc.id}"
     )
-    fields: list[dict[str, Any]] = []
+    fields: list[EmbedField] = []
     if doc.serial_number:
         fields.append({"name": "字號", "value": str(doc.serial_number), "inline": True})
     body = doc.subject[:1500] if doc.subject else None
@@ -423,6 +457,18 @@ async def emit_public_document_notice(db: AsyncSession, doc: Document) -> None:
                 "thread_name": f"討論：{doc.title[:80]}",
             },
         )
+    await emit_routed_notification(
+        db,
+        event_key="document.published",
+        module="document",
+        title=f"公開公文：{doc.title}",
+        body=body,
+        link=link,
+        fields=fields,
+        severity=Severity.SUCCESS,
+        org_id=doc.org_id,
+        thread_name=f"討論：{doc.title[:80]}",
+    )
 
 
 async def emit_announcement_notice(db: AsyncSession, ann: Announcement) -> None:
@@ -450,7 +496,7 @@ async def emit_announcement_notice(db: AsyncSession, ann: Announcement) -> None:
     if not channel_ids:
         return
     severity = Severity.URGENT if ann.is_urgent else Severity.INFO
-    title_prefix = "【緊急】" if ann.is_urgent else "【最新】"
+    title_prefix = "【重要】" if ann.is_urgent else "【最新】"
     embed = build_embed(
         Domain.ANNOUNCEMENT,
         severity,
@@ -469,32 +515,19 @@ async def emit_announcement_notice(db: AsyncSession, ann: Announcement) -> None:
                 "thread_name": f"留言：{ann.title[:80]}",
             },
         )
-
-
-# ── Phase 1：個人 DM 與額外 domain 推播 ────────────────────────────────────────
-
-
-async def emit_user_dm(
-    db: AsyncSession,
-    *,
-    user_id: uuid.UUID,
-    embed: dict[str, Any],
-    components: list[dict[str, Any]] | None = None,
-    category: str | None = None,
-) -> None:
-    """個人 DM 推播。dispatcher 端會檢查 NotificationPreference 與綁定狀態。"""
-    from api.services.outbox import emit
-
-    await emit(
+    await emit_routed_notification(
         db,
-        event_type="discord.user_dm",
-        payload={
-            "user_id": str(user_id),
-            "embed": embed,
-            "components": components,
-            "category": category,
-        },
+        event_key="announcement.published",
+        module="announcement",
+        title=f"{title_prefix}{ann.title}",
+        link=f"/announcements/{ann.id}",
+        severity=severity,
+        org_id=ann.org_id,
+        thread_name=f"留言：{ann.title[:80]}",
     )
+
+
+# ── 個人 DM 與額外 domain 推播 ────────────────────────────────────────────────
 
 
 def _fmt_dt(value: datetime | None) -> str | None:
@@ -529,131 +562,6 @@ async def _emit_org_channels(
     return len(channel_ids)
 
 
-# ── 會議 ──────────────────────────────────────────────────────────────────────
-
-
-async def emit_meeting_invited(db: AsyncSession, meeting: Any) -> None:
-    """新會議建立/發布；推 org channel + 與會者 DM（在 dispatcher 端套 preference）。"""
-    fields: list[dict[str, Any]] = []
-    if dt := _fmt_dt(getattr(meeting, "starts_at", None)):
-        fields.append({"name": "開會時間", "value": dt, "inline": True})
-    if loc := getattr(meeting, "location", None):
-        fields.append({"name": "地點", "value": str(loc), "inline": True})
-    if chair := getattr(meeting, "chair_name", None):
-        fields.append({"name": "主席", "value": str(chair), "inline": True})
-    link = f"/meetings/{meeting.id}"
-    embed = build_embed(
-        Domain.MEETING,
-        Severity.INFO,
-        title=f"開會通知：{meeting.title}",
-        body=getattr(meeting, "description", None),
-        fields=fields,
-        link=link,
-    )
-    components = default_action_row(open_url=link, domain=Domain.MEETING)
-    components_list = [components] if components else None
-    await _emit_org_channels(
-        db,
-        org_ids={meeting.org_id} if getattr(meeting, "org_id", None) else set(),
-        embed=embed,
-        components=components_list,
-        thread_name=f"會議：{meeting.title[:80]}",
-    )
-
-
-async def emit_meeting_agenda_changed(db: AsyncSession, meeting: Any) -> None:
-    link = f"/meetings/{meeting.id}"
-    embed = build_embed(
-        Domain.MEETING,
-        Severity.WARNING,
-        title=f"議程變更：{meeting.title}",
-        body="議程或會議資訊已更新，請至平台檢視最新版本。",
-        link=link,
-    )
-    components = default_action_row(open_url=link, domain=Domain.MEETING)
-    await _emit_org_channels(
-        db,
-        org_ids={meeting.org_id} if getattr(meeting, "org_id", None) else set(),
-        embed=embed,
-        components=[components] if components else None,
-    )
-
-
-async def emit_meeting_minutes_published(db: AsyncSession, meeting: Any) -> None:
-    link = f"/meetings/{meeting.id}"
-    embed = build_embed(
-        Domain.MEETING,
-        Severity.SUCCESS,
-        title=f"會議紀錄發布：{meeting.title}",
-        body="會議紀錄已發布，可上平台檢視全文與決議。",
-        link=link,
-    )
-    components = default_action_row(open_url=link, domain=Domain.MEETING)
-    await _emit_org_channels(
-        db,
-        org_ids={meeting.org_id} if getattr(meeting, "org_id", None) else set(),
-        embed=embed,
-        components=[components] if components else None,
-        thread_name=f"討論：{meeting.title[:80]}",
-    )
-
-
-# ── 行事曆 ────────────────────────────────────────────────────────────────────
-
-
-async def emit_calendar_event_published(db: AsyncSession, event: Any) -> None:
-    fields: list[dict[str, Any]] = []
-    if dt := _fmt_dt(getattr(event, "starts_at", None)):
-        fields.append({"name": "開始時間", "value": dt, "inline": True})
-    if dt := _fmt_dt(getattr(event, "ends_at", None)):
-        fields.append({"name": "結束時間", "value": dt, "inline": True})
-    if loc := getattr(event, "location", None):
-        fields.append({"name": "地點", "value": str(loc), "inline": True})
-    link = getattr(event, "href", None) or f"/calendar/events/{event.id}"
-    embed = build_embed(
-        Domain.CALENDAR,
-        Severity.INFO,
-        title=f"新行事曆：{event.title}",
-        body=getattr(event, "description", None),
-        fields=fields,
-        link=link,
-    )
-    components = default_action_row(open_url=link, domain=Domain.CALENDAR)
-    await _emit_org_channels(
-        db,
-        org_ids={event.org_id} if getattr(event, "org_id", None) else set(),
-        embed=embed,
-        components=[components] if components else None,
-    )
-
-
-async def emit_calendar_event_reminder(
-    db: AsyncSession, event: Any, user_id: uuid.UUID, lead: str = "即將開始"
-) -> None:
-    """提醒個別參與者；dispatcher 套 preference + quiet hours。"""
-    fields: list[dict[str, Any]] = []
-    if dt := _fmt_dt(getattr(event, "starts_at", None)):
-        fields.append({"name": "開始時間", "value": dt, "inline": True})
-    if loc := getattr(event, "location", None):
-        fields.append({"name": "地點", "value": str(loc), "inline": True})
-    link = getattr(event, "href", None) or f"/calendar/events/{event.id}"
-    embed = build_embed(
-        Domain.CALENDAR,
-        Severity.WARNING,
-        title=f"行事曆提醒（{lead}）：{event.title}",
-        fields=fields,
-        link=link,
-    )
-    components = default_action_row(open_url=link, domain=Domain.CALENDAR)
-    await emit_user_dm(
-        db,
-        user_id=user_id,
-        embed=embed,
-        components=[components] if components else None,
-        category="calendar_reminder",
-    )
-
-
 # ── 問卷 ──────────────────────────────────────────────────────────────────────
 
 
@@ -661,7 +569,7 @@ async def emit_survey_opened(
     db: AsyncSession, survey: Any, org_ids: set[uuid.UUID] | None = None
 ) -> None:
     link = f"/surveys/{survey.id}"
-    fields: list[dict[str, Any]] = []
+    fields: list[EmbedField] = []
     if dt := _fmt_dt(getattr(survey, "closes_at", None)):
         fields.append({"name": "截止時間", "value": dt, "inline": True})
     if getattr(survey, "is_anonymous", False):
@@ -685,7 +593,7 @@ async def emit_survey_opened(
 
 async def emit_survey_closing_soon(db: AsyncSession, survey: Any, user_id: uuid.UUID) -> None:
     link = f"/surveys/{survey.id}"
-    fields: list[dict[str, Any]] = []
+    fields: list[EmbedField] = []
     if dt := _fmt_dt(getattr(survey, "closes_at", None)):
         fields.append({"name": "截止時間", "value": dt, "inline": True})
     embed = build_embed(
@@ -726,85 +634,11 @@ async def emit_survey_closed(
     )
 
 
-# ── 學餐 ──────────────────────────────────────────────────────────────────────
-
-
-async def emit_meal_order_open(
-    db: AsyncSession, schedule: Any, vendor_org_id: uuid.UUID, vendor_name: str
-) -> None:
-    fields: list[dict[str, Any]] = [
-        {"name": "商家", "value": vendor_name, "inline": True},
-        {"name": "供餐日期", "value": str(getattr(schedule, "date", "—")), "inline": True},
-    ]
-    if dt := _fmt_dt(getattr(schedule, "order_deadline", None)):
-        fields.append({"name": "結單時間", "value": dt, "inline": True})
-    link = f"/meal/schedules/{schedule.id}"
-    embed = build_embed(
-        Domain.MEAL,
-        Severity.INFO,
-        title=f"學餐開放訂購：{vendor_name}",
-        fields=fields,
-        link=link,
-    )
-    components = default_action_row(open_url=link, domain=Domain.MEAL)
-    await _emit_org_channels(
-        db,
-        org_ids={vendor_org_id},
-        embed=embed,
-        components=[components] if components else None,
-    )
-
-
-async def emit_meal_order_closing_soon(
-    db: AsyncSession, schedule: Any, user_id: uuid.UUID, vendor_name: str
-) -> None:
-    link = f"/meal/schedules/{schedule.id}"
-    fields: list[dict[str, Any]] = [{"name": "商家", "value": vendor_name, "inline": True}]
-    if dt := _fmt_dt(getattr(schedule, "order_deadline", None)):
-        fields.append({"name": "結單時間", "value": dt, "inline": True})
-    embed = build_embed(
-        Domain.MEAL,
-        Severity.WARNING,
-        title=f"學餐即將結單：{vendor_name}",
-        body="你尚未訂購此排程的學餐，請把握時間結單前下單。",
-        fields=fields,
-        link=link,
-    )
-    components = default_action_row(open_url=link, domain=Domain.MEAL)
-    await emit_user_dm(
-        db,
-        user_id=user_id,
-        embed=embed,
-        components=[components] if components else None,
-        category="meal_closing",
-    )
-
-
-async def emit_meal_order_closed(
-    db: AsyncSession, schedule: Any, vendor_org_id: uuid.UUID, vendor_name: str, order_count: int
-) -> None:
-    link = f"/meal/schedules/{schedule.id}"
-    embed = build_embed(
-        Domain.MEAL,
-        Severity.NEUTRAL,
-        title=f"學餐結單：{vendor_name}",
-        body=f"本次共 {order_count} 筆訂單，承辦人請至平台確認備餐與取餐安排。",
-        link=link,
-    )
-    components = default_action_row(open_url=link, domain=Domain.MEAL)
-    await _emit_org_channels(
-        db,
-        org_ids={vendor_org_id},
-        embed=embed,
-        components=[components] if components else None,
-    )
-
-
 # ── 福利社 ────────────────────────────────────────────────────────────────────
 
 
 async def emit_shop_item_listed(db: AsyncSession, product: Any) -> None:
-    fields: list[dict[str, Any]] = []
+    fields: list[EmbedField] = []
     if price := getattr(product, "price", None):
         fields.append({"name": "售價", "value": f"NT$ {price}", "inline": True})
     if dt := _fmt_dt(getattr(product, "sale_end", None)):
@@ -830,7 +664,7 @@ async def emit_shop_item_listed(db: AsyncSession, product: Any) -> None:
 
 async def emit_shop_order_ready(db: AsyncSession, order: Any, *, user_id: uuid.UUID) -> None:
     link = f"/shop/orders/{order.id}"
-    fields: list[dict[str, Any]] = []
+    fields: list[EmbedField] = []
     if serial := getattr(order, "serial_number", None):
         fields.append({"name": "訂單字號", "value": str(serial), "inline": True})
     embed = build_embed(
@@ -857,7 +691,7 @@ async def emit_shop_order_ready(db: AsyncSession, order: Any, *, user_id: uuid.U
 async def emit_regulation_workflow_changed(
     db: AsyncSession, regulation: Any, *, from_status: str | None = None
 ) -> None:
-    fields: list[dict[str, Any]] = [
+    fields: list[EmbedField] = [
         {"name": "目前狀態", "value": str(regulation.workflow_status), "inline": True}
     ]
     if from_status:
@@ -881,7 +715,7 @@ async def emit_regulation_workflow_changed(
 
 
 async def emit_regulation_published(db: AsyncSession, regulation: Any) -> None:
-    fields: list[dict[str, Any]] = [
+    fields: list[EmbedField] = [
         {"name": "版本", "value": str(getattr(regulation, "version", 1)), "inline": True}
     ]
     if dt := _fmt_dt(getattr(regulation, "effective_date", None)):
@@ -902,6 +736,17 @@ async def emit_regulation_published(db: AsyncSession, regulation: Any) -> None:
         components=[components] if components else None,
         thread_name=f"討論：{regulation.title[:80]}",
     )
+    await emit_routed_notification(
+        db,
+        event_key="regulation.published",
+        module="regulation",
+        title=f"法規公布：{regulation.title}",
+        fields=fields,
+        link=link,
+        severity=Severity.SUCCESS,
+        org_id=getattr(regulation, "org_id", None),
+        thread_name=f"討論：{regulation.title[:80]}",
+    )
 
 
 # ── 公文：個人待簽核 DM ───────────────────────────────────────────────────────
@@ -910,7 +755,7 @@ async def emit_regulation_published(db: AsyncSession, regulation: Any) -> None:
 async def emit_document_pending_to_approver(
     db: AsyncSession, document: Any, approver_user_id: uuid.UUID
 ) -> None:
-    fields: list[dict[str, Any]] = []
+    fields: list[EmbedField] = []
     if serial := getattr(document, "serial_number", None):
         fields.append({"name": "字號", "value": str(serial), "inline": True})
     if subject := getattr(document, "subject", None):
@@ -1010,29 +855,13 @@ async def emit_tenure_ended(
     )
 
 
-def _discord_headers() -> dict[str, str]:
-    return {
-        "Authorization": f"Bot {settings.DISCORD_BOT_TOKEN}",
-        "Content-Type": "application/json",
-    }
-
-
-def _sanitize_channel_name(value: str) -> str:
-    allowed = []
-    for char in value.lower():
-        if char.isalnum() or char in {"-", "_"}:
-            allowed.append(char)
-        elif char.isspace():
-            allowed.append("-")
-    name = "".join(allowed).strip("-")
-    return name[:80] or "petition"
-
-
 async def enqueue_petition_private_channel(
     db: AsyncSession, case_obj: PetitionCase, *, force: bool = False
 ) -> bool:
     from api.services.outbox import emit
 
+    if case_obj.is_confidential:
+        return False
     if case_obj.discord_channel_id and not force:
         return False
     config = await get_primary_guild_config(db)
@@ -1056,140 +885,24 @@ async def enqueue_petition_private_channel(
             "category_id": config.petition_private_category_id,
             "staff_role_id": config.petition_staff_role_id,
             "submitter_discord_user_id": submitter_link.discord_user_id if submitter_link else None,
-            "is_named": case_obj.is_named,
         },
     )
     return True
 
 
-def create_petition_private_channel(payload: dict[str, Any]) -> str | None:
-    if not bot_configured():
-        logger.warning("Discord Bot 未設定，跳過陳情私密頻道建立")
-        return None
-    guild_id = str(payload["guild_id"])
-    case_id = str(payload["case_id"])
-    case_number = str(payload.get("case_number") or case_id[:8])
-    title = str(payload.get("title") or "陳情案件")
-    staff_role_id = str(payload["staff_role_id"])
-    submitter_id = payload.get("submitter_discord_user_id")
-
-    view_channel = 1 << 10
-    send_messages = 1 << 11
-    manage_messages = 1 << 13
-    attach_files = 1 << 15
-    read_history = 1 << 16
-    petitioner_allow = view_channel | send_messages | attach_files | read_history
-    staff_allow = petitioner_allow | manage_messages
-    overwrites: list[dict[str, Any]] = [
-        {"id": guild_id, "type": 0, "deny": str(view_channel), "allow": "0"},
-        {"id": staff_role_id, "type": 0, "allow": str(staff_allow), "deny": "0"},
-    ]
-    if submitter_id:
-        overwrites.append(
-            {"id": str(submitter_id), "type": 1, "allow": str(petitioner_allow), "deny": "0"}
-        )
-    body: dict[str, Any] = {
-        "name": _sanitize_channel_name(f"petition-{case_number}-{title[:24]}"),
-        "type": 0,
-        "topic": f"HCCA 陳情案件 {case_number}。正式長文與附件請回平台處理。",
-        "permission_overwrites": overwrites,
-    }
-    if payload.get("category_id"):
-        body["parent_id"] = str(payload["category_id"])
-    with httpx.Client(timeout=10.0, headers=_discord_headers()) as client:
-        created = client.post(f"https://discord.com/api/v10/guilds/{guild_id}/channels", json=body)
-        created.raise_for_status()
-        channel = created.json()
-        channel_id = str(channel["id"])
-        intro = (
-            f"陳情案件 {case_number} 已建立私密討論頻道。\n"
-            f"案件：{title}\n"
-            f"{'<@' + str(submitter_id) + '> ' if submitter_id else ''}"
-            "這裡適合快速補充與溝通；正式回覆、附件與結案仍會保存到平台。"
-        )
-        message = client.post(
-            f"https://discord.com/api/v10/channels/{channel_id}/messages",
-            json={"content": intro[:1900]},
-        )
-        message.raise_for_status()
-
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import Session
-
-    from api.core.config import settings
-
-    sync_url = settings.DATABASE_URL.replace("+asyncpg", "")
-    engine = create_engine(sync_url)
-    with Session(engine) as session:
-        case_obj = session.get(PetitionCase, uuid.UUID(case_id))
-        if case_obj is not None:
-            case_obj.discord_guild_id = guild_id
-            case_obj.discord_channel_id = channel_id
-            case_obj.discord_channel_created_at = datetime.now(UTC)
-            session.commit()
-    return channel_id
-
-
-async def fetch_bot_guilds() -> list[dict[str, Any]]:
-    if not bot_configured():
-        return []
-    async with httpx.AsyncClient(timeout=10.0, headers=_discord_headers()) as client:
-        res = await client.get("https://discord.com/api/v10/users/@me/guilds")
-        res.raise_for_status()
-        return list(res.json())
-
-
-async def fetch_guild_channels(guild_id: str) -> list[dict[str, Any]]:
-    if not bot_configured():
-        return []
-    async with httpx.AsyncClient(timeout=10.0, headers=_discord_headers()) as client:
-        res = await client.get(f"https://discord.com/api/v10/guilds/{guild_id}/channels")
-        res.raise_for_status()
-        return list(res.json())
-
-
-async def fetch_guild_roles(guild_id: str) -> list[dict[str, Any]]:
-    if not bot_configured():
-        return []
-    async with httpx.AsyncClient(timeout=10.0, headers=_discord_headers()) as client:
-        res = await client.get(f"https://discord.com/api/v10/guilds/{guild_id}/roles")
-        res.raise_for_status()
-        return list(res.json())
-
-
-async def fetch_bot_user() -> dict[str, Any] | None:
-    if not bot_configured():
-        return None
-    async with httpx.AsyncClient(timeout=10.0, headers=_discord_headers()) as client:
-        res = await client.get("https://discord.com/api/v10/users/@me")
-        res.raise_for_status()
-        return dict(res.json())
-
-
-async def fetch_guild_member(guild_id: str, discord_user_id: str) -> dict[str, Any] | None:
-    if not bot_configured():
-        return None
-    async with httpx.AsyncClient(timeout=10.0, headers=_discord_headers()) as client:
-        res = await client.get(
-            f"https://discord.com/api/v10/guilds/{guild_id}/members/{discord_user_id}"
-        )
-        if res.status_code == 404:
-            return None
-        res.raise_for_status()
-        return dict(res.json())
-
-
 async def bot_health_snapshot(db: AsyncSession) -> dict[str, Any]:
-    bot_user = await fetch_bot_user()
+    from api.services.discord_inventory import read_inventory
+
+    inventory = await read_inventory()
     configs = (await db.execute(select(DiscordGuildConfig))).scalars().all()
     active_links = await db.scalar(
         select(DiscordAccountLink).where(DiscordAccountLink.is_active.is_(True)).limit(1)
     )
     return {
-        "bot_configured": bot_configured(),
+        "bot_configured": inventory is not None,
         "oauth_configured": is_configured(),
-        "bot_user_id": str(bot_user.get("id")) if bot_user else None,
-        "bot_username": str(bot_user.get("username")) if bot_user else None,
+        "bot_user_id": str(inventory.get("bot_user_id")) if inventory else None,
+        "bot_username": str(inventory.get("bot_username")) if inventory else None,
         "configured_guild_count": len(configs),
         "has_active_links": active_links is not None,
     }
@@ -1208,297 +921,11 @@ async def enqueue_all_role_sync(db: AsyncSession) -> int:
     return count
 
 
-def send_dm(
-    discord_user_id: str,
-    *,
-    title: str | None = None,
-    body: str | None = None,
-    link: str | None = None,
-    embed: dict[str, Any] | None = None,
-    components: list[dict[str, Any]] | None = None,
-) -> None:
-    if not bot_configured():
-        logger.warning("Discord Bot 未設定，跳過 DM")
-        return
-    payload: dict[str, Any] = {}
-    if embed is not None:
-        payload["embeds"] = [embed]
-    else:
-        text = title or "HCCA 平台通知"
-        if body:
-            text = f"{text}\n{body}"
-        if link:
-            text = f"{text}\n{_absolute_url(link)}"
-        payload["content"] = text[:1900]
-    if components:
-        payload["components"] = components
-    with httpx.Client(timeout=10.0, headers=_discord_headers()) as client:
-        channel = client.post(
-            "https://discord.com/api/v10/users/@me/channels",
-            json={"recipient_id": discord_user_id},
-        )
-        channel.raise_for_status()
-        channel_id = channel.json()["id"]
-        message = client.post(
-            f"https://discord.com/api/v10/channels/{channel_id}/messages",
-            json=payload,
-        )
-        message.raise_for_status()
-
-
-def send_channel_message(
-    channel_id: str,
-    *,
-    title: str | None = None,
-    body: str | None = None,
-    embed: dict[str, Any] | None = None,
-    components: list[dict[str, Any]] | None = None,
-    thread_name: str | None = None,
-) -> None:
-    if not bot_configured():
-        logger.warning("Discord Bot 未設定，跳過頻道訊息")
-        return
-    payload: dict[str, Any] = {}
-    if embed is not None:
-        payload["embeds"] = [embed]
-    else:
-        content = (title or "") if body is None else f"{title or ''}\n{body}".strip()
-        payload["content"] = content[:1900]
-    if components:
-        payload["components"] = components
-    with httpx.Client(timeout=10.0, headers=_discord_headers()) as client:
-        res = client.post(
-            f"https://discord.com/api/v10/channels/{channel_id}/messages",
-            json=payload,
-        )
-        res.raise_for_status()
-        if thread_name:
-            message_id = str(res.json().get("id") or "")
-            if message_id:
-                thread_res = client.post(
-                    f"https://discord.com/api/v10/channels/{channel_id}/messages/{message_id}/threads",
-                    json={
-                        "name": thread_name[:100],
-                        "auto_archive_duration": 1440,
-                    },
-                )
-                if thread_res.status_code >= 400:
-                    logger.warning(
-                        "Discord 自動開 thread 失敗 channel=%s message=%s status=%s",
-                        channel_id,
-                        message_id,
-                        thread_res.status_code,
-                    )
-
-
-def _strip_managed_prefix(name: str, prefixes: list[str]) -> str:
-    value = name.strip()
-    for prefix in sorted((p.strip() for p in prefixes if p.strip()), key=len, reverse=True):
-        if value.startswith(prefix):
-            return value[len(prefix) :].strip()
-    return value
-
-
-def _with_prefix(base_name: str, prefix: str | None) -> str:
-    name = base_name.strip() or "HCCA"
-    value = f"{prefix.strip()}{name}" if prefix else name
-    return value[:32]
-
-
-def sync_member_roles(
-    guild_id: str,
-    discord_user_id: str,
-    role_ids: list[str],
-    managed_role_ids: list[str] | None = None,
-    nickname_prefix: str | None = None,
-    managed_nickname_prefixes: list[str] | None = None,
-) -> None:
-    if not bot_configured():
-        logger.warning("Discord Bot 未設定，跳過角色同步")
-        return
-    with httpx.Client(timeout=10.0, headers=_discord_headers()) as client:
-        member_payload: dict[str, Any] | None = None
-        if managed_role_ids is not None:
-            member = client.get(
-                f"https://discord.com/api/v10/guilds/{guild_id}/members/{discord_user_id}"
-            )
-            member.raise_for_status()
-            member_payload = member.json()
-            current_roles = set(member_payload.get("roles") or [])
-            desired = set(role_ids)
-            for role_id in set(managed_role_ids) - desired:
-                if role_id in current_roles:
-                    res = client.delete(
-                        f"https://discord.com/api/v10/guilds/{guild_id}/members/{discord_user_id}/roles/{role_id}"
-                    )
-                    res.raise_for_status()
-        for role_id in role_ids:
-            res = client.put(
-                f"https://discord.com/api/v10/guilds/{guild_id}/members/{discord_user_id}/roles/{role_id}"
-            )
-            res.raise_for_status()
-        if managed_nickname_prefixes is not None:
-            if member_payload is None:
-                member = client.get(
-                    f"https://discord.com/api/v10/guilds/{guild_id}/members/{discord_user_id}"
-                )
-                member.raise_for_status()
-                member_payload = member.json()
-            user_payload = member_payload.get("user") or {}
-            current_name = (
-                member_payload.get("nick")
-                or user_payload.get("global_name")
-                or user_payload.get("username")
-                or "HCCA"
-            )
-            base_name = _strip_managed_prefix(str(current_name), managed_nickname_prefixes)
-            desired_nick = _with_prefix(base_name, nickname_prefix)
-            if desired_nick != member_payload.get("nick"):
-                res = client.patch(
-                    f"https://discord.com/api/v10/guilds/{guild_id}/members/{discord_user_id}",
-                    json={"nick": desired_nick},
-                )
-                res.raise_for_status()
-    logger.info(
-        "Discord 角色同步完成 guild=%s user=%s roles=%d", guild_id, discord_user_id, len(role_ids)
-    )
-
-
-def format_discord_payload(payload: dict[str, Any]) -> tuple[str, str | None]:
-    title = str(payload.get("title") or "HCCA 平台通知")
-    body = payload.get("body")
-    link = payload.get("link")
-    if link:
-        href = str(link)
-        if not href.startswith(("http://", "https://")):
-            href = _absolute_url(href)
-        body = f"{body}\n{href}" if body else href
-    return title, str(body) if body else None
-
-
-def _get_user_preference(session: Any, user_id: uuid.UUID) -> Any | None:
-    """讀取 DiscordNotificationPreference；若表不存在或讀取失敗回 None。"""
-    try:
-        from sqlalchemy import select as _select
-
-        from api.models.discord_account import DiscordNotificationPreference
-
-        return session.execute(
-            _select(DiscordNotificationPreference).where(
-                DiscordNotificationPreference.user_id == user_id
-            )
-        ).scalar_one_or_none()
-    except ImportError:
-        return None
-    except Exception as exc:
-        logger.debug("讀取 DM preference 失敗：%s", exc)
-        return None
-
-
-def _user_dm_allowed(session: Any, user_id: uuid.UUID, category: str | None) -> bool:
-    """檢查 NotificationPreference category 是否允許；未綁定 preference 預設 True。"""
-    if not category:
-        return True
-    pref = _get_user_preference(session, user_id)
-    if pref is None:
-        return True
-    prefs = pref.preferences or {}
-    return bool(prefs.get(category, True))
-
-
-def _in_quiet_hours(pref: Any) -> bool:
-    """檢查當前時刻是否落在 user quiet hours 區間（依 pref.timezone）。"""
-    if pref is None:
-        return False
-    start = getattr(pref, "quiet_hours_start", None)
-    end = getattr(pref, "quiet_hours_end", None)
-    if start is None or end is None:
-        return False
-    try:
-        from zoneinfo import ZoneInfo
-
-        tz_name = getattr(pref, "timezone", None) or "Asia/Taipei"
-        now_local = datetime.now(ZoneInfo(tz_name)).time()
-    except Exception:
-        now_local = datetime.now(UTC).time()
-    if start <= end:
-        return start <= now_local < end
-    # 跨午夜，例如 22:00 → 08:00
-    return now_local >= start or now_local < end
-
-
-def dispatch_user_dm(payload: dict[str, Any]) -> None:
-    """Celery 端 user_dm 分派：解析平台 user_id → DiscordAccountLink → send_dm。
-
-    payload schema:
-        - user_id: str(UUID) 必填
-        - embed: dict 必填（純文字 DM 直接走舊 discord.push）
-        - components: list[dict] 可選
-        - category: str 可選；若帶入會查 NotificationPreference 是否允許
-    """
-    user_id_str = payload.get("user_id")
-    embed = payload.get("embed")
-    components = payload.get("components")
-    category = payload.get("category")
-    if not user_id_str or embed is None:
-        logger.warning("discord.user_dm payload 缺 user_id 或 embed")
-        return
-    try:
-        user_uuid = uuid.UUID(str(user_id_str))
-    except (TypeError, ValueError):
-        logger.warning("discord.user_dm user_id 非合法 UUID：%s", user_id_str)
-        return
-
-    from sqlalchemy import create_engine
-    from sqlalchemy import select as _select
-    from sqlalchemy.orm import Session
-
-    sync_url = settings.DATABASE_URL.replace("+asyncpg", "")
-    eng = create_engine(sync_url)
-    with Session(eng) as session:
-        link = session.execute(
-            _select(DiscordAccountLink).where(
-                DiscordAccountLink.user_id == user_uuid,
-                DiscordAccountLink.is_active.is_(True),
-            )
-        ).scalar_one_or_none()
-        if link is None:
-            logger.info("Discord DM 略過：使用者 %s 未綁定", user_uuid)
-            return
-        pref = _get_user_preference(session, user_uuid)
-        if category and pref is not None:
-            prefs = pref.preferences or {}
-            if not bool(prefs.get(category, True)):
-                logger.info("Discord DM 略過：user=%s category=%s 已關閉", user_uuid, category)
-                return
-        if _in_quiet_hours(pref):
-            logger.info(
-                "Discord DM 略過：user=%s category=%s 在 quiet hours 區間",
-                user_uuid,
-                category,
-            )
-            return
-        discord_user_id = link.discord_user_id
-
-    send_dm(str(discord_user_id), embed=embed, components=components)
-
-
 __all__ = [
-    "bot_configured",
     "consume_open_token",
     "create_open_url",
-    "create_petition_private_channel",
-    "dispatch_user_dm",
     "emit_announcement_notice",
-    "emit_calendar_event_published",
-    "emit_calendar_event_reminder",
     "emit_document_pending_to_approver",
-    "emit_meal_order_closed",
-    "emit_meal_order_closing_soon",
-    "emit_meal_order_open",
-    "emit_meeting_agenda_changed",
-    "emit_meeting_invited",
-    "emit_meeting_minutes_published",
     "emit_moderation_log",
     "emit_public_document_notice",
     "emit_regulation_published",
@@ -1517,12 +944,6 @@ __all__ = [
     "enqueue_petition_private_channel",
     "enqueue_role_sync",
     "bot_health_snapshot",
-    "format_discord_payload",
-    "fetch_bot_user",
-    "fetch_bot_guilds",
-    "fetch_guild_channels",
-    "fetch_guild_member",
-    "fetch_guild_roles",
     "get_guild_config",
     "get_primary_guild_config",
     "get_org_announcement_channel",
@@ -1530,9 +951,6 @@ __all__ = [
     "get_user_by_discord_id",
     "get_user_link",
     "is_configured",
-    "send_channel_message",
-    "send_dm",
-    "sync_member_roles",
     "unlink_user",
     "upsert_user_link",
 ]

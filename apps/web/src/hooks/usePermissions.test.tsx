@@ -1,0 +1,105 @@
+import { act, renderHook } from "@testing-library/react";
+import { beforeEach, describe, expect, it } from "vitest";
+
+import { AUTH_CACHE_EVENT, cacheCurrentUser } from "@/lib/auth-cache";
+import { usePermissions } from "./usePermissions";
+
+describe("usePermissions", () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+  });
+
+  function renderPermissions() {
+    const hook = renderHook(() => usePermissions());
+    act(() => {
+      window.dispatchEvent(new Event("load"));
+      window.dispatchEvent(new Event(AUTH_CACHE_EVENT));
+    });
+    return hook;
+  }
+
+  it("supports direct and compatibility permissions", () => {
+    sessionStorage.setItem(
+      "permissions",
+      JSON.stringify(["document:create", "audit:view"]),
+    );
+
+    const { result } = renderPermissions();
+
+    expect(result.current.isReady).toBe(true);
+    expect(result.current.can("document:create")).toBe(true);
+    expect(result.current.can("document:draft")).toBe(true);
+    expect(result.current.can("audit:view_org")).toBe(true);
+    expect(result.current.can("shop:manage")).toBe(false);
+  });
+
+  it("treats owners as administrators", () => {
+    sessionStorage.setItem("is_owner", "true");
+
+    const { result } = renderPermissions();
+
+    expect(result.current.isOwner).toBe(true);
+    expect(result.current.isAdmin).toBe(true);
+    expect(result.current.canAny("anything:at-all")).toBe(true);
+  });
+
+  it("ignores malformed cached permission JSON", () => {
+    sessionStorage.setItem("permissions", "{broken");
+
+    const { result } = renderPermissions();
+
+    expect(result.current.permissions.size).toBe(0);
+    expect(result.current.can("document:create")).toBe(false);
+  });
+
+  it("refreshes after the current user cache is updated", () => {
+    const { result } = renderPermissions();
+
+    act(() => {
+      cacheCurrentUser({ id: "admin-1", is_superuser: true });
+    });
+
+    expect(result.current.isAdmin).toBe(true);
+    expect(result.current.can("anything:at-all")).toBe(true);
+  });
+
+  it("restores cached permissions when hydration starts after document load", () => {
+    sessionStorage.setItem("permissions", JSON.stringify(["hydration:permission"]));
+    const previousReadyState = document.readyState;
+    Object.defineProperty(document, "readyState", {
+      configurable: true,
+      value: "complete",
+    });
+
+    try {
+      const { result } = renderHook(() => usePermissions());
+
+      expect(result.current.permissions.has("hydration:permission")).toBe(true);
+    } finally {
+      Object.defineProperty(document, "readyState", {
+        configurable: true,
+        value: previousReadyState,
+      });
+    }
+  });
+
+  it("supports the global permission and audit compatibility aliases", () => {
+    sessionStorage.setItem("permissions", JSON.stringify(["admin:all"]));
+
+    const { result } = renderPermissions();
+
+    expect(result.current.can("anything:at-all")).toBe(true);
+    expect(result.current.canAny("anything:at-all")).toBe(true);
+
+    sessionStorage.setItem("permissions", JSON.stringify(["audit:view_all"]));
+    act(() => window.dispatchEvent(new Event(AUTH_CACHE_EVENT)));
+    expect(result.current.can("audit:view_org")).toBe(true);
+    expect(result.current.canAny("audit:view_org")).toBe(true);
+  });
+
+  it("returns false when no requested permission matches", () => {
+    const { result } = renderPermissions();
+
+    expect(result.current.canAny("shop:manage", "finance:view")).toBe(false);
+  });
+});

@@ -1,0 +1,271 @@
+"""使用者自助連結 Email 驗證流程。"""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+
+import pytest
+from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from api.dependencies.auth import get_current_active_user
+from api.main import app
+from api.models.discord_account import DiscordAccountLink
+from api.models.notification import Notification
+from api.models.user import User
+from api.models.user_identity import UserIdentity
+from api.services import user_email_verification as verification_svc
+
+
+class FakeRedis:
+    def __init__(self) -> None:
+        self.store: dict[str, str] = {}
+
+    async def set(
+        self,
+        key: str,
+        value: str,
+        *,
+        ex: int | None = None,
+        nx: bool = False,
+    ) -> bool:
+        if nx and key in self.store:
+            return False
+        self.store[key] = value
+        return True
+
+    async def setex(self, key: str, _ttl: int, value: str) -> None:
+        self.store[key] = value
+
+    async def get(self, key: str) -> str | None:
+        return self.store.get(key)
+
+    async def delete(self, key: str) -> None:
+        self.store.pop(key, None)
+
+
+def _override_user(user: User) -> None:
+    async def override() -> User:
+        return user
+
+    app.dependency_overrides[get_current_active_user] = override
+
+
+@pytest.mark.asyncio
+async def test_user_verifies_email_before_it_is_linked(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = User(
+        email="primary@hchs.hc.edu.tw",
+        display_name="自助綁定",
+        is_active=True,
+        is_verified=True,
+    )
+    db_session.add(user)
+    await db_session.flush()
+    _override_user(user)
+
+    fake_redis = FakeRedis()
+    sent_to: list[str] = []
+    monkeypatch.setattr(verification_svc, "redis_client", fake_redis)
+    monkeypatch.setattr(verification_svc.secrets, "randbelow", lambda _limit: 123456)
+    monkeypatch.setattr(
+        verification_svc,
+        "send_branded_email",
+        lambda recipients, *_args, **_kwargs: sent_to.extend(recipients) or ["task-id"],
+    )
+
+    request_response = await client.post(
+        "/users/me/emails/verification",
+        json={"email": "private@gmail.com"},
+    )
+
+    assert request_response.status_code == 202
+    assert sent_to == ["private@gmail.com"]
+    assert (
+        await db_session.scalar(
+            select(UserIdentity).where(UserIdentity.email == "private@gmail.com")
+        )
+        is None
+    )
+
+    wrong_response = await client.post(
+        "/users/me/emails/verify",
+        json={"email": "private@gmail.com", "code": "000000"},
+    )
+    assert wrong_response.status_code == 400
+
+    verify_response = await client.post(
+        "/users/me/emails/verify",
+        json={"email": "private@gmail.com", "code": "123456"},
+    )
+
+    assert verify_response.status_code == 200
+    assert verify_response.json()["emails"] == [
+        "primary@hchs.hc.edu.tw",
+        "private@gmail.com",
+    ]
+    identity = await db_session.scalar(
+        select(UserIdentity).where(UserIdentity.email == "private@gmail.com")
+    )
+    assert identity is not None
+    assert identity.user_id == user.id
+
+
+@pytest.mark.asyncio
+async def test_user_can_self_merge_email_owned_by_another_account_without_conflict(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = User(
+        email="primary@hchs.hc.edu.tw",
+        display_name="自助綁定",
+        is_active=True,
+        is_verified=True,
+    )
+    other = User(
+        email="already-owned@gmail.com",
+        display_name="自助綁定",
+        is_active=True,
+        is_verified=True,
+    )
+    db_session.add_all([user, other])
+    await db_session.flush()
+    db_session.add(
+        UserIdentity(
+            user_id=other.id,
+            provider="email",
+            external_id=other.email,
+            email=other.email,
+            display_name=other.display_name,
+            linked_at=datetime.now(UTC),
+        )
+    )
+    await db_session.flush()
+    _override_user(user)
+
+    fake_redis = FakeRedis()
+    sent_to: list[str] = []
+    monkeypatch.setattr(verification_svc, "redis_client", fake_redis)
+    monkeypatch.setattr(verification_svc.secrets, "randbelow", lambda _limit: 123456)
+    monkeypatch.setattr(
+        verification_svc,
+        "send_branded_email",
+        lambda recipients, *_args, **_kwargs: sent_to.extend(recipients) or ["task-id"],
+    )
+
+    response = await client.post(
+        "/users/me/emails/verification",
+        json={"email": other.email},
+    )
+
+    assert response.status_code == 202
+    assert sent_to == [other.email]
+
+    verify_response = await client.post(
+        "/users/me/emails/verify",
+        json={"email": other.email, "code": "123456"},
+    )
+
+    assert verify_response.status_code == 200
+    assert verify_response.json()["emails"] == [
+        "already-owned@gmail.com",
+        "primary@hchs.hc.edu.tw",
+    ]
+    await db_session.refresh(other)
+    assert other.is_active is False
+    assert other.email.endswith("@deleted.local")
+    identity = await db_session.scalar(
+        select(UserIdentity).where(UserIdentity.email == "already-owned@gmail.com")
+    )
+    assert identity is not None
+    assert identity.user_id == user.id
+
+
+@pytest.mark.asyncio
+async def test_self_merge_with_business_conflict_stops_and_notifies_admin(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    admin = User(
+        email="merge-admin@school.edu",
+        display_name="合併管理員",
+        is_active=True,
+        is_verified=True,
+        is_superuser=True,
+    )
+    user = User(
+        email="primary-conflict@school.edu",
+        display_name="主要帳號",
+        is_active=True,
+        is_verified=True,
+    )
+    other = User(
+        email="secondary-conflict@school.edu",
+        display_name="次要帳號",
+        is_active=True,
+        is_verified=True,
+    )
+    db_session.add_all([admin, user, other])
+    await db_session.flush()
+    db_session.add(
+        UserIdentity(
+            user_id=other.id,
+            provider="email",
+            external_id=other.email,
+            email=other.email,
+            display_name=other.display_name,
+            linked_at=datetime.now(UTC),
+        )
+    )
+    db_session.add_all(
+        [
+            DiscordAccountLink(
+                user_id=user.id, discord_user_id="111111111111111111", username="first"
+            ),
+            DiscordAccountLink(
+                user_id=other.id, discord_user_id="222222222222222222", username="second"
+            ),
+        ]
+    )
+    await db_session.flush()
+    admin_id = admin.id
+    _override_user(user)
+
+    fake_redis = FakeRedis()
+    monkeypatch.setattr(verification_svc, "redis_client", fake_redis)
+    monkeypatch.setattr(verification_svc.secrets, "randbelow", lambda _limit: 123456)
+    monkeypatch.setattr(
+        verification_svc,
+        "send_branded_email",
+        lambda *_args, **_kwargs: ["task-id"],
+    )
+
+    request_response = await client.post(
+        "/users/me/emails/verification",
+        json={"email": other.email},
+    )
+    assert request_response.status_code == 202
+
+    verify_response = await client.post(
+        "/users/me/emails/verify",
+        json={"email": other.email, "code": "123456"},
+    )
+
+    assert verify_response.status_code == 409
+    assert "已停止合併並通知管理員" in verify_response.json()["detail"]
+    notification = await db_session.scalar(
+        select(Notification).where(
+            Notification.user_id == admin_id,
+            Notification.title == "帳戶合併需要管理員處理",
+        )
+    )
+    assert notification is not None
+    assert "Discord 綁定" in (notification.body or "")
+    await db_session.refresh(other)
+    assert other.is_active is True

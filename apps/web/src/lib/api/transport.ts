@@ -1,0 +1,371 @@
+import { API_BASE } from "../config";
+import { reportClientError, type ClientErrorDiagnostics } from "../client-error-reporter";
+
+export type HccaRequestInit = RequestInit;
+
+function getCookie(name: string): string | null {
+  if (typeof document === "undefined") return null;
+  const prefix = `${name}=`;
+  return document.cookie
+    .split(";")
+    .map((item) => item.trim())
+    .find((item) => item.startsWith(prefix))
+    ?.slice(prefix.length) ?? null;
+}
+
+export function csrfHeaders(method?: string): Record<string, string> {
+  const normalized = (method ?? "GET").toUpperCase();
+  if (!["POST", "PUT", "PATCH", "DELETE"].includes(normalized)) return {};
+  const token = getCookie("csrf_token");
+  return token ? { "X-CSRF-Token": decodeURIComponent(token) } : {};
+}
+
+export function createTraceId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID().replaceAll("-", "");
+  }
+  return `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`.padEnd(32, "0").slice(0, 32);
+}
+
+function createSpanId(): string {
+  if (typeof crypto !== "undefined" && "getRandomValues" in crypto) {
+    const bytes = new Uint8Array(8);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+  }
+  return (Date.now().toString(16) + Math.random().toString(16).slice(2)).slice(-16).padStart(16, "0");
+}
+
+export function traceHeaders(): { traceId: string; headers: Record<string, string> } {
+  const traceId = createTraceId();
+  return {
+    traceId,
+    headers: {
+      "X-Trace-ID": traceId,
+      traceparent: `00-${traceId}-${createSpanId()}-01`,
+    },
+  };
+}
+
+export function requestInitWithTrace(init: HccaRequestInit, trace: Record<string, string>): RequestInit {
+  return {
+    ...init,
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...csrfHeaders(init.method),
+      ...init.headers,
+      ...trace,
+    },
+  };
+}
+
+export class NetworkRequestError extends Error {}
+
+const GET_REQUEST_TIMEOUT_MS = 15_000;
+const MUTATION_REQUEST_TIMEOUT_MS = 30_000;
+const NULL_BODY_STATUS_CODES = new Set([204, 205, 304]);
+
+function requestTimeoutMs(init: HccaRequestInit): number {
+  return (init.method ?? "GET").toUpperCase() === "GET"
+    ? GET_REQUEST_TIMEOUT_MS
+    : MUTATION_REQUEST_TIMEOUT_MS;
+}
+
+function clientRequestPath(path: string): string {
+  return path.split(/[?#]/, 1)[0].slice(0, 500);
+}
+
+function transportErrorName(error: unknown): string {
+  return typeof error === "object" && error !== null && "name" in error && typeof error.name === "string"
+    ? error.name.slice(0, 100) : "UnknownError";
+}
+
+function createRequestTimeout(signal: AbortSignal | null | undefined, timeoutMs: number) {
+  const controller = new AbortController();
+  const startedAt = performance.now();
+  let timerDelayMs: number | undefined;
+  let hiddenMs = 0;
+  let hiddenAt = typeof document !== "undefined" && document.visibilityState === "hidden"
+    ? startedAt : undefined;
+  const onVisibilityChange = () => {
+    if (hiddenAt !== undefined) hiddenMs += performance.now() - hiddenAt;
+    hiddenAt = document.visibilityState === "hidden" ? performance.now() : undefined;
+  };
+  if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVisibilityChange);
+  const onAbort = () => controller.abort(signal?.reason);
+  const timer = setTimeout(() => {
+    timerDelayMs = Math.max(0, performance.now() - startedAt - timeoutMs);
+    controller.abort(new Error(`API request timed out after ${timeoutMs}ms`));
+    signal?.removeEventListener("abort", onAbort);
+  }, timeoutMs);
+  const cleanup = () => {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", onAbort);
+    if (hiddenAt !== undefined) {
+      hiddenMs += performance.now() - hiddenAt;
+      hiddenAt = undefined;
+    }
+    if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisibilityChange);
+  };
+
+  if (signal?.aborted) onAbort();
+  else signal?.addEventListener("abort", onAbort, { once: true });
+
+  return {
+    signal: controller.signal,
+    cleanup,
+    evidence: (): ClientErrorDiagnostics => ({
+      request_hidden_ms: Math.min(86_400_000, Math.max(0,
+        hiddenMs + (hiddenAt !== undefined ? performance.now() - hiddenAt : 0))),
+      ...(timerDelayMs !== undefined ? { timeout_timer_delay_ms: Math.min(86_400_000, timerDelayMs) } : {}),
+    }),
+  };
+}
+
+function responseWithBodyTimeout(
+  response: Response,
+  timeoutSignal: AbortSignal,
+  requestSignal: AbortSignal | null | undefined,
+  path: string,
+  method: string,
+  attempts: number,
+  timeoutMs: number,
+  cleanup: () => void,
+  evidence: () => ClientErrorDiagnostics,
+): Response {
+  if (NULL_BODY_STATUS_CODES.has(response.status) || !response.body) {
+    cleanup();
+    return response;
+  }
+
+  const reader = response.body.getReader();
+  let cleaned = false;
+  const finish = () => {
+    if (cleaned) return;
+    cleaned = true;
+    cleanup();
+  };
+  const body = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (done) {
+          finish();
+          controller.close();
+        } else {
+          controller.enqueue(value);
+        }
+      } catch (error) {
+        finish();
+        if (timeoutSignal.aborted && !requestSignal?.aborted) {
+          const message = `後端 API 回應逾時（${Math.round(timeoutMs / 1000)} 秒）：${clientRequestPath(path)}`;
+          reportClientError({
+            scope: "api.timeout",
+            message,
+            diagnostics: {
+              failure_kind: "timeout",
+              request_method: method,
+              request_path: clientRequestPath(path),
+              request_attempts: attempts,
+              request_timeout_ms: timeoutMs,
+              ...evidence(),
+              request_phase: "body",
+              response_request_id: response.headers.get("X-Request-ID")?.slice(0, 100),
+              error_name: transportErrorName(error),
+            },
+          });
+          controller.error(new NetworkRequestError(message));
+        } else {
+          controller.error(error);
+        }
+      }
+    },
+    async cancel(reason) {
+      try {
+        await reader.cancel(reason);
+      } finally {
+        finish();
+      }
+    },
+  });
+
+  return new Response(body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+}
+
+export function isRequestAborted(error: unknown, signal?: AbortSignal | null): boolean {
+  if (signal?.aborted) return true;
+  return typeof error === "object"
+    && error !== null
+    && "name" in error
+    && error.name === "AbortError";
+}
+
+function waitForRetry(delayMs: number, signal?: AbortSignal | null): Promise<void> {
+  if (!signal) return new Promise((resolve) => setTimeout(resolve, delayMs));
+  if (signal.aborted) return Promise.reject(signal.reason);
+
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, delayMs);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal.reason);
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+export async function fetchWithRetry(
+  path: string,
+  init: HccaRequestInit,
+  trace: Record<string, string>,
+  maxRetries: number,
+): Promise<{ response: Response; attempts: number }> {
+  const method = (init.method ?? "GET").toUpperCase();
+  const timeoutMs = requestTimeoutMs(init);
+  const requestPath = clientRequestPath(path);
+  const startedAt = performance.now();
+  const onlineAtStart = typeof navigator === "undefined" ? undefined : navigator.onLine;
+  const visibilityAtStart = typeof document === "undefined" ? undefined : document.visibilityState;
+  const evidence = (): ClientErrorDiagnostics => ({
+    ...timeout.evidence(),
+    request_elapsed_ms: Math.min(86_400_000, Math.max(0, performance.now() - startedAt)),
+    online_at_start: onlineAtStart,
+    visibility_at_start: visibilityAtStart,
+    ...(/^[0-9a-f]{32}$/.test(trace["X-Trace-ID"] ?? "") ? { request_trace_id: trace["X-Trace-ID"] } : {}),
+  });
+  const timeout = createRequestTimeout(init.signal, timeoutMs);
+  let attempts = 0;
+  let timeoutTransferredToBody = false;
+  try {
+    while (true) {
+      try {
+        const response = await fetch(
+          `${API_BASE}${path}`,
+          requestInitWithTrace({ ...init, signal: timeout.signal }, trace),
+        );
+        const timedResponse = responseWithBodyTimeout(
+          response,
+          timeout.signal,
+          init.signal,
+          path,
+          method,
+          attempts + 1,
+          timeoutMs,
+          timeout.cleanup,
+          evidence,
+        );
+        timeoutTransferredToBody = Boolean(response.body);
+        return { response: timedResponse, attempts };
+      } catch (error) {
+        // 元件卸載或路由切換造成的取消不是網路故障；不要重試、開熔斷或回報錯誤。
+        if (init.signal?.aborted) throw error;
+        if (timeout.signal.aborted) {
+          const message = `後端 API 回應逾時（${Math.round(timeoutMs / 1000)} 秒）：${requestPath}`;
+          reportClientError({
+            scope: "api.timeout",
+            message,
+            diagnostics: {
+              failure_kind: "timeout",
+              request_method: method,
+              request_path: requestPath,
+              request_attempts: attempts + 1,
+              request_timeout_ms: timeoutMs,
+              ...evidence(),
+              request_phase: "headers",
+              error_name: transportErrorName(error),
+            },
+          });
+          throw new NetworkRequestError(message);
+        }
+        if (isRequestAborted(error, init.signal)) throw error;
+        if (attempts >= maxRetries) {
+          const failureName = transportErrorName(error);
+          const message = `${failureName}: API request failed`;
+          reportClientError({
+            scope: "api.network",
+            message,
+            stack: error instanceof Error ? error.stack : undefined,
+            diagnostics: {
+              failure_kind: "network",
+              request_method: method,
+              request_path: requestPath,
+              request_attempts: attempts + 1,
+              request_timeout_ms: timeoutMs,
+              ...evidence(),
+              request_phase: "headers",
+              error_name: failureName.slice(0, 100),
+            },
+          });
+          throw new NetworkRequestError(`無法連線至後端 API：${API_BASE}`);
+        }
+        await waitForRetry([400, 900][attempts] ?? 1500, timeout.signal);
+        attempts += 1;
+      }
+    }
+  } finally {
+    if (!timeoutTransferredToBody) timeout.cleanup();
+  }
+}
+
+/** 供下載、上傳等需要讀取原始 Response 的呼叫沿用同一套身分標頭。 */
+export function authFetch(input: RequestInfo | URL, init: HccaRequestInit = {}): Promise<Response> {
+  const headers = new Headers(
+    typeof Request !== "undefined" && input instanceof Request ? input.headers : undefined,
+  );
+  new Headers(init.headers).forEach((value, key) => headers.set(key, value));
+  return fetch(input, { credentials: "include", ...init, headers });
+}
+
+export type UploadProgressHandler = (progress: number) => void;
+
+/**
+ * Upload a multipart request through XHR so callers can render byte-level progress.
+ * Falls back to the shared fetch wrapper when progress reporting is not requested.
+ */
+export function uploadWithProgress(
+  input: RequestInfo | URL,
+  init: HccaRequestInit,
+  onProgress?: UploadProgressHandler,
+): Promise<Response> {
+  if (!onProgress || typeof XMLHttpRequest === "undefined") return authFetch(input, init);
+
+  const headers = new Headers(
+    typeof Request !== "undefined" && input instanceof Request ? input.headers : undefined,
+  );
+  new Headers(init.headers).forEach((value, key) => headers.set(key, value));
+
+  const url = input instanceof URL ? input.toString() : input.toString();
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(init.method ?? "POST", url, true);
+    xhr.withCredentials = init.credentials === "omit" ? false : true;
+    headers.forEach((value, key) => xhr.setRequestHeader(key, value));
+    xhr.upload.addEventListener("progress", (event) => {
+      if (event.lengthComputable) onProgress(event.loaded / event.total);
+    });
+    xhr.onload = () => {
+      const responseHeaders = new Headers();
+      xhr.getAllResponseHeaders().trim().split(/[\r\n]+/).forEach((line) => {
+        const separator = line.indexOf(":");
+        if (separator > 0) responseHeaders.set(line.slice(0, separator), line.slice(separator + 1).trim());
+      });
+      const responseBody = NULL_BODY_STATUS_CODES.has(xhr.status) ? null : xhr.responseText;
+      resolve(new Response(responseBody, {
+        status: xhr.status,
+        statusText: xhr.statusText,
+        headers: responseHeaders,
+      }));
+    };
+    xhr.onerror = () => reject(new NetworkRequestError(`無法連線至 API：${url}`));
+    xhr.onabort = () => reject(new NetworkRequestError("上傳已取消"));
+    xhr.send(init.body as XMLHttpRequestBodyInit | null);
+  });
+}

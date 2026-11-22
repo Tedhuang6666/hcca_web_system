@@ -1,0 +1,32 @@
+.frame {
+  position: absolute;
+  inset: 0;
+  background: var(--public-soft);
+}
+
+.placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  color: var(--public-secondary);
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.image {
+  object-fit: cover;
+  opacity: 0;
+}
+
+.frame[data-state="ready"] .image {
+  opacity: 1;
+}
+
+.frame[data-state="ready"] .placeholder {
+  visibility: hidden;
+}

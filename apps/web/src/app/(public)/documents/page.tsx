@@ -1,0 +1,15 @@
+import DocumentListClient from "./DocumentSearch";
+import { pageMetadata } from "@/lib/seo";
+import { fetchPublicDocuments } from "@/lib/serverFetch";
+
+export const metadata = pageMetadata({
+  title: "公開公文",
+  description: "依字號、標題與主旨查詢竹嶺班聯數位整合平台公開公文。",
+  path: "/documents",
+  type: "website",
+});
+
+export default async function DocumentListPage() {
+  const initialDocs = await fetchPublicDocuments({ limit: 20, offset: 0 });
+  return <DocumentListClient initialDocs={initialDocs} />;
+}

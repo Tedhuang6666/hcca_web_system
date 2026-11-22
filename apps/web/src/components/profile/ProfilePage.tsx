@@ -1,0 +1,673 @@
+"use client";
+import { useState, useEffect } from "react";
+import Image from "next/image";
+import { usePathname } from "next/navigation";
+import { toast } from "sonner";
+import { usersApi, classApi, apiErrorMessage } from "@/lib/api";
+import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
+import { SectionSkeleton } from "@/components/ui/Skeleton";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
+import Toggle from "@/components/ui/Toggle";
+import SessionManagement from "@/components/profile/SessionManagement";
+import { usePermissions } from "@/hooks/usePermissions";
+import type {
+  UserRead,
+  UserPositionRead,
+  SchoolClassListItem,
+} from "@/lib/types";
+
+const POSITION_CATEGORY_LABEL = {
+  council: "自治職位",
+  class: "班級職位",
+  system: "系統職位",
+} as const;
+
+const PERMISSION_LABELS: Record<string, string> = {
+  "merchandise_submission:view": "查看校商投稿",
+  "merchandise_submission:manage": "管理校商投稿",
+  "merchandise_submission:review": "審核校商投稿",
+};
+
+type ProfileTab = "account" | "positions" | "permissions";
+
+const PROFILE_TABS: { key: ProfileTab; label: string }[] = [
+  { key: "account", label: "帳號" },
+  { key: "positions", label: "職位" },
+  { key: "permissions", label: "權限" },
+];
+
+/* ─── Inline edit field ─────────────────────────────────────────────────────── */
+function EditableField({
+  label,
+  value,
+  placeholder,
+  maxLength,
+  onSave,
+}: {
+  label: string;
+  value: string;
+  placeholder?: string;
+  maxLength?: number;
+  onSave: (v: string) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const [saving, setSaving] = useState(false);
+
+  // sync when value changes from outside
+  useEffect(() => { if (!editing) setDraft(value); }, [value, editing]);
+
+  async function handleSave() {
+    if (draft === value) { setEditing(false); return; }
+    setSaving(true);
+    try {
+      await onSave(draft);
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div>
+      <p className="text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>{label}</p>
+      {editing ? (
+        <div className="flex items-center gap-2">
+          <input
+            className="input flex-1"
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            maxLength={maxLength}
+            onKeyDown={e => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") setEditing(false); }}
+            autoFocus
+          />
+          <button type="button" onClick={handleSave} disabled={saving} className="btn btn-primary">
+            {saving ? "儲存中…" : "儲存"}
+          </button>
+          <button type="button" onClick={() => setEditing(false)} className="btn btn-ghost">
+            取消
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 group">
+          <p className="text-sm flex-1" style={{ color: value ? "var(--text-primary)" : "var(--text-disabled)" }}>
+            {value || placeholder || "—"}
+          </p>
+          <button
+            type="button"
+            onClick={() => { setDraft(value); setEditing(true); }}
+            className="btn btn-ghost"
+            aria-label={`編輯${label}`}>
+            編輯
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+const PROFILE_ME_KEY = "profile/me";
+const PROFILE_POSITIONS_KEY = "profile/positions";
+const PROFILE_EMAILS_KEY = "profile/emails";
+const PROFILE_CLASS_KEY = "profile/class";
+
+export default function ProfilePage() {
+  const confirm = useConfirm();
+  const pathname = usePathname();
+  const { permissions: authPermissions, isAdmin, isOwner } = usePermissions();
+  const [activeTab, setActiveTab] = useState<ProfileTab>("account");
+  const [user, setUser] = useState<UserRead | null>(() => cacheGet<UserRead>(PROFILE_ME_KEY) ?? null);
+  const [positions, setPositions] = useState<UserPositionRead[]>(() => cacheGet<UserPositionRead[]>(PROFILE_POSITIONS_KEY) ?? []);
+  const [myClass, setMyClass] = useState<SchoolClassListItem | null>(() => cacheGet<SchoolClassListItem>(PROFILE_CLASS_KEY) ?? null);
+  const [linkedEmails, setLinkedEmails] = useState<string[]>(() => cacheGet<string[]>(PROFILE_EMAILS_KEY) ?? []);
+  const [newEmail, setNewEmail] = useState("");
+  const [emailCode, setEmailCode] = useState("");
+  const [emailVerificationPending, setEmailVerificationPending] = useState(false);
+  const [emailBusy, setEmailBusy] = useState(false);
+  const [loading, setLoading] = useState(!cacheHas(PROFILE_ME_KEY));
+  const [loadError, setLoadError] = useState("");
+
+  useEffect(() => {
+    if (!cacheHas(PROFILE_ME_KEY)) setLoading(true);
+    setLoadError("");
+    Promise.all([
+      usersApi.me().catch((e) => {
+        setLoadError(apiErrorMessage(e, "無法載入個人資料"));
+        return null;
+      }),
+      usersApi.myPositions(false).catch(() => []),
+      usersApi.myEmails().catch(() => ({ emails: [], primary_email: null })),
+    ]).then(([u, pos, emailResult]) => {
+      if (u) { setUser(u); cacheSet(PROFILE_ME_KEY, u); }
+      const posArr = pos as UserPositionRead[];
+      setPositions(posArr);
+      cacheSet(PROFILE_POSITIONS_KEY, posArr);
+      setLinkedEmails(emailResult.emails);
+      cacheSet(PROFILE_EMAILS_KEY, emailResult.emails);
+      if (u && emailResult.primary_email && emailResult.primary_email !== u.email) {
+        const normalizedUser = { ...u, email: emailResult.primary_email };
+        setUser(normalizedUser);
+        cacheSet(PROFILE_ME_KEY, normalizedUser);
+      }
+    }).finally(() => setLoading(false));
+
+    classApi.myClass().then((cls) => { setMyClass(cls); cacheSet(PROFILE_CLASS_KEY, cls); }).catch(() => setMyClass(null));
+  }, []);
+
+  async function saveDisplayName(v: string) {
+    if (!v.trim()) { toast.error("名稱不可為空"); return; }
+    try {
+      const updated = await usersApi.updateMe({ display_name: v.trim() });
+      setUser(updated);
+      localStorage.setItem("user_name", updated.display_name);
+      toast.success("顯示名稱已更新");
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "更新失敗"));
+      throw e;
+    }
+  }
+
+  async function saveStudentId(v: string) {
+    try {
+      const updated = await usersApi.updateMe({ student_id: v.trim() || undefined });
+      setUser(updated);
+      toast.success("學號已更新");
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "更新失敗"));
+      throw e;
+    }
+  }
+
+  async function toggleShowEmail() {
+    if (!user) return;
+    try {
+      const updated = await usersApi.updateMe({ show_email: !user.show_email });
+      setUser(updated);
+    } catch { /* ignore */ }
+  }
+
+  async function requestEmailVerification() {
+    if (!newEmail.trim()) {
+      toast.error("請輸入要連結的 Email");
+      return;
+    }
+    setEmailBusy(true);
+    try {
+      await usersApi.requestEmailVerification(newEmail.trim());
+      setEmailVerificationPending(true);
+      toast.success("驗證碼已寄出，10 分鐘內有效");
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "寄送驗證碼失敗"));
+    } finally {
+      setEmailBusy(false);
+    }
+  }
+
+  async function verifyEmail() {
+    if (!/^\d{6}$/.test(emailCode)) {
+      toast.error("請輸入 6 位數驗證碼");
+      return;
+    }
+    setEmailBusy(true);
+    try {
+      const result = await usersApi.verifyEmail(newEmail.trim(), emailCode);
+      setLinkedEmails(result.emails);
+      if (user && result.primary_email && result.primary_email !== user.email) {
+        const updated = { ...user, email: result.primary_email };
+        setUser(updated);
+        cacheSet(PROFILE_ME_KEY, updated);
+      }
+      setNewEmail("");
+      setEmailCode("");
+      setEmailVerificationPending(false);
+      toast.success("登入 Email 已連結");
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "驗證失敗"));
+    } finally {
+      setEmailBusy(false);
+    }
+  }
+
+  async function setPrimaryEmail(email: string) {
+    setEmailBusy(true);
+    try {
+      const result = await usersApi.setPrimaryEmail(email);
+      setLinkedEmails(result.emails);
+      if (user && result.primary_email) {
+        const updated = { ...user, email: result.primary_email };
+        setUser(updated);
+        cacheSet(PROFILE_ME_KEY, updated);
+      }
+      toast.success("主要登入 Email 已更新");
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "更新主要 Email 失敗"));
+    } finally {
+      setEmailBusy(false);
+    }
+  }
+
+  async function unlinkEmail(email: string) {
+    if (!(await confirm({
+      title: "解除登入 Email 連結？",
+      description: `${email} 將不能再用於登入此帳號。`,
+      confirmLabel: "解除連結",
+      danger: true,
+    }))) return;
+    setEmailBusy(true);
+    try {
+      const result = await usersApi.unlinkEmail(email);
+      setLinkedEmails(result.emails);
+      toast.success("Email 連結已解除");
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "解除 Email 失敗"));
+    } finally {
+      setEmailBusy(false);
+    }
+  }
+
+  const initials = user?.display_name?.charAt(0)?.toUpperCase() ?? "?";
+
+  const today = new Date().toISOString().slice(0, 10);
+  const activePositions = positions.filter(
+    p => p.start_date <= today && (!p.end_date || p.end_date >= today)
+  );
+  const activeCouncilPositions = activePositions.filter((p) => p.position_category === "council");
+  const activeClassPositions = activePositions.filter((p) => p.position_category === "class");
+  const activeSystemPositions = activePositions.filter((p) => p.position_category === "system");
+  const pastPositions = positions.filter(
+    p => p.end_date && p.end_date < today
+  );
+  const permissionCodes = Array.from(authPermissions).sort();
+  const hasFullSystemAccess = isAdmin || authPermissions.has("admin:all");
+
+  if (loading) {
+    return (
+      <div className="space-y-5 max-w-2xl mx-auto">
+        <div>
+          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
+            {pathname === "/settings/account" ? "帳號與個人資料" : "個人資料"}
+          </h1>
+        </div>
+        <div
+          className="flex gap-1 rounded-lg border p-1"
+          style={{ borderColor: "var(--border)", background: "var(--bg-surface)" }}
+          aria-hidden="true">
+          {PROFILE_TABS.map((tab) => (
+            <span
+              key={tab.key}
+              className="flex-1 rounded-md px-3 py-2 text-center text-xs font-medium"
+              style={{
+                background: tab.key === "account" ? "var(--primary-dim)" : "transparent",
+                color: tab.key === "account" ? "var(--primary-text)" : "var(--text-muted)",
+              }}>
+              {tab.label}
+            </span>
+          ))}
+        </div>
+        <SectionSkeleton lines={6} />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="space-y-5 max-w-2xl mx-auto">
+        <div>
+          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
+            {pathname === "/settings/account" ? "帳號與個人資料" : "個人資料"}
+          </h1>
+        </div>
+        <section className="card p-6 text-center">
+          <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+            個人資料載入失敗
+          </p>
+          <p className="mt-2 text-sm" style={{ color: "var(--text-muted)" }}>
+            {loadError || "目前無法取得帳號資料，請稍後再試。"}
+          </p>
+          <button className="btn btn-primary mt-4" onClick={() => window.location.reload()}>
+            重新載入
+          </button>
+        </section>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 max-w-2xl mx-auto">
+      {/* 頁首 */}
+      <div>
+        <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
+          {pathname === "/settings/account" ? "帳號與個人資料" : "個人資料"}
+        </h1>
+      </div>
+
+      <div
+        className="flex gap-1 rounded-lg border p-1"
+        style={{ borderColor: "var(--border)", background: "var(--bg-surface)" }}
+        role="tablist"
+        aria-label="個人資料頁籤">
+        {PROFILE_TABS.map((tab) => {
+          const active = activeTab === tab.key;
+          return (
+            <button
+              key={tab.key}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setActiveTab(tab.key)}
+              className="flex-1 rounded-md px-3 py-2 text-xs font-medium transition-colors"
+              style={{
+                background: active ? "var(--primary-dim)" : "transparent",
+                color: active ? "var(--primary-text)" : "var(--text-muted)",
+              }}>
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 帳號資訊卡片 */}
+      {activeTab === "account" && <section className="card p-6 space-y-5" aria-labelledby="profile-heading">
+        <div className="flex items-center gap-4">
+          {/* 頭像 */}
+          {user?.avatar_url ? (
+            <Image src={user.avatar_url} alt={user.display_name}
+              width={56} height={56} unoptimized
+              className="w-14 h-14 rounded-full object-cover flex-shrink-0" />
+          ) : (
+            <div
+              className="w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold flex-shrink-0"
+              style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}
+              aria-hidden="true">
+              {initials}
+            </div>
+          )}
+          <div className="min-w-0">
+            <h2 id="profile-heading" className="text-base font-semibold truncate"
+              style={{ color: "var(--text-primary)" }}>
+              {user?.display_name ?? "—"}
+            </h2>
+            <p className="text-sm truncate" style={{ color: "var(--text-muted)" }}>
+              {user?.email ?? "—"}
+            </p>
+            {user?.is_superuser && (
+              <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded font-medium"
+                style={{ background: "var(--warning-dim)", color: "var(--warning)" }}>
+                管理員
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div style={{ borderTop: "1px solid var(--border)", paddingTop: "1.25rem" }}
+          className="space-y-4">
+          <EditableField
+            label="顯示名稱"
+            value={user?.display_name ?? ""}
+            placeholder="請輸入顯示名稱"
+            maxLength={100}
+            onSave={saveDisplayName}
+          />
+          <EditableField
+            label="學號"
+            value={user?.student_id ?? ""}
+            placeholder="尚未設定"
+            maxLength={20}
+            onSave={saveStudentId}
+          />
+          <div>
+            <p className="text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>目前班級</p>
+            <p className="text-sm" style={{ color: "var(--text-primary)" }}>
+              {myClass
+                ? (myClass.label ?? `${myClass.academic_year} 學年度 ${myClass.class_code} 班`)
+                : "尚未歸班"}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>電子郵件</p>
+            <div className="space-y-1">
+              {(linkedEmails.length > 0 ? linkedEmails : [user?.email ?? "—"]).map((email) => (
+                <div key={email} className="flex items-center gap-2">
+                  <p className="min-w-0 flex-1 break-all text-sm" style={{ color: "var(--text-primary)" }}>
+                    {email}
+                    {email === user?.email && (
+                      <span className="ml-2 text-xs" style={{ color: "var(--text-muted)" }}>
+                        主要
+                      </span>
+                    )}
+                  </p>
+                  {email !== user?.email && email !== "—" && (
+                    <>
+                      <button
+                        type="button"
+                        className="btn btn-ghost shrink-0 px-2 py-1 text-xs"
+                        onClick={() => void setPrimaryEmail(email)}
+                        disabled={emailBusy}
+                      >
+                        設為主要
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost shrink-0 px-2 py-1 text-xs"
+                        onClick={() => void unlinkEmail(email)}
+                        disabled={emailBusy}
+                      >
+                        解除
+                      </button>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 space-y-2">
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="email"
+                  value={newEmail}
+                  onChange={(event) => {
+                    setNewEmail(event.target.value);
+                    setEmailVerificationPending(false);
+                    setEmailCode("");
+                  }}
+                  placeholder="新增私人或其他校務 Email"
+                  className="input flex-1"
+                />
+                <button
+                  onClick={requestEmailVerification}
+                  disabled={emailBusy || !newEmail.trim()}
+                  className="btn btn-primary text-xs"
+                >
+                  寄送驗證碼
+                </button>
+              </div>
+              {emailVerificationPending && (
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    inputMode="numeric"
+                    value={emailCode}
+                    onChange={(event) => setEmailCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="6 位數驗證碼"
+                    className="input flex-1 font-mono"
+                  />
+                  <button
+                    onClick={verifyEmail}
+                    disabled={emailBusy || emailCode.length !== 6}
+                    className="btn btn-primary text-xs"
+                  >
+                    驗證並連結
+                  </button>
+                </div>
+              )}
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                若此 Email 已屬於其他帳號，驗證後兩個帳號會合併。
+              </p>
+            </div>
+          </div>
+
+          {/* 公文承辦人顯示設定 */}
+          <div style={{ borderTop: "1px solid var(--border)", paddingTop: "1rem" }}>
+            <p className="text-xs font-semibold mb-2" style={{ color: "var(--text-muted)" }}>
+              公文承辦人資訊顯示設定
+            </p>
+            <div className="space-y-2">
+              {[
+                {
+                  label: "在公文上顯示電子郵件",
+                  checked: user?.show_email ?? true,
+                  onToggle: toggleShowEmail,
+                },
+              ].map(({ label, checked, onToggle }) => (
+                <Toggle key={label} checked={checked} onChange={onToggle} label={label} />
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>帳號狀態</p>
+            <div className="flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full`}
+                style={{ background: user?.is_active ? "var(--success)" : "var(--danger)" }}
+                aria-hidden="true" />
+              <span className="text-sm" style={{ color: "var(--text-primary)" }}>
+                {user?.is_active ? "正常" : "已停用"}
+              </span>
+              {user?.is_verified && (
+                <span className="text-xs px-1.5 py-0.5 rounded"
+                  style={{ background: "var(--success-dim)", color: "var(--success)" }}>
+                  已驗證
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>}
+
+      {activeTab === "account" && <SessionManagement />}
+
+      {/* 現職職位 */}
+      {activeTab === "positions" && <section className="card overflow-hidden" aria-labelledby="positions-heading">
+        <div className="px-5 py-4" style={{ borderBottom: "1px solid var(--border)" }}>
+          <h2 id="positions-heading" className="text-sm font-semibold"
+            style={{ color: "var(--text-primary)" }}>
+            現職職位
+            {activePositions.length > 0 && (
+              <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full"
+                style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
+                {activePositions.length}
+              </span>
+            )}
+          </h2>
+        </div>
+        {activePositions.length === 0 ? (
+          <p className="px-5 py-8 text-sm text-center" style={{ color: "var(--text-muted)" }}>
+            目前無在任職位
+          </p>
+        ) : (
+          <div>
+            {[
+              ["自治職位", activeCouncilPositions],
+              ["班級職位", activeClassPositions],
+              ["系統職位", activeSystemPositions],
+            ].filter(([, list]) => (list as UserPositionRead[]).length > 0).map(([label, list]) => (
+              <div key={label as string}>
+                <p className="px-5 pt-4 pb-2 text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
+                  {label as string}
+                </p>
+                <ul aria-label={`${label as string}列表`}>
+                  {(list as UserPositionRead[]).map((p, idx) => (
+                    <li key={p.id}
+                      className="px-5 py-3.5 flex items-center justify-between gap-3"
+                      style={idx < (list as UserPositionRead[]).length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}>
+                      <div>
+                        <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+                          {p.position_name || p.position_id.slice(0, 8) + "…"}
+                        </p>
+                        {p.position_org_name && (
+                          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                            {p.position_org_name}
+                          </p>
+                        )}
+                        <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+                          自 {p.start_date}{p.end_date ? ` 至 ${p.end_date}` : " 起（無限期）"}
+                        </p>
+                      </div>
+                      <span className="badge" style={{ color: "var(--success)", background: "var(--success-dim)", borderColor: "var(--success)" }}>
+                        在任中
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>}
+
+      {/* 有效權限 */}
+      {activeTab === "permissions" && (hasFullSystemAccess || permissionCodes.length > 0) && (
+        <section className="card p-5" aria-labelledby="perms-heading">
+          <h2 id="perms-heading" className="text-sm font-semibold mb-3"
+            style={{ color: "var(--text-primary)" }}>
+            有效權限
+          </h2>
+          {isAdmin && (
+            <div className="mb-3 rounded-md px-3 py-2 text-xs"
+              style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
+              {isOwner ? "系統擁有者" : "超級管理員"}：擁有全部系統權限
+            </div>
+          )}
+          <div className="flex flex-wrap gap-1.5">
+            {permissionCodes.map(code => (
+              <span key={code} className="text-xs px-2 py-1 rounded font-mono"
+                style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
+                {PERMISSION_LABELS[code] ?? code}
+              </span>
+            ))}
+          </div>
+        </section>
+      )}
+      {activeTab === "permissions" && !hasFullSystemAccess && permissionCodes.length === 0 && (
+        <section className="card p-6 text-center">
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+            目前沒有可顯示的有效權限。
+          </p>
+        </section>
+      )}
+
+      {/* 歷史職位（折疊） */}
+      {activeTab === "positions" && pastPositions.length > 0 && (
+        <section className="card overflow-hidden" aria-labelledby="past-positions-heading">
+          <div className="px-5 py-4" style={{ borderBottom: "1px solid var(--border)" }}>
+            <h2 id="past-positions-heading" className="text-sm font-semibold"
+              style={{ color: "var(--text-muted)" }}>
+              歷史職位（{pastPositions.length} 筆）
+            </h2>
+          </div>
+          <ul aria-label="歷史職位列表">
+            {pastPositions.map((p, idx) => (
+              <li key={p.id}
+                className="px-5 py-3 flex items-center justify-between gap-3"
+                style={idx < pastPositions.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}>
+                <div>
+                  <p className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
+                    {p.position_name || p.position_id.slice(0, 8) + "…"}
+                  </p>
+                  {p.position_org_name && (
+                    <p className="text-xs" style={{ color: "var(--text-muted)" }}>{p.position_org_name}</p>
+                  )}
+                  <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+                    {POSITION_CATEGORY_LABEL[p.position_category]} · {p.start_date} 至 {p.end_date}
+                  </p>
+                </div>
+                <span className="badge" style={{ color: "var(--text-muted)", background: "var(--bg-elevated)", borderColor: "var(--border)" }}>
+                  已卸任
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </div>
+  );
+}

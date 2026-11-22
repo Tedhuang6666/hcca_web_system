@@ -5,13 +5,15 @@ from __future__ import annotations
 import uuid
 from datetime import date
 
-from sqlalchemy import select, text
+from sqlalchemy import exists, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import aliased, selectinload
 
+from api.core.clock import local_today
 from api.models.document import Document
 from api.models.org import Org, Permission, Position, UserPosition
 from api.models.regulation import Regulation
+from api.models.school_class import SchoolClass
 from api.schemas.org import (
     OrgCreate,
     OrgTree,
@@ -19,17 +21,24 @@ from api.schemas.org import (
     PermissionCreate,
     PositionCreate,
     PositionUpdate,
-    UserPositionCreate,
-    UserPositionUpdate,
 )
 
 # ── Org ──────────────────────────────────────────────────────────────────────
 
 
-async def get_orgs(db: AsyncSession, active_only: bool = False) -> list[Org]:
+async def get_orgs(
+    db: AsyncSession,
+    active_only: bool = False,
+    exclude_class_orgs: bool = False,
+    org_ids: list[uuid.UUID] | None = None,
+) -> list[Org]:
     query = select(Org).order_by(Org.name)
     if active_only:
         query = query.where(Org.is_active.is_(True))
+    if org_ids is not None:
+        query = query.where(Org.id.in_(org_ids))
+    if exclude_class_orgs:
+        query = query.where(~exists().where(SchoolClass.org_id == Org.id))
     result = await db.execute(query)
     return list(result.scalars().all())
 
@@ -39,6 +48,21 @@ async def get_org(db: AsyncSession, org_id: uuid.UUID) -> Org | None:
         select(Org).where(Org.id == org_id).options(selectinload(Org.children))
     )
     return result.scalar_one_or_none()
+
+
+async def get_org_descendant_ids(db: AsyncSession, org_id: uuid.UUID) -> list[uuid.UUID]:
+    """Return an organization and all descendants using one recursive query."""
+    descendants = (
+        select(Org.id.label("org_id"))
+        .where(Org.id == org_id)
+        .cte("org_descendants", recursive=True)
+    )
+    child_org = aliased(Org)
+    descendants = descendants.union_all(
+        select(child_org.id).join(descendants, child_org.parent_id == descendants.c.org_id)
+    )
+    result = await db.scalars(select(descendants.c.org_id))
+    return list(result.all())
 
 
 async def _org_exists(db: AsyncSession, org_id: uuid.UUID) -> bool:
@@ -52,7 +76,7 @@ async def _user_has_active_position_in_org(
     user_id: uuid.UUID,
     org_id: uuid.UUID,
 ) -> bool:
-    today = date.today()
+    today = local_today()
     result = await db.execute(
         select(UserPosition.id)
         .join(Position, UserPosition.position_id == Position.id)
@@ -148,12 +172,18 @@ async def delete_org(db: AsyncSession, org: Org) -> None:
 
 
 def build_org_tree(orgs: list[Org], parent_id: uuid.UUID | None = None) -> list[OrgTree]:
-    """從扁平清單遞迴建構樹狀結構。O(n²) 複雜度：每層遍歷所有節點。"""
-    return [
-        OrgTree.model_validate(org).model_copy(update={"children": build_org_tree(orgs, org.id)})
-        for org in orgs
-        if org.parent_id == parent_id
-    ]
+    """從扁平清單建構樹狀結構。O(n) adjacency map 一次 pass。"""
+    children_map: dict[uuid.UUID | None, list[Org]] = {}
+    for org in orgs:
+        children_map.setdefault(org.parent_id, []).append(org)
+
+    def _recurse(pid: uuid.UUID | None) -> list[OrgTree]:
+        return [
+            OrgTree.model_validate(o).model_copy(update={"children": _recurse(o.id)})
+            for o in children_map.get(pid, [])
+        ]
+
+    return _recurse(parent_id)
 
 
 # ── Position ─────────────────────────────────────────────────────────────────
@@ -218,6 +248,14 @@ async def update_position(db: AsyncSession, position: Position, data: PositionUp
 
 
 async def delete_position(db: AsyncSession, position: Position) -> None:
+    holders = list(
+        (
+            await db.scalars(select(UserPosition).where(UserPosition.position_id == position.id))
+        ).all()
+    )
+    for holder in holders:
+        await db.delete(holder)
+    await db.flush()
     await db.delete(position)
     await db.flush()
 
@@ -253,29 +291,11 @@ async def get_user_positions(db: AsyncSession, user_id: uuid.UUID) -> list[UserP
     return list(result.scalars().all())
 
 
-async def create_user_position(db: AsyncSession, data: UserPositionCreate) -> UserPosition:
-    up = UserPosition(**data.model_dump())
-    db.add(up)
-    await db.flush()
-    await db.refresh(up)
-    return up
-
-
-async def update_user_position(
-    db: AsyncSession, up: UserPosition, data: UserPositionUpdate
-) -> UserPosition:
-    if data.end_date is not None:
-        up.end_date = data.end_date
-    await db.flush()
-    await db.refresh(up)
-    return up
-
-
 async def get_active_positions_by_date(
     db: AsyncSession, user_id: uuid.UUID, on_date: date | None = None
 ) -> list[UserPosition]:
     """取得指定日期（預設今天）仍在任的職位記錄"""
-    check_date = on_date or date.today()
+    check_date = on_date or local_today()
     result = await db.execute(
         select(UserPosition)
         .where(

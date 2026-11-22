@@ -1,0 +1,253 @@
+import { render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import OrderDetailPage from "@/app/(public)/shop/orders/[id]/page";
+import type { OrderOut } from "@/lib/types";
+
+const api = vi.hoisted(() => ({
+  me: vi.fn(),
+  getOrder: vi.fn(),
+  listOrders: vi.fn(),
+  listDelegatedOrders: vi.fn(),
+  getCurrentRegistrations: vi.fn(),
+  catalog: vi.fn(),
+  getCloseStatus: vi.fn(),
+  getProduct: vi.fn(),
+  previewCurrentPromotion: vi.fn(),
+  applyCurrentPromotion: vi.fn(),
+}));
+const navigation = vi.hoisted(() => ({ search: "" }));
+
+vi.mock("@/lib/api", () => ({
+  authApi: { me: api.me },
+  shopApi: {
+    getOrder: api.getOrder,
+    listOrders: api.listOrders,
+    listDelegatedOrders: api.listDelegatedOrders,
+    getCurrentRegistrations: api.getCurrentRegistrations,
+    catalog: api.catalog,
+    getCloseStatus: api.getCloseStatus,
+    getProduct: api.getProduct,
+    previewCurrentPromotion: api.previewCurrentPromotion,
+    applyCurrentPromotion: api.applyCurrentPromotion,
+  },
+  apiErrorMessage: (_error: unknown, fallback: string) => fallback,
+}));
+
+vi.mock("@/hooks/useWS", () => ({ useWS: vi.fn() }));
+vi.mock("next/navigation", () => ({
+  useParams: () => ({ id: "first" }),
+  useSearchParams: () => new URLSearchParams(navigation.search),
+}));
+
+const firstOrder = {
+  id: "first",
+  serial_number: "ORDER-001",
+  user_id: "student",
+  activity_id: "festival",
+  activity_name: "校慶",
+  category_id: "goods",
+  category_name: "紀念品",
+  status: "pending",
+  subtotal_price: 200,
+  discount_amount: 0,
+  total_price: 200,
+  promotion_id: null,
+  promotion_code: null,
+  applied_promotions: [],
+  payment_method: "cash_on_pickup",
+  notes: null,
+  class_id: "class",
+  class_label: "一年一班",
+  assistance_scope: "self",
+  assisted_by_id: null,
+  is_paid: false,
+  is_class_collected: true,
+  class_collected_at: null,
+  paid_at: null,
+  created_at: "2026-10-10T00:00:00Z",
+  updated_at: "2026-10-10T00:00:00Z",
+  items: [{ gift_quantity: 0, gift_discount_amount: 0,
+    id: "bag-first",
+    product_id: "bag",
+    product_name: "紀念袋",
+    quantity: 2,
+    unit_price: 100,
+    subtotal: 200,
+    selected_options: [],
+  }],
+} as OrderOut;
+
+const addedOrder: OrderOut = {
+  ...firstOrder,
+  id: "added",
+  serial_number: "ORDER-002",
+  total_price: 100,
+  subtotal_price: 100,
+  is_class_collected: false,
+  created_at: "2026-10-10T01:00:00Z",
+  items: [{ ...firstOrder.items[0], id: "bag-added", quantity: 1, subtotal: 100 }],
+};
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  navigation.search = "";
+  api.me.mockResolvedValue({ id: "student" });
+  api.getOrder.mockImplementation(async (id: string) => id === "added" ? addedOrder : firstOrder);
+  api.listOrders.mockResolvedValue([firstOrder, addedOrder]);
+  api.listDelegatedOrders.mockResolvedValue([]);
+  api.getCurrentRegistrations.mockResolvedValue([]);
+  api.getProduct.mockResolvedValue({ image_url: "/uploads/bag.png" });
+});
+
+describe("公開訂單詳情", () => {
+  it.each(["", "from=council", "from=class"])("keeps a single order's saved amount and discounts consistent for %s", async (search) => {
+    navigation.search = search;
+    const saved: OrderOut = {
+      ...firstOrder, serial_number: "ORD-2026-001505", is_class_collected: false,
+      subtotal_price: 2200, discount_amount: 100, total_price: 2100,
+      applied_promotions: [
+        { promotion_id: "sports", name: "運動套餐", code: null, discount_amount: 50 },
+        { promotion_id: "winter", name: "過冬套餐", code: null, discount_amount: 50 },
+      ],
+      items: [600, 300, 250, 300, 750].map((price, index) => ({
+        ...firstOrder.items[0], id: `item-${index}`, product_id: `product-${index}`,
+        quantity: 1, unit_price: price, subtotal: price,
+      })),
+    };
+    const unrelated: OrderOut = { ...addedOrder, subtotal_price: 3045, discount_amount: 113, total_price: 2932 };
+    api.getOrder.mockImplementation(async (id: string) => id === saved.id ? saved : unrelated);
+    api.listOrders.mockResolvedValue([saved, unrelated]);
+    api.getCurrentRegistrations.mockResolvedValue([saved, unrelated]);
+
+    const { container } = render(<OrderDetailPage />);
+
+    expect(await screen.findByText("訂單 ORD-2026-001505")).toBeVisible();
+    expect(screen.getByText("預購總額").parentElement).toHaveTextContent("NT$2,100");
+    expect(screen.getByText("目前尚待繳交").parentElement).toHaveTextContent("NT$2,100");
+    expect(screen.getByText("商品小計").parentElement).toHaveTextContent("NT$2,200");
+    expect(screen.getByText("應付總額").parentElement).toHaveTextContent("NT$2,100");
+    expect(screen.getByText("優惠折抵（運動套餐）").parentElement).toHaveTextContent("NT$50");
+    expect(screen.getByText("優惠折抵（過冬套餐）").parentElement).toHaveTextContent("NT$50");
+    expect(container.querySelectorAll(".shop-order-item")).toHaveLength(5);
+    expect(screen.queryByText("NT$5,032")).not.toBeInTheDocument();
+    expect(api.listOrders).not.toHaveBeenCalled();
+    expect(api.previewCurrentPromotion).not.toHaveBeenCalled();
+    expect(api.applyCurrentPromotion).not.toHaveBeenCalled();
+  });
+
+  it("allows direct editing of the pending addition when a collected order appears first", async () => {
+    navigation.search = "view=activity";
+    api.getCurrentRegistrations.mockResolvedValue([firstOrder, addedOrder]);
+    api.catalog.mockResolvedValue([{ id: "goods", products: [{ id: "bag", status: "active" }], series: [] }]);
+    api.getCloseStatus.mockResolvedValue({ statuses: { goods: { is_closed: false } } });
+    render(<OrderDetailPage />);
+    expect(await screen.findByText("尚未收款，可修改下方仍開放的商品。")).toBeVisible();
+    expect(screen.getAllByRole("spinbutton")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "修改尺寸／規格" })).toBeEnabled();
+  });
+
+  it("shows a gift as free and keeps it out of the paid preorder and editing flow", async () => {
+    const gift: OrderOut = { ...firstOrder, assistance_scope: "council_gift", total_price: 0,
+      subtotal_price: 0, is_class_collected: false, notes: "抽獎中獎",
+      items: [{ ...firstOrder.items[0], unit_price: 0, subtotal: 0 }] };
+    api.getOrder.mockResolvedValue(gift);
+    api.listOrders.mockResolvedValue([gift, addedOrder]);
+    api.getCurrentRegistrations.mockResolvedValue([addedOrder]);
+    render(<OrderDetailPage />);
+    expect(await screen.findByText("贈送，免付款")).toBeVisible();
+    expect(screen.getByText("抽獎中獎")).toBeVisible();
+    expect(screen.queryByText("待收款")).not.toBeInTheDocument();
+    expect(screen.queryByText(/尚未收款，可修改/)).not.toBeInTheDocument();
+    expect(screen.queryByText("NT$100")).not.toBeInTheDocument();
+  });
+
+  it("combines every preorder from the same activity into one detail view", async () => {
+    navigation.search = "view=activity";
+    const { container } = render(<OrderDetailPage />);
+
+    expect(await screen.findByRole("heading", { name: "校慶" })).toBeVisible();
+    expect(container.querySelector('img[alt=""]')).toHaveAttribute("src", expect.stringContaining("bag.png"));
+    expect(screen.getByText("活動預購總額").parentElement).toHaveTextContent("NT$300");
+    expect(screen.getAllByText("NT$300").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText(/×\s*3/)).toBeVisible();
+    expect(screen.getByText("已繳金額")).toBeVisible();
+    expect(screen.getByText("NT$200")).toBeVisible();
+    expect(screen.queryByText(/ORDER-/)).not.toBeInTheDocument();
+    expect(api.getOrder).toHaveBeenCalledWith("added");
+  });
+
+  it("reloads a single saved order when leaving the activity summary", async () => {
+    navigation.search = "view=activity";
+    const { rerender } = render(<OrderDetailPage />);
+    expect(await screen.findByText("活動預購總額")).toHaveTextContent("活動預購總額");
+
+    navigation.search = "";
+    rerender(<OrderDetailPage />);
+
+    expect(await screen.findByText("訂單 ORDER-001")).toBeVisible();
+    expect(screen.getByText("預購總額").parentElement).toHaveTextContent("NT$200");
+    expect(screen.queryByText("NT$300")).not.toBeInTheDocument();
+  });
+
+  it("uses the first product media image when the primary image is empty", async () => {
+    api.getProduct.mockResolvedValue({
+      image_url: "",
+      media: [{ image_url: "/uploads/bag-gallery.png" }],
+    });
+    const { container } = render(<OrderDetailPage />);
+
+    expect(await screen.findByRole("heading", { name: "校慶" })).toBeVisible();
+    expect(container.querySelector('img[alt=""]')).toHaveAttribute(
+      "src",
+      expect.stringContaining("bag-gallery.png"),
+    );
+  });
+
+  it("asks visitors to log in before requesting private order data", async () => {
+    api.me.mockResolvedValue(null);
+    render(<OrderDetailPage />);
+
+    expect(await screen.findByRole("heading", { name: "登入後查看預購" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "登入" }))
+      .toHaveAttribute("href", "/login?next=%2Fshop%2Forders%2Ffirst");
+    expect(api.getOrder).not.toHaveBeenCalled();
+  });
+
+  it("lets a parent edit only the line they added to the student's order", async () => {
+    const delegatedOrder: OrderOut = {
+      ...firstOrder,
+      is_class_collected: false,
+      items: [
+        firstOrder.items[0],
+        {
+          ...firstOrder.items[0], id: "mom-item", delegation_link_id: "mom-link",
+          delegation_name: "給媽媽代訂", ordered_by_id: "parent", ordered_by_name: "媽媽",
+        },
+        {
+          ...firstOrder.items[0], id: "dad-item", delegation_link_id: "dad-link",
+          delegation_name: "給爸爸代訂", ordered_by_id: "dad", ordered_by_name: "爸爸",
+        },
+      ],
+    };
+    api.me.mockResolvedValue({ id: "parent" });
+    api.getOrder.mockResolvedValue(delegatedOrder);
+    api.listDelegatedOrders.mockResolvedValue([{
+      order: { ...delegatedOrder, user_name: "學生" },
+      editable_item_ids: ["mom-item"],
+    }]);
+    api.catalog.mockResolvedValue([{
+      id: "goods",
+      products: [{ id: "bag", status: "active", sale_end: null }],
+      series: [],
+    }]);
+    api.getCloseStatus.mockResolvedValue({ statuses: { goods: { is_closed: false } } });
+
+    render(<OrderDetailPage />);
+
+    expect(await screen.findByText("只能修改你代訂的品項；學生本人與其他家人的品項僅供查看。"))
+      .toBeVisible();
+    expect(screen.getAllByRole("spinbutton")).toHaveLength(1);
+    expect(api.listDelegatedOrders).toHaveBeenCalledWith({ order_id: "first", limit: "1" });
+    expect(screen.queryByRole("link", { name: "修改紀念袋登記" })).not.toBeInTheDocument();
+  });
+});

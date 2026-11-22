@@ -20,6 +20,9 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.clock import local_today
+from api.core.spreadsheet import safe_mapping
+
 logger = logging.getLogger(__name__)
 
 
@@ -69,7 +72,7 @@ async def _r_pending_documents_top(session: AsyncSession) -> list[dict[str, Any]
             Document.created_at,
             Document.created_by,
         )
-        .where(Document.status.in_([DocumentStatus.UNDER_REVIEW, DocumentStatus.DRAFT]))
+        .where(Document.status.in_([DocumentStatus.PENDING, DocumentStatus.DRAFT]))
         .order_by(Document.created_at.asc())
         .limit(20)
     )
@@ -91,7 +94,7 @@ async def _r_expired_active_positions(session: AsyncSession) -> list[dict[str, A
     from api.models.org import Org, Position, UserPosition
     from api.models.user import User
 
-    today = datetime.now(UTC).date()
+    today = local_today()
     stmt = (
         select(
             UserPosition.id,
@@ -217,7 +220,7 @@ async def _r_inactive_users_no_positions(session: AsyncSession) -> list[dict[str
     from api.models.org import UserPosition
     from api.models.user import User
 
-    today = datetime.now(UTC).date()
+    today = local_today()
     # 找出 today 仍有效任期的 user_id
     active_user_ids = select(UserPosition.user_id).where(
         UserPosition.start_date <= today,
@@ -267,9 +270,12 @@ async def _r_superuser_list(session: AsyncSession) -> list[dict[str, Any]]:
 
 async def _r_orgs_position_summary(session: AsyncSession) -> list[dict[str, Any]]:
     """各組織職位數 / 現任人數摘要。"""
+    from sqlalchemy import text
+
     from api.models.org import Org, Position, UserPosition
 
-    today = datetime.now(UTC).date()
+    today = local_today()
+    await session.execute(text("SET LOCAL statement_timeout = '5s'"))
     stmt = (
         select(
             Org.id,
@@ -396,5 +402,7 @@ def to_csv(rows: list[dict[str, Any]]) -> bytes:
     writer = csv.DictWriter(buf, fieldnames=fieldnames)
     writer.writeheader()
     for r in rows:
-        writer.writerow({k: ("" if r.get(k) is None else r.get(k)) for k in fieldnames})
+        writer.writerow(
+            safe_mapping({k: ("" if r.get(k) is None else r.get(k)) for k in fieldnames})
+        )
     return buf.getvalue().encode("utf-8-sig")  # BOM 讓 Excel 正確開啟中文

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -131,8 +132,8 @@ def _mock_scalar_none_result() -> MagicMock:
 # ── 令格式驗證 ───────────────────────────────────────────────────────────────
 
 
-def test_decree_create_allows_empty_subject() -> None:
-    """令可直接以正文起稿，不需要主旨欄位。"""
+def test_decree_create_defaults_issuer_title() -> None:
+    """令可直接以正文起稿，並自動補上令前主詞。"""
     payload = _make_create_payload(
         category=DocumentCategory.DECREE,
         subject=None,
@@ -141,6 +142,18 @@ def test_decree_create_allows_empty_subject() -> None:
 
     assert payload.category == DocumentCategory.DECREE
     assert payload.subject is None
+    assert payload.issuer_full_name == "主席"
+
+
+def test_decree_create_allows_no_recipients() -> None:
+    """令沒有傳統受文者欄位時，建立請求仍應通過驗證。"""
+    payload = _make_create_payload(
+        category=DocumentCategory.DECREE,
+        subject=None,
+        doc_description="茲發布學生自治相關規定。",
+    )
+
+    assert payload.recipients == []
 
 
 def test_decree_template_allows_empty_subject() -> None:
@@ -155,6 +168,43 @@ def test_decree_template_allows_empty_subject() -> None:
 
     assert template.category == DocumentCategory.DECREE
     assert template.subject is None
+    assert template.issuer_full_name == "主席"
+
+
+def test_announcement_create_allows_empty_basis() -> None:
+    payload = _make_create_payload(category=DocumentCategory.ANNOUNCEMENT, basis=None)
+
+    assert payload.category == DocumentCategory.ANNOUNCEMENT
+    assert payload.basis is None
+
+
+def test_announcement_template_allows_empty_basis() -> None:
+    template = DocumentTemplateCreate(
+        org_id=uuid.uuid4(),
+        name="公告範本",
+        category=DocumentCategory.ANNOUNCEMENT,
+        subject="公告本會辦理學生自治事項，請查照。",
+        basis=None,
+    )
+
+    assert template.category == DocumentCategory.ANNOUNCEMENT
+    assert template.basis is None
+
+
+def test_decree_update_defaults_issuer_title() -> None:
+    payload = DocumentUpdate(category=DocumentCategory.DECREE)
+
+    assert payload.issuer_full_name == "主席"
+
+
+def test_meeting_notice_create_without_attendee_is_rejected() -> None:
+    with pytest.raises(ValueError, match="至少設定一位出席者"):
+        _make_create_payload(
+            category=DocumentCategory.MEETING_NOTICE,
+            meeting_purpose="召開幹部會議",
+            meeting_time=datetime(2026, 8, 31, 18, tzinfo=UTC),
+            meeting_location="第一會議室",
+        )
 
 
 @pytest.mark.asyncio
@@ -190,6 +240,7 @@ async def test_decree_print_hides_empty_recipient_and_subject() -> None:
     html = await render_document_print_html(_make_session(), doc)
 
     assert "發文字號：" in html
+    assert "主席令" in re.sub(r"<[^>]+>", "", html)
     assert "茲修正發布" in html
     assert "受文者：" not in html
     assert "主旨：" not in html
@@ -208,7 +259,9 @@ async def test_create_document_generates_serial() -> None:
     async def return_created_document(*_: object) -> Document:
         return session.add.call_args_list[0].args[0]
 
-    with patch("api.services.document.get_document", side_effect=return_created_document):
+    with patch(
+        "api.services.document._lifecycle.get_document", side_effect=return_created_document
+    ):
         doc = await create_document(
             session,
             data=_make_create_payload(manual_serial_number="DOC-2026-000001"),
@@ -342,7 +395,9 @@ async def test_submit_document_creates_approval_steps() -> None:
     doc = _make_draft_doc()
     approvers = [uuid.uuid4(), uuid.uuid4(), uuid.uuid4()]
 
-    with patch("api.services.document._resolve_active_delegate_assignment", return_value=None):
+    with patch(
+        "api.services.document._access._resolve_active_delegate_assignment", return_value=None
+    ):
         await submit_document(session, doc, approver_ids=approvers)
 
     assert doc.status == DocumentStatus.PENDING
@@ -469,7 +524,8 @@ async def test_get_current_approval_allows_active_assignment_delegate() -> None:
     assignment.delegate_user_id = delegate_id
 
     with patch(
-        "api.services.document._resolve_active_delegate_assignment", return_value=assignment
+        "api.services.document._lifecycle._resolve_active_delegate_assignment",
+        return_value=assignment,
     ):
         current, is_acting = await _get_current_approval(session, doc, delegate_id)
 
@@ -495,7 +551,9 @@ async def test_get_current_approval_blocks_expired_assignment_delegate() -> None
     result.scalar_one_or_none.return_value = approval
     session.execute = AsyncMock(return_value=result)
 
-    with patch("api.services.document._resolve_active_delegate_assignment", return_value=None):
+    with patch(
+        "api.services.document._lifecycle._resolve_active_delegate_assignment", return_value=None
+    ):
         current, is_acting = await _get_current_approval(session, doc, delegate_id)
 
     assert current is None
@@ -566,6 +624,7 @@ async def test_sensitive_public_document_is_redacted_without_full_access() -> No
 @pytest.mark.asyncio
 async def test_sensitive_document_creator_sees_list_content() -> None:
     session = _make_session()
+    session.execute = AsyncMock(side_effect=[_mock_scalars_result([]), _mock_scalars_result([])])
     creator_id = uuid.uuid4()
 
     doc = _make_list_doc(

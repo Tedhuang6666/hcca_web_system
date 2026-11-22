@@ -1,0 +1,170 @@
+"use client";
+
+import { AlertTriangle, ArrowRight, X } from "lucide-react";
+import { useEffect, useState } from "react";
+
+import { announcementsApi } from "@/lib/api/announcements";
+import { usePublicWS } from "@/hooks/usePublicWS";
+import type { AnnouncementOut } from "@/lib/types";
+
+const DISMISSAL_TTL_MS = 10 * 60 * 1000;
+const ANNOUNCEMENT_CACHE_KEY = "hcca:important-announcement";
+const ANNOUNCEMENT_CACHE_TTL_MS = 60 * 1000;
+
+export type ImportantAnnouncement = Pick<
+  AnnouncementOut,
+  "id" | "updated_at" | "link_url" | "title" | "link_label"
+>;
+
+function dismissalKey(item: ImportantAnnouncement) {
+  return `hcca:public-important-announcement:${item.id}:${item.updated_at}`;
+}
+
+function wasRecentlyDismissed(item: ImportantAnnouncement) {
+  if (typeof window === "undefined") return false;
+
+  try {
+    const raw = window.localStorage.getItem(dismissalKey(item));
+    const dismissedAt = raw ? Number(raw) : NaN;
+    if (!Number.isFinite(dismissedAt)) return false;
+    if (Date.now() - dismissedAt >= DISMISSAL_TTL_MS) {
+      window.localStorage.removeItem(dismissalKey(item));
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function rememberDismissal(item: ImportantAnnouncement) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(dismissalKey(item), String(Date.now()));
+  } catch {
+    // 儲存空間受限或無痕模式下，關閉仍應只影響目前畫面。
+  }
+}
+
+function readAnnouncementCache(): ImportantAnnouncement | null | undefined {
+  try {
+    const raw = sessionStorage.getItem(ANNOUNCEMENT_CACHE_KEY);
+    if (!raw) return undefined;
+    const cached = JSON.parse(raw) as { savedAt: number; item: ImportantAnnouncement | null };
+    if (!Number.isFinite(cached.savedAt) || Date.now() - cached.savedAt > ANNOUNCEMENT_CACHE_TTL_MS) {
+      sessionStorage.removeItem(ANNOUNCEMENT_CACHE_KEY);
+      return undefined;
+    }
+    return cached.item;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeAnnouncementCache(item: ImportantAnnouncement | null) {
+  try {
+    sessionStorage.setItem(ANNOUNCEMENT_CACHE_KEY, JSON.stringify({ savedAt: Date.now(), item }));
+  } catch {
+    /* storage may be unavailable */
+  }
+}
+
+export default function ImportantAnnouncementBanner({
+  announcement: initialAnnouncement,
+}: {
+  announcement?: ImportantAnnouncement | null;
+}) {
+  const [announcement, setAnnouncement] = useState<ImportantAnnouncement | null>(
+    initialAnnouncement ?? null,
+  );
+  const [visible, setVisible] = useState(Boolean(initialAnnouncement));
+  const [resolved, setResolved] = useState(initialAnnouncement !== undefined);
+
+  useEffect(() => {
+    let active = true;
+
+    if (initialAnnouncement !== undefined) {
+      setAnnouncement(initialAnnouncement);
+      setVisible(Boolean(initialAnnouncement && !wasRecentlyDismissed(initialAnnouncement)));
+      setResolved(true);
+      return () => {
+        active = false;
+      };
+    }
+
+    const cached = readAnnouncementCache();
+    if (cached !== undefined) {
+      setAnnouncement(cached);
+      setVisible(Boolean(cached && !wasRecentlyDismissed(cached)));
+      setResolved(true);
+      return () => {
+        active = false;
+      };
+    }
+
+    setResolved(false);
+    announcementsApi.activeUrgent()
+      .then((item) => {
+        if (!active) return;
+        writeAnnouncementCache(item);
+        setAnnouncement(item);
+        setVisible(Boolean(item && !wasRecentlyDismissed(item)));
+        setResolved(true);
+      })
+      .catch(() => {
+        if (!active) return;
+        setAnnouncement(null);
+        setResolved(true);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [initialAnnouncement]);
+
+  usePublicWS("/public/announcements", () => {
+    void announcementsApi.refreshActiveUrgent().then((item) => {
+      setAnnouncement(item);
+      setVisible(Boolean(item && !wasRecentlyDismissed(item)));
+      setResolved(true);
+    }).catch(() => undefined);
+  });
+
+  if (!resolved || !announcement || !visible) return null;
+
+  const target = announcement.link_url?.trim() || `/news/${announcement.id}`;
+  const opensExternal = /^https?:\/\//.test(target);
+  const dismiss = () => {
+    rememberDismissal(announcement);
+    setVisible(false);
+  };
+
+  return (
+    <div className="public-important-strip" role="region" aria-label="重要公告">
+      <AlertTriangle className="public-important-strip-icon" size={18} aria-hidden />
+      <a
+        href={target}
+        className="public-important-strip-link"
+        target={opensExternal ? "_blank" : undefined}
+        rel={opensExternal ? "noreferrer" : undefined}
+      >
+        <span className="public-important-strip-label">重要公告</span>
+        <span className="public-important-strip-title">{announcement.title}</span>
+        <span className="public-important-strip-cta">
+          {announcement.link_label || (announcement.link_url ? "前往連結" : "查看公告")}
+          <ArrowRight size={15} aria-hidden />
+        </span>
+      </a>
+      <button
+        type="button"
+        className="public-important-strip-close"
+        onClick={dismiss}
+        aria-label="關閉重要公告，10 分鐘內不再顯示"
+        title="關閉公告（10 分鐘內不再顯示）"
+      >
+        <X size={18} aria-hidden />
+      </button>
+    </div>
+  );
+}

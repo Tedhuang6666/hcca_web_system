@@ -17,11 +17,11 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 
 from api.core.celery_app import celery_app
-from api.core.database import AsyncSessionLocal
+from api.core.database import task_session
 from api.models.notification import Notification
 from api.models.user import User
 from api.services.mail import enqueue_email
-from api.services.notification_pref import get_digest_frequency
+from api.services.notification_pref import get_digest_frequency, normalize_preferences
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ def _render_digest_html(user: User, notifications: list[Notification]) -> str:
   <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;
               box-shadow:0 1px 3px rgba(0,0,0,0.05);">
     <div style="padding:18px 20px;border-bottom:1px solid #eee;">
-      <h1 style="margin:0;font-size:16px;color:#111;">HCCA 通知摘要</h1>
+      <h1 style="margin:0;font-size:16px;color:#111;">班聯會通知摘要</h1>
       <p style="margin:4px 0 0;font-size:13px;color:#666;">嗨 {name}，您有 {total} 則未讀通知</p>
     </div>
     <table style="width:100%;border-collapse:collapse;">{"".join(rows)}</table>
@@ -79,7 +79,7 @@ async def _process_digest(frequency: str, window_hours: int) -> dict[str, int]:
     sent = 0
     skipped = 0
 
-    async with AsyncSessionLocal() as session:
+    async with task_session() as session:
         users_result = await session.execute(select(User).where(User.is_active.is_(True)))
         users = users_result.scalars().all()
         for user in users:
@@ -89,19 +89,31 @@ async def _process_digest(frequency: str, window_hours: int) -> dict[str, int]:
                 select(Notification)
                 .where(Notification.user_id == user.id)
                 .where(Notification.is_read.is_(False))
+                .where(Notification.email_queued_at.is_(None))
                 .where(Notification.created_at >= cutoff)
                 .order_by(Notification.created_at.desc())
             )
             ntfs = list(ntfs_result.scalars().all())
+            preferences = normalize_preferences(user.notification_preferences)
+            ntfs = [
+                notification
+                for notification in ntfs
+                if preferences.get(notification.type, {}).get("email", False)
+            ]
             if not ntfs:
                 skipped += 1
                 continue
             html = _render_digest_html(user, ntfs)
-            subject = f"HCCA 通知摘要：{len(ntfs)} 則未讀"
+            subject = f"班聯會通知摘要：{len(ntfs)} 則未讀"
             try:
                 enqueue_email(to=user.email, subject=subject, body=html, subtype="html")
+                queued_at = datetime.now(UTC)
+                for notification in ntfs:
+                    notification.email_queued_at = queued_at
+                await session.commit()
                 sent += 1
             except Exception:
+                await session.rollback()
                 logger.warning("digest enqueue failed for user=%s", user.id, exc_info=True)
     logger.info(
         "digest task done frequency=%s window=%dh sent=%d skipped=%d",
@@ -113,13 +125,29 @@ async def _process_digest(frequency: str, window_hours: int) -> dict[str, int]:
     return {"sent": sent, "skipped": skipped}
 
 
-@celery_app.task(name="api.services.digest_tasks.send_daily_digest", bind=True, max_retries=0)
+@celery_app.task(
+    name="api.services.digest_tasks.send_daily_digest",
+    bind=True,
+    max_retries=3,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=600,
+    retry_jitter=True,
+)
 def send_daily_digest(self) -> dict:  # noqa: ARG001
     """每日 08:00 聚合過去 24 小時未讀通知。"""
     return asyncio.run(_process_digest("daily", window_hours=24))
 
 
-@celery_app.task(name="api.services.digest_tasks.send_weekly_digest", bind=True, max_retries=0)
+@celery_app.task(
+    name="api.services.digest_tasks.send_weekly_digest",
+    bind=True,
+    max_retries=3,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=600,
+    retry_jitter=True,
+)
 def send_weekly_digest(self) -> dict:  # noqa: ARG001
     """每週一 08:00 聚合過去 7 天未讀通知。"""
     return asyncio.run(_process_digest("weekly", window_hours=24 * 7))

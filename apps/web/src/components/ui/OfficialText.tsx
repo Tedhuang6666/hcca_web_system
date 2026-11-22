@@ -151,90 +151,6 @@ export function OfficialText({
 
   return (
     <div className={`official-text ${className}`}>
-      <style>{`
-        .official-text {
-          min-width: 0;
-          max-width: 100%;
-          white-space: normal;
-          overflow-wrap: anywhere;
-          word-break: break-word;
-        }
-        .official-text-line {
-          display: grid;
-          grid-template-columns: max-content minmax(0, 1fr);
-          column-gap: 0.45em;
-          margin: 0.1em 0;
-        }
-        .official-text-line.plain {
-          display: block;
-          white-space: pre-wrap;
-        }
-        .official-text-line.blank {
-          display: block;
-          height: 1em;
-        }
-        .official-text-prefix {
-          white-space: pre;
-        }
-        .official-text-body {
-          min-width: 0;
-          white-space: pre-wrap;
-          overflow-wrap: anywhere;
-          word-break: break-word;
-        }
-        .official-smart-link {
-          color: var(--primary);
-          text-decoration: underline;
-          text-decoration-thickness: 1px;
-          text-underline-offset: 0.18em;
-        }
-        .official-smart-link:hover {
-          opacity: 0.82;
-        }
-        .official-text-line.level-1 { margin-left: 0; }
-        .official-text-line.level-2 { margin-left: 2em; }
-        .official-text-line.level-3 { margin-left: 4em; }
-        .official-amendment-table {
-          margin: 0.75rem 0 1rem;
-        }
-        .official-amendment-table table {
-          width: 100%;
-          table-layout: fixed;
-          border-collapse: collapse;
-        }
-        .official-amendment-table th,
-        .official-amendment-table td {
-          padding: 0.6rem 0.7rem;
-          vertical-align: top;
-          border-top: 1px solid var(--border);
-          overflow-wrap: anywhere;
-          word-break: break-word;
-        }
-        .official-amendment-table thead th {
-          border-top: 0;
-          text-align: left;
-          font-size: 0.75rem;
-          color: var(--text-muted);
-        }
-        .official-amendment-mobile {
-          display: none;
-        }
-        @media (max-width: 639px) {
-          .official-amendment-desktop {
-            display: none;
-          }
-          .official-amendment-mobile {
-            display: grid;
-            gap: 0.6rem;
-          }
-          .official-amendment-card {
-            border: 1px solid var(--border);
-            border-radius: 0.75rem;
-            padding: 0.75rem;
-            background: var(--bg-elevated);
-          }
-        }
-      `}</style>
       {blocks.map((block) => {
         if (block.type === "amendment_table") {
           return (
@@ -261,7 +177,7 @@ export function OfficialText({
                       <tr key={`${row.status}-${row.articleNo}-${rowIndex}`}>
                         <td>
                           <span
-                            className="inline-flex rounded px-1.5 py-0.5 text-[11px]"
+                            className="inline-flex rounded px-1.5 py-0.5 text-xs"
                             style={amendmentStatusStyle(row.status)}
                           >
                             {row.status}
@@ -281,7 +197,7 @@ export function OfficialText({
                   <article key={`${row.status}-${row.articleNo}-${rowIndex}`} className="official-amendment-card">
                     <div className="mb-2 flex flex-wrap items-center gap-2">
                       <span
-                        className="inline-flex rounded px-1.5 py-0.5 text-[11px]"
+                        className="inline-flex rounded px-1.5 py-0.5 text-xs"
                         style={amendmentStatusStyle(row.status)}
                       >
                         {row.status}

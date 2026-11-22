@@ -11,6 +11,7 @@ from logging.config import dictConfig
 from typing import Any
 
 from api.core.config import settings
+from api.core.trace_context import get_trace_id
 
 _request_id: contextvars.ContextVar[str | None] = contextvars.ContextVar("request_id", default=None)
 _configured = False
@@ -31,7 +32,17 @@ def get_request_id() -> str | None:
 class RequestContextFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         record.request_id = get_request_id() or "-"
+        record.trace_id = get_trace_id() or "-"
+        record.service = "api"
+        record.release = settings.APP_RELEASE or settings.APP_VERSION
         record.environment = settings.ENVIRONMENT
+        return True
+
+
+class SingleLineMessageFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.msg = record.getMessage().replace("\r", "\\r").replace("\n", "\\n")
+        record.args = ()
         return True
 
 
@@ -69,7 +80,10 @@ class JsonLogFormatter(logging.Formatter):
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
+            "service": getattr(record, "service", "api"),
+            "release": getattr(record, "release", settings.APP_RELEASE or settings.APP_VERSION),
             "request_id": getattr(record, "request_id", "-"),
+            "trace_id": getattr(record, "trace_id", "-"),
             "environment": getattr(record, "environment", settings.ENVIRONMENT),
         }
         for key, value in record.__dict__.items():
@@ -114,7 +128,8 @@ def configure_logging() -> None:
             "version": 1,
             "disable_existing_loggers": False,
             "filters": {
-                "request_context": {"()": "api.core.structured_logging.RequestContextFilter"}
+                "single_line": {"()": "api.core.structured_logging.SingleLineMessageFilter"},
+                "request_context": {"()": "api.core.structured_logging.RequestContextFilter"},
             },
             "formatters": {"default": formatter},
             "handlers": {
@@ -122,7 +137,7 @@ def configure_logging() -> None:
                     "class": "logging.StreamHandler",
                     "stream": sys.stdout,
                     "formatter": "default",
-                    "filters": ["request_context"],
+                    "filters": ["single_line", "request_context"],
                 }
             },
             "root": {
@@ -145,6 +160,7 @@ def configure_logging() -> None:
 __all__ = [
     "JsonLogFormatter",
     "RequestContextFilter",
+    "SingleLineMessageFilter",
     "configure_logging",
     "get_request_id",
     "reset_request_id",

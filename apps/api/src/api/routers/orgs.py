@@ -3,21 +3,30 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.cache import cache_get, cache_invalidate, cache_set
+from api.core.auth_cookies import access_token_from_cookies
+from api.core.cache import (
+    cache_get,
+    cache_invalidate,
+    cache_invalidate_user_permissions,
+    cache_set,
+)
 from api.core.database import get_db
-from api.core.permission_codes import PermissionCode
+from api.core.permission_codes import PermissionCode, validate_permission_codes
+from api.core.security import decode_token
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_any
-from api.models.org import Org
+from api.models.org import Position, UserPosition
 from api.models.user import User
 from api.schemas.org import OrgCreate, OrgRead, OrgTree, OrgUpdate
 from api.services import audit as audit_svc
 from api.services import org as org_svc
+from api.services import user_session as user_session_svc
 from api.services.permission import (
     get_user_org_ids_with_any_permission,
     get_user_org_ids_with_permission,
@@ -30,24 +39,43 @@ DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
 
 
+def _get_org_update_session_id(request: Request) -> uuid.UUID | None:
+    """取得目前瀏覽器工作階段，讓權限更新不會把操作者自己登出。"""
+    token = access_token_from_cookies(request.cookies)
+    if not token:
+        return None
+    try:
+        raw_session_id = decode_token(token).get("sid")
+        return uuid.UUID(str(raw_session_id)) if raw_session_id else None
+    except (ExpiredSignatureError, InvalidTokenError, TypeError, ValueError):
+        return None
+
+
 @router.get("", response_model=list[OrgRead], summary="列出所有組織節點（扁平）")
 async def list_orgs(
     db: DbDep,
     _: CurrentUser,
     active_only: bool = Query(False, description="僅回傳啟用中的組織"),
+    exclude_class_orgs: bool = Query(False, description="排除班級系統自動建立的組織"),
 ) -> list:
     # 檢查快取
-    cache_key = f"org:list:active_only={active_only}"
-    cached = await cache_get(cache_key)
-    if cached is not None:
-        return cached
+    cache_key = f"org:list:active_only={active_only}:exclude_class_orgs={exclude_class_orgs}"
+    if not exclude_class_orgs:
+        cached = await cache_get(cache_key)
+        if cached is not None:
+            return cached
 
     # 查詢並序列化
-    orgs = await org_svc.get_orgs(db, active_only=active_only)
+    orgs = await org_svc.get_orgs(
+        db,
+        active_only=active_only,
+        exclude_class_orgs=exclude_class_orgs,
+    )
     result = [OrgRead.model_validate(o).model_dump(mode="json") for o in orgs]
 
     # 快取 300 秒
-    await cache_set(cache_key, result, ttl=300)
+    if not exclude_class_orgs:
+        await cache_set(cache_key, result, ttl=300)
     return result
 
 
@@ -79,17 +107,18 @@ async def list_my_create_orgs(db: DbDep, current_user: CurrentUser) -> list:
     superuser 直接回傳所有組織。
     """
     if current_user.is_superuser:
-        result = await db.execute(select(Org).where(Org.is_active.is_(True)).order_by(Org.name))
-        return list(result.scalars().all())
+        return await org_svc.get_orgs(db, active_only=True, exclude_class_orgs=True)
     org_ids = await get_user_org_ids_with_any_permission(
         db, current_user.id, {"document:create", "document:draft"}
     )
     if not org_ids:
         return []
-    result = await db.execute(
-        select(Org).where(Org.id.in_(org_ids), Org.is_active.is_(True)).order_by(Org.name)
+    return await org_svc.get_orgs(
+        db,
+        active_only=True,
+        exclude_class_orgs=True,
+        org_ids=org_ids,
     )
-    return list(result.scalars().all())
 
 
 @router.get(
@@ -103,15 +132,16 @@ async def list_my_regulation_create_orgs(db: DbDep, current_user: CurrentUser) -
     superuser 直接回傳所有組織。
     """
     if current_user.is_superuser:
-        result = await db.execute(select(Org).where(Org.is_active.is_(True)).order_by(Org.name))
-        return list(result.scalars().all())
+        return await org_svc.get_orgs(db, active_only=True, exclude_class_orgs=True)
     org_ids = await get_user_org_ids_with_permission(db, current_user.id, "regulation:create")
     if not org_ids:
         return []
-    result = await db.execute(
-        select(Org).where(Org.id.in_(org_ids), Org.is_active.is_(True)).order_by(Org.name)
+    return await org_svc.get_orgs(
+        db,
+        active_only=True,
+        exclude_class_orgs=True,
+        org_ids=org_ids,
     )
-    return list(result.scalars().all())
 
 
 @router.get(
@@ -125,19 +155,19 @@ async def list_my_serial_template_orgs(db: DbDep, current_user: CurrentUser) -> 
     superuser 或 admin:all 直接回傳所有組織。
     """
     if current_user.is_superuser:
-        result = await db.execute(select(Org).where(Org.is_active.is_(True)).order_by(Org.name))
-        return list(result.scalars().all())
+        return await org_svc.get_orgs(db, active_only=True, exclude_class_orgs=True)
     codes = await get_user_permission_codes(db, current_user.id)
     if "admin:all" in codes:
-        result = await db.execute(select(Org).where(Org.is_active.is_(True)).order_by(Org.name))
-        return list(result.scalars().all())
+        return await org_svc.get_orgs(db, active_only=True, exclude_class_orgs=True)
     org_ids = await get_user_org_ids_with_permission(db, current_user.id, "serial:create")
     if not org_ids:
         return []
-    result = await db.execute(
-        select(Org).where(Org.id.in_(org_ids), Org.is_active.is_(True)).order_by(Org.name)
+    return await org_svc.get_orgs(
+        db,
+        active_only=True,
+        exclude_class_orgs=True,
+        org_ids=org_ids,
     )
-    return list(result.scalars().all())
 
 
 @router.get("/{org_id}", response_model=OrgRead, summary="取得單一組織節點")
@@ -156,6 +186,12 @@ async def get_org(org_id: uuid.UUID, db: DbDep, _: CurrentUser) -> object:
     dependencies=[Depends(require_any(PermissionCode.ORG_MANAGE, PermissionCode.ADMIN_ALL))],
 )
 async def create_org(data: OrgCreate, db: DbDep, current_user: CurrentUser) -> object:
+    invalid_codes = validate_permission_codes(data.default_permission_codes)
+    if invalid_codes:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"存在未知權限碼：{', '.join(invalid_codes)}",
+        )
     org = await org_svc.create_org(db, data)
     await audit_svc.record(
         db,
@@ -186,17 +222,25 @@ async def update_org(
     data: OrgUpdate,
     db: DbDep,
     current_user: CurrentUser,
+    request: Request,
 ) -> object:
     org = await org_svc.get_org(db, org_id)
     if not org:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="組織節點不存在")
+    if data.default_permission_codes is not None:
+        invalid_codes = validate_permission_codes(data.default_permission_codes)
+        if invalid_codes:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"存在未知權限碼：{', '.join(invalid_codes)}",
+            )
     before = {
         "name": org.name,
         "description": org.description,
         "parent_id": str(org.parent_id) if org.parent_id else None,
         "prefix": org.prefix,
-        "bill_stage": org.bill_stage,
         "leader_user_id": str(org.leader_user_id) if org.leader_user_id else None,
+        "default_permission_codes": sorted(org.default_permission_codes or []),
         "is_active": org.is_active,
     }
     try:
@@ -217,8 +261,8 @@ async def update_org(
                 "description": org.description,
                 "parent_id": str(org.parent_id) if org.parent_id else None,
                 "prefix": org.prefix,
-                "bill_stage": org.bill_stage,
                 "leader_user_id": str(org.leader_user_id) if org.leader_user_id else None,
+                "default_permission_codes": sorted(org.default_permission_codes or []),
                 "is_active": org.is_active,
             },
         },
@@ -229,6 +273,25 @@ async def update_org(
     await cache_invalidate("org:list:active_only=False")
     await cache_invalidate("org:list:active_only=True")
     await cache_invalidate("org:tree")
+    updated_parent_id = str(org.parent_id) if org.parent_id else None
+    updated_default_codes = sorted(org.default_permission_codes or [])
+    if (
+        before["parent_id"] != updated_parent_id
+        or before["default_permission_codes"] != updated_default_codes
+    ):
+        affected_org_ids = await org_svc.get_org_descendant_ids(db, org.id)
+        current_session_id = _get_org_update_session_id(request)
+        holder_ids = (
+            await db.scalars(
+                select(UserPosition.user_id)
+                .join(Position, UserPosition.position_id == Position.id)
+                .where(Position.org_id.in_(affected_org_ids))
+                .distinct()
+            )
+        ).all()
+        for user_id in holder_ids:
+            await cache_invalidate_user_permissions(str(user_id))
+            await user_session_svc.revoke_others(db, user_id, current_session_id)
     return org
 
 

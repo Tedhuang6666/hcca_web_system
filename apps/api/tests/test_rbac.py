@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import timedelta
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.clock import local_today
 from api.models.org import Org, Permission, Position, UserPosition
 from api.models.user import User
-from api.services.permission import get_user_permission_codes, user_has_permission
+from api.services.permission import (
+    get_user_permission_codes,
+    get_user_permission_codes_batch,
+    get_user_permission_codes_for_org,
+)
 
 
 async def _seed_data(
@@ -33,7 +38,7 @@ async def _seed_data(
     perm = Permission(position_id=position.id, code="document:approve")
     db.add(perm)
 
-    today = date.today()
+    today = local_today()  # 與 RBAC 引擎同一時鐘（Asia/Taipei），避免 UTC 換日造成邊界 flaky
     up = UserPosition(
         user_id=user.id,
         position_id=position.id,
@@ -54,6 +59,84 @@ async def test_active_user_has_permission(db_session: AsyncSession) -> None:
     codes = await get_user_permission_codes(db_session, user.id)
 
     assert "document:approve" in codes
+
+
+@pytest.mark.asyncio
+async def test_active_user_has_org_default_permission(db_session: AsyncSession) -> None:
+    """現任職位持有人應取得所屬組織的預設權限碼"""
+    user, position = await _seed_data(db_session, start_offset=-10)
+    org = await db_session.get(Org, position.org_id)
+    assert org is not None
+    org.default_permission_codes = ["document:submit"]
+    await db_session.flush()
+
+    codes = await get_user_permission_codes(db_session, user.id)
+
+    assert "document:submit" in codes
+
+
+@pytest.mark.asyncio
+async def test_user_inherits_default_permissions_from_org_ancestors(
+    db_session: AsyncSession,
+) -> None:
+    """下級組織成員取得自身與所有上級組織的預設權限。"""
+    user, position = await _seed_data(db_session, start_offset=-10)
+    today = local_today()
+    root = Org(name="學生會", default_permission_codes=["finance:view"])
+    department = Org(
+        name="學權部",
+        default_permission_codes=["document:create"],
+        parent=root,
+    )
+    db_session.add_all([root, department])
+    await db_session.flush()
+
+    leaf = await db_session.get(Org, position.org_id)
+    assert leaf is not None
+    leaf.parent_id = department.id
+    leaf.default_permission_codes = ["document:submit"]
+
+    root_user = User(
+        email="root-member@school.edu",
+        display_name="學生會成員",
+        is_active=True,
+        is_verified=True,
+    )
+    db_session.add(root_user)
+    await db_session.flush()
+    root_position = Position(org_id=root.id, name="學生會職位")
+    db_session.add(root_position)
+    await db_session.flush()
+    db_session.add(
+        UserPosition(
+            user_id=root_user.id,
+            position_id=root_position.id,
+            start_date=today,
+        )
+    )
+    await db_session.flush()
+
+    effective_codes = await get_user_permission_codes(db_session, user.id, on_date=today)
+    scoped_codes = await get_user_permission_codes_for_org(
+        db_session, user.id, leaf.id, on_date=today
+    )
+    batch_codes = await get_user_permission_codes_batch(
+        db_session, [user.id, root_user.id], on_date=today
+    )
+    root_codes = await get_user_permission_codes(db_session, root_user.id, on_date=today)
+
+    inherited = {"finance:view", "document:create", "document:submit"}
+    assert inherited <= effective_codes
+    assert inherited <= scoped_codes
+    assert inherited <= batch_codes[user.id]
+    assert "document:create" not in root_codes
+    assert "document:submit" not in root_codes
+    assert "document:create" not in batch_codes[root_user.id]
+    assert "document:submit" not in batch_codes[root_user.id]
+    assert (
+        await get_user_permission_codes_for_org(db_session, user.id, root.id, on_date=today)
+        == frozenset()
+    )
 
 
 @pytest.mark.asyncio
@@ -89,12 +172,13 @@ async def test_future_position_grants_no_permission(db_session: AsyncSession) ->
 
 
 @pytest.mark.asyncio
-async def test_user_has_permission_helper(db_session: AsyncSession) -> None:
-    """user_has_permission 輔助函式應正確回傳布林值"""
+async def test_permission_codes_support_membership_checks(db_session: AsyncSession) -> None:
+    """現行權限集合支援正向與反向判斷。"""
     user, _ = await _seed_data(db_session, start_offset=-5)
 
-    assert await user_has_permission(db_session, user.id, "document:approve") is True
-    assert await user_has_permission(db_session, user.id, "finance:view") is False
+    codes = await get_user_permission_codes(db_session, user.id)
+    assert "document:approve" in codes
+    assert "finance:view" not in codes
 
 
 @pytest.mark.asyncio

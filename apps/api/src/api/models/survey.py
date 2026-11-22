@@ -12,10 +12,11 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
-    UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -43,9 +44,12 @@ class QuestionType(enum.StrEnum):
     TEXT = "text"  # 簡答（單行文字）
     TEXTAREA = "textarea"  # 長答（多行文字）
     SINGLE = "single"  # 單選
+    SINGLE_GRID = "single_grid"  # 單選方格（每列選一欄）
     MULTIPLE = "multiple"  # 多選
+    MULTI_TEXT = "multi_text"  # 多欄詳答
     RANKING = "ranking"  # 拖拉排序（從選項中挑選並排序）
-    RATING = "rating"  # 評分（1–5 / 1–10）
+    RATING = "rating"  # 評分（自訂範圍）
+    LINEAR_SCALE = "linear_scale"  # 線性刻度
     DATE = "date"  # 日期輸入
     SECTION_TEXT = "section_text"  # 純文字描述區塊
     PAGE_BREAK = "page_break"  # 分頁
@@ -74,6 +78,16 @@ class Survey(Base, TimestampMixin):
     """
 
     __tablename__ = "surveys"
+    __table_args__ = (
+        Index(
+            "ix_surveys_open",
+            "status",
+            text("updated_at DESC"),
+            postgresql_where=text("status = 'open'"),
+        ),
+        Index("ix_surveys_status_updated_at", "status", text("updated_at DESC")),
+        Index("ix_surveys_created_at_desc", text("created_at DESC")),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     title: Mapped[str] = mapped_column(String(300), nullable=False, index=True)
@@ -94,10 +108,25 @@ class Survey(Base, TimestampMixin):
     is_public: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )
+    # 是否出現在未登入可瀏覽的公開問卷列表；不影響持連結者直接填答。
+    is_listed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
     # 限制名單（JSON 陣列字串）；三者皆空代表「任何登入者皆可填」
     allowed_org_ids_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     allowed_user_ids_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     allowed_domains_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 限定目前班級年級（JSON 整數陣列）；空值代表不限年級
+    allowed_grades_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 可選的公告內容；服務層會同步到 announcements，並導向問卷填答頁。
+    announcement: Mapped[str | None] = mapped_column(Text, nullable=True)
+    announcement_title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    show_announcement_popup: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    announcement_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("announcements.id", ondelete="SET NULL"), nullable=True
+    )
 
     org_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -153,6 +182,7 @@ class SurveyQuestion(Base, TimestampMixin):
     )
     order_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     question_text: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     question_type: Mapped[QuestionType] = mapped_column(
         Enum(QuestionType, name="questiontype", values_callable=lambda obj: [e.value for e in obj]),
         nullable=False,
@@ -161,6 +191,10 @@ class SurveyQuestion(Base, TimestampMixin):
     is_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # 選項 JSON（SINGLE/MULTIPLE/RANKING 題型）
     options_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 單選方格的欄位標籤；列標籤沿用 options_json。
+    grid_columns_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 選項預覽圖片 URL 陣列，與 options_json 依序對應
+    option_image_sets_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 選項額外設定 JSON：{"exclusive": ["以上皆非"], "other": ["其他"]}
     # exclusive：多選題的互斥選項（勾選後清空其他）
     # other：可附加自由輸入文字的選項
@@ -198,12 +232,11 @@ class SurveyResponse(Base, TimestampMixin):
     一次完整填答記錄。
     匿名問卷：respondent_id=NULL，anon_token 為不可逆 UUID（每次填答生成）。
     非匿名問卷：respondent_id=填答人 user_id，anon_token=NULL。
-    UNIQUE (survey_id, respondent_id)：非匿名問卷每人限填一次。
-    匿名問卷：每個 anon_token 一條記錄（允許重複填答由 allow_multiple 控制）。
+    是否可新增多份回應由 Survey.allow_multiple 決定；單次填答的限制在服務層
+    以鎖定問卷後檢查，才能讓多次填答問卷保留同一位填答者的每一份回應。
     """
 
     __tablename__ = "survey_responses"
-    __table_args__ = (UniqueConstraint("survey_id", "respondent_id", name="uq_survey_respondent"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     survey_id: Mapped[uuid.UUID] = mapped_column(

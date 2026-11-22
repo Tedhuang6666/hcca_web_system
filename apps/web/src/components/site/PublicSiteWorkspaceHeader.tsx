@@ -1,0 +1,43 @@
+"use client";
+
+import Link from "next/link";
+import { ArrowUpRight, Eye, Images, RefreshCw } from "lucide-react";
+
+export default function PublicSiteWorkspaceHeader({ loading, onRefresh }: {
+  loading: boolean;
+  onRefresh: () => void;
+}) {
+  return (
+      <header className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-sm">
+        <div className="grid gap-8 px-6 py-7 lg:grid-cols-[1fr_auto] lg:items-center lg:px-8">
+          <div className="min-w-0">
+            <h1 className="mt-3 text-2xl font-semibold text-[var(--text-primary)]">
+              公開網站工作台
+            </h1>
+          </div>
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+            <Link href="/admin/gallery" className="btn btn-ghost min-h-11 justify-center px-4 text-sm">
+              <Images size={16} aria-hidden /> 活動影像
+            </Link>
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={loading}
+              className="btn btn-ghost min-h-11 flex-1 justify-center px-4 text-sm sm:flex-none"
+            >
+              <RefreshCw size={16} aria-hidden /> 同步資料
+            </button>
+            <a
+              href="/"
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn-primary min-h-11 flex-1 justify-center px-4 text-sm font-semibold sm:flex-none"
+            >
+              <Eye size={16} aria-hidden /> 預覽官網
+              <ArrowUpRight size={15} aria-hidden />
+            </a>
+          </div>
+        </div>
+      </header>
+  );
+}

@@ -1,4 +1,4 @@
-"""Feature flag service 測試。Phase D3。"""
+"""Feature flag service 測試。"""
 
 from __future__ import annotations
 

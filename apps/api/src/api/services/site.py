@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import re
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Any
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.core.clock import local_today
 from api.models.org import Position, UserPosition
 from api.models.site import (
     PublicLink,
@@ -24,6 +25,7 @@ from api.schemas.site import (
     PublicLinkCategoryCreate,
     PublicLinkCategoryUpdate,
     PublicLinkCreate,
+    PublicLinkTreeUpdate,
     PublicLinkUpdate,
     PublicOfficerCandidateOut,
     PublicOfficerOut,
@@ -33,6 +35,7 @@ from api.schemas.site import (
     PublicSitePageUpdate,
     PublicSiteSettingsUpdate,
 )
+from api.services._base import apply_updates
 
 DEFAULT_SETTINGS = {
     "site_title": "新竹高中班聯會",
@@ -40,13 +43,25 @@ DEFAULT_SETTINGS = {
     "site_logo_url": None,
     "site_logo_alt": None,
     "hero_title": "新竹高中班聯會",
-    "hero_subtitle": "連結學生、整理公共資訊，讓校園自治被更多人看見。",
+    "hero_subtitle": "連結學生、整理公共資訊，讓學生自治被更多人看見。",
     "hero_image_url": None,
     "hero_image_alt": None,
     "about_title": "關於班聯會",
     "about_body_md": "新竹高中班聯會是由學生組成的自治組織，負責整合班級意見、推動公共服務，並維護校園公共參與。",
     "mission_md": "我們希望讓學生的聲音被聽見，也讓制度、活動與公共資訊更透明。",
     "history_md": None,
+    "support_md": "若使用平台時遇到問題，請先查看最新公告；仍需要協助時，請透過下方聯絡資訊與管理團隊聯繫。",
+    "error_report_md": "回報錯誤時，請提供發生時間、操作步驟與畫面；請勿在公開內容中填寫密碼或其他敏感資料。",
+    "contact_md": None,
+    "terms_md": None,
+    "developer_team_md": None,
+    "system_info_md": """## 需要協助嗎？
+
+若使用平台時遇到問題，請先查看最新公告；仍需要協助時，請透過聯絡資訊與管理團隊聯繫。
+
+## 錯誤回報
+
+回報錯誤時，請提供發生時間、操作步驟與畫面；請勿在公開內容中填寫密碼或其他敏感資料。""",
     "cta_label": "查看平台連結",
     "cta_href": "/links",
     "public_database_label": "公開資料庫",
@@ -59,14 +74,22 @@ DEFAULT_SETTINGS = {
 }
 
 
-# custom_css 會被原樣注入公開首頁的 <style>，必須清洗以防 stored XSS / CSS 注入。
-# 這不是完整 CSS parser，而是針對已知的破出 / 外洩向量做白名單外的中和：
-#   - 標籤破出：</style>、<script>、<!-- -->（避免從 <style> 逃逸成 HTML/JS）
-#   - 外部載入 / 腳本執行：@import、expression()、javascript:/vbscript:、behavior、-moz-binding
-#   - url() 內的腳本協定
-# 子選擇器 > 等合法 CSS 不受影響（我們只中和特定危險 token，不一律刪 < >）。
+class InvalidPublicLinkSchedule(ValueError):
+    """公開連結的啟用時間區間不合法。"""
+
+
+def _with_utc_timezone(value: datetime | None) -> datetime | None:
+    if value is not None and value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value
+
+
+# custom_css 會被注入公開首頁的 <style>，先清除已知 HTML/CSS 執行向量。
 _CSS_DANGER_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"<\s*/?\s*(?:style|script|iframe|svg|img|object|embed|link|meta)\b[^>]*>?", re.I),
+    re.compile(
+        r"<\s*/?\s*(?:style|script|iframe|svg|img|object|embed|link|meta)\b[^>]*>?",
+        re.I,
+    ),
     re.compile(r"<!--|-->"),
     re.compile(r"@import\b[^;]*;?", re.I),
     re.compile(r"expression\s*\(", re.I),
@@ -76,7 +99,7 @@ _CSS_DANGER_PATTERNS: tuple[re.Pattern[str], ...] = (
 
 
 def sanitize_css(raw: str | None) -> str | None:
-    """中和 custom_css 中可導致 XSS / CSS 注入外洩的片段。"""
+    """中和 custom_css 中常見的標籤逃逸與 CSS 執行片段。"""
     if not raw:
         return raw
     cleaned = raw
@@ -98,10 +121,9 @@ async def get_settings(db: AsyncSession) -> PublicSiteSettings:
 
 async def update_settings(db: AsyncSession, data: PublicSiteSettingsUpdate) -> PublicSiteSettings:
     settings = await get_settings(db)
-    for key, value in data.model_dump(exclude_unset=True).items():
-        if key == "custom_css":
-            value = sanitize_css(value)
-        setattr(settings, key, value)
+    updates = apply_updates(settings, data)
+    if "custom_css" in updates:
+        settings.custom_css = sanitize_css(settings.custom_css)
     await db.flush()
     return settings
 
@@ -129,8 +151,7 @@ async def create_link_category(
 async def update_link_category(
     db: AsyncSession, category: PublicLinkCategory, data: PublicLinkCategoryUpdate
 ) -> PublicLinkCategory:
-    for key, value in data.model_dump(exclude_unset=True).items():
-        setattr(category, key, value)
+    apply_updates(category, data)
     await db.flush()
     return category
 
@@ -142,7 +163,12 @@ async def list_links(db: AsyncSession, active_only: bool = False) -> list[Public
         .order_by(PublicLink.sort_order, PublicLink.title)
     )
     if active_only:
-        stmt = stmt.where(PublicLink.is_active.is_(True))
+        now = func.now()
+        stmt = stmt.where(
+            PublicLink.is_active.is_(True),
+            or_(PublicLink.starts_at.is_(None), PublicLink.starts_at <= now),
+            or_(PublicLink.ends_at.is_(None), PublicLink.ends_at > now),
+        )
     return list((await db.execute(stmt)).scalars().all())
 
 
@@ -163,10 +189,58 @@ async def create_link(db: AsyncSession, data: PublicLinkCreate) -> PublicLink:
 
 
 async def update_link(db: AsyncSession, link: PublicLink, data: PublicLinkUpdate) -> PublicLink:
-    for key, value in data.model_dump(exclude_unset=True).items():
-        setattr(link, key, value)
+    updates = data.model_dump(exclude_unset=True)
+    starts_at = _with_utc_timezone(updates.get("starts_at", link.starts_at))
+    ends_at = _with_utc_timezone(updates.get("ends_at", link.ends_at))
+    if starts_at is not None and ends_at is not None and ends_at <= starts_at:
+        raise InvalidPublicLinkSchedule("停用時間必須晚於啟用時間")
+    apply_updates(link, data)
     await db.flush()
     return await get_link(db, link.id) or link
+
+
+async def reorder_links(db: AsyncSession, link_ids: list[uuid.UUID]) -> list[PublicLink]:
+    links = await list_links(db)
+    by_id = {link.id: link for link in links}
+    if len(link_ids) != len(by_id) or set(link_ids) != set(by_id):
+        raise ValueError("排序清單必須包含所有連結且不可重複")
+
+    for sort_order, link_id in enumerate(link_ids):
+        by_id[link_id].sort_order = sort_order
+    await db.flush()
+    return await list_links(db)
+
+
+async def update_link_tree(
+    db: AsyncSession, data: PublicLinkTreeUpdate
+) -> tuple[list[PublicLinkCategory], list[PublicLink]]:
+    categories = await list_link_categories(db)
+    links = await list_links(db)
+    category_ids = data.category_ids
+    link_ids = [entry.id for entry in data.links]
+
+    if len(category_ids) != len(set(category_ids)) or set(category_ids) != {
+        category.id for category in categories
+    }:
+        raise ValueError("分類排序必須包含所有分類且不可重複")
+    if len(link_ids) != len(set(link_ids)) or set(link_ids) != {link.id for link in links}:
+        raise ValueError("連結樹必須包含所有連結且不可重複")
+
+    categories_by_id = {category.id: category for category in categories}
+    links_by_id = {link.id: link for link in links}
+    for sort_order, category_id in enumerate(category_ids):
+        categories_by_id[category_id].sort_order = sort_order
+
+    for sort_order, entry in enumerate(data.links):
+        if entry.category_id is not None and entry.category_id not in categories_by_id:
+            raise ValueError("連結所屬分類不存在")
+        link = links_by_id[entry.id]
+        link.category_id = entry.category_id
+        link.category = categories_by_id.get(entry.category_id)
+        link.sort_order = sort_order
+
+    await db.flush()
+    return await list_link_categories(db), await list_links(db)
 
 
 def _active_term_filter(stmt: Select[Any], on_date: date) -> Select[Any]:
@@ -185,7 +259,7 @@ async def list_officers(
     則套用覆寫（顯示名稱、稱謂、簡介、排序、精選），並可透過 is_visible=False 隱藏。
     尚未建立覆寫設定的幹部仍會以使用者/職位的預設值自動顯示。
     """
-    today = date.today()
+    today = local_today()
     stmt = (
         select(UserPosition)
         .join(UserPosition.user)
@@ -252,8 +326,7 @@ async def create_officer_profile(
 async def update_officer_profile(
     db: AsyncSession, profile: PublicOfficerProfile, data: PublicOfficerProfileUpdate
 ) -> PublicOfficerProfile:
-    for key, value in data.model_dump(exclude_unset=True).items():
-        setattr(profile, key, value)
+    apply_updates(profile, data)
     await db.flush()
     return profile
 
@@ -261,7 +334,7 @@ async def update_officer_profile(
 async def list_officer_candidates(
     db: AsyncSession, active_only: bool = True
 ) -> list[PublicOfficerCandidateOut]:
-    today = date.today()
+    today = local_today()
     existing_result = await db.execute(select(PublicOfficerProfile.user_position_id))
     existing_ids = set(existing_result.scalars().all())
     stmt = (
@@ -356,7 +429,6 @@ async def create_page(db: AsyncSession, data: PublicSitePageCreate) -> PublicSit
 async def update_page(
     db: AsyncSession, page: PublicSitePage, data: PublicSitePageUpdate
 ) -> PublicSitePage:
-    for key, value in data.model_dump(exclude_unset=True).items():
-        setattr(page, key, value)
+    apply_updates(page, data)
     await db.flush()
     return page

@@ -18,16 +18,21 @@ on:
   pull_request:
     paths:
       - "apps/web/**"
+      - ".lighthouseci/**"
       - ".github/workflows/a11y.yml"
   push:
     branches: [main]
     paths:
       - "apps/web/**"
+      - ".lighthouseci/**"
       - ".github/workflows/a11y.yml"
 
 permissions:
   contents: read
-  pull-requests: write
+
+concurrency:
+  group: a11y-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   axe:
@@ -35,12 +40,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "20"
+          node-version-file: .nvmrc
           cache: "npm"
           cache-dependency-path: apps/web/package-lock.json
 
@@ -54,6 +61,7 @@ jobs:
         env:
           NEXT_PUBLIC_API_URL: ""
           NEXT_PUBLIC_WS_URL: "ws://localhost:8000"
+          API_INTERNAL_URL: "http://127.0.0.1:8000"
 
       - name: Start Next.js (background)
         working-directory: apps/web
@@ -63,19 +71,36 @@ jobs:
           # ——next build 不會自動把它們放進 .next/standalone。
           cp -r .next/static .next/standalone/.next/static
           cp -r public .next/standalone/public
-          HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js &
+          API_INTERNAL_URL=http://127.0.0.1:8000 HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js > /tmp/next-server.log 2>&1 &
+          NEXT_PID=$!
           for i in $(seq 1 30); do
-            if curl -sf http://127.0.0.1:3000/ > /dev/null; then
-              echo "Next.js is up"; exit 0;
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://127.0.0.1:3000/ 2>/dev/null || echo "000")
+            case "$STATUS" in
+              2[0-9][0-9]|3[0-9][0-9])
+                echo "Next.js is up (HTTP $STATUS)"
+                curl -fsS --max-time 10 http://127.0.0.1:3000/ -o /tmp/next-home.html
+                if ! grep -q 'main-content' /tmp/next-home.html; then
+                  echo "::error::Next.js returned no server-rendered main content"
+                  cat /tmp/next-server.log
+                  exit 1
+                fi
+                exit 0
+                ;;
+            esac
+            if ! kill -0 "$NEXT_PID" 2>/dev/null; then
+              echo "::error::Next.js server process died"; cat /tmp/next-server.log; exit 1
             fi
+            echo "Waiting for Next.js... (attempt $i, HTTP $STATUS)"
             sleep 2
           done
-          echo "::error::Next.js failed to start within 60s"; exit 1
+          echo "::error::Next.js failed to start within 60s"
+          cat /tmp/next-server.log
+          exit 1
 
       - name: Install axe-core CLI + Chrome-matched ChromeDriver
         run: |
           set -e
-          npm install -g @axe-core/cli@4.9
+          npm install -g @axe-core/cli@4.11.3
           # @axe-core/cli 內建的 chromedriver 版本會比 runner 上（會自動更新的）Chrome
           # 還新，造成 "session not created" → 退出碼 2。改裝一支對應已安裝 Chrome
           # 版本的 chromedriver（DETECT_CHROMEDRIVER_VERSION 會自動偵測），稍後用
@@ -93,6 +118,7 @@ jobs:
               http://127.0.0.1:3000/legal/accessibility \
             --chromedriver-path "$(npm root -g)/chromedriver/bin/chromedriver" \
             --chrome-options="no-sandbox,disable-setuid-sandbox,disable-dev-shm-usage" \
+            --load-delay 1000 \
             --exit \
             --tags wcag2a,wcag2aa,wcag21a,wcag21aa \
             --save axe-report.json
@@ -100,7 +126,7 @@ jobs:
 
       - name: Upload axe report
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: axe-report
           path: axe-report.json
@@ -111,12 +137,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "20"
+          # Lighthouse 13 支援 runner 的 Chrome 150；版本由根目錄 .nvmrc 統一管理。
+          node-version-file: .nvmrc
           cache: "npm"
           cache-dependency-path: apps/web/package-lock.json
 
@@ -127,30 +156,131 @@ jobs:
       - name: Build web (production)
         working-directory: apps/web
         run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: ""
+          NEXT_PUBLIC_WS_URL: "ws://localhost:8000"
+          API_INTERNAL_URL: "http://127.0.0.1:8000"
 
       - name: Start Next.js (background)
         working-directory: apps/web
         run: |
           # 同 axe job：output:standalone 不能用 `next start`，改跑 standalone server。
-          # treosh action 沒有可靠的 startServerCommand 輸入（原本的 START_SERVER_COMMAND
-          # env 根本不會被讀），所以這裡自行把 server 拉起來，action 只負責對既有 URL 收數據。
+          # Lighthouse CLI 不負責啟動網站，因此先自行啟動 standalone server。
           cp -r .next/static .next/standalone/.next/static
           cp -r public .next/standalone/public
-          HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js &
+          API_INTERNAL_URL=http://127.0.0.1:8000 HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js > /tmp/next-server.log 2>&1 &
+          NEXT_PID=$!
           for i in $(seq 1 30); do
-            if curl -sf http://127.0.0.1:3000/ > /dev/null; then
-              echo "Next.js is up"; exit 0;
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://127.0.0.1:3000/ 2>/dev/null || echo "000")
+            case "$STATUS" in
+              2[0-9][0-9]|3[0-9][0-9])
+                echo "Next.js is up (HTTP $STATUS)"
+                curl -fsS --max-time 10 http://127.0.0.1:3000/ -o /tmp/next-home.html
+                if ! grep -q 'main-content' /tmp/next-home.html; then
+                  echo "::error::Next.js returned no server-rendered main content"
+                  cat /tmp/next-server.log
+                  exit 1
+                fi
+                exit 0
+                ;;
+            esac
+            if ! kill -0 "$NEXT_PID" 2>/dev/null; then
+              echo "::error::Next.js server process died"; cat /tmp/next-server.log; exit 1
             fi
+            echo "Waiting for Next.js... (attempt $i, HTTP $STATUS)"
             sleep 2
           done
-          echo "::error::Next.js failed to start within 60s"; exit 1
+          echo "::error::Next.js failed to start within 60s"
+          cat /tmp/next-server.log
+          exit 1
 
-      - name: Lighthouse CI
-        uses: treosh/lighthouse-ci-action@v12
+      - name: Run Lighthouse
+        run: |
+          node --version
+          google-chrome --version || true
+          mkdir -p .lighthouseci/reports
+
+          run_lighthouse() {
+            local url="$1"
+            local report_path="$2"
+
+            for attempt in 1 2; do
+              if npx --yes lighthouse@13.4.0 "$url" \
+                --config-path=.lighthouseci/config.json \
+                --output=json \
+                --output-path="$report_path" \
+                --chrome-flags="--headless=new --no-sandbox --disable-dev-shm-usage --disable-backgrounding-occluded-windows --disable-renderer-backgrounding"; then
+                return 0
+              fi
+
+              # Chrome can intermittently miss FCP or navigation-start tracing on its first
+              # headless navigation, even after the standalone server has returned SSR content.
+              # Retry those transient failures only; all other failures, and a second retryable
+              # failure, still fail the job.
+              if ! grep -Eq '"code": "(NO_FCP|NO_NAVSTART)"' "$report_path" \
+                || [ "$attempt" -eq 2 ]; then
+                return 1
+              fi
+
+              echo "::warning::Lighthouse trace was not ready; retrying once after the server settles."
+              sleep 2
+            done
+          }
+
+          for path in / /legal/privacy; do
+            name=$(echo "$path" | tr '/' '-' | sed 's/^-//; s/-$//' | sed 's/^$/home/')
+            for run in 1 2; do
+              run_lighthouse \
+                "http://127.0.0.1:3000$path" \
+                ".lighthouseci/reports/$name-$run.json"
+            done
+          done
+
+      - name: Validate Lighthouse thresholds
+        run: |
+          node --input-type=module <<'NODE'
+          import { readdir, readFile } from "node:fs/promises";
+
+          const thresholds = [
+            [["categories", "performance", "score"], 0.7, "warn"],
+            [["categories", "accessibility", "score"], 0.9, "error"],
+            [["categories", "best-practices", "score"], 0.9, "warn"],
+            [["categories", "seo", "score"], 0.9, "warn"],
+            [["audits", "first-contentful-paint", "numericValue"], 2500, "warn", "max"],
+            [["audits", "largest-contentful-paint", "numericValue"], 2500, "warn", "max"],
+            [["audits", "cumulative-layout-shift", "numericValue"], 0.1, "error", "max"],
+            [["audits", "total-blocking-time", "numericValue"], 300, "warn", "max"],
+          ];
+          const reports = await Promise.all(
+            (await readdir(".lighthouseci/reports"))
+              .filter((file) => file.endsWith(".json"))
+              .map(async (file) => [file, JSON.parse(await readFile(`.lighthouseci/reports/${file}`, "utf8"))]),
+          );
+          let failed = false;
+          for (const [file, report] of reports) {
+            for (const [pathParts, limit, level, direction = "min"] of thresholds) {
+              const value = pathParts.reduce((current, part) => current?.[part], report);
+              const path = pathParts.join(".");
+              const passed = direction === "min" ? value >= limit : value <= limit;
+              const message = `${file}: ${path}=${value} (${direction} ${limit})`;
+              if (passed) console.log(`PASS ${message}`);
+              else if (level === "error") { console.error(`FAIL ${message}`); failed = true; }
+              else console.warn(`WARN ${message}`);
+            }
+          }
+          if (failed) process.exit(1);
+          NODE
+
+      - name: Collect Lighthouse diagnostics
+        if: always()
+        run: cp /tmp/next-server.log .lighthouseci/next-server.log 2>/dev/null || true
+
+      - name: Upload Lighthouse reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          urls: |
-            http://127.0.0.1:3000/
-            http://127.0.0.1:3000/legal/privacy
-          configPath: ./.lighthouseci/config.json
-          uploadArtifacts: true
-          temporaryPublicStorage: true
+          name: lighthouse-reports
+          path: |
+            .lighthouseci/reports
+            .lighthouseci/next-server.log
+          retention-days: 30

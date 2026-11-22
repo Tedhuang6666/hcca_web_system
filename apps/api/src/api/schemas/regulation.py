@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from api.models.regulation import (
     ArticleType,
@@ -39,34 +40,6 @@ class RegulationArticleOut(BaseModel):
     updated_at: datetime
 
 
-class RegulationArticleCreate(BaseModel):
-    """新增條文"""
-
-    sort_index: int = Field(..., ge=0, description="排序索引（同法規內唯一）")
-    order_index: int = Field(default=0, ge=0, description="同層級排序")
-    parent_id: uuid.UUID | None = Field(default=None, description="父節點 ID")
-    article_type: ArticleType = Field(..., description="條文層級類型")
-    title: str = Field(default="", max_length=200, description="條文標題（如：第一章 總則）")
-    subtitle: str = Field(default="", max_length=200, description="條文副標題")
-    legal_number: str | None = Field(None, max_length=50, description="法律條號（如 5-1）")
-    content: str | None = Field(None, description="條文內容（Chapter 類型可不填）")
-
-
-class RegulationArticleUpdate(BaseModel):
-    """更新條文"""
-
-    sort_index: int | None = Field(None, ge=0)
-    order_index: int | None = Field(None, ge=0)
-    parent_id: uuid.UUID | None = None
-    article_type: ArticleType | None = None
-    title: str | None = Field(None, max_length=200)
-    subtitle: str | None = Field(None, max_length=200)
-    legal_number: str | None = Field(None, max_length=50)
-    content: str | None = None
-    is_deleted: bool | None = None
-    frozen_by: str | None = None
-
-
 # ── 審議流程日誌 ─────────────────────────────────────────────────────────────
 
 
@@ -81,33 +54,6 @@ class RegulationWorkflowLogOut(BaseModel):
     actor_id: uuid.UUID
     note: str | None
     created_at: datetime
-
-
-class WorkflowActionRequest(BaseModel):
-    """審議流程動作請求（送審/排程/核定/退回）"""
-
-    note: str | None = Field(None, max_length=500, description="備註或退回原因")
-    meeting_id: uuid.UUID | None = Field(None, description="排入議程時，同步加入指定議事會議的議程")
-    serial_template_id: uuid.UUID | None = Field(
-        None, description="主席公布產生公文時指定使用的字號模板"
-    )
-    manual_serial_number: str | None = Field(
-        None, max_length=100, description="主席公布產生公文時指定手動字號"
-    )
-
-
-class ArticleReorderItem(BaseModel):
-    id: uuid.UUID
-    sort_index: int = Field(..., ge=0)
-
-
-class ArticleReorderRequest(BaseModel):
-    items: list[ArticleReorderItem] = Field(..., min_length=1)
-
-
-class ArticleMoveRequest(BaseModel):
-    parent_id: uuid.UUID | None = Field(None, description="目標父節點")
-    order_index: int = Field(..., ge=0, description="目標同層排序位置")
 
 
 class RegulationTreeNodeOut(BaseModel):
@@ -141,17 +87,13 @@ class RegulationRevisionOut(BaseModel):
     proposal_metadata_snapshot: str | None = None
     resolution_link: str | None
     amended_at: datetime
+    amended_at_precision: Literal["date", "month", "year", "unknown"] = "date"
+    amended_year: int | None = None
+    published_document_id: uuid.UUID | None = None
+    published_document_summary: str | None = None
     amended_by: uuid.UUID
     amended_by_name: str | None = None
     created_at: datetime
-
-
-class RegulationRevisionCreate(BaseModel):
-    """手動建立修訂記錄（發布新版時通常由服務層自動呼叫）"""
-
-    change_brief: str = Field(..., min_length=1, max_length=500, description="修訂摘要")
-    is_total_amendment: bool = Field(False, description="是否為全文修訂")
-    resolution_link: str | None = Field(None, description="相關決議連結（多個以換行分隔）")
 
 
 # ── 法規主體 ─────────────────────────────────────────────────────────────────
@@ -199,6 +141,14 @@ class RegulationOut(BaseModel):
     revisions: list[RegulationRevisionOut] = []
     workflow_logs: list[RegulationWorkflowLogOut] = []
 
+    @computed_field(description="未刪除的條節點數；編、章、節、項、款、目不計入")
+    @property
+    def article_count(self) -> int:
+        return sum(
+            article.article_type == ArticleType.ARTICLE and not article.is_deleted
+            for article in self.articles
+        )
+
 
 class RegulationListItem(BaseModel):
     """法規列表輕量版（不含 Markdown 內容與條文，加快載入）"""
@@ -214,6 +164,7 @@ class RegulationListItem(BaseModel):
     workflow_status: RegulationWorkflowStatus
     org_id: uuid.UUID
     published_at: datetime | None
+    effective_date: datetime | None = None
     repealed_date: datetime | None = None
     freeze_reason: str | None = None
     freeze_at: datetime | None = None
@@ -224,60 +175,12 @@ class RegulationListItem(BaseModel):
 # ── 請求體 ────────────────────────────────────────────────────────────────────
 
 
-class RegulationCreate(BaseModel):
-    title: str = Field(..., min_length=1, max_length=200, description="法規標題")
-    category: RegulationCategory = Field(..., description="法規分類")
-    content: str = Field(default="", description="Markdown 全文內容（與結構化條文可並用）")
-    preface: str | None = Field(None, description="法規前言/序言（選填）")
-    amendment_type: RegulationAmendmentType = Field(
-        RegulationAmendmentType.ENACT, description="制定/修正/廢止"
-    )
-    amended_articles: str | None = Field(None, description="修正條號清單")
-    effective_date: datetime | None = Field(None, description="生效日期")
-    legislative_history: str | None = Field(None, description="沿革")
-    legal_basis: str | None = Field(None, description="法源依據")
-    proposal_metadata: str | None = Field(None, description="提案/決議資訊")
-    org_id: uuid.UUID = Field(..., description="所屬組織 ID")
-
-
-class RegulationUpdate(BaseModel):
-    title: str | None = Field(None, min_length=1, max_length=200)
-    category: RegulationCategory | None = None
-    content: str | None = Field(None, description="Markdown 全文內容（空字串代表清除）")
-    preface: str | None = None
-    amendment_type: RegulationAmendmentType | None = None
-    amended_articles: str | None = None
-    effective_date: datetime | None = None
-    legislative_history: str | None = None
-    legal_basis: str | None = None
-    proposal_metadata: str | None = None
-    change_brief: str | None = Field(
-        None, max_length=500, description="修改摘要（更新時自動建立歷程）"
-    )
-    autosave: bool = Field(False, description="線上自動儲存；不遞增版本、不建立修訂歷程")
-
-
 class RegulationPublishRequest(BaseModel):
     """發布法規（草稿 → 正式發布）"""
 
     change_brief: str = Field(default="初次發布", max_length=500, description="修訂摘要")
     is_total_amendment: bool = Field(False, description="是否為全文修訂")
     resolution_link: str | None = Field(None, description="相關決議連結")
-
-
-class RegulationArchiveRequest(BaseModel):
-    """停用（封存）法規：is_active=False"""
-
-    reason: str | None = Field(None, max_length=500, description="停用原因")
-
-
-class RepealRegulationRequest(BaseModel):
-    """廢止法規"""
-
-    reason: str = Field(..., min_length=1, max_length=500, description="廢止理由")
-    replacement_id: uuid.UUID | None = Field(None, description="替代法規 ID（若有）")
-
-    pass
 
 
 class RegulationSearchResult(BaseModel):
@@ -294,6 +197,7 @@ class RegulationSearchResult(BaseModel):
     workflow_status: RegulationWorkflowStatus
     org_id: uuid.UUID
     published_at: datetime | None
+    effective_date: datetime | None = None
     repealed_date: datetime | None = None
     freeze_reason: str | None = None
     freeze_at: datetime | None = None
@@ -301,32 +205,6 @@ class RegulationSearchResult(BaseModel):
     updated_at: datetime
     # 命中的條文摘要（關鍵字出現在標題/副標題/內容的條文）
     matched_articles: list[RegulationArticleOut] = []
-
-
-class AutoRenumberRequest(BaseModel):
-    include_special_number: bool = Field(False, description="是否重編特殊條號（如 5-1）")
-
-
-class AmendmentComparisonRowOut(BaseModel):
-    article_key: str
-    status: str = Field(default="修正", description="異動類型：新增/修正/條次調整/刪除")
-    revised_text: str
-    current_text: str
-    note: str
-
-
-class AmendmentComparisonExportRowIn(BaseModel):
-    article_key: str = Field(..., max_length=200)
-    status: str = Field(..., max_length=20)
-    revised_text: str = ""
-    current_text: str = ""
-    note: str = ""
-
-
-class AmendmentComparisonExportRequest(BaseModel):
-    proposal_title: str = Field(..., min_length=1, max_length=200)
-    rationale: str | None = Field(None, max_length=5000)
-    rows: list[AmendmentComparisonExportRowIn] = Field(..., min_length=1)
 
 
 class ReferenceWarningOut(BaseModel):

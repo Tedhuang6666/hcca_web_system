@@ -1,5 +1,8 @@
 """FastAPI 依賴注入 - 身份驗證相關"""
 
+import uuid
+from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 from fastapi import Depends, HTTPException, Request, status
@@ -8,10 +11,14 @@ from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.auth_cookies import access_token_from_cookies
 from api.core.config import settings
 from api.core.database import get_db
-from api.core.security import decode_token, is_blacklisted, register_active_token
+from api.core.defense import find_identity_block
+from api.core.security import decode_token, is_blacklisted, is_session_revoked
 from api.models.user import User
+from api.models.user_identity import UserIdentity
+from api.models.user_session import UserSession
 
 if TYPE_CHECKING:
     pass
@@ -23,9 +30,7 @@ def _token_from_request(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None,
 ) -> str | None:
-    if credentials is not None:
-        return credentials.credentials
-    return request.cookies.get(settings.ACCESS_TOKEN_COOKIE_NAME)
+    return access_token_from_cookies(request.cookies)
 
 
 async def _user_from_access_token(token: str, db: AsyncSession) -> User | None:
@@ -35,20 +40,60 @@ async def _user_from_access_token(token: str, db: AsyncSession) -> User | None:
         payload = decode_token(token)
     except (ExpiredSignatureError, InvalidTokenError):
         return None
-    if payload.get("type") != "access":
+    token_type = payload.get("type")
+    if token_type != "access":
         return None
-    user_id: str | None = payload.get("sub")
-    if not user_id:
+    raw_user_id: str | None = payload.get("sub")
+    if not raw_user_id:
         return None
+    try:
+        user_id = uuid.UUID(raw_user_id)
+    except (TypeError, ValueError):
+        return None
+
+    # JWT 是身分提示而不是 User 的可寫快照。每次都取受目前 session 管理的 ORM
+    # instance，確保停用、降權、MFA 與個人資料更新立即以資料庫狀態為準。
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if user is None or not user.is_active:
         return None
-    # 使用即註冊：把 jti 寫進 user_tokens 集合，讓 admin 能 revoke_user 一次清空所有 session
-    await register_active_token(
-        user_id, payload.get("jti"), settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
-    )
+
+    raw_session_id = payload.get("sid")
+    if raw_session_id is not None:
+        try:
+            session_id = uuid.UUID(str(raw_session_id))
+        except (TypeError, ValueError):
+            return None
+        # Redis 是即時撤銷快取；資料庫是可在 Redis 故障或資料遺失後復原的真相。
+        if await is_session_revoked(str(session_id)):
+            return None
+        now = datetime.now(UTC)
+        active_session = await db.scalar(
+            select(UserSession.id).where(
+                UserSession.id == session_id,
+                UserSession.user_id == user_id,
+                UserSession.revoked_at.is_(None),
+                UserSession.expires_at > now,
+                UserSession.absolute_expires_at > now,
+            )
+        )
+        if active_session is None:
+            return None
+
     return user
+
+
+def ensure_admin_login_ip_allowed(request: Request, user: User) -> None:
+    """在建立或更新管理員登入工作階段時套用 IP 白名單。"""
+    if not user.is_superuser or not settings.ADMIN_IP_WHITELIST:
+        return
+
+    client_ip = request.client.host if request.client else ""
+    if client_ip not in settings.ADMIN_IP_WHITELIST:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="此 IP 不被授權為管理員",
+        )
 
 
 # 不拋出 401，直接回傳 None（供公開端點使用）
@@ -57,7 +102,21 @@ async def get_optional_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> "User | None":
-    """嘗試解析 Bearer Token，失敗或無 token 時回傳 None（不拋出 401）"""
+    """可選登入仍須通過完整身份檢查；封鎖或失效身份只享有匿名存取權。"""
+    try:
+        return await get_current_user(request, credentials, db)
+    except HTTPException as exc:
+        if exc.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN):
+            return None
+        raise
+
+
+async def get_identity_for_access_status(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> "User | None":
+    """僅供封鎖狀態查詢辨識有效身份；不可作為業務資料的授權依賴。"""
     token = _token_from_request(request, credentials)
     if token is None:
         return None
@@ -81,10 +140,6 @@ async def get_current_user(
     if token is None:
         raise _CREDENTIALS_EXCEPTION
 
-    # 檢查黑名單
-    if await is_blacklisted(token):
-        raise _CREDENTIALS_EXCEPTION
-
     # 解碼 JWT
     try:
         payload = decode_token(token)
@@ -97,25 +152,48 @@ async def get_current_user(
     except InvalidTokenError as e:
         raise _CREDENTIALS_EXCEPTION from e
 
-    # 驗證 Token 類型
     if payload.get("type") != "access":
         raise _CREDENTIALS_EXCEPTION
 
-    user_id: str | None = payload.get("sub")
-    if user_id is None:
-        raise _CREDENTIALS_EXCEPTION
-
-    # 查詢使用者
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
+    user = await _user_from_access_token(token, db)
     if user is None:
         raise _CREDENTIALS_EXCEPTION
 
-    # 使用即註冊 jti，供 admin 端 revoke_user 強制登出
-    await register_active_token(
-        user_id, payload.get("jti"), settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    identity_emails = {user.email}
+    rows = await db.scalars(
+        select(UserIdentity.email).where(
+            UserIdentity.user_id == user.id,
+            UserIdentity.email.is_not(None),
+        )
     )
+    identity_emails.update(email for email in rows.all() if email)
+    block = await find_identity_block(
+        user_id=str(user.id),
+        emails=identity_emails,
+    )
+    if block:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "message": "此帳號已被網站封鎖",
+                "blocked": True,
+                "reason": block.get("reason") or "未提供原因",
+                "expires_at": block.get("expires_at"),
+            },
+        )
 
+    if user.is_superuser and settings.ADMIN_IP_WHITELIST:
+        # 白名單原本只在 Google 登入時檢查；passkey、Discord、免密碼連結與 refresh
+        # 取得的 session 也必須受同一限制，否則白名單形同虛設。
+        client_ip = request.client.host if request.client else ""
+        if client_ip not in settings.ADMIN_IP_WHITELIST:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="此 IP 不被授權為管理員",
+            )
+
+    # 供 SecurityAuditMiddleware 在回應後記錄操作者；只放識別資料，不保留 ORM 物件。
+    request.state.user = SimpleNamespace(id=user.id, email=user.email)
     return user
 
 
@@ -129,3 +207,17 @@ async def get_current_active_user(
             detail="帳號已停用",
         )
     return current_user
+
+
+async def get_current_school_member(
+    current_user: User = Depends(get_current_active_user),
+) -> User:
+    """確保當前使用者具校內成員身分。"""
+    normalized = current_user.email.strip().lower()
+    domain = normalized.rsplit("@", maxsplit=1)[-1] if "@" in normalized else ""
+    if current_user.student_id or domain in settings.LOGIN_ALLOWED_EMAIL_DOMAINS:
+        return current_user
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="僅限校內成員使用",
+    )

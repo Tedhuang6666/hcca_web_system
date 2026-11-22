@@ -14,28 +14,24 @@ NOTIFICATION_TYPES: tuple[str, ...] = (
     "document_approved",
     "document_rejected",
     "document_recalled",
-    # 議事
-    "meeting_invited",
-    "meeting_today",
-    "meeting_minutes_ready",
     # 法規
     "regulation_review_assigned",
     "regulation_publish_ready",
     "regulation_published",
     # 陳情
+    "petition_received",
+    "petition_updated",
     "petition_assigned",
     "petition_replied",
     "petition_status_updated",
-    # 學餐 / 校商
-    "meal_class_collecting",
-    "meal_pickup_ready",
+    # 校商投稿 / 商品
+    "merchandise_submission_received",
+    "merchandise_submission_status",
     "shop_order_paid",
     # 問卷 / 公告
     "survey_invitation",
     "announcement",
-    # 行事曆 / 工作
-    "calendar_event_invited",
-    "calendar_event_updated",
+    # 工作
     "work_item_assigned",
     "work_item_due",
     # 系統
@@ -46,9 +42,17 @@ NOTIFICATION_TYPES: tuple[str, ...] = (
 _EMAIL_DEFAULT_ON: frozenset[str] = frozenset(
     {
         "document_pending",
-        "meeting_invited",
+        "document_approved",
+        "document_rejected",
+        "document_recalled",
         "regulation_publish_ready",
+        "petition_received",
+        "petition_updated",
         "petition_assigned",
+        "petition_replied",
+        "petition_status_updated",
+        "merchandise_submission_received",
+        "merchandise_submission_status",
     }
 )
 
@@ -58,22 +62,19 @@ TYPE_LABELS: dict[str, str] = {
     "document_approved": "公文核准",
     "document_rejected": "公文退回",
     "document_recalled": "公文撤回",
-    "meeting_invited": "會議邀請",
-    "meeting_today": "今日會議提醒",
-    "meeting_minutes_ready": "會議紀錄發布",
     "regulation_review_assigned": "法規排入議程",
     "regulation_publish_ready": "法規待公布",
     "regulation_published": "法規已公布",
+    "petition_received": "新陳情",
+    "petition_updated": "陳情更新",
     "petition_assigned": "陳情指派",
     "petition_replied": "陳情回覆",
     "petition_status_updated": "陳情狀態更新",
-    "meal_class_collecting": "班級開始收單",
-    "meal_pickup_ready": "取餐通知",
-    "shop_order_paid": "校商訂單付款",
+    "merchandise_submission_received": "校商投稿送出",
+    "merchandise_submission_status": "校商投稿狀態",
+    "shop_order_paid": "商品訂單付款",
     "survey_invitation": "問卷邀請",
     "announcement": "公告通知",
-    "calendar_event_invited": "行事曆邀請",
-    "calendar_event_updated": "行事曆異動",
     "work_item_assigned": "工作指派",
     "work_item_due": "工作期限",
     "system": "系統通知",
@@ -144,3 +145,77 @@ def set_digest_frequency(prefs: dict | None, frequency: str) -> dict:
     next_prefs = dict(prefs or {})
     next_prefs[_DIGEST_KEY] = frequency
     return next_prefs
+
+
+# ── 模組靜音（一鍵關閉整個模組的所有通知）────────────────────────────────────
+
+# 通知類型 → 所屬模組（供靜音時批次關閉同模組所有類型）
+TYPE_MODULE_MAP: dict[str, str] = {
+    "document_pending": "document",
+    "document_approved": "document",
+    "document_rejected": "document",
+    "document_recalled": "document",
+    "regulation_review_assigned": "regulation",
+    "regulation_publish_ready": "regulation",
+    "regulation_published": "regulation",
+    "petition_received": "petition",
+    "petition_updated": "petition",
+    "petition_assigned": "petition",
+    "petition_replied": "petition",
+    "petition_status_updated": "petition",
+    "merchandise_submission_received": "shop",
+    "merchandise_submission_status": "shop",
+    "shop_order_paid": "shop",
+    "survey_invitation": "survey",
+    "announcement": "announcement",
+    "work_item_assigned": "work",
+    "work_item_due": "work",
+    "system": "system",
+}
+
+MODULE_LABELS: dict[str, str] = {
+    "document": "公文",
+    "regulation": "法規",
+    "petition": "陳情",
+    "shop": "購票",
+    "survey": "問卷",
+    "announcement": "公告",
+    "work": "工作",
+    "system": "系統",
+}
+
+KNOWN_MODULES: frozenset[str] = frozenset(MODULE_LABELS)
+
+# 存於 notification_preferences JSON 的保留鍵（雙底線開頭）
+_MUTED_MODULES_KEY = "__muted_modules"
+
+
+def get_muted_modules(prefs: dict | None) -> list[str]:
+    """從原始 prefs JSON 取出已靜音的模組清單；未設定回空列表。"""
+    raw = (prefs or {}).get(_MUTED_MODULES_KEY)
+    if isinstance(raw, list):
+        return [m for m in raw if isinstance(m, str) and m in KNOWN_MODULES]
+    return []
+
+
+def set_muted_modules(prefs: dict | None, modules: list[str]) -> dict:
+    """回傳寫入新靜音模組清單後的完整 prefs dict（保留其他欄位）。
+
+    同時把被靜音模組的所有通知類型的 inapp/email/line/discord 全關；
+    取消靜音時不自動恢復（避免覆蓋使用者之前的細部設定）。
+    """
+    invalid = [m for m in modules if m not in KNOWN_MODULES]
+    if invalid:
+        raise ValueError(f"未知的模組名稱：{', '.join(invalid)}")
+    next_prefs = normalize_preferences(prefs)
+    mute_set = frozenset(modules)
+    for ntype, module in TYPE_MODULE_MAP.items():
+        if module in mute_set:
+            next_prefs[ntype] = {"inapp": False, "email": False, "line": False, "discord": False}
+    # 寫回保留鍵，在 JSONB 最外層
+    result: dict = {**next_prefs, _MUTED_MODULES_KEY: sorted(mute_set)}
+    # 保留其他保留鍵（如 __digest_frequency）
+    for key, val in (prefs or {}).items():
+        if key.startswith("__") and key != _MUTED_MODULES_KEY:
+            result[key] = val
+    return result

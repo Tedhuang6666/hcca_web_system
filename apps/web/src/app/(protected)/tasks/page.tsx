@@ -1,0 +1,488 @@
+"use client";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import {
+  FileText, Scale, MessageSquare, CheckSquare, ShoppingCart,
+  Megaphone, Inbox, AlertCircle, Clock, ChevronRight,
+} from "lucide-react";
+import {
+  documentsApi,
+  regulationsApi,
+  tasksApi,
+  type DocumentStats,
+  type TaskItem,
+  type TaskInboxResponse,
+  type TaskModule,
+} from "@/lib/api";
+import type { RegulationWorkflowStatus } from "@/lib/types";
+import { ListPageSkeleton } from "@/components/ui/Skeleton";
+import { cacheGet, cacheSet } from "@/lib/api-cache";
+import { usePermissions } from "@/hooks/usePermissions";
+import { LoadingState } from "@/components/ui/LoadingState";
+
+type IconProps = { size: number; "aria-hidden": boolean };
+function FallbackModuleIcon(p: IconProps) { return <FileText {...p} />; }
+
+const MODULE_ICONS: Record<TaskModule, React.ComponentType<IconProps>> = {
+  document: (p) => <FileText {...p} />,
+  regulation: (p) => <Scale {...p} />,
+  petition: (p) => <MessageSquare {...p} />,
+  survey: (p) => <CheckSquare {...p} />,
+  shop: (p) => <ShoppingCart {...p} />,
+  announcement: (p) => <Megaphone {...p} />,
+  work_item: (p) => <CheckSquare {...p} />,
+};
+
+const MODULE_LABEL: Record<TaskModule, string> = {
+  document: "公文",
+  regulation: "法規",
+  petition: "陳情",
+  survey: "問卷",
+  shop: "商品",
+  announcement: "公告",
+  work_item: "工作",
+};
+
+const SEVERITY_STYLES: Record<string, { color: string; bg: string; border: string; label: string }> = {
+  info:     { color: "var(--primary-text)", bg: "var(--primary-dim)", border: "var(--info-border)",    label: "一般" },
+  warning:  { color: "var(--warning)", bg: "var(--warning-dim)", border: "var(--warning-border)", label: "提醒" },
+  critical: { color: "var(--danger)",  bg: "var(--danger-dim)",  border: "var(--danger-border)",  label: "緊急" },
+};
+
+type QuickFilter = "all" | "critical" | "today" | "overdue" | "high";
+
+const QUICK_FILTERS: Array<{ key: QuickFilter; label: string }> = [
+  { key: "all", label: "全部" },
+  { key: "critical", label: "緊急" },
+  { key: "today", label: "今日" },
+  { key: "overdue", label: "已逾期" },
+  { key: "high", label: "高分" },
+];
+
+function formatDueAt(s?: string | null) {
+  if (!s) return "";
+  const d = new Date(s);
+  const now = new Date();
+  const diffMs = d.getTime() - now.getTime();
+  const diffH = Math.round(diffMs / (1000 * 60 * 60));
+  if (diffMs < 0) {
+    const overdueH = Math.abs(diffH);
+    return overdueH < 24 ? `已過 ${overdueH} 小時` : `已過 ${Math.round(overdueH / 24)} 天`;
+  }
+  if (diffH < 24) return `${diffH} 小時內`;
+  return `${Math.round(diffH / 24)} 天後`;
+}
+
+const CACHE_KEYS = {
+  tasks: "tasks/inbox",
+  dashboardTasks: "dashboard/tasks",
+  docStats: "tasks/doc-stats",
+  regCounts: "tasks/reg-counts",
+} as const;
+
+export default function TasksPage() {
+  const router = useRouter();
+  const [cachedTasks, setCachedTasks] = useState<TaskInboxResponse | undefined>();
+  const [cachedDocStats, setCachedDocStats] = useState<DocumentStats | undefined>();
+  const [cachedRegCounts, setCachedRegCounts] = useState<Record<string, number> | undefined>();
+  const [cacheHydrated, setCacheHydrated] = useState(false);
+  const [data, setData] = useState<TaskInboxResponse | null>(null);
+  const [docStats, setDocStats] = useState<DocumentStats | null>(null);
+  const [regCounts, setRegCounts] = useState<Record<string, number>>({});
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<TaskModule | "all">("all");
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
+  const { can, canAny, isAdmin, permissions } = usePermissions();
+  const hasTaskAccess = isAdmin
+    || permissions.has("admin:all")
+    || Array.from(permissions).some(
+      (permission) => permission.startsWith("document:") || permission.startsWith("regulation:"),
+    );
+  const canSeeDocumentDrafts = can("document:draft");
+  const canSeeDocumentApprovals = can("document:approve");
+  const canSeeRegulationReview = canAny("regulation:schedule", "regulation:council_approve");
+  const canSeeRegulationPublish = can("regulation:president_publish");
+
+  useEffect(() => {
+    // Dashboard 已經抓過同一份待辦清單時，直接沿用該快取，避免從首頁
+    // 進入待辦中心又發出一次相同的 /tasks GET。
+    setCachedTasks(
+      cacheGet<TaskInboxResponse>(CACHE_KEYS.tasks)
+      ?? cacheGet<TaskInboxResponse>(CACHE_KEYS.dashboardTasks),
+    );
+    setCachedDocStats(cacheGet<DocumentStats>(CACHE_KEYS.docStats));
+    setCachedRegCounts(cacheGet<Record<string, number>>(CACHE_KEYS.regCounts));
+    setCacheHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!cacheHydrated) return;
+    let mounted = true;
+    if (cachedTasks) {
+      setData(cachedTasks);
+      setLoading(false);
+      cacheSet(CACHE_KEYS.tasks, cachedTasks);
+    }
+    if (cachedDocStats) setDocStats(cachedDocStats);
+    if (cachedRegCounts) setRegCounts(cachedRegCounts);
+    if (!hasTaskAccess) {
+      router.replace("/dashboard");
+      return () => { mounted = false; };
+    }
+    const loadSupplementary = () => {
+      void Promise.allSettled([
+        canSeeDocumentDrafts || canSeeDocumentApprovals ? documentsApi.stats() : Promise.resolve(null),
+        ...(["under_review", "scheduled", "council_approved"] as RegulationWorkflowStatus[])
+          .map(status => {
+            const allowed = status === "council_approved"
+              ? canSeeRegulationPublish
+              : canSeeRegulationReview;
+            return allowed
+              ? regulationsApi.list({ workflow_status: status, limit: "50" })
+              : Promise.resolve([]);
+          }),
+      ]).then(([statsRes, underReviewRes, scheduledRes, councilApprovedRes]) => {
+        if (!mounted) return;
+        if (statsRes.status === "fulfilled" && statsRes.value) {
+          setDocStats(statsRes.value);
+          cacheSet(CACHE_KEYS.docStats, statsRes.value);
+        }
+        const counts = {
+          under_review: underReviewRes.status === "fulfilled" ? underReviewRes.value.length : 0,
+          scheduled: scheduledRes.status === "fulfilled" ? scheduledRes.value.length : 0,
+          council_approved: councilApprovedRes.status === "fulfilled" ? councilApprovedRes.value.length : 0,
+        };
+        setRegCounts(counts);
+        cacheSet(CACHE_KEYS.regCounts, counts);
+      });
+    };
+
+    const supplementaryTimer = window.setTimeout(loadSupplementary, 250);
+    if (!cachedTasks) {
+      tasksApi.list()
+        .then((nextData) => {
+          if (!mounted) return;
+          setData(nextData);
+          cacheSet(CACHE_KEYS.tasks, nextData);
+        })
+        .catch((e: unknown) => {
+          toast.error("無法載入待辦中心");
+          console.error(e);
+        })
+        .finally(() => { if (mounted) setLoading(false); });
+    }
+    return () => {
+      mounted = false;
+      window.clearTimeout(supplementaryTimer);
+    };
+  }, [
+    canSeeDocumentApprovals,
+    canSeeDocumentDrafts,
+    canSeeRegulationPublish,
+    canSeeRegulationReview,
+    cacheHydrated,
+    cachedDocStats,
+    cachedRegCounts,
+    cachedTasks,
+    hasTaskAccess,
+    router,
+  ]);
+
+  const filtered = useMemo<TaskItem[]>(() => {
+    if (!data) return [];
+    const now = Date.now();
+    const tomorrow = now + 24 * 60 * 60 * 1000;
+    return data.items.filter((t) => {
+      if (t.module === "document" && !canSeeDocumentApprovals) return false;
+      if (
+        t.module === "regulation"
+        && ((t.action === "publish" && !canSeeRegulationPublish)
+          || (t.action === "review" && !canSeeRegulationReview))
+      ) return false;
+      if (tab !== "all" && t.module !== tab) return false;
+      const due = t.due_at ? new Date(t.due_at).getTime() : null;
+      if (quickFilter === "critical") return t.severity === "critical";
+      if (quickFilter === "today") return due !== null && due >= now && due <= tomorrow;
+      if (quickFilter === "overdue") return due !== null && due < now;
+      if (quickFilter === "high") return t.priority_score >= 70;
+      return true;
+    });
+  }, [
+    canSeeDocumentApprovals,
+    canSeeRegulationPublish,
+    canSeeRegulationReview,
+    data,
+    quickFilter,
+    tab,
+  ]);
+
+  const moduleTabs: Array<TaskModule | "all"> = useMemo(() => {
+    const tabs: Array<TaskModule | "all"> = ["all"];
+    if (!data) return tabs;
+    const present = new Set(
+      data.items
+        .filter((t) => {
+          if (t.module === "document") return canSeeDocumentApprovals;
+          if (t.module !== "regulation") return true;
+          return t.action === "publish" ? canSeeRegulationPublish : canSeeRegulationReview;
+        })
+        .map((t) => t.module),
+    );
+    return [...tabs, ...Array.from(present).sort()];
+  }, [canSeeDocumentApprovals, canSeeRegulationPublish, canSeeRegulationReview, data]);
+
+  if (!hasTaskAccess) {
+    return (
+      <LoadingState
+        title="正在返回首頁"
+        description="此帳號目前沒有公文或法規工作權限。"
+      />
+    );
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-5">
+      <header className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold flex items-center gap-2"
+            style={{ color: "var(--text-primary)" }}>
+            <Inbox size={20} aria-hidden={true} style={{ color: "var(--primary-text)" }} />
+            我的待辦
+          </h1>
+        </div>
+        {data && (
+          <span className="text-3xl font-bold leading-none"
+            style={{ color: "var(--text-primary)" }}>
+            {data.total}
+          </span>
+        )}
+      </header>
+
+      <section
+        className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4"
+        aria-label="治理工作台摘要"
+      >
+        {canSeeDocumentApprovals && (
+          <WorkspaceMetric href="/documents?status=pending&my_only=true" label="待我簽核" value={docStats?.pending_my_approval ?? 0} tone="danger" />
+        )}
+        {canSeeDocumentDrafts && (
+          <WorkspaceMetric href="/documents?status=draft&my_only=true" label="我的草稿" value={docStats?.draft ?? 0} tone="neutral" />
+        )}
+        {canSeeRegulationReview && (
+          <WorkspaceMetric href="/regulations/pending" label="法規送審" value={regCounts.under_review ?? 0} tone="info" />
+        )}
+        {canSeeRegulationPublish && (
+          <WorkspaceMetric href="/regulations/pending" label="待主席公布" value={regCounts.council_approved ?? 0} tone="success" />
+        )}
+      </section>
+
+      <section className="grid gap-2 sm:grid-cols-3" aria-label="常用治理入口">
+        {canSeeDocumentDrafts && <QuickAction href="/documents/new" label="建立公文" detail="套範本、選字號、保存草稿" />}
+        {can("regulation:create") && <QuickAction href="/regulations/new" label="起草法規" detail="建立條文、送審與會議連動" />}
+      </section>
+
+      <section
+        className="rounded-lg p-3"
+        style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+        aria-label="智慧篩選"
+      >
+        <div className="flex gap-1 overflow-x-auto">
+          {QUICK_FILTERS.map((filter) => {
+            const active = quickFilter === filter.key;
+            return (
+              <button
+                key={filter.key}
+                type="button"
+                onClick={() => setQuickFilter(filter.key)}
+                aria-pressed={active}
+                className="flex-shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium"
+                style={{
+                  background: active ? "var(--primary-dim)" : "transparent",
+                  color: active ? "var(--primary-text)" : "var(--text-muted)",
+                  border: active ? "1px solid var(--info-border)" : "1px solid var(--border)",
+                }}>
+                {filter.label}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Tabs */}
+      <div className="flex gap-0.5 p-1 rounded-xl overflow-x-auto"
+        style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+        role="tablist" aria-label="待辦類別">
+        {moduleTabs.map((m) => {
+          const count = m === "all" ? (data?.total ?? 0) : (data?.by_module[m] ?? 0);
+          const active = tab === m;
+          return (
+            <button
+              key={m}
+              role="tab"
+              aria-selected={active}
+              onClick={() => setTab(m)}
+              className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5"
+              style={{
+                background: active ? "var(--primary-dim)" : "transparent",
+                color: active ? "var(--primary-text)" : "var(--text-muted)",
+                border: active ? "1px solid var(--info-border)" : "1px solid transparent",
+              }}>
+              <span>{m === "all" ? "全部" : MODULE_LABEL[m as TaskModule]}</span>
+              <span className="opacity-70">({count})</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* List */}
+      {loading ? (
+        <ListPageSkeleton rows={5} showHeader={false} showFilters={false} />
+      ) : filtered.length === 0 ? (
+        <EmptyState />
+      ) : (
+        <ul className="space-y-2">
+          {filtered.map((t) => <TaskRow key={t.id} t={t} />)}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function WorkspaceMetric({
+  href,
+  label,
+  value,
+  tone,
+}: {
+  href: string;
+  label: string;
+  value: number;
+  tone: "danger" | "neutral" | "info" | "success";
+}) {
+  const colors = {
+    danger: { color: "var(--danger)", bg: "var(--danger-dim)", border: "var(--danger-border)" },
+    neutral: { color: "var(--text-primary)", bg: "var(--bg-surface)", border: "var(--border)" },
+    info: { color: "var(--primary-text)", bg: "var(--primary-dim)", border: "var(--info-border)" },
+    success: { color: "var(--success)", bg: "var(--success-dim)", border: "var(--success-border, var(--border))" },
+  }[tone];
+  return (
+    <Link
+      href={href}
+      className="rounded-lg px-4 py-3 transition-opacity hover:opacity-85"
+      style={{ background: colors.bg, border: `1px solid ${colors.border}`, textDecoration: "none" }}
+    >
+      <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>{label}</p>
+      <p className="mt-1 text-2xl font-semibold leading-none" style={{ color: colors.color }}>{value}</p>
+    </Link>
+  );
+}
+
+function QuickAction({ href, label, detail }: { href: string; label: string; detail: string }) {
+  return (
+    <Link
+      href={href}
+      className="rounded-lg p-3 transition-colors"
+      style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", textDecoration: "none" }}
+    >
+      <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{label}</p>
+      <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>{detail}</p>
+    </Link>
+  );
+}
+
+function TaskRow({ t }: { t: TaskItem }) {
+  const sev = SEVERITY_STYLES[t.severity] ?? SEVERITY_STYLES.info;
+  const Icon = MODULE_ICONS[t.module] ?? FallbackModuleIcon;
+  const due = formatDueAt(t.due_at);
+
+  return (
+    <li>
+      <Link
+        href={t.href}
+        className="flex items-center gap-3 p-4 rounded-lg transition-colors"
+        style={{
+          background: "var(--bg-surface)",
+          border: "1px solid var(--border)",
+          textDecoration: "none",
+          borderLeftWidth: "3px",
+          borderLeftColor: sev.color,
+        }}
+        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
+        onMouseLeave={(e) => (e.currentTarget.style.background = "var(--bg-surface)")}>
+        <div
+          className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+          style={{ background: sev.bg, color: sev.color, border: `1px solid ${sev.border}` }}
+          aria-hidden="true">
+          <Icon size={15} aria-hidden={true} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>
+            {t.title}
+          </p>
+          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+            <span className="text-xs px-1.5 py-0.5 rounded font-medium"
+              style={{ color: sev.color, background: sev.bg, border: `1px solid ${sev.border}` }}>
+              {MODULE_LABEL[t.module] ?? t.module}
+            </span>
+            {t.subtitle && (
+              <span className="text-xs truncate" style={{ color: "var(--text-muted)" }}>
+                {t.subtitle}
+              </span>
+            )}
+            {due && (
+              <span className="text-xs flex items-center gap-1 ml-auto"
+                style={{ color: t.severity === "critical" ? sev.color : "var(--text-muted)" }}>
+                {t.severity === "critical" ? (
+                  <AlertCircle size={11} aria-hidden={true} />
+                ) : (
+                  <Clock size={11} aria-hidden={true} />
+                )}
+                {due}
+              </span>
+            )}
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <span
+              className="rounded px-1.5 py-0.5 text-xs font-semibold"
+              style={{ background: sev.bg, color: sev.color, border: `1px solid ${sev.border}` }}>
+              優先 {t.priority_score}
+            </span>
+            {t.priority_reasons.slice(0, 2).map((reason) => (
+              <span
+                key={reason}
+                className="rounded px-1.5 py-0.5 text-xs"
+                style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
+                {reason}
+              </span>
+            ))}
+          </div>
+          {t.recommended_action && (
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              {t.recommended_action}
+            </p>
+          )}
+        </div>
+        <ChevronRight size={16} aria-hidden={true} style={{ color: "var(--text-disabled)" }} />
+      </Link>
+    </li>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="text-center py-16 px-4"
+      style={{
+        background: "var(--bg-surface)",
+        border: "1px solid var(--border)",
+        borderRadius: "var(--radius-lg)",
+      }}>
+      <Inbox size={36} aria-hidden={true}
+        style={{ color: "var(--text-disabled)", display: "inline-block", marginBottom: 10 }} />
+      <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+        目前沒有待辦事項
+      </p>
+    </div>
+  );
+}

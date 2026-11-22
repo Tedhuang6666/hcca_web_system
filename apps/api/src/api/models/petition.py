@@ -5,9 +5,20 @@ from __future__ import annotations
 import enum
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -42,6 +53,10 @@ class PetitionEventType(enum.StrEnum):
     REJECTED = "rejected"
     NOTE = "note"
     ATTACHMENT_ADDED = "attachment_added"
+    PUBLIC_REQUESTED = "public_requested"
+    PUBLIC_RESPONDED = "public_responded"
+    PUBLIC_CONFIRMED = "public_confirmed"
+    PUBLIC_DECLINED = "public_declined"
 
 
 class PetitionEventVisibility(enum.StrEnum):
@@ -52,6 +67,14 @@ class PetitionEventVisibility(enum.StrEnum):
 class PetitionAttachmentVisibility(enum.StrEnum):
     PUBLIC = "public"
     INTERNAL = "internal"
+
+
+class PetitionPublicStatus(enum.StrEnum):
+    NOT_REQUESTED = "not_requested"
+    PENDING_USER = "pending_user"
+    PENDING_HANDLER = "pending_handler"
+    PUBLISHED = "published"
+    DECLINED = "declined"
 
 
 class PetitionType(Base, TimestampMixin):
@@ -76,10 +99,20 @@ class PetitionCase(Base, TimestampMixin):
     """陳情案件主表。"""
 
     __tablename__ = "petition_cases"
+    __table_args__ = (
+        Index(
+            "ix_petitions_assigned_status",
+            "assigned_to_id",
+            "status",
+            postgresql_where=text("status IN ('submitted', 'in_progress', 'needs_info')"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     case_number: Mapped[str] = mapped_column(String(7), nullable=False, unique=True, index=True)
-    verification_code_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    # Keep existing hashes for historical rows; new cases use account ownership instead.
+    verification_code_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    share_token_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
 
     type_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -98,6 +131,10 @@ class PetitionCase(Base, TimestampMixin):
         index=True,
     )
     is_named: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+    is_confidential: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false"), index=True
+    )
+    confidential_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     submitter_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
@@ -110,6 +147,28 @@ class PetitionCase(Base, TimestampMixin):
     latest_internal_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     supplement_request: Mapped[str | None] = mapped_column(Text, nullable=True)
     rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    public_status: Mapped[PetitionPublicStatus] = mapped_column(
+        Enum(
+            PetitionPublicStatus,
+            name="petitionpublicstatus",
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
+        nullable=False,
+        default=PetitionPublicStatus.NOT_REQUESTED,
+        index=True,
+    )
+    public_title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    public_content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    public_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    public_user_responded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    public_published_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     current_org_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("orgs.id", ondelete="RESTRICT"), nullable=False, index=True
@@ -158,6 +217,12 @@ class PetitionCaseEvent(Base, TimestampMixin):
         nullable=False,
         index=True,
     )
+    related_document_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("documents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     event_type: Mapped[PetitionEventType] = mapped_column(
         Enum(
             PetitionEventType,
@@ -192,6 +257,9 @@ class PetitionCaseEvent(Base, TimestampMixin):
     content: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     case: Mapped[PetitionCase] = relationship("PetitionCase", back_populates="events")
+    related_document: Mapped[Any | None] = relationship(
+        "Document", foreign_keys=[related_document_id]
+    )
     actor: Mapped[User | None] = relationship("User", foreign_keys=[actor_id])
     from_org: Mapped[Org | None] = relationship("Org", foreign_keys=[from_org_id])
     to_org: Mapped[Org | None] = relationship("Org", foreign_keys=[to_org_id])
@@ -239,6 +307,7 @@ __all__ = [
     "PetitionCaseEvent",
     "PetitionEventType",
     "PetitionEventVisibility",
+    "PetitionPublicStatus",
     "PetitionStatus",
     "PetitionType",
 ]

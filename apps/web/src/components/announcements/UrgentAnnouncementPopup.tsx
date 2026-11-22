@@ -1,11 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import dynamic from "next/dynamic";
 import { announcementsApi } from "@/lib/api";
 import { useLowDataMode } from "@/hooks/useLowDataMode";
+import { usePublicWS } from "@/hooks/usePublicWS";
 import type { AnnouncementOut } from "@/lib/types";
-import AnnouncementMarkdown from "./AnnouncementMarkdown";
+
+const AnnouncementMarkdown = dynamic(() => import("./AnnouncementMarkdown"), {
+  loading: () => <p role="status">正在載入公告內容…</p>,
+});
 
 const URGENT_CACHE_KEY = "hcca:urgent-announcement-cache";
 const URGENT_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -38,21 +43,47 @@ function writeUrgentCache(item: AnnouncementOut | null) {
   }
 }
 
+function urgentDismissalKey(item: AnnouncementOut) {
+  return `urgent-announcement:${item.id}:${item.updated_at}`;
+}
+
+function hasDismissedUrgent(item: AnnouncementOut) {
+  if (typeof window === "undefined") return false;
+  try {
+    const storage = item.show_on_every_visit ? sessionStorage : localStorage;
+    return storage.getItem(urgentDismissalKey(item)) === "dismissed";
+  } catch {
+    return false;
+  }
+}
+
+function rememberUrgentDismissal(item: AnnouncementOut) {
+  if (typeof window === "undefined") return;
+  try {
+    const storage = item.show_on_every_visit ? sessionStorage : localStorage;
+    storage.setItem(urgentDismissalKey(item), "dismissed");
+  } catch {
+    /* storage quota or private mode */
+  }
+}
+
 export default function UrgentAnnouncementPopup() {
   const [item, setItem] = useState<AnnouncementOut | null>(null);
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const lowDataMode = useLowDataMode();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
     const cached = lowDataMode ? readUrgentCache() : null;
     if (cached) {
-      if (cached.item) {
-        const key = `urgent-announcement:${cached.item.id}:${cached.item.updated_at}`;
-        if (sessionStorage.getItem(key) !== "dismissed") {
-          setItem(cached.item);
-          setOpen(true);
-        }
+      if (cached.item && !hasDismissedUrgent(cached.item)) {
+        setItem(cached.item);
+        setOpen(true);
       }
       return () => { mounted = false; };
     }
@@ -61,8 +92,7 @@ export default function UrgentAnnouncementPopup() {
         if (!mounted) return;
         writeUrgentCache(announcement);
         if (!announcement) return;
-        const key = `urgent-announcement:${announcement.id}:${announcement.updated_at}`;
-        if (sessionStorage.getItem(key) === "dismissed") return;
+        if (hasDismissedUrgent(announcement)) return;
         setItem(announcement);
         setOpen(true);
       })
@@ -70,31 +100,68 @@ export default function UrgentAnnouncementPopup() {
     return () => { mounted = false; };
   }, [lowDataMode]);
 
-  if (!item || !open) return null;
+  usePublicWS("/public/announcements", () => {
+    void announcementsApi.refreshActiveUrgent().then((announcement) => {
+      if (!announcement || hasDismissedUrgent(announcement)) {
+        setItem(null);
+        setOpen(false);
+        return;
+      }
+      writeUrgentCache(announcement);
+      setItem(announcement);
+      setOpen(true);
+    }).catch(() => undefined);
+  }, !lowDataMode);
+
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  // 彈窗可能在使用者操作中途由推播開啟：移入焦點、支援 Esc，關閉後把焦點還原。
+  useEffect(() => {
+    if (!open || !item) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeButtonRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      rememberUrgentDismissal(item);
+      setOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      if (previous?.isConnected) previous.focus();
+    };
+  }, [open, item]);
+
+  if (!mounted || !item || !open) return null;
 
   const dismiss = () => {
-    sessionStorage.setItem(`urgent-announcement:${item.id}:${item.updated_at}`, "dismissed");
+    rememberUrgentDismissal(item);
     setOpen(false);
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center"
+  const target = item.link_url || `/announcements/${item.id}`;
+  const targetLabel = item.link_label || (item.link_url ? "前往連結" : "查看公告");
+  const opensExternal = /^https?:\/\//.test(target);
+
+  return createPortal(
+    <div className="fixed inset-0 z-[140] flex items-center justify-center overflow-y-auto p-3 sm:p-4"
       style={{ background: "var(--bg-overlay)" }}
       role="dialog"
       aria-modal="true"
-      aria-labelledby="urgent-announcement-title">
+      aria-labelledby="important-announcement-title">
       <div className="absolute inset-0" onClick={dismiss} aria-hidden="true" />
-      <section className="relative w-full max-w-2xl overflow-hidden rounded-lg"
-        style={{ background: "var(--bg-surface)", border: "1px solid var(--danger-border)", boxShadow: "var(--shadow-xl)" }}>
+      <section className="relative flex w-full max-w-2xl flex-col overflow-hidden rounded-lg max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)]"
+        style={{ background: "var(--bg-surface)", border: "1px solid var(--warning-border)", boxShadow: "var(--shadow-xl)" }}>
         <div className="flex items-center justify-between gap-3 px-5 py-3"
-          style={{ background: "var(--danger-dim)", borderBottom: "1px solid var(--danger-border)" }}>
+          style={{ background: "var(--warning-dim)", borderBottom: "1px solid var(--warning-border)" }}>
           <div className="min-w-0">
-            <p className="text-xs font-medium" style={{ color: "var(--danger)" }}>緊急公告</p>
-            <h2 id="urgent-announcement-title" className="truncate text-lg font-semibold">
+            <p className="text-xs font-medium" style={{ color: "var(--warning)" }}>重要公告</p>
+            <h2 id="important-announcement-title" className="break-words text-lg font-semibold leading-snug">
               {item.title}
             </h2>
           </div>
-          <button type="button" className="topbar-icon-btn flex-shrink-0" onClick={dismiss} aria-label="關閉緊急公告">
+          <button ref={closeButtonRef} type="button" className="topbar-icon-btn flex-shrink-0" onClick={dismiss} aria-label="關閉重要公告">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
               <line x1="18" y1="6" x2="6" y2="18" />
@@ -102,20 +169,27 @@ export default function UrgentAnnouncementPopup() {
             </svg>
           </button>
         </div>
-        <div className="max-h-[62vh] overflow-y-auto p-5">
+        <div className="max-h-[55dvh] overflow-y-auto p-4 sm:max-h-[62vh] sm:p-5">
           <AnnouncementMarkdown content={item.content} />
           <div className="mt-6 border-t pt-4 text-sm"
             style={{ borderColor: "var(--border)", color: "var(--text-secondary)" }}>
             公告人：{item.author_name || "未命名"}
           </div>
         </div>
-        <div className="flex justify-end gap-2 px-5 py-4" style={{ borderTop: "1px solid var(--border)" }}>
-          <button type="button" className="btn btn-ghost" onClick={dismiss}>稍後再看</button>
-          <Link href={`/announcements/${item.id}`} className="btn btn-primary" onClick={dismiss}>
-            查看公告
-          </Link>
+        <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:justify-end sm:px-5 sm:py-4" style={{ borderTop: "1px solid var(--border)" }}>
+          <button type="button" className="btn btn-ghost w-full justify-center sm:w-auto" onClick={dismiss}>稍後再看</button>
+          <a
+            href={target}
+            className="btn btn-primary w-full justify-center sm:w-auto"
+            target={opensExternal ? "_blank" : undefined}
+            rel={opensExternal ? "noreferrer" : undefined}
+            onClick={dismiss}
+          >
+            {targetLabel}
+          </a>
         </div>
       </section>
     </div>
+    , document.body,
   );
 }

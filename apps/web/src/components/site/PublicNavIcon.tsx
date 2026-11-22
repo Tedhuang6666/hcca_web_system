@@ -1,0 +1,42 @@
+import {
+  BookOpenText,
+  FileSearch,
+  Info,
+  Images,
+  Landmark,
+  Link2,
+  ListChecks,
+  Mail,
+  MapPinned,
+  Megaphone,
+  MessageSquareText,
+  Radio,
+  Scale,
+  ShoppingBag,
+  UsersRound,
+  type LucideIcon,
+} from "lucide-react";
+
+const ICONS: Record<string, LucideIcon> = {
+  news: Megaphone,
+  shop: ShoppingBag,
+  articles: BookOpenText,
+  about: Landmark,
+  "system-info": Info,
+  officers: UsersRound,
+  activities: Images,
+  contact: Mail,
+  links: Link2,
+  "public-db": BookOpenText,
+  regulations: Scale,
+  documents: FileSearch,
+  elections: Radio,
+  "partner-map": MapPinned,
+  surveys: ListChecks,
+  petitions: MessageSquareText,
+};
+
+export default function PublicNavIcon({ iconKey, size }: { iconKey: string; size: number }) {
+  const Icon = ICONS[iconKey];
+  return Icon ? <Icon size={size} aria-hidden /> : null;
+}

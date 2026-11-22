@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly HCCA active public metadata discovery
+
+[Timer]
+OnCalendar=Sun *-*-* 07:31:00
+AccuracySec=1min
+Unit=hcca-security@public-metadata.service
+
+[Install]
+WantedBy=timers.target

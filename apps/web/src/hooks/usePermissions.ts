@@ -1,8 +1,90 @@
 "use client";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { useSessionSnapshot } from "@/contexts/SessionSnapshotContext";
+import { AUTH_CACHE_EVENT } from "@/lib/auth-cache";
+
+type PermissionState = {
+  permissions: Set<string>;
+  isAdmin: boolean;
+  isOwner: boolean;
+  isReady: boolean;
+};
+
+const EMPTY_PERMISSION_STATE: PermissionState = {
+  permissions: new Set<string>(),
+  isAdmin: false,
+  isOwner: false,
+  isReady: false,
+};
+
+// Cache an immutable view of browser storage. Server snapshots belong to the
+// request's provider and never enter this module-level browser cache during SSR.
+let clientPermissionState = EMPTY_PERMISSION_STATE;
+
+function equalPermissionState(left: PermissionState, right: PermissionState): boolean {
+  if (
+    left.isAdmin !== right.isAdmin
+    || left.isOwner !== right.isOwner
+    || left.isReady !== right.isReady
+    || left.permissions.size !== right.permissions.size
+  ) return false;
+  for (const permission of left.permissions) {
+    if (!right.permissions.has(permission)) return false;
+  }
+  return true;
+}
+
+function refreshClientPermissionState(onChange: () => void) {
+  getClientPermissionState();
+  // Every subscriber must be notified, including when another subscriber has
+  // already refreshed the shared snapshot for this same cache event.
+  onChange();
+}
+
+function subscribeToPermissionState(onChange: () => void) {
+  if (typeof window === "undefined") return () => {};
+  const refresh = () => {
+    refreshClientPermissionState(onChange);
+  };
+  window.addEventListener(AUTH_CACHE_EVENT, refresh);
+  // useSyncExternalStore subscribes after hydration commits, so reading the
+  // browser cache immediately is safe and avoids waiting for every page asset
+  // to finish loading before permission-gated UI can settle.
+  refresh();
+  return () => {
+    window.removeEventListener(AUTH_CACHE_EVENT, refresh);
+  };
+}
+
+function getClientPermissionState() {
+  const next = readPermissionState();
+  if (!equalPermissionState(clientPermissionState, next)) clientPermissionState = next;
+  return clientPermissionState;
+}
+
+function readPermissionState(): PermissionState {
+  if (typeof window === "undefined") {
+    return { permissions: new Set<string>(), isAdmin: false, isOwner: false, isReady: false };
+  }
+  const raw = sessionStorage.getItem("permissions");
+  const superuser = sessionStorage.getItem("is_superuser") === "true";
+  const owner = sessionStorage.getItem("is_owner") === "true";
+  const hasCachedAuthState = ["permissions", "is_superuser", "is_owner"]
+    .some((key) => sessionStorage.getItem(key) !== null);
+  let perms: string[] = [];
+  try { perms = raw ? JSON.parse(raw) : []; } catch { /* ignore */ }
+  return {
+    permissions: new Set<string>(perms),
+    isAdmin: superuser || owner,
+    isOwner: owner,
+    // localStorage 的 user_id 會跨瀏覽器工作階段保留；若安全權限快取尚未
+    // 寫入，代表 /auth/me 尚未完成，不能把暫時的空權限當成拒絕存取。
+    isReady: !localStorage.getItem("user_id") || hasCachedAuthState,
+  };
+}
 
 /**
- * 讀取 localStorage 中儲存的使用者權限列表（由 /auth/me 在登入時寫入）。
+ * 讀取使用者權限列表（由 /auth/me 在登入時寫入 sessionStorage）。
  * 超級管理員（is_superuser=true）視為擁有所有權限。
  *
  * 用法：
@@ -10,16 +92,29 @@ import { useCallback, useMemo } from "react";
  *   if (can("document:create")) { ... }
  */
 export function usePermissions() {
-  const { permissions, isAdmin, isOwner } = useMemo(() => {
-    if (typeof window === "undefined") return { permissions: new Set<string>(), isAdmin: false, isOwner: false };
-    const raw = localStorage.getItem("permissions");
-    const superuser = localStorage.getItem("is_superuser") === "true";
-    const owner = localStorage.getItem("is_owner") === "true";
-    let perms: string[] = [];
-    try { perms = raw ? JSON.parse(raw) : []; } catch { /* ignore */ }
-    // Owner 視為超管：自動擁有所有權限
-    return { permissions: new Set<string>(perms), isAdmin: superuser || owner, isOwner: owner };
-  }, []);
+  const sessionSnapshot = useSessionSnapshot();
+  const initialUser = sessionSnapshot?.user;
+  const serverState = useMemo<PermissionState>(() => initialUser ? {
+    permissions: new Set(initialUser.permissions),
+    isAdmin: Boolean(initialUser.is_superuser || initialUser.is_owner),
+    isOwner: Boolean(initialUser.is_owner),
+    isReady: true,
+  } : EMPTY_PERMISSION_STATE, [initialUser]);
+  const getServerSnapshot = useCallback(() => serverState, [serverState]);
+  const getSnapshot = useCallback(() => {
+    // Until the verified user seeds the browser cache, ignore an older user's
+    // cached permissions. Keep the server reference when values match so late
+    // Suspense boundaries can hydrate without an initial permission transition.
+    if (sessionSnapshot && !sessionSnapshot.initialized) return serverState;
+    const current = getClientPermissionState();
+    return sessionSnapshot && equalPermissionState(serverState, current) ? serverState : current;
+  }, [sessionSnapshot, serverState]);
+  const permissionState = useSyncExternalStore(
+    subscribeToPermissionState,
+    getSnapshot,
+    getServerSnapshot,
+  );
+  const { permissions, isAdmin, isOwner, isReady } = permissionState;
 
   /** 是否擁有指定權限（超管自動通過） */
   const can = useCallback((code: string) =>
@@ -43,5 +138,5 @@ export function usePermissions() {
     [isAdmin, permissions],
   );
 
-  return { can, canAny, isAdmin, isOwner, permissions };
+  return { can, canAny, isAdmin, isOwner, permissions, isReady };
 }

@@ -1,0 +1,70 @@
+import type {
+  DocumentOut,
+  PetitionPublicListItem,
+  PetitionPublicOut,
+  PublicBudgetDetail,
+  PublicBudgetListItem,
+  RegulationOut,
+} from "@/lib/types";
+import {
+  fetchPublicJson as fetchCachedPublicJson,
+  fetchPublicJsonResult,
+  type PublicFetchResult,
+} from "@/lib/serverFetch";
+
+async function fetchPublicJson<T>(path: string): Promise<T | null> {
+  return fetchCachedPublicJson<T>(path);
+}
+
+export async function fetchPublicRegulation(id: string): Promise<RegulationOut | null> {
+  return fetchPublicJson<RegulationOut>(`/regulations/${encodeURIComponent(id)}`);
+}
+
+export async function fetchPublicDocument(id: string): Promise<DocumentOut | null> {
+  // 公文可見度可能在建立後才切換為公開；避免把切換前的 404/null
+  // 以一般公開內容快取保留 5 分鐘，導致公開連結持續顯示不存在。
+  return fetchCachedPublicJson<DocumentOut>(
+    `/documents/${encodeURIComponent(id)}`,
+    { revalidate: 15 },
+  );
+}
+
+export async function fetchPublicDocumentResult(
+  id: string,
+): Promise<PublicFetchResult<DocumentOut>> {
+  const path = `/documents/${encodeURIComponent(id)}`;
+  const cached = await fetchCachedPublicJson<DocumentOut>(path, { revalidate: 15 });
+  if (cached) return { data: cached, status: 200 };
+  return fetchPublicJsonResult<DocumentOut>(path);
+}
+
+export async function fetchPublicPetitions(
+  params: { limit?: number; offset?: number } = {},
+): Promise<PetitionPublicListItem[]> {
+  const search = new URLSearchParams();
+  if (params.limit !== undefined) search.set("limit", String(params.limit));
+  if (params.offset !== undefined) search.set("offset", String(params.offset));
+  const query = search.size ? `?${search.toString()}` : "";
+  return (await fetchPublicJson<PetitionPublicListItem[]>(`/petitions/public${query}`)) ?? [];
+}
+
+export async function fetchPublicPetition(id: string): Promise<PetitionPublicOut | null> {
+  return fetchPublicJson<PetitionPublicOut>(`/petitions/public/${encodeURIComponent(id)}`);
+}
+
+export async function fetchPublicBudgets(): Promise<PublicFetchResult<PublicBudgetListItem[]>> {
+  // 公開狀態可能剛更新；直接讀取，並保留失敗狀態，避免舊快取或 API 錯誤被當成空清單。
+  return fetchPublicJsonResult<PublicBudgetListItem[]>("/finance/public/budgets");
+}
+
+export async function fetchPublicBudget(
+  id: string,
+  reviewSubmissionId?: string,
+): Promise<PublicBudgetDetail | null> {
+  const query = reviewSubmissionId
+    ? `?review_submission_id=${encodeURIComponent(reviewSubmissionId)}`
+    : "";
+  return (await fetchPublicJsonResult<PublicBudgetDetail>(
+    `/finance/public/budgets/${encodeURIComponent(id)}${query}`,
+  )).data;
+}

@@ -3,8 +3,8 @@
 設計：
   - half-open 探測由 Celery beat 觸發（每 30s 掃 Redis ZSET module_probe_queue）；
     這檔提供探測/恢復的純函式，task 端只負責排程與呼叫。
-  - 跳閘通知透過 outbox 三條事件分派：
-      discord.channel_alert / email.send / admin.notification
+  - 跳閘通知透過 outbox 兩條事件分派：
+      discord.channel_alert / admin.notification
     任一通道故障不阻塞跳閘流程（fire-and-forget + log）。
   - half-open 探測使用 httpx AsyncClient 打 self loopback 的 /{module}/__module_health__
     端點；通過則 clear_module_maintenance + set_module_reset；失敗則延長 cooldown 並排下一次。
@@ -12,7 +12,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
 
@@ -72,6 +71,9 @@ async def attempt_recovery(module_id: str, *, force: bool = False) -> bool:
     existing = await get_module_maintenance(module_id)
     if not existing or not existing.get("on"):
         return True  # 本來就沒在維護
+
+    if existing.get("mode") == "closed":
+        return False  # 管理員明確關閉，不可被健康探測自動恢復
 
     if not force and existing.get("source") == "manual":
         # manual 維護不在這裡自動解除（admin 必須走 force 路徑）
@@ -152,7 +154,7 @@ async def notify_module_tripped(
     cooldown_s: int,
     escalated: bool,
 ) -> None:
-    """跳閘事件透過 outbox 分派三條通知。
+    """跳閘事件透過 outbox 分派 Discord 與站內通知。
 
     任一通知失敗不影響跳閘決策；單一通道故障也不會拖延其他通道。
     """
@@ -195,58 +197,35 @@ async def _dispatch_all_channels(
     body: str,
     severity: str,
 ) -> None:
-    """同時寫三條 outbox event；用 gather 增加吞吐但不阻塞單一失敗。"""
+    """依序寫入各通知通道，避免同一 AsyncSession 並行 flush。"""
     from api.services import outbox
 
-    coros = []
     # 1. Discord 頻道告警
     channel_id = settings.MODULE_ALERT_DISCORD_CHANNEL_ID
     if channel_id:
-        coros.append(
-            outbox.emit(
-                session,
-                event_type="discord.channel_alert",
-                payload={
-                    "channel_id": channel_id,
-                    "title": title,
-                    "body": body,
-                    "severity": severity,
-                    "module_id": module_id,
-                },
-            )
-        )
-    # 2. Email 給 SUPERUSER_EMAILS
-    if settings.SUPERUSER_EMAILS:
-        for addr in settings.SUPERUSER_EMAILS:
-            coros.append(
-                outbox.emit(
-                    session,
-                    event_type="email.send",
-                    payload={
-                        "to": addr,
-                        "subject": title,
-                        "body": body,
-                        "module_id": module_id,
-                        "severity": severity,
-                    },
-                )
-            )
-    # 3. admin UI 通知中心
-    coros.append(
-        outbox.emit(
+        await outbox.emit(
             session,
-            event_type="admin.notification",
+            event_type="discord.channel_alert",
             payload={
+                "channel_id": channel_id,
                 "title": title,
                 "body": body,
-                "module_id": module_id,
                 "severity": severity,
-                "category": "module_circuit",
+                "module_id": module_id,
             },
         )
+    # 2. admin UI 通知中心
+    await outbox.emit(
+        session,
+        event_type="admin.notification",
+        payload={
+            "title": title,
+            "body": body,
+            "module_id": module_id,
+            "severity": severity,
+            "category": "module_circuit",
+        },
     )
-    if coros:
-        await asyncio.gather(*coros, return_exceptions=True)
 
 
 async def _emit_recovered_notification(module_id: str) -> None:

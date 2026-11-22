@@ -1,7 +1,7 @@
-"""公文自動催辦 Celery 任務。Phase C1。
+"""公文自動催辦 Celery 任務。
 
 每日 08:00 跑：
-  1. 找出 status IN (submitted, in_approval) 且 due_date < now 的公文
+  1. 找出 status = pending（待審核 / 簽核中）且 due_date < now 的公文
   2. 依 reminder_count 採不同行動：
         0 → 寄信給目前簽核人 + 站內通知
         1 → 加 cc 直屬主管
@@ -53,7 +53,7 @@ async def _emit_event(db, *, event_type: str, payload: dict) -> None:
 
 async def _process_overdue_async() -> dict:
     """主邏輯：掃描 overdue 公文 + 採取催辦行動。"""
-    from api.core.database import AsyncSessionLocal
+    from api.core.database import task_session
 
     now = datetime.now(UTC)
     sent = 0
@@ -61,18 +61,11 @@ async def _process_overdue_async() -> dict:
     admin_escalated = 0
     examined = 0
 
-    async with AsyncSessionLocal() as db:
+    async with task_session() as db:
         # 找待簽且過期的公文
         doc_stmt = (
             select(Document)
-            .where(
-                Document.status.in_(
-                    [
-                        DocumentStatus.SUBMITTED.value,
-                        DocumentStatus.IN_APPROVAL.value,
-                    ]
-                )
-            )
+            .where(Document.status == DocumentStatus.PENDING.value)
             .where(Document.due_date.is_not(None))
             .where(Document.due_date < now)
             .order_by(Document.due_date)
@@ -138,7 +131,7 @@ async def _process_overdue_async() -> dict:
                 actor = await db.get(User, doc.author_id) if doc.author_id else None
                 actor_email = actor.email if actor else None
             except Exception:
-                pass
+                logger.debug("audit log actor 查詢失敗，略過", exc_info=True)
             await audit_chain.write_audit_log_with_chain(
                 db,
                 entity_type="document",
@@ -167,10 +160,67 @@ async def _process_overdue_async() -> dict:
     }
 
 
-@celery_app.task(name="api.services.document_reminder_tasks.send_document_reminders")
-def send_document_reminders() -> dict:
+async def _process_scheduled_archives_async() -> dict:
+    """將到期的已核准公文轉為已封存。"""
+    from api.core.database import task_session
+
+    now = datetime.now(UTC)
+    archived = 0
+    async with task_session() as db:
+        result = await db.execute(
+            select(Document)
+            .where(Document.status == DocumentStatus.APPROVED.value)
+            .where(Document.archive_at.is_not(None))
+            .where(Document.archive_at <= now)
+            .order_by(Document.archive_at)
+            .limit(500)
+        )
+        docs = list(result.scalars().all())
+        for doc in docs:
+            doc.status = DocumentStatus.ARCHIVED
+            doc.completed_at = doc.completed_at or now
+            archived += 1
+            await audit_chain.write_audit_log_with_chain(
+                db,
+                entity_type="document",
+                entity_id=str(doc.id),
+                action="archive_scheduled",
+                actor_id=None,
+                actor_email=None,
+                meta={"archive_at": doc.archive_at.isoformat() if doc.archive_at else None},
+                summary=f"公文「{doc.title}」依預約時間自動歸檔",
+            )
+        await db.commit()
+
+    return {"status": "ok", "archived": archived, "now": now.isoformat()}
+
+
+@celery_app.task(
+    name="api.services.document_reminder_tasks.send_document_reminders",
+    bind=True,
+    max_retries=3,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+)
+def send_document_reminders(self) -> dict:  # type: ignore[type-arg]
     """每日 08:00 跑（建議）。對 overdue 公文催辦 + 視次數升級。"""
     return asyncio.run(_process_overdue_async())
 
 
-__all__ = ["send_document_reminders"]
+@celery_app.task(
+    name="api.services.document_reminder_tasks.archive_scheduled_documents",
+    bind=True,
+    max_retries=3,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+)
+def archive_scheduled_documents(self) -> dict:  # type: ignore[type-arg]
+    """每分鐘執行，處理已到期的預約歸檔。"""
+    return asyncio.run(_process_scheduled_archives_async())
+
+
+__all__ = ["send_document_reminders", "archive_scheduled_documents"]

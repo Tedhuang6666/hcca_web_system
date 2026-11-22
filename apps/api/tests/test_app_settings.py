@@ -8,10 +8,10 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api import app
 from api.core import app_settings as app_settings_svc
 from api.core.config import settings
 from api.dependencies.auth import get_current_active_user
+from api.main import app
 from api.models.user import User
 from api.services import mfa as mfa_svc
 
@@ -250,3 +250,73 @@ async def test_reveal_requires_mfa(
         json={"mfa_code": "wrong", "keys": ["RESEND_API_KEY"]},
     )
     assert resp.status_code == 403
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "SECRET_KEY",
+        "JWT_SIGNING_KEY",
+        "JWT_PREVIOUS_SIGNING_KEYS",
+        "JWT_SESSION_HASH_KEY",
+        "FIELD_ENCRYPTION_KEYS",
+        "MFA_SECRET_ENCRYPTION_KEY",
+        "BACKUP_GPG_PASSPHRASE",
+        "GITHUB_TOKEN",
+        "SENTRY_AUTH_TOKEN",
+        "PERFORMANCE_MONITOR_TOKEN",
+        "RECOVERY_AGENT_TOKEN",
+        "SECURITY_SCAN_BYPASS_TOKEN",
+        "POSTHOG_API_KEY",
+        "POSTHOG_PERSONAL_API_KEY",
+        "GOOGLE_PAGESPEED_API_KEY",
+        "GOOGLE_CRUX_API_KEY",
+        "REDIS_CACHE_URL",
+        "REDIS_REALTIME_URL",
+        "CELERY_BROKER_URL",
+    ],
+)
+def test_signing_keys_and_tokens_are_masked(key: str) -> None:
+    assert key in type(settings).model_fields
+    assert app_settings_svc.is_secret_key(key)
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "ACCESS_TOKEN_EXPIRE_MINUTES",
+        "REFRESH_TOKEN_EXPIRE_DAYS",
+        "ACCESS_TOKEN_COOKIE_NAME",
+        "AUTH_LEGACY_TOKEN_COMPAT_ENABLED",
+        "VAPID_PUBLIC_KEY",
+        "CELERY_DLQ_REDIS_KEY",
+        "APP_NAME",
+    ],
+)
+def test_non_secret_settings_stay_visible(key: str) -> None:
+    assert not app_settings_svc.is_secret_key(key)
+
+
+def test_every_secret_like_setting_is_masked() -> None:
+    """新增 *_KEY／*_TOKEN／*_PASSPHRASE 設定時不得漏遮罩。"""
+    secret_words = {"KEY", "KEYS", "TOKEN", "SECRET", "PASSWORD", "PASSPHRASE", "DSN"}
+    allowed = {
+        "ACCESS_TOKEN_EXPIRE_MINUTES",
+        "REFRESH_TOKEN_EXPIRE_DAYS",
+        "REFRESH_TOKEN_ABSOLUTE_DAYS",
+        "ACCESS_TOKEN_COOKIE_NAME",
+        "REFRESH_TOKEN_COOKIE_NAME",
+        "LEGACY_ACCESS_TOKEN_COOKIE_NAME",
+        "LEGACY_REFRESH_TOKEN_COOKIE_NAME",
+        "AUTH_LEGACY_TOKEN_COMPAT_ENABLED",
+        "VAPID_PUBLIC_KEY",
+        "CELERY_DLQ_REDIS_KEY",
+    }
+    leaked = [
+        key
+        for key in type(settings).model_fields
+        if set(key.split("_")) & secret_words
+        and key not in allowed
+        and not app_settings_svc.is_secret_key(key)
+    ]
+    assert leaked == []

@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import api.services.document._lifecycle as _doc_lifecycle
 from api.models.org import Org
 from api.models.user import User
 from api.schemas.document import (
@@ -66,7 +67,7 @@ async def test_document_template_crud_and_create_draft(
     async def fake_serial(_session: AsyncSession, _template: object) -> str:
         return "DOC-2026-000777"
 
-    monkeypatch.setattr(doc_svc, "generate_serial_from_template", fake_serial)
+    monkeypatch.setattr(_doc_lifecycle, "generate_serial_from_template", fake_serial)
     draft = await doc_svc.create_document_from_template(
         db_session,
         template=template,
@@ -97,7 +98,8 @@ async def test_inactive_document_template_hidden_by_default(db_session: AsyncSes
             org_id=org.id,
             name="公告範本",
             category="announcement",
-            subject="為公告校園自治事項，請 查照。",
+            subject="為公告學生自治事項，請 查照。",
+            basis="依學生自治相關規定辦理。",
         ),
         created_by=user.id,
     )

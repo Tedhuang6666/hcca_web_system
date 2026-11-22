@@ -1,0 +1,73 @@
+import Image from "next/image";
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+
+import MarkdownBlock from "@/components/site/MarkdownBlock";
+import PublicSiteShell from "@/components/site/PublicSiteShell";
+import { fetchPublicPage, fetchPublicShellData } from "@/lib/serverFetch";
+import { pageMetadata } from "@/lib/seo";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const page = await fetchPublicPage(slug);
+  if (!page) return {};
+  return pageMetadata({
+    title: page.seo_title || page.title,
+    description: page.seo_description || page.summary || "新竹高中班聯會公開資訊。",
+    path: `/pages/${encodeURIComponent(slug)}`,
+    type: "website",
+    imagePath: page.cover_image_url || undefined,
+  });
+}
+
+export default async function CmsPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  const [bundle, page] = await Promise.all([
+    fetchPublicShellData(),
+    fetchPublicPage(slug),
+  ]);
+
+  if (!page) notFound();
+
+  return (
+    <PublicSiteShell
+      navPages={bundle.bundle?.nav_pages ?? []}
+      settings={bundle.bundle?.settings}
+      urgentAnnouncement={bundle.urgentAnnouncement}
+    >
+      <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
+        <article className="space-y-6">
+          <header>
+            <h1 className="text-3xl font-bold">{page.title}</h1>
+            {page.summary && (
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--text-secondary)]">
+                {page.summary}
+              </p>
+            )}
+          </header>
+          {page.cover_image_url && (
+            <Image
+              src={page.cover_image_url}
+              alt={page.cover_image_alt || page.title}
+              width={1200}
+              height={360}
+              unoptimized
+              className="max-h-[360px] w-full rounded-lg object-cover"
+            />
+          )}
+          <div className="card public-cms-content p-5 md:p-7">
+            <MarkdownBlock markdown={page.body_md} />
+          </div>
+        </article>
+      </div>
+    </PublicSiteShell>
+  );
+}

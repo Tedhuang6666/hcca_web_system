@@ -2,36 +2,43 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import UTC, datetime
+from urllib.parse import parse_qs, unquote, urljoin, urlparse, urlunsplit
 
-from sqlalchemy import Select, and_, desc, exists, func, or_, select
+import httpx
+from sqlalchemy import Select, and_, exists, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.core.search import like_contains
 from api.models.partner_map import (
     PartnerBusiness,
+    PartnerBusinessAccount,
+    PartnerBusinessListingType,
     PartnerBusinessStatus,
     PartnerLocation,
     PartnerOffer,
-    PartnerRating,
     PartnerSubmission,
     PartnerTag,
     partner_business_tags,
 )
+from api.models.user import User
 from api.schemas.partner_map import (
     PartnerBusinessCreate,
+    PartnerBusinessSelfUpdate,
     PartnerBusinessUpdate,
     PartnerLocationCreate,
     PartnerLocationUpdate,
     PartnerOfferCreate,
     PartnerOfferUpdate,
-    PartnerRatingCreate,
     PartnerSubmissionCreate,
     PartnerSubmissionReview,
     PartnerTagCreate,
     PartnerTagUpdate,
 )
+from api.services._base import apply_updates
 
 
 def active_offer_clause(now: datetime | None = None):
@@ -41,6 +48,126 @@ def active_offer_clause(now: datetime | None = None):
         or_(PartnerOffer.starts_at == None, PartnerOffer.starts_at <= now),  # noqa: E711
         or_(PartnerOffer.ends_at == None, PartnerOffer.ends_at >= now),  # noqa: E711
     )
+
+
+_GOOGLE_SHORT_HOSTS = {"maps.app.goo.gl", "goo.gl"}
+_MAX_GOOGLE_REDIRECTS = 5
+
+
+def _trusted_google_maps_host(host: str | None) -> str | None:
+    host = (host or "").lower().rstrip(".")
+    if host == "maps.app.goo.gl":
+        return "maps.app.goo.gl"
+    if host == "goo.gl":
+        return "goo.gl"
+    if host == "google.com":
+        return "google.com"
+    if host == "maps.google.com":
+        return "maps.google.com"
+    if host == "www.google.com":
+        return "www.google.com"
+    return None
+
+
+def _canonical_google_maps_url(url: str) -> tuple[str, str]:
+    parsed = urlparse(url)
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("Google Maps 連結的連接埠格式不正確") from exc
+
+    trusted_host = _trusted_google_maps_host(parsed.hostname)
+    if (
+        parsed.scheme != "https"
+        or trusted_host is None
+        or parsed.username is not None
+        or parsed.password is not None
+        or port is not None
+        or parsed.fragment
+    ):
+        raise ValueError("連結未導向 Google Maps")
+
+    # Rebuild the authority from a fixed allowlisted host. User input can only
+    # contribute path/query data and can never choose the outbound destination.
+    return trusted_host, urlunsplit(("https", trusted_host, parsed.path, parsed.query, ""))
+
+
+def _extract_coordinates(value: str) -> tuple[float, float] | None:
+    patterns = (
+        r"!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)",
+        r"@(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)",
+        r"(?:^|[^\d-])(-?\d{1,3}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)(?:$|[^\d])",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, value)
+        if not match:
+            continue
+        latitude, longitude = float(match.group(1)), float(match.group(2))
+        if -90 <= latitude <= 90 and -180 <= longitude <= 180:
+            return latitude, longitude
+    return None
+
+
+def _looks_like_address(value: str) -> bool:
+    return bool(re.search(r"\d", value) and re.search(r"[市縣區鄉鎮路街巷弄號段]", value))
+
+
+def _extract_place_name(parsed_url) -> str | None:
+    match = re.search(r"/maps/place/([^/@]+)", unquote(parsed_url.path))
+    if not match:
+        return None
+    name = match.group(1).replace("+", " ").strip(" /")
+    return name[:200] or None
+
+
+def _extract_address(parsed_url) -> str | None:
+    query_values = parse_qs(parsed_url.query).get("query", [])
+    for value in query_values:
+        address = unquote(value).replace("+", " ").strip()
+        if address and _extract_coordinates(address) is None and _looks_like_address(address):
+            return address[:300]
+    return None
+
+
+async def parse_google_maps_link(url: str) -> dict[str, str | float | None]:
+    """展開 Google Maps 連結並擷取可直接建立據點的地址與座標。"""
+
+    original = url.strip()
+    host, resolved_url = _canonical_google_maps_url(original)
+
+    if host in _GOOGLE_SHORT_HOSTS:
+        try:
+            async with httpx.AsyncClient(follow_redirects=False, timeout=8.0) as client:
+                for _ in range(_MAX_GOOGLE_REDIRECTS):
+                    response = await client.get(resolved_url)
+                    if response.is_redirect:
+                        location = response.headers.get("location")
+                        if not location:
+                            raise ValueError("Google Maps 短網址缺少導向位置")
+                        next_url = urljoin(resolved_url, location)
+                        _, resolved_url = _canonical_google_maps_url(next_url)
+                        continue
+                    response.raise_for_status()
+                    break
+                else:
+                    raise ValueError("Google Maps 短網址導向次數過多")
+        except (httpx.HTTPError, ValueError) as exc:
+            raise ValueError("無法展開這個 Google Maps 短網址，請改貼完整連結") from exc
+
+    _, resolved_url = _canonical_google_maps_url(resolved_url)
+    parsed = urlparse(resolved_url)
+    coordinates = _extract_coordinates(unquote(resolved_url))
+    if coordinates is None:
+        raise ValueError("連結中找不到座標，請從 Google Maps 的店家頁面重新複製分享連結")
+    latitude, longitude = coordinates
+    address = _extract_address(parsed)
+    return {
+        "google_maps_url": resolved_url,
+        "name": _extract_place_name(parsed),
+        "address": address,
+        "latitude": latitude,
+        "longitude": longitude,
+    }
 
 
 def _as_aware(value: datetime) -> datetime:
@@ -71,26 +198,7 @@ def _business_options():
         selectinload(PartnerBusiness.tags),
         selectinload(PartnerBusiness.locations),
         selectinload(PartnerBusiness.offers),
-        selectinload(PartnerBusiness.ratings),
-    )
-
-
-def rating_stats(business: PartnerBusiness) -> tuple[float | None, int]:
-    ratings = [rating.rating for rating in business.ratings if rating.is_public]
-    if not ratings:
-        return None, 0
-    return round(sum(ratings) / len(ratings), 1), len(ratings)
-
-
-def popularity_score(business: PartnerBusiness) -> float:
-    avg, count = rating_stats(business)
-    rating_score = (avg or 0) * 12 + min(count, 30) * 2
-    return round(
-        business.view_count * 0.2
-        + business.click_count * 0.7
-        + business.checkin_count * 3
-        + rating_score,
-        1,
+        selectinload(PartnerBusiness.promo_images),
     )
 
 
@@ -112,8 +220,14 @@ async def create_tag(db: AsyncSession, data: PartnerTagCreate) -> PartnerTag:
 
 
 async def update_tag(db: AsyncSession, tag: PartnerTag, data: PartnerTagUpdate) -> PartnerTag:
-    for key, value in data.model_dump(exclude_unset=True).items():
-        setattr(tag, key, value)
+    original_name = tag.name
+    apply_updates(tag, data)
+    if data.name is not None and data.name != original_name:
+        await db.execute(
+            update(PartnerBusiness)
+            .where(PartnerBusiness.category == original_name)
+            .values(category=data.name)
+        )
     await db.flush()
     await db.refresh(tag)
     return tag
@@ -131,26 +245,33 @@ async def create_business(
     db: AsyncSession, data: PartnerBusinessCreate, created_by: uuid.UUID | None
 ) -> PartnerBusiness:
     tags = await _resolve_tags(db, data.tag_ids)
-    fields = data.model_dump(exclude={"tag_ids"})
+    fields = data.model_dump(exclude={"tag_ids", "initial_offers", "initial_locations"})
     fields["status"] = str(fields["status"])
     business = PartnerBusiness(**fields, created_by=created_by)
     business.tags = tags
+    business.locations = [
+        PartnerLocation(**location.model_dump()) for location in data.initial_locations
+    ]
+    business.offers = [PartnerOffer(**offer.model_dump()) for offer in data.initial_offers]
     db.add(business)
     await db.flush()
-    await db.refresh(business, ["tags", "locations", "offers", "ratings"])
+    await db.refresh(business, ["tags", "locations", "offers", "promo_images"])
     return business
 
 
 async def update_business(
-    db: AsyncSession, business: PartnerBusiness, data: PartnerBusinessUpdate
+    db: AsyncSession,
+    business: PartnerBusiness,
+    data: PartnerBusinessUpdate | PartnerBusinessSelfUpdate,
 ) -> PartnerBusiness:
     fields = data.model_dump(exclude_unset=True, exclude={"tag_ids"})
     for key, value in fields.items():
         setattr(business, key, str(value) if key == "status" and value is not None else value)
-    if data.tag_ids is not None:
-        business.tags = await _resolve_tags(db, data.tag_ids)
+    tag_ids = getattr(data, "tag_ids", None)
+    if tag_ids is not None:
+        business.tags = await _resolve_tags(db, tag_ids)
     await db.flush()
-    await db.refresh(business, ["tags", "locations", "offers", "ratings"])
+    await db.refresh(business, ["tags", "locations", "offers", "promo_images"])
     return business
 
 
@@ -178,8 +299,193 @@ async def list_businesses(
     return list(result.scalars().unique().all())
 
 
-async def delete_business(db: AsyncSession, business: PartnerBusiness) -> None:
+async def list_business_accounts(
+    db: AsyncSession, business_id: uuid.UUID
+) -> list[PartnerBusinessAccount]:
+    result = await db.execute(
+        select(PartnerBusinessAccount)
+        .where(PartnerBusinessAccount.business_id == business_id)
+        .options(selectinload(PartnerBusinessAccount.user))
+        .order_by(PartnerBusinessAccount.created_at)
+    )
+    return list(result.scalars().all())
+
+
+async def replace_business_accounts(
+    db: AsyncSession,
+    business: PartnerBusiness,
+    user_ids: list[uuid.UUID],
+    granted_by: uuid.UUID,
+) -> list[PartnerBusinessAccount]:
+    unique_user_ids = list(dict.fromkeys(user_ids))
+    if unique_user_ids:
+        result = await db.execute(
+            select(User).where(User.id.in_(unique_user_ids), User.is_active == True)  # noqa: E712
+        )
+        users = {user.id: user for user in result.scalars().all()}
+        if len(users) != len(unique_user_ids):
+            raise ValueError("部分指定的店家帳號不存在或已停用")
+    else:
+        users = {}
+
+    existing = {
+        account.user_id: account for account in await list_business_accounts(db, business.id)
+    }
+    for user_id, account in existing.items():
+        account.is_active = user_id in users
+        if account.is_active:
+            account.granted_by = granted_by
+    for user_id in unique_user_ids:
+        if user_id not in existing:
+            db.add(
+                PartnerBusinessAccount(
+                    business_id=business.id,
+                    user_id=user_id,
+                    granted_by=granted_by,
+                    is_active=True,
+                )
+            )
+    await db.flush()
+    return await list_business_accounts(db, business.id)
+
+
+async def list_managed_businesses(db: AsyncSession, user_id: uuid.UUID) -> list[PartnerBusiness]:
+    result = await db.execute(
+        select(PartnerBusiness)
+        .join(PartnerBusinessAccount)
+        .where(
+            PartnerBusinessAccount.user_id == user_id,
+            PartnerBusinessAccount.is_active == True,  # noqa: E712
+        )
+        .options(*_business_options())
+        .order_by(PartnerBusiness.name)
+    )
+    return list(result.scalars().unique().all())
+
+
+async def get_managed_business(
+    db: AsyncSession, business_id: uuid.UUID, user_id: uuid.UUID
+) -> PartnerBusiness | None:
+    result = await db.execute(
+        select(PartnerBusiness)
+        .join(PartnerBusinessAccount)
+        .where(
+            PartnerBusiness.id == business_id,
+            PartnerBusinessAccount.user_id == user_id,
+            PartnerBusinessAccount.is_active == True,  # noqa: E712
+        )
+        .options(*_business_options())
+    )
+    return result.scalar_one_or_none()
+
+
+async def list_contact_businesses(
+    db: AsyncSession,
+    *,
+    keyword: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[PartnerBusiness]:
+    q = (
+        select(PartnerBusiness)
+        .where(
+            PartnerBusiness.status == PartnerBusinessStatus.ACTIVE.value,
+            PartnerBusiness.listing_type == PartnerBusinessListingType.ONLINE.value,
+        )
+        .options(*_business_options())
+    )
+    if keyword:
+        term = like_contains(keyword.strip())
+        q = q.where(
+            or_(
+                PartnerBusiness.name.ilike(term),
+                PartnerBusiness.summary.ilike(term),
+                PartnerBusiness.description.ilike(term),
+                PartnerBusiness.category.ilike(term),
+                PartnerBusiness.contact_name.ilike(term),
+                PartnerBusiness.contact_phone.ilike(term),
+                PartnerBusiness.contact_email.ilike(term),
+                PartnerBusiness.instagram_handle.ilike(term),
+                PartnerBusiness.line_id.ilike(term),
+                PartnerBusiness.other_contact.ilike(term),
+            )
+        )
+    q = q.order_by(PartnerBusiness.sort_order, PartnerBusiness.name).offset(offset).limit(limit)
+    result = await db.execute(q)
+    return list(result.scalars().unique().all())
+
+
+async def delete_business(db: AsyncSession, business: PartnerBusiness) -> list[str]:
+    storage_keys = list(
+        dict.fromkeys(
+            key
+            for key in [
+                business.flyer_storage_key,
+                *(image.storage_key for image in business.promo_images),
+            ]
+            if key
+        )
+    )
     await db.delete(business)
+    return storage_keys
+
+
+def _business_matches_tag_ids(tag_ids: list[uuid.UUID]):
+    tag_id_values = set(tag_ids)
+    category_names = select(PartnerTag.name).where(PartnerTag.id.in_(tag_id_values))
+    return or_(
+        exists()
+        .where(partner_business_tags.c.business_id == PartnerBusiness.id)
+        .where(partner_business_tags.c.tag_id.in_(tag_id_values)),
+        func.trim(PartnerBusiness.category).in_(category_names),
+    )
+
+
+async def discover_businesses(
+    db: AsyncSession,
+    *,
+    listing_type: PartnerBusinessListingType | None = None,
+    tag_ids: list[uuid.UUID] | None = None,
+    keyword: str | None = None,
+    has_active_offer: bool = False,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[PartnerBusiness]:
+    q = (
+        select(PartnerBusiness)
+        .where(PartnerBusiness.status == PartnerBusinessStatus.ACTIVE.value)
+        .options(*_business_options())
+    )
+    if listing_type is not None:
+        q = q.where(PartnerBusiness.listing_type == listing_type.value)
+    if tag_ids:
+        q = q.where(
+            exists()
+            .where(partner_business_tags.c.business_id == PartnerBusiness.id)
+            .where(partner_business_tags.c.tag_id.in_(set(tag_ids)))
+        )
+    if keyword:
+        term = like_contains(keyword.strip())
+        q = q.where(
+            or_(
+                PartnerBusiness.name.ilike(term),
+                PartnerBusiness.summary.ilike(term),
+                PartnerBusiness.description.ilike(term),
+                PartnerBusiness.category.ilike(term),
+                PartnerBusiness.contact_name.ilike(term),
+                PartnerBusiness.instagram_handle.ilike(term),
+                PartnerBusiness.line_id.ilike(term),
+            )
+        )
+    if has_active_offer:
+        q = q.where(
+            exists()
+            .where(PartnerOffer.business_id == PartnerBusiness.id)
+            .where(active_offer_clause())
+        )
+    q = q.order_by(PartnerBusiness.sort_order, PartnerBusiness.name).offset(offset).limit(limit)
+    result = await db.execute(q)
+    return list(result.scalars().unique().all())
 
 
 async def list_map_locations(
@@ -200,22 +506,18 @@ async def list_map_locations(
         .join(PartnerLocation.business)
         .where(
             PartnerBusiness.status == PartnerBusinessStatus.ACTIVE.value,
+            PartnerBusiness.listing_type == PartnerBusinessListingType.PHYSICAL.value,
             PartnerLocation.is_active == True,  # noqa: E712
         )
         .options(
             selectinload(PartnerLocation.business).selectinload(PartnerBusiness.tags),
             selectinload(PartnerLocation.business).selectinload(PartnerBusiness.offers),
-            selectinload(PartnerLocation.business).selectinload(PartnerBusiness.ratings),
         )
     )
     if tag_ids:
-        q = q.where(
-            exists()
-            .where(partner_business_tags.c.business_id == PartnerBusiness.id)
-            .where(partner_business_tags.c.tag_id.in_(set(tag_ids)))
-        )
+        q = q.where(_business_matches_tag_ids(tag_ids))
     if keyword:
-        term = f"%{keyword.strip()}%"
+        term = like_contains(keyword.strip())
         q = q.where(
             or_(
                 PartnerBusiness.name.ilike(term),
@@ -248,22 +550,6 @@ async def list_map_locations(
     return list(result.scalars().unique().all())
 
 
-async def increment_business_metric(
-    db: AsyncSession, business: PartnerBusiness, metric: str
-) -> PartnerBusiness:
-    if metric == "view":
-        business.view_count += 1
-    elif metric == "click":
-        business.click_count += 1
-    elif metric == "checkin":
-        business.checkin_count += 1
-    else:
-        raise ValueError("不支援的統計類型")
-    await db.flush()
-    await db.refresh(business, ["tags", "locations", "offers", "ratings"])
-    return business
-
-
 async def create_location(
     db: AsyncSession, business: PartnerBusiness, data: PartnerLocationCreate
 ) -> PartnerLocation:
@@ -281,8 +567,7 @@ async def get_location(db: AsyncSession, location_id: uuid.UUID) -> PartnerLocat
 async def update_location(
     db: AsyncSession, location: PartnerLocation, data: PartnerLocationUpdate
 ) -> PartnerLocation:
-    for key, value in data.model_dump(exclude_unset=True).items():
-        setattr(location, key, value)
+    apply_updates(location, data)
     await db.flush()
     await db.refresh(location)
     return location
@@ -309,8 +594,7 @@ async def get_offer(db: AsyncSession, offer_id: uuid.UUID) -> PartnerOffer | Non
 async def update_offer(
     db: AsyncSession, offer: PartnerOffer, data: PartnerOfferUpdate
 ) -> PartnerOffer:
-    for key, value in data.model_dump(exclude_unset=True).items():
-        setattr(offer, key, value)
+    apply_updates(offer, data)
     await db.flush()
     await db.refresh(offer)
     return offer
@@ -322,56 +606,6 @@ async def delete_offer(db: AsyncSession, offer: PartnerOffer) -> None:
 
 def active_offer_count(business: PartnerBusiness) -> int:
     return sum(1 for offer in business.offers if is_offer_current(offer))
-
-
-async def count_active_offers(db: AsyncSession, business_id: uuid.UUID) -> int:
-    value = await db.scalar(
-        select(func.count(PartnerOffer.id)).where(
-            PartnerOffer.business_id == business_id,
-            active_offer_clause(),
-        )
-    )
-    return int(value or 0)
-
-
-async def upsert_rating(
-    db: AsyncSession,
-    business: PartnerBusiness,
-    data: PartnerRatingCreate,
-    user_id: uuid.UUID | None,
-) -> PartnerRating:
-    rating: PartnerRating | None = None
-    if user_id is not None:
-        result = await db.execute(
-            select(PartnerRating).where(
-                PartnerRating.business_id == business.id,
-                PartnerRating.user_id == user_id,
-            )
-        )
-        rating = result.scalar_one_or_none()
-    if rating is None:
-        rating = PartnerRating(business_id=business.id, user_id=user_id)
-        db.add(rating)
-    rating.rating = data.rating
-    rating.comment = data.comment
-    rating.visit_count = data.visit_count
-    rating.is_public = data.is_public
-    await db.flush()
-    await db.refresh(rating)
-    return rating
-
-
-async def list_ratings(
-    db: AsyncSession, business_id: uuid.UUID, *, limit: int = 20, offset: int = 0
-) -> list[PartnerRating]:
-    result = await db.execute(
-        select(PartnerRating)
-        .where(PartnerRating.business_id == business_id, PartnerRating.is_public == True)  # noqa: E712
-        .order_by(PartnerRating.created_at.desc())
-        .offset(offset)
-        .limit(limit)
-    )
-    return list(result.scalars().all())
 
 
 async def create_submission(
@@ -417,18 +651,3 @@ async def review_submission(
     await db.flush()
     await db.refresh(submission)
     return submission
-
-
-async def ranking(db: AsyncSession, *, limit: int = 10) -> list[PartnerBusiness]:
-    result = await db.execute(
-        select(PartnerBusiness)
-        .where(PartnerBusiness.status == PartnerBusinessStatus.ACTIVE.value)
-        .options(*_business_options())
-        .order_by(desc(PartnerBusiness.checkin_count), desc(PartnerBusiness.view_count))
-        .limit(limit)
-    )
-    return sorted(
-        list(result.scalars().unique().all()),
-        key=lambda business: popularity_score(business),
-        reverse=True,
-    )

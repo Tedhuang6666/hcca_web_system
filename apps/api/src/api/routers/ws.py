@@ -2,32 +2,109 @@
 
 import logging
 import uuid
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, status
-from jwt.exceptions import InvalidTokenError
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.auth_cookies import access_token_from_cookies
+from api.core.clock import local_today
+from api.core.config import settings
 from api.core.database import AsyncSessionLocal
-from api.core.security import decode_token, is_blacklisted
+from api.core.security import decode_token, is_blacklisted, is_session_revoked
 from api.core.ws_manager import WSCapacityError, manager
-from api.dependencies.auth import get_current_active_user
-from api.services.permission import get_user_permission_codes
+from api.dependencies.permissions import require_permission
+from api.models.user import User
+from api.models.user_session import UserSession
+from api.services.permission import active_tenure_filter, get_user_permission_codes
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["WebSocket"])
+WS_CLOSE_AUTH_ERROR = 4001
+WS_CLOSE_FORBIDDEN = 4003
+
+
+@router.websocket("/ws/public/elections/{election_id}")
+async def public_election_websocket(websocket: WebSocket, election_id: uuid.UUID) -> None:
+    """公開唯讀開票推播；客戶端只能回覆心跳，不可廣播訊息。"""
+    room = f"election:{election_id}"
+    async with AsyncSessionLocal() as db:
+        from api.models.election import Election
+
+        election = await db.scalar(
+            select(Election).where(
+                Election.id == election_id,
+                Election.is_public.is_(True),
+                Election.status != "draft",
+            )
+        )
+    if election is None:
+        await websocket.close(code=4004, reason="找不到此公開選舉")
+        return
+    try:
+        await manager.connect(websocket, room, _client_ip(websocket))
+    except WSCapacityError as exc:
+        await websocket.close(code=1013, reason=exc.reason)
+        return
+    try:
+        while True:
+            raw = await websocket.receive_json()
+            if raw.get("type") == "pong":
+                manager.notify_pong(websocket)
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, room)
+    except RuntimeError as exc:
+        if "WebSocket is not connected" not in str(exc):
+            raise
+        manager.disconnect(websocket, room)
+        logger.debug("WebSocket client disconnected during handshake room=%s", room)
+
+
+@router.websocket("/ws/public/announcements")
+async def public_announcement_websocket(websocket: WebSocket) -> None:
+    """公開重要公告變更推播；訊息只包含公告 ID，不攜帶受限內容。"""
+    if not await _validate_ws_origin(websocket):
+        return
+    room = "public:announcements"
+    try:
+        await manager.connect(websocket, room, _client_ip(websocket))
+    except WSCapacityError as exc:
+        await websocket.close(code=1013, reason=exc.reason)
+        return
+    try:
+        while True:
+            raw = await websocket.receive_json()
+            if raw.get("type") == "pong":
+                manager.notify_pong(websocket)
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, room)
+    except RuntimeError as exc:
+        if "WebSocket is not connected" not in str(exc):
+            raise
+        manager.disconnect(websocket, room)
+        logger.debug("WebSocket client disconnected during handshake room=%s", room)
+
 
 # ── 認證輔助 ─────────────────────────────────────────────────────────────────
 
 
 def _ws_token_from_websocket(websocket: WebSocket) -> str | None:
-    token_qs = websocket.query_params.get("token")
-    if token_qs:
-        return token_qs
     auth = websocket.headers.get("authorization", "")
     if auth.lower().startswith("bearer "):
         return auth[7:]
-    return websocket.cookies.get("hcca_access_token")
+    return access_token_from_cookies(websocket.cookies)
+
+
+async def _validate_ws_origin(websocket: WebSocket) -> bool:
+    """Cookie 驗證的 WebSocket 必須來自明確允許的前端 origin。"""
+    origin = websocket.headers.get("origin")
+    if origin and origin in settings.ALLOWED_ORIGINS:
+        return True
+    await websocket.close(code=WS_CLOSE_FORBIDDEN, reason="不允許的 WebSocket Origin")
+    return False
 
 
 def _client_ip(websocket: WebSocket) -> str:
@@ -35,39 +112,112 @@ def _client_ip(websocket: WebSocket) -> str:
     return websocket.client.host if websocket.client else "unknown"
 
 
-async def _authenticate_ws(websocket: WebSocket) -> str | None:
+async def _authenticate_ws(
+    websocket: WebSocket,
+    db: AsyncSession | None = None,
+) -> tuple[str, str | None, int | None] | None:
     """
     驗證 WebSocket 連線的 JWT Token（優先使用 Authorization header，否則使用 HttpOnly cookie）。
     回傳 user_id 字串；若驗證失敗則關閉連線並回傳 None。
     """
     token = _ws_token_from_websocket(websocket)
     if not token:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="缺少認證 Token")
+        await websocket.close(code=WS_CLOSE_AUTH_ERROR, reason="缺少認證 Token")
         return None
 
     try:
         if await is_blacklisted(token):
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Token 已登出")
+            await websocket.close(code=WS_CLOSE_AUTH_ERROR, reason="Token 已登出")
             return None
 
         payload = decode_token(token)
         if payload.get("type") != "access":
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="無效的 Token 類型")
+            await websocket.close(code=WS_CLOSE_AUTH_ERROR, reason="無效的 Token 類型")
             return None
 
-        return payload.get("sub")
+        user_id = payload.get("sub")
+        if not isinstance(user_id, str):
+            await websocket.close(code=WS_CLOSE_AUTH_ERROR, reason="無效的 Token 使用者")
+            return None
+        session_id = payload.get("sid")
+        try:
+            user_uuid = uuid.UUID(user_id)
+            session_uuid = uuid.UUID(str(session_id)) if session_id is not None else None
+        except (TypeError, ValueError):
+            await websocket.close(code=WS_CLOSE_AUTH_ERROR, reason="無效的工作階段識別")
+            return None
+        if session_uuid is not None and await is_session_revoked(str(session_uuid)):
+            await websocket.close(code=WS_CLOSE_AUTH_ERROR, reason="工作階段已撤銷")
+            return None
 
-    except InvalidTokenError:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="無效的 Token")
+        try:
+            if db is None:
+                async with AsyncSessionLocal() as session:
+                    identity_is_active = await _ws_identity_is_active(
+                        session, user_uuid, session_uuid
+                    )
+            else:
+                identity_is_active = await _ws_identity_is_active(db, user_uuid, session_uuid)
+        except Exception:
+            logger.exception("WebSocket database identity validation failed")
+            await websocket.close(code=1013, reason="目前無法驗證登入工作階段")
+            return None
+        if not identity_is_active:
+            await websocket.close(code=WS_CLOSE_AUTH_ERROR, reason="帳號或登入工作階段已停用")
+            return None
+
+        expires_at = payload.get("exp")
+        return (
+            user_id,
+            str(session_id) if session_id is not None else None,
+            expires_at if isinstance(expires_at, int) else None,
+        )
+
+    except ExpiredSignatureError:
+        await websocket.close(code=WS_CLOSE_AUTH_ERROR, reason="Token 已過期")
         return None
+    except InvalidTokenError:
+        await websocket.close(code=WS_CLOSE_AUTH_ERROR, reason="無效的 Token")
+        return None
+
+
+async def _ws_identity_is_active(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    session_id: uuid.UUID | None,
+) -> bool:
+    active_user = await db.scalar(
+        select(User.id).where(User.id == user_id, User.is_active.is_(True))
+    )
+    if active_user is None:
+        return False
+    if session_id is None:
+        return True
+
+    now = datetime.now(UTC)
+    active_session = await db.scalar(
+        select(UserSession.id).where(
+            UserSession.id == session_id,
+            UserSession.user_id == user_id,
+            UserSession.revoked_at.is_(None),
+            UserSession.expires_at > now,
+            UserSession.absolute_expires_at > now,
+        )
+    )
+    return active_session is not None
 
 
 async def _assert_room_access(room: str, user_id: str) -> None:
     """
-    房間授權規則：
+    房間授權規則（預設拒絕 default-deny）：
     - user:{uuid}：只能加入自己的房間；admin:all 例外
     - org:{uuid}：必須是該 org 成員；admin:all 例外
-    - 其他房間：任何已登入者可加入
+    - 其餘房間（election/document/petition/survey/...）：僅 admin:all
+
+    安全：先前為「其他房間任何已登入者可加入」的 default-allow，導致任何已登入者
+    （含外部 Google 帳號）可加入 election:/petition: 等伺服器推播房間，
+    讀取未公開選舉的即時票數等敏感資料。公開開票請改用唯讀的
+    /ws/public/elections/{id}（僅限 is_public 選舉）。
     """
     try:
         user_uuid = uuid.UUID(user_id)
@@ -92,12 +242,24 @@ async def _assert_room_access(room: str, user_id: str) -> None:
             is_member = await db.scalar(
                 select(UserPosition.id)
                 .join(Position, UserPosition.position_id == Position.id)
-                .where(UserPosition.user_id == user_uuid, Position.org_id == org_id)
+                .where(
+                    UserPosition.user_id == user_uuid,
+                    Position.org_id == org_id,
+                    *active_tenure_filter(local_today()),
+                )
                 .limit(1)
             )
             if not is_member:
                 raise PermissionError("無權加入此組織房間")
             return
+
+        if room == "shop:orders":
+            if "shop:manage" not in codes:
+                raise PermissionError("無權加入商品訂單房間")
+            return
+
+        # 預設拒絕：未明確授權的房間一律不得加入。
+        raise PermissionError("無權加入此房間")
 
 
 # ── WebSocket 端點 ────────────────────────────────────────────────────────────
@@ -112,7 +274,7 @@ async def websocket_room(
     加入指定房間的 WebSocket 連線。
 
     連線 URL 範例：
-        ws://localhost:8000/ws/general?token=<access_token>
+        使用 HttpOnly auth cookie 或 Authorization header；不接受 URL query token。
 
     訊息格式（客戶端送出）：
         { "type": "message", "data": { "text": "Hello" } }
@@ -123,19 +285,30 @@ async def websocket_room(
           "data": { "text": "Hello" }, "timestamp": "..." }
         { "type": "ping" }                          # 伺服器心跳（前端必須回 pong）
     """
-    user_id = await _authenticate_ws(websocket)
-    if user_id is None:
+    if not await _validate_ws_origin(websocket):
         return
+    auth = await _authenticate_ws(websocket)
+    if auth is None:
+        return
+    user_id, session_id, access_expires_at = auth
 
     try:
         await _assert_room_access(room, user_id)
     except Exception:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="無權加入此房間")
+        await websocket.close(code=WS_CLOSE_FORBIDDEN, reason="無權加入此房間")
         return
 
     client_ip = _client_ip(websocket)
+    connected = False
     try:
-        await manager.connect(websocket, room, client_ip)
+        await manager.connect(
+            websocket,
+            room,
+            client_ip,
+            session_id=session_id,
+            access_expires_at=access_expires_at,
+        )
+        connected = True
     except WSCapacityError as exc:
         logger.warning(
             "WS capacity hit scope=%s room=%s ip=%s reason=%s",
@@ -158,37 +331,30 @@ async def websocket_room(
         while True:
             raw = await websocket.receive_json()
 
-            msg_type: str = raw.get("type", "message")
-            data: dict = raw.get("data", {})
-
-            # 心跳回應：純內部記帳，不廣播
-            if msg_type == "pong":
+            # 本端點為伺服器→客戶端單向推播：只處理心跳，其餘 client 訊息一律忽略，
+            # 不轉發任何 client 廣播。先前會把 client 訊息廣播回房間，導致任何已登入者
+            # 可注入/竄改房間訊息（例如對公開開票房間推送假的 election_update 票數）。
+            # 真正的動作（投票等）一律走 HTTP 端點，不依賴 WS 上行訊息。
+            if raw.get("type") == "pong":
                 manager.notify_pong(websocket)
-                continue
-
-            outbound = manager.build_message(msg_type, data, room=room, sender=user_id)
-
-            if msg_type == "broadcast_all":
-                # 特殊類型：全域廣播，僅允許擁有 admin:all 權限的使用者
-                async with AsyncSessionLocal() as db:
-                    codes = await get_user_permission_codes(db, user_id)
-                if "admin:all" not in codes:
-                    await websocket.send_json(
-                        manager.build_message(
-                            "error", {"detail": "需要 admin:all 權限才能執行全域廣播"}, room=room
-                        )
-                    )
-                else:
-                    await manager.broadcast_all(outbound)
-            else:
-                await manager.broadcast_to_room(room, outbound)
 
     except WebSocketDisconnect:
         manager.disconnect(websocket, room)
-        await manager.broadcast_to_room(
-            room,
-            manager.build_message("leave", {"user_id": user_id}, room=room),
-        )
+        if connected:
+            await manager.broadcast_to_room(
+                room,
+                manager.build_message("leave", {"user_id": user_id}, room=room),
+            )
+    except RuntimeError as exc:
+        if "WebSocket is not connected" not in str(exc):
+            raise
+        manager.disconnect(websocket, room)
+        if connected:
+            await manager.broadcast_to_room(
+                room,
+                manager.build_message("leave", {"user_id": user_id}, room=room),
+            )
+        logger.debug("WebSocket client disconnected during handshake room=%s", room)
 
 
 # ── 管理端點（HTTP）──────────────────────────────────────────────────────────
@@ -197,7 +363,7 @@ async def websocket_room(
 @router.get(
     "/ws/rooms",
     summary="列出所有活躍 WebSocket 房間",
-    dependencies=[Depends(get_current_active_user)],
+    dependencies=[Depends(require_permission("admin:all"))],
 )
 async def list_ws_rooms() -> dict[str, object]:
     """回傳目前所有活躍房間與連線統計"""

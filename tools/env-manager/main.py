@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -149,7 +149,7 @@ def backup_env() -> Path | None:
 def render_env(values: dict[str, str], schema: dict[str, dict[str, Any]]) -> str:
     lines = [
         "# ============================================================",
-        "# 校園自治整合平台 - 本機環境變數",
+        "# 竹嶺班聯數位整合系統 - 本機環境變數",
         "# 由 tools/env-manager 產生；修改前會自動建立 .env.backup.*",
         "# ============================================================",
         "",
@@ -175,17 +175,31 @@ def placeholder_for_example(key: str, meta: dict[str, Any], value: str) -> str:
     return value
 
 
+_ALLOWED_HOSTS = {f"127.0.0.1:{PORT}", f"localhost:{PORT}", f"[::1]:{PORT}"}
+_API_HEADER = "x-env-manager"
+
+
 @app.middleware("http")
 async def localhost_only(request: Request, call_next):
     client_host = request.client.host if request.client else ""
     if client_host not in {"127.0.0.1", "::1", "localhost"}:
-        raise HTTPException(status_code=403, detail="Localhost only")
+        return JSONResponse(status_code=403, content={"detail": "Localhost only"})
+    # DNS rebinding：惡意網域解析到 127.0.0.1 時，Host 會是攻擊者的網域。
+    if request.headers.get("host", "") not in _ALLOWED_HOSTS:
+        return JSONResponse(status_code=403, content={"detail": "Unexpected Host"})
+    if request.url.path.startswith("/api/"):
+        # 自訂標頭會觸發 CORS 預檢，其他網站無法讓瀏覽器帶上；同時拒絕非本機 Origin。
+        origin = request.headers.get("origin")
+        if request.headers.get(_API_HEADER) != "1" or (
+            origin and urlparse(origin).netloc not in _ALLOWED_HOSTS
+        ):
+            return JSONResponse(status_code=403, content={"detail": "Cross-site request blocked"})
     return await call_next(request)
 
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request, "index.html")
 
 
 @app.get("/api/env")

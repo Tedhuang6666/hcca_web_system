@@ -1,22 +1,53 @@
 """SQLAlchemy 2.0 非同步資料庫設定"""
 
-from collections.abc import AsyncGenerator
+import asyncio
+import logging
+from collections.abc import AsyncGenerator, AsyncIterator
+from contextlib import asynccontextmanager
+from uuid import uuid4
 
+from sqlalchemy import func, select, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.pool import NullPool
 
 from api.core.config import settings  # noqa: E402
 
+logger = logging.getLogger(__name__)
+
+_TASK_DB_CONNECT_MAX_ATTEMPTS = 5
+_TASK_DB_CONNECT_RETRY_BASE_SECONDS = 1.0
+
+
+def _pgbouncer_connect_args() -> dict[str, object]:
+    """Avoid asyncpg prepared-statement name collisions through transaction pooling."""
+    return {
+        "statement_cache_size": 0,
+        "prepared_statement_cache_size": 0,
+        "prepared_statement_name_func": lambda: f"__asyncpg_{uuid4()}__",
+    }
+
+
 # --- 非同步 Engine ---
-engine = create_async_engine(
-    str(settings.DATABASE_URL),
-    echo=settings.SQL_ECHO,
-    pool_pre_ping=True,
-    pool_size=settings.DB_POOL_SIZE,
-    max_overflow=settings.DB_MAX_OVERFLOW,
-    pool_timeout=settings.DB_POOL_TIMEOUT_SECONDS,
-    pool_recycle=settings.DB_POOL_RECYCLE_SECONDS,
-)
+# 預設：app 端自管 QueuePool。
+# DB_USE_PGBOUNCER=true（走 PgBouncer transaction pooling）時：
+#   - 改用 NullPool — 連線池交給 PgBouncer，app 端不再持久連線。
+#   - 關閉 asyncpg / SQLAlchemy 的 server-side prepared statement cache，
+#     否則 transaction 模式下跨連線會報 "prepared statement does not exist"。
+_engine_kwargs: dict = {"echo": settings.SQL_ECHO, "pool_pre_ping": True}
+if settings.DB_USE_PGBOUNCER:
+    _engine_kwargs["poolclass"] = NullPool
+    _engine_kwargs["connect_args"] = _pgbouncer_connect_args()
+else:
+    _engine_kwargs.update(
+        pool_size=settings.DB_POOL_SIZE,
+        max_overflow=settings.DB_MAX_OVERFLOW,
+        pool_timeout=settings.DB_POOL_TIMEOUT_SECONDS,
+        pool_recycle=settings.DB_POOL_RECYCLE_SECONDS,
+    )
+
+engine = create_async_engine(str(settings.DATABASE_URL), **_engine_kwargs)
 
 # --- Session Factory ---
 AsyncSessionLocal = async_sessionmaker(
@@ -28,11 +59,83 @@ AsyncSessionLocal = async_sessionmaker(
 )
 
 
+@asynccontextmanager
+async def task_session() -> AsyncIterator[AsyncSession]:
+    """Celery 同步 task 內 `asyncio.run()` 專用的 DB session。
+
+    每次 `asyncio.run()` 都是新的 event loop。沿用模組層級的 `AsyncSessionLocal`
+    （非 PgBouncer 時是持久 QueuePool）會讓 pooled asyncpg 連線綁在已關閉的舊 loop，
+    再次使用時拋 `Event loop is closed` / `got Future attached to a different loop`
+    （watchdog 已實際發生）。故這裡每次都建專屬 NullPool engine，結束即 dispose，
+    語義與 `AsyncSessionLocal` 一致（expire_on_commit/autoflush/autocommit 皆 False）。
+
+    新增需在 Celery worker 內跑 async DB 的 task 時，一律用本函式，勿直接用
+    `AsyncSessionLocal`。
+    """
+    last_error: Exception | None = None
+    for attempt in range(1, _TASK_DB_CONNECT_MAX_ATTEMPTS + 1):
+        task_engine_kwargs: dict = {"poolclass": NullPool}
+        if settings.DB_USE_PGBOUNCER:
+            task_engine_kwargs["connect_args"] = _pgbouncer_connect_args()
+        task_engine = create_async_engine(str(settings.DATABASE_URL), **task_engine_kwargs)
+        factory = async_sessionmaker(
+            task_engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+            autoflush=False,
+            autocommit=False,
+        )
+        session = factory()
+        try:
+            # Force the connection before yielding.  Without this probe, a
+            # transient DB/DNS outage escapes from the context manager and each
+            # task reports a separate failure before Celery can retry it.
+            await session.execute(text("SELECT 1"))
+        except (OperationalError, OSError) as exc:
+            last_error = exc
+            await session.close()
+            await task_engine.dispose()
+            if attempt == _TASK_DB_CONNECT_MAX_ATTEMPTS:
+                raise
+            delay = _TASK_DB_CONNECT_RETRY_BASE_SECONDS * 2 ** (attempt - 1)
+            logger.warning(
+                "Celery task DB connection unavailable; retrying in %.1fs (%d/%d): %s",
+                delay,
+                attempt,
+                _TASK_DB_CONNECT_MAX_ATTEMPTS,
+                exc,
+            )
+            await asyncio.sleep(delay)
+            continue
+
+        try:
+            yield session
+        finally:
+            await session.close()
+            await task_engine.dispose()
+        return
+
+    if last_error is not None:  # pragma: no cover - loop always raises earlier
+        raise last_error
+
+
 # --- ORM 基礎類別 ---
 class Base(DeclarativeBase):
     """所有 ORM Model 的基礎類別"""
 
     pass
+
+
+async def advisory_xact_lock(session: AsyncSession, key: int) -> None:
+    """在當前交易期間取得 PostgreSQL advisory lock，序列化臨界區。
+
+    用途：流水號/字號配發等「讀最大值 → +1」操作，避免並發 create 撞同號
+    （會觸發 unique constraint → 500）。鎖在交易結束（commit/rollback）時自動釋放。
+
+    測試用 sqlite 無 advisory lock 且為單緒，直接略過。
+    """
+    if session.bind is not None and session.bind.dialect.name == "postgresql":
+        await session.execute(select(func.pg_advisory_xact_lock(key)))
 
 
 # --- FastAPI 依賴注入用 Session Generator ---

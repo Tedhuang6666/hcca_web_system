@@ -1,41 +1,66 @@
 # Production blue-green compose file.
 # Run with:
-#   docker compose --env-file .env.production -f docker-compose.bluegreen.yml up -d db redis proxy
+#   docker compose --env-file .env.production -f docker-compose.bluegreen.yml up -d db pgbouncer redis proxy
 #   bash scripts/zero-downtime-deploy.sh green
 
 x-api-common: &api-common
+  extends:
+    file: docker-compose.runtime.yml
+    service: production
+  image: ${API_IMAGE:-hcca-api:bluegreen-local}
   build:
     context: .
     dockerfile: apps/api/Dockerfile
   env_file:
     - ${PROD_ENV_FILE:-.env.production}
   environment: &api-env
-    ENVIRONMENT: production
-    DEBUG: "false"
-    ENABLE_API_DOCS: "false"
-    COOKIE_SECURE: "true"
-    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}
-    DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}
+    HOME: /tmp
+    PRIVACY_EXPORT_DIR: /app/privacy-exports
+    APP_RELEASE: ${APP_RELEASE:-}
+    BUILD_COMMIT: ${BUILD_COMMIT:-}
     DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
     DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-20}
-    DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
-    DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
-    HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
-    REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
+    GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE: ${GOOGLE_DRIVE_SERVICE_ACCOUNT_HOST_FILE:+/run/secrets/google-drive-service-account.json}
+    GOOGLE_DRIVE_SERVICE_ACCOUNT_HOST_FILE: ""
+    SENTRY_DSN: ${SENTRY_DSN:-}
+    SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.1}
+    SENTRY_PROFILES_SAMPLE_RATE: ${SENTRY_PROFILES_SAMPLE_RATE:-0.0}
+    SENTRY_AUTH_TOKEN: ${SENTRY_AUTH_TOKEN:-}
+    SENTRY_ORG: ${SENTRY_ORG:-}
+    SENTRY_PROJECT: ${SENTRY_PROJECT:-}
+    POSTHOG_API_KEY: ${POSTHOG_API_KEY:-}
+    POSTHOG_HOST: ${POSTHOG_HOST:-https://us.i.posthog.com}
+    POSTHOG_PERSONAL_API_KEY: ${POSTHOG_PERSONAL_API_KEY:-}
+    OTEL_ENABLED: ${OTEL_ENABLED:-false}
+    OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+    OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
   depends_on:
     db:
       condition: service_healthy
     redis:
       condition: service_healthy
+    redis-cache:
+      condition: service_healthy
+    redis-broker:
+      condition: service_healthy
+    redis-realtime:
+      condition: service_healthy
+    pgbouncer:
+      condition: service_healthy
   volumes:
     - uploads:/app/uploads
+    - privacy-exports:/app/privacy-exports
+    - "${GOOGLE_DRIVE_SERVICE_ACCOUNT_HOST_FILE:-/dev/null}:/run/secrets/google-drive-service-account.json:ro"
 
 x-api-service: &api-service
   <<: *api-common
   restart: unless-stopped
+  mem_limit: ${API_MEM_LIMIT:-1200m}
+  memswap_limit: ${API_MEM_LIMIT:-1200m}
+  mem_reservation: 256m
   environment:
     <<: *api-env
-    GUNICORN_WORKERS: ${GUNICORN_WORKERS:-4}
+    GUNICORN_WORKERS: ${GUNICORN_WORKERS:-1}
     GUNICORN_KEEPALIVE: ${GUNICORN_KEEPALIVE:-5}
     GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-60}
     GUNICORN_GRACEFUL_TIMEOUT: ${GUNICORN_GRACEFUL_TIMEOUT:-30}
@@ -45,26 +70,48 @@ x-api-service: &api-service
   healthcheck:
     test:
       [
-        "CMD-SHELL",
-        "python -c \"import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3).status == 200 else 1)\"",
+        "CMD",
+        "curl",
+        "--fail",
+        "--silent",
+        "--show-error",
+        "--max-time",
+        "5",
+        "--output",
+        "/dev/null",
+        "http://127.0.0.1:8000/ready",
       ]
     interval: 10s
     timeout: 5s
-    retries: 6
-    start_period: 30s
+    retries: 18
+    start_period: 180s
   stop_grace_period: 45s
 
 x-web-service: &web-service
+  image: ${WEB_IMAGE:-hcca-web:bluegreen-local}
   build:
     context: .
     dockerfile: apps/web/Dockerfile
     args:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
       NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-}
-      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://hcca40.hct.works}
+      NEXT_PUBLIC_SHOP_LOOKBOOK_BASE_URL: ${NEXT_PUBLIC_SHOP_LOOKBOOK_BASE_URL:-}
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://hcca.tw}
+      NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
+      NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE: ${NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE:-0.05}
+      NEXT_PUBLIC_POSTHOG_KEY: ${NEXT_PUBLIC_POSTHOG_KEY:-}
+      NEXT_PUBLIC_POSTHOG_HOST: ${NEXT_PUBLIC_POSTHOG_HOST:-https://us.i.posthog.com}
   restart: unless-stopped
+  mem_limit: ${WEB_MEM_LIMIT:-768m}
+  memswap_limit: ${WEB_MEM_LIMIT:-768m}
+  mem_reservation: 192m
   environment:
     NODE_ENV: production
+    SENTRY_DSN: ${SENTRY_DSN:-}
+    NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE: ${NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE:-0.05}
+    OTEL_ENABLED: ${OTEL_ENABLED:-false}
+    OTEL_SERVICE_NAME: ${OTEL_WEB_SERVICE_NAME:-hcca-web}
+    OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_WEB_OTLP_ENDPOINT:-http://otel-collector:4318}
   healthcheck:
     test:
       [
@@ -80,6 +127,9 @@ x-web-service: &web-service
 x-worker-service: &worker-service
   <<: *api-common
   restart: unless-stopped
+  mem_limit: ${CELERY_WORKER_MEM_LIMIT:-1200m}
+  memswap_limit: ${CELERY_WORKER_MEM_LIMIT:-1200m}
+  mem_reservation: 256m
   environment:
     <<: *api-env
     DB_POOL_SIZE: ${CELERY_DB_POOL_SIZE:-5}
@@ -91,37 +141,49 @@ x-worker-service: &worker-service
 
 services:
   db:
-    image: postgres:16-alpine
-    restart: unless-stopped
+    extends:
+      file: docker-compose.infrastructure.yml
+      service: db
+
+  pgbouncer:
+    extends:
+      file: docker-compose.infrastructure.yml
+      service: pgbouncer
+    mem_limit: ${PGBOUNCER_MEM_LIMIT:-64m}
+    mem_reservation: 16m
+    cpus: ${PGBOUNCER_CPUS:-0.25}
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
+      MAX_CLIENT_CONN: ${PGBOUNCER_MAX_CLIENT_CONN:-200}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
-      timeout: 5s
-      retries: 5
 
   redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    command: ["sh", "-c", "redis-server --appendonly yes --requirepass \"$${REDIS_PASSWORD}\""]
-    environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
-    volumes:
-      - redisdata:/data
-    healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    extends:
+      file: docker-compose.infrastructure.yml
+      service: redis
+
+  redis-cache:
+    extends:
+      file: docker-compose.infrastructure.yml
+      service: redis-cache
+
+  redis-broker:
+    extends:
+      file: docker-compose.infrastructure.yml
+      service: redis-broker
+
+  redis-realtime:
+    extends:
+      file: docker-compose.infrastructure.yml
+      service: redis-realtime
 
   migrate:
     <<: *api-common
     restart: "no"
+    environment:
+      <<: *api-env
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}
+      DB_USE_PGBOUNCER: "false"
     command: python -m alembic -c /app/alembic.ini upgrade head
 
   api-blue:
@@ -135,7 +197,13 @@ services:
     environment:
       NODE_ENV: production
       API_INTERNAL_URL: http://api-blue:8000
-      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://hcca40.hct.works}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE: ${NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE:-0.05}
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: ${OTEL_WEB_SERVICE_NAME:-hcca-web}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_WEB_OTLP_ENDPOINT:-http://otel-collector:4318}
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://hcca.tw}
+      NEXT_PUBLIC_POSTHOG_HOST: ${NEXT_PUBLIC_POSTHOG_HOST:-https://us.i.posthog.com}
     depends_on:
       api-blue:
         condition: service_healthy
@@ -145,7 +213,13 @@ services:
     environment:
       NODE_ENV: production
       API_INTERNAL_URL: http://api-green:8000
-      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://hcca40.hct.works}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE: ${NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE:-0.05}
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: ${OTEL_WEB_SERVICE_NAME:-hcca-web}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_WEB_OTLP_ENDPOINT:-http://otel-collector:4318}
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://hcca.tw}
+      NEXT_PUBLIC_POSTHOG_HOST: ${NEXT_PUBLIC_POSTHOG_HOST:-https://us.i.posthog.com}
     depends_on:
       api-green:
         condition: service_healthy
@@ -156,18 +230,13 @@ services:
       python -m celery -A api.core.celery_app.celery_app worker
       --loglevel=info
       --concurrency=${CELERY_WORKER_CONCURRENCY:-4}
-      --queues=celery,default,documents,email,meal,backup,recovery
+      --queues=celery,default,email,backup,recovery
       -n worker-blue@%h
+    # 不設 healthcheck：`inspect ping` 每 30s 起重量級 python 行程、等 broker 回覆，
+    # 忙時 ping 卡住會堆積吃光 CPU；且 Docker 判 unhealthy 自動重啟反而打掉忙碌 worker。
+    # 存活交給 restart: unless-stopped。
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "python -m celery -A api.core.celery_app.celery_app inspect ping -d worker-blue@$$HOSTNAME -t 5 >/dev/null",
-        ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+      disable: true
 
   celery-worker-green:
     <<: *worker-service
@@ -175,26 +244,31 @@ services:
       python -m celery -A api.core.celery_app.celery_app worker
       --loglevel=info
       --concurrency=${CELERY_WORKER_CONCURRENCY:-4}
-      --queues=celery,default,documents,email,meal,backup,recovery
+      --queues=celery,default,email,backup,recovery
       -n worker-green@%h
+    # 同 worker-blue：不設 healthcheck，避免 inspect ping 堆積與 unhealthy 自動重啟。
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "python -m celery -A api.core.celery_app.celery_app inspect ping -d worker-green@$$HOSTNAME -t 5 >/dev/null",
-        ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+      disable: true
 
   celery-beat:
     <<: *worker-service
-    command: >
-      python -m celery -A api.core.celery_app.celery_app beat
-      --loglevel=info
-      --scheduler celery.beat:PersistentScheduler
-      --pidfile=/tmp/celerybeat.pid
+    mem_limit: ${CELERY_BEAT_MEM_LIMIT:-256m}
+    memswap_limit: ${CELERY_BEAT_MEM_LIMIT:-256m}
+    mem_reservation: 48m
+    # pidfile 放非持久化的 /dev/shm，避免 beat 以 PID 1 執行時把「1」寫進
+    # 持久化 volume，重啟後被 celery 誤判「已在執行（pid: 1）」而卡重啟迴圈。
+    # 啟動清理 pidfile 與舊排程檔，避免已刪除的任務從持久化狀態重新投遞。
+    # exec 讓 celery 接手 PID 1。
+    command:
+      - sh
+      - -c
+      - >
+        rm -f /dev/shm/celerybeat.pid /tmp/celerybeat.pid /tmp/celerybeat-schedule* &&
+        exec python -m celery -A api.core.celery_app.celery_app beat
+        --loglevel=INFO
+        --scheduler celery.beat:PersistentScheduler
+        --schedule=/tmp/celerybeat-schedule
+        --pidfile=/dev/shm/celerybeat.pid
     environment:
       <<: *api-env
       DB_POOL_SIZE: ${CELERY_BEAT_DB_POOL_SIZE:-2}
@@ -202,31 +276,34 @@ services:
     volumes:
       - uploads:/app/uploads
       - celerybeat:/tmp
+    # beat 不設 healthcheck：pidfile 存在不代表排程仍在運作，且判 unhealthy 自動重啟
+    # 反而易與 PID 1 殘留 pidfile 互相作用觸發重啟迴圈。存活交給 restart: unless-stopped。
     healthcheck:
-      test: ["CMD-SHELL", "test -f /tmp/celerybeat.pid && kill -0 \"$$(cat /tmp/celerybeat.pid)\""]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
+      disable: true
 
   proxy:
     image: caddy:2-alpine
     restart: unless-stopped
+    entrypoint: ["/bin/sh", "/etc/caddy/bluegreen/start-caddy.sh"]
+    command: []
     ports:
       - "80:80"
       - "443:443"
     environment:
       SITE_DOMAIN: ${SITE_DOMAIN:?set SITE_DOMAIN}
     volumes:
-      - ./deploy/bluegreen/Caddyfile.blue:/etc/caddy/Caddyfile:ro
       - ./deploy/bluegreen:/etc/caddy/bluegreen:ro
+      - ./.deploy-state:/etc/caddy/state:ro
       - caddydata:/data
       - caddyconfig:/config
 
 volumes:
   pgdata:
   redisdata:
+  rediscachedata:
+  redisbrokerdata:
   uploads:
+  privacy-exports:
   celerybeat:
   caddydata:
   caddyconfig:

@@ -1,0 +1,196 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { shopApi, apiErrorMessage } from "@/lib/api";
+import type { ShopDelegationOut } from "@/lib/types";
+import CopyButton from "@/components/ui/CopyButton";
+import DelegationInstructions from "./DelegationInstructions";
+
+export default function DelegationLinks({ categoryId, activityId, scopeName, initiallyCreating = false }: {
+  categoryId: string;
+  activityId: string | null;
+  scopeName: string;
+  initiallyCreating?: boolean;
+}) {
+  const [links, setLinks] = useState<ShopDelegationOut[]>([]);
+  const [names, setNames] = useState<Record<string, string>>({});
+  const [name, setName] = useState("");
+  const [shareUrl, setShareUrl] = useState("");
+  const [shareLinkId, setShareLinkId] = useState<string | null>(null);
+  const [authorizationCode, setAuthorizationCode] = useState<string | null>(null);
+  const [codeExpiresAt, setCodeExpiresAt] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [loadError, setLoadError] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(initiallyCreating);
+  const nameInput = useRef<HTMLInputElement>(null);
+  const shareInput = useRef<HTMLInputElement>(null);
+  const codeInput = useRef<HTMLInputElement>(null);
+  // 視窗首次開啟由 Modal 記住觸發按鈕並設定焦點，避免先搶焦點而無法返回。
+  useEffect(() => {
+    if (creating && !initiallyCreating) nameInput.current?.focus();
+  }, [creating, initiallyCreating]);
+  useEffect(() => {
+    if (shareUrl) {
+      const input = authorizationCode ? codeInput.current : shareInput.current;
+      input?.focus();
+      input?.select();
+    }
+  }, [shareUrl, authorizationCode]);
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError(false);
+    try {
+      const result = await shopApi.listDelegationLinks();
+      setLinks(result);
+      setNames(Object.fromEntries(result.map((link) => [link.id, link.name])));
+    } catch (error) {
+      setLoadError(true);
+      setMessage(apiErrorMessage(error, "無法載入代訂連結"));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  useEffect(() => { void load(); }, [load]);
+
+  const run = async (operation: () => Promise<ShopDelegationOut | void>, success: string, revokedId?: string) => {
+    setBusy(true);
+    setMessage("");
+    try {
+      const result = await operation();
+      if (result?.token) {
+        setShareUrl(`${window.location.origin}/shop#delegate=${encodeURIComponent(result.token)}`);
+        setShareLinkId(result.id);
+        setAuthorizationCode(result.authorization_code ?? null);
+        setCodeExpiresAt(result.authorization_code_expires_at ?? null);
+        setCreating(false);
+        setName("");
+      } else if (revokedId === shareLinkId) {
+        setShareUrl("");
+        setShareLinkId(null);
+        setAuthorizationCode(null);
+        setCodeExpiresAt(null);
+      }
+      setMessage(success);
+      await load();
+    } catch (error) {
+      setMessage(apiErrorMessage(error, "操作失敗，請再試一次"));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const visibleLinks = links.filter((link) => activityId
+    ? link.activity_id === activityId : !link.activity_id && link.category_id === categoryId);
+  const otherLinks = links.filter((link) => !visibleLinks.includes(link));
+  const renderLink = (link: ShopDelegationOut) => <li key={link.id}>
+    <label>連結名稱
+      <input aria-label={`修改${link.name}的名稱`} maxLength={80} value={names[link.id] ?? link.name}
+        disabled={busy || Boolean(link.revoked_at)}
+        onChange={(event) => setNames((current) => ({ ...current, [link.id]: event.target.value }))} />
+    </label>
+    <p>{link.revoked_at ? "已撤銷" : link.bound_user_email
+      ? `已綁定 ${link.bound_user_name ?? "家人"}（${link.bound_user_email}）` : "尚未綁定家人帳號"}</p>
+    <p>建立於 {new Date(link.created_at).toLocaleDateString("zh-TW")}</p>
+    {!link.revoked_at && <div className="shop-delegation-actions">
+      <button type="button" disabled={busy || !names[link.id]?.trim()} onClick={() => void run(
+        () => shopApi.renameDelegationLink(link.id, names[link.id].trim()), "名稱已更新；既有品項會保留下單時的名稱。",
+      )}>儲存名稱</button>
+      <button type="button" disabled={busy} onClick={() => void run(
+        () => shopApi.renewDelegationLink(link.id), "新連結已建立，舊連結已停用；請複製新連結。",
+      )}>重新產生（停用舊連結）</button>
+      <button type="button" disabled={busy} onClick={() => void run(
+        () => shopApi.revokeDelegationLink(link.id), "連結已撤銷，已登記的品項仍保留。", link.id,
+      )}>撤銷</button>
+    </div>}
+  </li>;
+
+  return (
+    <section className="shop-delegation-links shop-delegation-entry" aria-label="建立與管理代訂授權">
+      <p className="shop-delegation-scope"><strong>本次授權：{scopeName}</strong>
+        <span>{activityId ? "同活動商品皆可代訂" : "僅限此活動"}</span>
+      </p>
+      <div id="shop-delegation-create" hidden={!creating}>
+        <form className="shop-delegation-form" onSubmit={(event) => {
+          event.preventDefault();
+          if (!busy && name.trim()) void run(() => shopApi.createDelegationLink({ name: name.trim(), category_id: categoryId }), "驗證碼與連結已建立，請傳給家人。");
+        }}>
+          <label>邀請誰來代訂
+            <input ref={nameInput} data-autofocus value={name} maxLength={80} placeholder="例如：媽媽、爸爸" required
+              onChange={(event) => setName(event.target.value)} disabled={busy} />
+          </label>
+          <button type="submit" className="shop-delegation-primary" disabled={busy || !name.trim()}>
+            {busy ? "建立中…" : "建立代訂驗證碼"}
+          </button>
+        </form>
+        <p className="shop-delegation-note">家人選購後，品項會加入你的預購，由你繳款與領取。</p>
+      </div>
+      {shareUrl && <div className="shop-delegation-share">
+        <p className="shop-delegation-share-title">驗證碼與分享連結</p>
+        {authorizationCode && <>
+          <div className="shop-delegation-form">
+            <label>七位數代訂驗證碼
+              <input ref={codeInput} readOnly value={authorizationCode} className="shop-delegation-code"
+                onFocus={(event) => event.target.select()} />
+            </label>
+            <CopyButton
+              className="shop-delegation-primary"
+              value={authorizationCode}
+              label="複製驗證碼"
+              icon="none"
+              announcement="驗證碼已複製"
+              onCopied={() => setMessage("驗證碼已複製，請傳給家人。")}
+              onCopyError={() => {
+                codeInput.current?.focus();
+                codeInput.current?.select();
+                setMessage("請選取驗證碼後手動複製。");
+              }}
+            />
+          </div>
+          <p className="shop-delegation-note">{codeExpiresAt
+            ? `此驗證碼有效至 ${new Date(codeExpiresAt).toLocaleString("zh-TW")}。`
+            : "授權有效至商品截止或班級結單。"}
+            家人登入後，在商品頁點「家人代訂」輸入。</p>
+        </>}
+        <div className="shop-delegation-form">
+          <label>分享連結（請在離開頁面前保存）
+            <input ref={shareInput} readOnly value={shareUrl} onFocus={(event) => event.target.select()} />
+          </label>
+          <CopyButton
+            className="shop-delegation-primary"
+            value={shareUrl}
+            label="複製連結"
+            icon="none"
+            announcement="分享連結已複製"
+            onCopyError={() => {
+              shareInput.current?.focus();
+              shareInput.current?.select();
+              setMessage("請選取分享連結後手動複製。");
+            }}
+          />
+        </div>
+        <p className="shop-delegation-note">請先保存；關閉、重整或切換活動後須重新產生。</p>
+      </div>}
+      {!creating && <button type="button" className={shareUrl ? "shop-delegation-secondary" : "shop-delegation-primary"}
+        aria-expanded={creating} aria-controls="shop-delegation-create" disabled={busy}
+        onClick={() => {
+          setCreating(true);
+          if (initiallyCreating) window.requestAnimationFrame(() => nameInput.current?.focus());
+        }}>{shareUrl ? "建立另一組驗證碼" : "建立家長代訂連結"}</button>}
+      <p role="status">{busy ? "處理中…" : loading ? "載入代訂連結中…" : message}</p>
+      {loadError && <button type="button" onClick={() => void load()}>重新載入連結</button>}
+      <div className="shop-delegation-support">
+        <DelegationInstructions />
+        {visibleLinks.length > 0 && <details className="shop-delegation-management">
+          <summary tabIndex={0}>管理本次授權的連結（{visibleLinks.length}）</summary>
+          <ul className="shop-delegation-list">{visibleLinks.map(renderLink)}</ul>
+        </details>}
+        {!loading && !loadError && visibleLinks.length === 0 && <p className="shop-delegation-note">這個活動尚未建立代訂連結。</p>}
+        {otherLinks.length > 0 && <details>
+          <summary tabIndex={0}>其他活動的連結（{otherLinks.length}）</summary>
+          <ul className="shop-delegation-list">{otherLinks.map(renderLink)}</ul>
+        </details>}
+      </div>
+    </section>
+  );
+}

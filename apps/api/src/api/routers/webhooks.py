@@ -1,4 +1,4 @@
-"""Webhook 訂閱管理路由。Phase D2。
+"""Webhook 訂閱管理路由。
 
 管理員（webhook:admin）：
     GET    /webhooks                 列所有
@@ -19,7 +19,6 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
-from api.core.ssrf import UnsafeURLError, assert_safe_url
 from api.dependencies.permissions import require_permission
 from api.models.webhook import WebhookDelivery
 from api.schemas.webhook import (
@@ -59,18 +58,19 @@ async def admin_create_subscription(
     user=Depends(require_permission("webhook:admin")),
 ) -> WebhookSubscriptionCreatedResponse:
     try:
-        await assert_safe_url(str(body.url))
-    except UnsafeURLError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
-    row, secret = await webhook_svc.create_subscription(
-        db,
-        owner_user_id=user.id,
-        name=body.name,
-        url=str(body.url),
-        events=body.events,
-        description=body.description,
-        max_retries=body.max_retries,
-    )
+        row, secret = await webhook_svc.create_subscription(
+            db,
+            owner_user_id=user.id,
+            name=body.name,
+            url=str(body.url),
+            events=body.events,
+            description=body.description,
+            max_retries=body.max_retries,
+        )
+    except webhook_svc.UnsafeWebhookUrlError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
     await db.commit()
     return WebhookSubscriptionCreatedResponse(
         subscription=WebhookSubscriptionOut.model_validate(row),
@@ -98,11 +98,6 @@ async def admin_get_subscription(subscription_id: uuid.UUID, db: DbDep) -> Webho
 async def admin_update_subscription(
     subscription_id: uuid.UUID, body: WebhookSubscriptionUpdate, db: DbDep
 ) -> WebhookSubscriptionOut:
-    if body.url:
-        try:
-            await assert_safe_url(str(body.url))
-        except UnsafeURLError as exc:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     try:
         row = await webhook_svc.update_subscription(
             db,

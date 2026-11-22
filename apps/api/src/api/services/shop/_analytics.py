@@ -1,0 +1,552 @@
+"""依目前有效訂單快照分析銷售；不寫入或調整訂單資料。"""
+
+from __future__ import annotations
+
+import json
+import uuid
+from collections import defaultdict
+from datetime import UTC, date, datetime, time, timedelta
+from statistics import median
+
+from sqlalchemy import or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from api.core.clock import TAIPEI, local_today
+from api.models.shop import Order, OrderItem, OrderStatus, Product, ProductVariantGroup
+from api.schemas.shop_analytics import (
+    ShopSalesAnalyticsOut,
+    ShopSalesCosts,
+    ShopSalesCrossRow,
+    ShopSalesDay,
+    ShopSalesMetrics,
+    ShopSalesPeriod,
+    ShopSalesRow,
+    ShopSalesVariantRow,
+)
+from api.services.school_class import class_display_label
+from api.services.shop._analytics_insights import build_sales_insights
+from api.services.shop._costs import item_cost as order_item_cost
+
+
+def _allocate_amounts(order: Order) -> dict[uuid.UUID, int]:
+    """先扣明細贈品折抵，再分攤整單金額；最大餘數法確保加總等於整單。"""
+    items = sorted(order.items, key=lambda item: str(item.id))
+    # 贈品快照已指定實際折抵品項；不可把免費商品的折扣攤到其他付費商品。
+    weights = {
+        item.id: max(0, item.quantity * item.unit_price - (item.gift_discount_amount or 0))
+        for item in items
+    }
+    base = sum(weights.values())
+    if not base:
+        return {item.id: 0 for item in items}
+    total = order.total_price
+    amounts = {item.id: total * weights[item.id] // base for item in items}
+    remainder = total - sum(amounts.values())
+    ranked = sorted(
+        items,
+        key=lambda item: (
+            -(total * weights[item.id] % base),
+            str(item.id),
+        ),
+    )
+    for item in ranked[:remainder]:
+        amounts[item.id] += 1
+    return amounts
+
+
+async def sales_analytics(
+    session: AsyncSession,
+    *,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    compare: bool = False,
+    compare_from: date | None = None,
+    activity_id: uuid.UUID | None = None,
+    category_id: uuid.UUID | None = None,
+    product_id: uuid.UUID | None = None,
+    grade: int | None = None,
+    class_id: uuid.UUID | None = None,
+    is_paid: bool | None = None,
+) -> ShopSalesAnalyticsOut:
+    start, end = sales_date_range(date_from, date_to)
+    days = (end - start).days + 1
+    previous_start = compare_from or start - timedelta(days=days)
+    previous_end = previous_start + timedelta(days=days - 1)
+    ranges = [(start, end)] + ([(previous_start, previous_end)] if compare else [])
+    periods = []
+    for period_start, period_end in ranges:
+        orders = await load_sales_orders(
+            session,
+            date_from=period_start,
+            date_to=period_end,
+            activity_id=activity_id,
+            category_id=category_id,
+            product_id=product_id,
+            grade=grade,
+            class_id=class_id,
+            is_paid=is_paid,
+        )
+        periods.append(_summarize(orders, period_start, period_end, product_id, category_id))
+    previous = periods[1] if compare else None
+    return ShopSalesAnalyticsOut(
+        generated_at=datetime.now(UTC),
+        current=periods[0],
+        previous=previous,
+        insights=build_sales_insights(periods[0], previous),
+    )
+
+
+def sales_date_range(date_from: date | None, date_to: date | None) -> tuple[date, date]:
+    end = date_to or local_today()
+    start = date_from or end - timedelta(days=29)
+    if not 1 <= (end - start).days + 1 <= 366:
+        raise ValueError("訂購迄日不得早於起日，每次最多分析 366 天")
+    return start, end
+
+
+async def load_sales_orders(
+    session: AsyncSession,
+    *,
+    date_from: date,
+    date_to: date,
+    activity_id: uuid.UUID | None = None,
+    category_id: uuid.UUID | None = None,
+    product_id: uuid.UUID | None = None,
+    grade: int | None = None,
+    class_id: uuid.UUID | None = None,
+    is_paid: bool | None = None,
+    include_variants: bool = False,
+) -> list[Order]:
+    """分析與整理表共用篩選，保留整單明細供折扣分攤。"""
+    query = (
+        select(Order)
+        .options(
+            selectinload(Order.items).selectinload(OrderItem.product).selectinload(Product.series),
+            selectinload(Order.school_class),
+        )
+        .where(
+            Order.test_product_id.is_(None),
+            Order.created_at >= datetime.combine(date_from, time.min, TAIPEI),
+            Order.created_at < datetime.combine(date_to + timedelta(days=1), time.min, TAIPEI),
+        )
+    )
+    if include_variants:
+        query = query.options(
+            selectinload(Order.items)
+            .selectinload(OrderItem.product)
+            .selectinload(Product.variant_groups)
+            .selectinload(ProductVariantGroup.options)
+        )
+    if activity_id is not None:
+        query = query.where(Order.activity_id == activity_id)
+    if grade is not None:
+        query = query.where(Order.school_class.has(grade=grade))
+    if class_id is not None:
+        query = query.where(Order.class_id == class_id)
+    if is_paid is not None:
+        query = query.where(Order.is_paid.is_(is_paid))
+    if product_id is not None:
+        query = query.where(Order.items.any(OrderItem.product_id == product_id))
+    if category_id is not None:
+        query = query.where(
+            Order.items.any(
+                OrderItem.product.has(
+                    or_(
+                        Product.category_id == category_id,
+                        Product.series.has(category_id=category_id),
+                    )
+                )
+            )
+        )
+    return list((await session.scalars(query)).unique().all())
+
+
+def _add_costs(target: ShopSalesCosts, amount: int, cost: int, missing: int) -> None:
+    target.missing_cost_item_count += missing
+    if target.missing_cost_item_count:
+        target.total_cost = None
+        target.profit_amount = None
+    else:
+        target.total_cost = (target.total_cost or 0) + cost
+        target.profit_amount = (target.profit_amount or 0) + amount - cost
+
+
+def _summarize(
+    orders: list[Order],
+    start: date,
+    end: date,
+    product_id: uuid.UUID | None,
+    category_id: uuid.UUID | None,
+) -> ShopSalesPeriod:
+    metrics = ShopSalesMetrics()
+    groups: dict[str, dict[str, ShopSalesRow]] = defaultdict(dict)
+    seen: dict[tuple[str, str], set[uuid.UUID]] = defaultdict(set)
+    group_buyers: dict[tuple[str, str], set[uuid.UUID]] = defaultdict(set)
+    buyers: set[uuid.UUID] = set()
+    positive_amounts: list[int] = []
+    buyer_orders: dict[uuid.UUID, int] = defaultdict(int)
+    active_records: list[tuple[Order, int, int, int, int, int]] = []
+    cross_meta: dict[str, dict[str, dict]] = defaultdict(dict)
+
+    def add(
+        kind: str,
+        key: str,
+        label: str,
+        order: Order,
+        quantity: int,
+        amount: int,
+        gross: int | None = None,
+        cost: int = 0,
+        missing: int = 0,
+    ) -> None:
+        row = groups[kind].setdefault(key, ShopSalesRow(key=key, label=label))
+        if order.id not in seen[kind, key]:
+            row.order_count += 1
+            seen[kind, key].add(order.id)
+        group_buyers[kind, key].add(order.user_id)
+        row.buyer_count = len(group_buyers[kind, key])
+        row.item_count += quantity
+        row.total_amount += amount
+        row.paid_amount += amount if order.is_paid else 0
+        row.gross_amount += amount if gross is None else gross
+        row.discount_amount += 0 if gross is None else gross - amount
+        if order.status not in (OrderStatus.CANCELLED, OrderStatus.REFUNDED):
+            _add_costs(row, amount, cost, missing)
+
+    # 同一選項改名後仍依識別碼合併，顯示期間內最近一筆訂單的名稱快照。
+    for order in sorted(orders, key=lambda order: (order.created_at, str(order.id)), reverse=True):
+        items = [
+            item
+            for item in order.items
+            if (product_id is None or item.product_id == product_id)
+            and (
+                category_id is None
+                or item.product.category_id == category_id
+                or (item.product.series and item.product.series.category_id == category_id)
+            )
+        ]
+        if not items:
+            continue
+        amounts = _allocate_amounts(order)
+        discounts = {
+            item.id: item.quantity * item.unit_price - amounts[item.id] for item in order.items
+        }
+        amount = sum(amounts[item.id] for item in items)
+        quantity = sum(item.quantity for item in items)
+        discount = sum(discounts[item.id] for item in items)
+        gross = amount + discount
+        # 採目前商品成本，補填或更正後可重算既有訂單；未知成本不可視為零。
+        costs = {item.id: order_item_cost(item) for item in items}
+        cost = sum(value[0] for value in costs.values())
+        missing = sum(value[1] for value in costs.values())
+        status_labels = {
+            "pending": "待確認",
+            "confirmed": "已確認",
+            "cancelled": "已取消",
+            "refunded": "已退款",
+        }
+        add(
+            "statuses",
+            order.status.value,
+            status_labels.get(order.status.value, order.status.value),
+            order,
+            quantity,
+            amount,
+            gross,
+            cost,
+            missing,
+        )
+        if order.status in (OrderStatus.CANCELLED, OrderStatus.REFUNDED):
+            continue
+        active_records.append((order, quantity, amount, gross, cost, missing))
+        _add_costs(metrics, amount, cost, missing)
+        buyer_orders[order.user_id] += 1
+        metrics.order_count += 1
+        metrics.item_count += quantity
+        metrics.total_amount += amount
+        metrics.paid_amount += amount if order.is_paid else 0
+        metrics.discount_amount += discount
+        metrics.discounted_order_count += int(discount > 0)
+        buyers.add(order.user_id)
+        if amount > 0:
+            positive_amounts.append(amount)
+        created = order.created_at
+        local = (created if created.tzinfo else created.replace(tzinfo=UTC)).astimezone(TAIPEI)
+        sc = order.school_class
+        source = order.assistance_scope
+        for kind, key, label in [
+            ("daily", local.date().isoformat(), local.date().isoformat()),
+            ("hours", str(local.hour), f"{local.hour:02d}:00"),
+            ("weekdays", str(local.weekday()), f"週{'一二三四五六日'[local.weekday()]}"),
+            (
+                "weekday_hours",
+                str(local.weekday() * 24 + local.hour),
+                f"週{'一二三四五六日'[local.weekday()]} {local.hour:02d}:00",
+            ),
+            ("grades", str(sc.grade) if sc else "none", f"{sc.grade} 年級" if sc else "未分班"),
+            ("classes", str(sc.id) if sc else "none", class_display_label(sc) or "未分班"),
+            ("amount_bands", str(min((amount - 1) // 500, 6)) if amount else "zero", ""),
+            (
+                "item_bands",
+                str(quantity) if quantity <= 5 else "6–9" if quantity < 10 else "10+",
+                "",
+            ),
+        ]:
+            add(kind, key, label, order, quantity, amount, gross, cost, missing)
+
+        source_groups: list[tuple[str, str, list[OrderItem]]] = []
+        if source == "class_assisted":
+            source_groups.append(("class_assisted", "班代代購", items))
+        elif source == "self":
+            own_items = [item for item in items if item.delegation_link_id is None]
+            family_items = [item for item in items if item.delegation_link_id is not None]
+            if own_items:
+                source_groups.append(("self", "自行訂購", own_items))
+            if family_items:
+                source_groups.append(("family_assisted", "家人代購", family_items))
+        else:
+            label = "贈送（免付款）" if source == "council_gift" else source
+            source_groups.append((source, label, items))
+
+        for source_key, source_label, source_items in source_groups:
+            source_amount = sum(amounts[item.id] for item in source_items)
+            source_gross = sum(amounts[item.id] + discounts[item.id] for item in source_items)
+            source_quantity = sum(item.quantity for item in source_items)
+            source_cost = sum(costs[item.id][0] for item in source_items)
+            source_missing = sum(costs[item.id][1] for item in source_items)
+            add(
+                "sources",
+                source_key,
+                source_label,
+                order,
+                source_quantity,
+                source_amount,
+                source_gross,
+                source_cost,
+                source_missing,
+            )
+
+        for item in items:
+            product = item.product
+            item_gross = amounts[item.id] + discounts[item.id]
+            item_cost, item_missing = costs[item.id]
+            add(
+                "products",
+                str(product.id),
+                product.name,
+                order,
+                item.quantity,
+                amounts[item.id],
+                item_gross,
+                item_cost,
+                item_missing,
+            )
+            for kind, dimension_key, dimension_label in [
+                (
+                    "grade_products",
+                    str(sc.grade) if sc else "none",
+                    f"{sc.grade} 年級" if sc else "未分班",
+                ),
+                (
+                    "class_products",
+                    str(sc.id) if sc else "none",
+                    class_display_label(sc) or "未分班",
+                ),
+            ]:
+                key = f"{dimension_key}:{product.id}"
+                add(
+                    kind,
+                    key,
+                    f"{dimension_label} · {product.name}",
+                    order,
+                    item.quantity,
+                    amounts[item.id],
+                    item_gross,
+                    item_cost,
+                    item_missing,
+                )
+                cross_meta[kind][key] = dict(
+                    dimension_key=dimension_key,
+                    dimension_label=dimension_label,
+                    product_id=product.id,
+                    product_name=product.name,
+                )
+            options = _sales_options(item.selected_options or [])
+            option_label = (
+                " / ".join(f"{group}：{value}" for _, _, group, value in options) or "無規格"
+            )
+            variant_key = json.dumps(
+                [str(product.id), sorted((group, option) for group, option, _, _ in options)],
+                ensure_ascii=False,
+            )
+            add(
+                "variants",
+                variant_key,
+                f"{product.name} · {option_label}",
+                order,
+                item.quantity,
+                amounts[item.id],
+                item_gross,
+                item_cost,
+                item_missing,
+            )
+            cross_meta["variants"].setdefault(
+                variant_key,
+                dict(product_id=product.id, product_name=product.name, option_label=option_label),
+            )
+            for group_key, option_key, group_name, value in options:
+                key = json.dumps([str(product.id), group_key, option_key], ensure_ascii=False)
+                add(
+                    "variant_options",
+                    key,
+                    f"{product.name} · {group_name}：{value}",
+                    order,
+                    item.quantity,
+                    amounts[item.id],
+                    item_gross,
+                    item_cost,
+                    item_missing,
+                )
+                cross_meta["variant_options"].setdefault(
+                    key,
+                    dict(
+                        product_id=product.id,
+                        product_name=product.name,
+                        group_key=group_key,
+                        group_name=group_name,
+                        option_label=value,
+                    ),
+                )
+
+    metrics.buyer_count = len(buyers)
+    metrics.median_order_amount = float(median(positive_amounts)) if positive_amounts else 0
+    metrics.average_buyer_amount = round(metrics.total_amount / len(buyers), 2) if buyers else 0
+    metrics.repeat_buyer_count = sum(count > 1 for count in buyer_orders.values())
+    metrics.repeat_buyer_rate = (
+        round(metrics.repeat_buyer_count / len(buyers) * 100, 2) if buyers else 0
+    )
+    for order, quantity, amount, gross, cost, missing in active_records:
+        count = buyer_orders[order.user_id]
+        key = str(count) if count < 3 else "3+"
+        add("buyer_segments", key, f"{key} 筆訂單", order, quantity, amount, gross, cost, missing)
+    metrics.unpaid_amount = metrics.total_amount - metrics.paid_amount
+    metrics.average_order_amount = (
+        round(sum(positive_amounts) / len(positive_amounts), 2) if positive_amounts else 0
+    )
+    if metrics.order_count:
+        metrics.average_items_per_order = round(metrics.item_count / metrics.order_count, 2)
+        metrics.promotion_usage_rate = round(
+            metrics.discounted_order_count / metrics.order_count * 100, 2
+        )
+    if metrics.total_amount:
+        metrics.payment_rate = round(metrics.paid_amount / metrics.total_amount * 100, 2)
+    daily = []
+    cumulative = 0
+    for index in range((end - start).days + 1):
+        key = (start + timedelta(days=index)).isoformat()
+        row = groups["daily"].get(key, ShopSalesRow(key=key, label=key))
+        cumulative += row.total_amount
+        daily.append(ShopSalesDay(**row.model_dump(), cumulative_amount=cumulative))
+
+    def rows(kind: str) -> list[ShopSalesRow]:
+        return sorted(groups[kind].values(), key=lambda row: (-row.item_count, row.label))
+
+    def variant_rows(kind: str) -> list[ShopSalesVariantRow]:
+        result = []
+        for row in rows(kind):
+            meta = cross_meta[kind][row.key]
+            product = groups["products"][str(meta["product_id"])]
+            result.append(
+                ShopSalesVariantRow(
+                    **row.model_dump(),
+                    **meta,
+                    item_share=round(row.item_count / product.item_count * 100, 2)
+                    if product.item_count
+                    else 0,
+                    amount_share=round(row.total_amount / product.total_amount * 100, 2)
+                    if product.total_amount
+                    else 0,
+                )
+            )
+        return result
+
+    bands = (
+        [("zero", "NT$0")]
+        + [(str(i), f"NT${i * 500 + 1:,}–{(i + 1) * 500:,}") for i in range(6)]
+        + [("6", "NT$3,001 以上")]
+    )
+    amount_bands = [
+        groups["amount_bands"]
+        .get(key, ShopSalesRow(key=key, label=label))
+        .model_copy(update={"label": label})
+        for key, label in bands
+    ]
+    item_bands = [
+        groups["item_bands"]
+        .get(key, ShopSalesRow(key=key, label=key))
+        .model_copy(update={"label": f"{key} 件"})
+        for key in ["1", "2", "3", "4", "5", "6–9", "10+"]
+    ]
+    for key, label in (
+        ("self", "自行訂購"),
+        ("family_assisted", "家人代購"),
+        ("class_assisted", "班代代購"),
+    ):
+        groups["sources"].setdefault(key, ShopSalesRow(key=key, label=label))
+
+    return ShopSalesPeriod(
+        date_from=start,
+        date_to=end,
+        metrics=metrics,
+        daily=daily,
+        grades=rows("grades"),
+        classes=rows("classes"),
+        products=rows("products"),
+        variants=variant_rows("variants"),
+        variant_options=variant_rows("variant_options"),
+        sources=rows("sources"),
+        amount_bands=amount_bands,
+        item_bands=item_bands,
+        hours=[
+            groups["hours"].get(str(hour), ShopSalesRow(key=str(hour), label=f"{hour:02d}:00"))
+            for hour in range(24)
+        ],
+        weekdays=[
+            groups["weekdays"].get(
+                str(day), ShopSalesRow(key=str(day), label=f"週{'一二三四五六日'[day]}")
+            )
+            for day in range(7)
+        ],
+        weekday_hours=[
+            groups["weekday_hours"].get(
+                str(cell),
+                ShopSalesRow(
+                    key=str(cell), label=f"週{'一二三四五六日'[cell // 24]} {cell % 24:02d}:00"
+                ),
+            )
+            for cell in range(168)
+        ],
+        statuses=rows("statuses"),
+        buyer_segments=rows("buyer_segments"),
+        grade_products=[
+            ShopSalesCrossRow(**row.model_dump(), **cross_meta["grade_products"][row.key])
+            for row in rows("grade_products")
+        ],
+        class_products=[
+            ShopSalesCrossRow(**row.model_dump(), **cross_meta["class_products"][row.key])
+            for row in rows("class_products")
+        ],
+    )
+
+
+def _sales_options(snapshots: list[dict]) -> list[tuple[str, str, str, str]]:
+    """保留歷史快照，ID 優先；無 ID 的舊明細依名稱識別，不靠顯示分隔符分組。"""
+    options = {}
+    for option in snapshots:
+        group_name = str(option.get("group_name", ""))
+        value = str(option.get("value", ""))
+        group_key = f"id:{option['group_id']}" if option.get("group_id") else f"name:{group_name}"
+        option_key = f"id:{option['option_id']}" if option.get("option_id") else f"value:{value}"
+        options[group_key, option_key] = (group_key, option_key, group_name, value)
+    return sorted(options.values(), key=lambda option: (option[2], option[3], option[0], option[1]))

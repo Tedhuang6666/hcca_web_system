@@ -1,0 +1,38 @@
+import { reportClientError } from "./client-error-reporter";
+
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+    public requestId?: string | null,
+    public errorId?: string | null,
+    public traceId?: string | null,
+  ) {
+    super(message);
+  }
+}
+
+/** 取出 ApiError 的後端訊息，非 ApiError 時回傳 fallback 文案（toast 顯示用） */
+export function apiErrorMessage(e: unknown, fallback: string): string {
+  return e instanceof ApiError ? e.message : fallback;
+}
+
+export async function withFallback<T>(
+  promise: Promise<T>,
+  fallback: T,
+  onError?: (error: unknown) => void,
+): Promise<T> {
+  try {
+    return await promise;
+  } catch (error) {
+    if (!(error instanceof ApiError && error.status === 401)) {
+      reportClientError({
+        scope: "api.withFallback",
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+    }
+    onError?.(error);
+    return fallback;
+  }
+}

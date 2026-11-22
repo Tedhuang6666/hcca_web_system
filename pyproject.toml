@@ -1,50 +1,16 @@
 [project]
 name = "campus-platform"
 version = "0.1.0"
-description = "校園自治整合平台"
+description = "竹嶺班聯數位整合系統"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = [
-    "aioredis>=2.0.1",
-    "alembic>=1.18.4",
-    "asyncpg>=0.31.0",
-    "authlib>=1.6.9",
-    "bcrypt>=5.0.0",
-    "boto3>=1.42.88",
-    "celery>=5.3.1",
-    "coloredlogs>=15.0.1",
-    "email-validator>=2.3.0",
-    "fastapi>=0.135.3",
-    "httpx>=0.28.1",
-    "itsdangerous>=2.2.0",
-    "line-bot-sdk>=3.23.0",
-    "pandas>=3.0.2",
-    "passlib>=1.7.4",
-    "psycopg2-binary>=2.9.11",
-    "pydantic>=2.12.5",
-    "pydantic-settings>=2.13.1",
-    "pyjwt>=2.12.1",
-    "pytest>=9.0.3",
-    "pytest-asyncio>=1.3.0",
-    "python-dotenv>=1.2.2",
-    "python-jose>=3.5.0",
-    "python-json-logger>=4.1.0",
-    "python-multipart>=0.0.24",
-    "redis>=7.4.0",
-    "sentry-sdk>=2.57.0",
-    "slowapi>=0.1.9",
-    "sqlalchemy>=2.0.49",
-    "starlette>=0.52.1",
-    "uvicorn>=0.44.0",
-    "weasyprint>=68.1",
-    "websockets>=16.0",
-]
 
 [tool.uv.workspace]
 members = [
     "apps/api",
     "libs/shared",
 ]
+exclude = ["apps/discord-bot"]
 
 [tool.ruff]
 line-length = 100
@@ -78,7 +44,15 @@ files = [
     "apps/api/src/api/core/login_lockout.py",
     "apps/api/src/api/core/anomaly_detection.py",
     "apps/api/src/api/core/field_crypto.py",
+    "apps/api/src/api/core/prometheus_metrics.py",
+    "apps/api/src/api/core/request_id.py",
+    "apps/api/src/api/core/sentry.py",
+    "apps/api/src/api/core/structured_logging.py",
+    "apps/api/src/api/services/metrics_tasks.py",
     "apps/api/src/api/services/storage.py",
+    "apps/api/src/api/services/shop/_buyer.py",
+    "apps/api/src/api/services/shop/_events.py",
+    "apps/api/src/api/services/shop/_lookups.py",
 ]
 
 [tool.coverage.run]
@@ -90,8 +64,7 @@ omit = [
 ]
 
 [tool.coverage.report]
-# 起始門檻：以目前實測值為基準的保守值，避免覆蓋率默默下滑。
-# 補測試後可逐步調高。
-fail_under = 45
+# 2026-11-17 全套 PostgreSQL / migration schema 實測約 73%，保留小幅 headroom。
+fail_under = 72
 show_missing = true
 skip_covered = false

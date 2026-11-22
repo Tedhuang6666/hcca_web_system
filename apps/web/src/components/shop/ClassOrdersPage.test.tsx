@@ -1,0 +1,812 @@
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import ClassOrdersPage from "@/app/(protected)/shop/class-orders/page";
+
+import type { CatalogCategoryOut } from "@/lib/types";
+
+const api = vi.hoisted(() => ({
+  listClassOrders: vi.fn(), classSummary: vi.fn(), catalog: vi.fn(), getCloseStatus: vi.fn(),
+  getProduct: vi.fn(), getOrder: vi.fn(), updateOrder: vi.fn(), createClassOrder: vi.fn(), myClass: vi.fn(), members: vi.fn(),
+  setClassCollected: vi.fn(), closeCategory: vi.fn(), reopenCategory: vi.fn(),
+  listSupplementOrders: vi.fn(), getClassDeadline: vi.fn(),
+}));
+vi.mock("@/lib/api", () => ({ shopApi: api, classApi: api, apiErrorMessage: (_: unknown, fallback: string) => fallback }));
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  Object.defineProperty(window, "matchMedia", { configurable: true, value: () => ({ matches: true }) });
+  Element.prototype.scrollIntoView = vi.fn();
+  api.listClassOrders.mockResolvedValue([]);
+  api.listSupplementOrders.mockResolvedValue([]);
+  api.getClassDeadline.mockResolvedValue(null);
+  api.classSummary.mockResolvedValue({ product_rows: [] });
+  api.catalog.mockResolvedValue([{ id: "category", name: "園遊會", activity_id: null, series: [], products: [
+    { id: "product", name: "紀念袋", status: "active", price: 100 },
+    { id: "shirt", name: "紀念衫", status: "active", price: 200 },
+    { id: "badge", name: "紀念徽章", status: "active", price: 50 },
+  ] }]);
+  api.getProduct.mockImplementation(async (id: string) => id === "badge"
+    ? { id, name: "紀念徽章", price: 50, variant_groups: [{ id: "color", name: "顏色", options: Array.from({ length: 30 }, (_, index) => ({
+      id: `color-${index + 1}`, value: `色票${index + 1}`, is_active: true, price_delta: 0,
+    })) }] }
+    : id === "shirt"
+      ? { id, name: "紀念衫", price: 200, variant_groups: [{ id: "size", name: "尺寸", options: [
+      { id: "medium", value: "M", is_active: true, price_delta: 0 },
+      { id: "large", value: "L", is_active: true, price_delta: 20 },
+      ] }] }
+      : { id, name: "紀念袋", price: 100, variant_groups: [] });
+  api.getCloseStatus.mockResolvedValue({ statuses: {} });
+  api.myClass.mockResolvedValue({ id: "class" });
+  api.members.mockResolvedValue([
+    { id: "a", display_name: "示範甲", seat_number: 1 },
+    { id: "b", display_name: "示範乙", seat_number: 2 },
+  ]);
+  api.createClassOrder.mockResolvedValue([]);
+  api.closeCategory.mockResolvedValue({});
+  api.reopenCategory.mockResolvedValue({});
+});
+
+async function chooseStudent(id = "a") {
+  const singleMode = await screen.findByRole("button", { name: "逐位代訂", hidden: true });
+  if (singleMode.getAttribute("aria-pressed") !== "true") fireEvent.click(singleMode);
+  const roster = await screen.findByRole("group", { name: "同學搜尋結果" });
+  fireEvent.click(await within(roster).findByRole("button", { name: id === "a" ? /1 號.*示範甲/ : /2 號.*示範乙/ }));
+}
+
+async function chooseProduct(id = "product") {
+  const change = screen.queryByRole("button", { name: "換商品" });
+  if (change) fireEvent.click(change);
+  const search = screen.getByRole("searchbox", { name: "搜尋商品" });
+  const productName = id === "shirt" ? /紀念衫/ : /紀念袋/;
+  const results = screen.getByRole("group", { name: "商品搜尋結果" });
+  fireEvent.change(search, { target: { value: id === "shirt" ? "紀念衫" : "紀念袋" } });
+  fireEvent.click(await within(results).findByRole("button", { name: productName }));
+  if (id === "shirt") fireEvent.click(await screen.findByRole("radio", { name: "M" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: /加入清單，繼續選商品/ })).toBeEnabled());
+}
+
+function taskSwitch() {
+  return screen.getByRole("navigation", { name: "班代工作" });
+}
+
+function openOrderWorkspace() {
+  fireEvent.click(within(taskSwitch()).getByRole("button", { name: "幫同學訂購" }));
+}
+
+async function openCollectWorkspace(selectFirst = true) {
+  fireEvent.click(within(taskSwitch()).getByRole("button", { name: "登記收款" }));
+  if (selectFirst) {
+    const picker = await screen.findByRole("group", { name: "活動" });
+    const choices = await within(picker).findAllByRole("radio");
+    if (!(choices[0] as HTMLInputElement).checked) fireEvent.click(choices[0]);
+  }
+}
+
+describe("班代工作流程", () => {
+  it("預設只帶入未結單活動，代訂、名冊與查詢沿用同一活動", async () => {
+    const current: CatalogCategoryOut[] = await api.catalog();
+    api.catalog.mockResolvedValue([...current,
+      { ...current[0], id: "old", name: "去年活動", order_closed_at: "2025-01-01T00:00:00Z" },
+    ]);
+    api.listClassOrders.mockImplementation(async (params: { category_id?: string }) => params.category_id ? [] : [
+      { id: "old-order", user_id: "a", status: "pending", category_id: "old", total_price: 900, is_class_collected: true },
+    ]);
+    await act(async () => { render(<ClassOrdersPage />); });
+    expect(screen.getByRole("radio", { name: "園遊會" })).toBeChecked();
+    expect(screen.queryByRole("radio", { name: /去年活動/ })).not.toBeInTheDocument();
+    expect(api.classSummary.mock.calls.every(([params]) => params.category_id === "category")).toBe(true);
+    await openCollectWorkspace(false);
+    expect(screen.getByRole("group", { name: "全班收款統計" })).not.toHaveTextContent("NT$900");
+    fireEvent.click(screen.getByText("訂單查詢與其他工具"));
+    fireEvent.click(screen.getByRole("button", { name: "查詢／修改訂單" }));
+    expect(screen.getByRole("combobox", { name: "整理活動" })).not.toHaveTextContent("去年活動");
+    fireEvent.click(screen.getByRole("button", { name: /查看已結單活動/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /去年活動/ }));
+    await waitFor(() => expect(api.classSummary).toHaveBeenLastCalledWith({ category_id: "old", general_only: "true" }));
+    expect(screen.getByText("目前活動：去年活動")).toBeVisible();
+    openOrderWorkspace();
+    expect(screen.getByText("目前代訂 去年活動")).toBeVisible();
+  });
+
+  it("代訂已有商品時固定活動，避免把其他活動加入草稿", async () => {
+    const current: CatalogCategoryOut[] = await api.catalog();
+    api.catalog.mockResolvedValue([...current, { ...current[0], id: "other", name: "另一活動" }]);
+    await act(async () => { render(<ClassOrdersPage />); });
+    expect(screen.queryByRole("group", { name: "同學搜尋結果" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: "園遊會" }));
+    await chooseStudent();
+    await chooseProduct();
+    expect(screen.getByRole("radio", { name: "另一活動" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: /加入清單，繼續選商品/ }));
+    expect(screen.getByRole("radio", { name: "另一活動" })).toBeDisabled();
+  });
+
+  it("依被代訂同學的資格切換商品", async () => {
+    const catalog: CatalogCategoryOut[] = await api.catalog();
+    api.catalog.mockImplementation(async (_activity, _closed, _path, memberId?: string) => catalog.map((category) => ({
+      ...category, products: category.products.map((product) => ({ ...product,
+        purchase_allowed: memberId === "a" ? product.id === "shirt" : product.id === "product",
+      })),
+    })));
+    await act(async () => { render(<ClassOrdersPage />); });
+    await chooseStudent();
+    const results = screen.getByRole("group", { name: "商品搜尋結果" });
+    await within(results).findByRole("button", { name: /紀念衫/ });
+    expect(within(results).queryByRole("button", { name: /紀念袋/ })).not.toBeInTheDocument();
+    expect(api.catalog).toHaveBeenCalledWith(undefined, true, undefined, "a");
+    fireEvent.click(screen.getByRole("button", { name: "更換同學" }));
+    await chooseStudent("b");
+    await within(screen.getByRole("group", { name: "商品搜尋結果" })).findByRole("button", { name: /紀念袋/ });
+    expect(screen.queryByRole("button", { name: /紀念衫.*NT/ })).not.toBeInTheDocument();
+    await chooseProduct();
+    expect(api.getProduct).toHaveBeenLastCalledWith("product", "b");
+  });
+
+  it("批次代訂只顯示所有所選同學都可購買的商品", async () => {
+    const catalog: CatalogCategoryOut[] = await api.catalog();
+    api.catalog.mockImplementation(async (_activity, _closed, _path, memberId?: string) => catalog.map((category) => ({
+      ...category, products: category.products.map((product) => ({ ...product,
+        purchase_allowed: product.id === "badge" || product.id === (memberId === "a" ? "shirt" : "product"),
+      })),
+    })));
+    await act(async () => { render(<ClassOrdersPage />); });
+    fireEvent.click(screen.getByText("要幫多人訂購相同商品？"));
+    fireEvent.click(screen.getByRole("button", { name: "批次給多人" }));
+    fireEvent.click(await screen.findByRole("button", { name: "選取顯示的 2 位" }));
+    const results = screen.getByRole("group", { name: "商品搜尋結果" });
+    await within(results).findByRole("button", { name: /紀念徽章/ });
+    expect(within(results).getAllByRole("button")).toHaveLength(1);
+    expect(screen.getByText("只顯示所有已選同學都能訂購的商品。")).toBeVisible();
+  });
+
+  it("同組限購一張，加入清單與待送出清單後不能再選同組商品", async () => {
+    const catalog: CatalogCategoryOut[] = await api.catalog();
+    catalog[0].products[0].purchase_group = "tickets";
+    catalog[0].products[1].purchase_group = "tickets";
+    api.catalog.mockResolvedValue(catalog);
+    await act(async () => { render(<ClassOrdersPage />); });
+    await chooseStudent();
+    await chooseProduct();
+    const quantity = screen.getByRole("spinbutton", { name: /^數量$/ });
+    expect(quantity).toHaveAttribute("max", "1");
+    fireEvent.change(quantity, { target: { value: "2" } });
+    expect(quantity).toHaveValue(1);
+    fireEvent.click(screen.getByRole("button", { name: /加入清單，繼續選商品/ }));
+    const results = screen.getByRole("group", { name: "商品搜尋結果" });
+    expect(within(results).queryByRole("button", { name: /紀念袋|紀念衫/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("spinbutton", { name: "紀念袋數量" })).toHaveAttribute("max", "1");
+    fireEvent.click(screen.getByRole("button", { name: "加入待送出，登記下一位" }));
+    await chooseStudent();
+    await within(screen.getByRole("group", { name: "商品搜尋結果" })).findByRole("button", { name: /紀念徽章/ });
+    expect(screen.queryByRole("button", { name: /紀念袋.*NT|紀念衫.*NT/ })).not.toBeInTheDocument();
+  });
+
+  it("購買資格載入失敗時不提供商品，重試後才可選購", async () => {
+    const catalog: CatalogCategoryOut[] = await api.catalog();
+    let failed = true;
+    api.catalog.mockImplementation(async (_activity, _closed, _path, memberId?: string) => {
+      if (memberId && failed) throw new Error("unavailable");
+      return catalog;
+    });
+    await act(async () => { render(<ClassOrdersPage />); });
+    await chooseStudent();
+    await screen.findByText("無法確認同學的購買資格，請重新載入。");
+    expect(screen.getByRole("searchbox", { name: "搜尋商品" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /紀念袋.*NT/ })).not.toBeInTheDocument();
+    failed = false;
+    fireEvent.click(screen.getByRole("button", { name: "重新確認購買資格" }));
+    await chooseProduct();
+  });
+
+  it("切換學生後忽略前一位學生較晚回傳的商品資格", async () => {
+    const catalog: CatalogCategoryOut[] = await api.catalog();
+    let resolveFirst!: (data: CatalogCategoryOut[]) => void;
+    const first = new Promise<CatalogCategoryOut[]>((resolve) => { resolveFirst = resolve; });
+    api.catalog.mockImplementation(async (_activity, _closed, _path, memberId?: string) => memberId === "a" ? first : catalog);
+    await act(async () => { render(<ClassOrdersPage />); });
+    await chooseStudent();
+    expect(screen.getByText("正在確認同學可訂購的商品…")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "更換同學" }));
+    await chooseStudent("b");
+    await chooseProduct();
+    await act(async () => { resolveFirst([]); });
+    expect(screen.getByRole("button", { name: /送出示範乙的訂單/ })).toBeEnabled();
+  });
+
+  it("整理與篩選活動列出同活動下各個活動，並傳送活動篩選", async () => {
+    api.catalog.mockResolvedValue([
+      { id: "shirts", name: "衣服", activity_id: "festival", activity_name: "校慶", series: [], products: [
+        { id: "shirt", name: "紀念衫", status: "active", price: 200 },
+      ] },
+      { id: "bags", name: "袋子", activity_id: "festival", activity_name: "校慶", series: [], products: [
+        { id: "bag", name: "紀念袋", status: "active", price: 100 },
+      ] },
+    ]);
+    api.listClassOrders.mockImplementation(async (params: { category_id?: string }) => params.category_id === "shirts"
+      ? [{ id: "shirt-order", serial_number: "SHIRT-1", user_id: "a", status: "pending", activity_id: "festival", total_price: 200, items: [] }]
+      : []);
+    await act(async () => { render(<ClassOrdersPage />); });
+    fireEvent.click(screen.getByText("訂單查詢與其他工具"));
+    fireEvent.click(screen.getByRole("button", { name: "查詢／修改訂單" }));
+    fireEvent.click(await screen.findByRole("radio", { name: "校慶" }));
+    const select = await screen.findByRole("combobox", { name: "整理活動" });
+    await within(select).findByRole("option", { name: "衣服" });
+    expect(within(select).getByRole("option", { name: "袋子" })).toBeInTheDocument();
+    expect(within(select).queryByRole("option", { name: "校慶" })).not.toBeInTheDocument();
+    fireEvent.change(select, { target: { value: "category:shirts" } });
+    await waitFor(() => expect(api.classSummary).toHaveBeenLastCalledWith({ activity_id: "festival", category_id: "shirts" }));
+    expect(api.listClassOrders).toHaveBeenCalledWith(expect.objectContaining({ category_id: "shirts" }));
+    expect(await screen.findAllByText("SHIRT-1")).not.toHaveLength(0);
+    const productSelect = screen.getByRole("combobox", { name: "依商品篩選" });
+    expect(within(productSelect).getByRole("option", { name: "紀念衫" })).toBeInTheDocument();
+    expect(within(productSelect).queryByRole("option", { name: "紀念袋" })).not.toBeInTheDocument();
+    const detailSelect = screen.getByRole("combobox", { name: "依活動篩選" });
+    fireEvent.change(detailSelect, { target: { value: "category:bags" } });
+    await waitFor(() => expect(api.classSummary).toHaveBeenLastCalledWith({ activity_id: "festival", category_id: "bags" }));
+    expect(select).toHaveValue("category:bags");
+    expect(within(productSelect).getByRole("option", { name: "紀念袋" })).toBeInTheDocument();
+    fireEvent.change(select, { target: { value: "all" } });
+    await waitFor(() => expect(api.classSummary).toHaveBeenLastCalledWith({ activity_id: "festival" }));
+  });
+
+  it("班代沒有本班截止設定，保留加購與補收款工具", async () => {
+    await act(async () => { render(<ClassOrdersPage />); });
+    await screen.findByRole("navigation", { name: "班代工作" });
+    expect(screen.getByText("追加訂單補收款")).not.toBeVisible();
+    expect(screen.getByText("查詢／修改訂單")).not.toBeVisible();
+    expect(screen.queryByText("本班截止時間")).not.toBeInTheDocument();
+    expect(api.getClassDeadline).not.toHaveBeenCalled();
+    expect(api.closeCategory).not.toHaveBeenCalled();
+    expect(api.reopenCategory).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("訂單查詢與其他工具"));
+    expect(screen.getByText(/班聯結單或統一截止後停止代購/)).not.toBeVisible();
+    fireEvent.click(screen.getByText("加購與繳款說明"));
+    expect(screen.getByText(/班聯結單或統一截止後停止代購/)).toBeVisible();
+    fireEvent.click(screen.getByText("追加訂單與補收款"));
+    expect(await screen.findByRole("heading", { name: "追加訂單補收款" })).toBeVisible();
+  });
+
+  it("班聯確認本班收款後仍提供該活動代訂商品", async () => {
+    api.getCloseStatus.mockResolvedValue({ statuses: { category: { is_closed: true, is_global: false } } });
+    await act(async () => { render(<ClassOrdersPage />); });
+    await waitFor(() => expect(api.getCloseStatus).toHaveBeenCalled());
+    openOrderWorkspace();
+    await chooseStudent();
+    await chooseProduct();
+    expect(screen.getByRole("button", { name: /加入清單，繼續選商品/ })).toBeEnabled();
+  });
+
+  it("已結單活動仍有本班未收款時直接顯示入口，並可繼續收款", async () => {
+    api.catalog.mockResolvedValue([{ id: "category", name: "園遊會", activity_id: "festival",
+      activity_name: "園遊會", order_closed_at: "2026-10-27T12:00:00Z", series: [], products: [] }]);
+    api.listClassOrders.mockResolvedValue([
+      { id: "closed-order", serial_number: "1", user_id: "a", status: "pending", total_price: 100,
+        activity_id: "festival", is_class_collected: false, items: [] },
+    ]);
+    api.setClassCollected.mockResolvedValue({});
+    await act(async () => { render(<ClassOrdersPage />); });
+    await openCollectWorkspace(false);
+    expect(screen.getByRole("radio", { name: /園遊會.*已結單.*待收款/ })).toBeVisible();
+    expect(screen.queryByRole("button", { name: /查看已結單活動/ })).not.toBeInTheDocument();
+    expect(api.classSummary).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("radio", { name: /園遊會/ }));
+    const table = await screen.findByRole("table", { name: "園遊會各座號收款" });
+    const collect = within(table).getAllByRole("button", { name: /^已收到 NT\$/ })
+      .find((button) => !button.hasAttribute("disabled"))!;
+    fireEvent.click(collect);
+    fireEvent.click(screen.getByRole("button", { name: "確認收到款項" }));
+    await waitFor(() => expect(api.setClassCollected).toHaveBeenCalledWith("closed-order", true));
+    expect(api.catalog).toHaveBeenCalledWith(undefined, true);
+  });
+
+  it.each([
+    { label: "已收齊", status: "pending", is_class_collected: true, total_price: 100 },
+    { label: "已取消", status: "cancelled", is_class_collected: false, total_price: 100 },
+    { label: "已退款", status: "refunded", is_class_collected: false, total_price: 100 },
+    { label: "零元", status: "pending", is_class_collected: false, total_price: 0 },
+  ])("只有$label訂單的已結單活動仍收進折疊區", async (order) => {
+    api.catalog.mockResolvedValue([{ id: "category", name: "園遊會", activity_id: "festival",
+      order_closed_at: "2026-10-27T12:00:00Z", series: [], products: [] }]);
+    api.listClassOrders.mockResolvedValue([{ ...order, id: "order", activity_id: "festival", user_id: "a" }]);
+    await act(async () => { render(<ClassOrdersPage />); });
+    expect(screen.queryByRole("radio", { name: /園遊會/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "查看已結單活動（1）" }));
+    expect(screen.getByRole("radio", { name: /園遊會.*已結單/ })).toBeVisible();
+    expect(screen.queryByRole("radio", { name: /園遊會.*待收款/ })).not.toBeInTheDocument();
+  });
+
+  it("依各活動的本班未收款狀態顯示入口，收齊後重新進入會折疊", async () => {
+    api.catalog.mockResolvedValue([
+      { id: "owing", name: "待補收活動", activity_id: null, order_closed_at: "2026-10-27T12:00:00Z", series: [], products: [] },
+      { id: "settled", name: "收齊活動", activity_id: null, order_closed_at: "2026-10-27T12:00:00Z", series: [], products: [] },
+    ]);
+    const orders = [
+      { id: "unpaid", category_id: "owing", activity_id: null, user_id: "a", status: "pending", total_price: 50, is_class_collected: false },
+      { id: "paid", category_id: "owing", activity_id: null, user_id: "a", status: "pending", total_price: 100, is_class_collected: true },
+      { id: "settled", category_id: "settled", activity_id: null, user_id: "a", status: "pending", total_price: 100, is_class_collected: true },
+    ];
+    api.listClassOrders.mockResolvedValue(orders);
+    let view: ReturnType<typeof render>;
+    await act(async () => { view = render(<ClassOrdersPage />); });
+    expect(screen.getByRole("radio", { name: /待補收活動.*已結單.*待收款/ })).toBeVisible();
+    expect(screen.queryByRole("radio", { name: /收齊活動/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看已結單活動（1）" })).toBeVisible();
+    view!.unmount();
+
+    api.listClassOrders.mockResolvedValue(orders.map((order) => ({ ...order, is_class_collected: true })));
+    await act(async () => { render(<ClassOrdersPage />); });
+    expect(screen.queryByRole("radio", { name: /待補收活動/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看已結單活動（2）" })).toBeVisible();
+  });
+
+  it("代訂與清單數量都能先刪空再輸入，並送出實際填寫的數量", async () => {
+    const user = userEvent.setup();
+    await act(async () => { render(<ClassOrdersPage />); });
+    await chooseStudent();
+    await chooseProduct();
+    const quantity = screen.getByRole("spinbutton", { name: /^數量$/ });
+
+    await user.clear(quantity);
+    expect(quantity).toHaveValue(null);
+    await user.type(quantity, "8");
+    expect(quantity).toHaveValue(8);
+    await user.click(screen.getByRole("button", { name: /加入清單，繼續選商品/ }));
+
+    const itemQuantity = screen.getByRole("spinbutton", { name: "紀念袋數量" });
+    await user.clear(itemQuantity);
+    expect(itemQuantity).toHaveValue(null);
+    await user.type(itemQuantity, "6");
+    expect(itemQuantity).toHaveValue(6);
+    await user.click(screen.getByRole("button", { name: "送出示範甲的訂單 · 小計 NT$600" }));
+
+    await waitFor(() => expect(api.createClassOrder).toHaveBeenCalledWith({
+      user_id: "a", notes: null, items: [{ product_id: "product", quantity: 6, option_ids: [] }],
+    }));
+  });
+
+  it("主要切換列提供代訂與確認收款", async () => {
+    await act(async () => { render(<ClassOrdersPage />); });
+
+    const navigation = taskSwitch();
+    expect(within(navigation).getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "幫同學訂購", "登記收款",
+    ]);
+    fireEvent.click(within(navigation).getByRole("button", { name: "登記收款" }));
+    expect(await screen.findByRole("heading", { name: "登記收款" })).toBeVisible();
+  });
+
+  it("shows the roster first and clears the current items before changing classmates", async () => {
+    await act(async () => { render(<ClassOrdersPage />); });
+    expect(within(screen.getByRole("list", { name: "代訂步驟" })).getByText("選同學")).toHaveAttribute("aria-current", "step");
+    expect(screen.queryByRole("searchbox", { name: "搜尋商品" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /送出.*訂單/ })).not.toBeInTheDocument();
+    await chooseStudent();
+    expect(screen.queryByRole("group", { name: "同學搜尋結果" })).not.toBeInTheDocument();
+    expect(within(screen.getByRole("list", { name: "代訂步驟" })).getByText("選商品")).toHaveAttribute("aria-current", "step");
+    await chooseProduct("shirt");
+    expect(within(screen.getByRole("list", { name: "代訂步驟" })).getByText("確認送出")).toHaveAttribute("aria-current", "step");
+    expect(screen.queryByRole("group", { name: "商品搜尋結果" })).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "備註", hidden: true })).not.toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "清空並重選同學" }));
+    await chooseStudent("b");
+    await chooseProduct();
+    fireEvent.click(screen.getByRole("button", { name: /送出示範乙的訂單/ }));
+    await waitFor(() => expect(api.createClassOrder).toHaveBeenCalledWith({
+      user_id: "b", notes: null, items: [{ product_id: "product", quantity: 1, option_ids: [] }],
+    }));
+  });
+
+  it("recovers from a product detail error without losing the chosen classmate", async () => {
+    api.getProduct.mockRejectedValueOnce(new Error("unavailable"));
+    await act(async () => { render(<ClassOrdersPage />); });
+    await chooseStudent();
+    fireEvent.click(await screen.findByRole("button", { name: /紀念袋.*NT/ }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("無法載入商品規格");
+    await chooseProduct();
+    expect(screen.getByRole("button", { name: /送出示範甲的訂單/ })).toBeEnabled();
+  });
+
+  it("reloads the roster after a first order so collection stays on the same seat", async () => {
+    api.members.mockResolvedValue([
+      { id: "roster-member", user_id: null, roster_entry_id: "seat-7", display_name: "未登入同學", seat_number: 7 },
+    ]);
+    api.createClassOrder.mockImplementation(async () => {
+      api.members.mockResolvedValue([
+        { id: "new-user", user_id: "new-user", roster_entry_id: "seat-7", display_name: "未登入同學", seat_number: 7 },
+      ]);
+      api.listClassOrders.mockResolvedValue([{
+        id: "first-order", user_id: "new-user", user_name: "未登入同學", status: "pending",
+        category_id: "category", activity_id: null, total_price: 100,
+        is_paid: false, is_class_collected: false, items: [],
+      }]);
+      return [];
+    });
+    await act(async () => { render(<ClassOrdersPage />); });
+    fireEvent.click(await screen.findByRole("button", { name: /7 號.*未登入同學/ }));
+    await chooseProduct();
+    fireEvent.click(screen.getByRole("button", { name: /送出.*訂單/ }));
+    await screen.findByText(/已完成 1 位同學的訂購/);
+    await waitFor(() => expect(api.members).toHaveBeenCalledTimes(2));
+    await openCollectWorkspace();
+    const table = await screen.findByRole("table", { name: "園遊會各座號收款" });
+    const rows = within(table).getAllByRole("row").slice(1);
+    expect(rows).toHaveLength(1);
+    expect(within(rows[0]).getByRole("rowheader")).toHaveTextContent("7 號");
+    expect(within(rows[0]).getByRole("button", { name: /^已收到 NT\$/ })).toBeEnabled();
+  });
+
+  it("retries a failed roster load using refresh", async () => {
+    api.members.mockRejectedValueOnce(new Error("roster unavailable"));
+    await act(async () => { render(<ClassOrdersPage />); });
+    await screen.findByText("無法載入本班名冊，請重新整理後再試。");
+    expect(screen.getByRole("searchbox", { name: "搜尋同學" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "重新整理" }));
+    expect(await screen.findByRole("button", { name: /1 號.*示範甲/ })).toBeEnabled();
+  });
+
+  it("finds an unregistered classmate by seat and submits their roster entry", async () => {
+    api.members.mockResolvedValue([
+      { id: "roster-member", user_id: null, roster_entry_id: "seat-7", display_name: "尚未登入同學", seat_number: 7 },
+      { id: "a", user_id: "a", display_name: "示範甲", seat_number: 1 },
+    ]);
+    await act(async () => { render(<ClassOrdersPage />); });
+    const search = await screen.findByRole("searchbox", { name: "搜尋同學" });
+    await screen.findByRole("button", { name: /7 號.*尚未登入同學/ });
+    fireEvent.change(search, { target: { value: "7" } });
+    fireEvent.click(within(screen.getByRole("group", { name: "同學搜尋結果" })).getByRole("button", { name: /7 號/ }));
+    expect(screen.getByRole("region", { name: "訂購同學" })).toHaveTextContent("尚未登入同學");
+    await chooseProduct();
+    expect(api.catalog).toHaveBeenCalledWith(undefined, true, undefined, "seat-7");
+    expect(api.getProduct).toHaveBeenLastCalledWith("product", "seat-7");
+    fireEvent.click(screen.getByRole("button", { name: /送出.*訂單/ }));
+    await waitFor(() => expect(api.createClassOrder).toHaveBeenCalledWith({
+      roster_entry_id: "seat-7", notes: null,
+      items: [{ product_id: "product", quantity: 1, option_ids: [] }],
+    }));
+  });
+
+  it("submits a mixed batch with both roster entries and registered accounts", async () => {
+    api.members.mockResolvedValue([
+      { id: "a", user_id: "a", display_name: "示範甲", seat_number: 1 },
+      { id: "r", user_id: null, roster_entry_id: "seat-2", display_name: "未登入同學", seat_number: 2 },
+    ]);
+    await act(async () => { render(<ClassOrdersPage />); });
+    fireEvent.click(screen.getByText("要幫多人訂購相同商品？"));
+    fireEvent.click(screen.getByRole("button", { name: "批次給多人" }));
+    await screen.findByRole("checkbox", { name: /2 號/ });
+    fireEvent.click(screen.getByRole("button", { name: "選取顯示的 2 位" }));
+    await chooseProduct();
+    fireEvent.click(screen.getByRole("button", { name: /送出.*訂單/ }));
+    await waitFor(() => expect(api.createClassOrder).toHaveBeenCalledTimes(2));
+    expect(api.createClassOrder.mock.calls.map(([body]) => body)).toEqual([
+      { user_id: "a", notes: null, items: [{ product_id: "product", quantity: 1, option_ids: [] }] },
+      { roster_entry_id: "seat-2", notes: null, items: [{ product_id: "product", quantity: 1, option_ids: [] }] },
+    ]);
+  });
+
+  it("opens single-student ordering first, then sorts the collection roster by seat number", async () => {
+    api.members.mockResolvedValue([
+      { id: "b", display_name: "示範乙", seat_number: 2 },
+      { id: "a", display_name: "示範甲", seat_number: 1 },
+    ]);
+    await act(async () => { render(<ClassOrdersPage />); });
+
+    expect(within(taskSwitch()).getByRole("button", { name: "幫同學訂購" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "逐位代訂", hidden: true })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "批次給多人", hidden: true })).toHaveAttribute("aria-pressed", "false");
+    await openCollectWorkspace();
+    const table = await screen.findByRole("table", { name: "園遊會各座號收款" });
+    const rows = within(table).getAllByRole("row").slice(1);
+    expect(rows.map((row) => within(row).getByRole("rowheader").textContent)).toEqual(["1 號示範甲", "2 號示範乙"]);
+    expect(within(table).getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual(["同學", "預購品項", "還要收", "收款"]);
+    expect(within(table).queryByRole("columnheader", { name: "訂單" })).not.toBeInTheDocument();
+  });
+
+  it("shows the selected activity's whole-class due and collected totals regardless of roster filters", async () => {
+    api.listClassOrders.mockResolvedValue([
+      {
+        id: "collected-order", user_id: "a", user_name: "示範甲", status: "pending",
+        category_id: "category", activity_id: null, total_price: 150,
+        is_paid: false, is_class_collected: true, items: [],
+      },
+      {
+        id: "uncollected-order", user_id: "b", user_name: "示範乙", status: "pending",
+        category_id: "category", activity_id: null, total_price: 250,
+        is_paid: false, is_class_collected: false, items: [],
+      },
+      {
+        id: "cancelled-order", user_id: "a", user_name: "示範甲", status: "cancelled",
+        category_id: "category", activity_id: null, total_price: 50,
+        is_paid: false, is_class_collected: false, items: [],
+      },
+      {
+        id: "refunded-order", user_id: "b", user_name: "示範乙", status: "refunded",
+        category_id: "category", activity_id: null, total_price: 70,
+        is_paid: false, is_class_collected: false, items: [],
+      },
+    ]);
+    await act(async () => { render(<ClassOrdersPage />); });
+
+    await openCollectWorkspace();
+    const totals = await screen.findByRole("group", { name: "全班收款統計" });
+    expect(within(totals).getByText("全班應收").parentElement?.textContent).toContain("NT$400");
+    expect(within(totals).getByText("班代目前已收").parentElement?.textContent).toContain("NT$150");
+
+    fireEvent.change(screen.getByRole("textbox", { name: "搜尋收款同學" }), {
+      target: { value: "示範甲" },
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: "名冊收款狀態" }), {
+      target: { value: "paid" },
+    });
+
+    expect(within(totals).getByText("全班應收").parentElement?.textContent).toContain("NT$400");
+    expect(within(totals).getByText("班代目前已收").parentElement?.textContent).toContain("NT$150");
+  });
+
+  it("shows a clear message when there are no activities to collect", async () => {
+    api.catalog.mockResolvedValue([]);
+    await act(async () => { render(<ClassOrdersPage />); });
+
+    await openCollectWorkspace(false);
+    expect(await screen.findByRole("status")).toHaveTextContent("目前沒有可收款的活動");
+  });
+
+  it("keeps existing items when adding another product to an assisted order", async () => {
+    const order = {
+      id: "assisted-order", serial_number: "ORD-1", user_id: "a", user_name: "示範甲",
+      status: "pending", total_price: 200, category_id: "category", activity_id: null,
+      assistance_scope: "class_assisted", is_paid: false, is_class_collected: false,
+      items: [{ id: "bag", product_id: "product", product_name: "紀念袋", quantity: 2,
+        unit_price: 100, subtotal: 200, selected_options: [] }],
+    };
+    api.listClassOrders.mockResolvedValue([order]);
+    api.getOrder.mockResolvedValue(order);
+    api.updateOrder.mockResolvedValue(order);
+    await act(async () => { render(<ClassOrdersPage />); });
+    fireEvent.click(screen.getByText("訂單查詢與其他工具"));
+    fireEvent.click(screen.getByRole("button", { name: "查詢／修改訂單" }));
+    const edit = await screen.findByTitle("修改訂單");
+    expect(edit).toBeVisible();
+    fireEvent.click(edit);
+    await screen.findByRole("spinbutton", { name: "紀念袋數量" });
+    expect(screen.queryByRole("group", { name: "加入商品與規格" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "新增商品" }));
+    await chooseProduct("shirt");
+    fireEvent.click(screen.getByRole("button", { name: "儲存修改 · 小計 NT$400" }));
+    await waitFor(() => expect(api.updateOrder).toHaveBeenCalledWith("assisted-order", {
+      user_id: "a", notes: null, items: [
+        { product_id: "product", quantity: 2, option_ids: [] },
+        { product_id: "shirt", quantity: 1, option_ids: ["medium"] },
+      ],
+    }));
+  });
+
+  it("lists non-cancelled class orders by seat number", async () => {
+    api.members.mockResolvedValue([
+      { id: "student-12", display_name: "十二號同學", seat_number: 12 },
+      { id: "student-2", display_name: "二號同學", seat_number: 2 },
+      { id: "student-unseated", display_name: "未編座號同學", seat_number: null },
+    ]);
+    api.listClassOrders.mockResolvedValue([
+      { id: "order-12", serial_number: "ORD-12", user_id: "student-12", user_name: "十二號同學",
+        status: "pending", total_price: 100, is_class_collected: false },
+      { id: "cancelled-order", serial_number: "ORD-CANCELLED", user_id: "student-2",
+        user_name: "二號同學", status: "cancelled", total_price: 100, is_class_collected: false },
+      { id: "order-2", serial_number: "ORD-2", user_id: "student-2", user_name: "二號同學",
+        status: "pending", total_price: 100, is_class_collected: false },
+      { id: "refunded-order", serial_number: "ORD-2-REFUNDED", user_id: "student-2",
+        user_name: "二號同學", status: "refunded", total_price: 100, is_class_collected: false },
+      { id: "unseated-order", serial_number: "ORD-UNSEATED", user_id: "student-unseated",
+        user_name: "未編座號同學", status: "pending", total_price: 100, is_class_collected: false },
+    ]);
+    await act(async () => { render(<ClassOrdersPage />); });
+    fireEvent.click(screen.getByText("訂單查詢與其他工具"));
+    fireEvent.click(screen.getByRole("button", { name: "查詢／修改訂單" }));
+
+    fireEvent.click(screen.getByRole("radio", { name: /一般商品/ }));
+    await screen.findAllByRole("link", { name: "ORD-2" });
+    const table = screen.getAllByRole("table").find((candidate) =>
+      within(candidate).queryByRole("link", { name: "ORD-2" }),
+    )!;
+    expect(within(table).getAllByRole("link").map((link) => link.textContent)).toEqual([
+      "ORD-2", "ORD-2-REFUNDED", "ORD-12", "ORD-UNSEATED",
+    ]);
+    expect(screen.queryByText("ORD-CANCELLED")).not.toBeInTheDocument();
+    expect(screen.getByText("4 筆")).toBeInTheDocument();
+  });
+
+  it("一次只收一個活動，切換後名冊、合計與送出均排除前一活動", async () => {
+    api.catalog.mockResolvedValue([
+      { id: "love", name: "傳情", activity_id: null, series: [], products: [] },
+      { id: "dance", name: "舞會", activity_id: null, series: [], products: [] },
+    ]);
+    api.listClassOrders.mockResolvedValue([
+      { id: "love-order", user_id: "a", status: "pending", category_id: "love", total_price: 100, is_class_collected: false },
+      { id: "dance-order", user_id: "a", status: "pending", category_id: "dance", total_price: 300, is_class_collected: false },
+    ]);
+    await act(async () => { render(<ClassOrdersPage />); });
+    await openCollectWorkspace(false);
+    const love = await screen.findByRole("radio", { name: "傳情" });
+    const dance = screen.getByRole("radio", { name: "舞會" });
+    expect(love).not.toBeChecked();
+    expect(dance).not.toBeChecked();
+    expect(screen.queryByRole("table", { name: /各座號收款/ })).not.toBeInTheDocument();
+    fireEvent.click(love);
+    fireEvent.click((await screen.findAllByRole("button", { name: "已收到 NT$100" }))[0]);
+    let dialog = screen.getByRole("dialog", { name: "核對同學收款" });
+    expect(dialog).toHaveTextContent("傳情");
+    expect(dialog).not.toHaveTextContent("舞會");
+    expect(api.setClassCollected).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "返回核對" }));
+    fireEvent.click(dance);
+    fireEvent.click((await screen.findAllByRole("button", { name: "已收到 NT$300" }))[0]);
+    dialog = screen.getByRole("dialog", { name: "核對同學收款" });
+    expect(dialog).not.toHaveTextContent("傳情");
+    expect(dialog).toHaveTextContent("舞會");
+    expect(dialog).toHaveTextContent("NT$300");
+    expect(love).not.toBeChecked();
+    expect(dance).toBeChecked();
+    fireEvent.click(within(dialog).getByRole("button", { name: "確認收到款項" }));
+    await waitFor(() => expect(api.setClassCollected).toHaveBeenCalledTimes(1));
+    expect(api.setClassCollected).not.toHaveBeenCalledWith("love-order", true);
+    expect(api.setClassCollected).toHaveBeenCalledWith("dance-order", true);
+  });
+
+  it("shows an error message when collection data cannot be loaded", async () => {
+    api.listClassOrders.mockRejectedValue(new Error("service unavailable"));
+    api.catalog.mockResolvedValue([]);
+    await act(async () => { render(<ClassOrdersPage />); });
+
+    await openCollectWorkspace(false);
+    expect(await screen.findByText(/無法載入活動與座號收款資料/)).toHaveAttribute("role", "alert");
+  });
+
+  it("applies a searched product and variant to multiple classmates", async () => {
+    await act(async () => { render(<ClassOrdersPage />); });
+    fireEvent.click(screen.getByText("要幫多人訂購相同商品？"));
+    fireEvent.click(screen.getByRole("button", { name: "批次給多人" }));
+    await screen.findByRole("checkbox", { name: /1 號/ });
+    fireEvent.click(screen.getByRole("button", { name: "選取顯示的 2 位" }));
+    await chooseProduct("shirt");
+    fireEvent.change(screen.getByRole("spinbutton", { name: "每位數量" }), { target: { value: "2" } });
+    fireEvent.click(screen.getByRole("button", { name: /加入清單，繼續選商品/ }));
+
+    expect(screen.getByRole("heading", { name: "2 位同學的商品清單" })).toBeVisible();
+    expect(screen.getByText("每人 NT$400 · 2 位合計 NT$800")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "送出2 位同學的訂單 · 小計 NT$800" }));
+
+    await waitFor(() => expect(api.createClassOrder).toHaveBeenCalledTimes(2));
+    expect(api.createClassOrder.mock.calls.map(([body]) => body)).toEqual([
+      { user_id: "a", notes: null, items: [{ product_id: "shirt", quantity: 2, option_ids: ["medium"] }] },
+      { user_id: "b", notes: null, items: [{ product_id: "shirt", quantity: 2, option_ids: ["medium"] }] },
+    ]);
+  });
+
+  it("searches within a product that has many specifications", async () => {
+    await act(async () => { render(<ClassOrdersPage />); });
+    fireEvent.click(screen.getByText("要幫多人訂購相同商品？"));
+    fireEvent.click(screen.getByRole("button", { name: "批次給多人" }));
+    await screen.findByRole("checkbox", { name: /1 號/ });
+    fireEvent.click(screen.getByRole("button", { name: "選取顯示的 2 位" }));
+    const productSearch = screen.getByRole("searchbox", { name: "搜尋商品" });
+    fireEvent.change(productSearch, { target: { value: "徽章" } });
+    fireEvent.click(await screen.findByRole("button", { name: /紀念徽章/ }));
+
+    const variantSearch = await screen.findByRole("searchbox", { name: "搜尋顏色" });
+    expect(variantSearch).toHaveAttribute("placeholder", "搜尋顏色（30 個規格）");
+    await userEvent.setup().type(variantSearch, "色票30");
+    const colorOptions = within(screen.getByRole("group", { name: "顏色" }));
+    fireEvent.click(await colorOptions.findByRole("radio", { name: "色票30" }));
+
+    expect(screen.getByRole("button", { name: /加入清單，繼續選商品/ })).toBeEnabled();
+  });
+
+  it("builds a multi-product order for one student with merged quantities and the chosen variant", async () => {
+    await act(async () => { render(<ClassOrdersPage />); });
+    openOrderWorkspace();
+    expect(screen.queryByRole("searchbox", { name: "搜尋商品" })).not.toBeInTheDocument();
+    await chooseStudent();
+    await chooseProduct();
+    fireEvent.click(screen.getByRole("button", { name: /加入清單，繼續選商品/ }));
+    expect(screen.getByRole("region", { name: "訂購同學" })).toHaveTextContent("示範甲");
+    expect(screen.getByRole("button", { name: "清空並重選同學" })).toBeEnabled();
+    await chooseProduct();
+    fireEvent.click(screen.getByRole("button", { name: /加入清單，繼續選商品/ }));
+    await chooseProduct("shirt");
+    fireEvent.click(screen.getByRole("radio", { name: /L/ }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: /^數量$/ }), { target: { value: "2" } });
+    expect(screen.getByRole("spinbutton", { name: "紀念袋數量" })).toHaveValue(2);
+    expect(screen.getByRole("heading", { name: "示範甲的商品清單" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "送出示範甲的訂單 · 小計 NT$640" }));
+    await waitFor(() => expect(api.createClassOrder).toHaveBeenCalledTimes(1));
+    expect(api.createClassOrder.mock.calls[0][0]).toEqual({
+      user_id: "a", notes: null, items: [
+        { product_id: "product", quantity: 2, option_ids: [] },
+        { product_id: "shirt", quantity: 2, option_ids: ["large"] },
+      ],
+    });
+  });
+
+  it("queues one student's products before selecting the next and retries only failed drafts", async () => {
+    api.createClassOrder.mockResolvedValueOnce([]).mockRejectedValueOnce(new Error("中斷")).mockResolvedValueOnce([]);
+    await act(async () => { render(<ClassOrdersPage />); });
+    openOrderWorkspace();
+    await chooseStudent();
+    await chooseProduct();
+    fireEvent.click(screen.getByRole("button", { name: /加入清單，繼續選商品/ }));
+    await chooseProduct();
+    fireEvent.click(screen.getByRole("button", { name: "加入待送出，登記下一位" }));
+    expect(screen.getByRole("searchbox", { name: "搜尋同學" })).toHaveValue("");
+    await chooseStudent("b");
+    await chooseProduct("shirt");
+    fireEvent.click(screen.getByRole("button", { name: /^送出待送出清單（2 位）/ }));
+    await waitFor(() => expect(api.createClassOrder).toHaveBeenCalledTimes(2));
+    expect(api.createClassOrder.mock.calls[0][0]).toMatchObject({
+      user_id: "a", items: [{ product_id: "product", quantity: 2, option_ids: [] }],
+    });
+    const retry = await screen.findByRole("button", { name: /^送出待送出清單（1 位）/ });
+    await waitFor(() => expect(retry).toBeEnabled());
+    fireEvent.click(retry);
+    await waitFor(() => expect(api.createClassOrder).toHaveBeenCalledTimes(3));
+    expect(api.createClassOrder.mock.calls[2][0]).toMatchObject({
+      user_id: "b", items: [{ product_id: "shirt", quantity: 1, option_ids: ["medium"] }],
+    });
+  });
+
+  it("preserves the current draft when switching to collection and back", async () => {
+    await act(async () => { render(<ClassOrdersPage />); });
+    openOrderWorkspace();
+    await chooseStudent();
+    await chooseProduct();
+    await openCollectWorkspace();
+    expect(screen.queryByRole("combobox", { name: "商品" })).not.toBeInTheDocument();
+    openOrderWorkspace();
+    expect(screen.getByRole("region", { name: "訂購同學" })).toHaveTextContent("示範甲");
+    expect(screen.getByRole("button", { name: /^送出示範甲的訂單/ })).toBeEnabled();
+  });
+
+  it("does not count cancelled orders or another activity when collecting by seat", async () => {
+    api.listClassOrders.mockResolvedValue([
+      { id: "one", serial_number: "1", user_id: "a", status: "pending", total_price: 100, activity_id: null, is_class_collected: false },
+      { id: "cancel", serial_number: "2", user_id: "a", status: "cancelled", total_price: 500, activity_id: null },
+      { id: "other", serial_number: "3", user_id: "a", status: "pending", total_price: 300, activity_id: "other", is_class_collected: false },
+    ]);
+    api.setClassCollected.mockResolvedValue({});
+    await act(async () => { render(<ClassOrdersPage />); });
+    await openCollectWorkspace();
+    fireEvent.click(screen.getByRole("radio", { name: /一般商品/ }));
+    const collectButtons = await screen.findAllByRole("button", { name: /^已收到 NT\$/ });
+    fireEvent.click(collectButtons.find((button) => !button.hasAttribute("disabled"))!);
+    fireEvent.click(screen.getByRole("button", { name: "確認收到款項" }));
+    await waitFor(() => expect(api.setClassCollected).toHaveBeenCalledTimes(1));
+    expect(api.setClassCollected).toHaveBeenCalledWith("one", true);
+  });
+
+  it("shows merged items and the supplemental amount, and collects only additions in this activity", async () => {
+    const item = { id: "bag", product_id: "product", product_name: "紀念袋", quantity: 1,
+      unit_price: 100, subtotal: 100, selected_options: [] };
+    api.listClassOrders.mockResolvedValue([
+      { id: "collected", user_id: "a", status: "pending", total_price: 200,
+        activity_id: null, category_id: "category", is_class_collected: true,
+        items: [{ ...item, quantity: 2, subtotal: 200 }] },
+      { id: "addition", user_id: "a", status: "pending", total_price: 100,
+        activity_id: null, category_id: "category", is_class_collected: false, items: [item] },
+      { id: "cancelled", user_id: "a", status: "cancelled", total_price: 500,
+        activity_id: null, category_id: "category", is_class_collected: false, items: [item] },
+      { id: "other", user_id: "a", status: "pending", total_price: 300,
+        activity_id: "other", is_class_collected: false, items: [item] },
+    ]);
+    api.setClassCollected.mockResolvedValue({});
+    await act(async () => { render(<ClassOrdersPage />); });
+    await openCollectWorkspace(false);
+    const love = await screen.findByRole("radio", { name: "園遊會" });
+    if (!(love as HTMLInputElement).checked) fireEvent.click(love);
+    await screen.findAllByText("紀念袋 × 3");
+    fireEvent.click((await screen.findAllByRole("button", { name: "已收到 NT$100" }))[0]);
+    fireEvent.click(screen.getByRole("button", { name: "確認收到款項" }));
+    await waitFor(() => expect(api.setClassCollected).toHaveBeenCalledTimes(1));
+    expect(api.setClassCollected).toHaveBeenCalledWith("addition", true);
+  });
+});

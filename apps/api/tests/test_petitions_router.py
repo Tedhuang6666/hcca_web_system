@@ -1,0 +1,1751 @@
+"""陳情系統（petitions.py）Router 層測試 - 送件 / 查詢 / 機關工作台 / 分案轉派。"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import UTC, date, datetime, timedelta
+
+import pytest
+from sqlalchemy import select
+
+from api.core.config import settings
+from api.models.notification import Notification
+from api.models.org import Org, Permission, Position, UserPosition
+from api.models.outbox import OutboxEvent
+from api.models.petition import (
+    PetitionCase,
+    PetitionCaseEvent,
+    PetitionPublicStatus,
+    PetitionStatus,
+    PetitionType,
+)
+from api.models.user import User
+from api.schemas.petition import PetitionCreate, PetitionStatusUpdate
+from api.services import petition as petition_svc
+from api.services.outbox import _dispatch
+
+# ── 測試輔助 ──────────────────────────────────────────────────────────────────
+
+
+async def _email_intents_for_user(db, user: User) -> list[OutboxEvent]:
+    notification_ids = {
+        str(value)
+        for value in await db.scalars(
+            select(Notification.id).where(Notification.user_id == user.id)
+        )
+    }
+    events = await db.scalars(
+        select(OutboxEvent).where(OutboxEvent.event_type == "notification.email_batch")
+    )
+    return [event for event in events if event.payload.get("notification_id") in notification_ids]
+
+
+async def _grant_org_permission(db, user: User, org: Org, code: str) -> None:
+    """替使用者在指定機關（org）內建立具權限碼的職位（陳情分案/查看等為 org-scoped）。"""
+    from api.core.cache import cache_invalidate_user_permissions
+
+    position = Position(org_id=org.id, name=f"職位-{uuid.uuid4().hex[:6]}")
+    db.add(position)
+    await db.flush()
+    db.add(Permission(position_id=position.id, code=code))
+    db.add(UserPosition(user_id=user.id, position_id=position.id, start_date=date.today()))
+    await db.flush()
+    await cache_invalidate_user_permissions(str(user.id))
+
+
+async def _bare_user(db) -> User:
+    user = User(
+        email=f"u-{uuid.uuid4().hex[:8]}@school.edu",
+        display_name="測試使用者",
+        is_active=True,
+        is_verified=True,
+    )
+    db.add(user)
+    await db.flush()
+    return user
+
+
+async def _make_org_and_type(db, *, name: str = "學生事務處") -> tuple[Org, PetitionType]:
+    org = Org(name=name)
+    db.add(org)
+    await db.flush()
+    petition_type = PetitionType(name=f"設施維修-{uuid.uuid4().hex[:6]}", responsible_org_id=org.id)
+    db.add(petition_type)
+    await db.flush()
+    return org, petition_type
+
+
+async def _make_child_org_and_type(db, parent: Org) -> tuple[Org, PetitionType]:
+    org = Org(name=f"下級機關-{uuid.uuid4().hex[:6]}", parent_id=parent.id)
+    db.add(org)
+    await db.flush()
+    petition_type = PetitionType(name=f"設施維修-{uuid.uuid4().hex[:6]}", responsible_org_id=org.id)
+    db.add(petition_type)
+    await db.flush()
+    return org, petition_type
+
+
+async def _create_case(
+    db,
+    petition_type: PetitionType,
+    *,
+    submitter: User | None = None,
+):
+    from api.schemas.petition import PetitionCreate
+
+    if submitter is None:
+        submitter = await _bare_user(db)
+    data = PetitionCreate(
+        type_id=petition_type.id,
+        title="教室冷氣故障",
+        content="B302 教室冷氣無法啟動，請盡快派員維修。",
+    )
+    case_obj, share_token = await petition_svc.create_case(db, data=data, submitter=submitter)
+    return case_obj, share_token
+
+
+# ── 前台送件 ──────────────────────────────────────────────────────────────────
+
+
+async def test_create_petition_without_login_returns_401(db_session, client) -> None:
+    _, petition_type = await _make_org_and_type(db_session)
+    resp = await client.post(
+        "/petitions",
+        json={
+            "type_id": str(petition_type.id),
+            "is_named": False,
+            "contact_email": "guest@example.com",
+            "contact_name": "訪客甲",
+            "title": "路燈損壞",
+            "content": "校門口路燈損壞多日未修。",
+        },
+    )
+    assert resp.status_code == 401
+
+
+async def test_submit_petition_with_multiple_attachments_creates_case_once(
+    db_session, authed_client_factory, tmp_path, monkeypatch
+) -> None:
+    from api.core import config as config_module
+
+    monkeypatch.setattr(config_module.settings, "STORAGE_LOCAL_DIR", str(tmp_path))
+    _, petition_type = await _make_org_and_type(db_session)
+    submitter = await _bare_user(db_session)
+
+    response = await authed_client_factory(submitter).post(
+        "/petitions/submit",
+        data={
+            "type_id": str(petition_type.id),
+            "title": "走廊照明故障",
+            "content": "附上照片和檢查紀錄，請協助處理。",
+        },
+        files=[
+            ("attachments", ("現場照片.pdf", b"%PDF-1.4 photo", "application/pdf")),
+            ("attachments", ("檢查紀錄.pdf", b"%PDF-1.4 report", "application/pdf")),
+        ],
+    )
+
+    assert response.status_code == 201
+    detail = await authed_client_factory(submitter).get(f"/petitions/{response.json()['id']}")
+    assert detail.status_code == 200
+    assert {item["filename"] for item in detail.json()["attachments"]} == {
+        "現場照片.pdf",
+        "檢查紀錄.pdf",
+    }
+
+
+async def test_submit_petition_rolls_back_case_when_an_attachment_is_invalid(
+    db_session, authed_client_factory, tmp_path, monkeypatch
+) -> None:
+    from api.core import config as config_module
+
+    monkeypatch.setattr(config_module.settings, "STORAGE_LOCAL_DIR", str(tmp_path))
+    _, petition_type = await _make_org_and_type(db_session)
+    submitter = await _bare_user(db_session)
+    title = "附件失敗時不建立案件"
+
+    response = await authed_client_factory(submitter).post(
+        "/petitions/submit",
+        data={
+            "type_id": str(petition_type.id),
+            "title": title,
+            "content": "其中一個附件內容不符合宣告格式。",
+        },
+        files=[
+            ("attachments", ("有效附件.pdf", b"%PDF-1.4 valid", "application/pdf")),
+            ("attachments", ("錯誤附件.pdf", b"not a pdf", "application/pdf")),
+        ],
+    )
+
+    assert response.status_code == 422
+    assert not any(path.is_file() for path in tmp_path.rglob("*"))
+    await db_session.rollback()
+    assert await db_session.scalar(select(PetitionCase).where(PetitionCase.title == title)) is None
+
+
+async def test_submit_petition_with_attachments_without_login_returns_401(
+    db_session, client
+) -> None:
+    _, petition_type = await _make_org_and_type(db_session)
+
+    response = await client.post(
+        "/petitions/submit",
+        data={
+            "type_id": str(petition_type.id),
+            "title": "未登入送件",
+            "content": "登入後才能送出陳情。",
+        },
+    )
+
+    assert response.status_code == 401
+
+
+async def test_admin_can_create_external_petition_with_contact_email(
+    db_session, authed_client_factory, admin_user: User
+) -> None:
+    _, petition_type = await _make_org_and_type(db_session)
+
+    response = await authed_client_factory(admin_user).post(
+        "/petitions/admin/cases",
+        json={
+            "type_id": str(petition_type.id),
+            "contact_name": "校外陳情人",
+            "contact_email": "external@example.com",
+            "title": "校外管道反映的問題",
+            "content": "請協助將這件外部反映納入陳情流程。",
+        },
+    )
+
+    assert response.status_code == 201
+    case_obj = await db_session.scalar(
+        select(PetitionCase).where(PetitionCase.id == uuid.UUID(response.json()["id"]))
+    )
+    assert case_obj is not None
+    assert case_obj.submitter_id is None
+    assert case_obj.contact_name == "校外陳情人"
+    assert case_obj.contact_email == "external@example.com"
+    assert case_obj.verification_code_hash is None
+    assert "verification_code" not in response.json()
+    assert response.json()["status"] == "submitted"
+
+
+async def test_non_admin_cannot_create_external_petition(
+    db_session, authed_client_factory, member_user: User
+) -> None:
+    _, petition_type = await _make_org_and_type(db_session)
+
+    response = await authed_client_factory(member_user).post(
+        "/petitions/admin/cases",
+        json={
+            "type_id": str(petition_type.id),
+            "contact_name": "未授權使用者",
+            "contact_email": "external@example.com",
+            "title": "不應建立",
+            "content": "不應建立代收案件。",
+        },
+    )
+
+    assert response.status_code == 403
+
+
+async def test_admin_can_register_external_submitter_on_unlinked_case(
+    db_session, authed_client_factory, admin_user: User
+) -> None:
+    _, petition_type = await _make_org_and_type(db_session)
+    create_response = await authed_client_factory(admin_user).post(
+        "/petitions/admin/cases",
+        json={
+            "type_id": str(petition_type.id),
+            "contact_name": "先前未登記",
+            "contact_email": "old@example.com",
+            "title": "補登陳情人測試",
+            "content": "案件先建立，之後再補登聯絡人。",
+        },
+    )
+    assert create_response.status_code == 201
+
+    response = await authed_client_factory(admin_user).patch(
+        f"/petitions/{create_response.json()['id']}/submitter",
+        json={
+            "contact_name": "補登後陳情人",
+            "contact_email": "registered@example.com",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["contact_name"] == "補登後陳情人"
+    assert body["contact_email"] == "registered@example.com"
+    assert body["submitter"]["contact_email"] == "registered@example.com"
+
+
+async def test_external_submitter_receives_status_email_event(
+    db_session, authed_client_factory, admin_user: User
+) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    create_response = await authed_client_factory(admin_user).post(
+        "/petitions/admin/cases",
+        json={
+            "type_id": str(petition_type.id),
+            "contact_name": "外部收件人",
+            "contact_email": "notify@example.com",
+            "title": "外部信箱通知測試",
+            "content": "狀態更新時應寄送通知。",
+        },
+    )
+    assert create_response.status_code == 201
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:handle")
+
+    response = await authed_client_factory(handler).patch(
+        f"/petitions/{create_response.json()['id']}/status",
+        json={"status": "rejected", "public_message": "資料不足，暫不受理。"},
+    )
+
+    assert response.status_code == 200
+    event = await db_session.scalar(
+        select(OutboxEvent)
+        .where(OutboxEvent.event_type == "petition.external_notify")
+        .order_by(OutboxEvent.created_at.desc())
+    )
+    assert event is not None
+    assert event.payload["contact_email"] == "notify@example.com"
+
+
+async def test_configured_petition_recipient_gets_new_case_notification(
+    db_session, client, authed_client_factory, admin_user: User
+) -> None:
+    _, petition_type = await _make_org_and_type(db_session)
+    admin_user.notification_preferences = {
+        "petition_received": {"inapp": True, "email": False, "line": False, "discord": False}
+    }
+    admin = authed_client_factory(admin_user)
+    settings_response = await admin.put(
+        "/petitions/admin/notification-settings",
+        json={"enabled": True, "recipient_user_ids": [str(admin_user.id)]},
+    )
+    assert settings_response.status_code == 200
+    assert settings_response.json()["recipient_user_ids"] == [str(admin_user.id)]
+
+    submitter = await _bare_user(db_session)
+    response = await authed_client_factory(submitter).post(
+        "/petitions",
+        json={
+            "type_id": str(petition_type.id),
+            "title": "應通知負責人",
+            "content": "新陳情應通知設定的負責人。",
+        },
+    )
+    assert response.status_code == 201
+    notification = await db_session.scalar(
+        select(Notification).where(
+            Notification.user_id == admin_user.id,
+            Notification.type == "petition_received",
+        )
+    )
+    assert notification is not None
+
+
+async def test_petition_handler_permission_alone_does_not_receive_new_case_notification(
+    db_session, authed_client_factory
+) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    handler = await _bare_user(db_session)
+    handler.notification_preferences = {
+        "petition_received": {"inapp": True, "email": False, "line": False, "discord": False}
+    }
+    await _grant_org_permission(db_session, handler, org, "petition:handle")
+    submitter = await _bare_user(db_session)
+
+    response = await authed_client_factory(submitter).post(
+        "/petitions",
+        json={
+            "type_id": str(petition_type.id),
+            "title": "權限不應決定通知收件人",
+            "content": "未設定收件人時，不應因具陳情處理權限而收到新案通知。",
+        },
+    )
+    assert response.status_code == 201
+    notification = await db_session.scalar(
+        select(Notification).where(
+            Notification.user_id == handler.id,
+            Notification.type == "petition_received",
+        )
+    )
+    assert notification is None
+
+
+async def test_closing_assigned_case_does_not_notify_unrelated_permission_holder(
+    db_session, authed_client_factory
+) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:assign")
+    await _grant_org_permission(db_session, handler, org, "petition:handle")
+
+    council_org = Org(name=f"學生議會-{uuid.uuid4().hex[:6]}")
+    db_session.add(council_org)
+    await db_session.flush()
+    council_member = await _bare_user(db_session)
+    await _grant_org_permission(db_session, council_member, council_org, "petition:handle")
+
+    case_obj, _share_token = await _create_case(db_session, petition_type)
+    assigned = await authed_client_factory(handler).patch(
+        f"/petitions/{case_obj.id}/assign", json={"assigned_to_id": str(handler.id)}
+    )
+    assert assigned.status_code == 200
+
+    closed = await authed_client_factory(handler).patch(
+        f"/petitions/{case_obj.id}/status",
+        json={"status": "closed", "public_message": "案件已完成處理。"},
+    )
+    assert closed.status_code == 200
+
+    notification = await db_session.scalar(
+        select(Notification).where(
+            Notification.user_id == council_member.id,
+            Notification.type == "petition_updated",
+        )
+    )
+    assert notification is None
+
+
+async def test_create_petition_survives_optional_integration_failure(
+    db_session, authed_client_factory, monkeypatch
+) -> None:
+    _, petition_type = await _make_org_and_type(db_session)
+
+    async def fail_notification(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("Discord route unavailable")
+
+    monkeypatch.setattr(
+        "api.services.discord_notification_routes.emit_routed_notification",
+        fail_notification,
+    )
+    monkeypatch.setattr(
+        "api.routers.petitions.enqueue_petition_private_channel",
+        fail_notification,
+    )
+
+    submitter = await _bare_user(db_session)
+    response = await authed_client_factory(submitter).post(
+        "/petitions",
+        json={
+            "type_id": str(petition_type.id),
+            "title": "整合故障時仍可送件",
+            "content": "核心陳情流程不應被可選通知服務阻斷。",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["status"] == "submitted"
+    assert "verification_code" not in response.json()
+
+
+async def test_create_petition_without_login_without_contact_returns_401(
+    db_session, client
+) -> None:
+    _, petition_type = await _make_org_and_type(db_session)
+    resp = await client.post(
+        "/petitions",
+        json={
+            "type_id": str(petition_type.id),
+            "title": "無聯絡方式",
+            "content": "測試內容測試內容",
+        },
+    )
+    assert resp.status_code == 401
+
+
+async def test_create_petition_unknown_type_returns_422(
+    client, member_user, authed_client_factory
+) -> None:
+    resp = await authed_client_factory(member_user).post(
+        "/petitions",
+        json={
+            "type_id": str(uuid.uuid4()),
+            "title": "測試",
+            "content": "測試內容測試內容",
+        },
+    )
+    assert resp.status_code == 422
+
+
+async def test_list_public_types_hides_inactive(db_session, client) -> None:
+    org = Org(name="總務處")
+    db_session.add(org)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            PetitionType(name="啟用類型", responsible_org_id=org.id, is_active=True),
+            PetitionType(name="停用類型", responsible_org_id=org.id, is_active=False),
+        ]
+    )
+    await db_session.flush()
+
+    resp = await client.get("/petitions/types")
+    assert resp.status_code == 200
+    names = [t["name"] for t in resp.json()]
+    assert "啟用類型" in names
+    assert "停用類型" not in names
+
+
+# ── 查詢 ──────────────────────────────────────────────────────────────────────
+
+
+async def test_lookup_case_by_owner_case_number_succeeds(db_session, authed_client_factory) -> None:
+    _, petition_type = await _make_org_and_type(db_session)
+    owner = await _bare_user(db_session)
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
+
+    resp = await authed_client_factory(owner).get(
+        "/petitions/lookup",
+        params={"case_number": case_obj.case_number},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["case_number"] == case_obj.case_number
+
+
+async def test_lookup_case_rejects_another_submitter(db_session, authed_client_factory) -> None:
+    _, petition_type = await _make_org_and_type(db_session)
+    owner = await _bare_user(db_session)
+    other_user = await _bare_user(db_session)
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
+
+    resp = await authed_client_factory(other_user).get(
+        "/petitions/lookup",
+        params={"case_number": case_obj.case_number},
+    )
+    assert resp.status_code == 404
+
+
+async def test_lookup_case_by_share_token_succeeds(db_session, authed_client_factory) -> None:
+    _, petition_type = await _make_org_and_type(db_session)
+    owner = await _bare_user(db_session)
+    data = PetitionCreate(
+        type_id=petition_type.id,
+        title="教室冷氣故障",
+        content="B302 教室冷氣無法啟動，請盡快派員維修。",
+    )
+    case_obj, share_token = await petition_svc.create_case(db_session, data=data, submitter=owner)
+
+    resp = await authed_client_factory(owner).post(
+        "/petitions/share", json={"share_token": share_token}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["title"] == "教室冷氣故障"
+
+
+async def test_submitter_can_edit_content_before_assignment(
+    db_session, authed_client_factory
+) -> None:
+    _, petition_type = await _make_org_and_type(db_session)
+    owner = await _bare_user(db_session)
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
+
+    resp = await authed_client_factory(owner).patch(
+        f"/petitions/{case_obj.id}/content",
+        json={"title": "更新後標題", "content": "更新後的陳情內容"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["title"] == "更新後標題"
+    assert resp.json()["content"] == "更新後的陳情內容"
+    assert resp.json()["can_edit_content"] is True
+
+
+async def test_unauthenticated_cannot_edit_content(db_session, client) -> None:
+    _, petition_type = await _make_org_and_type(db_session)
+    owner = await _bare_user(db_session)
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
+
+    forbidden = await client.patch(
+        f"/petitions/{case_obj.id}/content",
+        json={"content": "不應該成功"},
+    )
+    assert forbidden.status_code == 401
+
+
+async def test_submitter_cannot_edit_content_after_assignment(
+    db_session, authed_client_factory
+) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    owner = await _bare_user(db_session)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:assign")
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
+
+    assigned = await authed_client_factory(handler).patch(
+        f"/petitions/{case_obj.id}/assign", json={"assigned_to_id": str(handler.id)}
+    )
+    assert assigned.status_code == 200
+
+    edited = await authed_client_factory(owner).patch(
+        f"/petitions/{case_obj.id}/content", json={"content": "太晚了"}
+    )
+    assert edited.status_code == 409
+
+
+async def test_list_my_cases_returns_only_own_cases(db_session, authed_client_factory) -> None:
+    _, petition_type = await _make_org_and_type(db_session)
+    owner = await _bare_user(db_session)
+    other = await _bare_user(db_session)
+    await _create_case(db_session, petition_type, submitter=owner)
+    await _create_case(db_session, petition_type, submitter=other)
+
+    ac = authed_client_factory(owner)
+    resp = await ac.get("/petitions/my")
+    assert resp.status_code == 200
+    assert len(resp.json()) == 1
+
+
+# ── 類型管理 ──────────────────────────────────────────────────────────────────
+
+
+async def test_admin_types_require_permission(member_user, authed_client_factory) -> None:
+    ac = authed_client_factory(member_user)
+    resp = await ac.get("/petitions/admin/types")
+    assert resp.status_code == 403
+
+
+async def test_admin_types_crud_with_permission(
+    db_session, admin_user, authed_client_factory
+) -> None:
+    org = Org(name="環保組")
+    db_session.add(org)
+    await db_session.flush()
+    ac = authed_client_factory(admin_user)  # superuser 略過權限檢查
+
+    created = await ac.post(
+        "/petitions/admin/types",
+        json={"name": "環境清潔", "responsible_org_id": str(org.id)},
+    )
+    assert created.status_code == 201
+    type_id = created.json()["id"]
+
+    updated = await ac.patch(f"/petitions/admin/types/{type_id}", json={"is_active": False})
+    assert updated.status_code == 200
+    assert updated.json()["is_active"] is False
+
+    deleted = await ac.delete(f"/petitions/admin/types/{type_id}")
+    assert deleted.status_code == 204
+
+
+async def test_update_unknown_type_returns_404(admin_user, authed_client_factory) -> None:
+    ac = authed_client_factory(admin_user)
+    resp = await ac.patch(f"/petitions/admin/types/{uuid.uuid4()}", json={"name": "亂改"})
+    assert resp.status_code == 404
+
+
+# ── 機關工作台 ────────────────────────────────────────────────────────────────
+
+
+async def test_list_manage_cases_scoped_to_org_permission(
+    db_session, authed_client_factory
+) -> None:
+    org_a, type_a = await _make_org_and_type(db_session, name="機關甲")
+    org_b, type_b = await _make_org_and_type(db_session, name="機關乙")
+    await _create_case(db_session, type_a)
+    await _create_case(db_session, type_b)
+
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org_a, "petition:view_org")
+
+    ac = authed_client_factory(handler)
+    resp = await ac.get("/petitions/manage")
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert len(payload) == 1
+    assert payload[0]["current_org_id"] == str(org_a.id)
+
+
+async def test_parent_org_handler_can_manage_child_cases_but_viewer_cannot(
+    db_session, authed_client_factory
+) -> None:
+    parent = Org(name=f"上級機關-{uuid.uuid4().hex[:6]}")
+    db_session.add(parent)
+    await db_session.flush()
+    _child, child_type = await _make_child_org_and_type(db_session, parent)
+    _unrelated_org, unrelated_type = await _make_org_and_type(db_session)
+    child_case, _share_token = await _create_case(db_session, child_type)
+    unrelated_case, _share_token = await _create_case(db_session, unrelated_type)
+    parent_handler = await _bare_user(db_session)
+    parent_viewer = await _bare_user(db_session)
+    await _grant_org_permission(db_session, parent_handler, parent, "petition:assign")
+    await _grant_org_permission(db_session, parent_handler, parent, "petition:handle")
+    await _grant_org_permission(db_session, parent_viewer, parent, "petition:view_org")
+
+    handler_client = authed_client_factory(parent_handler)
+    managed_cases = await handler_client.get("/petitions/manage")
+    assert managed_cases.status_code == 200
+    assert [item["id"] for item in managed_cases.json()] == [str(child_case.id)]
+    assert (await handler_client.get(f"/petitions/{child_case.id}")).status_code == 200
+    assert (await handler_client.get(f"/petitions/{unrelated_case.id}")).status_code == 403
+
+    viewer_client = authed_client_factory(parent_viewer)
+    viewer_cases = await viewer_client.get("/petitions/manage")
+    assert viewer_cases.status_code == 200
+    assert viewer_cases.json() == []
+    assert (await viewer_client.get(f"/petitions/{child_case.id}")).status_code == 403
+
+
+async def test_confidential_petition_access_is_scoped_by_role(
+    db_session, authed_client_factory, admin_user: User, monkeypatch
+) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    owner = await _bare_user(db_session)
+    handler = await _bare_user(db_session)
+    other_handler = await _bare_user(db_session)
+    viewer = await _bare_user(db_session)
+    cross_org_viewer = await _bare_user(db_session)
+    petition_admin = await _bare_user(db_session)
+    site_owner = await _bare_user(db_session)
+    site_owner.is_superuser = True
+    monkeypatch.setattr(settings, "OWNER_EMAILS", [site_owner.email.lower()])
+    await _grant_org_permission(db_session, handler, org, "petition:view_org")
+    await _grant_org_permission(db_session, other_handler, org, "petition:handle")
+    await _grant_org_permission(db_session, viewer, org, "petition:view_org")
+    await _grant_org_permission(db_session, petition_admin, org, "petition:admin")
+    other_org, _other_type = await _make_org_and_type(db_session, name="另一負責機關")
+    await _grant_org_permission(db_session, cross_org_viewer, other_org, "petition:view_org")
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
+    case_obj.assigned_to_id = handler.id
+    case_obj.status = PetitionStatus.ASSIGNED
+    await db_session.flush()
+
+    unauthorized = await authed_client_factory(viewer).post(
+        f"/petitions/{case_obj.id}/confidential"
+    )
+    assert unauthorized.status_code == 403
+
+    marked = await authed_client_factory(petition_admin).post(
+        f"/petitions/{case_obj.id}/confidential",
+        json={"reason": "涉及個人安全與敏感聯絡資料"},
+    )
+    assert marked.status_code == 200
+    assert marked.json() == {
+        "id": str(case_obj.id),
+        "is_confidential": True,
+        "confidential_reason": "涉及個人安全與敏感聯絡資料",
+    }
+
+    case_obj.status = PetitionStatus.CLOSED
+    case_obj.public_status = PetitionPublicStatus.PUBLISHED
+    await db_session.flush()
+
+    updated_reason = await authed_client_factory(petition_admin).post(
+        f"/petitions/{case_obj.id}/confidential",
+        json={"reason": "更新後的密件原因"},
+    )
+    assert updated_reason.status_code == 200
+    assert updated_reason.json()["confidential_reason"] == "更新後的密件原因"
+
+    owner_detail = await authed_client_factory(owner).get(f"/petitions/{case_obj.id}")
+    assert owner_detail.status_code == 200
+    assert owner_detail.json()["is_confidential"] is True
+    assert owner_detail.json()["confidential_blocked"] is False
+    assert owner_detail.json()["confidential_reason"] == "更新後的密件原因"
+    assert owner_detail.json()["content"]
+
+    handler_detail = await authed_client_factory(handler).get(f"/petitions/{case_obj.id}")
+    assert handler_detail.status_code == 200
+    assert handler_detail.json()["confidential_blocked"] is False
+    assert handler_detail.json()["content"]
+
+    other_handler_detail = await authed_client_factory(other_handler).get(
+        f"/petitions/{case_obj.id}"
+    )
+    assert other_handler_detail.status_code == 200
+    assert other_handler_detail.json()["confidential_blocked"] is True
+    assert other_handler_detail.json()["content"] == ""
+
+    site_owner_detail = await authed_client_factory(site_owner).get(f"/petitions/{case_obj.id}")
+    assert site_owner_detail.status_code == 200
+    assert site_owner_detail.json()["confidential_blocked"] is False
+    assert site_owner_detail.json()["content"]
+
+    petition_admin_client = authed_client_factory(petition_admin)
+    admin_detail = await petition_admin_client.get(f"/petitions/{case_obj.id}")
+    assert admin_detail.status_code == 200
+    assert admin_detail.json()["confidential_blocked"] is True
+    assert admin_detail.json()["content"] == ""
+    assert (
+        await authed_client_factory(cross_org_viewer).get(f"/petitions/{case_obj.id}")
+    ).status_code == 403
+    assert (await petition_admin_client.get(f"/petitions/{case_obj.id}/print")).status_code == 403
+    assert (
+        await petition_admin_client.get(
+            f"/petitions/{case_obj.id}/attachments/{uuid.uuid4()}/download"
+        )
+    ).status_code == 403
+    admin_detail = await authed_client_factory(admin_user).get(f"/petitions/{case_obj.id}")
+    assert admin_detail.status_code == 200
+    assert admin_detail.json()["confidential_blocked"] is True
+    assert admin_detail.json()["content"] == ""
+
+    viewer_detail = await authed_client_factory(viewer).get(f"/petitions/{case_obj.id}")
+    assert viewer_detail.status_code == 200
+    assert viewer_detail.json()["title"] == "此案件已被設為密件"
+    assert viewer_detail.json()["confidential_blocked"] is True
+    assert viewer_detail.json()["content"] == ""
+    assert viewer_detail.json()["confidential_reason"] == "更新後的密件原因"
+
+    viewer_cases = (await authed_client_factory(viewer).get("/petitions/manage")).json()
+    assert viewer_cases[0]["id"] == str(case_obj.id)
+    assert viewer_cases[0]["title"] == "此案件已被設為密件"
+    handler_cases = (await authed_client_factory(handler).get("/petitions/manage")).json()
+    assert handler_cases[0]["title"] == "教室冷氣故障"
+    other_handler_cases = (
+        await authed_client_factory(other_handler).get("/petitions/manage")
+    ).json()
+    assert other_handler_cases[0]["title"] == "此案件已被設為密件"
+    admin_cases = (await petition_admin_client.get("/petitions/manage")).json()
+    assert admin_cases[0]["title"] == "此案件已被設為密件"
+    site_owner_cases = (await authed_client_factory(site_owner).get("/petitions/manage")).json()
+    assert site_owner_cases[0]["title"] == "教室冷氣故障"
+    cross_org_cases = (
+        await authed_client_factory(cross_org_viewer).get("/petitions/manage")
+    ).json()
+    assert all(item["id"] != str(case_obj.id) for item in cross_org_cases)
+
+    assert await petition_svc.can_view_case(db_session, case_obj, owner)
+    assert await petition_svc.can_view_case(db_session, case_obj, handler)
+    assert await petition_svc.can_view_case(db_session, case_obj, site_owner)
+    assert not await petition_svc.can_view_case(db_session, case_obj, viewer)
+    assert not await petition_svc.can_view_case(db_session, case_obj, other_handler)
+    assert not await petition_svc.can_view_case(db_session, case_obj, petition_admin)
+
+    own_cases = await authed_client_factory(owner).get("/petitions/my")
+    assert own_cases.status_code == 200
+    assert [item["id"] for item in own_cases.json()] == [str(case_obj.id)]
+
+    lookup = await authed_client_factory(owner).get(
+        "/petitions/lookup",
+        params={"case_number": case_obj.case_number},
+    )
+    assert lookup.status_code == 200
+    assert lookup.json()["confidential_blocked"] is False
+    assert lookup.json()["content"]
+
+    public_request = await authed_client_factory(admin_user).post(
+        f"/petitions/{case_obj.id}/public-request",
+        json={"title": "不應公開", "content": "不應公開"},
+    )
+    assert public_request.status_code == 403
+
+    site_owner_public_request = await authed_client_factory(site_owner).post(
+        f"/petitions/{case_obj.id}/public-request",
+        json={"title": "不應公開", "content": "不應公開"},
+    )
+    assert site_owner_public_request.status_code == 409
+    assert site_owner_public_request.json()["detail"] == "密件不可申請公開"
+
+    public_cases = await authed_client_factory(owner).get("/petitions/public")
+    assert public_cases.status_code == 200
+    assert all(item["id"] != str(case_obj.id) for item in public_cases.json())
+    public_detail = await authed_client_factory(owner).get(f"/petitions/public/{case_obj.id}")
+    assert public_detail.status_code == 404
+
+
+async def test_petition_confidentiality_reason_is_required(
+    db_session, authed_client_factory, admin_user: User
+) -> None:
+    _, petition_type = await _make_org_and_type(db_session)
+    owner = await _bare_user(db_session)
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
+
+    response = await authed_client_factory(admin_user).post(
+        f"/petitions/{case_obj.id}/confidential", json={"reason": "   "}
+    )
+    assert response.status_code == 422
+
+
+async def test_get_stats_scoped_by_org(db_session, authed_client_factory) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    await _create_case(db_session, petition_type)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:view_org")
+
+    ac = authed_client_factory(handler)
+    resp = await ac.get("/petitions/stats")
+    assert resp.status_code == 200
+    assert resp.json()["total"] == 1
+
+
+async def test_monthly_stats_filter_by_month_type_and_org_scope(
+    db_session, authed_client_factory, client
+) -> None:
+    from api.core.clock import TAIPEI
+
+    org, petition_type = await _make_org_and_type(db_session)
+    case_obj, _share_token = await _create_case(db_session, petition_type)
+    case_obj.submitted_at = datetime(2026, 9, 1, 9, tzinfo=TAIPEI)
+    case_obj.closed_at = datetime(2026, 9, 2, 9, tzinfo=TAIPEI)
+
+    _other_org, other_type = await _make_org_and_type(db_session, name="教務處")
+    other_case, _other_share_token = await _create_case(db_session, other_type)
+    other_case.submitted_at = datetime(2026, 9, 3, 9, tzinfo=TAIPEI)
+    other_case.closed_at = datetime(2026, 9, 4, 9, tzinfo=TAIPEI)
+    await db_session.flush()
+
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:view_org")
+
+    assert (await client.get("/petitions/stats/monthly?month=2026-09")).status_code == 401
+    response = await authed_client_factory(handler).get("/petitions/stats/monthly?month=2026-09")
+    assert response.status_code == 200
+    assert response.json() == {
+        "month": "2026-09",
+        "received_total": 1,
+        "completed_total": 1,
+        "average_completion_hours": 24.0,
+        "by_type": [{"type_name": petition_type.name, "count": 1}],
+    }
+
+    next_month = await authed_client_factory(handler).get("/petitions/stats/monthly?month=2026-10")
+    assert next_month.status_code == 200
+    assert next_month.json()["received_total"] == 0
+
+    forbidden = await authed_client_factory(await _bare_user(db_session)).get(
+        "/petitions/stats/monthly?month=2026-09"
+    )
+    assert forbidden.status_code == 403
+
+
+# ── 案件詳情存取控制 ──────────────────────────────────────────────────────────
+
+
+async def test_get_case_forbidden_for_unrelated_user(db_session, authed_client_factory) -> None:
+    _, petition_type = await _make_org_and_type(db_session)
+    owner = await _bare_user(db_session)
+    stranger = await _bare_user(db_session)
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
+
+    ac = authed_client_factory(stranger)
+    resp = await ac.get(f"/petitions/{case_obj.id}")
+    assert resp.status_code == 403
+
+
+async def test_get_case_visible_to_submitter(db_session, authed_client_factory) -> None:
+    _, petition_type = await _make_org_and_type(db_session)
+    owner = await _bare_user(db_session)
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
+
+    ac = authed_client_factory(owner)
+    resp = await ac.get(f"/petitions/{case_obj.id}")
+    assert resp.status_code == 200
+    assert resp.json()["id"] == str(case_obj.id)
+    assert resp.json()["latest_internal_note"] is None  # 陳情人不可見內部備註
+
+
+async def test_get_case_by_case_number_compatibility_route(
+    db_session, authed_client_factory
+) -> None:
+    _, petition_type = await _make_org_and_type(db_session)
+    owner = await _bare_user(db_session)
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
+
+    resp = await authed_client_factory(owner).get(f"/petitions/{case_obj.case_number}")
+
+    assert resp.status_code == 200
+    assert resp.json()["id"] == str(case_obj.id)
+
+
+async def test_list_assignable_users_returns_org_members(db_session, authed_client_factory) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:view_org")
+    case_obj, _share_token = await _create_case(db_session, petition_type)
+
+    ac = authed_client_factory(handler)
+    resp = await ac.get(f"/petitions/{case_obj.id}/assignable-users")
+    assert resp.status_code == 200
+    assert any(u["id"] == str(handler.id) for u in resp.json())
+
+
+async def test_list_assignable_users_includes_parent_members_only_for_parent_assigner(
+    db_session, authed_client_factory
+) -> None:
+    parent = Org(name=f"上級機關-{uuid.uuid4().hex[:6]}")
+    db_session.add(parent)
+    await db_session.flush()
+    org, petition_type = await _make_child_org_and_type(db_session, parent)
+    child_member = await _bare_user(db_session)
+    parent_assigner = await _bare_user(db_session)
+    child_assigner = await _bare_user(db_session)
+    await _grant_org_permission(db_session, child_member, org, "petition:view_org")
+    await _grant_org_permission(db_session, parent_assigner, parent, "petition:assign")
+    await _grant_org_permission(db_session, child_assigner, org, "petition:assign")
+    case_obj, _share_token = await _create_case(db_session, petition_type)
+
+    parent_response = await authed_client_factory(parent_assigner).get(
+        f"/petitions/{case_obj.id}/assignable-users"
+    )
+    assert parent_response.status_code == 200
+    parent_ids = {entry["id"] for entry in parent_response.json()}
+    assert str(child_member.id) in parent_ids
+    assert str(parent_assigner.id) in parent_ids
+
+    child_response = await authed_client_factory(child_assigner).get(
+        f"/petitions/{case_obj.id}/assignable-users"
+    )
+    assert child_response.status_code == 200
+    child_ids = {entry["id"] for entry in child_response.json()}
+    assert str(child_member.id) in child_ids
+    assert str(parent_assigner.id) not in child_ids
+
+
+# ── 分案 / 轉派 / 回覆 / 狀態 / 備註 ───────────────────────────────────────────
+
+
+async def test_assign_case_requires_permission(
+    db_session, member_user, authed_client_factory
+) -> None:
+    _, petition_type = await _make_org_and_type(db_session)
+    case_obj, _share_token = await _create_case(db_session, petition_type)
+    ac = authed_client_factory(member_user)
+    resp = await ac.patch(
+        f"/petitions/{case_obj.id}/assign", json={"assigned_to_id": str(member_user.id)}
+    )
+    assert resp.status_code == 403
+
+
+async def test_assign_case_rejects_user_outside_org(db_session, authed_client_factory) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:assign")
+    outsider = await _bare_user(db_session)
+    case_obj, _share_token = await _create_case(db_session, petition_type)
+
+    ac = authed_client_factory(handler)
+    resp = await ac.patch(
+        f"/petitions/{case_obj.id}/assign", json={"assigned_to_id": str(outsider.id)}
+    )
+    assert resp.status_code == 422
+
+
+async def test_assign_case_succeeds_for_org_member(db_session, authed_client_factory) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:assign")
+    case_obj, _share_token = await _create_case(db_session, petition_type)
+
+    ac = authed_client_factory(handler)
+    resp = await ac.patch(
+        f"/petitions/{case_obj.id}/assign", json={"assigned_to_id": str(handler.id)}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "assigned"
+
+
+async def test_parent_org_can_assign_and_handle_child_case(
+    db_session, authed_client_factory
+) -> None:
+    parent = Org(name=f"上級機關-{uuid.uuid4().hex[:6]}")
+    db_session.add(parent)
+    await db_session.flush()
+    _org, petition_type = await _make_child_org_and_type(db_session, parent)
+    chair = await _bare_user(db_session)
+    await _grant_org_permission(db_session, chair, parent, "petition:assign")
+    await _grant_org_permission(db_session, chair, parent, "petition:handle")
+    case_obj, _share_token = await _create_case(db_session, petition_type)
+    ac = authed_client_factory(chair)
+
+    assigned = await ac.patch(
+        f"/petitions/{case_obj.id}/assign", json={"assigned_to_id": str(chair.id)}
+    )
+    assert assigned.status_code == 200
+    assert assigned.json()["assigned_to_id"] == str(chair.id)
+
+    replied = await ac.post(
+        f"/petitions/{case_obj.id}/reply",
+        json={"public_content": "已由上級機關處理", "close": True},
+    )
+    assert replied.status_code == 200
+    assert replied.json()["status"] == "closed"
+
+
+async def test_parent_assigner_cannot_assign_to_sibling_org_member(
+    db_session, authed_client_factory
+) -> None:
+    parent = Org(name=f"上級機關-{uuid.uuid4().hex[:6]}")
+    db_session.add(parent)
+    await db_session.flush()
+    _org, petition_type = await _make_child_org_and_type(db_session, parent)
+    sibling_org, _ = await _make_child_org_and_type(db_session, parent)
+    assigner = await _bare_user(db_session)
+    sibling_member = await _bare_user(db_session)
+    await _grant_org_permission(db_session, assigner, parent, "petition:assign")
+    await _grant_org_permission(db_session, sibling_member, sibling_org, "petition:view_org")
+    case_obj, _share_token = await _create_case(db_session, petition_type)
+
+    response = await authed_client_factory(assigner).patch(
+        f"/petitions/{case_obj.id}/assign",
+        json={"assigned_to_id": str(sibling_member.id)},
+    )
+
+    assert response.status_code == 422
+
+
+async def test_transfer_case_moves_to_new_org(db_session, authed_client_factory) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    target_org = Org(name="新負責機關")
+    db_session.add(target_org)
+    await db_session.flush()
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:transfer")
+    case_obj, _share_token = await _create_case(db_session, petition_type)
+
+    ac = authed_client_factory(handler)
+    resp = await ac.patch(
+        f"/petitions/{case_obj.id}/transfer",
+        json={"to_org_id": str(target_org.id), "reason": "非本機關業務範圍"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["current_org_id"] == str(target_org.id)
+    assert resp.json()["status"] == "transferred"
+
+
+async def test_reply_case_marks_resolved_when_requested(db_session, authed_client_factory) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:handle")
+    case_obj, _share_token = await _create_case(db_session, petition_type)
+
+    ac = authed_client_factory(handler)
+    resp = await ac.post(
+        f"/petitions/{case_obj.id}/reply",
+        json={"public_content": "已派員修復完畢", "resolve": True},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "resolved"
+    assert resp.json()["public_reply"] == "已派員修復完畢"
+
+
+async def test_public_petition_attachment_can_be_downloaded_by_submitter(
+    db_session, authed_client_factory, tmp_path, monkeypatch
+) -> None:
+    from api.core import config as config_module
+
+    monkeypatch.setattr(config_module.settings, "STORAGE_LOCAL_DIR", str(tmp_path))
+    org, petition_type = await _make_org_and_type(db_session)
+    owner = await _bare_user(db_session)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:handle")
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
+
+    uploaded = await authed_client_factory(handler).post(
+        f"/petitions/{case_obj.id}/attachments",
+        files={"file": ("回覆說明.pdf", b"%PDF-1.4 reply", "application/pdf")},
+        data={"visibility": "public"},
+    )
+    assert uploaded.status_code == 201
+    assert uploaded.json()["visibility"] == "public"
+
+    submitter_uploaded = await authed_client_factory(owner).post(
+        f"/petitions/{case_obj.id}/attachments",
+        files={"file": ("使用者附件.pdf", b"%PDF-1.4 user", "application/pdf")},
+    )
+    assert submitter_uploaded.status_code == 201
+
+    handler_detail = await authed_client_factory(handler).get(f"/petitions/{case_obj.id}")
+    assert handler_detail.status_code == 200
+    assert {item["id"] for item in handler_detail.json()["attachments"]} == {
+        uploaded.json()["id"],
+        submitter_uploaded.json()["id"],
+    }
+
+    downloaded = await authed_client_factory(owner).get(
+        f"/petitions/{case_obj.id}/attachments/{uploaded.json()['id']}/download"
+    )
+    assert downloaded.status_code == 200
+    assert downloaded.content == b"%PDF-1.4 reply"
+
+    previewed = await authed_client_factory(owner).get(
+        f"/petitions/{case_obj.id}/attachments/{uploaded.json()['id']}/preview"
+    )
+    assert previewed.status_code == 200
+    assert previewed.headers["content-type"] == "application/pdf"
+    assert "inline" in previewed.headers["content-disposition"]
+    assert previewed.content == b"%PDF-1.4 reply"
+
+
+async def test_reply_promotes_handler_attachment_and_emails_external_submitter(
+    db_session, authed_client_factory, admin_user: User, tmp_path, monkeypatch
+) -> None:
+    import base64
+
+    from api.core import config as config_module
+    from api.services.outbox import _dispatch
+
+    monkeypatch.setattr(config_module.settings, "STORAGE_LOCAL_DIR", str(tmp_path))
+    org, petition_type = await _make_org_and_type(db_session)
+    created = await authed_client_factory(admin_user).post(
+        "/petitions/admin/cases",
+        json={
+            "type_id": str(petition_type.id),
+            "contact_name": "外部收件人",
+            "contact_email": "reply@example.com",
+            "title": "回覆附件郵件測試",
+            "content": "陳情內容",
+        },
+    )
+    assert created.status_code == 201
+    case_id = created.json()["id"]
+    handler = await _bare_user(db_session)
+    second_handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:handle")
+    await _grant_org_permission(db_session, second_handler, org, "petition:handle")
+
+    uploaded = await authed_client_factory(handler).post(
+        f"/petitions/{case_id}/attachments",
+        files={"file": ("回覆附件.pdf", b"%PDF-1.4 attached", "application/pdf")},
+        data={"visibility": "internal"},
+    )
+    assert uploaded.status_code == 201
+
+    forbidden = await authed_client_factory(second_handler).post(
+        f"/petitions/{case_id}/reply",
+        json={"public_content": "回覆", "attachment_ids": [uploaded.json()["id"]]},
+    )
+    assert forbidden.status_code == 403
+
+    replied = await authed_client_factory(handler).post(
+        f"/petitions/{case_id}/reply",
+        json={
+            "public_content": "已處理",
+            "resolve": False,
+            "attachment_ids": [uploaded.json()["id"]],
+        },
+    )
+    assert replied.status_code == 200
+    assert replied.json()["status"] == "in_progress"
+    attachment = next(
+        item for item in replied.json()["attachments"] if item["id"] == uploaded.json()["id"]
+    )
+    assert attachment["visibility"] == "public"
+
+    event = await db_session.scalar(
+        select(OutboxEvent)
+        .where(OutboxEvent.event_type == "petition.external_notify")
+        .order_by(OutboxEvent.created_at.desc())
+    )
+    assert event is not None
+    assert event.payload["related_id"] == case_id
+    assert event.payload["attachment_ids"] == [uploaded.json()["id"]]
+
+    queued: dict[str, object] = {}
+
+    def fake_enqueue_email(*args: object, **kwargs: object) -> None:
+        queued["args"] = args
+        queued["kwargs"] = kwargs
+
+    monkeypatch.setattr("api.services.mail.enqueue_email", fake_enqueue_email)
+    await _dispatch(db_session, event)
+    assert queued["args"][:1] == ("reply@example.com",)
+    assert queued["kwargs"] == {
+        "attachments": [
+            {
+                "filename": "回覆附件.pdf",
+                "content": base64.b64encode(b"%PDF-1.4 attached").decode("ascii"),
+            }
+        ]
+    }
+
+
+async def test_office_attachment_preview_returns_converted_pdf(
+    db_session, authed_client_factory, tmp_path, monkeypatch
+) -> None:
+    from unittest.mock import AsyncMock
+    from urllib.parse import quote
+
+    from api.core import config as config_module
+    from api.services import petition_preview
+
+    monkeypatch.setattr(config_module.settings, "STORAGE_LOCAL_DIR", str(tmp_path))
+    org, petition_type = await _make_org_and_type(db_session)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:handle")
+    case_obj, _share_token = await _create_case(db_session, petition_type)
+    uploaded = await authed_client_factory(handler).post(
+        f"/petitions/{case_obj.id}/attachments",
+        files={
+            "file": (
+                "會議記錄.docx",
+                b"PK\x03\x04office-document",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+    )
+    assert uploaded.status_code == 201
+    conversion = AsyncMock(return_value=b"%PDF-converted")
+    monkeypatch.setattr(petition_preview, "convert_office_attachment_to_pdf", conversion)
+
+    previewed = await authed_client_factory(handler).get(
+        f"/petitions/{case_obj.id}/attachments/{uploaded.json()['id']}/preview"
+    )
+
+    assert previewed.status_code == 200
+    assert previewed.headers["content-type"] == "application/pdf"
+    assert quote("會議記錄.pdf".encode()) in previewed.headers["content-disposition"]
+    assert previewed.content == b"%PDF-converted"
+    conversion.assert_awaited_once()
+
+
+async def test_account_reply_attachment_is_added_to_notification_email(
+    db_session, authed_client_factory, tmp_path, monkeypatch
+) -> None:
+    import base64
+
+    from api.core import config as config_module
+    from api.services.outbox import _dispatch
+
+    monkeypatch.setattr(config_module.settings, "STORAGE_LOCAL_DIR", str(tmp_path))
+    org, petition_type = await _make_org_and_type(db_session)
+    owner = await _bare_user(db_session)
+    owner.notification_preferences = {"petition_replied": {"inapp": True, "email": True}}
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:handle")
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
+
+    uploaded = await authed_client_factory(handler).post(
+        f"/petitions/{case_obj.id}/attachments",
+        files={"file": ("說明.pdf", b"%PDF-account", "application/pdf")},
+        data={"visibility": "internal"},
+    )
+    assert uploaded.status_code == 201
+    replied = await authed_client_factory(handler).post(
+        f"/petitions/{case_obj.id}/reply",
+        json={"public_content": "已完成處理", "attachment_ids": [uploaded.json()["id"]]},
+    )
+    assert replied.status_code == 200
+
+    event = await db_session.scalar(
+        select(OutboxEvent)
+        .where(OutboxEvent.event_type == "notification.email_with_attachments")
+        .order_by(OutboxEvent.created_at.desc())
+    )
+    assert event is not None
+    assert event.payload["user_id"] == str(owner.id)
+    assert event.payload["attachment_ids"] == [uploaded.json()["id"]]
+
+    captured: dict[str, object] = {}
+
+    def fake_send_branded_email(**kwargs: object) -> None:
+        captured.update(kwargs)
+
+    monkeypatch.setattr("api.email.sender.send_branded_email", fake_send_branded_email)
+    await _dispatch(db_session, event)
+
+    assert captured["to"] == [owner.email]
+    assert captured["attachments"] == [
+        {"filename": "說明.pdf", "content": base64.b64encode(b"%PDF-account").decode("ascii")}
+    ]
+
+
+async def test_petition_print_is_restricted_to_handlers_and_returns_pdf(
+    db_session,
+    authed_client_factory,
+    tmp_path,
+    monkeypatch,
+    render_pdf_with_project_font,
+) -> None:
+    from io import BytesIO
+
+    from PIL import Image
+    from pypdf import PageObject, PdfReader
+
+    from api.core import config as config_module
+
+    monkeypatch.setattr(config_module.settings, "STORAGE_LOCAL_DIR", str(tmp_path))
+    org, petition_type = await _make_org_and_type(db_session)
+    owner = await _bare_user(db_session)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:handle")
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
+
+    image_buffer = BytesIO()
+    Image.new("RGB", (8, 8), color=(30, 100, 180)).save(image_buffer, format="PNG")
+    attachment_pdf = render_pdf_with_project_font("陳情附件文件內容")
+    handler_client = authed_client_factory(handler)
+    uploaded_pdf = await handler_client.post(
+        f"/petitions/{case_obj.id}/attachments",
+        files={"file": ("補充資料.pdf", attachment_pdf, "application/pdf")},
+        data={"visibility": "public"},
+    )
+    uploaded_image = await handler_client.post(
+        f"/petitions/{case_obj.id}/attachments",
+        files={"file": ("現場照片.png", image_buffer.getvalue(), "image/png")},
+        data={"visibility": "public"},
+    )
+    assert uploaded_pdf.status_code == 201
+    assert uploaded_image.status_code == 201
+
+    handler_response = await handler_client.get(f"/petitions/{case_obj.id}/print")
+    assert handler_response.status_code == 200
+    assert handler_response.headers["content-type"] == "application/pdf"
+    assert handler_response.content.startswith(b"%PDF")
+    reader = PdfReader(BytesIO(handler_response.content))
+    printed_text = "".join(page.extract_text() or "" for page in reader.pages)
+
+    def page_has_image(page: PageObject) -> bool:
+        resources = page.get("/Resources")
+        if resources is None:
+            return False
+        xobjects = resources.get_object().get("/XObject")
+        if xobjects is None:
+            return False
+        return any(
+            xobject.get_object().get("/Subtype") == "/Image"
+            for xobject in xobjects.get_object().values()
+        )
+
+    assert "附件 1：補充資料.pdf" in printed_text
+    assert "附件 2：現場照片.png" in printed_text
+    assert "陳情附件文件內容" in printed_text
+    assert any(page_has_image(page) for page in reader.pages)
+
+    owner_response = await authed_client_factory(owner).get(f"/petitions/{case_obj.id}/print")
+    assert owner_response.status_code == 403
+
+
+async def test_handler_can_edit_own_public_reply_within_one_hour(
+    db_session, authed_client_factory
+) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:handle")
+    case_obj, _share_token = await _create_case(db_session, petition_type)
+    ac = authed_client_factory(handler)
+
+    response = await ac.post(
+        f"/petitions/{case_obj.id}/reply",
+        json={"public_content": "原始回覆", "resolve": True},
+    )
+    assert response.status_code == 200
+    event_result = await db_session.execute(
+        select(PetitionCaseEvent).where(
+            PetitionCaseEvent.case_id == case_obj.id,
+            PetitionCaseEvent.event_type == "replied",
+        )
+    )
+    event = event_result.scalar_one()
+
+    edited = await ac.patch(
+        f"/petitions/{case_obj.id}/events/{event.id}",
+        json={"content": "修正後回覆"},
+    )
+    assert edited.status_code == 200
+    assert edited.json()["public_reply"] == "修正後回覆"
+    updated_event = next(item for item in edited.json()["events"] if item["id"] == str(event.id))
+    assert updated_event["content"] == "修正後回覆"
+    assert updated_event["can_edit"] is True
+
+
+async def test_public_event_cannot_be_edited_after_one_hour(
+    db_session, authed_client_factory
+) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:handle")
+    case_obj, _share_token = await _create_case(db_session, petition_type)
+    ac = authed_client_factory(handler)
+
+    replied = await ac.post(
+        f"/petitions/{case_obj.id}/reply",
+        json={"public_content": "原始回覆", "resolve": True},
+    )
+    assert replied.status_code == 200
+    event_result = await db_session.execute(
+        select(PetitionCaseEvent).where(
+            PetitionCaseEvent.case_id == case_obj.id,
+            PetitionCaseEvent.event_type == "replied",
+        )
+    )
+    event = event_result.scalar_one()
+    event_result = await db_session.execute(
+        select(PetitionCaseEvent).where(PetitionCaseEvent.id == event.id)
+    )
+    event_obj = event_result.scalar_one()
+    event_obj.created_at = datetime.now(UTC) - timedelta(hours=3, seconds=1)
+    await db_session.flush()
+
+    edited = await ac.patch(
+        f"/petitions/{case_obj.id}/events/{event.id}",
+        json={"content": "太晚了"},
+    )
+    assert edited.status_code == 409
+
+
+async def test_reply_case_can_auto_assign_and_close(db_session, authed_client_factory) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:handle")
+    case_obj, _share_token = await _create_case(db_session, petition_type)
+
+    ac = authed_client_factory(handler)
+    resp = await ac.post(
+        f"/petitions/{case_obj.id}/reply",
+        json={"public_content": "已完成處理", "close": True},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "closed"
+    assert resp.json()["assigned_to_id"] == str(handler.id)
+    event_result = await db_session.execute(
+        select(PetitionCaseEvent.event_type)
+        .where(PetitionCaseEvent.case_id == case_obj.id)
+        .order_by(PetitionCaseEvent.created_at)
+    )
+    assert [event.value for event in event_result.scalars().all()][-2:] == ["assigned", "replied"]
+
+
+async def test_public_petition_requires_user_then_handler_confirmation(
+    db_session, authed_client_factory, client
+) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    owner = await _bare_user(db_session)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:handle")
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
+    handler_client = authed_client_factory(handler)
+
+    closed = await handler_client.post(
+        f"/petitions/{case_obj.id}/reply",
+        json={"public_content": "已完成修繕", "close": True},
+    )
+    assert closed.status_code == 200
+
+    requested = await handler_client.post(
+        f"/petitions/{case_obj.id}/public-request",
+        json={"title": "公開版：教室冷氣故障", "content": "B302 冷氣故障，已完成修繕。"},
+    )
+    assert requested.status_code == 200
+    assert requested.json()["public_status"] == "pending_user"
+
+    owner_client = authed_client_factory(owner)
+    modified = await owner_client.post(
+        f"/petitions/{case_obj.id}/public-response",
+        json={
+            "decision": "approve_with_changes",
+            "title": "公開版：教室設備故障",
+            "content": "教室設備故障，已完成修繕。",
+        },
+    )
+    assert modified.status_code == 200
+    assert modified.json()["public_status"] == "pending_handler"
+
+    confirmed = await handler_client.post(f"/petitions/{case_obj.id}/public-confirm")
+    assert confirmed.status_code == 200
+    assert confirmed.json()["public_status"] == "published"
+
+    public = await client.get(f"/petitions/public/{case_obj.id}")
+    assert public.status_code == 200
+    assert public.json()["title"] == "公開版：教室設備故障"
+    assert public.json()["content"] == "教室設備故障，已完成修繕。"
+    assert public.json()["reply"] == "已完成修繕"
+    assert "contact_name" not in public.json()
+    assert "submitter" not in public.json()
+
+
+async def test_update_status_needs_info_requires_message(db_session, authed_client_factory) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:handle")
+    case_obj, _share_token = await _create_case(db_session, petition_type)
+
+    ac = authed_client_factory(handler)
+    missing_message = await ac.patch(
+        f"/petitions/{case_obj.id}/status", json={"status": "needs_info"}
+    )
+    assert missing_message.status_code == 422
+
+    ok = await ac.patch(
+        f"/petitions/{case_obj.id}/status",
+        json={"status": "needs_info", "public_message": "請補充現場照片"},
+    )
+    assert ok.status_code == 200
+    assert ok.json()["supplement_request"] == "請補充現場照片"
+
+
+@pytest.mark.parametrize(
+    ("scenario", "should_email"),
+    [
+        ("needs_info", False),
+        ("closed_status", False),
+        ("closed", True),
+        ("rejected", True),
+        ("public_request", True),
+    ],
+)
+async def test_petition_updates_email_logged_in_submitter(
+    db_session, authed_client_factory, scenario, should_email, monkeypatch
+) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    owner = await _bare_user(db_session)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:handle")
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
+
+    scheduled: list[dict] = []
+
+    def fake_schedule(**kwargs):
+        scheduled.append(kwargs)
+
+    monkeypatch.setattr(
+        "api.services.notification.send_notification_email_batch.apply_async", fake_schedule
+    )
+    ac = authed_client_factory(handler)
+    previous_intents = {event.id for event in await _email_intents_for_user(db_session, owner)}
+
+    if scenario == "needs_info":
+        response = await ac.patch(
+            f"/petitions/{case_obj.id}/status",
+            json={"status": "needs_info", "public_message": "請補充現場照片"},
+        )
+    elif scenario in {"closed_status", "rejected"}:
+        response = await ac.patch(
+            f"/petitions/{case_obj.id}/status",
+            json={
+                "status": "rejected" if scenario == "rejected" else "closed",
+                "public_message": (
+                    "不屬於本機關業務範圍" if scenario == "rejected" else "案件已結案"
+                ),
+            },
+        )
+    else:
+        response = await ac.post(
+            f"/petitions/{case_obj.id}/reply",
+            json={"public_content": "已完成處理", "close": True},
+        )
+        assert response.status_code == 200
+        if scenario == "public_request":
+            previous_intents = {
+                event.id for event in await _email_intents_for_user(db_session, owner)
+            }
+            response = await ac.post(
+                f"/petitions/{case_obj.id}/public-request",
+                json={"title": "公開版陳情", "content": "已完成處理。"},
+            )
+
+    assert response.status_code == 200
+    assert scheduled == []
+    intents = [
+        event
+        for event in await _email_intents_for_user(db_session, owner)
+        if event.id not in previous_intents
+    ]
+    assert len(intents) == int(should_email)
+    for intent in intents:
+        await _dispatch(db_session, intent)
+    assert len(scheduled) == int(should_email)
+    if should_email:
+        assert scheduled[0]["args"][0] == str(owner.id)
+
+
+async def test_petition_transfer_does_not_email_submitter(
+    db_session, authed_client_factory, monkeypatch
+) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    target_org = Org(name=f"承辦機關-{uuid.uuid4().hex[:6]}")
+    db_session.add(target_org)
+    await db_session.flush()
+    owner = await _bare_user(db_session)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:transfer")
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
+
+    scheduled: list[dict] = []
+    monkeypatch.setattr(
+        "api.services.notification.send_notification_email_batch.apply_async",
+        lambda **kwargs: scheduled.append(kwargs),
+    )
+    previous_intents = {event.id for event in await _email_intents_for_user(db_session, owner)}
+
+    response = await authed_client_factory(handler).patch(
+        f"/petitions/{case_obj.id}/transfer",
+        json={"to_org_id": str(target_org.id), "reason": "改由專責機關處理"},
+    )
+
+    assert response.status_code == 200
+    assert scheduled == []
+    assert {
+        event.id for event in await _email_intents_for_user(db_session, owner)
+    } == previous_intents
+
+
+async def test_add_internal_note_succeeds(db_session, authed_client_factory) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:handle")
+    case_obj, _share_token = await _create_case(db_session, petition_type)
+
+    ac = authed_client_factory(handler)
+    resp = await ac.post(f"/petitions/{case_obj.id}/notes", json={"content": "已電話聯繫陳情人"})
+    assert resp.status_code == 200
+    assert resp.json()["latest_internal_note"] == "已電話聯繫陳情人"
+
+
+# ── 補件 ──────────────────────────────────────────────────────────────────────
+
+
+async def test_supplement_case_requires_authenticated_submitter(
+    db_session, client, authed_client_factory
+) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:handle")
+    owner = await _bare_user(db_session)
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
+    await petition_svc.update_status(
+        db_session,
+        case_obj,
+        data=PetitionStatusUpdate(status="needs_info", public_message="請補件"),
+        actor_id=handler.id,
+    )
+
+    forbidden = await client.post(
+        f"/petitions/{case_obj.id}/supplement", json={"content": "補充內容"}
+    )
+    assert forbidden.status_code == 401
+
+    ok = await authed_client_factory(owner).post(
+        f"/petitions/{case_obj.id}/supplement",
+        json={"content": "補充內容"},
+    )
+    assert ok.status_code == 200
+    assert ok.json()["status"] == "in_progress"
+
+
+async def test_marking_confidential_redacts_earlier_notifications(
+    db_session, authed_client_factory, admin_user: User
+) -> None:
+    from api.models.notification import Notification
+    from api.services.petition import CONFIDENTIAL_NOTIFICATION_BODY
+
+    _, petition_type = await _make_org_and_type(db_session)
+    owner = await _bare_user(db_session)
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=owner)
+    sent = Notification(
+        user_id=owner.id,
+        type="petition_received",
+        title="已收到陳情",
+        body=f"陳情內容：\n{case_obj.content}",
+        related_id=case_obj.id,
+    )
+    unrelated = Notification(
+        user_id=owner.id, type="petition_received", title="其他案件", body="保留內容"
+    )
+    db_session.add_all([sent, unrelated])
+    await db_session.flush()
+
+    response = await authed_client_factory(admin_user).post(
+        f"/petitions/{case_obj.id}/confidential", json={"reason": "涉及個資"}
+    )
+
+    assert response.status_code == 200, response.text
+    await db_session.refresh(sent)
+    await db_session.refresh(unrelated)
+    assert sent.body == CONFIDENTIAL_NOTIFICATION_BODY
+    assert case_obj.content not in (sent.body or "")
+    assert unrelated.body == "保留內容"

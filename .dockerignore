@@ -10,11 +10,34 @@
 **/node_modules
 **/coverage
 **/.turbo
+docs/
+hcca-showcase/
+output/
+playwright-report/
+test-results/
 
+# 任何層級的環境檔都不進 build context（含 apps/web/.env.local、.env.sentry-build-plugin）
 .env
 .env.*
+**/.env
+**/.env.*
 !.env.example
 !.env.production.example
+
+# 本機程式索引、AI 工具設定、瀏覽器暫存與個資匯出：與映像無關，且可能含敏感資料
+.gitnexus
+.codegraph
+.claude
+.agents
+.codex
+.mcp.json
+.playwright-cli
+.playwright-mcp
+.lighthouseci
+C:*
+ssh
+backups
+privacy_exports
 
 uploads
 參考

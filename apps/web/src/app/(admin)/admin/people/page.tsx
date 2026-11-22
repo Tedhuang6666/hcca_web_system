@@ -1,0 +1,1361 @@
+"use client";
+
+import dynamic from "next/dynamic";
+import Link from "next/link";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import AdminWorkbenchTabs from "@/components/admin/AdminWorkbenchTabs";
+import { PeopleManagementEmbedProvider } from "@/components/admin/PeopleManagementEmbedContext";
+import {
+  BadgeCheck,
+  BookUser,
+  ChevronLeft,
+  ChevronRight,
+  CircleSlash,
+  Link2,
+  Plus,
+  RefreshCcw,
+  Search,
+  ShieldCheck,
+  SlidersHorizontal,
+  Upload,
+  UserRound,
+  UsersRound,
+  X,
+} from "lucide-react";
+import { toast } from "sonner";
+
+import { usePermissions } from "@/hooks/usePermissions";
+import { adminApi, ApiError, classApi, orgsApi, peopleApi, withFallback } from "@/lib/api";
+import { getPeopleDirectoryStats } from "@/lib/api/people";
+import { today } from "@/lib/dateUtils";
+import { AccountDirectoryPanel } from "@/components/admin/AccountDirectoryPanel";
+import MobileBackToList from "@/components/ui/MobileBackToList";
+import styles from "@/components/admin/PeopleManagement.module.css";
+import PersonClassRosterEditor from "@/components/admin/PersonClassRosterEditor";
+import type {
+  AdminUserDetail,
+  OrgRead,
+  PersonAffiliationCreate,
+  PersonAffiliationKind,
+  PersonAffiliationOut,
+  PersonDetailOut,
+  PersonDirectoryStats,
+  PersonListItem,
+  PersonStatus,
+  PositionSummary,
+  SchoolClassListItem,
+} from "@/lib/types";
+import { confirmAction } from "@/components/ui/ConfirmDialog";
+
+const STATUS_LABEL: Record<PersonStatus, string> = {
+  active: "在校",
+  alumni: "校友",
+  transferred: "轉出",
+  inactive: "停用",
+};
+
+const KIND_LABEL: Record<PersonAffiliationKind, string> = {
+  student: "學生身分",
+  class_member: "分班名冊",
+  class_role: "班級幹部",
+  org_position: "自治組織幹部",
+};
+
+const CLASS_ROLE_OPTIONS = [
+  { key: "class_representative", label: "班代" },
+  { key: "class_leader", label: "班長" },
+  { key: "vice_leader", label: "副班長" },
+];
+
+type PeopleManagementSection = "people" | "defense" | "organization" | "classes";
+const PEOPLE_PAGE_SIZE = 200;
+
+const UserAndFeatureActionsPanel = dynamic(
+  () => import("@/components/admin/UserAndFeatureActionsPanel"),
+  { loading: () => <WorkspaceLoading /> },
+);
+const OrganizationPermissionPanel = dynamic(
+  () => import("../permissions/page"),
+  { loading: () => <WorkspaceLoading /> },
+);
+const ClassManagementPanel = dynamic(
+  () => import("../classes/page"),
+  { loading: () => <WorkspaceLoading /> },
+);
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof ApiError ? error.message : fallback;
+}
+
+function classLabel(item: SchoolClassListItem | { academic_year?: number | null; label?: string | null; class_code?: string | null }) {
+  if ("class_code" in item && item.class_code) {
+    return `${item.academic_year} 學年度 ${item.label ?? `${item.class_code} 班`}`;
+  }
+  return item.label ?? "未命名班級";
+}
+
+function roleTone(kind: PersonAffiliationKind) {
+  if (kind === "class_member") return "#2563eb";
+  if (kind === "class_role") return "#0f766e";
+  if (kind === "org_position") return "#b45309";
+  return "#64748b";
+}
+
+function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...props}
+      className={`input ${props.className ?? ""}`}
+      style={{ color: "var(--text-primary)", ...props.style }}
+    />
+  );
+}
+
+function SelectInput(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <select
+      {...props}
+      className={`input ${props.className ?? ""}`}
+      style={{ color: "var(--text-primary)", ...props.style }}
+    />
+  );
+}
+
+function Panel({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={`rounded-md ${className}`} style={{ border: "1px solid var(--border)" }}>
+      {children}
+    </section>
+  );
+}
+
+function IconButton({
+  children,
+  onClick,
+  disabled,
+  title,
+  tone = "neutral",
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  title?: string;
+  tone?: "neutral" | "primary" | "danger";
+}) {
+  const color = tone === "primary" ? "var(--primary)" : tone === "danger" ? "var(--danger)" : "var(--text-secondary)";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+      style={{ border: "1px solid var(--border)", color }}
+    >
+      {children}
+    </button>
+  );
+}
+
+export default function PeopleAdminPage() {
+  const { can, isAdmin } = usePermissions();
+  const searchParams = useSearchParams();
+  const requestedSection = searchParams.get("section");
+  const canManagePeople = isAdmin || can("admin:all") || can("admin:users") || can("class:manage") || can("org:manage_members");
+  const canOpen: Record<PeopleManagementSection, boolean> = {
+    people: canManagePeople,
+    defense: isAdmin,
+    organization: isAdmin || can("admin:all") || can("admin:users") || can("org:manage_members"),
+    classes: isAdmin || can("admin:all") || can("class:manage"),
+  };
+  const section = Object.hasOwn(canOpen, requestedSection ?? "") && canOpen[requestedSection as PeopleManagementSection]
+    ? requestedSection as PeopleManagementSection
+    : "people";
+
+  if (!canManagePeople) {
+    return (
+      <div className="py-24 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+        需要人員、班級或組織成員管理權限才能使用此工作台。
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-0 min-w-0 flex-col xl:h-full">
+      <AdminWorkbenchTabs />
+      <div className="xl:min-h-0 xl:flex-1 xl:overflow-auto" aria-label="人員與使用者防護工作區">
+        <PeopleManagementEmbedProvider>
+          {section === "people" && <PersonDirectoryPanel />}
+          {section === "defense" && <UserAndFeatureActionsPanel />}
+          {section === "organization" && <OrganizationPermissionPanel />}
+          {section === "classes" && <ClassManagementPanel />}
+        </PeopleManagementEmbedProvider>
+      </div>
+    </div>
+  );
+}
+
+function PersonDirectoryPanel() {
+  const { can, isAdmin } = usePermissions();
+  const allowed = isAdmin || can("admin:all") || can("admin:users") || can("class:manage") || can("org:manage_members");
+  const canManageMasterData = isAdmin || can("admin:all") || can("admin:users");
+  const canAssignClass = isAdmin || can("admin:all") || can("class:manage");
+  const canManageOrgAffiliations = canManageMasterData || can("org:manage_members");
+  const canManageAccounts = isAdmin || can("admin:all");
+  const [directoryView, setDirectoryView] = useState<"people" | "accounts">("people");
+  const [accountId, setAccountId] = useState<string | null>(null);
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
+  const detailRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [people, setPeople] = useState<PersonListItem[]>([]);
+  const [stats, setStats] = useState<PersonDirectoryStats | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<PersonDetailOut | null>(null);
+  const [classes, setClasses] = useState<SchoolClassListItem[]>([]);
+  const [orgs, setOrgs] = useState<OrgRead[]>([]);
+  const [positions, setPositions] = useState<Pick<PositionSummary, "id" | "name" | "org_id" | "org_name">[]>([]);
+  const [users, setUsers] = useState<AdminUserDetail[]>([]);
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState<PersonStatus | "">("");
+  const [classId, setClassId] = useState("");
+  const [pageIndex, setPageIndex] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [usersLoading, setUsersLoading] = useState(true);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [showAffiliation, setShowAffiliation] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
+
+  const loadReference = useCallback(async () => {
+    setUsersLoading(true);
+    try {
+      const scope = await withFallback(peopleApi.accessScope(), {
+        is_global: false,
+        org_ids: [],
+        class_ids: [],
+        classes: [],
+      });
+      const scopedClasses = scope.is_global
+        ? classApi.list({ is_active: "true" })
+        : Promise.resolve(scope.classes ?? []);
+      const scopedOrgs = scope.is_global
+        ? orgsApi.list({ active_only: true })
+        : Promise.all((scope.org_ids ?? []).map((orgId) => orgsApi.get(orgId)));
+      const scopedPositions = scope.is_global
+        ? adminApi.listPositions()
+        : Promise.all((scope.org_ids ?? []).map((orgId) => orgsApi.listPositions(orgId))).then((rows) => rows.flat());
+      const [classRows, orgRows, positionRows, userRows] = await Promise.all([
+        withFallback(scopedClasses, []),
+        withFallback(scopedOrgs, []),
+        withFallback(scopedPositions, []),
+        scope.is_global ? withFallback(adminApi.listUsers({ limit: 200 }), []) : Promise.resolve([]),
+      ]);
+      const allowedOrgIds = new Set(scope.org_ids ?? []);
+      const orgNames = new Map(orgRows.map((item) => [item.id, item.name]));
+      setClasses(classRows);
+      setOrgs(orgRows);
+      setPositions(
+        positionRows
+          .filter((item) => scope.is_global || allowedOrgIds.has(item.org_id))
+          .map((item) => ({
+            ...item,
+            org_name:
+              "org_name" in item && typeof item.org_name === "string"
+                ? item.org_name
+                : (orgNames.get(item.org_id) ?? ""),
+          })),
+      );
+      setUsers(scope.is_global ? userRows : []);
+    } finally {
+      setUsersLoading(false);
+    }
+  }, []);
+
+  const loadPeople = useCallback(async () => {
+    if (!allowed) return;
+    setLoading(true);
+    try {
+      const rows = await peopleApi.list({
+        keyword: query.trim() || undefined,
+        status: status || undefined,
+        class_id: classId || undefined,
+        limit: PEOPLE_PAGE_SIZE,
+        offset: pageIndex * PEOPLE_PAGE_SIZE,
+      });
+      setPeople(rows);
+      setSelectedId((current) => current && rows.some((row) => row.id === current) ? current : rows[0]?.id ?? null);
+      try {
+        setStats(await getPeopleDirectoryStats({
+          keyword: query.trim() || undefined,
+          status: status || undefined,
+          class_id: classId || undefined,
+        }));
+      } catch (error) {
+        toast.error(errorMessage(error, "載入人員統計失敗"));
+      }
+    } catch (error) {
+      toast.error(errorMessage(error, "載入人員清單失敗"));
+    } finally {
+      setLoading(false);
+    }
+  }, [allowed, classId, pageIndex, query, status]);
+
+  const loadDetail = useCallback(async (id: string | null) => {
+    if (!id) {
+      setDetail(null);
+      return;
+    }
+    setDetailLoading(true);
+    try {
+      setDetail(await peopleApi.get(id));
+    } catch (error) {
+      toast.error(errorMessage(error, "載入人員詳情失敗"));
+    } finally {
+      setDetailLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!allowed) {
+      setLoading(false);
+      return;
+    }
+    void loadReference();
+  }, [allowed, loadReference]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadPeople(), 200);
+    return () => window.clearTimeout(timer);
+  }, [loadPeople]);
+
+  useEffect(() => {
+    void loadDetail(selectedId);
+  }, [loadDetail, selectedId]);
+
+  const refreshAll = async () => {
+    await Promise.all([loadReference(), loadPeople()]);
+    await loadDetail(selectedId);
+  };
+
+  const matchedCount = stats?.matched_people_count ?? null;
+  const pageCount = Math.max(1, Math.ceil((matchedCount ?? 0) / PEOPLE_PAGE_SIZE));
+  const rangeStart = matchedCount ? pageIndex * PEOPLE_PAGE_SIZE + 1 : 0;
+  const rangeEnd = pageIndex * PEOPLE_PAGE_SIZE + people.length;
+  const showingPersonDetail = directoryView === "people" && mobileDetailOpen;
+
+  const openPerson = (id: string) => {
+    setSelectedId(id);
+    setMobileDetailOpen(true);
+    window.requestAnimationFrame(() => {
+      if (window.innerWidth < 1280) detailRef.current?.focus();
+    });
+  };
+
+  if (!allowed) {
+    return (
+      <div className="py-24 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+        需要人員、班級或組織成員管理權限才能使用此工作台。
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto flex min-h-0 min-w-0 w-full max-w-7xl flex-col gap-4 p-3 sm:p-5 xl:h-full xl:flex-1">
+      <header className={`${showingPersonDetail ? "hidden xl:flex" : "flex"} flex-col gap-3 md:flex-row md:items-end md:justify-between`}>
+        <div>
+          <h1 className="text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
+            人員與身分
+          </h1>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <IconButton onClick={refreshAll}>
+            <RefreshCcw size={14} /> 重新整理
+          </IconButton>
+          {directoryView === "people" && (
+            <>
+              {(canManageMasterData || (canAssignClass && classes.length > 0)) && (
+                <IconButton onClick={() => setShowImport(true)} tone="primary">
+                  <Upload size={14} /> 匯入名冊
+                </IconButton>
+              )}
+              {canManageMasterData && (
+                <IconButton onClick={() => setShowCreate(true)} tone="primary">
+                  <Plus size={14} /> 新增人員
+                </IconButton>
+              )}
+            </>
+          )}
+        </div>
+      </header>
+
+      {canManageAccounts && (
+        <div className={`${showingPersonDetail ? "hidden xl:flex" : "flex"} gap-2`} role="group" aria-label="人員與帳號檢視">
+          {([
+            ["people", "人員資料"],
+            ["accounts", "平台帳號"],
+          ] as const).map(([view, label]) => (
+            <button
+              key={view}
+              type="button"
+              aria-pressed={directoryView === view}
+              onClick={() => { setAccountId(null); setMobileDetailOpen(false); setDirectoryView(view); }}
+              className="min-h-11 shrink-0 rounded-lg px-4 text-sm font-medium"
+              style={{
+                color: directoryView === view ? "var(--primary-text)" : "var(--text-muted)",
+                background: directoryView === view ? "var(--primary-dim)" : "var(--bg-surface)",
+                border: "1px solid var(--border)",
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {directoryView === "people" ? (
+        <>
+      <details className={`${showingPersonDetail ? "hidden xl:block" : ""} rounded-lg border px-3`} style={{ borderColor: "var(--border)" }}>
+        <summary className="min-h-11 cursor-pointer py-3 text-xs" style={{ color: "var(--text-muted)" }}>名冊統計</summary>
+      <div className="grid grid-cols-2 gap-2 pb-3 md:grid-cols-3 xl:grid-cols-5">
+        <Stat icon={<UsersRound size={15} />} label="平台帳號" value={stats?.account_count ?? null} />
+        <Stat icon={<UserRound size={15} />} label="人員主檔" value={stats?.people_count ?? null} />
+        <Stat icon={<Link2 size={15} />} label="已連帳號" value={stats?.linked_count ?? null} />
+        <Stat icon={<BookUser size={15} />} label="有分班" value={stats?.classed_count ?? null} />
+        <Stat icon={<CircleSlash size={15} />} label="待連帳號" value={stats?.pending_link_count ?? null} />
+      </div>
+      </details>
+
+      <div className="grid min-w-0 grid-cols-1 gap-4 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)]">
+        <Panel className={`${showingPersonDetail ? "hidden xl:flex" : "flex"} min-w-0 min-h-0 flex-col overflow-hidden`}>
+          <div className="space-y-2 p-3" style={{ borderBottom: "1px solid var(--border)" }}>
+            <div className="flex items-center gap-2">
+              <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-2" style={{ border: "1px solid var(--border)" }}>
+                <Search size={15} style={{ color: "var(--text-muted)" }} />
+                <input
+                  ref={searchRef}
+                  value={query}
+                  onChange={(event) => {
+                    setPageIndex(0);
+                    setQuery(event.target.value);
+                  }}
+                  className="min-h-7 min-w-0 w-full bg-transparent text-sm outline-none"
+                  aria-label="搜尋人員"
+                  placeholder="搜尋姓名、學號、Email"
+                  style={{ color: "var(--text-primary)" }}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setFilterOpen((v) => !v)}
+                className="md:hidden inline-flex min-h-11 flex-shrink-0 items-center gap-1 rounded-md px-2.5 py-2 text-xs font-medium"
+                style={{
+                  border: "1px solid var(--border)",
+                  color: (status || classId) ? "var(--primary-text)" : "var(--text-muted)",
+                  background: (status || classId) ? "var(--primary-dim)" : "transparent",
+                }}
+                aria-expanded={filterOpen}
+              >
+                <SlidersHorizontal size={13} />
+                {(status || classId) ? "篩選中" : "篩選"}
+              </button>
+            </div>
+            <div className={`grid grid-cols-2 gap-2 ${filterOpen ? "" : "hidden md:grid"}`}>
+              <SelectInput aria-label="依人員狀態篩選" value={status} onChange={(event) => {
+                setPageIndex(0);
+                setStatus(event.target.value as PersonStatus | "");
+              }}>
+                <option value="">全部狀態</option>
+                {Object.entries(STATUS_LABEL).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </SelectInput>
+              <SelectInput aria-label="依班級篩選人員" value={classId} onChange={(event) => {
+                setPageIndex(0);
+                setClassId(event.target.value);
+              }}>
+                <option value="">全部班級</option>
+                {classes.map((item) => (
+                  <option key={item.id} value={item.id}>{classLabel(item)}</option>
+                ))}
+              </SelectInput>
+            </div>
+          </div>
+          <div className="min-h-0 flex-1 overflow-auto">
+            {loading ? (
+              <div className="p-4 text-sm" style={{ color: "var(--text-muted)" }}>載入中...</div>
+            ) : people.length === 0 ? (
+              <div className="p-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+                找不到符合條件的人員。
+              </div>
+            ) : (
+              people.map((person) => (
+                <button
+                  key={person.id}
+                  type="button"
+                  onClick={() => openPerson(person.id)}
+                  aria-current={selectedId === person.id ? "true" : undefined}
+                  className="w-full cursor-pointer px-4 py-3 text-left transition-colors"
+                  style={{
+                    borderBottom: "1px solid var(--border)",
+                    background: selectedId === person.id ? "var(--primary-dim)" : "transparent",
+                  }}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                        {person.display_name}
+                      </p>
+                      <p className="mt-0.5 truncate text-xs" style={{ color: "var(--text-muted)" }}>
+                        {person.student_id ?? "無學號"} · {person.email ?? "未填 Email"}
+                      </p>
+                    </div>
+                    <span className="shrink-0 whitespace-nowrap rounded px-2 py-0.5 text-xs" style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+                      {STATUS_LABEL[person.status]}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {person.class_labels.slice(0, 2).map((label) => (
+                      <span key={label} className="rounded px-1.5 py-0.5 text-xs" style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}>{label}</span>
+                    ))}
+                    {person.role_titles.slice(0, 2).map((label) => (
+                      <span key={label} className="rounded px-1.5 py-0.5 text-xs" style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>{label}</span>
+                    ))}
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2" style={{ borderTop: "1px solid var(--border)" }}>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }} aria-live="polite">
+              {loading
+                ? "更新名單中…"
+                : matchedCount === null
+                  ? "總筆數暫時無法載入"
+                  : `顯示 ${rangeStart}–${rangeEnd} 筆，共 ${matchedCount} 筆`}
+            </p>
+            <div className="flex items-center gap-1">
+              <IconButton
+                onClick={() => setPageIndex((current) => Math.max(0, current - 1))}
+                disabled={loading || pageIndex === 0}
+                title="上一頁"
+              >
+                <ChevronLeft size={14} />
+                <span className="sr-only">上一頁</span>
+              </IconButton>
+              <span className="min-w-12 text-center text-xs tabular-nums" style={{ color: "var(--text-muted)" }}>
+                {pageIndex + 1} / {pageCount}
+              </span>
+              <IconButton
+                onClick={() => setPageIndex((current) => current + 1)}
+                disabled={loading || matchedCount === null || (pageIndex + 1) * PEOPLE_PAGE_SIZE >= matchedCount}
+                title="下一頁"
+              >
+                <ChevronRight size={14} />
+                <span className="sr-only">下一頁</span>
+              </IconButton>
+            </div>
+          </div>
+        </Panel>
+
+        <Panel className={`${showingPersonDetail ? "flex" : "hidden xl:flex"} min-w-0 flex-col xl:min-h-0 xl:overflow-hidden`}>
+          <div ref={detailRef} tabIndex={-1} className="min-w-0 outline-none xl:contents">
+            <div className="p-3 xl:hidden">
+              <MobileBackToList label="返回人員清單" className="min-h-11" onBack={() => {
+                setMobileDetailOpen(false);
+                window.requestAnimationFrame(() => searchRef.current?.focus());
+              }} />
+            </div>
+          {detailLoading ? (
+            <div className="p-8 text-sm" style={{ color: "var(--text-muted)" }}>載入人員詳情...</div>
+          ) : detail ? (
+            <PersonDetailPanel
+              key={detail.id}
+              person={detail}
+              classes={classes}
+              users={users}
+              canAssignClass={canAssignClass}
+              canManageMasterData={canManageMasterData}
+              canManageAccounts={canManageAccounts}
+              onChanged={refreshAll}
+              onAssign={() => setShowAffiliation(true)}
+              onOpenAccount={(id) => { setAccountId(id); setDirectoryView("accounts"); }}
+            />
+          ) : (
+            <div className="p-10 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+              請先選擇一位人員。
+            </div>
+          )}
+          </div>
+        </Panel>
+      </div>
+
+      {showCreate && (
+        <CreatePersonDialog
+          users={users}
+          onClose={() => setShowCreate(false)}
+          onDone={async (id) => {
+            setShowCreate(false);
+            await refreshAll();
+            setSelectedId(id);
+          }}
+        />
+      )}
+      {showImport && (
+        <ImportRosterDialog
+          classes={classes}
+          classRequired={!canManageMasterData}
+          onClose={() => setShowImport(false)}
+          onDone={async () => {
+            setShowImport(false);
+            await refreshAll();
+          }}
+        />
+      )}
+      {showAffiliation && detail && (
+        <AffiliationDialog
+          person={detail}
+          classes={classes}
+          orgs={orgs}
+          positions={positions}
+          canAssignClass={canAssignClass}
+          canManageOrgAffiliations={canManageOrgAffiliations}
+          onClose={() => setShowAffiliation(false)}
+          onDone={async () => {
+            setShowAffiliation(false);
+            await refreshAll();
+          }}
+        />
+      )}
+        </>
+      ) : (
+        <AccountDirectoryPanel
+          initialSelectedId={accountId}
+          users={users}
+          loading={usersLoading}
+          classes={classes}
+          canManageClasses={canAssignClass}
+          onRefresh={refreshAll}
+        />
+      )}
+    </div>
+  );
+}
+
+function WorkspaceLoading() {
+  return (
+    <div className="p-6 text-sm" role="status" style={{ color: "var(--text-muted)" }}>
+      載入管理工具…
+    </div>
+  );
+}
+
+function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; value: number | null }) {
+  return (
+    <Panel className="p-3">
+      <div className="flex items-center gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
+        {icon}
+        {label}
+      </div>
+      <p className="mt-1 text-2xl font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>
+        {value === null ? "—" : value.toLocaleString("zh-TW")}
+      </p>
+    </Panel>
+  );
+}
+
+function PersonDetailPanel({
+  person,
+  classes,
+  users,
+  canAssignClass,
+  canManageMasterData,
+  canManageAccounts,
+  onChanged,
+  onAssign,
+  onOpenAccount,
+}: {
+  person: PersonDetailOut;
+  classes: SchoolClassListItem[];
+  users: AdminUserDetail[];
+  canAssignClass: boolean;
+  canManageMasterData: boolean;
+  canManageAccounts: boolean;
+  onChanged: () => Promise<void>;
+  onAssign: () => void;
+  onOpenAccount: (id: string) => void;
+}) {
+  const [quickClassId, setQuickClassId] = useState("");
+  const [classSaving, setClassSaving] = useState(false);
+  const [edit, setEdit] = useState({
+    display_name: person.display_name,
+    legal_name: person.legal_name ?? "",
+    student_id: person.student_id ?? "",
+    email: person.email ?? "",
+    status: person.status,
+    user_id: person.user_id ?? "",
+    note: person.note ?? "",
+  });
+
+  useEffect(() => {
+    setEdit({
+      display_name: person.display_name,
+      legal_name: person.legal_name ?? "",
+      student_id: person.student_id ?? "",
+      email: person.email ?? "",
+      status: person.status,
+      user_id: person.user_id ?? "",
+      note: person.note ?? "",
+    });
+  }, [person]);
+
+  const active = person.affiliations.filter((item) => item.status !== "ended");
+  const ended = person.affiliations.filter((item) => item.status === "ended");
+
+  const save = async () => {
+    try {
+      await peopleApi.update(person.id, {
+        display_name: edit.display_name,
+        legal_name: edit.legal_name || null,
+        student_id: edit.student_id || null,
+        email: edit.email || null,
+        status: edit.status,
+        user_id: edit.user_id || null,
+        note: edit.note || null,
+      });
+      toast.success("人員主檔已更新");
+      await onChanged();
+    } catch (error) {
+      toast.error(errorMessage(error, "更新人員主檔失敗"));
+    }
+  };
+
+  const syncPending = async () => {
+    try {
+      const result = await peopleApi.syncPending(person.id);
+      toast.success(`已同步 ${result.synced} 筆待生效身分`);
+      await onChanged();
+    } catch (error) {
+      toast.error(errorMessage(error, "同步失敗"));
+    }
+  };
+
+  const assignClass = async (classId: string) => {
+    const schoolClass = classes.find((item) => item.id === classId);
+    if (!schoolClass || classSaving) return;
+    setQuickClassId(classId);
+    setClassSaving(true);
+    try {
+      if (person.user_id) {
+        await classApi.addMembership(schoolClass.id, { user_id: person.user_id });
+      } else {
+        await peopleApi.createAffiliation({
+          person_id: person.id,
+          kind: "class_member",
+          class_id: schoolClass.id,
+          academic_year: schoolClass.academic_year,
+          source: "manual",
+        });
+      }
+      toast.success(`已將 ${person.display_name} 設定至 ${classLabel(schoolClass)}`);
+      await onChanged();
+    } catch (error) {
+      toast.error(errorMessage(error, "設定班級失敗"));
+    } finally {
+      setQuickClassId("");
+      setClassSaving(false);
+    }
+  };
+
+  return (
+    <div className={styles.person}>
+      <div className="flex-shrink-0 p-5" style={{ borderBottom: "1px solid var(--border)" }}>
+        <div className="flex min-w-0 flex-col gap-4">
+          <div>
+            <div className="flex min-w-0 items-start gap-2">
+              <UserRound size={22} className="shrink-0" style={{ color: "var(--primary-text)" }} />
+              <h2 className="min-w-0 break-words text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
+                {person.display_name}
+              </h2>
+            </div>
+            <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+              {person.student_id ?? "無學號"} · {person.user_id ? "已連結平台帳號" : "尚未連結平台帳號"}
+            </p>
+            {person.email && <p className="mt-1 break-all text-xs" style={{ color: "var(--text-muted)" }}>{person.email}</p>}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {canManageAccounts && person.user_id && active.some((item) => item.status === "pending_user") && <IconButton onClick={syncPending}>
+              <BadgeCheck size={14} /> 同步待生效
+            </IconButton>}
+            <IconButton onClick={onAssign} tone="primary">
+              <Plus size={14} /> 新增身分
+            </IconButton>
+          </div>
+        </div>
+
+        {canManageMasterData && <details className="mt-4 border-t" style={{ borderColor: "var(--border)" }}>
+          <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium" style={{ color: "var(--text-secondary)" }}>編輯基本資料</summary>
+          <div className={styles.personForm}>
+          <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+            顯示姓名
+            <TextInput className="mt-1" value={edit.display_name} onChange={(event) => setEdit({ ...edit, display_name: event.target.value })} />
+          </label>
+          <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+            法定姓名
+            <TextInput className="mt-1" value={edit.legal_name} onChange={(event) => setEdit({ ...edit, legal_name: event.target.value })} placeholder="選填" />
+          </label>
+          <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+            學號
+            <TextInput className="mt-1" value={edit.student_id} onChange={(event) => setEdit({ ...edit, student_id: event.target.value })} />
+          </label>
+          <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+            狀態
+            <SelectInput className="mt-1" value={edit.status} onChange={(event) => setEdit({ ...edit, status: event.target.value as PersonStatus })}>
+              {Object.entries(STATUS_LABEL).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </SelectInput>
+          </label>
+          <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+            Email
+            <TextInput className="mt-1" value={edit.email} onChange={(event) => setEdit({ ...edit, email: event.target.value })} />
+          </label>
+          <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+            連結平台帳號
+            <SelectInput className="mt-1" value={edit.user_id} onChange={(event) => setEdit({ ...edit, user_id: event.target.value })}>
+              <option value="">尚未連結</option>
+              {users.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.display_name} · {user.student_id ?? user.email}
+                </option>
+              ))}
+            </SelectInput>
+          </label>
+          <label className={`text-xs ${styles.fullRow}`} style={{ color: "var(--text-muted)" }}>
+            管理備註
+            <textarea className="input mt-1 min-h-20 w-full resize-y" value={edit.note} onChange={(event) => setEdit({ ...edit, note: event.target.value })} placeholder="人員管理備註" />
+          </label>
+          <div className="flex items-end">
+            <IconButton onClick={save} tone="primary">
+              <ShieldCheck size={14} /> 儲存
+            </IconButton>
+          </div>
+          </div>
+        </details>}
+      </div>
+
+      <div className="min-w-0 space-y-4 p-4 sm:p-5 xl:min-h-0 xl:flex-1 xl:overflow-y-auto">
+        <AffiliationSection title="有效身分" items={active} onChanged={onChanged} />
+        {ended.length > 0 && (
+          <details className="min-w-0 rounded-md border" style={{ borderColor: "var(--border)" }}>
+            <summary className="min-h-11 cursor-pointer px-4 py-3 text-sm" style={{ color: "var(--text-secondary)" }}>歷史身分（{ended.length} 筆）</summary>
+            <AffiliationSection title="歷史紀錄" items={ended} onChanged={onChanged} muted />
+          </details>
+        )}
+        <Panel className="h-fit p-4">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>班級與座號</h3>
+            <Link href="/admin/people?section=classes" className="inline-flex min-h-11 shrink-0 items-center gap-1 text-xs font-medium" style={{ color: "var(--primary-text)" }}>
+              管理<ChevronRight size={14} />
+            </Link>
+          </div>
+            {canAssignClass && (
+              <SelectInput
+                aria-label={`快速設定 ${person.display_name} 的班級`}
+                className="min-h-11 w-full"
+                value={classSaving ? quickClassId : ""}
+                onChange={(event) => void assignClass(event.target.value)}
+                disabled={classSaving || classes.length === 0}
+              >
+                <option value="">{classSaving ? "設定中…" : "快速設定班級"}</option>
+                {classes.map((item) => (
+                  <option key={item.id} value={item.id}>{classLabel(item)}</option>
+                ))}
+              </SelectInput>
+            )}
+          {(person.class_roster ?? []).length === 0 ? (
+            <p className="mt-3 text-xs" style={{ color: "var(--text-muted)" }}>尚無班級座號名冊資料。</p>
+          ) : (
+            <div className="mt-3 space-y-2">
+              {(person.class_roster ?? []).map((entry) => (
+                <div key={`${entry.class_id}-${entry.student_id}-${entry.seat_number}`} className="rounded-md px-3 py-2.5" style={{ background: "var(--bg-elevated)" }}>
+                  <p className="text-xs font-medium" style={{ color: "var(--text-primary)" }}>
+                    {entry.class_label ?? `${entry.academic_year} 學年度 ${entry.class_code} 班`}
+                  </p>
+                  <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                    {entry.is_active ? "目前班級" : "歷史班級"} · 座號 {entry.seat_number} · 學號 {entry.student_id}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+          {canAssignClass && <PersonClassRosterEditor
+            key={`${person.id}-${(person.class_roster ?? []).map((entry) => `${entry.class_id}:${entry.seat_number}`).join(",")}`}
+            person={person} classes={classes} onChanged={onChanged}
+          />}
+        </Panel>
+        {person.user_id && canManageAccounts && (
+          <button type="button" onClick={() => { if (person.user_id) onOpenAccount(person.user_id); }}
+            className="flex min-h-14 w-full min-w-0 items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left"
+            style={{ borderColor: "var(--border)", color: "var(--primary-text)" }}>
+            <span className="min-w-0"><span className="block text-sm font-medium">管理連結帳號</span>
+              <span className="mt-1 block break-all text-xs" style={{ color: "var(--text-muted)" }}>學籍、幹部任期、登入與安全設定</span>
+            </span>
+            <ChevronRight size={18} className="shrink-0" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AffiliationSection({
+  title,
+  items,
+  onChanged,
+  muted = false,
+}: {
+  title: string;
+  items: PersonAffiliationOut[];
+  onChanged: () => Promise<void>;
+  muted?: boolean;
+}) {
+  return (
+    <Panel className="overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
+        <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{title}</h3>
+        <span className="text-xs" style={{ color: "var(--text-muted)" }}>{items.length} 筆</span>
+      </div>
+      {items.length === 0 ? (
+        <div className="p-6 text-center text-sm" style={{ color: "var(--text-muted)" }}>尚無資料。</div>
+      ) : (
+        <div>
+          {items.map((item) => (
+            <AffiliationRow key={item.id} item={item} muted={muted} onChanged={onChanged} />
+          ))}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function AffiliationRow({
+  item,
+  muted,
+  onChanged,
+}: {
+  item: PersonAffiliationOut;
+  muted: boolean;
+  onChanged: () => Promise<void>;
+}) {
+  const { can, isAdmin } = usePermissions();
+  const [ending, setEnding] = useState(false);
+  const isClassMembership = item.kind === "class_member" && Boolean(item.class_id);
+  const canManageAll = isAdmin || can("admin:all") || can("admin:users");
+  const canManageClassAffiliation = canManageAll || can("class:manage");
+  const canManageOrgAffiliation = canManageAll || can("org:manage_members");
+  const canEndAffiliation = item.class_id ? canManageClassAffiliation : canManageOrgAffiliation;
+  const end = async () => {
+    if (ending) return;
+    const message = isClassMembership
+      ? `確定轉出「${item.class_label ?? "本班"}」？本班座號名冊及幹部任命會一併結束，歷史歸屬會保留。`
+      : `確定結束「${item.title ?? KIND_LABEL[item.kind]}」？`;
+    if (!(await confirmAction({ title: message, danger: false }))) return;
+    setEnding(true);
+    try {
+      if (isClassMembership && item.class_id) {
+        await classApi.removeMember(item.class_id, item.person_id);
+      } else {
+        await peopleApi.endAffiliation(item.id);
+      }
+      toast.success(isClassMembership ? "已將人員轉出分班" : "身分已結束");
+      await onChanged();
+    } catch (error) {
+      toast.error(errorMessage(error, isClassMembership ? "轉出分班失敗" : "結束身分失敗"));
+    } finally { setEnding(false); }
+  };
+  const color = roleTone(item.kind);
+  return (
+    <div className="grid grid-cols-1 gap-3 px-4 py-3 md:grid-cols-[1fr_auto]" style={{ borderBottom: "1px solid var(--border)", opacity: muted ? 0.7 : 1 }}>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="h-2 w-2 rounded-full" style={{ background: color }} />
+          <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+            {item.title ?? item.position_name ?? item.role_key ?? KIND_LABEL[item.kind]}
+          </p>
+          <span className="rounded px-1.5 py-0.5 text-xs" style={{ background: `color-mix(in srgb, ${color} 9%, transparent)`, color }}>
+            {KIND_LABEL[item.kind]}
+          </span>
+          {item.status === "pending_user" && (
+            <span className="rounded px-1.5 py-0.5 text-xs" style={{ color: "var(--warning)", background: "var(--warning-dim)" }}>
+              待連帳號
+            </span>
+          )}
+        </div>
+        <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+          {[item.class_label, item.org_name, item.position_name].filter(Boolean).join(" · ") || "全域身分"}
+        </p>
+        <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+          {item.start_date} 起 {item.end_date ? `至 ${item.end_date}` : "，目前有效"}
+          {item.synced_user_position_id ? " · 已同步 RBAC" : ""}
+        </p>
+      </div>
+      {!muted && canEndAffiliation && (!isClassMembership || canManageClassAffiliation) && (
+        <div className="flex min-h-[44px] items-center justify-end">
+          <IconButton onClick={end} tone="danger" disabled={ending}>
+            <X size={14} /> {ending ? "處理中…" : isClassMembership ? "轉出分班" : "結束"}
+          </IconButton>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CreatePersonDialog({
+  users,
+  onClose,
+  onDone,
+}: {
+  users: AdminUserDetail[];
+  onClose: () => void;
+  onDone: (id: string) => void;
+}) {
+  const [form, setForm] = useState({
+    display_name: "",
+    student_id: "",
+    email: "",
+    status: "active" as PersonStatus,
+    user_id: "",
+  });
+
+  const submit = async () => {
+    if (!form.display_name.trim()) {
+      toast.error("請填寫姓名");
+      return;
+    }
+    try {
+      const created = await peopleApi.create({
+        display_name: form.display_name.trim(),
+        student_id: form.student_id.trim() || null,
+        legal_name: null,
+        email: form.email.trim() || null,
+        status: form.status,
+        note: null,
+        user_id: form.user_id || null,
+      });
+      toast.success("人員已建立");
+      onDone(created.id);
+    } catch (error) {
+      toast.error(errorMessage(error, "建立人員失敗"));
+    }
+  };
+
+  return (
+    <Dialog title="新增人員" onClose={onClose}>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <label className="text-xs md:col-span-2" style={{ color: "var(--text-muted)" }}>
+          姓名
+          <TextInput className="mt-1" value={form.display_name} onChange={(event) => setForm({ ...form, display_name: event.target.value })} />
+        </label>
+        <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+          學號
+          <TextInput className="mt-1" value={form.student_id} onChange={(event) => setForm({ ...form, student_id: event.target.value })} />
+        </label>
+        <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+          狀態
+          <SelectInput className="mt-1" value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value as PersonStatus })}>
+            {Object.entries(STATUS_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </SelectInput>
+        </label>
+        <label className="text-xs md:col-span-2" style={{ color: "var(--text-muted)" }}>
+          Email
+          <TextInput className="mt-1" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
+        </label>
+        <label className="text-xs md:col-span-2" style={{ color: "var(--text-muted)" }}>
+          可選：連結既有 User
+          <SelectInput className="mt-1" value={form.user_id} onChange={(event) => setForm({ ...form, user_id: event.target.value })}>
+            <option value="">不連結</option>
+            {users.map((user) => (
+              <option key={user.id} value={user.id}>{user.display_name} · {user.student_id ?? user.email}</option>
+            ))}
+          </SelectInput>
+        </label>
+      </div>
+      <DialogActions onCancel={onClose} onSubmit={submit} submitLabel="建立" />
+    </Dialog>
+  );
+}
+
+function ImportRosterDialog({
+  classes,
+  classRequired,
+  onClose,
+  onDone,
+}: {
+  classes: SchoolClassListItem[];
+  classRequired: boolean;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [classId, setClassId] = useState("");
+  const [academicYear, setAcademicYear] = useState("");
+  const [raw, setRaw] = useState("學號,姓名,Email\n");
+
+  const submit = async () => {
+    const rows = raw
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .filter((line, index) => !(index === 0 && line.includes("學號")))
+      .map((line) => {
+        const [studentId, name, email] = line.split(",").map((cell) => cell?.trim() ?? "");
+        return {
+          student_id: studentId,
+          display_name: name,
+          email: email || null,
+          class_id: classId || null,
+          academic_year: academicYear ? Number(academicYear) : null,
+        };
+      })
+      .filter((row) => row.student_id && row.display_name);
+    if (rows.length === 0) {
+      toast.error("沒有可匯入的資料");
+      return;
+    }
+    if (classRequired && !classId) {
+      toast.error("請選擇班級");
+      return;
+    }
+    try {
+      const result = await peopleApi.importRoster(rows);
+      toast.success(`匯入 ${result.total} 筆，建立 ${result.people_created} 人，新增 ${result.affiliations_created} 筆分班`);
+      onDone();
+    } catch (error) {
+      toast.error(errorMessage(error, "匯入名冊失敗"));
+    }
+  };
+
+  return (
+    <Dialog title="匯入名冊" onClose={onClose} maxWidth="max-w-3xl">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+          指定班級
+          <SelectInput className="mt-1" value={classId} onChange={(event) => setClassId(event.target.value)}>
+            {!classRequired && <option value="">只建立學生主檔</option>}
+            {classes.map((item) => (
+              <option key={item.id} value={item.id}>{classLabel(item)}</option>
+            ))}
+          </SelectInput>
+        </label>
+        <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+          學年度
+          <TextInput className="mt-1" value={academicYear} onChange={(event) => setAcademicYear(event.target.value)} placeholder="例如 115" />
+        </label>
+        <label className="text-xs md:col-span-2" style={{ color: "var(--text-muted)" }}>
+          CSV 內容
+          <textarea
+            value={raw}
+            onChange={(event) => setRaw(event.target.value)}
+            className="mt-1 h-72 w-full rounded-md border bg-transparent p-3 font-mono text-xs outline-none"
+            style={{ borderColor: "var(--border)", color: "var(--text-primary)" }}
+          />
+        </label>
+      </div>
+      <DialogActions onCancel={onClose} onSubmit={submit} submitLabel="匯入" />
+    </Dialog>
+  );
+}
+
+function AffiliationDialog({
+  person,
+  classes,
+  orgs,
+  positions,
+  canAssignClass,
+  canManageOrgAffiliations,
+  onClose,
+  onDone,
+}: {
+  person: PersonDetailOut;
+  classes: SchoolClassListItem[];
+  orgs: OrgRead[];
+  positions: Pick<PositionSummary, "id" | "name" | "org_id" | "org_name">[];
+  canAssignClass: boolean;
+  canManageOrgAffiliations: boolean;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [kind, setKind] = useState<PersonAffiliationKind>("class_member");
+  const [classId, setClassId] = useState("");
+  const [orgId, setOrgId] = useState("");
+  const [positionId, setPositionId] = useState("");
+  const [roleKey, setRoleKey] = useState("class_representative");
+  const [title, setTitle] = useState("");
+  const [startDate, setStartDate] = useState(today());
+  const [endDate, setEndDate] = useState("");
+
+  const availablePositions = positions.filter((position) => !orgId || position.org_id === orgId);
+
+  const submit = async () => {
+    const payload: PersonAffiliationCreate = {
+      person_id: person.id,
+      kind,
+      class_id: kind === "class_member" || kind === "class_role" ? classId || null : null,
+      org_id: kind === "org_position" ? orgId || null : null,
+      position_id: kind === "org_position" ? positionId || null : null,
+      role_key: kind === "class_role" ? roleKey : null,
+      title: title.trim() || null,
+      start_date: startDate,
+      end_date: endDate || null,
+      source: "manual",
+    };
+    if ((kind === "class_member" || kind === "class_role") && !classId) {
+      toast.error("請選擇班級");
+      return;
+    }
+    if (kind === "org_position" && !positionId) {
+      toast.error("請選擇自治組織職位");
+      return;
+    }
+    try {
+      await peopleApi.createAffiliation(payload);
+      toast.success("身分已新增");
+      onDone();
+    } catch (error) {
+      toast.error(errorMessage(error, "新增身分失敗"));
+    }
+  };
+
+  return (
+    <Dialog title={`新增 ${person.display_name} 的身分`} onClose={onClose}>
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+          {(Object.keys(KIND_LABEL) as PersonAffiliationKind[])
+            .filter((item) =>
+              item === "org_position" ? canManageOrgAffiliations : canAssignClass,
+            )
+            .map((item) => (
+            <button
+              key={item}
+              type="button"
+              onClick={() => setKind(item)}
+              className="cursor-pointer rounded-md px-2 py-2 text-xs font-medium transition-colors"
+              style={kind === item ? { background: "var(--primary-dim)", color: "var(--primary-text)" } : { border: "1px solid var(--border)", color: "var(--text-secondary)" }}
+            >
+              {KIND_LABEL[item]}
+            </button>
+            ))}
+        </div>
+        {(kind === "class_member" || kind === "class_role") && (
+          <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+            班級
+            <SelectInput className="mt-1" value={classId} onChange={(event) => setClassId(event.target.value)}>
+              <option value="">選擇班級</option>
+              {classes.map((item) => (
+                <option key={item.id} value={item.id}>{classLabel(item)}</option>
+              ))}
+            </SelectInput>
+          </label>
+        )}
+        {kind === "class_role" && (
+          <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+            班級職位
+            <SelectInput className="mt-1" value={roleKey} onChange={(event) => setRoleKey(event.target.value)}>
+              {CLASS_ROLE_OPTIONS.map((item) => (
+                <option key={item.key} value={item.key}>{item.label}</option>
+              ))}
+            </SelectInput>
+          </label>
+        )}
+        {kind === "org_position" && (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+              組織
+              <SelectInput className="mt-1" value={orgId} onChange={(event) => setOrgId(event.target.value)}>
+                <option value="">全部組織</option>
+                {orgs.map((org) => (
+                  <option key={org.id} value={org.id}>{org.name}</option>
+                ))}
+              </SelectInput>
+            </label>
+            <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+              職位
+              <SelectInput className="mt-1" value={positionId} onChange={(event) => setPositionId(event.target.value)}>
+                <option value="">選擇職位</option>
+                {availablePositions.map((position) => (
+                  <option key={position.id} value={position.id}>{position.org_name} · {position.name}</option>
+                ))}
+              </SelectInput>
+            </label>
+          </div>
+        )}
+        <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+          顯示職稱（選填）
+          <TextInput className="mt-1" value={title} onChange={(event) => setTitle(event.target.value)} />
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+            起始日
+            <TextInput className="mt-1" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+          </label>
+          <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+            結束日
+            <TextInput className="mt-1" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+          </label>
+        </div>
+      </div>
+      <DialogActions onCancel={onClose} onSubmit={submit} submitLabel="新增身分" />
+    </Dialog>
+  );
+}
+
+function Dialog({
+  title,
+  children,
+  onClose,
+  maxWidth = "max-w-2xl",
+}: {
+  title: string;
+  children: React.ReactNode;
+  onClose: () => void;
+  maxWidth?: string;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.48)" }}>
+      <div className={`max-h-[90vh] w-full ${maxWidth} overflow-auto rounded-md`} style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "1px solid var(--border)" }}>
+          <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>{title}</h2>
+          <button type="button" onClick={onClose} className="cursor-pointer rounded p-1" style={{ color: "var(--text-muted)" }} aria-label="關閉">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="space-y-4 p-5">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function DialogActions({
+  onCancel,
+  onSubmit,
+  submitLabel,
+}: {
+  onCancel: () => void;
+  onSubmit: () => void;
+  submitLabel: string;
+}) {
+  return (
+    <div className="flex justify-end gap-2">
+      <IconButton onClick={onCancel}>取消</IconButton>
+      <IconButton onClick={onSubmit} tone="primary">{submitLabel}</IconButton>
+    </div>
+  );
+}

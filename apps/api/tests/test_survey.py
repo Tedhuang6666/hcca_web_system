@@ -1,14 +1,20 @@
-"""問卷系統測試 - schema 序列化修復、回應計數、圖片題型與試算表匯出。"""
+"""問卷系統的 schema 序列化、回應計數、圖片題型與試算表匯出測試。"""
 
 from __future__ import annotations
 
+import json
+import threading
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from io import BytesIO
 
 import pytest
+from openpyxl import load_workbook
 from pydantic import TypeAdapter, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.clock import local_today
+from api.models.org import Org, Position, UserPosition
 from api.models.survey import (
     QuestionType,
     Survey,
@@ -16,13 +22,14 @@ from api.models.survey import (
     SurveyResponse,
     SurveyStatus,
 )
-from api.models.org import Org
 from api.models.user import User
 from api.schemas.survey import (
     SurveyCreate,
     SurveyOut,
     SurveyQuestionCreate,
     SurveyQuestionOut,
+    SurveySubmit,
+    SurveyUpdate,
 )
 from api.services import survey as survey_svc
 
@@ -51,7 +58,7 @@ async def _make_draft_survey(db: AsyncSession) -> Survey:
     )
 
 
-# ── schema 序列化修復（核心 bug） ─────────────────────────────────────────────
+# ── Schema 序列化 ────────────────────────────────────────────────────────────
 
 
 async def test_question_out_parses_options_via_typeadapter(db_session: AsyncSession) -> None:
@@ -87,6 +94,40 @@ async def test_survey_out_nested_questions_keep_options(db_session: AsyncSession
 
     out = TypeAdapter(SurveyOut).validate_python(loaded, from_attributes=True)
     assert out.questions[0].options == ["A", "B"]
+
+
+def test_survey_grade_audience_validates_selected_grades() -> None:
+    org_id = uuid.uuid4()
+    with pytest.raises(ValidationError, match="年級只能選擇"):
+        SurveyCreate(title="錯誤年級", org_id=org_id, allowed_grades=[4])
+    with pytest.raises(ValidationError, match="僅適用登入後填答"):
+        SurveyCreate(title="公開年級限制", org_id=org_id, is_public=True, allowed_grades=[1, 2])
+
+    update = SurveyUpdate(allowed_grades=[2, 1])
+    assert update.allowed_grades == [1, 2]
+
+
+def test_survey_out_restores_grade_audience_from_model() -> None:
+    now = datetime.now(UTC)
+    survey = Survey(
+        id=uuid.uuid4(),
+        title="高一、高二問卷",
+        status=SurveyStatus.DRAFT,
+        is_anonymous=False,
+        allow_multiple=False,
+        is_public=False,
+        is_listed=True,
+        org_id=uuid.uuid4(),
+        created_by=uuid.uuid4(),
+        created_at=now,
+        updated_at=now,
+        allowed_grades_json="[1, 2]",
+        show_announcement_popup=False,
+    )
+
+    out = TypeAdapter(SurveyOut).validate_python(survey, from_attributes=True)
+
+    assert out.allowed_grades == [1, 2]
 
 
 # ── 回應計數 ──────────────────────────────────────────────────────────────────
@@ -125,6 +166,106 @@ async def test_list_surveys_includes_response_count(db_session: AsyncSession) ->
     assert match.response_count == 1
 
 
+async def test_list_respondable_surveys_scans_past_first_hundred_candidates(
+    db_session: AsyncSession,
+) -> None:
+    user = await _make_user(db_session)
+    org = Org(name=f"問卷組織-{uuid.uuid4().hex[:6]}")
+    db_session.add(org)
+    await db_session.flush()
+
+    now = datetime.now(UTC)
+    surveys = [
+        Survey(
+            title=f"限制問卷-{index}-{uuid.uuid4().hex[:6]}",
+            status=SurveyStatus.OPEN,
+            is_public=False,
+            allowed_user_ids_json=json.dumps(
+                [str(user.id)] if index == 100 else [str(uuid.uuid4())]
+            ),
+            org_id=org.id,
+            created_by=user.id,
+            created_at=now - timedelta(seconds=index),
+        )
+        for index in range(101)
+    ]
+    db_session.add_all(surveys)
+    await db_session.flush()
+
+    result = await survey_svc.list_respondable_surveys(db_session, user, limit=1)
+
+    assert [survey.id for survey in result] == [surveys[100].id]
+
+
+async def test_survey_org_access_uses_only_current_user_positions(
+    db_session: AsyncSession,
+) -> None:
+    org = Org(name=f"任期問卷組織-{uuid.uuid4().hex[:6]}")
+    db_session.add(org)
+    await db_session.flush()
+    position = Position(org_id=org.id, name="問卷填答成員")
+    db_session.add(position)
+    await db_session.flush()
+    expired_user = await _make_user(db_session)
+    current_user = await _make_user(db_session)
+    today = local_today()
+    db_session.add_all(
+        [
+            UserPosition(
+                user_id=expired_user.id,
+                position_id=position.id,
+                start_date=today - timedelta(days=30),
+                end_date=today - timedelta(days=1),
+            ),
+            UserPosition(
+                user_id=current_user.id,
+                position_id=position.id,
+                start_date=today - timedelta(days=1),
+                end_date=today,
+            ),
+        ]
+    )
+    survey = Survey(
+        title="依目前任期開放的問卷",
+        status=SurveyStatus.OPEN,
+        is_public=False,
+        allowed_org_ids_json=json.dumps([str(org.id)]),
+        org_id=org.id,
+        created_by=expired_user.id,
+    )
+    db_session.add(survey)
+    await db_session.flush()
+
+    with pytest.raises(PermissionError):
+        await survey_svc.check_survey_access(db_session, survey, expired_user)
+    await survey_svc.check_survey_access(db_session, survey, current_user)
+
+
+async def test_close_expired_surveys_changes_only_expired_open_surveys(
+    db_session: AsyncSession,
+) -> None:
+    now = datetime.now(UTC)
+    expired = await _make_draft_survey(db_session)
+    expired.status = SurveyStatus.OPEN
+    expired.closes_at = now - timedelta(seconds=1)
+
+    upcoming = await _make_draft_survey(db_session)
+    upcoming.status = SurveyStatus.OPEN
+    upcoming.closes_at = now + timedelta(minutes=1)
+
+    already_closed = await _make_draft_survey(db_session)
+    already_closed.status = SurveyStatus.CLOSED
+    already_closed.closes_at = now - timedelta(minutes=1)
+    await db_session.flush()
+
+    closed_count = await survey_svc.close_expired_surveys(db_session, now=now)
+
+    assert closed_count == 1
+    assert expired.status == SurveyStatus.CLOSED
+    assert upcoming.status == SurveyStatus.OPEN
+    assert already_closed.status == SurveyStatus.CLOSED
+
+
 # ── 圖片題型 ──────────────────────────────────────────────────────────────────
 
 
@@ -152,15 +293,129 @@ def test_answerable_question_without_text_is_rejected() -> None:
         SurveyQuestionCreate(question_type=QuestionType.TEXT, question_text="   ")
 
 
+def test_multiple_choice_limit_cannot_exceed_option_count() -> None:
+    with pytest.raises(ValidationError, match="多選最多項數不可大於選項總數"):
+        SurveyQuestionCreate(
+            question_text="可選活動",
+            question_type=QuestionType.MULTIPLE,
+            options=["A", "B"],
+            max_value=3,
+        )
+
+
+async def test_submit_response_rejects_empty_required_answer(db_session: AsyncSession) -> None:
+    survey = await _make_draft_survey(db_session)
+    question = await survey_svc.add_question(
+        db_session,
+        survey,
+        data=SurveyQuestionCreate(question_text="必填意見", question_type=QuestionType.TEXT),
+    )
+    survey.status = SurveyStatus.OPEN
+
+    with pytest.raises(ValueError, match="為必填"):
+        await survey_svc.submit_response(
+            db_session,
+            survey,
+            respondent_id=await _make_respondent_id(db_session),
+            data=SurveySubmit(answers=[{"question_id": question.id, "answer_text": "   "}]),
+        )
+
+
+async def test_submit_response_rejects_answers_above_multiple_choice_limit(
+    db_session: AsyncSession,
+) -> None:
+    survey = await _make_draft_survey(db_session)
+    question = await survey_svc.add_question(
+        db_session,
+        survey,
+        data=SurveyQuestionCreate(
+            question_text="最多選兩項",
+            question_type=QuestionType.MULTIPLE,
+            options=["A", "B", "C"],
+            max_value=2,
+        ),
+    )
+    survey.status = SurveyStatus.OPEN
+
+    with pytest.raises(ValueError, match="最多可選 2 個選項"):
+        await survey_svc.submit_response(
+            db_session,
+            survey,
+            respondent_id=await _make_respondent_id(db_session),
+            data=SurveySubmit(
+                answers=[{"question_id": question.id, "answer_options": ["A", "B", "C"]}],
+            ),
+        )
+
+
+# ── 回答副本信件 ──────────────────────────────────────────────────────────────
+
+
+async def test_response_copy_email_includes_questions_options_and_images(
+    db_session: AsyncSession,
+) -> None:
+    survey = await _make_draft_survey(db_session)
+    question = await survey_svc.add_question(
+        db_session,
+        survey,
+        data=SurveyQuestionCreate(
+            question_text="最想參加哪一類活動？",
+            question_type=QuestionType.SINGLE,
+            is_required=True,
+            options=["社團博覽會", "校慶晚會"],
+            image_url="/uploads/surveys/question.png",
+            option_image_sets=[
+                ["/uploads/surveys/clubs.png"],
+                ["/uploads/surveys/celebration.png"],
+            ],
+        ),
+    )
+    response = SurveyResponse(
+        survey_id=survey.id,
+        respondent_id=await _make_respondent_id(db_session),
+        submitted_at=datetime.now(UTC),
+    )
+    db_session.add(response)
+    await db_session.flush()
+    answer = SurveyAnswer(
+        response_id=response.id,
+        question_id=question.id,
+        answer_text="社團博覽會",
+    )
+    db_session.add(answer)
+    await db_session.flush()
+
+    subject, context = survey_svc.render_response_copy_email(survey, [question], [answer])
+    body_html = context["body_html"]
+
+    assert subject == f"問卷「{survey.title}」回答副本"
+    assert "最想參加哪一類活動？" in body_html
+    assert "社團博覽會（你的選擇）" in body_html
+    assert "校慶晚會" in body_html
+    assert "question.png" in body_html
+    assert "clubs.png" in body_html
+    assert "celebration.png" in body_html
+    assert body_html.count("<img") == 3
+
+
 # ── 試算表匯出 ────────────────────────────────────────────────────────────────
 
 
 async def test_build_survey_export_returns_xlsx(db_session: AsyncSession) -> None:
     survey = await _make_draft_survey(db_session)
-    question = await survey_svc.add_question(
+    text_question = await survey_svc.add_question(
         db_session,
         survey,
-        data=SurveyQuestionCreate(question_text="意見", question_type=QuestionType.TEXT),
+        data=SurveyQuestionCreate(question_text="=1+1", question_type=QuestionType.TEXT),
+    )
+    choice_question = await survey_svc.add_question(
+        db_session,
+        survey,
+        data=SurveyQuestionCreate(
+            question_text="選項測試",
+            question_type=QuestionType.MULTIPLE,
+            options=["=2+2", "安全選項"],
+        ),
     )
     survey.status = SurveyStatus.OPEN
     response = SurveyResponse(
@@ -170,8 +425,19 @@ async def test_build_survey_export_returns_xlsx(db_session: AsyncSession) -> Non
     )
     db_session.add(response)
     await db_session.flush()
-    db_session.add(
-        SurveyAnswer(response_id=response.id, question_id=question.id, answer_text="很好")
+    db_session.add_all(
+        [
+            SurveyAnswer(
+                response_id=response.id,
+                question_id=text_question.id,
+                answer_text="=1+1",
+            ),
+            SurveyAnswer(
+                response_id=response.id,
+                question_id=choice_question.id,
+                answer_json=json.dumps(["=2+2"]),
+            ),
+        ]
     )
     await db_session.flush()
 
@@ -179,3 +445,33 @@ async def test_build_survey_export_returns_xlsx(db_session: AsyncSession) -> Non
     # .xlsx 為 zip 容器，檔頭為 PK
     assert data[:2] == b"PK"
     assert len(data) > 0
+    workbook = load_workbook(BytesIO(data), data_only=False)
+    detail_sheet = workbook["回應明細"]
+    summary_sheet = workbook["統計摘要"]
+    for cell in (detail_sheet["C2"], detail_sheet["D2"], summary_sheet["A2"], summary_sheet["B3"]):
+        assert cell.data_type == "s"
+    assert detail_sheet["C2"].value == "'=1+1"
+    assert detail_sheet["D2"].value == "'=2+2"
+    assert summary_sheet["A2"].value == "'=1+1"
+    assert summary_sheet["B3"].value == "'=2+2"
+
+
+async def test_build_survey_export_renders_off_event_loop(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    survey = await _make_draft_survey(db_session)
+    event_loop_thread = threading.current_thread()
+    render_threads: list[threading.Thread] = []
+
+    def render_export(*_args: object) -> bytes:
+        render_threads.append(threading.current_thread())
+        return b"xlsx"
+
+    monkeypatch.setattr(survey_svc, "_render_survey_export", render_export)
+
+    data = await survey_svc.build_survey_export(db_session, survey)
+
+    assert data == b"xlsx"
+    assert len(render_threads) == 1
+    assert render_threads[0] is not event_loop_thread

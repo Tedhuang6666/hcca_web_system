@@ -1,0 +1,370 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import {
+  Coffee,
+  BookOpen,
+  BookmarkCheck,
+  Croissant,
+  Dumbbell,
+  GraduationCap,
+  HeartPulse,
+  Landmark,
+  Printer,
+  Scissors,
+  Sandwich,
+  School,
+  Shirt,
+  ShoppingBag,
+  Soup,
+  TrainFront,
+  UtensilsCrossed,
+  Wrench,
+  type LucideIcon,
+} from "lucide-react";
+import { divIcon } from "leaflet";
+import type { StyleSpecification } from "maplibre-gl";
+import { MapContainer, Marker, Popup, TileLayer, ZoomControl, useMap } from "react-leaflet";
+import type { LatLngBounds, LatLngExpression } from "leaflet";
+import type { UnifiedMapItem } from "@/lib/partner-map-types";
+import { businessOpenState } from "@/lib/business-hours";
+import {
+  MAP_MAX_ZOOM,
+  MAP_TILE_ATTRIBUTION,
+  mapTileUrl,
+  PARTNER_MAP_STYLE_ATTRIBUTION,
+  partnerMapStyleUrl,
+} from "@/lib/map-tiles";
+import { defaultPartnerIconKey, getPartnerIcon, isPartnerIconKey } from "./partner-map-icons";
+import styles from "./PartnerLeafletMap.module.css";
+import { mapMarkerSvg } from "./partner-map-marker-svg";
+import { useVectorBasemap } from "./useVectorBasemap";
+import {
+  markerColor,
+  markerKind,
+  markerLabel,
+  type MarkerKind,
+  type PartnerMapBoundsState,
+} from "./partner-map-utils";
+
+function toBoundsState(bounds: LatLngBounds): PartnerMapBoundsState {
+  return {
+    min_lat: String(bounds.getSouth()),
+    max_lat: String(bounds.getNorth()),
+    min_lng: String(bounds.getWest()),
+    max_lng: String(bounds.getEast()),
+  };
+}
+
+function BoundsReporter({ onBoundsChange }: { onBoundsChange: (bounds: PartnerMapBoundsState) => void }) {
+  const map = useMap();
+  const lastBoundsKey = useRef<string | null>(null);
+  const onBoundsChangeRef = useRef(onBoundsChange);
+  onBoundsChangeRef.current = onBoundsChange;
+
+  useEffect(() => {
+    const reportBounds = () => {
+      const bounds = toBoundsState(map.getBounds());
+      const boundsKey = JSON.stringify(bounds);
+      if (lastBoundsKey.current === boundsKey) return;
+      lastBoundsKey.current = boundsKey;
+      onBoundsChangeRef.current(bounds);
+    };
+    const eventHandlers = {
+      movestart: () => map.closePopup(),
+      zoomstart: () => map.closePopup(),
+      moveend: reportBounds,
+      zoomend: reportBounds,
+    };
+
+    map.on(eventHandlers);
+    reportBounds();
+    return () => {
+      map.off(eventHandlers);
+    };
+  }, [map]);
+
+  return null;
+}
+
+function ThemeClassSync({ theme }: { theme: "light" | "dark" }) {
+  const map = useMap();
+  useEffect(() => {
+    const container = map.getContainer();
+    container.classList.toggle("partner-map-theme-dark", theme === "dark");
+    container.classList.toggle("partner-map-theme-light", theme === "light");
+  }, [map, theme]);
+  return null;
+}
+
+function MapStyleLayer({ theme }: { theme: "light" | "dark" }) {
+  const map = useMap();
+
+  useEffect(() => {
+    let disposed = false;
+    let removeLayer: (() => void) | undefined;
+
+    void Promise.all([
+      import("maplibre-gl"),
+      import("@maplibre/maplibre-gl-leaflet"),
+    ]).then(async ([maplibre, { maplibreGL }]) => {
+      if (disposed) return;
+
+      maplibre.setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
+      const response = await fetch(partnerMapStyleUrl(theme));
+      if (!response.ok) throw new Error(`地圖樣式回應 ${response.status}`);
+      const style = await response.json() as StyleSpecification;
+      const filteredStyle: StyleSpecification = {
+        ...style,
+        layers: style.layers.filter((styleLayer) => (
+          styleLayer.type !== "symbol" || !styleLayer.layout?.["icon-image"]
+        )),
+      };
+      if (disposed) return;
+
+      const layer = maplibreGL({
+        style: filteredStyle,
+        minZoom: 1,
+        maxZoom: MAP_MAX_ZOOM,
+        interactive: false,
+        attributionControl: false,
+      });
+
+      layer.addTo(map);
+      map.attributionControl?.addAttribution(PARTNER_MAP_STYLE_ATTRIBUTION);
+      removeLayer = () => {
+        layer.remove();
+        map.attributionControl?.removeAttribution(PARTNER_MAP_STYLE_ATTRIBUTION);
+      };
+    }).catch((error: unknown) => {
+      if (!disposed) console.error("載入特約地圖底圖失敗", error);
+    });
+
+    return () => {
+      disposed = true;
+      removeLayer?.();
+    };
+  }, [map, theme]);
+
+  return null;
+}
+
+const iconByKind: Record<Exclude<MarkerKind, "all">, LucideIcon> = {
+  drink: Coffee,
+  breakfast: Croissant,
+  fast_food: Sandwich,
+  noodle: Soup,
+  uniform: Shirt,
+  retail: ShoppingBag,
+  fitness: Dumbbell,
+  health: HeartPulse,
+  beauty: Scissors,
+  repair: Wrench,
+  stationery: BookOpen,
+  cram_school: GraduationCap,
+  copy: Printer,
+  meal: UtensilsCrossed,
+  other: Landmark,
+};
+
+export function markerIcon(item: UnifiedMapItem): LucideIcon {
+  if (item.source === "recommended") return BookmarkCheck;
+  const configuredIconKey = item.tags.find((tag) => tag.icon_key)?.icon_key;
+  if (configuredIconKey && isPartnerIconKey(configuredIconKey)) return getPartnerIcon(configuredIconKey);
+
+  const inferredIconKey = defaultPartnerIconKey([
+    item.business_name,
+    item.category ?? "",
+    ...item.tags.map((tag) => tag.name),
+  ].join(" "));
+  if (inferredIconKey !== "store") return getPartnerIcon(inferredIconKey);
+
+  return iconByKind[markerKind(item)];
+}
+
+function storeIcon(item: UnifiedMapItem) {
+  const Icon = markerIcon(item);
+  const iconMarkup = mapMarkerSvg(Icon, 14, 2.2);
+  const openState = businessOpenState(item.business_hours);
+  const sourceClass = item.source === "recommended" ? "is-recommended" : "is-partner";
+  const offerBadge = item.has_discount_offer
+    ? '<span class="partner-map-marker-offer-badge" aria-label="折扣優惠">★</span>'
+    : "";
+  return divIcon({
+    className: "partner-map-marker-shell",
+    iconSize: [36, 36],
+    iconAnchor: [18, 32],
+    popupAnchor: [0, -30],
+    html: `
+      <div class="partner-map-marker ${sourceClass} ${openState === false ? "is-closed" : ""}" style="--marker-color: ${markerColor(item)}">
+        <div class="partner-map-marker-icon">${iconMarkup}</div>
+        ${offerBadge}
+      </div>
+    `,
+  });
+}
+
+function landmarkIcon(kind: "school" | "station") {
+  if (kind === "station") {
+    const iconMarkup = mapMarkerSvg(TrainFront, 19, 2.4);
+    return divIcon({
+      className: "partner-map-marker-shell",
+      iconSize: [36, 42],
+      iconAnchor: [18, 36],
+      popupAnchor: [0, -34],
+      html: `<div class="partner-map-station-marker">${iconMarkup}</div>`,
+    });
+  }
+
+  const iconMarkup = mapMarkerSvg(School, 22, 2.3);
+  return divIcon({
+    className: "partner-map-marker-shell",
+    iconSize: [36, 42],
+    iconAnchor: [18, 36],
+    popupAnchor: [0, -34],
+    html: `<div class="partner-map-school-marker">${iconMarkup}</div>`,
+  });
+}
+
+function useMapTheme() {
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const syncTheme = () => {
+      setTheme(root.dataset.theme === "dark" ? "dark" : "light");
+    };
+    syncTheme();
+    const observer = new MutationObserver(syncTheme);
+    observer.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => observer.disconnect();
+  }, []);
+
+  return theme;
+}
+
+export default function PartnerLeafletMap({
+  items,
+  center,
+  userLocation,
+  onOpenBusiness,
+  onBoundsChange,
+}: {
+  items: UnifiedMapItem[];
+  center: LatLngExpression;
+  userLocation: [number, number] | null;
+  onOpenBusiness: (businessId: string, source?: "partner" | "recommended") => void;
+  onBoundsChange: (bounds: PartnerMapBoundsState) => void;
+}) {
+  const theme = useMapTheme();
+  const vectorBasemap = useVectorBasemap();
+  const hsinchuStation: LatLngExpression = [24.801645, 120.971703];
+
+  return (
+    <div className="h-full w-full" role="region" aria-label="特約與推薦商家互動地圖">
+      <MapContainer
+        center={center}
+        zoom={16}
+        maxZoom={MAP_MAX_ZOOM}
+        zoomControl={false}
+        className={`h-full w-full partner-map-leaflet partner-map-theme-${theme} ${styles.mapSurface}`}
+        scrollWheelZoom>
+        {vectorBasemap ? <MapStyleLayer theme={theme} /> : (
+          <TileLayer
+            url={mapTileUrl()}
+            attribution={MAP_TILE_ATTRIBUTION}
+            maxNativeZoom={19}
+            maxZoom={MAP_MAX_ZOOM}
+            updateWhenIdle
+            keepBuffer={1}
+          />
+        )}
+        <ZoomControl position="bottomright" />
+        <ThemeClassSync theme={theme} />
+        <BoundsReporter onBoundsChange={onBoundsChange} />
+        <Marker
+          position={center}
+          icon={landmarkIcon("school")}
+          alt="新竹高中周邊地標"
+          title="新竹高中周邊地標"
+          eventHandlers={{
+            add: (event) => {
+              (event.target as { getElement?: () => HTMLElement | undefined }).getElement?.()
+                ?.setAttribute("aria-label", "新竹高中周邊地標");
+            },
+          }}>
+          <Popup>新竹高中周邊</Popup>
+        </Marker>
+        <Marker
+          position={hsinchuStation}
+          icon={landmarkIcon("station")}
+          alt="新竹火車站地標"
+          title="新竹火車站地標"
+          eventHandlers={{
+            add: (event) => {
+              (event.target as { getElement?: () => HTMLElement | undefined }).getElement?.()
+                ?.setAttribute("aria-label", "新竹火車站地標");
+            },
+          }}>
+          <Popup>新竹火車站</Popup>
+        </Marker>
+        {userLocation && (
+          <Marker
+            position={userLocation}
+            icon={divIcon({
+              className: "partner-map-marker-shell",
+              iconSize: [30, 30],
+              iconAnchor: [15, 15],
+              html: '<div class="partner-map-user-marker"></div>',
+            })}
+            alt="你的目前位置"
+            title="你的目前位置"
+            eventHandlers={{
+              add: (event) => {
+                (event.target as { getElement?: () => HTMLElement | undefined }).getElement?.()
+                  ?.setAttribute("aria-label", "你的目前位置");
+              },
+            }}>
+            <Popup>你的位置</Popup>
+          </Marker>
+        )}
+        {items.map((item) => (
+          <Marker
+            key={item.location_id}
+            position={[item.latitude, item.longitude]}
+            icon={storeIcon(item)}
+            alt={`${item.business_name}，${markerLabel(item)}。按 Enter 開啟詳情`}
+            title={item.business_name}
+            eventHandlers={{
+              add: (event) => {
+                (event.target as { getElement?: () => HTMLElement | undefined }).getElement?.()
+                  ?.setAttribute("aria-label", `${item.business_name}，${markerLabel(item)}。按 Enter 開啟詳情`);
+              },
+              click: () => onOpenBusiness(item.business_id, item.source),
+            }}>
+            <Popup>
+              <div className="min-w-48">
+                <p className="text-sm font-semibold">{item.business_name}</p>
+                <p className="mt-1 flex items-center gap-1 text-xs font-medium" style={{ color: markerColor(item) }}>
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: markerColor(item) }} aria-hidden="true" />
+                  {markerLabel(item)}
+                </p>
+                <p className="mt-1 text-xs">{item.address}</p>
+                {item.has_discount_offer && <p className="mt-1 text-xs text-amber-600">★ 有折扣優惠</p>}
+                {item.has_active_offer && (
+                  <p className="mt-2 text-xs text-emerald-700">{item.active_offer_titles.join("、")}</p>
+                )}
+                <button
+                  type="button"
+                  className="mt-2 text-xs font-medium text-blue-700"
+                  onClick={() => onOpenBusiness(item.business_id, item.source)}>
+                  查看詳情
+                </button>
+              </div>
+            </Popup>
+          </Marker>
+        ))}
+      </MapContainer>
+    </div>
+  );
+}

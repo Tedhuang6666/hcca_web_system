@@ -15,8 +15,12 @@ node_modules/
 # Cache
 .ruff_cache/
 .pytest_cache/
+.mypy_cache/
 .next/
 apps/web/.next/
+.coverage
+coverage.xml
+htmlcov/
 
 # Environment files
 .env
@@ -35,6 +39,8 @@ apps/web/.next/
 
 # Uploads and local references
 uploads/
+!apps/web/src/app/api/uploads/
+!apps/web/src/app/api/uploads/**
 參考/
 文件範例/
 
@@ -65,16 +71,30 @@ RegulationArticleCreate
 # Local maintainer/editor files
 .claude/
 .maintainer-notes/
-.codex/
 .maintainer-tools/
 .cursor/
 .vscode/
+.mcp.json
+
+# 個人設定與歷史筆記留在本機；共同規範與現行維護入口納入版本控制。
+.codex/
+.agents/
 docs/
 README_FOR_CLAUDE.md
 CLAUDE.md
+AGENTS.md
+PROJECT_CONTEXT.md
 MAINTAINER_CONTEXT.md
 meilisearch
 test.env
+
+# Local database exports and manual backups
+/*.dump
+/backups/manual/
+/openapi.json
+.deploy-state/
+# 個資匯出測試會在 repo 根目錄產生真實 zip（services/privacy.py exports_root）
+/privacy_exports/
 
 # Celery beat 執行期排程狀態（runtime，勿進版控）
 apps/api/celerybeat-schedule
@@ -89,3 +109,67 @@ test.env
 
 # Windows 下載標記殘留檔（NTFS ADS）
 *:Zone.Identifier
+
+.playwright-mcp/
+screenshots/
+nuclei-*.txt
+
+# 本機部署啟動器（含主機連線資訊，勿進 git）
+scripts/deploy.local.sh
+.dev-launch.log
+backups/predeploy/
+apps/web/public/brand/hcca-emblem.pngZone.Identifier
+hcca-discord-bot.zip
+apps/discord-bot/env.example
+apps/discord-bot/env.example
+
+ssh/
+apps/api/src/api/discord_cogs/__pycache__/
+
+# Lighthouse profiles
+/C:*lighthouse.*/
+C:\Users\ted98\AppData\Local\lighthouse.*/
+CUsersted98AppDataLocallighthouse.*/
+.playwright-cli/
+output/playwright/
+# 本機瀏覽器資料與檢查產物，不應進版控或程式索引
+/C:*/
+*.tsbuildinfo
+coverage/
+playwright-report/
+test-results/
+.impeccable/
+hcca-showcase/
+output/receipt-format/
+校商圖片/
+apps/web/public/shop/104/
+output/
+.codegraph/
+
+# Maintained, portable project instructions and runbooks.
+!/AGENTS.md
+!/CLAUDE.md
+!/PROJECT_CONTEXT.md
+!apps/api/AGENTS.md
+!apps/web/AGENTS.md
+!docs/
+docs/*
+!docs/README.md
+!docs/AI_WORKFLOW.md
+!docs/HANDOFF_CHECKLIST.md
+!docs/ENVIRONMENT.md
+!docs/TECHNICAL_DEBT.md
+!.agents/
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/hcca-maintenance/
+!.agents/skills/hcca-maintenance/SKILL.md
+# Shared skill source is in .agents/skills; Claude loads the same directory through this link.
+!.agents/skills/prod-host-operations/
+!.agents/skills/prod-host-operations/SKILL.md
+!.claude/
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/prod-host-operations

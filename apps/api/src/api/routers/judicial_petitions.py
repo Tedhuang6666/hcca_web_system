@@ -10,10 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
-from api.dependencies.auth import get_current_active_user, get_optional_user
+from api.dependencies.auth import get_current_active_user, get_current_school_member
 from api.dependencies.permissions import require_any
 from api.models.judicial_petition import JudicialPetition, JudicialPetitionStatus
 from api.models.user import User
+from api.routers._common import or_404
 from api.schemas.judicial_petition import (
     JudicialPetitionCreate,
     JudicialPetitionListItem,
@@ -28,14 +29,12 @@ router = APIRouter(prefix="/judicial-petitions", tags=["評議委員會訴訟"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
-OptionalUser = Annotated[User | None, Depends(get_optional_user)]
+SchoolMember = Annotated[User, Depends(get_current_school_member)]
 
 
 async def _petition_or_404(session: AsyncSession, petition_id: uuid.UUID) -> JudicialPetition:
     petition = await judicial_svc.get(session, petition_id)
-    if petition is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此評議聲請")
-    return petition
+    return or_404(petition, "找不到此評議聲請")
 
 
 @router.post(
@@ -47,7 +46,7 @@ async def _petition_or_404(session: AsyncSession, petition_id: uuid.UUID) -> Jud
 async def create_judicial_petition(
     payload: JudicialPetitionCreate,
     session: DbDep,
-    current_user: OptionalUser,
+    current_user: SchoolMember,
 ) -> JudicialPetition:
     petition = await judicial_svc.create(session, data=payload, submitter=current_user)
     await audit_svc.record(
@@ -55,8 +54,8 @@ async def create_judicial_petition(
         entity_type="judicial_petition",
         entity_id=str(petition.id),
         action="judicial_petition.create",
-        actor_id=str(current_user.id) if current_user else None,
-        actor_email=current_user.email if current_user else None,
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
         meta={"docket_number": petition.docket_number, "petition_type": petition.petition_type},
         summary=f"建立評議聲請 {petition.docket_number}",
     )
@@ -121,7 +120,7 @@ async def get_judicial_petition(
         str(PermissionCode.ADMIN_ALL),
     }:
         return petition
-    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權查看此評議聲請")
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此評議聲請")
 
 
 @router.patch(
@@ -144,7 +143,7 @@ async def update_judicial_petition_status(
     user: CurrentUser,
 ) -> JudicialPetition:
     petition = await _petition_or_404(session, petition_id)
-    petition = await judicial_svc.update_status(session, petition, data=payload)
+    petition = await judicial_svc.update_status(session, petition, data=payload, actor=user)
     await audit_svc.record(
         session,
         entity_type="judicial_petition",

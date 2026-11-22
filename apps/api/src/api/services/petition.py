@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 import hashlib
-import hmac
 import secrets
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import case, extract, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import load_only, selectinload
 
+from api.core.clock import local_today, roc_year
 from api.core.config import settings
+from api.core.database import advisory_xact_lock
+from api.core.permission_codes import PermissionCode
 from api.models.org import Org, Position, UserPosition
 from api.models.petition import (
     PetitionAttachment,
@@ -21,24 +23,38 @@ from api.models.petition import (
     PetitionCaseEvent,
     PetitionEventType,
     PetitionEventVisibility,
+    PetitionPublicStatus,
     PetitionStatus,
     PetitionType,
 )
 from api.models.user import User
 from api.schemas.petition import (
+    PetitionAdminCreate,
     PetitionAssignUpdate,
+    PetitionContentUpdate,
     PetitionCreate,
+    PetitionEventUpdate,
     PetitionInternalNoteCreate,
+    PetitionMonthlyStatsOut,
+    PetitionMonthlyTypeStatsItem,
     PetitionOrgStatsItem,
+    PetitionPublicRequest,
+    PetitionPublicResponse,
     PetitionReplyCreate,
     PetitionStatsOut,
     PetitionStatusUpdate,
+    PetitionSubmitterUpdate,
     PetitionSupplementCreate,
     PetitionTransferUpdate,
     PetitionTypeCreate,
     PetitionTypeUpdate,
 )
-from api.services.permission import active_tenure_filter
+from api.services._base import apply_updates
+from api.services.permission import (
+    active_tenure_filter,
+    get_user_org_ids_with_permission,
+    get_user_permission_codes,
+)
 
 STATUS_LABELS: dict[PetitionStatus, str] = {
     PetitionStatus.SUBMITTED: "已收件",
@@ -62,6 +78,66 @@ STATUS_MESSAGES: dict[PetitionStatus, str] = {
     PetitionStatus.REJECTED: "案件經審查後不予受理。",
 }
 
+PUBLIC_EVENT_EDIT_WINDOW = timedelta(hours=3)
+
+
+def can_edit_content(case_obj: PetitionCase) -> bool:
+    return case_obj.status == PetitionStatus.SUBMITTED
+
+
+def is_site_owner(user: User) -> bool:
+    email = user.email.strip().lower()
+    return email in {owner.strip().lower() for owner in settings.OWNER_EMAILS}
+
+
+async def can_view_case(session: AsyncSession, case_obj: PetitionCase, user: User) -> bool:
+    """檢查使用者是否可將案件內容用於其他受保護的業務流程。"""
+    if case_obj.is_confidential:
+        return is_site_owner(user) or user.id in {case_obj.submitter_id, case_obj.assigned_to_id}
+    codes = await get_user_permission_codes(session, user.id)
+    if case_obj.submitter_id == user.id:
+        return True
+    if user.is_superuser or {
+        str(PermissionCode.ADMIN_ALL),
+        str(PermissionCode.PETITION_ADMIN),
+        str(PermissionCode.PETITION_VIEW_ALL),
+    } & set(codes):
+        return True
+
+    org_ids: set[uuid.UUID] = set()
+    for permission in (
+        PermissionCode.PETITION_VIEW_ORG,
+        PermissionCode.PETITION_ASSIGN,
+        PermissionCode.PETITION_HANDLE,
+        PermissionCode.PETITION_TRANSFER,
+        PermissionCode.PETITION_ANALYTICS_ORG,
+    ):
+        org_ids.update(
+            await get_user_case_org_ids_with_permission(session, user.id, str(permission))
+        )
+    return case_obj.current_org_id in org_ids
+
+
+async def get_user_case_org_ids_with_permission(
+    session: AsyncSession, user_id: uuid.UUID, permission_code: str
+) -> list[uuid.UUID]:
+    """回傳具陳情權限的組織；分案／處理權限包含直屬下級機關案件。"""
+    org_ids = set(await get_user_org_ids_with_permission(session, user_id, permission_code))
+    if (
+        permission_code
+        not in {
+            str(PermissionCode.PETITION_ASSIGN),
+            str(PermissionCode.PETITION_HANDLE),
+        }
+        or not org_ids
+    ):
+        return list(org_ids)
+
+    result = await session.scalars(select(Org.id).where(Org.parent_id.in_(org_ids)))
+    org_ids.update(result.all())
+    return list(org_ids)
+
+
 NEXT_ACTIONS: dict[PetitionStatus, str] = {
     PetitionStatus.SUBMITTED: "請等待機關分案。",
     PetitionStatus.ASSIGNED: "請等待承辦人處理。",
@@ -74,23 +150,23 @@ NEXT_ACTIONS: dict[PetitionStatus, str] = {
 }
 
 
-def generate_verification_code() -> str:
-    return f"{secrets.randbelow(100000):05d}"
+def generate_share_token() -> str:
+    """產生僅顯示一次的高熵分享權杖。"""
+    return secrets.token_urlsafe(32)
 
 
-def hash_verification_code(case_number: str, code: str) -> str:
-    raw = f"{case_number}:{code}".encode()
-    return hmac.new(settings.SECRET_KEY.encode(), raw, hashlib.sha256).hexdigest()
+def hash_share_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def verify_code(case: PetitionCase, code: str) -> bool:
-    expected = hash_verification_code(case.case_number, code)
-    return hmac.compare_digest(case.verification_code_hash, expected)
+_CASE_NUMBER_LOCK_KEY = 0x7065_7463  # "petc"
 
 
 async def _next_case_number(session: AsyncSession) -> str:
-    year = datetime.now(UTC).year - 1911
+    year = roc_year()
     prefix = f"{year:03d}"
+    # 序列化並發配發，避免讀 max → +1 撞同號（unique constraint → 500）。
+    await advisory_xact_lock(session, _CASE_NUMBER_LOCK_KEY)
     result = await session.execute(
         select(PetitionCase.case_number)
         .where(PetitionCase.case_number.like(f"{prefix}%"))
@@ -135,6 +211,49 @@ async def add_event(
     return event
 
 
+async def edit_public_event(
+    session: AsyncSession,
+    case_obj: PetitionCase,
+    *,
+    event_id: uuid.UUID,
+    data: PetitionEventUpdate,
+    actor_id: uuid.UUID,
+) -> PetitionCaseEvent:
+    result = await session.execute(
+        select(PetitionCaseEvent).where(
+            PetitionCaseEvent.id == event_id,
+            PetitionCaseEvent.case_id == case_obj.id,
+        )
+    )
+    event = result.scalar_one_or_none()
+    if event is None:
+        raise ValueError("找不到此處理訊息")
+    if event.visibility != PetitionEventVisibility.PUBLIC:
+        raise ValueError("只有使用者可見的訊息可以編輯")
+    if event.actor_id != actor_id:
+        raise ValueError("只能編輯自己發布的訊息")
+    created_at = event.created_at
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=UTC)
+    if datetime.now(UTC) - created_at > PUBLIC_EVENT_EDIT_WINDOW:
+        raise ValueError("訊息建立已超過 3 小時，無法再編輯")
+
+    changes = data.model_dump(exclude_unset=True)
+    if "title" in changes:
+        event.title = changes["title"]
+    if "content" in changes:
+        event.content = changes["content"]
+        if event.event_type == PetitionEventType.REPLIED:
+            case_obj.public_reply = changes["content"]
+        elif event.event_type == PetitionEventType.NEEDS_INFO:
+            case_obj.supplement_request = changes["content"]
+        elif event.event_type == PetitionEventType.REJECTED:
+            case_obj.rejection_reason = changes["content"]
+    await session.flush()
+    await session.refresh(case_obj, attribute_names=["events"])
+    return event
+
+
 async def get_type(session: AsyncSession, type_id: uuid.UUID) -> PetitionType | None:
     return await session.get(PetitionType, type_id)
 
@@ -157,8 +276,7 @@ async def create_type(session: AsyncSession, data: PetitionTypeCreate) -> Petiti
 async def update_type(
     session: AsyncSession, petition_type: PetitionType, data: PetitionTypeUpdate
 ) -> PetitionType:
-    for field, value in data.model_dump(exclude_unset=True).items():
-        setattr(petition_type, field, value)
+    apply_updates(petition_type, data)
     await session.flush()
     return petition_type
 
@@ -168,35 +286,34 @@ async def delete_type(session: AsyncSession, petition_type: PetitionType) -> Non
     await session.flush()
 
 
-async def create_case(
+async def _create_case(
     session: AsyncSession,
     *,
-    data: PetitionCreate,
-    submitter: User | None,
+    type_id: uuid.UUID,
+    title: str,
+    content: str,
+    submitter_id: uuid.UUID | None,
+    contact_name: str,
+    contact_email: str,
+    actor_id: uuid.UUID | None,
+    created_title: str = "案件已建立",
 ) -> tuple[PetitionCase, str]:
-    petition_type = await get_type(session, data.type_id)
+    petition_type = await get_type(session, type_id)
     if petition_type is None or not petition_type.is_active:
         raise ValueError("陳情類型不存在或已停用")
-    if submitter is None and not data.contact_email:
-        raise ValueError("訪客送件需提供聯絡 email")
-    contact_name = data.contact_name
-    contact_email = str(data.contact_email) if data.contact_email else None
-    if submitter is not None:
-        contact_name = submitter.display_name
-        contact_email = submitter.email
 
-    code = generate_verification_code()
+    share_token = generate_share_token()
     case_number = await _next_case_number(session)
     case_obj = PetitionCase(
         case_number=case_number,
-        verification_code_hash=hash_verification_code(case_number, code),
-        type_id=data.type_id,
-        is_named=data.is_named,
-        submitter_id=submitter.id if submitter else None,
+        share_token_hash=hash_share_token(share_token),
+        type_id=type_id,
+        is_named=True,
+        submitter_id=submitter_id,
         contact_name=contact_name,
         contact_email=contact_email,
-        title=data.title,
-        content=data.content,
+        title=title,
+        content=content,
         current_org_id=petition_type.responsible_org_id,
         submitted_at=datetime.now(UTC),
     )
@@ -206,11 +323,156 @@ async def create_case(
         session,
         case_obj,
         event_type=PetitionEventType.CREATED,
-        title="案件已建立",
+        title=created_title,
         content=STATUS_MESSAGES[PetitionStatus.SUBMITTED],
-        actor_id=submitter.id if submitter else None,
+        actor_id=actor_id,
     )
-    return case_obj, code
+    return case_obj, share_token
+
+
+async def create_case(
+    session: AsyncSession,
+    *,
+    data: PetitionCreate,
+    submitter: User,
+) -> tuple[PetitionCase, str]:
+    if submitter is None:
+        raise ValueError("陳情必須先登入帳號")
+    return await _create_case(
+        session,
+        type_id=data.type_id,
+        title=data.title,
+        content=data.content,
+        submitter_id=submitter.id,
+        contact_name=submitter.display_name,
+        contact_email=submitter.email,
+        actor_id=submitter.id,
+    )
+
+
+async def create_admin_case(
+    session: AsyncSession,
+    *,
+    data: PetitionAdminCreate,
+    actor_id: uuid.UUID,
+) -> tuple[PetitionCase, str]:
+    return await _create_case(
+        session,
+        type_id=data.type_id,
+        title=data.title,
+        content=data.content,
+        submitter_id=None,
+        contact_name=data.contact_name,
+        contact_email=str(data.contact_email).strip().lower(),
+        actor_id=actor_id,
+        created_title="案件已建立（管理員代收）",
+    )
+
+
+async def update_submitter(
+    session: AsyncSession,
+    case_obj: PetitionCase,
+    *,
+    data: PetitionSubmitterUpdate,
+    actor_id: uuid.UUID,
+) -> PetitionCase:
+    if case_obj.submitter_id is not None:
+        raise ValueError("此案件已綁定平台帳號，無法改為外部陳情人")
+    case_obj.is_named = True
+    case_obj.contact_name = data.contact_name
+    case_obj.contact_email = str(data.contact_email).strip().lower()
+    await session.flush()
+    await add_event(
+        session,
+        case_obj,
+        event_type=PetitionEventType.NOTE,
+        title="已登記陳情人",
+        content=f"姓名：{case_obj.contact_name}\nEmail：{case_obj.contact_email}",
+        actor_id=actor_id,
+        visibility=PetitionEventVisibility.INTERNAL,
+    )
+    return case_obj
+
+
+async def set_confidential(
+    session: AsyncSession, case_obj: PetitionCase, *, reason: str
+) -> PetitionCase:
+    if not case_obj.is_confidential and case_obj.submitter_id is None:
+        raise ValueError("案件尚未綁定平台帳號，無法指定密件擁有者")
+    case_obj.is_confidential = True
+    case_obj.confidential_reason = reason.strip()
+    await _redact_sent_notifications(session, case_obj)
+    await session.flush()
+    return case_obj
+
+
+CONFIDENTIAL_NOTIFICATION_BODY = "此案件已改列密件，內容不再顯示於通知，請至案件頁查看。"
+
+
+async def _redact_sent_notifications(session: AsyncSession, case_obj: PetitionCase) -> None:
+    """改列密件時，把先前通知與尚未寄出的外部通知中的案件內容一併移除。
+
+    通知內容原本會附上陳情全文；改列密件只擋得住之後的通知，舊通知、
+    待寄外部信件仍會保留全文，因此在這裡回頭清除。
+    """
+    from sqlalchemy import update
+
+    from api.models.notification import Notification
+    from api.models.outbox import OutboxEvent, OutboxStatus
+
+    await session.execute(
+        update(Notification)
+        .where(
+            Notification.related_id == case_obj.id,
+            Notification.type.like("petition%"),
+        )
+        .values(body=CONFIDENTIAL_NOTIFICATION_BODY)
+    )
+    pending = await session.scalars(
+        select(OutboxEvent).where(
+            OutboxEvent.event_type == "petition.external_notify",
+            OutboxEvent.status == OutboxStatus.PENDING,
+        )
+    )
+    for event in pending:
+        payload = dict(event.payload or {})
+        if payload.get("related_id") == str(case_obj.id):
+            payload["body"] = CONFIDENTIAL_NOTIFICATION_BODY
+            event.payload = payload
+
+
+async def update_content(
+    session: AsyncSession,
+    case_obj: PetitionCase,
+    *,
+    data: PetitionContentUpdate,
+) -> PetitionCase:
+    if not can_edit_content(case_obj):
+        raise ValueError("案件已進入分案或處理流程，無法再編輯原始內容")
+    changes = data.model_dump(exclude_unset=True)
+    if "title" in changes:
+        case_obj.title = changes["title"]
+    if "content" in changes:
+        case_obj.content = changes["content"]
+    await session.flush()
+    return case_obj
+
+
+async def get_case_by_share_token(session: AsyncSession, share_token: str) -> PetitionCase | None:
+    """以雜湊後的高熵 token 查詢案件，避免資料庫保存 bearer token 明文。"""
+    result = await session.execute(
+        select(PetitionCase)
+        .where(PetitionCase.share_token_hash == hash_share_token(share_token))
+        .options(
+            selectinload(PetitionCase.type),
+            selectinload(PetitionCase.current_org),
+            selectinload(PetitionCase.submitter),
+            selectinload(PetitionCase.assigned_to),
+            selectinload(PetitionCase.events),
+            selectinload(PetitionCase.attachments),
+        )
+    )
+    return result.scalar_one_or_none()
 
 
 async def get_case(session: AsyncSession, case_id: uuid.UUID) -> PetitionCase | None:
@@ -253,12 +515,30 @@ async def list_cases(
     assigned_to_id: uuid.UUID | None = None,
     status: PetitionStatus | None = None,
     keyword: str | None = None,
+    include_confidential: bool = False,
     limit: int = 50,
     offset: int = 0,
 ) -> list[PetitionCase]:
     stmt = (
         select(PetitionCase)
         .options(
+            load_only(
+                PetitionCase.id,
+                PetitionCase.case_number,
+                PetitionCase.type_id,
+                PetitionCase.status,
+                PetitionCase.public_status,
+                PetitionCase.is_confidential,
+                PetitionCase.submitter_id,
+                PetitionCase.title,
+                PetitionCase.current_org_id,
+                PetitionCase.assigned_to_id,
+                PetitionCase.discord_guild_id,
+                PetitionCase.discord_channel_id,
+                PetitionCase.discord_channel_created_at,
+                PetitionCase.submitted_at,
+                PetitionCase.updated_at,
+            ),
             selectinload(PetitionCase.type),
             selectinload(PetitionCase.current_org),
             selectinload(PetitionCase.assigned_to),
@@ -282,8 +562,58 @@ async def list_cases(
         stmt = stmt.where(
             PetitionCase.title.ilike(pattern) | PetitionCase.case_number.ilike(pattern)
         )
+    if submitter_id is None and not include_confidential:
+        stmt = stmt.where(PetitionCase.is_confidential.is_(False))
     result = await session.execute(stmt)
     return list(result.scalars().all())
+
+
+async def list_public_cases(
+    session: AsyncSession, *, limit: int = 50, offset: int = 0
+) -> list[PetitionCase]:
+    result = await session.execute(
+        select(PetitionCase)
+        .where(
+            PetitionCase.status == PetitionStatus.CLOSED,
+            PetitionCase.public_status == PetitionPublicStatus.PUBLISHED,
+            PetitionCase.is_confidential.is_(False),
+        )
+        .options(selectinload(PetitionCase.type), selectinload(PetitionCase.current_org))
+        .order_by(PetitionCase.public_published_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    return list(result.scalars().all())
+
+
+async def get_public_case(session: AsyncSession, case_id: uuid.UUID) -> PetitionCase | None:
+    result = await session.execute(
+        select(PetitionCase)
+        .where(
+            PetitionCase.id == case_id,
+            PetitionCase.status == PetitionStatus.CLOSED,
+            PetitionCase.public_status == PetitionPublicStatus.PUBLISHED,
+            PetitionCase.is_confidential.is_(False),
+        )
+        .options(selectinload(PetitionCase.type), selectinload(PetitionCase.current_org))
+    )
+    return result.scalar_one_or_none()
+
+
+async def case_assignable_org_ids(
+    session: AsyncSession, *, current_org_id: uuid.UUID, actor_id: uuid.UUID
+) -> list[uuid.UUID]:
+    """回傳操作者可指派承辦人的組織：案件機關，以及具分案權的直接上級。"""
+    parent_org_id = await session.scalar(select(Org.parent_id).where(Org.id == current_org_id))
+    if parent_org_id is None:
+        return [current_org_id]
+
+    actor_org_ids = await get_user_org_ids_with_permission(
+        session, actor_id, str(PermissionCode.PETITION_ASSIGN)
+    )
+    if parent_org_id in actor_org_ids:
+        return [current_org_id, parent_org_id]
+    return [current_org_id]
 
 
 async def assign_case(
@@ -293,9 +623,16 @@ async def assign_case(
     data: PetitionAssignUpdate,
     actor_id: uuid.UUID,
 ) -> PetitionCase:
-    user_in_org = await _user_in_org(session, data.assigned_to_id, case_obj.current_org_id)
+    assignable_org_ids = await case_assignable_org_ids(
+        session, current_org_id=case_obj.current_org_id, actor_id=actor_id
+    )
+    user_in_org = False
+    for org_id in assignable_org_ids:
+        if await _user_in_org(session, data.assigned_to_id, org_id):
+            user_in_org = True
+            break
     if not user_in_org:
-        raise ValueError("只能指派給目前負責機關內的有效任期成員")
+        raise ValueError("只能指派給目前負責機關或具分案權的直接上級機關成員")
     previous = case_obj.status
     case_obj.assigned_to_id = data.assigned_to_id
     case_obj.assigned_at = datetime.now(UTC)
@@ -316,25 +653,6 @@ async def assign_case(
         from_status=previous.value,
         to_status=case_obj.status.value,
     )
-    # 通知承辦人
-    try:
-        from api.routers.notifications import create_notification
-
-        await create_notification(
-            session,
-            user_id=data.assigned_to_id,
-            type="petition_assigned",
-            title=f"陳情指派：{case_obj.title}",
-            body=f"案號 {case_obj.case_number}，請於系統內回覆",
-            link=f"/petitions/{case_obj.case_number}",
-            related_id=case_obj.id,
-        )
-    except Exception:
-        import logging
-
-        logging.getLogger(__name__).warning(
-            "send petition_assigned notification failed", exc_info=True
-        )
     return case_obj
 
 
@@ -375,14 +693,34 @@ async def reply_case(
     data: PetitionReplyCreate,
     actor_id: uuid.UUID,
 ) -> PetitionCase:
-    previous = case_obj.status
     now = datetime.now(UTC)
+    if case_obj.assigned_to_id is None:
+        case_obj.assigned_to_id = actor_id
+        case_obj.assigned_at = now
+        previous_assignment_status = case_obj.status
+        case_obj.status = PetitionStatus.ASSIGNED
+        await session.flush()
+        await add_event(
+            session,
+            case_obj,
+            event_type=PetitionEventType.ASSIGNED,
+            title="回覆前自動分派承辦人",
+            content="案件未分派承辦人，已自動分派給回覆人員。",
+            actor_id=actor_id,
+            from_status=previous_assignment_status.value,
+            to_status=case_obj.status.value,
+        )
+    previous = case_obj.status
     case_obj.public_reply = data.public_content
     if case_obj.first_response_at is None:
         case_obj.first_response_at = now
     if data.internal_note:
         case_obj.latest_internal_note = data.internal_note
-    if data.resolve:
+    if data.close:
+        case_obj.status = PetitionStatus.CLOSED
+        case_obj.resolved_at = now
+        case_obj.closed_at = now
+    elif data.resolve:
         case_obj.status = PetitionStatus.RESOLVED
         case_obj.resolved_at = now
     else:
@@ -408,6 +746,111 @@ async def reply_case(
             actor_id=actor_id,
             visibility=PetitionEventVisibility.INTERNAL,
         )
+    return case_obj
+
+
+async def request_public(
+    session: AsyncSession,
+    case_obj: PetitionCase,
+    *,
+    data: PetitionPublicRequest,
+    actor_id: uuid.UUID,
+) -> PetitionCase:
+    if case_obj.is_confidential:
+        raise ValueError("密件不可申請公開")
+    if case_obj.status != PetitionStatus.CLOSED:
+        raise ValueError("案件結案後才能提出公開申請")
+    if case_obj.public_status in {
+        PetitionPublicStatus.PENDING_USER,
+        PetitionPublicStatus.PENDING_HANDLER,
+        PetitionPublicStatus.PUBLISHED,
+    }:
+        raise ValueError("此案件已有進行中的公開流程")
+    case_obj.public_title = data.title or case_obj.title
+    case_obj.public_content = data.content or case_obj.content
+    case_obj.public_status = PetitionPublicStatus.PENDING_USER
+    case_obj.public_requested_at = datetime.now(UTC)
+    case_obj.public_user_responded_at = None
+    case_obj.public_published_at = None
+    await session.flush()
+    await add_event(
+        session,
+        case_obj,
+        event_type=PetitionEventType.PUBLIC_REQUESTED,
+        title="已提出公開陳情申請",
+        content="請陳情人確認公開標題與內容。",
+        actor_id=actor_id,
+        visibility=PetitionEventVisibility.PUBLIC,
+    )
+    return case_obj
+
+
+async def respond_public(
+    session: AsyncSession,
+    case_obj: PetitionCase,
+    *,
+    data: PetitionPublicResponse,
+    actor_id: uuid.UUID | None,
+) -> PetitionCase:
+    if case_obj.is_confidential:
+        raise ValueError("密件不可公開")
+    if case_obj.public_status != PetitionPublicStatus.PENDING_USER:
+        raise ValueError("此案件目前沒有待確認的公開申請")
+    now = datetime.now(UTC)
+    case_obj.public_user_responded_at = now
+    if data.decision == "reject":
+        case_obj.public_status = PetitionPublicStatus.DECLINED
+        event_type = PetitionEventType.PUBLIC_DECLINED
+        title = "陳情人拒絕公開"
+        content = "陳情人拒絕公開此案件。"
+    elif data.decision == "approve_with_changes":
+        case_obj.public_title = data.title
+        case_obj.public_content = data.content
+        case_obj.public_status = PetitionPublicStatus.PENDING_HANDLER
+        event_type = PetitionEventType.PUBLIC_RESPONDED
+        title = "陳情人修改公開內容，待承辦確認"
+        content = "陳情人已修改公開標題或內容，請承辦確認差異後發布。"
+    else:
+        case_obj.public_status = PetitionPublicStatus.PUBLISHED
+        case_obj.public_published_at = now
+        event_type = PetitionEventType.PUBLIC_CONFIRMED
+        title = "陳情人同意公開"
+        content = "陳情人同意以目前草案公開此案件。"
+    await session.flush()
+    await add_event(
+        session,
+        case_obj,
+        event_type=event_type,
+        title=title,
+        content=content,
+        actor_id=actor_id,
+        visibility=PetitionEventVisibility.PUBLIC,
+    )
+    return case_obj
+
+
+async def confirm_public(
+    session: AsyncSession,
+    case_obj: PetitionCase,
+    *,
+    actor_id: uuid.UUID,
+) -> PetitionCase:
+    if case_obj.is_confidential:
+        raise ValueError("密件不可公開")
+    if case_obj.public_status != PetitionPublicStatus.PENDING_HANDLER:
+        raise ValueError("此案件目前沒有待承辦確認的公開修改")
+    case_obj.public_status = PetitionPublicStatus.PUBLISHED
+    case_obj.public_published_at = datetime.now(UTC)
+    await session.flush()
+    await add_event(
+        session,
+        case_obj,
+        event_type=PetitionEventType.PUBLIC_CONFIRMED,
+        title="承辦確認公開內容並發布",
+        content="已確認陳情人修改後的公開標題與內容。",
+        actor_id=actor_id,
+        visibility=PetitionEventVisibility.PUBLIC,
+    )
     return case_obj
 
 
@@ -528,7 +971,7 @@ async def add_attachment(
     uploaded_by: uuid.UUID | None,
 ) -> PetitionAttachment:
     attachment = PetitionAttachment(
-        case_id=case_obj.id,
+        case=case_obj,
         filename=filename,
         storage_key=storage_key,
         content_type=content_type,
@@ -555,7 +998,7 @@ async def add_attachment(
 
 
 async def _user_in_org(session: AsyncSession, user_id: uuid.UUID, org_id: uuid.UUID) -> bool:
-    today = datetime.now(UTC).date()
+    today = local_today()
     result = await session.execute(
         select(UserPosition.id)
         .join(Position, UserPosition.position_id == Position.id)
@@ -576,41 +1019,137 @@ async def stats(
     user_id: uuid.UUID,
     include_by_org: bool,
 ) -> PetitionStatsOut:
-    base = select(PetitionCase)
-    if org_ids is not None:
-        if not org_ids:
-            return PetitionStatsOut(
-                total=0,
-                pending_assignment=0,
-                my_assigned=0,
-                needs_info=0,
-                in_progress=0,
-                resolved=0,
-                closed_this_month=0,
-            )
-        base = base.where(PetitionCase.current_org_id.in_(org_ids))
+    if org_ids is not None and not org_ids:
+        return PetitionStatsOut(
+            total=0,
+            pending_assignment=0,
+            my_assigned=0,
+            needs_info=0,
+            in_progress=0,
+            resolved=0,
+            closed_this_month=0,
+        )
 
-    result = await session.execute(base)
-    cases = list(result.scalars().all())
     now = datetime.now(UTC)
+    base_filter = []
+    if org_ids is not None:
+        base_filter.append(PetitionCase.current_org_id.in_(org_ids))
+
+    stmt = select(
+        func.count().label("total"),
+        func.sum(
+            case(
+                (
+                    (PetitionCase.assigned_to_id.is_(None))
+                    & (PetitionCase.status == PetitionStatus.SUBMITTED),
+                    1,
+                ),
+                else_=0,
+            )
+        ).label("pending_assignment"),
+        func.sum(case((PetitionCase.assigned_to_id == user_id, 1), else_=0)).label("my_assigned"),
+        func.sum(case((PetitionCase.status == PetitionStatus.NEEDS_INFO, 1), else_=0)).label(
+            "needs_info"
+        ),
+        func.sum(case((PetitionCase.status == PetitionStatus.IN_PROGRESS, 1), else_=0)).label(
+            "in_progress"
+        ),
+        func.sum(case((PetitionCase.status == PetitionStatus.RESOLVED, 1), else_=0)).label(
+            "resolved"
+        ),
+        func.sum(
+            case(
+                (
+                    (PetitionCase.closed_at.isnot(None))
+                    & (extract("year", PetitionCase.closed_at) == now.year)
+                    & (extract("month", PetitionCase.closed_at) == now.month),
+                    1,
+                ),
+                else_=0,
+            )
+        ).label("closed_this_month"),
+    ).where(*base_filter)
+
+    row = (await session.execute(stmt)).one()
     out = PetitionStatsOut(
-        total=len(cases),
-        pending_assignment=sum(
-            1 for c in cases if c.assigned_to_id is None and c.status == PetitionStatus.SUBMITTED
-        ),
-        my_assigned=sum(1 for c in cases if c.assigned_to_id == user_id),
-        needs_info=sum(1 for c in cases if c.status == PetitionStatus.NEEDS_INFO),
-        in_progress=sum(1 for c in cases if c.status == PetitionStatus.IN_PROGRESS),
-        resolved=sum(1 for c in cases if c.status == PetitionStatus.RESOLVED),
-        closed_this_month=sum(
-            1
-            for c in cases
-            if c.closed_at and c.closed_at.year == now.year and c.closed_at.month == now.month
-        ),
+        total=int(row.total or 0),
+        pending_assignment=int(row.pending_assignment or 0),
+        my_assigned=int(row.my_assigned or 0),
+        needs_info=int(row.needs_info or 0),
+        in_progress=int(row.in_progress or 0),
+        resolved=int(row.resolved or 0),
+        closed_this_month=int(row.closed_this_month or 0),
     )
     if include_by_org:
         out.by_org = await org_stats(session, org_ids=org_ids)
     return out
+
+
+async def monthly_stats(
+    session: AsyncSession,
+    *,
+    month: str,
+    start_at: datetime,
+    end_at: datetime,
+    org_ids: list[uuid.UUID] | None,
+) -> PetitionMonthlyStatsOut:
+    if org_ids is not None and not org_ids:
+        return PetitionMonthlyStatsOut(
+            month=month,
+            received_total=0,
+            completed_total=0,
+            average_completion_hours=None,
+            by_type=[],
+        )
+
+    org_filter = [] if org_ids is None else [PetitionCase.current_org_id.in_(org_ids)]
+    received_filter = [
+        PetitionCase.submitted_at >= start_at,
+        PetitionCase.submitted_at < end_at,
+        *org_filter,
+    ]
+    received_total = int(
+        await session.scalar(select(func.count()).select_from(PetitionCase).where(*received_filter))
+        or 0
+    )
+
+    type_rows = (
+        await session.execute(
+            select(PetitionType.name, func.count(PetitionCase.id))
+            .join(PetitionCase, PetitionCase.type_id == PetitionType.id)
+            .where(*received_filter)
+            .group_by(PetitionType.name)
+            .order_by(func.count(PetitionCase.id).desc(), PetitionType.name)
+        )
+    ).all()
+
+    completion_row = (
+        await session.execute(
+            select(
+                func.count(PetitionCase.id),
+                func.avg(
+                    extract("epoch", PetitionCase.closed_at - PetitionCase.submitted_at) / 3600
+                ),
+            ).where(
+                PetitionCase.closed_at >= start_at,
+                PetitionCase.closed_at < end_at,
+                PetitionCase.closed_at.isnot(None),
+                *org_filter,
+            )
+        )
+    ).one()
+
+    return PetitionMonthlyStatsOut(
+        month=month,
+        received_total=received_total,
+        completed_total=int(completion_row[0] or 0),
+        average_completion_hours=(
+            float(completion_row[1]) if completion_row[1] is not None else None
+        ),
+        by_type=[
+            PetitionMonthlyTypeStatsItem(type_name=row[0], count=int(row[1])) for row in type_rows
+        ],
+    )
 
 
 async def org_stats(

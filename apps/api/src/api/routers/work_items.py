@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from contextlib import suppress
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -14,6 +15,7 @@ from api.models.user import User
 from api.schemas.work_item import WorkItemCreate, WorkItemOut, WorkItemUpdate
 from api.services import audit as audit_svc
 from api.services import work_item as work_item_svc
+from api.services.notification import create_notification
 
 router = APIRouter(prefix="/work-items", tags=["工作分配"])
 
@@ -29,7 +31,11 @@ async def list_work_items(
     include_done: bool = False,
     limit: int = Query(100, ge=1, le=200),
 ) -> list[WorkItemOut]:
-    target_id = assigned_to_id if current_user.is_superuser else assigned_to_id or current_user.id
+    target_id = assigned_to_id or current_user.id
+    if not current_user.is_superuser and target_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="無權查看其他使用者的工作項目"
+        )
     rows = await work_item_svc.list_work_items(
         db, user_id=target_id, include_done=include_done, limit=limit
     )
@@ -51,6 +57,17 @@ async def create_work_item(
         meta=body.model_dump(mode="json"),
         summary=f"建立工作分配：{item.title}",
     )
+    if body.assigned_to_id and body.assigned_to_id != current_user.id:
+        with suppress(Exception):
+            await create_notification(
+                db,
+                user_id=body.assigned_to_id,
+                type="work_item_assigned",
+                title=f"你被指派了工作：{item.title}",
+                body=item.description or "",
+                link="/work-items",
+                related_id=item.id,
+            )
     return WorkItemOut.model_validate(item)
 
 

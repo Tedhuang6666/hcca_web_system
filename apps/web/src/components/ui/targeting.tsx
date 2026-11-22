@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ComboboxOption } from "@/components/ui/Combobox";
 import { emailApi, orgsApi, usersApi } from "@/lib/api";
+import { orgDisplayName } from "@/lib/orgs";
 
 /**
  * 對象選擇共用元件與 hooks。
@@ -56,7 +57,7 @@ export function useOrgOptions(): ComboboxOption[] {
   useEffect(() => {
     orgsApi
       .list({ active_only: true })
-      .then((orgs) => setOrgOptions(orgs.map((o) => ({ value: o.id, label: o.name }))))
+      .then((orgs) => setOrgOptions(orgs.map((o) => ({ value: o.id, label: orgDisplayName(o, orgs) }))))
       .catch(() => setOrgOptions([]));
   }, []);
   return orgOptions;

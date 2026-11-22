@@ -15,18 +15,20 @@ JWT claim 被偽造也只能擠進 origin → RBAC 第二道防線會在 router 
 
 from __future__ import annotations
 
+import asyncio
 import logging
-import random
+import secrets
 from collections.abc import Awaitable, Callable
+from urllib.parse import quote
 
 import jwt
-from starlette.responses import JSONResponse, Response
+from starlette.responses import JSONResponse, RedirectResponse, Response
 from starlette.types import Receive, Scope, Send
 
 from api.core.config import settings
 from api.core.database import engine
 from api.core.defense import endpoint_lockdown_reason
-from api.core.ip_blocklist import is_blocked
+from api.core.ip_blocklist import get_block, is_blocked
 from api.core.load_signals import get_5xx_ratio, get_active_requests
 from api.core.maintenance import (
     get_load_shed_force_mode,
@@ -36,8 +38,10 @@ from api.core.maintenance import (
 from api.core.metrics import get_db_pool_stats
 from api.core.modules import match_module
 from api.core.security import decode_token
+from api.core.trust import request_is_trusted
 
 logger = logging.getLogger(__name__)
+PROTECTIVE_RESPONSE_HEADER = "X-HCCA-Protective-Response"
 
 # 維護模式 / shed 啟動時，少數路徑要永遠可用：
 ALWAYS_ALLOWED_PATHS = frozenset(
@@ -52,10 +56,18 @@ ALWAYS_ALLOWED_PATHS = frozenset(
         "/auth/logout",
         "/system/maintenance",
         "/system/module-status",
+        "/system/access-status",
     }
 )
 ALWAYS_ALLOWED_PREFIXES = (
+    # 認證流程（OAuth、MFA、Passkey）必須在維護模式中保持可用，否則管理員
+    # 無法建立 bypass token 來解除維護。各端點仍由自己的 auth/CSRF/RBAC
+    # 依賴負責驗證，這裡只略過保護性 503。
+    "/auth/",
     "/admin/",
+    # Synthetic performance probes must still obtain sessions and persist results
+    # while a deploy temporarily enables the maintenance page.
+    "/internal/observability/",
     "/docs",
     "/redoc",
     "/openapi.json",
@@ -67,6 +79,17 @@ def _access_claims(scope: Scope) -> dict:
 
     不查 DB；不阻塞。若 token 缺失/失效則回傳空 dict。
     """
+    token = _access_token(scope)
+    if not token:
+        return {}
+    try:
+        return decode_token(token)
+    except jwt.PyJWTError:
+        return {}
+
+
+def _access_token(scope: Scope) -> str | None:
+    """從 cookie / Authorization header 取出 access token 原文。"""
     headers = scope.get("headers") or []
     token: str | None = None
     for k, v in headers:
@@ -91,13 +114,7 @@ def _access_claims(scope: Scope) -> dict:
                     break
             if token:
                 break
-
-    if not token:
-        return {}
-    try:
-        return decode_token(token)
-    except jwt.PyJWTError:
-        return {}
+    return token
 
 
 def _can_bypass_protection(scope: Scope) -> bool:
@@ -107,6 +124,43 @@ def _can_bypass_protection(scope: Scope) -> bool:
         payload.get("is_admin")
         or "admin:all" in permissions
         or "system:maintenance_bypass" in permissions
+    )
+
+
+async def _bypass_token_still_valid(scope: Scope) -> bool:
+    """旁路只信任 JWT 宣告不夠：已登出、被撤銷的管理員 token 在到期前仍會通過。
+
+    這裡只查 Redis（黑名單與 session 撤銷快取），不查資料庫；Redis 失效時一律不旁路。
+    """
+    from api.core.security import (
+        RedisUnavailableError,
+        is_blacklisted,
+        is_session_revoked,
+    )
+
+    token = _access_token(scope)
+    if not token:
+        return False
+    try:
+        if await is_blacklisted(token, fail_closed=True, raise_on_unavailable=True):
+            return False
+        session_id = _access_claims(scope).get("sid")
+        if session_id and await is_session_revoked(str(session_id), fail_closed=True):
+            return False
+    except RedisUnavailableError:
+        logger.warning("無法確認管理員旁路 token 狀態，改走一般防護", exc_info=True)
+        return False
+    return True
+
+
+def _is_browser_navigation(scope: Scope) -> bool:
+    """判斷請求是否是瀏覽器直接導覽，而非前端 fetch。"""
+    headers = {key.decode("latin-1"): value.decode("latin-1") for key, value in scope["headers"]}
+    accept = headers.get("accept", "")
+    fetch_dest = headers.get("sec-fetch-dest", "")
+    fetch_mode = headers.get("sec-fetch-mode", "")
+    return "text/html" in accept and (
+        fetch_dest in {"document", "iframe"} or fetch_mode == "navigate"
     )
 
 
@@ -140,8 +194,8 @@ async def _should_shed_by_signals() -> tuple[bool, str]:
         db_stats = get_db_pool_stats(engine)
         if db_stats.utilization > settings.LOAD_SHED_DB_POOL_THRESHOLD:
             return True, f"db_pool={db_stats.utilization:.2%}"
-    except Exception:  # pool stats 失敗不該影響服務
-        pass
+    except Exception:
+        logger.debug("DB pool stats 讀取失敗，略過 pool 壓力判斷", exc_info=True)
 
     return False, ""
 
@@ -167,35 +221,63 @@ class LoadShedMiddleware:
             await self.app(scope, receive, send)
             return
 
-        # 1. IP 黑名單
-        if await is_blocked(ip):
-            await self._respond_blocked(scope, send)
-            return
+        # 自己人白名單 IP / 有效掃描 token：豁免黑名單與後續鎖定 / 維護 / load shed
+        trusted = request_is_trusted(scope)
+        can_bypass = trusted or (
+            _can_bypass_protection(scope) and await _bypass_token_still_valid(scope)
+        )
+        check_ip_block = not trusted and not can_bypass
 
-        can_bypass = _can_bypass_protection(scope)
-        lockdown_reason = await endpoint_lockdown_reason(path)
+        # 這些都是唯讀防護投影；串行讀取會在 Redis pool 短暫壅塞時把多個
+        # 0.25～2 秒等待相加到每一個頁面 API。併行後總等待時間取最慢的一個，
+        # 各函式仍維持原本的 fail-open / fail-safe 預設值。
+        module_id = match_module(path)
+        checks = []
+        if check_ip_block:
+            checks.append(is_blocked(ip))
+        checks.extend(
+            [
+                endpoint_lockdown_reason(path),
+                get_maintenance_state(),
+            ]
+        )
+        if module_id:
+            checks.append(get_module_maintenance(module_id))
+        if settings.LOAD_SHED_ENABLED:
+            checks.append(get_load_shed_force_mode())
+        results = await asyncio.gather(*checks)
+
+        offset = 0
+        if check_ip_block:
+            if results[0]:
+                await self._respond_blocked(scope, send, await get_block(ip))
+                return
+            offset = 1
+
+        lockdown_reason = results[offset]
         if lockdown_reason and not can_bypass:
             await self._respond_lockdown(scope, send, lockdown_reason)
             return
 
         # 2. Maintenance mode（全站）
-        maintenance = await get_maintenance_state()
+        maintenance = results[offset + 1]
         if maintenance.get("enabled") and not can_bypass:
             await self._respond_maintenance(scope, send, maintenance)
             return
 
-        # 3. Module maintenance（單一模組；admin 照常放行以便驗證/修復）
-        if not can_bypass:
-            module_id = match_module(path)
-            if module_id:
-                mstate = await get_module_maintenance(module_id)
-                if mstate and mstate.get("on"):
+        # 3. Module state：維護模式允許 admin 驗證；關閉模式只保留 /admin 管理通道。
+        if module_id:
+            mstate = results[offset + 2]
+            if mstate and mstate.get("on"):
+                closed = mstate.get("mode") == "closed"
+                if closed or not can_bypass:
                     await self._respond_module_maintenance(scope, send, module_id, mstate)
                     return
 
         # 4. Load shed
         if settings.LOAD_SHED_ENABLED:
-            mode = await get_load_shed_force_mode()
+            mode_index = offset + 2 + bool(module_id)
+            mode = results[mode_index]
             should_shed = False
             reason = ""
             if mode == "bypass" or mode == "off":
@@ -214,9 +296,16 @@ class LoadShedMiddleware:
 
         await self.app(scope, receive, send)
 
-    async def _respond_blocked(self, scope: Scope, send: Send) -> None:
+    async def _respond_blocked(self, scope: Scope, send: Send, block: dict | None = None) -> None:
         resp = JSONResponse(
-            {"detail": "您的 IP 已被封鎖，請聯絡管理員"},
+            {
+                "detail": {
+                    "message": "您的網路位址已被網站封鎖",
+                    "blocked": True,
+                    "reason": (block or {}).get("reason") or "未提供原因",
+                    "expires_at": (block or {}).get("expires_at"),
+                }
+            },
             status_code=403,
         )
         await self._send_response(resp, scope, send)
@@ -226,7 +315,7 @@ class LoadShedMiddleware:
         resp = JSONResponse(
             {"detail": message, "maintenance": True, "until": state.get("until")},
             status_code=503,
-            headers={"Retry-After": "60"},
+            headers={"Retry-After": "60", PROTECTIVE_RESPONSE_HEADER: "1"},
         )
         await self._send_response(resp, scope, send)
 
@@ -234,24 +323,41 @@ class LoadShedMiddleware:
         self, scope: Scope, send: Send, module_id: str, state: dict
     ) -> None:
         reason = state.get("reason") or ""
-        message = f"此功能模組維護中，請稍後再試{('：' + reason) if reason else ''}"
+        closed = state.get("mode") == "closed"
+        if _is_browser_navigation(scope):
+            frontend = settings.FRONTEND_BASE_URL.rstrip("/")
+            location = f"{frontend}/module-status?module={quote(module_id, safe='')}"
+            resp = RedirectResponse(
+                url=location,
+                status_code=303,
+                headers={PROTECTIVE_RESPONSE_HEADER: "1"},
+            )
+            await self._send_response(resp, scope, send)
+            return
+        message = (
+            f"此功能模組系統關閉中{('：' + reason) if reason else ''}"
+            if closed
+            else f"此功能模組維護中，請稍後再試{('：' + reason) if reason else ''}"
+        )
         resp = JSONResponse(
             {
                 "detail": message,
                 "module_maintenance": True,
+                "module_closed": closed,
                 "module": module_id,
+                "mode": state.get("mode", "maintenance"),
                 "source": state.get("source"),
                 "until": state.get("until"),
             },
             status_code=503,
-            headers={"Retry-After": "60"},
+            headers={"Retry-After": "60", PROTECTIVE_RESPONSE_HEADER: "1"},
         )
         await self._send_response(resp, scope, send)
 
     async def _respond_shed(self, scope: Scope, send: Send, reason: str) -> None:
         # 加上隨機 jitter 避免雷鳴效應
         base = settings.LOAD_SHED_RETRY_AFTER_BASE_SECONDS
-        retry_after = base + random.randint(0, base * 2)
+        retry_after = base + secrets.randbelow(base * 2 + 1)
         logger.info(
             "Load shed: path=%s ip=%s reason=%s retry_after=%d",
             scope.get("path"),
@@ -262,7 +368,7 @@ class LoadShedMiddleware:
         resp = JSONResponse(
             {"detail": "伺服器壅塞，請稍後再試", "load_shed": True},
             status_code=503,
-            headers={"Retry-After": str(retry_after)},
+            headers={"Retry-After": str(retry_after), PROTECTIVE_RESPONSE_HEADER: "1"},
         )
         await self._send_response(resp, scope, send)
 
@@ -270,7 +376,7 @@ class LoadShedMiddleware:
         resp = JSONResponse(
             {"detail": "此功能因全站防護策略暫時停用", "load_shed": True, "reason": reason},
             status_code=503,
-            headers={"Retry-After": "60"},
+            headers={"Retry-After": "60", PROTECTIVE_RESPONSE_HEADER: "1"},
         )
         await self._send_response(resp, scope, send)
 

@@ -3,20 +3,24 @@
 import logging
 from datetime import datetime
 from typing import Annotated
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
 from linebot.v3.exceptions import InvalidSignatureError
 from pydantic import BaseModel, ConfigDict
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.auth_cookies import set_auth_cookies
 from api.core.config import settings
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
-from api.core.security import create_access_token, create_refresh_token
+from api.core.security import create_mfa_challenge_token
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_permission
 from api.models.user import User
+from api.services import user_session as user_session_svc
 from api.services.line_bot import (
     consume_open_token,
     create_link_code,
@@ -25,6 +29,7 @@ from api.services.line_bot import (
     is_configured,
     unlink_user,
 )
+from api.services.permission import is_privileged_account
 
 logger = logging.getLogger(__name__)
 
@@ -120,31 +125,41 @@ async def delete_my_line_binding(db: DbDep, current_user: CurrentUser) -> None:
 
 
 @router.get("/open", summary="LINE 自動登入並導向指定頁面")
-async def open_from_line(token: str = Query(...)) -> RedirectResponse:
+async def open_from_line(
+    db: DbDep,
+    request: Request,
+    token: str = Query(...),
+) -> RedirectResponse:
+    frontend = settings.FRONTEND_BASE_URL.rstrip("/")
     consumed = await consume_open_token(token)
     if consumed is None:
-        return RedirectResponse(url=f"{settings.FRONTEND_BASE_URL.rstrip('/')}/login")
+        return RedirectResponse(url=f"{frontend}/login")
 
     user_id, path = consumed
-    response = RedirectResponse(url=f"{settings.FRONTEND_BASE_URL.rstrip('/')}{path}")
-    response.set_cookie(
-        settings.ACCESS_TOKEN_COOKIE_NAME,
-        create_access_token(subject=str(user_id), extra_claims={"source": "line"}),
-        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        httponly=True,
-        secure=settings.COOKIE_SECURE,
-        samesite=settings.COOKIE_SAMESITE,
-        path="/",
+    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if user is None or not user.is_active:
+        return RedirectResponse(url=f"{frontend}/login")
+
+    if await is_privileged_account(db, user_id=user.id, is_superuser=user.is_superuser):
+        # 管理帳號不接受免密碼連結登入，改導向正常登入流程。
+        return RedirectResponse(url=f"{frontend}/login?{urlencode({'next': path})}")
+
+    if user.mfa_enabled:
+        challenge_token = create_mfa_challenge_token(subject=str(user_id))
+        request.session["mfa_challenge"] = challenge_token
+        qs = urlencode({"next": path})
+        return RedirectResponse(url=f"{frontend}/auth/mfa?{qs}")
+
+    tokens = await user_session_svc.issue_session_tokens(
+        db,
+        user_id=user.id,
+        extra_claims={"source": "line"},
+        user_agent=request.headers.get("user-agent"),
+        ip_address=request.client.host if request.client else None,
+        auth_method="line_open",
     )
-    response.set_cookie(
-        settings.REFRESH_TOKEN_COOKIE_NAME,
-        create_refresh_token(subject=str(user_id)),
-        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
-        httponly=True,
-        secure=settings.COOKIE_SECURE,
-        samesite=settings.COOKIE_SAMESITE,
-        path="/",
-    )
+    response = RedirectResponse(url=f"{frontend}{path}")
+    set_auth_cookies(response, tokens.access_token, tokens.refresh_token)
     return response
 
 

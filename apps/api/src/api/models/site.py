@@ -3,9 +3,19 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -35,6 +45,12 @@ class PublicSiteSettings(Base, TimestampMixin):
     about_body_md: Mapped[str] = mapped_column(Text, nullable=False)
     mission_md: Mapped[str | None] = mapped_column(Text, nullable=True)
     history_md: Mapped[str | None] = mapped_column(Text, nullable=True)
+    support_md: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_report_md: Mapped[str | None] = mapped_column(Text, nullable=True)
+    contact_md: Mapped[str | None] = mapped_column(Text, nullable=True)
+    terms_md: Mapped[str | None] = mapped_column(Text, nullable=True)
+    developer_team_md: Mapped[str | None] = mapped_column(Text, nullable=True)
+    system_info_md: Mapped[str | None] = mapped_column(Text, nullable=True)
     cta_label: Mapped[str] = mapped_column(String(60), nullable=False)
     cta_href: Mapped[str] = mapped_column(String(500), nullable=False)
     public_database_label: Mapped[str] = mapped_column(String(60), nullable=False)
@@ -86,6 +102,8 @@ class PublicLink(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="true", index=True
     )
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     category: Mapped[PublicLinkCategory | None] = relationship("PublicLinkCategory")
 

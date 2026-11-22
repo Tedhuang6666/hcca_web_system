@@ -8,12 +8,15 @@ from __future__ import annotations
 import re
 import uuid
 from functools import lru_cache
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import bleach
 from itsdangerous import URLSafeTimedSerializer
 from jinja2 import (
+    ChainableUndefined,
     Environment,
     FileSystemLoader,
     StrictUndefined,
@@ -54,31 +57,56 @@ _ALLOWED_TAGS = [
 ]
 _ALLOWED_ATTRS = {"a": ["href", "title"]}
 _ALLOWED_PROTOCOLS = ["http", "https", "mailto"]
-_VARIABLE_KEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
+_VARIABLE_KEY_RE = re.compile(r"^[^\W\d]\w{0,63}$", re.UNICODE)
 _RESERVED_VARIABLE_KEYS = {"user", "app", "unsubscribe_url", "frontend_base_url"}
+_CONDITIONAL_OPERATORS = frozenset(
+    {
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "is_empty",
+        "is_not_empty",
+    }
+)
 
 _UNSUBSCRIBE_SALT = "hcca-email-unsubscribe"
+_VISIBLE_URL_RE = re.compile(r"(?i)(?:https?://|www\.)[^\s<>\"'`]+")
+_URL_TRAILING_PUNCTUATION = ".,!?;:)]}，。！？；：、）】》」』"
 
 # context 缺漏欄位的安全預設值（避免範本 Jinja Undefined）
 _CONTEXT_DEFAULTS: dict = {
     "subject": "",
     "preview_text": "",
+    "accent_color": "#111827",
+    "background_color": "#eef2f7",
+    "content_background_color": "#ffffff",
+    "body_line_height": 1.6,
+    "paragraph_spacing": 18,
+    "footer_text": "",
+    "show_system_footer": True,
     "heading": "",
     "body_text": "",
     "body_html": "",
+    "banner_image_url": "",
+    "banner_image_alt": "",
     "card_rows": [],
     "cta_url": "",
     "cta_label": "",
     "buttons": [],
     "blocks": [],
+    "brand_logo_url": "",
     "unsubscribe_url": "",
 }
 
 
 def absolutize_url(url: str | None) -> str:
-    """把相對路徑（如 /uploads/x.png）補上 FRONTEND_BASE_URL，供 email 內圖片載入。
+    """把相對路徑補上公開 base URL，供 email 內圖片載入。
 
-    email 客戶端無法載入相對路徑，因此上傳後的圖片網址需轉為絕對網址。
+    email 客戶端無法載入相對路徑，因此上傳後的圖片網址需轉為 API 絕對網址；
+    前端 public 靜態資源（如 /brand/...）則轉為前端絕對網址。
     已是 http/https 的網址原樣回傳；其他（含空字串）回傳空字串。
     """
     value = (url or "").strip()
@@ -86,14 +114,104 @@ def absolutize_url(url: str | None) -> str:
         return ""
     if value.startswith(("http://", "https://")):
         return value
+    if value.startswith("/uploads/"):
+        return f"{settings.API_PUBLIC_BASE_URL.rstrip('/')}{value}"
     if value.startswith("/"):
         return f"{settings.FRONTEND_BASE_URL.rstrip('/')}{value}"
     return ""
 
 
+def safe_link_url(url: str | None) -> str:
+    """只保留 email 連結允許的絕對 URL 協定。"""
+    value = (url or "").strip()
+    if not value:
+        return ""
+    return value if urlparse(value).scheme.lower() in _ALLOWED_PROTOCOLS else ""
+
+
 def _nl2br(value: str | None) -> Markup:
     """純文字換行轉 <br>（先逐行 escape 再以 <br> 連接，輸出 safe Markup）。"""
-    return Markup("<br>".join(escape(line) for line in (value or "").splitlines()))
+    # 所有不受信任片段都先 escape，Markup 只標記固定的 <br> 分隔符。
+    # Security: Markup 只接收 escape() 後的文字與固定的 <br> 標籤。
+    return Markup("<br>".join(escape(line) for line in (value or "").splitlines()))  # nosec
+
+
+class _VisibleUrlMasker(HTMLParser):
+    """保留 HTML 結構，將內文中裸露的網址改成描述文字超連結。"""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self.changed = False
+        self._anchor_depth = 0
+        self._raw_text_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.parts.append(self.get_starttag_text() or f"<{tag}>")
+        if tag == "a":
+            self._anchor_depth += 1
+        elif tag in {"script", "style", "title"}:
+            self._raw_text_depth += 1
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.parts.append(self.get_starttag_text() or f"<{tag}/>")
+
+    def handle_endtag(self, tag: str) -> None:
+        self.parts.append(f"</{tag}>")
+        if tag == "a":
+            self._anchor_depth = max(0, self._anchor_depth - 1)
+        elif tag in {"script", "style", "title"}:
+            self._raw_text_depth = max(0, self._raw_text_depth - 1)
+
+    def handle_data(self, data: str) -> None:
+        if self._raw_text_depth:
+            self.parts.append(data)
+            return
+
+        cursor = 0
+        for match in _VISIBLE_URL_RE.finditer(data):
+            url = match.group().rstrip(_URL_TRAILING_PUNCTUATION)
+            if not url:
+                continue
+            url_end = match.start() + len(url)
+            self.parts.append(str(escape(data[cursor : match.start()])))
+            if self._anchor_depth:
+                self.parts.append("查看連結")
+            else:
+                href = url if url.lower().startswith(("http://", "https://")) else f"https://{url}"
+                self.parts.append(
+                    f'<a href="{escape(href)}" '
+                    'style="color:#9b7a18;text-decoration:underline;">查看連結</a>'
+                )
+            self.parts.append(str(escape(data[url_end : match.end()])))
+            cursor = match.end()
+            self.changed = True
+        self.parts.append(str(escape(data[cursor:])))
+
+    def handle_comment(self, data: str) -> None:
+        self.parts.append(f"<!--{data}-->")
+
+    def handle_decl(self, decl: str) -> None:
+        self.parts.append(f"<!{decl}>")
+
+    def handle_pi(self, data: str) -> None:
+        self.parts.append(f"<?{data}>")
+
+    def handle_entityref(self, name: str) -> None:
+        self.parts.append(f"&{name};")
+
+    def handle_charref(self, name: str) -> None:
+        self.parts.append(f"&#{name};")
+
+
+def mask_visible_urls(html: str | None) -> str:
+    """將 HTML 顯示文字中的裸網址改為「查看連結」，保留既有 href。"""
+    if not html:
+        return ""
+    parser = _VisibleUrlMasker()
+    parser.feed(html)
+    parser.close()
+    return "".join(parser.parts) if parser.changed else html
 
 
 @lru_cache(maxsize=1)
@@ -113,11 +231,18 @@ def render_email(template_name: str, context: dict) -> str:
     自動注入 app_name / frontend_base_url；context 缺漏欄位以安全預設補齊。
     """
     template = _environment().get_template(f"{template_name}.html")
-    return template.render(
+    email_link_base_url = settings.EMAIL_LINK_BASE_URL.rstrip("/")
+    render_context = {
+        **_CONTEXT_DEFAULTS,
+        "brand_logo_url": absolutize_url(settings.EMAIL_BRAND_LOGO_URL),
+        **context,
+    }
+    rendered = template.render(
         app_name=settings.APP_NAME,
-        frontend_base_url=settings.FRONTEND_BASE_URL.rstrip("/"),
-        **{**_CONTEXT_DEFAULTS, **context},
+        frontend_base_url=email_link_base_url,
+        **render_context,
     )
+    return mask_visible_urls(rendered)
 
 
 def sanitize_html(raw: str | None) -> str:
@@ -153,6 +278,54 @@ def validate_variable_definitions(definitions: list[dict]) -> list[dict]:
     return normalized
 
 
+def validate_conditional_rules(definitions: list[dict], rules: list[dict]) -> list[dict]:
+    """正規化條件規則，並限制只能讀寫本次郵件定義的自訂變數。"""
+    allowed = {str(item.get("key", "")) for item in definitions or []}
+    normalized: list[dict] = []
+    for index, item in enumerate(rules or [], start=1):
+        condition_key = str(item.get("condition_key", "")).strip()
+        target_key = str(item.get("target_key", "")).strip()
+        operator = str(item.get("operator", "equals")).strip()
+        if condition_key not in allowed or target_key not in allowed:
+            raise ValueError(f"第 {index} 條條件規則的欄位不存在：{condition_key} / {target_key}")
+        if operator not in _CONDITIONAL_OPERATORS:
+            raise ValueError(f"第 {index} 條條件規則的判斷方式不支援：{operator}")
+        normalized.append(
+            {
+                "condition_key": condition_key,
+                "operator": operator,
+                "condition_value": str(item.get("condition_value") or "")[:500],
+                "target_key": target_key,
+                "target_value": str(item.get("target_value") or "")[:500],
+            }
+        )
+    return normalized
+
+
+def apply_conditional_rules(variables: dict[str, Any], rules: list[dict]) -> dict[str, str]:
+    """依序套用條件規則；後面的規則若命中，會覆蓋同一目標欄位。"""
+    resolved = {str(key): "" if value is None else str(value) for key, value in variables.items()}
+    for rule in rules or []:
+        actual = resolved.get(str(rule.get("condition_key", "")), "").strip()
+        expected = str(rule.get("condition_value") or "").strip()
+        operator = str(rule.get("operator", "equals"))
+        actual_folded = actual.casefold()
+        expected_folded = expected.casefold()
+        matched = {
+            "equals": actual_folded == expected_folded,
+            "not_equals": actual_folded != expected_folded,
+            "contains": expected_folded in actual_folded,
+            "not_contains": expected_folded not in actual_folded,
+            "starts_with": actual_folded.startswith(expected_folded),
+            "ends_with": actual_folded.endswith(expected_folded),
+            "is_empty": not actual,
+            "is_not_empty": bool(actual),
+        }.get(operator, False)
+        if matched:
+            resolved[str(rule.get("target_key", ""))] = str(rule.get("target_value") or "")
+    return resolved
+
+
 def validate_required_variables(
     definitions: list[dict], variables: dict[str, Any], *, recipient_label: str
 ) -> None:
@@ -166,16 +339,34 @@ def validate_required_variables(
             raise ValueError(f"{recipient_label} 缺少必要佔位符：{key}")
 
 
-@lru_cache(maxsize=1)
-def _personalization_environment() -> SandboxedEnvironment:
-    env = SandboxedEnvironment(autoescape=False, undefined=StrictUndefined)
-    return env
+@lru_cache(maxsize=2)
+def _personalization_environment(allow_missing_variables: bool = False) -> SandboxedEnvironment:
+    undefined = ChainableUndefined if allow_missing_variables else StrictUndefined
+    return SandboxedEnvironment(autoescape=False, undefined=undefined)
 
 
-def render_personalized_text(raw: str, variables: dict[str, Any]) -> str:
-    """以受限 Jinja2 語法渲染文字欄位；變數不存在會明確失敗。"""
+def render_personalized_text(
+    raw: str, variables: dict[str, Any], *, allow_missing_variables: bool = False
+) -> str:
+    """以受限 Jinja2 語法渲染文字；預覽可選擇將未提供的變數視為空字串。"""
+    text = raw or ""
+    depth = 0
+    for character in text:
+        if character == "{":
+            depth += 1
+        elif character == "}":
+            depth -= 1
+            if depth < 0:
+                raise ValueError("佔位符渲染失敗：大括號不成對")
+    if depth:
+        raise ValueError("佔位符渲染失敗：大括號不成對")
+
     try:
-        return _personalization_environment().from_string(raw or "").render(**variables)
+        return (
+            _personalization_environment(allow_missing_variables)
+            .from_string(text)
+            .render(**variables)
+        )
     except TemplateError as exc:
         raise ValueError(f"佔位符渲染失敗：{exc}") from exc
 
@@ -190,11 +381,14 @@ def build_personalization_context(
 ) -> dict[str, Any]:
     """建立系統預設佔位符與自訂佔位符合併後的 context。"""
     unsubscribe_url = ""
+    email_link_base_url = settings.EMAIL_LINK_BASE_URL.rstrip("/")
     if user_id:
         token = make_unsubscribe_token(user_id, "email")
-        unsubscribe_url = f"{settings.FRONTEND_BASE_URL.rstrip('/')}/unsubscribe?token={token}"
+        unsubscribe_url = f"{email_link_base_url}/unsubscribe?token={token}"
     return {
         **{key: "" if value is None else str(value) for key, value in custom_variables.items()},
+        "姓名": name or "",
+        "電子郵件": email,
         "user": {
             "id": str(user_id) if user_id else "",
             "name": name or "",
@@ -202,7 +396,7 @@ def build_personalization_context(
             "student_id": student_id or "",
         },
         "unsubscribe_url": unsubscribe_url,
-        "frontend_base_url": settings.FRONTEND_BASE_URL.rstrip("/"),
+        "frontend_base_url": email_link_base_url,
     }
 
 
@@ -215,8 +409,8 @@ def make_unsubscribe_token(user_id: uuid.UUID, notification_type: str) -> str:
 def parse_unsubscribe_token(token: str) -> tuple[uuid.UUID, str]:
     """驗證並解析退訂 token，回傳 (user_id, notification_type)。
 
-    token 無效時拋 itsdangerous.BadSignature。退訂連結不設過期。
+    token 無效或超過 90 天時拋 itsdangerous.BadSignature / SignatureExpired。
     """
     serializer = URLSafeTimedSerializer(settings.SECRET_KEY, salt=_UNSUBSCRIBE_SALT)
-    data = serializer.loads(token)
+    data = serializer.loads(token, max_age=90 * 86400)
     return uuid.UUID(data["uid"]), str(data["type"])

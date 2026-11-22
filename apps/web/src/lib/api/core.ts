@@ -1,0 +1,234 @@
+import { API_BASE } from "../config";
+import { shopDelegationLoginNext } from "../shop-delegation-link";
+import { ApiError } from "../api-helpers";
+import { clearAuthCache } from "../auth-cache";
+import { reportClientError } from "../client-error-reporter";
+import { recordApiMetric, recordCircuitOpen } from "../client-metrics";
+import { PERMISSION_DENIED_EVENT, type PermissionDeniedDetail } from "../permission-events";
+import { apiErrorFromResponse, errorMessageFromResponse, formatErrorDetail } from "./errors";
+import { circuitKey, circuitOpen, recordHardFailure, recordReachable } from "./circuit";
+import { refreshWithStatus, silentRefresh } from "./refresh";
+import {
+  authFetch,
+  csrfHeaders,
+  fetchWithRetry,
+  isRequestAborted,
+  NetworkRequestError,
+  traceHeaders,
+  type HccaRequestInit,
+  uploadWithProgress,
+  type UploadProgressHandler,
+} from "./transport";
+
+export { ApiError };
+export { authFetch, csrfHeaders, silentRefresh };
+export { uploadWithProgress };
+export { errorMessageFromResponse, formatErrorDetail };
+export type { HccaRequestInit, UploadProgressHandler };
+
+export const BASE = API_BASE;
+
+function isOffline(): boolean {
+  return typeof navigator !== "undefined" && navigator.onLine === false;
+}
+
+function requestOperationKind(method: string, path: string): "simple_get" | "crud" | "heavy" {
+  if (method === "GET") return "simple_get";
+  return /(export|report|analytics|collect|backup|restore|upload|bulk|ai)/i.test(path)
+    ? "heavy"
+    : "crud";
+}
+
+function isProtectionRecoveryPath(pathname: string): boolean {
+  return ["/login", "/auth", "/admin", "/maintenance"].some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
+
+function redirectToLoginAfterExpiry(): void {
+  if (typeof window === "undefined") return;
+  clearAuthCache();
+  if (window.location.pathname === "/login") return;
+  const fragment = new URLSearchParams(window.location.hash.slice(1));
+  const delegation = window.location.pathname === "/shop" && fragment.has("delegate");
+  const next = delegation
+    ? shopDelegationLoginNext(fragment.get("delegate") || "invalid")
+    : `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  window.location.replace(`/login?next=${encodeURIComponent(next)}`);
+}
+
+function dispatchPermissionDenied(path: string, error: ApiError): void {
+  if (typeof window === "undefined" || error.status !== 403) return;
+  const detail: PermissionDeniedDetail = { path, message: error.message };
+  window.dispatchEvent(new CustomEvent(PERMISSION_DENIED_EVENT, { detail }));
+}
+
+export async function request<T>(
+  path: string,
+  init: HccaRequestInit = {},
+  retriedAfterRefresh = false,
+): Promise<T> {
+  const method = (init.method ?? "GET").toUpperCase();
+  const operationKind = requestOperationKind(method, path);
+  const key = circuitKey(path);
+  const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
+  if (isOffline()) {
+    reportClientError({
+      scope: "api.offline",
+      message: "離線狀態",
+      diagnostics: {
+        failure_kind: "offline",
+        request_method: method,
+        request_path: path,
+        request_attempts: 0,
+      },
+    });
+    throw new ApiError(0, "目前處於離線狀態");
+  }
+  if (circuitOpen(key)) {
+    recordCircuitOpen(path);
+    recordApiMetric({ path, method, operation_kind: operationKind, status: 0, attempts: 0, circuit_open: true, duration_ms: Math.max(0, (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt) });
+    throw new ApiError(0, "暫時無法連線至後端（熔斷中），請稍候再試");
+  }
+
+  const { headers: trace } = traceHeaders();
+  let response: Response;
+  try {
+    const result = await fetchWithRetry(path, init, trace, method === "GET" ? 2 : 0);
+    response = result.response;
+    const protectiveResponse = response.headers.get("X-HCCA-Protective-Response") === "1";
+    recordApiMetric({ path, method, operation_kind: operationKind, status: response.status, protective_response: protectiveResponse, attempts: result.attempts, duration_ms: Math.max(0, (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt) });
+  } catch (error) {
+    if (isRequestAborted(error, init.signal)) throw error;
+    recordHardFailure(key);
+    recordApiMetric({ path, method, operation_kind: operationKind, status: 0, attempts: method === "GET" ? 2 : 0, duration_ms: Math.max(0, (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt) });
+    if (error instanceof NetworkRequestError) throw new ApiError(0, error.message);
+    throw error;
+  }
+
+  const protectiveResponse = response.headers.get("X-HCCA-Protective-Response") === "1";
+  if (response.status >= 500 && !protectiveResponse) recordHardFailure(key);
+  else recordReachable(key);
+
+  if (response.status === 401) {
+    const hasLocalLogin = typeof window === "undefined" || Boolean(window.localStorage.getItem("user_id"));
+    if (!hasLocalLogin) throw await apiErrorFromResponse(response);
+
+    const refreshStatus = await refreshWithStatus();
+    if (refreshStatus === "ok") {
+      let retry: Response;
+      try {
+        ({ response: retry } = await fetchWithRetry(path, init, trace, 0));
+      } catch (error) {
+        if (isRequestAborted(error, init.signal)) throw error;
+        if (!(error instanceof NetworkRequestError)) reportClientError({
+          scope: "api.refresh-network",
+          message: "刷新後重試失敗",
+          diagnostics: {
+            failure_kind: "network",
+            request_method: method,
+            request_path: path,
+            request_attempts: 1,
+          },
+        });
+        throw new ApiError(0, `無法連線至後端 API：${BASE}`);
+      }
+      if (retry.ok) {
+        if (retry.status === 204) return undefined as T;
+        return retry.json();
+      }
+      if (retry.status === 401) {
+        redirectToLoginAfterExpiry();
+        throw new ApiError(401, "登入已過期，請重新登入", retry.headers.get("X-Request-ID"));
+      }
+      const retryError = await apiErrorFromResponse(retry);
+      dispatchPermissionDenied(path, retryError);
+      throw retryError;
+    }
+    if (refreshStatus === "unavailable") {
+      throw new ApiError(503, "登入服務暫時不可用，請稍後再試", response.headers.get("X-Request-ID"));
+    }
+    if (typeof window !== "undefined" && Boolean(window.localStorage.getItem("user_id"))) redirectToLoginAfterExpiry();
+    throw new ApiError(401, "登入已過期，請重新登入", response.headers.get("X-Request-ID"));
+  }
+
+  if (response.status === 503) {
+    try {
+      const payload = (await response.clone().json()) as {
+        detail?: string;
+        maintenance?: boolean;
+        load_shed?: boolean;
+        module_maintenance?: boolean;
+        module?: string;
+        mode?: "maintenance" | "closed";
+        reason?: string;
+        until?: number | null;
+      };
+      if (typeof window !== "undefined" && payload.module_maintenance) {
+        window.dispatchEvent(new CustomEvent("hcca:module-maintenance", { detail: payload }));
+      }
+      if (typeof window !== "undefined" && (payload.maintenance || payload.load_shed) && !payload.module_maintenance) {
+        const hasLocalLogin = Boolean(window.localStorage.getItem("user_id"));
+        if (hasLocalLogin && !retriedAfterRefresh && await silentRefresh()) return request<T>(path, init, true);
+        const params = new URLSearchParams({
+          retry: response.headers.get("Retry-After") ?? "30",
+          detail: payload.detail ?? "",
+          kind: payload.maintenance ? "maintenance" : "busy",
+        });
+        if (payload.until) params.set("until", String(payload.until));
+        if (!isProtectionRecoveryPath(window.location.pathname)) window.location.replace(`/maintenance?${params}`);
+      }
+    } catch {
+      // 非 JSON 維護回應直接沿用一般錯誤呈現。
+    }
+  }
+
+  if (!response.ok) {
+    if (response.status === 412 && typeof window !== "undefined") window.dispatchEvent(new CustomEvent("hcca:policy-consent-required"));
+    if (response.status === 403 && typeof window !== "undefined" && response.headers.get("X-MFA-Required") === "true") {
+      const fragment = new URLSearchParams(window.location.hash.slice(1));
+      const destination = window.location.pathname === "/shop" && fragment.has("delegate")
+        ? shopDelegationLoginNext(fragment.get("delegate") || "invalid")
+        : window.location.pathname + window.location.search;
+      const next = encodeURIComponent(destination);
+      window.location.replace(`/settings/security?mfa_required=1&next=${next}`);
+      throw new ApiError(403, "需要設定雙重驗證才能存取此功能");
+    }
+    const error = await apiErrorFromResponse(response);
+    dispatchPermissionDenied(path, error);
+    throw error;
+  }
+  if (response.status === 204) return undefined as T;
+  return response.json();
+}
+
+export const get = <T>(path: string) => request<T>(path);
+export const post = <T>(path: string, body?: unknown) => request<T>(path, { method: "POST", body: JSON.stringify(body) });
+export const patch = <T>(path: string, body: unknown) => request<T>(path, { method: "PATCH", body: JSON.stringify(body) });
+export const put = <T>(path: string, body: unknown) => request<T>(path, { method: "PUT", body: JSON.stringify(body) });
+export const del = <T>(path: string) => request<T>(path, { method: "DELETE" });
+
+export const pathSegment = (value: string) => {
+  try { return encodeURIComponent(decodeURIComponent(value)); }
+  catch { return encodeURIComponent(value); }
+};
+
+export type UserSummary = { id: string; display_name: string; email: string };
+export type PrivacyRequestType = "access" | "export" | "correction" | "deletion" | "restriction" | "objection";
+export type PrivacyRequestStatus = "submitted" | "in_review" | "completed" | "rejected" | "cancelled";
+
+export interface PrivacyRequestOut {
+  id: string;
+  user_id: string;
+  request_type: PrivacyRequestType;
+  status: PrivacyRequestStatus;
+  subject: string;
+  description: string;
+  submitted_ip_address: string | null;
+  submitted_user_agent: string | null;
+  response_message: string | null;
+  handled_by: string | null;
+  handled_at: string | null;
+  created_at: string;
+  updated_at: string;
+}

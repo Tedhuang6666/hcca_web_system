@@ -1,18 +1,20 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ReactElement } from "react";
 
 import type { PermissionCodeInfo } from "@/lib/types";
 
 const REQUIRED_PERMISSION_CODES: PermissionCodeInfo[] = [
   {
+    category: "系統與安全",
     group: "系統管理",
     code: "audit:view_org",
     label: "查看本組織稽核日誌",
     desc: "查看目前任期所屬組織內的操作軌跡",
   },
   {
+    category: "系統與安全",
     group: "系統管理",
     code: "audit:view_all",
     label: "查看所有稽核日誌",
@@ -20,14 +22,28 @@ const REQUIRED_PERMISSION_CODES: PermissionCodeInfo[] = [
   },
 ];
 
+const PERMISSION_CATEGORY_ORDER = [
+  "系統與安全",
+  "組織與人員",
+  "治理與法規",
+  "校園營運",
+  "發布與溝通",
+];
+
+function categoryOrder(category: string) {
+  const index = PERMISSION_CATEGORY_ORDER.indexOf(category);
+  return index === -1 ? PERMISSION_CATEGORY_ORDER.length : index;
+}
+
 export function ensurePermissionCatalog(items: PermissionCodeInfo[]): PermissionCodeInfo[] {
   const map = new Map(items.map((item) => [item.code, item]));
   for (const required of REQUIRED_PERMISSION_CODES) {
     if (!map.has(required.code)) map.set(required.code, required);
   }
   return Array.from(map.values()).sort((a, b) => {
-    const byGroup = a.group.localeCompare(b.group, "zh-Hant");
-    return byGroup || a.label.localeCompare(b.label, "zh-Hant");
+    return categoryOrder(a.category) - categoryOrder(b.category)
+      || a.group.localeCompare(b.group, "zh-Hant")
+      || a.label.localeCompare(b.label, "zh-Hant");
   });
 }
 
@@ -73,15 +89,6 @@ const PERM_ICONS: Record<string, ReactElement> = {
       <path d="M13.73 21a2 2 0 0 1-3.46 0" />
     </svg>
   ),
-  meal: (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-      <path d="M18 8h1a4 4 0 0 1 0 8h-1" />
-      <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z" />
-      <line x1="6" y1="1" x2="6" y2="4" />
-      <line x1="10" y1="1" x2="10" y2="4" />
-      <line x1="14" y1="1" x2="14" y2="4" />
-    </svg>
-  ),
   survey: (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
       <path d="M9 11l3 3L22 4" />
@@ -104,7 +111,6 @@ function groupIconKey(group: string): string {
   if (group.includes("字號")) return "serial";
   if (group.includes("法規")) return "regulation";
   if (group.includes("公告")) return "announcement";
-  if (group.includes("學餐")) return "meal";
   if (group.includes("問卷")) return "survey";
   if (group.includes("商品") || group.includes("財務")) return "shop";
   return "settings";
@@ -115,6 +121,18 @@ interface PermCheckboxesProps {
   onChange: (codes: string[]) => void;
   permCodes: PermissionCodeInfo[];
 }
+
+type PermissionGroupView = {
+  category: string;
+  label: string;
+  iconKey: string;
+  items: PermissionCodeInfo[];
+};
+
+type PermissionCategoryView = {
+  category: string;
+  groups: PermissionGroupView[];
+};
 
 function isHighRiskPermission(code: string): boolean {
   return (
@@ -128,13 +146,15 @@ function isHighRiskPermission(code: string): boolean {
 }
 
 export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxesProps) {
-  const [expanded, setExpanded] = useState<Set<string>>(new Set(["系統管理"]));
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [keyword, setKeyword] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
   const [groupFilter, setGroupFilter] = useState("all");
   const permGroups = useMemo(() => {
     const q = keyword.trim().toLowerCase();
-    const groupMap = new Map<string, PermissionCodeInfo[]>();
+    const groupMap = new Map<string, PermissionGroupView>();
     for (const item of permCodes) {
+      if (categoryFilter !== "all" && item.category !== categoryFilter) continue;
       if (groupFilter !== "all" && item.group !== groupFilter) continue;
       if (
         q &&
@@ -145,23 +165,39 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
       ) {
         continue;
       }
-      if (!groupMap.has(item.group)) groupMap.set(item.group, []);
-      groupMap.get(item.group)!.push(item);
+      if (!groupMap.has(item.group)) {
+        groupMap.set(item.group, {
+          category: item.category,
+          label: item.group,
+          iconKey: groupIconKey(item.group),
+          items: [],
+        });
+      }
+      groupMap.get(item.group)!.items.push(item);
     }
-    return Array.from(groupMap.entries())
-      .map(([label, items]) => ({
-        label,
-        iconKey: groupIconKey(label),
-        items: items.sort((a, b) => a.label.localeCompare(b.label, "zh-Hant")),
+    return Array.from(groupMap.values())
+      .map((group) => ({
+        ...group,
+        items: group.items.sort((a, b) => a.label.localeCompare(b.label, "zh-Hant")),
       }))
-      .sort((a, b) => a.label.localeCompare(b.label, "zh-Hant"));
-  }, [groupFilter, keyword, permCodes]);
-  const allGroups = useMemo(
-    () => Array.from(new Set(permCodes.map((item) => item.group))).sort((a, b) => a.localeCompare(b, "zh-Hant")),
+      .sort((a, b) => categoryOrder(a.category) - categoryOrder(b.category)
+        || a.label.localeCompare(b.label, "zh-Hant"));
+  }, [categoryFilter, groupFilter, keyword, permCodes]);
+  const allCategories = useMemo(
+    () => Array.from(new Set(permCodes.map((item) => item.category)))
+      .sort((a, b) => categoryOrder(a) - categoryOrder(b) || a.localeCompare(b, "zh-Hant")),
     [permCodes],
+  );
+  const allGroups = useMemo(
+    () => Array.from(new Set(permCodes
+      .filter((item) => categoryFilter === "all" || item.category === categoryFilter)
+      .map((item) => item.group)))
+      .sort((a, b) => a.localeCompare(b, "zh-Hant")),
+    [categoryFilter, permCodes],
   );
   const selectedItems = useMemo(
     () => selected.map((code) => permCodes.find((item) => item.code === code) ?? {
+      category: "未知",
       group: "未知",
       code,
       label: code,
@@ -169,7 +205,35 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
     }),
     [permCodes, selected],
   );
+  const permissionCategories = useMemo<PermissionCategoryView[]>(() => {
+    const categoryMap = new Map<string, PermissionCategoryView>();
+    for (const group of permGroups) {
+      if (!categoryMap.has(group.category)) {
+        categoryMap.set(group.category, { category: group.category, groups: [] });
+      }
+      categoryMap.get(group.category)!.groups.push(group);
+    }
+    return Array.from(categoryMap.values()).sort((a, b) =>
+      categoryOrder(a.category) - categoryOrder(b.category)
+      || a.category.localeCompare(b.category, "zh-Hant"));
+  }, [permGroups]);
   const highRiskSelected = selectedItems.filter((item) => isHighRiskPermission(item.code));
+  const visibleCodes = useMemo(
+    () => permGroups.flatMap((group) => group.items.map((item) => item.code)),
+    [permGroups],
+  );
+  const allVisibleSelected = visibleCodes.length > 0 && visibleCodes.every((code) => selected.includes(code));
+
+  useEffect(() => {
+    const groupsWithSelected = permGroups
+      .filter((group) => group.items.some((item) => selected.includes(item.code)))
+      .map((group) => group.label);
+    const groupsToOpen = keyword || categoryFilter !== "all" || groupFilter !== "all"
+      ? permGroups.map((group) => group.label)
+      : groupsWithSelected;
+    if (!groupsToOpen.length) return;
+    setExpanded((prev) => new Set([...prev, ...groupsToOpen]));
+  }, [categoryFilter, groupFilter, keyword, permGroups, selected]);
 
   const toggle = (code: string) =>
     onChange(selected.includes(code) ? selected.filter((c) => c !== code) : [...selected, code]);
@@ -183,7 +247,7 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
 
   return (
     <div className="space-y-2">
-      <div className="grid grid-cols-1 sm:grid-cols-[1fr_180px] gap-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(180px,1fr)_170px_170px]">
         <div className="relative">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 opacity-40" width="13" height="13"
             viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
@@ -193,19 +257,60 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder="搜尋權限名稱、代碼或說明"
-            className="w-full text-xs pl-8 pr-3 py-2 rounded-lg outline-none"
+            aria-label="搜尋權限名稱、代碼或說明"
+            className="min-h-10 w-full rounded-lg px-3 pl-8 pr-3 text-xs outline-none"
             style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
           />
         </div>
         <select
+          value={categoryFilter}
+          onChange={(e) => {
+            setCategoryFilter(e.target.value);
+            setGroupFilter("all");
+          }}
+          aria-label="依分類篩選權限"
+          className="min-h-10 w-full rounded-lg px-3 text-xs outline-none"
+          style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}
+        >
+          <option value="all">全部分類</option>
+          {allCategories.map((category) => <option key={category} value={category}>{category}</option>)}
+        </select>
+        <select
           value={groupFilter}
           onChange={(e) => setGroupFilter(e.target.value)}
-          className="w-full text-xs px-3 py-2 rounded-lg outline-none"
+          aria-label="依模組篩選權限"
+          className="min-h-10 w-full rounded-lg px-3 text-xs outline-none"
           style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}
         >
           <option value="all">全部模組</option>
           {allGroups.map((group) => <option key={group} value={group}>{group}</option>)}
         </select>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs" style={{ color: "var(--text-muted)" }}>
+        <span>目前顯示 {visibleCodes.length} 項 · 已選 {selected.length} 項</span>
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            onClick={() => onChange(allVisibleSelected
+              ? selected.filter((code) => !visibleCodes.includes(code))
+              : Array.from(new Set([...selected, ...visibleCodes])))}
+            disabled={visibleCodes.length === 0}
+            className="min-h-9 rounded-lg px-2.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+            style={{ color: "var(--primary-text)", border: "1px solid var(--border-strong)", background: "var(--primary-dim)" }}
+          >
+            {allVisibleSelected ? "清除目前顯示" : "選取目前顯示"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setExpanded(new Set(permGroups.map((group) => group.label)))}
+            disabled={visibleCodes.length === 0}
+            className="min-h-9 rounded-lg px-2.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+            style={{ color: "var(--text-secondary)", border: "1px solid var(--border)" }}
+          >
+            展開目前模組
+          </button>
+        </div>
       </div>
 
       {selected.length > 0 && (
@@ -215,7 +320,7 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
               已選 {selected.length} 個權限
             </p>
             {highRiskSelected.length > 0 && (
-              <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ color: "#f59e0b", background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.28)" }}>
+              <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ color: "#f59e0b", background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.28)" }}>
                 {highRiskSelected.length} 個高風險
               </span>
             )}
@@ -226,10 +331,10 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
                 type="button"
                 key={item.code}
                 onClick={() => toggle(item.code)}
-                className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full cursor-pointer transition-colors"
+                className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full cursor-pointer transition-colors"
                 style={{
                   background: isHighRiskPermission(item.code) ? "rgba(245,158,11,0.12)" : "var(--primary-dim)",
-                  color: isHighRiskPermission(item.code) ? "#f59e0b" : "var(--primary)",
+                  color: isHighRiskPermission(item.code) ? "#f59e0b" : "var(--primary-text)",
                   border: `1px solid ${isHighRiskPermission(item.code) ? "rgba(245,158,11,0.28)" : "var(--border-strong)"}`,
                 }}
                 title="點擊移除此權限"
@@ -239,7 +344,7 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
               </button>
             ))}
             {selectedItems.length > 10 && (
-              <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}>
+              <span className="text-xs px-2 py-0.5 rounded-full" style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}>
                 +{selectedItems.length - 10}
               </span>
             )}
@@ -247,101 +352,131 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
         </div>
       )}
 
-      <div className="space-y-2 overflow-y-auto" style={{ maxHeight: "min(60vh, 480px)" }}>
-      {permGroups.map((g) => {
-        const groupCodes = g.items.map((item) => item.code);
-        if (!groupCodes.length) return null;
-        const isOpen = expanded.has(g.label);
-        const selectedCount = groupCodes.filter((c) => selected.includes(c)).length;
-        return (
-          <div
-            key={g.label}
-            className="rounded-xl overflow-hidden"
-            style={{ border: "1px solid var(--border)" }}
-          >
-            <button
-              type="button"
-              onClick={() => toggleGroup(g.label)}
-              className="flex items-center gap-2 w-full px-3 py-2.5 text-left transition-colors hover:opacity-80"
-              style={{ background: isOpen ? "var(--primary-dim)" : "var(--bg-elevated)" }}
-            >
-              <span
-                className="w-4 h-4 flex items-center justify-center flex-shrink-0"
-                style={{ color: "var(--text-muted)" }}
-              >
-                {PERM_ICONS[g.iconKey]}
-              </span>
-              <span className="text-xs font-semibold flex-1" style={{ color: "var(--text-secondary)" }}>
-                {g.label}
-              </span>
-              {selectedCount > 0 && (
-                <span
-                  className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
-                  style={{ background: "var(--primary-dim)", color: "var(--primary)" }}
-                >
-                  {selectedCount}/{groupCodes.length}
+      <div className="space-y-4 overflow-y-auto" style={{ maxHeight: "min(60vh, 480px)" }}>
+        {permissionCategories.length === 0 ? (
+          <div className="rounded-xl px-4 py-8 text-center text-xs" style={{ color: "var(--text-muted)", border: "1px dashed var(--border)" }}>
+            找不到符合條件的權限。請調整關鍵字、分類或模組。
+          </div>
+        ) : permissionCategories.map((category) => {
+          const categoryCodes = category.groups.flatMap((group) =>
+            group.items.map((item) => item.code),
+          );
+          const selectedCount = categoryCodes.filter((code) => selected.includes(code)).length;
+          return (
+            <section key={category.category} className="space-y-2">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 px-1">
+                <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                  {category.category}
+                </h3>
+                <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  {category.groups.length} 個模組 · 已選 {selectedCount}/{categoryCodes.length}
                 </span>
-              )}
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                className="flex-shrink-0 transition-transform"
-                style={{ color: "var(--text-muted)", transform: isOpen ? "rotate(90deg)" : "none" }}
-              >
-                <polyline points="9 18 15 12 9 6" />
-              </svg>
-            </button>
-            {isOpen && (
-              <div className="px-2 pb-2 pt-1 space-y-1" style={{ borderTop: "1px solid var(--border)" }}>
-                {g.items.map((info) => {
-                  const code = info.code;
-                  const on = selected.includes(code);
+              </div>
+              <div className="space-y-2">
+                {category.groups.map((g) => {
+                  const groupCodes = g.items.map((item) => item.code);
+                  const isOpen = expanded.has(g.label);
+                  const groupSelectedCount = groupCodes.filter((code) => selected.includes(code)).length;
+                  const groupContentId = `permission-group-${g.label}`;
                   return (
-                    <label
-                      key={code}
-                      className="flex items-start gap-2.5 cursor-pointer px-3 py-2.5 rounded-xl transition-all"
-                      style={{
-                        background: on ? "var(--primary-dim)" : "transparent",
-                        border: `1px solid ${on ? "var(--border-strong)" : "transparent"}`,
-                      }}
+                    <div
+                      key={g.label}
+                      className="rounded-xl overflow-hidden"
+                      style={{ border: "1px solid var(--border)" }}
                     >
-                      <input
-                        type="checkbox"
-                        checked={on}
-                        onChange={() => toggle(code)}
-                        className="accent-blue-600 flex-shrink-0 mt-0.5"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p
-                          className="text-xs font-medium"
-                          style={{ color: on ? "var(--primary)" : "var(--text-primary)" }}
+                      <button
+                        type="button"
+                        onClick={() => toggleGroup(g.label)}
+                        aria-expanded={isOpen}
+                        aria-controls={groupContentId}
+                        className="flex items-center gap-2 w-full px-3 py-2.5 text-left transition-colors hover:opacity-80"
+                        style={{ background: isOpen ? "var(--primary-dim)" : "var(--bg-elevated)" }}
+                      >
+                        <span
+                          className="w-4 h-4 flex items-center justify-center flex-shrink-0"
+                          style={{ color: "var(--text-muted)" }}
                         >
-                          {info.label ?? code}
-                          {isHighRiskPermission(code) && (
-                            <span className="ml-1 text-[10px] font-normal" style={{ color: "#f59e0b" }}>
-                              高風險
-                            </span>
-                          )}
-                        </p>
-                        {info.desc && (
-                          <p className="text-[11px] mt-0.5 leading-tight" style={{ color: "var(--text-muted)" }}>
-                            {info.desc}
-                          </p>
+                          {PERM_ICONS[g.iconKey]}
+                        </span>
+                        <span className="text-xs font-semibold flex-1" style={{ color: "var(--text-secondary)" }}>
+                          {g.label}
+                        </span>
+                        {groupSelectedCount > 0 && (
+                          <span
+                            className="text-xs px-1.5 py-0.5 rounded-full font-medium"
+                            style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}
+                          >
+                            {groupSelectedCount}/{groupCodes.length}
+                          </span>
                         )}
-                      </div>
-                    </label>
+                        <svg
+                          width="12"
+                          height="12"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          className="flex-shrink-0 transition-transform"
+                          style={{ color: "var(--text-muted)", transform: isOpen ? "rotate(90deg)" : "none" }}
+                        >
+                          <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                      </button>
+                      {isOpen && (
+                        <div
+                          id={groupContentId}
+                          className="px-2 pb-2 pt-1 space-y-1"
+                          style={{ borderTop: "1px solid var(--border)" }}
+                        >
+                          {g.items.map((info) => {
+                            const code = info.code;
+                            const on = selected.includes(code);
+                            return (
+                              <label
+                                key={code}
+                                className="flex items-start gap-2.5 cursor-pointer px-3 py-2.5 rounded-xl transition-[color,background-color,border-color,opacity,box-shadow,transform]"
+                                style={{
+                                  background: on ? "var(--primary-dim)" : "transparent",
+                                  border: `1px solid ${on ? "var(--border-strong)" : "transparent"}`,
+                                }}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={on}
+                                  onChange={() => toggle(code)}
+                                  className="accent-[var(--primary)] flex-shrink-0 mt-0.5"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <p
+                                    className="text-xs font-medium"
+                                    style={{ color: on ? "var(--primary-text)" : "var(--text-primary)" }}
+                                  >
+                                    {info.label ?? code}
+                                    {isHighRiskPermission(code) && (
+                                      <span className="ml-1 text-xs font-normal" style={{ color: "#f59e0b" }}>
+                                        高風險
+                                      </span>
+                                    )}
+                                  </p>
+                                  {info.desc && (
+                                    <p className="text-xs mt-0.5 leading-tight" style={{ color: "var(--text-muted)" }}>
+                                      {info.desc}
+                                    </p>
+                                  )}
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>
-            )}
-          </div>
-        );
-      })}
+            </section>
+          );
+        })}
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-"""政策版本與同意紀錄業務邏輯。Phase B1 / ADR-003。
+"""政策版本與同意紀錄業務邏輯（ADR-003）。
 
 不檢查權限（router 層注入 require_permission）。
 """

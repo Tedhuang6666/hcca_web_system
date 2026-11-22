@@ -1,0 +1,363 @@
+"""各商品主題必須各自開立收據，包含未指定主題的批次與舊訂單。"""
+
+import uuid
+from datetime import UTC, datetime, timedelta
+from io import BytesIO
+
+import pytest
+from pypdf import PdfReader
+from sqlalchemy import func, select
+
+from api.models.activity import Activity, ActivityStatus
+from api.models.school_class import SchoolClass
+from api.models.shop import Order, OrderItem, OrderStatus, Product, ProductCategory, ProductSeries
+from api.models.shop_class_payment import ShopClassPayment
+from api.models.shop_order_receipt_print import ShopOrderReceiptPrint
+from api.services.shop import _receipts
+
+
+@pytest.mark.parametrize("topics", [False, True], indirect=True)
+@pytest.mark.parametrize("selected", [False, True])
+async def test_class_confirmation_totals_specs_and_scope_without_recording_receipts(
+    db_session, admin_user, authed_client_factory, topics, selected
+):
+    school_class, activity, categories, products = topics
+    other_class = SchoolClass(
+        academic_year=115, class_code="102", label="一年二班", created_by=admin_user.id
+    )
+    db_session.add(other_class)
+    await db_session.flush()
+    orders = []
+    for size, quantity, paid in [("L", 2, False), ("XL", 4, True)]:
+        order = await _order(
+            db_session, admin_user, school_class, activity, [products[0]], total=quantity * 100
+        )
+        order.items[0].quantity = quantity
+        order.items[0].selected_options = [{"group_name": "尺寸", "value": size}]
+        order.is_paid = paid
+        orders.append(order)
+    await _order(db_session, admin_user, other_class, activity, [products[0]], total=101)
+    await _order(db_session, admin_user, school_class, activity, [products[1]], total=202)
+    await _order(
+        db_session, admin_user, school_class, activity, [products[0]], total=101, supplement=True
+    )
+    for state in [OrderStatus.CANCELLED, OrderStatus.REFUNDED]:
+        excluded = await _order(
+            db_session, admin_user, school_class, activity, [products[0]], total=101
+        )
+        excluded.status = state
+    test_order = await _order(
+        db_session, admin_user, school_class, activity, [products[0]], total=101
+    )
+    test_order.test_product_id = products[0].id
+    await db_session.flush()
+    payload = {"category_id": str(categories[0].id)}
+    if selected:
+        payload["class_ids"] = [str(school_class.id)]
+    response = await authed_client_factory(admin_user).post(
+        "/shop/orders/classes/confirmations.pdf", json=payload
+    )
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.headers["cache-control"] == "no-store"
+    pdf = PdfReader(BytesIO(response.content))
+    assert len(pdf.pages) == (1 if selected else 2)
+    text = "".join(pdf.pages[0].extract_text().split())
+    assert "班級訂購總數確認單" in text
+    assert "一年一班" in text and "主題1" in text
+    assert "L:2、XL:4" in text
+    assert "總件數：6件" in text
+    assert "訂單總額：600元" in text
+    assert "優惠折抵：6元" in text
+    assert "商品2" not in text
+    assert "班級確認人" in text and "核對人" in text
+    if not selected:
+        assert "一年二班" in pdf.pages[1].extract_text()
+    assert await db_session.scalar(select(func.count(ShopOrderReceiptPrint.order_id))) == 0
+    for order, paid in zip(orders, [False, True], strict=True):
+        await db_session.refresh(order)
+        assert order.is_paid is paid
+
+
+async def test_class_confirmations_require_permission_and_report_invalid_scopes(
+    db_session, admin_user, member_user, client, authed_client_factory
+):
+    path = "/shop/orders/classes/confirmations.pdf"
+    assert (await client.post(path, json={})).status_code == 401
+    assert (await authed_client_factory(member_user).post(path, json={})).status_code == 403
+    manager = authed_client_factory(admin_user)
+    assert (await manager.post(path, json={})).status_code == 400
+    assert (await manager.post(path, json={"class_ids": [str(uuid.uuid4())]})).status_code == 404
+    assert (await manager.post(path, json={"class_ids": []})).status_code == 422
+    assert (await manager.post(path, json={"category_id": str(uuid.uuid4())})).status_code == 400
+    assert (
+        await manager.post(
+            path,
+            json={
+                "activity_id": str(uuid.uuid4()),
+                "category_id": str(uuid.uuid4()),
+            },
+        )
+    ).status_code == 400
+
+
+@pytest.fixture
+async def topics(db_session, admin_user, request):
+    activity = None
+    if request.param:
+        activity = Activity(name="共同上層活動", status=ActivityStatus.ACTIVE)
+        db_session.add(activity)
+        await db_session.flush()
+    school_class = SchoolClass(
+        academic_year=115, class_code="101", label="一年一班", created_by=admin_user.id
+    )
+    db_session.add(school_class)
+    categories = [
+        ProductCategory(
+            id=uuid.UUID(f"aaaaaaaa-0000-0000-0000-{index + 1:012d}"),
+            name=f"主題{index + 1}",
+            activity_id=activity.id if activity else None,
+            created_by=admin_user.id,
+        )
+        for index in range(3)
+    ]
+    db_session.add_all(categories)
+    await db_session.flush()
+    series = ProductSeries(category_id=categories[0].id, name="第一主題系列")
+    db_session.add(series)
+    await db_session.flush()
+    products = [
+        Product(
+            name=f"商品{index + 1}",
+            price=(index + 1) * 101,
+            category_id=category.id if index else None,
+            series_id=series.id if index == 0 else None,
+            created_by=admin_user.id,
+        )
+        for index, category in enumerate(categories)
+    ]
+    db_session.add_all(products)
+    await db_session.flush()
+    return school_class, activity, categories, products
+
+
+async def _order(db, buyer, school_class, activity, products, *, total, supplement=False):
+    order = Order(
+        serial_number=f"ORD-TEST-{uuid.uuid4().hex[:8]}",
+        user_id=buyer.id,
+        class_id=school_class.id if school_class and not supplement else None,
+        supplement_class_id=school_class.id if supplement else None,
+        activity_id=activity.id if activity else None,
+        status=OrderStatus.PENDING,
+        total_price=total,
+        items=[
+            OrderItem(
+                product_id=product.id,
+                quantity=1,
+                unit_price=product.price,
+                selected_options=[],
+            )
+            for product in products
+        ],
+    )
+    db.add(order)
+    await db.flush()
+    return order
+
+
+def _page_totals(page):
+    totals = []
+
+    def visit(value, cm, tm, _font, _size):
+        x = tm[4] * cm[0] + tm[5] * cm[2] + cm[4]
+        top = 792 - (tm[4] * cm[1] + tm[5] * cm[3] + cm[5])
+        if value.strip() and 302 < x < 410 and (320 < top < 345 or 665 < top < 691):
+            totals.append(value.strip())
+
+    page.extract_text(visitor_text=visit)
+    return totals
+
+
+def _assert_separate_topics(content, amounts):
+    pdf = PdfReader(BytesIO(content))
+    assert len(pdf.pages) == len(amounts)
+    seen = set()
+    for page in pdf.pages:
+        text = "".join(page.extract_text().split())
+        matches = [index for index in amounts if f"商品{index}" in text]
+        assert len(matches) == 1, text
+        topic = matches[0]
+        assert topic not in seen
+        seen.add(topic)
+        assert text.count(f"主題{topic}") == 2
+        assert text.count("收執聯") == text.count("存根聯") == 1
+        assert _page_totals(page) == [str(amounts[topic])] * 2
+        for other in set(amounts) - {topic}:
+            assert f"主題{other}" not in text
+    assert seen == set(amounts)
+
+
+@pytest.mark.parametrize("topics", [False, True], indirect=True)
+@pytest.mark.parametrize("mode", ["single", "selected", "all_unpaid", "changed"])
+async def test_class_receipts_separate_topics_even_when_the_activity_matches(
+    db_session, admin_user, authed_client_factory, topics, mode
+):
+    school_class, activity, categories, products = topics
+    orders = []
+    for index, product in enumerate(products):
+        # 同主題的兩筆訂單仍合併為該班該主題的一份收據。
+        for amount in (40, 60) if index == 0 else ((index + 1) * 100,):
+            order = await _order(
+                db_session, admin_user, school_class, activity, [product], total=amount
+            )
+            # 同時覆蓋有主題快照與僅能從品項推導主題的歷史訂單。
+            order.category_id = categories[index].id if index == 1 else None
+            orders.append(order)
+    await db_session.flush()
+    client = authed_client_factory(admin_user)
+    scope = {"activity_id": str(activity.id) if activity else None}
+    if mode == "single":
+        response = await client.get(
+            f"/shop/orders/classes/{school_class.id}/receipt.pdf",
+            params={"activity_id": str(activity.id)} if activity else {},
+        )
+    elif mode == "changed":
+        response = await client.post("/shop/orders/receipts/changed.pdf", json=scope)
+    else:
+        payload = {**scope, "unpaid_only": mode == "all_unpaid"}
+        if mode == "selected":
+            payload["class_ids"] = [str(school_class.id)]
+        response = await client.post("/shop/orders/classes/receipts.pdf", json=payload)
+    assert response.status_code == 200, response.text
+    _assert_separate_topics(response.content, {1: 100, 2: 200, 3: 300})
+    for order in orders:
+        await db_session.refresh(order)
+        assert order.is_paid is False
+        assert await db_session.get(ShopOrderReceiptPrint, order.id) is not None
+
+
+@pytest.mark.parametrize("topics", [False, True], indirect=True)
+@pytest.mark.parametrize("payment_state", [None, False, True])
+@pytest.mark.parametrize("category_only", [False, True])
+async def test_unpaid_receipts_follow_orders_instead_of_class_payment_history(
+    db_session, admin_user, authed_client_factory, topics, payment_state, category_only
+):
+    school_class, activity, categories, products = topics
+    unpaid = await _order(db_session, admin_user, school_class, activity, [products[0]], total=101)
+    unpaid.is_class_collected = True  # 班代收款備忘不等於班聯確認收款。
+    paid = await _order(db_session, admin_user, school_class, activity, [products[1]], total=202)
+    paid.is_paid = True
+    paid_class = SchoolClass(
+        academic_year=115, class_code="102", label="一年二班", created_by=admin_user.id
+    )
+    db_session.add(paid_class)
+    await db_session.flush()
+    paid_without_confirmation = await _order(
+        db_session, admin_user, paid_class, activity, [products[0]], total=101
+    )
+    paid_without_confirmation.is_paid = True
+    payment = None
+    if payment_state is not None:
+        payment = ShopClassPayment(
+            class_id=school_class.id,
+            activity_id=activity.id if activity else None,
+            is_paid=payment_state,
+        )
+        db_session.add(payment)
+    await db_session.flush()
+    scope = (
+        {"category_id": str(categories[0].id)}
+        if category_only
+        else {"activity_id": str(activity.id) if activity else None}
+    )
+    client = authed_client_factory(admin_user)
+    path = "/shop/orders/classes/receipts.pdf"
+    response = await client.post(path, json={**scope, "unpaid_only": True})
+    assert response.status_code == 200, response.text
+    _assert_separate_topics(response.content, {1: 101})
+    text = "".join(page.extract_text() for page in PdfReader(BytesIO(response.content)).pages)
+    assert school_class.label in text
+    assert paid_class.label not in text
+    assert await db_session.get(ShopOrderReceiptPrint, unpaid.id) is not None
+    for order in (paid, paid_without_confirmation):
+        assert await db_session.get(ShopOrderReceiptPrint, order.id) is None
+        await db_session.refresh(order)
+        assert order.is_paid is True
+    await db_session.refresh(unpaid)
+    assert unpaid.is_paid is False
+    assert unpaid.is_class_collected is True
+    if payment is not None:
+        await db_session.refresh(payment)
+        assert payment.is_paid is payment_state
+
+    # 實際訂單全數收款後，即使缺少班級確認紀錄也不可再列印為未收款。
+    unpaid.is_paid = True
+    await db_session.flush()
+    empty = await client.post(path, json={**scope, "unpaid_only": True})
+    assert empty.status_code == 400
+    assert empty.json()["detail"] == "此活動沒有尚未確認收款的訂單"
+
+
+@pytest.mark.parametrize("topics", [False, True], indirect=True)
+@pytest.mark.parametrize("mode", ["class", "personal", "supplement"])
+async def test_legacy_order_spanning_topics_splits_items_and_preserves_the_paid_total(
+    db_session, admin_user, authed_client_factory, topics, mode
+):
+    school_class, activity, _, products = topics
+    order = await _order(
+        db_session,
+        admin_user,
+        school_class if mode != "personal" else None,
+        activity,
+        products,
+        total=605,  # 原始品項合計 606，分攤 1 元折抵後不得少算或重複計入。
+        supplement=mode == "supplement",
+    )
+    client = authed_client_factory(admin_user)
+    if mode == "supplement":
+        response = await client.get(f"/shop/orders/{order.id}/supplement-receipt.pdf")
+    else:
+        response = await client.post(
+            "/shop/orders/classes/receipts.pdf",
+            json={
+                "activity_id": str(activity.id) if activity else None,
+                "unpaid_only": mode == "personal",
+            },
+        )
+    assert response.status_code == 200, response.text
+    _assert_separate_topics(response.content, {1: 100, 2: 202, 3: 303})
+    await db_session.refresh(order)
+    assert order.total_price == 605
+    assert order.is_paid is False
+    assert (
+        await db_session.scalar(
+            select(func.count(OrderItem.id)).where(OrderItem.order_id == order.id)
+        )
+        == 3
+    )
+
+
+@pytest.mark.parametrize("topics", [False], indirect=True)
+async def test_changed_receipts_still_separate_topics_and_do_not_repeat_unchanged_orders(
+    db_session, admin_user, authed_client_factory, topics, monkeypatch
+):
+    school_class, activity, _, products = topics
+    orders = [
+        await _order(db_session, admin_user, school_class, activity, [product], total=100 * index)
+        for index, product in enumerate(products, 1)
+    ]
+    printed_at = datetime.now(UTC) + timedelta(seconds=1)
+    monkeypatch.setattr(_receipts, "now_local", lambda: printed_at)
+    client = authed_client_factory(admin_user)
+    first = await client.post("/shop/orders/classes/receipts.pdf", json={})
+    assert first.status_code == 200, first.text
+    _assert_separate_topics(first.content, {1: 100, 2: 200, 3: 300})
+    unchanged = await client.post("/shop/orders/receipts/changed.pdf", json={})
+    assert unchanged.status_code == 400
+    orders[0].total_price = 99
+    orders[0].updated_at = printed_at + timedelta(seconds=1)
+    await db_session.flush()
+    monkeypatch.setattr(_receipts, "now_local", lambda: printed_at + timedelta(seconds=2))
+    changed = await client.post("/shop/orders/receipts/changed.pdf", json={})
+    assert changed.status_code == 200, changed.text
+    _assert_separate_topics(changed.content, {1: 99, 2: 200, 3: 300})

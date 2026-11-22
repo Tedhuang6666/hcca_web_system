@@ -4,6 +4,11 @@ export type WritingSuggestion = {
   group: string;
 };
 
+export type WritingQualityCheck = {
+  severity: "info" | "warning";
+  message: string;
+};
+
 const COMMON_PHRASES: WritingSuggestion[] = [
   { group: "公文常用語", label: "請查照", value: "請查照。" },
   { group: "公文常用語", label: "請鑒核", value: "請　鑒核。" },
@@ -63,4 +68,27 @@ export function writingSuggestions(text: string, cursor = text.length): WritingS
 
 export function insertAtCursor(text: string, insert: string, start: number, end = start) {
   return `${text.slice(0, start)}${insert}${text.slice(end)}`;
+}
+
+export function writingQualityChecks(text: string): WritingQualityCheck[] {
+  const value = text.trim();
+  if (!value) return [];
+
+  const checks: WritingQualityCheck[] = [];
+  if (value.length < 12) {
+    checks.push({ severity: "info", message: "內容偏短，建議補上背景、依據或具體辦法。" });
+  }
+  if (/依據|依照|法規|辦法|條例/.test(value) && !/第[一二三四五六七八九十百\d]+條/.test(value)) {
+    checks.push({ severity: "warning", message: "提到法規依據時，建議標明具體條號。" });
+  }
+  if (/會議|開會|議程/.test(value) && !/決議|討論|報告事項|臨時動議/.test(value)) {
+    checks.push({ severity: "info", message: "會議文字可補上報告、討論或決議欄位。" });
+  }
+  if (/公布|施行|修正/.test(value) && !/自公布日施行|施行日期|生效/.test(value)) {
+    checks.push({ severity: "warning", message: "法規發布或修正文字建議交代施行時間。" });
+  }
+  if (/\d{1,2}\/\d{1,2}|\d{1,2}-\d{1,2}/.test(value)) {
+    checks.push({ severity: "info", message: "日期建議使用完整年月日，避免跨年度誤解。" });
+  }
+  return checks.slice(0, 3);
 }

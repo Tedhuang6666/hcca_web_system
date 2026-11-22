@@ -1,27 +1,109 @@
-{$SITE_DOMAIN} {
+{
+	# 官方 caddy:2-alpine 只內建 static IP source；明列 Cloudflare 官方 CIDR，
+	# 僅接受來自 Cloudflare edge 的 client IP header，避免偽造 CF-Connecting-IP。
+	servers {
+		trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+		trusted_proxies_strict
+		client_ip_headers CF-Connecting-IP X-Forwarded-For
+	}
+}
+{$SITE_DOMAIN}, www.{$SITE_DOMAIN} {
 	encode zstd gzip
 
 	header {
-		Referrer-Policy "strict-origin-when-cross-origin"
-		X-Content-Type-Options "nosniff"
-		X-Frame-Options "DENY"
-		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		# 在回應送出前覆寫上游同名欄位，避免 Next/FastAPI 與 Caddy 重複設定。
+		>Referrer-Policy "strict-origin-when-cross-origin"
+		>X-Content-Type-Options "nosniff"
+		>Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		>Cross-Origin-Opener-Policy "same-origin"
+		>Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	}
+
+	# 公開財務憑證 API 自行設定 SAMEORIGIN 與 frame-ancestors 'self'；
+	# 其餘路徑由 Caddy 強制 DENY，避免覆蓋憑證預覽所需的同源 iframe 標頭。
+	@not_public_finance_evidence {
+		not path_regexp ^/api/finance/public/budgets/[^/]+/(expenses|expense-claims)/[^/]+/evidence/[^/]+$
+	}
+	header @not_public_finance_evidence >X-Frame-Options "DENY"
+
+	@theme_asset path /theme.js
+	header @theme_asset Cache-Control "public, max-age=604800, stale-while-revalidate=604800"
+
+	# 互斥 handle 依路徑明確度先於 /api/* handle_path 命中，並攔截 metrics 尾端變體。
+	# Prometheus 只透過 Docker 內網直接抓取 api:8000/metrics。
+	handle /api/metrics* {
+		respond 404
 	}
 
 	handle_path /api/* {
-		reverse_proxy api:8000
+		reverse_proxy api:8000 {
+			header_up CF-Connecting-IP {client_ip}
+			health_uri /live
+			health_interval 15s
+			health_timeout 3s
+		}
+	}
+
+	# 異地主機的 Discord Bot 只需要這組內部 API；路由本身仍由 FastAPI
+	# 的 X-API-Key + discord:bot scope 保護，不把整個 API 面暴露給 Bot。
+	handle /internal/discord/* {
+		reverse_proxy api:8000 {
+			header_up CF-Connecting-IP {client_ip}
+			health_uri /live
+			health_interval 15s
+			health_timeout 3s
+		}
+	}
+# 受 X-Performance-Monitor-Token 保護的登入後效能探針；不含在公開頁面路由中。
+# 探針本身再由 FastAPI 驗證 token、限制 same-origin URL，避免僅靠 proxy 隔離。
+	handle /internal/observability/* {
+		reverse_proxy api:8000 {
+			header_up CF-Connecting-IP {client_ip}
+			health_uri /live
+			health_interval 15s
+			health_timeout 3s
+		}
 	}
 
 	handle /ws/* {
+		reverse_proxy api:8000 {
+			header_up CF-Connecting-IP {client_ip}
+		}
+	}
+
+	# 使用者上傳檔案（公告圖、問卷圖等公開素材）：瀏覽器快取 7 天、edge 快取 30 天。
+	# 財務憑證必須通過 /api/finance/journals/{id}/evidence 的帳本權限檢查，
+	# 不可由靜態 uploads 路徑繞過。
+	@private_finance_evidence path /uploads/finance/evidence/*
+	respond @private_finance_evidence 404
+
+	@public_uploads path /uploads/announcements/* /uploads/merchandise-submissions/templates/* /uploads/surveys/* /uploads/public-site/*
+	handle @public_uploads {
+		header Cache-Control "public, max-age=604800, s-maxage=2592000, stale-while-revalidate=604800"
 		reverse_proxy api:8000
 	}
 
 	handle /uploads/* {
+		header Cache-Control "no-store"
 		reverse_proxy api:8000
 	}
 
 	handle /auth/google/* {
 		reverse_proxy api:8000
+	}
+
+	handle /auth/discord/* {
+		reverse_proxy api:8000
+	}
+
+	# Next.js 靜態資源（hashed 檔名，永久快取）
+	handle /_next/static/* {
+		reverse_proxy web:3000
+	}
+
+	# 沿用 Next Image 的成功回應快取標頭，避免長期快取錯誤回應。
+	handle /_next/image* {
+		reverse_proxy web:3000
 	}
 
 	handle {

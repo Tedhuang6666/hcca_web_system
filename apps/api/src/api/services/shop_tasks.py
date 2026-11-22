@@ -1,14 +1,63 @@
-"""校商系統 Celery 定時任務 - 商品截止後通知班級幹部結單"""
+"""商品系統 Celery 定時任務 - 商品截止後通知班級幹部結單"""
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from api.core.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
+
+
+@celery_app.task(
+    name="api.services.shop_tasks.sync_organization_preorders",
+    bind=True,
+    max_retries=3,
+)
+def sync_organization_preorders(self) -> dict:  # noqa: ANN001
+    """逐來源 commit；重試時由匯入帳本與 source row lock 防止重複訂單。"""
+
+    async def _run() -> dict:
+        from sqlalchemy import select
+
+        from api.core.database import task_session
+        from api.models.shop_sheet import ShopSheetSource
+        from api.services.shop._sheet_import import sync_source
+
+        totals = {"imported": 0, "updated": 0, "skipped": 0, "review": 0}
+        async with task_session() as session:
+            source_ids = list(
+                await session.scalars(
+                    select(ShopSheetSource.id).where(ShopSheetSource.enabled.is_(True))
+                )
+            )
+        for source_id in source_ids:
+            async with task_session() as session:
+                try:
+                    # 重新確認 enabled，避免排程取清單後管理者剛好停用。
+                    source = await session.scalar(
+                        select(ShopSheetSource)
+                        .where(ShopSheetSource.id == source_id)
+                        .with_for_update()
+                    )
+                    if source is None or not source.enabled:
+                        continue
+                    result = await sync_source(session, source_id)
+                    await session.commit()
+                    for key, count in result.model_dump().items():
+                        totals[key] += count
+                except Exception:
+                    await session.rollback()
+                    raise
+        return totals
+
+    try:
+        return asyncio.run(_run())
+    except Exception as exc:
+        logger.error("組織預購同步失敗，將重試")
+        raise self.retry(exc=exc, countdown=60) from exc
 
 
 @celery_app.task(
@@ -20,39 +69,25 @@ def notify_class_cadres_on_deadline(self) -> dict:  # noqa: ANN001
     """
     Celery Beat 定時任務：商品截止販售後，通知各受影響班級幹部協助結單收費。
 
-    每 5 分鐘執行一次；掃描 sale_end 落在最近 6 分鐘內（剛截止）的商品，
+    每 5 分鐘執行一次；掃描有效截止時間落在最近 6 分鐘內（剛截止）的商品，
     找出有訂單的班級，對其幹部建立站內通知。視窗略大於排程間隔以避免漏發，
     可能導致極少數情況重複通知，對結單流程無害。
     """
 
     async def _run() -> int:
         from sqlalchemy import func, select
-        from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-        from api.core.config import settings
+        from api.core.database import task_session
         from api.models.notification import Notification
         from api.models.school_class import ClassCadre
-        from api.models.shop import Order, OrderItem, OrderStatus, Product
+        from api.models.shop import Order, OrderItem, OrderStatus
+        from api.services.shop._deadlines import recently_closed_product_ids
 
-        engine = create_async_engine(str(settings.DATABASE_URL), echo=False)
         notified = 0
-        async with AsyncSession(engine, expire_on_commit=False) as session:
+        async with task_session() as session:
             try:
                 now = datetime.now(UTC)
-                window_start = now - timedelta(minutes=6)
-                product_ids = (
-                    (
-                        await session.execute(
-                            select(Product.id).where(
-                                Product.sale_end.is_not(None),
-                                Product.sale_end > window_start,
-                                Product.sale_end <= now,
-                            )
-                        )
-                    )
-                    .scalars()
-                    .all()
-                )
+                product_ids = await recently_closed_product_ids(session, now=now)
                 if product_ids:
                     class_rows = (
                         await session.execute(
@@ -86,9 +121,9 @@ def notify_class_cadres_on_deadline(self) -> dict:  # noqa: ANN001
                                 Notification(
                                     user_id=user_id,
                                     type="system",
-                                    title="班級校商訂單已結單",
+                                    title="班級商品訂單已結單",
                                     body=(
-                                        f"貴班有 {order_count} 筆校商訂單已截止，"
+                                        f"貴班有 {order_count} 筆商品訂單已截止，"
                                         "請協助核對訂購情形與收費。"
                                     ),
                                     link="/shop/class-orders",
@@ -101,8 +136,6 @@ def notify_class_cadres_on_deadline(self) -> dict:  # noqa: ANN001
             except Exception:
                 await session.rollback()
                 raise
-            finally:
-                await engine.dispose()
 
     try:
         count = asyncio.run(_run())
@@ -111,3 +144,16 @@ def notify_class_cadres_on_deadline(self) -> dict:  # noqa: ANN001
     except Exception as exc:
         logger.error("[Celery Beat] 班級結單通知失敗: %s", exc)
         raise self.retry(exc=exc, countdown=120) from exc
+
+
+@celery_app.task(
+    name="api.services.shop_tasks.cleanup_expired_seat_holds",
+    bind=True,
+    max_retries=3,
+)
+def cleanup_expired_seat_holds(self) -> dict:  # noqa: ANN001
+    """劃位功能已移除；保留同名空任務，讓部署前已排入佇列的舊訊息能正常消化。
+
+    下一次部署後即可刪除此任務。
+    """
+    return {"removed": 0}

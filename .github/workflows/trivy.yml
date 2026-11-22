@@ -1,0 +1,118 @@
+name: Trivy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/**"
+      - "libs/**"
+      - "docker-compose.yml"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/trivy.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/**"
+      - "libs/**"
+      - "docker-compose.yml"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/trivy.yml"
+  schedule:
+    - cron: "37 6 * * 5"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trivy-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repository:
+    name: Repository misconfiguration and secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Scan repository
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: misconfig,secret
+          format: sarif
+          output: trivy-repository.sarif
+          severity: HIGH,CRITICAL
+          limit-severities-for-sarif: true
+          exit-code: "1"
+          timeout: 10m
+          skip-dirs: ".git,**/.next,**/node_modules,apps/api/alembic/versions"
+
+      - name: Upload repository results
+        if: always() && hashFiles('trivy-repository.sarif') != ''
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        with:
+          sarif_file: trivy-repository.sarif
+          category: trivy-repository
+
+  image:
+    name: Image scan (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: api
+            dockerfile: apps/api/Dockerfile
+          - name: web
+            dockerfile: apps/web/Dockerfile
+          - name: discord-bot
+            dockerfile: apps/discord-bot/Dockerfile
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build image
+        run: |
+          docker build \
+            --file "${{ matrix.dockerfile }}" \
+            --tag "hcca-${{ matrix.name }}:scan" \
+            .
+
+      - name: Scan image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: hcca-${{ matrix.name }}:scan
+          scanners: vuln,secret
+          vuln-type: os,library
+          format: sarif
+          output: trivy-image-${{ matrix.name }}.sarif
+          severity: HIGH,CRITICAL
+          limit-severities-for-sarif: true
+          ignore-unfixed: true
+          exit-code: "1"
+          timeout: 15m
+
+      - name: Upload image results
+        if: always() && hashFiles(format('trivy-image-{0}.sarif', matrix.name)) != ''
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        with:
+          sarif_file: trivy-image-${{ matrix.name }}.sarif
+          category: trivy-image-${{ matrix.name }}

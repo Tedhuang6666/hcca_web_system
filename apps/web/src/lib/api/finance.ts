@@ -1,0 +1,229 @@
+import type {
+  ChartAccountCreate,
+  ChartAccountOut,
+  ChartAccountUpdate,
+  FinanceExpenseClaimCreate,
+  FinanceBudget,
+  FinanceBudgetAllocation,
+  FinanceBudgetDetail,
+  FinanceBudgetExpenseOut,
+  FinanceBudgetImportResult,
+  FinanceBudgetIncomeItem,
+  FinanceBudgetIncomeRecord,
+  FinanceResetOut,
+  FinanceBudgetSubmission,
+  FinanceExpenseClaimItemOut,
+  ExpenseBudgetUpdate,
+  FinanceJournalOut,
+  ExpenseProcurementUpdate,
+  FinanceEvidenceUploadOut,
+  FinanceSettlement,
+  FundAccountOut,
+  JournalCreate,
+  LedgerOut,
+  PeriodCreate,
+  PeriodOut,
+  PublicExpenseClaimDetailOut,
+  TransferCreate,
+} from "@/lib/types";
+import { ApiError, BASE, csrfHeaders, del, errorMessageFromResponse, get, patch, post, silentRefresh, uploadWithProgress } from "./core";
+
+async function downloadDocument(path: string, filename: string, body?: object): Promise<void> {
+  const method = body ? "POST" : "GET";
+  const doFetch = () => fetch(`${BASE}${path}`, {
+    method, credentials: "include",
+    headers: { ...csrfHeaders(method), ...(body ? { "Content-Type": "application/json" } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  let response = await doFetch();
+  if (response.status === 401 && await silentRefresh()) response = await doFetch();
+  if (!response.ok) throw new ApiError(response.status, await errorMessageFromResponse(response));
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function postForm<T>(path: string, form: FormData): Promise<T> {
+  const doFetch = () => uploadWithProgress(`${BASE}${path}`, {
+    method: "POST",
+    credentials: "include",
+    headers: csrfHeaders("POST"),
+    body: form,
+  });
+  let response = await doFetch();
+  if (response.status === 401 && await silentRefresh()) response = await doFetch();
+  if (!response.ok) throw new ApiError(response.status, await errorMessageFromResponse(response));
+  return response.json() as Promise<T>;
+}
+
+export const financeApi = {
+  uploadEvidence: async (ledgerId: string, file: File, onProgress?: (progress: number) => void): Promise<FinanceEvidenceUploadOut> => {
+    const form = new FormData();
+    form.append("file", file);
+    const doFetch = () => uploadWithProgress(`${BASE}/finance/ledgers/${ledgerId}/evidence`, {
+      method: "POST",
+      credentials: "include",
+      headers: csrfHeaders("POST"),
+      body: form,
+    }, onProgress);
+    let response = await doFetch();
+    if (response.status === 401 && await silentRefresh()) response = await doFetch();
+    if (!response.ok) throw new ApiError(response.status, await errorMessageFromResponse(response));
+    return response.json();
+  },
+  getLedger: (id: string) => get<LedgerOut>(`/finance/ledgers/${id}`),
+  listLedgers: () => get<LedgerOut[]>("/finance/ledgers"),
+  createLedger: (body: { org_id: string; name: string }) => post<LedgerOut>("/finance/ledgers", body),
+  listAccounts: (ledgerId: string) => get<ChartAccountOut[]>(`/finance/ledgers/${ledgerId}/accounts`),
+  createAccount: (ledgerId: string, body: ChartAccountCreate) =>
+    post<ChartAccountOut>(`/finance/ledgers/${ledgerId}/accounts`, body),
+  updateAccount: (ledgerId: string, accountId: string, body: ChartAccountUpdate) =>
+    patch<ChartAccountOut>(`/finance/ledgers/${ledgerId}/accounts/${accountId}`, body),
+  listFunds: (ledgerId: string) => get<FundAccountOut[]>(`/finance/ledgers/${ledgerId}/funds`),
+  createPeriod: (ledgerId: string, body: PeriodCreate) =>
+    post<PeriodOut>(`/finance/ledgers/${ledgerId}/periods`, body),
+  listPeriods: (ledgerId: string) => get<PeriodOut[]>(`/finance/ledgers/${ledgerId}/periods`),
+  createJournal: (ledgerId: string, body: JournalCreate) =>
+    post<FinanceJournalOut>(`/finance/ledgers/${ledgerId}/journals`, body),
+  updateManualJournal: (entryId: string, body: {
+    period_id: string; entry_date: string; fund_account_id: string;
+    counterpart_account_id: string; description: string; amount: number;
+    source_url?: string; evidence_url?: string; note?: string;
+  }) => patch<FinanceJournalOut>(`/finance/journals/${entryId}/manual-entry`, body),
+  createExpenseClaim: (ledgerId: string, body: FinanceExpenseClaimCreate) =>
+    post<FinanceJournalOut>(`/finance/ledgers/${ledgerId}/expense-claims`, body),
+  updateExpenseClaim: (entryId: string, body: FinanceExpenseClaimCreate) =>
+    patch<FinanceJournalOut>(`/finance/journals/${entryId}/expense-claim`, body),
+  listJournals: (ledgerId: string, status?: string) =>
+    get<FinanceJournalOut[]>(`/finance/ledgers/${ledgerId}/journals${status ? `?status=${status}` : ""}`),
+  listClaimItems: (entryId: string) =>
+    get<FinanceExpenseClaimItemOut[]>(`/finance/journals/${entryId}/claim-items`),
+  createTransfer: (ledgerId: string, body: TransferCreate) =>
+    post<FinanceJournalOut>(`/finance/ledgers/${ledgerId}/transfers`, body),
+  submit: (entryId: string) => post<FinanceJournalOut>(`/finance/journals/${entryId}/submit`, {}),
+  post: (entryId: string) => post<FinanceJournalOut>(`/finance/journals/${entryId}/post`, {}),
+  returnClaim: (entryId: string, note: string) =>
+    post<FinanceJournalOut>(`/finance/journals/${entryId}/return`, { note }),
+  updateProcurement: (entryId: string, body: ExpenseProcurementUpdate) =>
+    patch<FinanceJournalOut>(`/finance/journals/${entryId}/procurement`, body),
+  markSchoolPaid: (entryId: string) =>
+    post<FinanceJournalOut>(`/finance/journals/${entryId}/school-payment`, {}),
+  markDuesPaid: (entryId: string) =>
+    post<FinanceJournalOut>(`/finance/journals/${entryId}/dues-payment`, {}),
+  completeClaim: (entryId: string) => post<FinanceJournalOut>(`/finance/journals/${entryId}/complete`, {}),
+  updateBudget: (entryId: string, body: ExpenseBudgetUpdate) =>
+    patch<FinanceJournalOut>(`/finance/journals/${entryId}/budget`, body),
+  listBudgets: (ledgerId: string) => get<FinanceBudget[]>(`/finance/ledgers/${ledgerId}/budgets`),
+  createBudget: (ledgerId: string, body: { period_id: string; name: string }) =>
+    post<FinanceBudget>(`/finance/ledgers/${ledgerId}/budgets`, body),
+  importBudget: (ledgerId: string, body: {
+    file: File; period_id: string; name: string; title?: string; proposing_org_id?: string;
+    budget_id?: string; replace_submission_id?: string; council_approved_on?: string;
+    full_snapshot?: boolean;
+  }) => {
+    const form = new FormData();
+    form.append("file", body.file);
+    form.append("period_id", body.period_id);
+    form.append("name", body.name);
+    if (body.title) form.append("title", body.title);
+    if (body.proposing_org_id) form.append("proposing_org_id", body.proposing_org_id);
+    if (body.budget_id) form.append("budget_id", body.budget_id);
+    if (body.replace_submission_id) form.append("replace_submission_id", body.replace_submission_id);
+    if (body.council_approved_on) form.append("council_approved_on", body.council_approved_on);
+    form.append("full_snapshot", String(body.full_snapshot ?? true));
+    return postForm<FinanceBudgetImportResult>(`/finance/ledgers/${ledgerId}/budgets/import`, form);
+  },
+  getBudget: (budgetId: string) => get<FinanceBudgetDetail>(`/finance/budgets/${budgetId}`),
+  createBudgetIncomeRecord: (budgetId: string, body: { income_item_id: string; amount: number; entry_date: string; note?: string | null }) =>
+    post<FinanceBudgetIncomeRecord>(`/finance/budgets/${budgetId}/income-records`, body),
+  updateBudgetIncomeRecord: (budgetId: string, recordId: string, body: { amount: number; entry_date: string; note?: string | null }) =>
+    patch<FinanceBudgetIncomeRecord>(`/finance/budgets/${budgetId}/income-records/${recordId}`, body),
+  exportBudget: (budgetId: string) =>
+    downloadDocument(`/finance/budgets/${budgetId}/export.xlsx`, "預算總表.xlsx"),
+  updateBudgetIncomeItem: (budgetId: string, incomeId: string, body: { amount: number; note?: string | null }) =>
+    patch<FinanceBudgetIncomeItem>(`/finance/budgets/${budgetId}/income-items/${incomeId}`, body),
+  renameBudget: (budgetId: string, body: { name: string }) =>
+    patch<FinanceBudget>(`/finance/budgets/${budgetId}`, body),
+  updateBudgetPublication: (budgetId: string, isPublic: boolean) =>
+    patch<FinanceBudget>(`/finance/budgets/${budgetId}/publication`, { is_public: isPublic }),
+  createBudgetSubmission: (budgetId: string, body: { kind: 'initial' | 'supplemental'; title: string; note?: string }) =>
+    post<FinanceBudgetSubmission>(`/finance/budgets/${budgetId}/submissions`, body),
+  updateBudgetSubmission: (submissionId: string, body: { title?: string; note?: string | null }) =>
+    patch<FinanceBudgetSubmission>(`/finance/budget-submissions/${submissionId}`, body),
+  deleteBudgetSubmission: (submissionId: string) =>
+    del<void>(`/finance/budget-submissions/${submissionId}`),
+  createBudgetNode: (submissionId: string, body: { parent_id?: string | null; name: string; sort_order?: number }) =>
+    post(`/finance/budget-submissions/${submissionId}/nodes`, body),
+  createBudgetAllocation: (submissionId: string, body: {
+    node_id: string; proposing_org_id: string; amount?: number; quantity?: number; unit?: string; unit_price?: number; note?: string
+  }) =>
+    post<FinanceBudgetAllocation>(`/finance/budget-submissions/${submissionId}/allocations`, body),
+  updateBudgetDraftAllocation: (submissionId: string, allocationId: string, body: {
+    node_id: string; proposing_org_id: string; amount?: number; quantity?: number;
+    unit?: string; unit_price?: number; note?: string | null;
+  }) =>
+    patch<FinanceBudgetAllocation>(
+      `/finance/budget-submissions/${submissionId}/allocations/${allocationId}`,
+      body,
+    ),
+  deleteBudgetDraftAllocation: (submissionId: string, allocationId: string) =>
+    del<void>(`/finance/budget-submissions/${submissionId}/allocations/${allocationId}`),
+  submitBudget: (submissionId: string) => post<FinanceBudgetSubmission>(`/finance/budget-submissions/${submissionId}/submit`, {}),
+  reviewBudget: (submissionId: string, body: {
+    status: 'approved' | 'returned' | 'rejected'; note?: string; council_approved_on?: string;
+  }) =>
+    post<FinanceBudgetSubmission>(`/finance/budget-submissions/${submissionId}/review`, body),
+  updateCouncilReviewPublication: (submissionId: string, isPublic: boolean) =>
+    patch<FinanceBudgetSubmission>(
+      `/finance/budget-submissions/${submissionId}/council-review-publication`,
+      { is_public: isPublic },
+    ),
+  updateBudgetAllocation: (allocationId: string, body: {
+    node_id?: string; amount?: number; quantity?: number; unit?: string;
+    unit_price?: number | null; note?: string | null; proposing_org_id?: string; reason: string;
+  }) =>
+    patch<FinanceBudgetAllocation>(`/finance/budget-allocations/${allocationId}`, body),
+  addBudgetAllocationEvidence: (
+    allocationId: string,
+    body: FinanceEvidenceUploadOut & { note?: string },
+  ) => post<FinanceBudgetAllocation["evidence"][number]>(
+    `/finance/budget-allocations/${allocationId}/evidence`, body,
+  ),
+  createBudgetExpense: (budgetId: string, body: {
+    allocation_id: string; department_org_id?: string; entry_date: string;
+    purpose: string; total_amount?: number; note?: string; advanced_by_name?: string | null;
+    items?: Array<{
+      name: string; unit_price: number; tax_rate?: number; quantity: number; unit: string;
+    }>;
+    evidence?: Array<{
+      storage_key: string; filename: string; content_type: string; file_size: number;
+    }>;
+  }) => post<FinanceBudgetExpenseOut>(`/finance/budgets/${budgetId}/expenses`, body),
+  updateBudgetExpense: (budgetId: string, expenseId: string, body: {
+    allocation_id: string; department_org_id: string; entry_date: string;
+    purpose: string; total_amount?: number; note?: string | null; advanced_by_name?: string | null;
+    items?: Array<{
+      name: string; unit_price: number; tax_rate?: number; quantity: number; unit: string;
+    }>;
+    evidence?: Array<{
+      storage_key: string; filename: string; content_type: string; file_size: number;
+    }>;
+  }) => patch<FinanceBudgetExpenseOut>(
+    `/finance/budgets/${budgetId}/expenses/${expenseId}`,
+    body,
+  ),
+  getPublicExpenseClaim: (budgetId: string, entryId: string) =>
+    get<PublicExpenseClaimDetailOut>(
+      `/finance/public/budgets/${budgetId}/expense-claims/${entryId}`,
+    ),
+  clearAllTestData: () => del<FinanceResetOut>("/finance/test-reset"),
+  getSettlement: (ledgerId: string, periodId: string) =>
+    get<FinanceSettlement>(`/finance/ledgers/${ledgerId}/periods/${periodId}/settlement`),
+  reimburseAdvance: (entryId: string, body: { period_id: string; entry_date: string; fund_account_id: string; payment_status?: 'school_paid' | 'dues_paid'; note?: string }) =>
+    post<FinanceJournalOut>(`/finance/journals/${entryId}/reimburse-advance`, body),
+};

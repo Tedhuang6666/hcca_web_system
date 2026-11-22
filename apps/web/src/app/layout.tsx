@@ -1,26 +1,57 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
-import { Suspense } from "react";
 import "./globals.css";
-import { Toaster } from "sonner";
-import AppShell from "@/components/layout/AppShell";
-import GoogleOneTap from "@/components/auth/GoogleOneTap";
-import PwaInstallPrompt from "@/components/pwa/PwaInstallPrompt";
+import "./accessibility.css";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
-import TelemetryProvider from "@/components/providers/TelemetryProvider";
-import ScrollProgressBar from "@/components/ui/ScrollProgressBar";
+import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
+import AppToaster from "@/components/ui/AppToaster";
+import BarePageTransition from "@/components/layout/BarePageTransition";
+import ClientErrorReporter from "@/components/providers/ClientErrorReporter";
+import WebVitalsReporter from "@/components/providers/WebVitalsReporter";
 import { BRANDING } from "@/lib/branding";
 import { SOCIAL_IMAGE, SOCIAL_SHARE_TITLE, SOCIAL_SITE_NAME } from "@/lib/social-metadata";
 import { SITE_URL } from "@/lib/seo";
 
 const DEFAULT_DESCRIPTION = BRANDING.description;
 
+// CSP nonce is generated per request by proxy.ts. Dynamic rendering keeps the
+// nonce in the response header synchronized with Next.js inline bootstrap scripts.
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   applicationName: SOCIAL_SITE_NAME,
   title: { default: SOCIAL_SHARE_TITLE, template: `%s｜${SOCIAL_SITE_NAME}` },
   description: DEFAULT_DESCRIPTION,
+  authors: [{ name: BRANDING.orgShortName, url: "/" }],
+  creator: BRANDING.orgShortName,
+  publisher: BRANDING.orgShortName,
+  category: "education",
+  other: {
+    google: "notranslate",
+  },
+  keywords: [
+    BRANDING.orgShortName,
+    BRANDING.acronym,
+    BRANDING.schoolName,
+    "學生自治",
+    "班聯會",
+  ],
+  referrer: "origin-when-cross-origin",
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
   manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      { url: "/brand/hcca-emblem-192.png", type: "image/png", sizes: "192x192" },
+      { url: "/brand/hcca-emblem-512.png", type: "image/png", sizes: "512x512" },
+    ],
+    apple: [{ url: "/brand/hcca-emblem-apple.png", type: "image/png", sizes: "180x180" }],
+    shortcut: ["/brand/hcca-emblem-192.png"],
+  },
   openGraph: {
     type: "website",
     locale: "zh_TW",
@@ -34,67 +65,66 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: SOCIAL_SHARE_TITLE,
     description: DEFAULT_DESCRIPTION,
-    images: [SOCIAL_IMAGE.url],
+    images: [{ url: SOCIAL_IMAGE.url, alt: SOCIAL_IMAGE.alt }],
   },
 };
 
 export const viewport: Viewport = {
   themeColor: BRANDING.themeColor,
+  viewportFit: "cover",
 };
 
-function ThemeScript({ nonce }: { nonce?: string }) {
-  const script = `
-    (function(){
-      try {
-        var t = localStorage.getItem('hcca-theme');
-        if (!t) {
-          t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-        }
-        document.documentElement.setAttribute('data-theme', t);
-      } catch(e) {}
-    })();
-  `;
+function ThemeScript({ nonce }: { nonce: string | null }) {
+  if (!nonce) return <script src="/theme.v1.js" defer />;
+
+  // Apply the theme before the first paint so the root surface does not wait
+  // for a separate request or flash between light and dark modes.
+  const script = `(() => {
+  try {
+    let theme = localStorage.getItem("hcca-theme");
+    if (!theme) {
+      theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    document.documentElement.setAttribute("data-theme", theme);
+  } catch {}
+})();`;
+
+  return <script nonce={nonce} dangerouslySetInnerHTML={{ __html: script }} />;
+}
+
+function StyleNonceBridge({ nonce }: { nonce: string | null }) {
+  if (!nonce) return null;
+
+  const script = `(() => {
+    const nonce = ${JSON.stringify(nonce)};
+    const createElement = document.createElement.bind(document);
+    document.createElement = function(name, options) {
+      const element = createElement(name, options);
+      if (name.toLowerCase() === "style") element.setAttribute("nonce", nonce);
+      return element;
+    };
+  })();`;
+
   return <script nonce={nonce} dangerouslySetInnerHTML={{ __html: script }} />;
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  // middleware 注入的當次 nonce；enforce CSP 時 inline script 需帶它才能執行
-  const nonce = (await headers()).get("x-nonce") ?? undefined;
+  const nonce = (await headers()).get("x-nonce");
+
   return (
     <html lang="zh-TW" suppressHydrationWarning data-scroll-behavior="smooth">
       <head>
+        <StyleNonceBridge nonce={nonce} />
         <ThemeScript nonce={nonce} />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=Noto+Serif+TC:wght@400;500;600;700&display=swap"
-          data-href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=Noto+Serif+TC:wght@400;500;600;700&display=swap"
-        />
       </head>
       <body className="antialiased">
+        <ClientErrorReporter />
+        <WebVitalsReporter />
         <ThemeProvider>
-          <ScrollProgressBar />
-          <Suspense fallback={null}>
-            <TelemetryProvider />
-          </Suspense>
-          <AppShell>{children}</AppShell>
-          <Suspense fallback={null}>
-            <GoogleOneTap />
-          </Suspense>
-          <PwaInstallPrompt />
-          <Toaster
-            position="top-right"
-            richColors
-            toastOptions={{
-              style: {
-                background: "var(--bg-elevated)",
-                border: "1px solid var(--border-strong)",
-                color: "var(--text-primary)",
-                fontSize: "0.875rem",
-              },
-            }}
-          />
+          <ConfirmProvider>
+            <BarePageTransition>{children}</BarePageTransition>
+            <AppToaster />
+          </ConfirmProvider>
         </ThemeProvider>
       </body>
     </html>

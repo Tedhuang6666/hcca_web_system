@@ -1,0 +1,295 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import {
+  Activity,
+  AlertTriangle,
+  BookUser,
+  ClipboardList,
+  Puzzle,
+  Settings,
+  SlidersHorizontal,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
+import { adminApi, auditLogsApi, systemApi, type ModuleStatus } from "@/lib/api";
+import { usePermissions } from "@/hooks/usePermissions";
+import type { AuditLogOut } from "@/lib/types";
+import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
+
+/* ── 小元件 ──────────────────────────────────────────────────────────────── */
+
+function Panel({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return (
+    <section className={`rounded-md ${className}`} style={{ border: "1px solid var(--border)" }}>
+      {children}
+    </section>
+  );
+}
+
+function StatCard({
+  icon,
+  label,
+  value,
+  warn,
+  href,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: number | null;
+  warn?: boolean;
+  href: string;
+}) {
+  return (
+    <Link href={href} style={{ textDecoration: "none" }}>
+      <Panel className="p-4 flex flex-col gap-1 transition-colors hover:bg-[var(--bg-hover)]">
+        <div className="flex items-center gap-1.5 text-xs" style={{ color: warn && value ? "var(--danger)" : "var(--text-muted)" }}>
+          {icon}
+          <span>{label}</span>
+        </div>
+        <p
+          className="text-2xl font-semibold"
+          style={{ color: warn && value ? "var(--danger)" : "var(--text-primary)" }}
+        >
+          {value === null ? "—" : value}
+        </p>
+      </Panel>
+    </Link>
+  );
+}
+
+function timeAgo(iso: string): string {
+  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (diff < 60) return "剛剛";
+  if (diff < 3600) return `${Math.floor(diff / 60)} 分鐘前`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} 小時前`;
+  return `${Math.floor(diff / 86400)} 天前`;
+}
+
+const ENTITY_LABELS: Record<string, string> = {
+  document: "公文",
+  user: "使用者",
+  person: "人員",
+  regulation: "法規",
+  announcement: "公告",
+  petition: "陳情",
+  survey: "問卷",
+  position: "職位",
+  org: "組織",
+  class: "班級",
+  election: "選舉",
+};
+
+function entityLabel(type: string) {
+  return ENTITY_LABELS[type] ?? type;
+}
+
+/* ── 快速操作定義 ─────────────────────────────────────────────────────────── */
+
+type QuickAction = {
+  href: string;
+  icon: LucideIcon;
+  label: string;
+  requiredPermission?: string;
+  requiredPermissions?: string[];
+};
+
+const QUICK_ACTIONS: QuickAction[] = [
+  { href: "/admin/people",       icon: Users,      label: "人員與組織" },
+  { href: "/admin/settings",     icon: Settings,   label: "系統設定" },
+  { href: "/admin/system",       icon: Activity,   label: "系統營運", requiredPermission: "admin:all" },
+  { href: "/admin/navigation-profiles", icon: SlidersHorizontal, label: "視角管理", requiredPermission: "admin:all" },
+  { href: "/audit-logs",         icon: ClipboardList, label: "稽核日誌" },
+];
+
+/* ── 主頁面 ──────────────────────────────────────────────────────────────── */
+
+const ADMIN_CACHE_KEY = "admin/dashboard";
+
+export default function AdminDashboardPage() {
+  const { isAdmin, can } = usePermissions();
+  const canAccessAdmin = isAdmin || can("admin:users");
+
+  const [userCount, setUserCount] = useState<number | null>(() => cacheGet<number>(ADMIN_CACHE_KEY + "/userCount") ?? null);
+  const [downModules, setDownModules] = useState<number | null>(() => cacheGet<number>(ADMIN_CACHE_KEY + "/downModules") ?? null);
+  const [positionCount, setPositionCount] = useState<number | null>(() => cacheGet<number>(ADMIN_CACHE_KEY + "/positionCount") ?? null);
+  const [recentLogs, setRecentLogs] = useState<AuditLogOut[]>(() => cacheGet<AuditLogOut[]>(ADMIN_CACHE_KEY + "/logs") ?? []);
+  const [maintenance, setMaintenance] = useState<{ enabled: boolean; message: string } | null>(null);
+  const [loading, setLoading] = useState(!cacheHas(ADMIN_CACHE_KEY + "/userCount"));
+
+  useEffect(() => {
+    if (!canAccessAdmin) return;
+    Promise.allSettled([
+      adminApi.dashboardStats(),
+      systemApi.listModules(),
+      auditLogsApi.list({ limit: 6 }),
+      systemApi.status(),
+    ]).then(([users, modules, logs, status]) => {
+      if (users.status === "fulfilled") {
+        setUserCount(users.value.active_user_count);
+        cacheSet(ADMIN_CACHE_KEY + "/userCount", users.value.active_user_count);
+      }
+      if (modules.status === "fulfilled") {
+        const count = (modules.value as ModuleStatus[]).filter((m) => !m.on).length;
+        setDownModules(count);
+        cacheSet(ADMIN_CACHE_KEY + "/downModules", count);
+      }
+      if (users.status === "fulfilled") {
+        setPositionCount(users.value.position_count);
+        cacheSet(ADMIN_CACHE_KEY + "/positionCount", users.value.position_count);
+      }
+      if (logs.status === "fulfilled") {
+        setRecentLogs(logs.value as AuditLogOut[]);
+        cacheSet(ADMIN_CACHE_KEY + "/logs", logs.value);
+      }
+      if (status.status === "fulfilled") setMaintenance(status.value.maintenance);
+      setLoading(false);
+    });
+  }, [canAccessAdmin, can]);
+
+  if (!canAccessAdmin) {
+    return (
+      <div className="p-6 text-center" style={{ color: "var(--text-muted)" }}>
+        您沒有存取管理後台的權限。
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-5 md:p-6 max-w-5xl mx-auto space-y-6">
+
+      {/* 維護模式警示 */}
+      {maintenance?.enabled && (
+        <div
+          className="flex items-start gap-3 rounded-md px-4 py-3 text-sm"
+          style={{
+            background: "var(--warning-dim)",
+            border: "1px solid var(--warning-border)",
+            color: "var(--warning)",
+          }}
+        >
+          <AlertTriangle size={16} className="mt-0.5 flex-shrink-0" />
+          <div className="flex-1">
+            <span className="font-semibold">系統目前處於維護模式</span>
+            {maintenance.message && (
+              <span className="ml-1">— {maintenance.message}</span>
+            )}
+          </div>
+          <Link
+            href="/admin/system"
+            className="flex-shrink-0 text-xs underline underline-offset-2"
+            style={{ color: "var(--warning)" }}
+          >
+            前往設定
+          </Link>
+        </div>
+      )}
+
+      {/* 標題 */}
+      <h1 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
+        系統總覽
+      </h1>
+
+      {/* 快速統計 */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <StatCard
+          href="/admin/people"
+          icon={<Users size={13} />}
+          label="活躍人員"
+          value={loading ? null : userCount}
+        />
+        <StatCard
+          href="/admin/modules"
+          icon={<Puzzle size={13} />}
+          label="關閉模組"
+          value={loading ? null : downModules}
+          warn
+        />
+        <StatCard
+          href="/admin/people?section=organization"
+          icon={<BookUser size={13} />}
+          label="組織職位"
+          value={loading ? null : positionCount}
+        />
+      </div>
+
+      {/* 快速操作 */}
+      <div>
+        <h2 className="text-sm font-semibold mb-3" style={{ color: "var(--text-secondary)" }}>
+          快速操作
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+          {QUICK_ACTIONS.filter((action) => {
+            if (isAdmin) return true;
+            if (action.requiredPermission) return can(action.requiredPermission);
+            if (action.requiredPermissions) return action.requiredPermissions.some(can);
+            return true;
+          }).map((action) => {
+            const Icon = action.icon;
+            return (
+              <Link
+                key={action.href}
+                href={action.href}
+                className="flex min-h-11 items-center gap-2.5 rounded-md px-3.5 text-sm font-semibold transition-colors hover:bg-[var(--bg-hover)]"
+                style={{ border: "1px solid var(--border)", color: "var(--text-primary)", textDecoration: "none" }}
+              >
+                <Icon size={16} aria-hidden style={{ color: "var(--text-muted)" }} />
+                {action.label}
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 最近稽核紀錄 */}
+      {recentLogs.length > 0 && (
+        <Panel>
+          <div
+            className="flex items-center justify-between px-4 py-3"
+            style={{ borderBottom: "1px solid var(--border)" }}
+          >
+            <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+              最近操作紀錄
+            </h2>
+            <Link
+              href="/audit-logs"
+              className="text-xs"
+              style={{ color: "var(--primary-text)", textDecoration: "none" }}
+            >
+              查看全部 →
+            </Link>
+          </div>
+          <ul className="divide-y" style={{ borderColor: "var(--border)" }}>
+            {recentLogs.map((log) => (
+              <li key={log.id} className="flex items-start gap-3 px-4 py-2.5">
+                <div
+                  className="mt-0.5 w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-semibold"
+                  style={{
+                    background: "var(--primary-dim)",
+                    color: "var(--primary-text)",
+                  }}
+                >
+                  {(log.actor_email ?? "S").charAt(0).toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm truncate" style={{ color: "var(--text-primary)" }}>
+                    <span className="font-medium">{log.actor_email ?? "系統"}</span>
+                    {" "}
+                    <span style={{ color: "var(--text-muted)" }}>
+                      {log.summary ?? `${log.action} ${entityLabel(log.entity_type)}`}
+                    </span>
+                  </p>
+                </div>
+                <span className="text-xs flex-shrink-0 mt-0.5" style={{ color: "var(--text-muted)" }}>
+                  {timeAgo(log.created_at)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
+
+    </div>
+  );
+}

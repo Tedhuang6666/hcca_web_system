@@ -13,6 +13,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
 from api.models.base import TimestampMixin
+from api.models.types import JSONList
 
 if TYPE_CHECKING:
     from api.models.user import User
@@ -37,10 +38,10 @@ class Org(Base, TimestampMixin):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 字號前綴：用於組合字號模板的 org_prefix（如「嶺代」「嶺學」），選填
     prefix: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    # 法案審議階段：標記此組織在議事流程的角色（值對應 MeetingBillStage：
-    # standing_committee=常務委員會 / council=議會）。此組織所辦會議的議程會依此
-    # 自動偵測待審法案；None 表一般組織。
-    bill_stage: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    # 建立職位時預先帶入的權限碼；職位仍可在此基礎上增加或移除權限。
+    default_permission_codes: Mapped[list[str]] = mapped_column(
+        JSONList, nullable=False, default=list, server_default="[]"
+    )
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="true", index=True
     )
@@ -116,7 +117,16 @@ class UserPosition(Base, TimestampMixin):
     """使用者擔任職位的任期記錄"""
 
     __tablename__ = "user_positions"
-    __table_args__ = (Index("ix_user_positions_user_end_date", "user_id", "end_date"),)
+    __table_args__ = (
+        Index("ix_user_positions_user_end_date", "user_id", "end_date"),
+        Index(
+            "ix_user_positions_user_tenure_position",
+            "user_id",
+            "start_date",
+            "end_date",
+            "position_id",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(

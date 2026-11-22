@@ -1,0 +1,799 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { toast } from "sonner";
+import {
+  discordApi,
+  featureFlagsApi,
+  lineApi,
+  notificationsApi,
+  apiErrorMessage,
+  type FeatureFlagOut,
+} from "@/lib/api";
+import type { ChannelPref, NotificationPreferences } from "@/lib/types";
+import { enableWebPush } from "@/lib/web-push";
+import { SectionSkeleton } from "@/components/ui/Skeleton";
+import { useModuleStatus } from "@/contexts/ModuleStatusContext";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
+import Toggle from "@/components/ui/Toggle";
+
+const OPTION_GROUPS = [
+  { id: "governance", label: "公文與法規" },
+  { id: "campus", label: "校園服務" },
+  { id: "personal", label: "工作與系統" },
+] as const;
+
+type OptionGroup = (typeof OPTION_GROUPS)[number]["id"];
+
+type NotificationOption = {
+  key: keyof NotificationPreferences;
+  label: string;
+  group: OptionGroup;
+  permissions?: readonly string[];
+};
+
+const OPTIONS: NotificationOption[] = [
+  {
+    key: "document_pending",
+    label: "公文待審",
+    group: "governance",
+    permissions: ["document:approve"],
+  },
+  {
+    key: "document_approved",
+    label: "公文核准",
+    group: "governance",
+    permissions: ["document:draft"],
+  },
+  {
+    key: "document_rejected",
+    label: "公文退回",
+    group: "governance",
+    permissions: ["document:draft"],
+  },
+  {
+    key: "document_recalled",
+    label: "公文撤回",
+    group: "governance",
+    permissions: ["document:draft"],
+  },
+  {
+    key: "regulation_review_assigned",
+    label: "法規審議",
+    group: "governance",
+    permissions: [
+      "regulation:schedule",
+      "regulation:council_approve",
+      "regulation:admin",
+    ],
+  },
+  {
+    key: "regulation_publish_ready",
+    label: "法規待公布",
+    group: "governance",
+    permissions: ["regulation:president_publish", "regulation:admin"],
+  },
+  {
+    key: "regulation_published",
+    label: "法規公布",
+    group: "governance",
+  },
+  {
+    key: "petition_received",
+    label: "新陳情",
+    group: "campus",
+    permissions: [
+      "petition:view_org",
+      "petition:assign",
+      "petition:handle",
+      "petition:transfer",
+      "petition:admin",
+    ],
+  },
+  {
+    key: "petition_updated",
+    label: "陳情更新",
+    group: "campus",
+    permissions: [
+      "petition:view_org",
+      "petition:assign",
+      "petition:handle",
+      "petition:transfer",
+      "petition:admin",
+    ],
+  },
+  {
+    key: "petition_assigned",
+    label: "陳情指派",
+    group: "campus",
+    permissions: ["petition:handle", "petition:admin"],
+  },
+  {
+    key: "petition_replied",
+    label: "陳情回覆",
+    group: "campus",
+  },
+  {
+    key: "petition_status_updated",
+    label: "陳情狀態",
+    group: "campus",
+  },
+  {
+    key: "merchandise_submission_received",
+    label: "新校商投稿",
+    group: "campus",
+    permissions: ["merchandise_submission:review", "merchandise_submission:manage", "shop:manage"],
+  },
+  {
+    key: "merchandise_submission_status",
+    label: "校商投稿狀態",
+    group: "campus",
+  },
+  {
+    key: "shop_order_paid",
+    label: "商品訂單",
+    group: "campus",
+  },
+  {
+    key: "survey_invitation",
+    label: "問卷邀請",
+    group: "campus",
+  },
+  {
+    key: "announcement",
+    label: "公告通知",
+    group: "campus",
+  },
+  {
+    key: "work_item_assigned",
+    label: "工作指派",
+    group: "personal",
+  },
+  {
+    key: "work_item_due",
+    label: "工作期限",
+    group: "personal",
+  },
+  {
+    key: "system",
+    label: "系統通知",
+    group: "personal",
+  },
+];
+
+const SYSTEM_EMAIL_OPTIONS = [
+  {
+    key: "email_scheduled_dispatch",
+    label: "預約寄信",
+    desc: "關閉後，到期郵件會保留在排程中。",
+    confirm: "確定關閉預約寄信？到期郵件會保留在排程中，不會被刪除。",
+  },
+] as const;
+
+type Channel = keyof ChannelPref;
+
+export default function NotificationSettingsPage() {
+  const confirm = useConfirm();
+  const { can, canAny } = usePermissions();
+  const canManageSystemEmail = can("feature_flag:admin");
+  const { isModuleClosed } = useModuleStatus();
+  const lineClosed = isModuleClosed("line");
+  const discordClosed = isModuleClosed("discord");
+  const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
+  const [lineLinked, setLineLinked] = useState(false);
+  const [discordLinked, setDiscordLinked] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [digest, setDigest] = useState<"off" | "daily" | "weekly">("off");
+  const [digestSaving, setDigestSaving] = useState(false);
+  const [pushPermission, setPushPermission] =
+    useState<NotificationPermission | null>(null);
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [systemEmailFlags, setSystemEmailFlags] = useState<FeatureFlagOut[]>(
+    [],
+  );
+  const [systemEmailLoading, setSystemEmailLoading] = useState(false);
+  const [systemEmailSaving, setSystemEmailSaving] = useState<string | null>(
+    null,
+  );
+  const showLine = !lineClosed && lineLinked;
+  const showDiscord = !discordClosed && discordLinked;
+
+  useEffect(() => {
+    if (typeof Notification !== "undefined") {
+      setPushPermission(Notification.permission);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!canManageSystemEmail) return;
+    setSystemEmailLoading(true);
+    featureFlagsApi
+      .list()
+      .then((flags) => {
+        const keys = new Set<string>(
+          SYSTEM_EMAIL_OPTIONS.map((option) => option.key),
+        );
+        setSystemEmailFlags(flags.filter((flag) => keys.has(flag.key)));
+      })
+      .catch((e) => toast.error(apiErrorMessage(e, "載入系統寄信設定失敗")))
+      .finally(() => setSystemEmailLoading(false));
+  }, [canManageSystemEmail]);
+
+  useEffect(() => {
+    Promise.all([
+      notificationsApi.getPreferences(),
+      lineApi.me().catch(() => ({ linked: false })),
+      discordApi.me().catch(() => ({ linked: false })),
+      notificationsApi
+        .getDigestFrequency()
+        .catch(() => ({ frequency: "off" as const })),
+      notificationsApi.listWebPushSubscriptions().catch(
+        () =>
+          [] as {
+            id: string;
+            endpoint: string;
+            device_label: string | null;
+            is_active: boolean;
+          }[],
+      ),
+    ])
+      .then(([nextPrefs, line, discord, digestPref, subs]) => {
+        setPrefs(nextPrefs);
+        setLineLinked(Boolean(line.linked));
+        setPushSubscribed(Array.isArray(subs) && subs.some((s) => s.is_active));
+        setDiscordLinked(Boolean(discord.linked));
+        setDigest(digestPref.frequency);
+      })
+      .catch((e) => toast.error(apiErrorMessage(e, "載入通知偏好失敗")))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const updateDigest = async (next: "off" | "daily" | "weekly") => {
+    const prev = digest;
+    setDigest(next);
+    setDigestSaving(true);
+    try {
+      await notificationsApi.setDigestFrequency(next);
+      toast.success(
+        next === "off"
+          ? "已關閉 Email 摘要"
+          : next === "daily"
+            ? "已啟用每日摘要（08:00 寄送）"
+            : "已啟用每週摘要（週一 08:00 寄送）",
+      );
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "更新摘要設定失敗"));
+      setDigest(prev);
+    } finally {
+      setDigestSaving(false);
+    }
+  };
+
+  const toggleSystemEmail = async (
+    flag: FeatureFlagOut,
+    confirmMessage: string,
+  ) => {
+    if (systemEmailSaving || flag.archived_at) return;
+    const next = !flag.is_globally_enabled;
+    if (
+      !next &&
+      !(await confirm({
+        title: "關閉系統寄信？",
+        description: confirmMessage,
+        confirmLabel: "關閉寄信",
+        danger: true,
+      }))
+    )
+      return;
+
+    setSystemEmailSaving(flag.key);
+    try {
+      const updated = await featureFlagsApi.update(flag.id, {
+        is_globally_enabled: next,
+      });
+      setSystemEmailFlags((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item)),
+      );
+      toast.success(next ? "系統寄信已開啟" : "系統寄信已關閉");
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "更新系統寄信設定失敗"));
+    } finally {
+      setSystemEmailSaving(null);
+    }
+  };
+
+  const visibleOptions = useMemo(
+    () =>
+      OPTIONS.filter(
+        (option) => !option.permissions || canAny(...option.permissions),
+      ),
+    [canAny],
+  );
+
+  const optionGroups = useMemo(
+    () =>
+      OPTION_GROUPS.map((group) => ({
+        ...group,
+        options: visibleOptions.filter((option) => option.group === group.id),
+      })).filter((group) => group.options.length > 0),
+    [visibleOptions],
+  );
+
+  const counts = useMemo(() => {
+    if (!prefs) return { inapp: 0, email: 0, line: 0, discord: 0 };
+    return {
+      inapp: visibleOptions.filter((o) => prefs[o.key].inapp).length,
+      email: visibleOptions.filter((o) => prefs[o.key].email).length,
+      line: visibleOptions.filter((o) => prefs[o.key].line).length,
+      discord: visibleOptions.filter((o) => prefs[o.key].discord).length,
+    };
+  }, [prefs, visibleOptions]);
+
+  const update = async (next: NotificationPreferences) => {
+    const prev = prefs;
+    setPrefs(next);
+    setSaving(true);
+    try {
+      const saved = await notificationsApi.updatePreferences(next);
+      setPrefs(saved);
+      toast.success("通知偏好已更新");
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "更新失敗"));
+      setPrefs(prev);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggle = (key: keyof NotificationPreferences, channel: Channel) => {
+    if (!prefs || saving) return;
+    if (channel === "line" && !lineLinked) {
+      toast.error("請先到帳號設定綁定 LINE");
+      return;
+    }
+    if (channel === "discord" && !discordLinked) {
+      toast.error("請先到帳號設定綁定 Discord");
+      return;
+    }
+    update({
+      ...prefs,
+      [key]: { ...prefs[key], [channel]: !prefs[key][channel] },
+    });
+  };
+
+  const setAll = (value: boolean) => {
+    if (!prefs || saving) return;
+    const next = { ...prefs };
+    for (const o of visibleOptions) {
+      next[o.key] = {
+        ...prefs[o.key],
+        inapp: value,
+        email: value,
+        ...(showLine ? { line: value } : {}),
+        ...(showDiscord ? { discord: value } : {}),
+      };
+    }
+    update(next);
+  };
+
+  const enablePush = async () => {
+    setPushBusy(true);
+    try {
+      await enableWebPush();
+      setPushPermission("granted");
+      setPushSubscribed(true);
+      toast.success("瀏覽器推播已啟用");
+    } catch (e) {
+      if (typeof Notification !== "undefined")
+        setPushPermission(Notification.permission);
+      toast.error(e instanceof Error ? e.message : "啟用推播失敗");
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
+  const testPush = async () => {
+    setPushBusy(true);
+    try {
+      const result = await notificationsApi.testWebPush();
+      toast.success(result.sent > 0 ? "已送出測試推播" : "沒有可用的推播訂閱");
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "測試推播失敗"));
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-5">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-xl font-semibold">通知偏好設定</h1>
+        </div>
+        <Link href="/notifications" className="btn btn-ghost">
+          回通知中心
+        </Link>
+      </header>
+
+      <section className="card overflow-hidden">
+        <div
+          className="px-5 py-4"
+          style={{ borderBottom: "1px solid var(--border)" }}
+        >
+          <h2 className="text-sm font-semibold">Email 摘要</h2>
+          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            未讀通知合併為一封 Email；即時推播照常。
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2 px-5 py-4">
+          {(
+            [
+              { key: "off", label: "關閉" },
+              { key: "daily", label: "每日 08:00" },
+              { key: "weekly", label: "每週一 08:00" },
+            ] as const
+          ).map(({ key, label }) => {
+            const active = digest === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => updateDigest(key)}
+                disabled={digestSaving || loading}
+                className="px-3 py-1.5 rounded-full text-xs font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] cursor-pointer hover:opacity-80 disabled:opacity-50"
+                style={
+                  active
+                    ? {
+                        background: "var(--primary-dim)",
+                        color: "var(--primary-text)",
+                        border: "1px solid var(--border-strong)",
+                      }
+                    : {
+                        color: "var(--text-muted)",
+                        border: "1px solid var(--border)",
+                        background: "var(--bg-surface)",
+                      }
+                }
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      {canManageSystemEmail && (
+        <section className="card overflow-hidden">
+          <div
+            className="px-5 py-4"
+            style={{ borderBottom: "1px solid var(--border)" }}
+          >
+            <h2 className="text-sm font-semibold">系統寄信</h2>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              全站設定，會影響所有使用者。
+            </p>
+          </div>
+          {systemEmailLoading ? (
+            <div className="p-5">
+              <SectionSkeleton lines={2} />
+            </div>
+          ) : (
+            <ul>
+              {SYSTEM_EMAIL_OPTIONS.map((option) => {
+                const flag = systemEmailFlags.find(
+                  (item) => item.key === option.key,
+                );
+                const enabled = Boolean(
+                  flag?.is_globally_enabled && !flag.archived_at,
+                );
+                return (
+                  <li
+                    key={option.key}
+                    className="flex items-center gap-3 px-5 py-4"
+                    style={{ borderBottom: "1px solid var(--border)" }}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className="text-sm font-medium"
+                        style={{ color: "var(--text-primary)" }}
+                      >
+                        {option.label}
+                      </p>
+                      <p
+                        className="mt-1 text-xs"
+                        style={{ color: "var(--text-muted)" }}
+                      >
+                        {flag
+                          ? option.desc
+                          : "目前無法調整。"}
+                      </p>
+                    </div>
+                    <Toggle
+                      checked={enabled}
+                      disabled={
+                        !flag ||
+                        Boolean(flag.archived_at) ||
+                        systemEmailSaving !== null
+                      }
+                      onChange={() => {
+                        if (flag) void toggleSystemEmail(flag, option.confirm);
+                      }}
+                      ariaLabel={option.label}
+                    />
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      )}
+
+      <section className="card overflow-hidden">
+        <div
+          className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
+          style={{ borderBottom: "1px solid var(--border)" }}
+        >
+          <div>
+            <h2 className="text-sm font-semibold">訂閱項目</h2>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              {loading
+                ? "載入中"
+                : [
+                    `站內 ${counts.inapp} 項`,
+                    `Email ${counts.email} 項`,
+                    showLine && `LINE ${counts.line} 項`,
+                    showDiscord && `Discord ${counts.discord} 項`,
+                  ]
+                    .filter(Boolean)
+                    .join("、") + " 已啟用"}
+              {saving ? "，儲存中" : ""}
+            </p>
+            {((!lineClosed && !lineLinked) ||
+              (!discordClosed && !discordLinked)) && (
+              <p
+                className="mt-1 text-xs"
+                style={{ color: "var(--text-muted)" }}
+              >
+                綁定 LINE 或 Discord 後可選擇通知項目。
+              </p>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => setAll(true)}
+              disabled={!prefs || saving}
+            >
+              全部開啟
+            </button>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => setAll(false)}
+              disabled={!prefs || saving}
+            >
+              全部關閉
+            </button>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="p-5">
+            <SectionSkeleton lines={5} />
+          </div>
+        ) : !prefs ? (
+          <div
+            className="px-5 py-12 text-center text-sm"
+            style={{ color: "var(--text-muted)" }}
+          >
+            無法載入通知偏好。
+          </div>
+        ) : (
+          <>
+            <div
+              className="flex items-center gap-3 px-5 py-2"
+              style={{ borderBottom: "1px solid var(--border)" }}
+            >
+              <div className="flex-1" />
+              <div
+                className="w-12 text-center text-xs font-semibold"
+                style={{ color: "var(--text-muted)" }}
+              >
+                站內
+              </div>
+              <div
+                className="w-12 text-center text-xs font-semibold"
+                style={{ color: "var(--text-muted)" }}
+              >
+                Email
+              </div>
+              {showLine && (
+                <div
+                  className="w-12 text-center text-xs font-semibold"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  LINE
+                </div>
+              )}
+              {showDiscord && (
+                <div
+                  className="w-16 text-center text-xs font-semibold"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  Discord
+                </div>
+              )}
+            </div>
+            <ul>
+              {optionGroups.map((group) => (
+                <li key={group.id}>
+                  <section aria-labelledby={`notification-group-${group.id}`}>
+                    <div
+                      className="px-5 py-3"
+                      style={{
+                        background: "var(--bg-hover)",
+                        borderBottom: "1px solid var(--border)",
+                      }}
+                    >
+                      <h3
+                        id={`notification-group-${group.id}`}
+                        className="text-sm font-semibold"
+                      >
+                        {group.label}
+                      </h3>
+                    </div>
+                    <ul>
+                      {group.options.map((item) => (
+                        <li
+                          key={item.key}
+                          className="flex items-center gap-3 px-5 py-3"
+                          style={{ borderBottom: "1px solid var(--border)" }}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p
+                              className="text-sm font-medium"
+                              style={{ color: "var(--text-primary)" }}
+                            >
+                              {item.label}
+                            </p>
+                          </div>
+                          <div className="flex w-12 justify-center">
+                            <Toggle
+                              checked={prefs[item.key].inapp}
+                              disabled={saving}
+                              onChange={() => toggle(item.key, "inapp")}
+                              ariaLabel={`${item.label}站內通知`}
+                            />
+                          </div>
+                          <div className="flex w-12 justify-center">
+                            <Toggle
+                              checked={prefs[item.key].email}
+                              disabled={saving}
+                              onChange={() => toggle(item.key, "email")}
+                              ariaLabel={`${item.label} Email 通知`}
+                            />
+                          </div>
+                          {showLine && (
+                            <div className="flex w-12 justify-center">
+                              <Toggle
+                                checked={prefs[item.key].line}
+                                disabled={saving}
+                                onChange={() => toggle(item.key, "line")}
+                                ariaLabel={`${item.label} LINE 通知`}
+                              />
+                            </div>
+                          )}
+                          {showDiscord && (
+                            <div className="flex w-16 justify-center">
+                              <Toggle
+                                checked={prefs[item.key].discord}
+                                disabled={saving}
+                                onChange={() => toggle(item.key, "discord")}
+                                ariaLabel={`${item.label} Discord 通知`}
+                              />
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </section>
+
+      <section className="card p-5 space-y-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold">瀏覽器推播</h2>
+              {pushPermission === "granted" && (
+                <span
+                  className="text-xs px-1.5 py-0.5 rounded font-medium"
+                  style={{
+                    background:
+                      "color-mix(in srgb, var(--success) 12%, transparent)",
+                    color: "var(--success)",
+                  }}
+                >
+                  已允許
+                </span>
+              )}
+              {pushPermission === "denied" && (
+                <span
+                  className="text-xs px-1.5 py-0.5 rounded font-medium"
+                  style={{
+                    background:
+                      "color-mix(in srgb, var(--danger) 12%, transparent)",
+                    color: "var(--danger)",
+                  }}
+                >
+                  已封鎖
+                </span>
+              )}
+              {pushPermission === "default" && (
+                <span
+                  className="text-xs px-1.5 py-0.5 rounded font-medium"
+                  style={{
+                    background:
+                      "color-mix(in srgb, var(--warning) 12%, transparent)",
+                    color: "var(--warning)",
+                  }}
+                >
+                  未設定
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              用於待審、公文狀態、公告與會議提醒。
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              className={
+                pushSubscribed
+                  ? "btn btn-ghost btn-sm"
+                  : "btn btn-primary btn-sm"
+              }
+              disabled={pushBusy || pushPermission === "denied"}
+              onClick={enablePush}
+            >
+              {pushSubscribed ? "重新訂閱" : "啟用推播"}
+            </button>
+            <button
+              className="btn btn-secondary btn-sm"
+              disabled={pushBusy || !pushSubscribed}
+              onClick={testPush}
+            >
+              測試推播
+            </button>
+          </div>
+        </div>
+        {pushPermission === "denied" && (
+          <div
+            className="rounded-lg px-4 py-3 text-xs space-y-1"
+            style={{
+              background: "color-mix(in srgb, var(--danger) 8%, transparent)",
+              border:
+                "1px solid color-mix(in srgb, var(--danger) 25%, transparent)",
+              color: "var(--danger)",
+            }}
+          >
+            <p className="font-medium">
+              通知權限已被瀏覽器封鎖，無法彈出授權視窗。
+            </p>
+            <p style={{ color: "var(--text-muted)" }}>
+              請點擊瀏覽器網址列左側的「鎖頭」或「資訊」圖示 → 通知 →
+              改為「允許」，然後重新整理頁面再點「啟用推播」。
+            </p>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}

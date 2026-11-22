@@ -13,6 +13,7 @@ from api.models.person import (
     PersonAffiliationStatus,
     PersonStatus,
 )
+from api.schemas.school_class import ClassRosterSummary
 
 
 class PersonBase(BaseModel):
@@ -119,6 +120,7 @@ class PersonAffiliationOut(BaseModel):
 
 class PersonDetailOut(PersonOut):
     affiliations: list[PersonAffiliationOut] = []
+    class_roster: list[ClassRosterSummary] = Field(default_factory=list)
 
 
 class PersonRosterImportRow(BaseModel):
@@ -142,6 +144,33 @@ class PersonRosterImportResult(BaseModel):
     skipped: int
 
 
+class PersonDirectoryStats(BaseModel):
+    account_count: int
+    people_count: int
+    linked_count: int
+    classed_count: int
+    pending_link_count: int
+    matched_people_count: int
+
+
+class PeopleAccessClassOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    academic_year: int
+    class_code: str
+    grade: int
+    label: str | None
+    is_active: bool
+
+
+class PeopleAccessScopeOut(BaseModel):
+    is_global: bool
+    org_ids: list[uuid.UUID] | None = None
+    class_ids: list[uuid.UUID] | None = None
+    classes: list[PeopleAccessClassOut] = Field(default_factory=list)
+
+
 __all__ = [
     "PersonAffiliationCreate",
     "PersonAffiliationOut",
@@ -150,6 +179,8 @@ __all__ = [
     "PersonDetailOut",
     "PersonListItem",
     "PersonOut",
+    "PeopleAccessClassOut",
+    "PeopleAccessScopeOut",
     "PersonRosterImport",
     "PersonRosterImportResult",
     "PersonUpdate",

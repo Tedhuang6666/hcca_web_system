@@ -2,19 +2,31 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
 import uuid
+from unittest.mock import AsyncMock, MagicMock
 
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api import app
+from api.core.celery_app import celery_app
+from api.core.config import settings
 from api.core.defense import default_rate_limit_config, publish_rules, set_rate_limit_config
+from api.core.ip_blocklist import block as block_ip
 from api.core.ip_blocklist import clear_cache as clear_ip_block_cache
+from api.core.ip_blocklist import unblock as unblock_ip
 from api.core.rate_limit import _memory_buckets
-from api.dependencies.auth import get_current_active_user
+from api.core.security import create_access_token
+from api.dependencies.auth import get_current_active_user, get_identity_for_access_status
+from api.main import app
 from api.models.audit_log import AuditLog
+from api.models.defense import DefenseRule
 from api.models.user import User
+from api.models.user_identity import UserIdentity
+from api.routers import admin_system
 
 
 def _override_user(user: User) -> None:
@@ -31,6 +43,7 @@ async def _seed_users(db: AsyncSession) -> tuple[User, User]:
         is_active=True,
         is_verified=True,
         is_superuser=True,
+        mfa_enabled=True,
     )
     member = User(
         email="member@school.edu",
@@ -59,6 +72,18 @@ async def test_non_admin_cannot_access_defense_summary(
     response = await client.get("/admin/system/defense/summary")
 
     assert response.status_code == 403
+
+
+async def test_admin_system_route_does_not_require_mfa(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin, _ = await _seed_users(db_session)
+    admin.mfa_enabled = False
+    _override_user(admin)
+
+    response = await client.get("/admin/system/defense/summary")
+
+    assert response.status_code == 200
 
 
 async def test_admin_create_defense_rule_syncs_redis_and_audit_log(
@@ -122,6 +147,8 @@ async def test_cidr_block_hits_middleware_and_allowlist_wins(client: AsyncClient
 
     blocked = await client.get("/")
     assert blocked.status_code == 403
+    assert blocked.json()["detail"]["blocked"] is True
+    assert blocked.json()["detail"]["reason"] == "test block"
 
     await publish_rules(
         [
@@ -169,6 +196,114 @@ async def test_cidr_block_hits_middleware_and_allowlist_wins(client: AsyncClient
     await _reset_defense_cache()
 
 
+async def test_admin_jwt_bypasses_ip_blocklist(client: AsyncClient) -> None:
+    blocked_ips = ("127.0.0.1", "testclient", "test")
+    for ip in blocked_ips:
+        await block_ip(ip, reason="test block")
+    clear_ip_block_cache()
+
+    token = create_access_token("admin-subject", {"is_admin": True})
+    try:
+        response = await client.get(
+            "/",
+            cookies={settings.ACCESS_TOKEN_COOKIE_NAME: token},
+        )
+        assert response.status_code != 403
+    finally:
+        for ip in blocked_ips:
+            await unblock_ip(ip)
+        clear_ip_block_cache()
+
+
+async def test_admin_can_preview_and_block_user_with_all_known_emails(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    await _reset_defense_cache()
+    admin, member = await _seed_users(db_session)
+    db_session.add(
+        UserIdentity(
+            user_id=member.id,
+            provider="google",
+            external_id="member-google-sub",
+            email="member.alias@school.edu",
+            linked_at=admin.created_at,
+        )
+    )
+    await db_session.flush()
+    _override_user(admin)
+
+    preview = await client.get(f"/admin/system/defense/users/{member.email}")
+    assert preview.status_code == 200
+    assert preview.json()["emails"] == ["member.alias@school.edu", "member@school.edu"]
+
+    response = await client.post(
+        "/admin/system/defense/user-blocks",
+        json={
+            "identifier": str(member.id),
+            "reason": "違反平台使用規範",
+            "include_emails": True,
+            "include_ips": False,
+        },
+    )
+    assert response.status_code == 201
+    assert {rule["rule_type"] for rule in response.json()["rules"]} == {
+        "user_block",
+        "email_block",
+    }
+
+    rows = await db_session.scalars(select(DefenseRule).where(DefenseRule.is_active.is_(True)))
+    targets = {(row.rule_type, row.target) for row in rows.all()}
+    assert ("user_block", str(member.id)) in targets
+    assert ("email_block", "member@school.edu") in targets
+    assert ("email_block", "member.alias@school.edu") in targets
+
+    await _reset_defense_cache()
+
+
+async def test_access_status_still_checks_linked_identity_email_block(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    await _reset_defense_cache()
+    _, member = await _seed_users(db_session)
+    db_session.add(
+        UserIdentity(
+            user_id=member.id,
+            provider="google",
+            external_id="member-access-status-sub",
+            email="member.alias@school.edu",
+            linked_at=member.created_at,
+        )
+    )
+    await db_session.flush()
+
+    async def override_optional_user() -> User:
+        return member
+
+    app.dependency_overrides[get_identity_for_access_status] = override_optional_user
+    await publish_rules(
+        [
+            {
+                "rule_type": "email_block",
+                "target": "member.alias@school.edu",
+                "reason": "linked identity blocked",
+                "expires_at": None,
+            }
+        ]
+    )
+
+    response = await client.get("/system/access-status")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "blocked": True,
+        "reason": "linked identity blocked",
+        "expires_at": None,
+    }
+    await _reset_defense_cache()
+
+
 async def test_rate_limit_override_returns_429(client: AsyncClient) -> None:
     await _reset_defense_cache()
     path = f"/defense-rate-limit-test-{uuid.uuid4().hex}"
@@ -188,3 +323,68 @@ async def test_rate_limit_override_returns_429(client: AsyncClient) -> None:
     assert second.status_code == 429
     assert second.headers["Retry-After"] == "60"
     await _reset_defense_cache()
+
+
+async def test_admin_can_replay_json_safe_dead_letter(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch,
+) -> None:
+    admin, _ = await _seed_users(db_session)
+    _override_user(admin)
+    task = "api.services.mail.send_email"
+    replay_args = [["user@example.com"], "subject", "body"]
+    replay_kwargs: dict = {}
+    sig_body = json.dumps(
+        {"task": task, "replay_args": replay_args, "replay_kwargs": replay_kwargs},
+        sort_keys=True,
+        ensure_ascii=False,
+    ).encode()
+    replay_sig = hmac.new(
+        admin_system.settings.SECRET_KEY.encode(), sig_body, hashlib.sha256
+    ).hexdigest()
+    raw = json.dumps(
+        {
+            "task": task,
+            "task_id": "failed-task",
+            "replay_args": replay_args,
+            "replay_kwargs": replay_kwargs,
+            "replay_sig": replay_sig,
+        }
+    )
+    monkeypatch.setattr(admin_system.redis_client, "lindex", AsyncMock(return_value=raw))
+    monkeypatch.setattr(admin_system.redis_client, "lrem", AsyncMock(return_value=1))
+    result = MagicMock(id="replayed-task")
+    monkeypatch.setattr(celery_app, "send_task", MagicMock(return_value=result))
+
+    response = await client.post(
+        "/admin/system/dead-letters/0/replay",
+        json={"expected_task": "api.services.mail.send_email"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["task_id"] == "replayed-task"
+    celery_app.send_task.assert_called_once()
+    admin_system.redis_client.lrem.assert_awaited_once_with(
+        admin_system.settings.CELERY_DLQ_REDIS_KEY,
+        1,
+        raw,
+    )
+
+
+async def test_dead_letter_replay_rejects_old_display_only_payload(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch,
+) -> None:
+    admin, _ = await _seed_users(db_session)
+    _override_user(admin)
+    raw = json.dumps({"task": "api.services.mail.send_email", "args": ["redacted"]})
+    monkeypatch.setattr(admin_system.redis_client, "lindex", AsyncMock(return_value=raw))
+
+    response = await client.post(
+        "/admin/system/dead-letters/0/replay",
+        json={"expected_task": "api.services.mail.send_email"},
+    )
+
+    assert response.status_code == 409

@@ -1,182 +1,250 @@
-# Production compose file that pulls prebuilt images from GHCR.
+# Canonical production topology: pulls prebuilt images from GHCR.
 # Run with:
 #   docker compose --env-file .env.production -f docker-compose.prod.pull.yml pull
-#   docker compose --env-file .env.production -f docker-compose.prod.pull.yml up -d db redis api web proxy
+#   docker compose --env-file .env.production -f docker-compose.prod.pull.yml --profile email --profile workers up -d
+#
+# 穩定核心：db / pgbouncer / role-specific redis / api / web / proxy（上面那行）。
+# 直接呼叫 Compose 時需啟用 workers profile；正式部署腳本預設啟動，確保事件自動結案排程運作。
 
 x-api-common: &api-common
-  image: ghcr.io/tedhuang6666/hcca_web_system-api:latest
+  extends:
+    file: docker-compose.runtime.yml
+    service: production
+  image: ${API_IMAGE:?set API_IMAGE to an immutable GHCR image tag}
   env_file:
     - ${PROD_ENV_FILE:-.env.production}
   environment:
-    ENVIRONMENT: production
-    DEBUG: "false"
-    ENABLE_API_DOCS: "false"
-    COOKIE_SECURE: "true"
-    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}
-    DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}
+    HOME: /tmp
+    PRIVACY_EXPORT_DIR: /app/privacy-exports
     DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
     DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-20}
-    DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
-    DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
-    HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
-    REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
+    GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE: ${GOOGLE_DRIVE_SERVICE_ACCOUNT_HOST_FILE:+/run/secrets/google-drive-service-account.json}
+    GOOGLE_DRIVE_SERVICE_ACCOUNT_HOST_FILE: ""
+    SENTRY_DSN: ${SENTRY_DSN:-}
+    SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.1}
+    SENTRY_PROFILES_SAMPLE_RATE: ${SENTRY_PROFILES_SAMPLE_RATE:-0.0}
+    SENTRY_AUTH_TOKEN: ${SENTRY_AUTH_TOKEN:-}
+    SENTRY_ORG: ${SENTRY_ORG:-}
+    SENTRY_PROJECT: ${SENTRY_PROJECT:-}
+    POSTHOG_API_KEY: ${POSTHOG_API_KEY:-}
+    POSTHOG_HOST: ${POSTHOG_HOST:-https://us.i.posthog.com}
+    POSTHOG_PERSONAL_API_KEY: ${POSTHOG_PERSONAL_API_KEY:-}
+    OTEL_ENABLED: ${OTEL_ENABLED:-false}
+    OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-hcca-api}
+    OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+    OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
   depends_on:
     db:
       condition: service_healthy
+    pgbouncer:
+      condition: service_healthy
     redis:
+      condition: service_healthy
+    redis-cache:
+      condition: service_healthy
+    redis-broker:
+      condition: service_healthy
+    redis-realtime:
       condition: service_healthy
   volumes:
     - uploads:/app/uploads
     - backups:/app/backups
+    - privacy-exports:/app/privacy-exports
+    - "${GOOGLE_DRIVE_SERVICE_ACCOUNT_HOST_FILE:-/dev/null}:/run/secrets/google-drive-service-account.json:ro"
 
 services:
   db:
-    image: postgres:16-alpine
-    restart: unless-stopped
+    extends:
+      file: docker-compose.infrastructure.yml
+      service: db
+
+  pgbouncer:
+    extends:
+      file: docker-compose.infrastructure.yml
+      service: pgbouncer
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
+      MAX_CLIENT_CONN: ${PGBOUNCER_MAX_CLIENT_CONN:-200}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
-      timeout: 5s
-      retries: 5
 
   redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    command: ["sh", "-c", "redis-server --appendonly yes --requirepass \"$${REDIS_PASSWORD}\""]
-    environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
-    volumes:
-      - redisdata:/data
-    healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    extends:
+      file: docker-compose.infrastructure.yml
+      service: redis
+
+  redis-cache:
+    extends:
+      file: docker-compose.infrastructure.yml
+      service: redis-cache
+
+  redis-broker:
+    extends:
+      file: docker-compose.infrastructure.yml
+      service: redis-broker
+
+  redis-realtime:
+    extends:
+      file: docker-compose.infrastructure.yml
+      service: redis-realtime
 
   migrate:
+    extends:
+      file: docker-compose.runtime.yml
+      service: migrate-pull
     <<: *api-common
     restart: "no"
+    profiles: ["migrate"]
+    environment: {}
     command: python -m alembic -c /app/alembic.ini upgrade head
 
   api:
     <<: *api-common
     restart: unless-stopped
+    # 記憶體護欄：吃到上限只 OOM-kill 自己，不再靠 swap 拖垮整台（memswap=mem 即禁用 swap）。
+    mem_limit: ${API_MEM_LIMIT:-1200m}
+    memswap_limit: ${API_MEM_LIMIT:-1200m}
+    mem_reservation: 256m
     environment:
-      ENVIRONMENT: production
-      DEBUG: "false"
-      ENABLE_API_DOCS: "false"
-      COOKIE_SECURE: "true"
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}
-      DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}
+      HOME: /tmp
+      APP_RELEASE: ${APP_RELEASE:-}
+      BUILD_COMMIT: ${BUILD_COMMIT:-}
       DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
       DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-20}
-      DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
-      DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
-      HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
-      REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
       DB_BACKUP_DIR: ${DB_BACKUP_DIR:-/app/backups}
-      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-4}
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-1}
       GUNICORN_KEEPALIVE: ${GUNICORN_KEEPALIVE:-5}
       GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-60}
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
     healthcheck:
       test:
         [
-          "CMD-SHELL",
-          "python -c \"import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3).status == 200 else 1)\"",
-        ]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
-  celery-worker:
-    <<: *api-common
-    restart: unless-stopped
-    command: >
-      python -m celery -A api.core.celery_app.celery_app worker
-      --loglevel=info
-      --concurrency=${CELERY_WORKER_CONCURRENCY:-2}
-      --max-tasks-per-child=${CELERY_MAX_TASKS_PER_CHILD:-200}
-      --queues=celery,backup,recovery
-    environment:
-      ENVIRONMENT: production
-      DEBUG: "false"
-      ENABLE_API_DOCS: "false"
-      COOKIE_SECURE: "true"
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}
-      DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}
-      DB_POOL_SIZE: ${CELERY_DB_POOL_SIZE:-5}
-      DB_MAX_OVERFLOW: ${CELERY_DB_MAX_OVERFLOW:-10}
-      DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
-      DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
-      HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
-      REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
-      DB_BACKUP_DIR: ${DB_BACKUP_DIR:-/app/backups}
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "python -m celery -A api.core.celery_app.celery_app inspect ping -d celery@$$HOSTNAME -t 5 >/dev/null",
+          "CMD",
+          "curl",
+          "--fail",
+          "--silent",
+          "--show-error",
+          "--max-time",
+          "5",
+          "--output",
+          "/dev/null",
+          "http://127.0.0.1:8000/ready",
         ]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 30s
+      retries: 10
+      start_period: 60s
+
+  # 一般背景任務 worker：不吃 email queue（寄信交給專責的 email-worker，
+  # 避免大量背景任務把寄信卡住）。
+  celery-worker:
+    <<: *api-common
+    restart: unless-stopped
+    profiles: ["workers"]
+    # 記憶體護欄：吃到上限只 OOM-kill 自己，不再靠 swap 拖垮整台（memswap=mem 即禁用 swap）。
+    mem_limit: ${CELERY_WORKER_MEM_LIMIT:-1200m}
+    memswap_limit: ${CELERY_WORKER_MEM_LIMIT:-1200m}
+    mem_reservation: 256m
+    # worker pool 用 solo：prefork(billiard) 在此環境會多行程失控吃滿 CPU
+    # （concurrency=1 仍飆到 600%+）。solo 在主行程內單工執行，正式站小流量最穩。
+    # 注意：solo 無子行程，故不用 --max-tasks-per-child（prefork 專屬，solo 會忽略）；
+    # 記憶體改由上方 mem_limit 守。prefetch=1 避免一次抓多筆訊息卡在主迴圈。
+    command: >
+      python -m celery -A api.core.celery_app.celery_app worker
+      --loglevel=info
+      --pool=solo
+      --concurrency=${CELERY_WORKER_CONCURRENCY:-1}
+      --prefetch-multiplier=1
+      --queues=default,email,backup,recovery
+    environment:
+      DB_POOL_SIZE: ${CELERY_DB_POOL_SIZE:-5}
+      DB_MAX_OVERFLOW: ${CELERY_DB_MAX_OVERFLOW:-10}
+      DB_BACKUP_DIR: ${DB_BACKUP_DIR:-/app/backups}
+    # 不設 healthcheck：先前用 `celery inspect ping` 會每 30s 起重量級 python 行程
+    # 堆積吃光 CPU；改成 `python -c 'import api.core.celery_app'` 雖輕量，但 import
+    # 整個 app 仍非零成本，且 Docker 一旦判 unhealthy 會自動重啟，反而把忙碌的 worker
+    # 打掉重練。worker 活著與否交由 restart: unless-stopped 與 mem_limit 守，不再 healthcheck。
+    healthcheck:
+      disable: true
+
+  # 寄信專責 worker：只吃 email queue、concurrency=1，與背景任務隔離。
+  # 獨立 "email" profile：需要寄信時才開
+  #   docker compose --env-file .env.production -f docker-compose.prod.pull.yml --profile email up -d email-worker
+  email-worker:
+    <<: *api-common
+    restart: unless-stopped
+    profiles: ["email"]
+    mem_limit: ${EMAIL_WORKER_MEM_LIMIT:-512m}
+    memswap_limit: ${EMAIL_WORKER_MEM_LIMIT:-512m}
+    mem_reservation: 128m
+    command: >
+      python -m celery -A api.core.celery_app.celery_app worker
+      --loglevel=info
+      --concurrency=${EMAIL_WORKER_CONCURRENCY:-1}
+      --max-tasks-per-child=${CELERY_MAX_TASKS_PER_CHILD:-200}
+      --queues=email
+    environment:
+      HOME: /tmp
+      DB_POOL_SIZE: ${EMAIL_WORKER_DB_POOL_SIZE:-3}
+      DB_MAX_OVERFLOW: ${EMAIL_WORKER_DB_MAX_OVERFLOW:-5}
+      DB_BACKUP_DIR: ${DB_BACKUP_DIR:-/app/backups}
+    # 同 worker：不設 healthcheck，避免 Docker 判 unhealthy 自動重啟把忙碌 worker 打掉。
+    healthcheck:
+      disable: true
 
   celery-beat:
     <<: *api-common
     restart: unless-stopped
-    command: >
-      python -m celery -A api.core.celery_app.celery_app beat
-      --loglevel=info
-      --scheduler celery.beat:PersistentScheduler
-      --pidfile=/tmp/celerybeat.pid
+    profiles: ["workers"]
+    # beat 只排程、不執行任務，記憶體很小；給個硬上限防意外洩漏（memswap=mem 即禁用 swap）。
+    mem_limit: ${CELERY_BEAT_MEM_LIMIT:-256m}
+    memswap_limit: ${CELERY_BEAT_MEM_LIMIT:-256m}
+    mem_reservation: 48m
+    # 根因：beat 以 PID 1 執行（exec），pidfile 會寫入「1」；若 pidfile 放在
+    # 持久化的 celerybeat volume（/tmp），重啟後 celery 讀到舊 pidfile「1」，
+    # 而每個容器都有 PID 1 → 判定「已在執行」而中止 → restart/autoheal 反覆
+    # 拉起形成 CPU 爆掉的重啟迴圈（ERROR: Pidfile already exists ... pid: 1）。
+    # pidfile 放在非持久化的 /dev/shm；排程檔每次啟動清除並依目前程式碼重建，
+    # 避免已刪除的任務從舊的 PersistentScheduler 狀態重新投遞。exec 讓 celery 接手 PID 1。
+    command:
+      - sh
+      - -c
+      - >
+        rm -f /dev/shm/celerybeat.pid /tmp/celerybeat.pid /tmp/celerybeat-schedule* &&
+        exec python -m celery -A api.core.celery_app.celery_app beat
+        --loglevel=INFO
+        --scheduler celery.beat:PersistentScheduler
+        --schedule=/tmp/celerybeat-schedule
+        --pidfile=/dev/shm/celerybeat.pid
     environment:
-      ENVIRONMENT: production
-      DEBUG: "false"
-      ENABLE_API_DOCS: "false"
-      COOKIE_SECURE: "true"
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}
-      DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}
+      HOME: /tmp
       DB_POOL_SIZE: ${CELERY_BEAT_DB_POOL_SIZE:-2}
       DB_MAX_OVERFLOW: ${CELERY_BEAT_DB_MAX_OVERFLOW:-2}
-      DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
-      DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
-      HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
-      REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
       DB_BACKUP_DIR: ${DB_BACKUP_DIR:-/app/backups}
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
     volumes:
       - uploads:/app/uploads
       - celerybeat:/tmp
+    # beat 不設 healthcheck：pidfile 存在不代表排程仍在運作，且判 unhealthy 自動重啟
+    # 反而易與 PID 1 殘留 pidfile 互相作用觸發重啟迴圈。存活交給 restart: unless-stopped。
     healthcheck:
-      test: ["CMD-SHELL", "test -f /tmp/celerybeat.pid && kill -0 \"$$(cat /tmp/celerybeat.pid)\""]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
+      disable: true
 
   web:
-    image: ghcr.io/tedhuang6666/hcca_web_system-web:latest
+    image: ${WEB_IMAGE:?set WEB_IMAGE to an immutable GHCR image tag}
     restart: unless-stopped
+    # 記憶體護欄：吃到上限只 OOM-kill 自己（memswap=mem 即禁用 swap）。
+    mem_limit: ${WEB_MEM_LIMIT:-768m}
+    memswap_limit: ${WEB_MEM_LIMIT:-768m}
+    mem_reservation: 192m
     environment:
       NODE_ENV: production
       API_INTERNAL_URL: http://api:8000
-      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://hcca40.hct.works}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE: ${NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE:-0.05}
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://hcca.tw}
+      NEXT_PUBLIC_POSTHOG_HOST: ${NEXT_PUBLIC_POSTHOG_HOST:-https://us.i.posthog.com}
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: ${OTEL_WEB_SERVICE_NAME:-hcca-web}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_WEB_OTLP_ENDPOINT:-http://otel-collector:4318}
+      OTEL_WEB_TRACES_SAMPLE_RATE: ${OTEL_WEB_TRACES_SAMPLE_RATE:-0.05}
     depends_on:
       api:
         condition: service_healthy
@@ -212,8 +280,11 @@ services:
 volumes:
   pgdata:
   redisdata:
+  rediscachedata:
+  redisbrokerdata:
   uploads:
   backups:
+  privacy-exports:
   celerybeat:
   caddydata:
   caddyconfig:

@@ -1,0 +1,626 @@
+import { API_BASE, apiUrl } from "./config";
+import { recordClientMetric } from "./client-metrics";
+
+const MAX_MESSAGE_LENGTH = 1000;
+const MAX_STACK_LENGTH = 6000;
+const MAX_SCOPE_LENGTH = 100;
+const MAX_PATH_LENGTH = 500;
+const STATIC_CACHE_NAME = "hcca-static-v5";
+const CHUNK_RELOAD_KEY = "hcca:chunk-reload-at";
+const CHUNK_RELOAD_COOLDOWN_MS = 30_000;
+const MAX_RECENT_REPORTS = 1_000;
+const OPTIONAL_TELEMETRY_PATHS = new Set([
+  "/analytics/page-views",
+  "/analytics/client-metrics/batch",
+  "/analytics/component-metrics/batch",
+]);
+
+const IGNORED_RESOURCE_HOSTS = new Set([
+  "connect.facebook.net",
+  "static.cloudflareinsights.com",
+  "server.arcgisonline.com",
+]);
+const IGNORED_RESOURCE_PATHS = new Set([
+  "/brand/hcca-emblem-64.avif",
+  "/brand/hcca-emblem-64.webp",
+]);
+
+export interface ClientErrorInput {
+  message: string;
+  stack?: string;
+  scope?: string;
+  pathname?: string;
+  dedupeKey?: string;
+  diagnostics?: ClientErrorDiagnostics;
+}
+
+export interface ClientErrorDiagnostics {
+  failure_kind?: "offline" | "network" | "timeout" | "csp" | "resource";
+  request_method?: string;
+  request_path?: string;
+  request_attempts?: number;
+  request_timeout_ms?: number;
+  request_elapsed_ms?: number;
+  request_trace_id?: string;
+  request_phase?: "headers" | "body";
+  online_at_start?: boolean;
+  visibility_at_start?: "visible" | "hidden" | "prerender";
+  request_hidden_ms?: number;
+  timeout_timer_delay_ms?: number;
+  error_name?: string;
+  error_source?: string;
+  error_line?: number;
+  error_column?: number;
+  error_digest?: string;
+  render_source?: string;
+  route_path?: string;
+  response_request_id?: string;
+  csp_directive?: string;
+  csp_disposition?: "enforce" | "report";
+  csp_blocked_source?: string;
+  csp_source_origin?: string;
+  csp_line_number?: number;
+  csp_column_number?: number;
+  resource_origin?: string;
+  resource_path?: string;
+  resource_timing_available?: boolean;
+  resource_status?: number;
+  resource_duration_ms?: number;
+  resource_transfer_bytes?: number;
+  resource_encoded_bytes?: number;
+  resource_protocol?: string;
+  resource_probe_status?: number;
+  resource_probe_result?: "response" | "network_error" | "skipped";
+  image_connected?: boolean;
+  image_complete?: boolean;
+  image_natural_width?: number;
+  image_loading?: string;
+  document_ready_state?: string;
+}
+
+export interface ClientErrorReceipt {
+  error_id: string;
+  request_id: string;
+  trace_id: string;
+}
+
+function limit(value: string | undefined, length: number): string {
+  return (value ?? "").slice(0, length);
+}
+
+const recentReports = new Map<string, number>();
+let chunkReloadPending = false;
+
+type BrowserConnection = { effectiveType?: string; type?: string };
+
+function referrerPath(): string | undefined {
+  if (!document.referrer) return undefined;
+  try {
+    const referrer = new URL(document.referrer);
+    return referrer.origin === window.location.origin ? referrer.pathname : referrer.origin;
+  } catch {
+    return undefined;
+  }
+}
+
+function apiOrigin(): string {
+  try {
+    return new URL(API_BASE, window.location.origin).origin;
+  } catch {
+    return window.location.origin;
+  }
+}
+
+function diagnosticContext(): Record<string, string | boolean> {
+  const navigatorWithConnection = navigator as Navigator & { connection?: BrowserConnection };
+  const release = process.env.NEXT_PUBLIC_BUILD_COMMIT
+    || process.env.NEXT_PUBLIC_APP_RELEASE
+    || process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA
+    || process.env.NEXT_PUBLIC_APP_VERSION;
+  return {
+    ...(release ? { release: release.slice(0, 128) } : {}),
+    page_origin: window.location.origin,
+    api_origin: apiOrigin(),
+    language: navigator.language.slice(0, 32),
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone.slice(0, 100),
+    viewport: `${window.innerWidth}x${window.innerHeight}`,
+    ...(navigatorWithConnection.connection?.effectiveType || navigatorWithConnection.connection?.type
+      ? { connection_type: navigatorWithConnection.connection.effectiveType || navigatorWithConnection.connection.type || "unknown" }
+      : {}),
+    ...(referrerPath() ? { referrer_path: referrerPath()! } : {}),
+    online: navigator.onLine,
+    visibility_state: document.visibilityState,
+  };
+}
+
+function csrfHeader(): Record<string, string> {
+  if (typeof document === "undefined") return {};
+  const token = document.cookie
+    .split(";")
+    .map((item) => item.trim())
+    .find((item) => item.startsWith("csrf_token="))
+    ?.slice("csrf_token=".length);
+  return token ? { "X-CSRF-Token": decodeURIComponent(token) } : {};
+}
+
+function safeDiagnostics(input: ClientErrorDiagnostics | undefined): ClientErrorDiagnostics | undefined {
+  if (!input) return undefined;
+  const requestMethods = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]);
+  const method = input.request_method?.trim().toUpperCase();
+  return {
+    ...input,
+    ...(method !== undefined
+      ? { request_method: requestMethods.has(method) ? method : "UNKNOWN" }
+      : {}),
+    ...(input.request_path !== undefined
+      ? { request_path: input.request_path.split(/[?#]/, 1)[0].slice(0, MAX_PATH_LENGTH) }
+      : {}),
+    ...(input.resource_path !== undefined
+      ? { resource_path: input.resource_path.split(/[?#]/, 1)[0].slice(0, MAX_PATH_LENGTH) }
+      : {}),
+    ...(input.error_source !== undefined
+      ? { error_source: input.error_source.split(/[?#]/, 1)[0].slice(0, MAX_PATH_LENGTH) }
+      : {}),
+  };
+}
+
+/** 將瀏覽器錯誤送到後端；回報失敗絕不能再製造一個未處理 rejection。 */
+export function reportClientError(input: ClientErrorInput): Promise<ClientErrorReceipt | null> {
+  if (typeof window === "undefined") return Promise.resolve(null);
+  const scope = input.scope ?? "runtime";
+  const connectionFailure = ["api.network", "api.timeout", "api.refresh-network"].includes(scope)
+    || scope.startsWith("resource:");
+  const optionalTelemetryFailure = scope.startsWith("api.")
+    && connectionFailure
+    && input.diagnostics?.request_method?.toUpperCase() === "POST"
+    && OPTIONAL_TELEMETRY_PATHS.has(input.diagnostics?.request_path?.split(/[?#]/, 1)[0] ?? "");
+  if (scope === "api.offline"
+    || input.diagnostics?.failure_kind === "offline"
+    || (navigator.onLine === false && connectionFailure)
+    || optionalTelemetryFailure
+    || (scope === "securitypolicyviolation" && input.diagnostics?.csp_disposition === "report")) {
+    return Promise.resolve(null);
+  }
+  if (recoverFromChunkFailure(chunkFailureUrl(input.message))) return Promise.resolve(null);
+
+  const fingerprint = `${input.dedupeKey ?? input.message}|${input.pathname ?? window.location.pathname}`;
+  const now = Date.now();
+  const lastReportedAt = recentReports.get(fingerprint) ?? 0;
+  if (now - lastReportedAt < 30_000) return Promise.resolve(null);
+  recentReports.delete(fingerprint);
+  recentReports.set(fingerprint, now);
+  for (const [key, timestamp] of recentReports) {
+    if (now - timestamp >= 30_000) recentReports.delete(key);
+  }
+  while (recentReports.size > MAX_RECENT_REPORTS) {
+    const oldestKey = recentReports.keys().next().value as string | undefined;
+    if (!oldestKey) break;
+    recentReports.delete(oldestKey);
+  }
+
+  try {
+    recordClientMetric({
+      metric: "client_error",
+      value: 1,
+      path: input.pathname ?? window.location.pathname,
+      interaction_name: (input.scope || "runtime").slice(0, 120),
+    });
+  } catch {
+    // Optional metrics may read blocked browser storage; still send the original error.
+  }
+
+  const diagnostics = safeDiagnostics(input.diagnostics);
+  const payload = JSON.stringify({
+    message: limit(input.message || "Unknown client error", MAX_MESSAGE_LENGTH),
+    stack: limit(input.stack, MAX_STACK_LENGTH),
+    scope: limit(input.scope || "runtime", MAX_SCOPE_LENGTH),
+    pathname: limit(input.pathname || window.location.pathname, MAX_PATH_LENGTH),
+    context: {
+      ...diagnosticContext(),
+      ...(diagnostics ? { diagnostics } : {}),
+    },
+  });
+
+  return fetch(apiUrl("/system/client-errors"), {
+    method: "POST",
+    credentials: "include",
+    keepalive: true,
+    headers: {
+      "content-type": "application/json",
+      ...csrfHeader(),
+    },
+    body: payload,
+  })
+    .then(async (response) => {
+      if (!response.ok) return null;
+      const receipt = (await response.json()) as Partial<ClientErrorReceipt>;
+      if (typeof receipt.error_id !== "string") return null;
+      return {
+        error_id: receipt.error_id,
+        request_id: typeof receipt.request_id === "string" ? receipt.request_id : "",
+        trace_id: typeof receipt.trace_id === "string" ? receipt.trace_id : "",
+      };
+    })
+    .catch(() => null);
+}
+
+function errorDetails(value: unknown): { message: string; stack?: string } {
+  // Error objects can come from another realm and fail instanceof Error.
+  if (typeof value === "object" && value !== null && "message" in value
+    && typeof value.message === "string") {
+    return {
+      message: value.message,
+      ...("stack" in value && typeof value.stack === "string" ? { stack: value.stack } : {}),
+    };
+  }
+  if (typeof value === "string") return { message: value };
+  try {
+    return { message: JSON.stringify(value) };
+  } catch {
+    return { message: String(value) };
+  }
+}
+
+function resourceUrl(target: Element): string | null {
+  if (target instanceof HTMLImageElement) return target.currentSrc || target.src || null;
+  if (target instanceof HTMLScriptElement) return target.src || null;
+  if (target instanceof HTMLLinkElement) return target.href || null;
+  return target.getAttribute("src") || target.getAttribute("href");
+}
+
+function isIgnoredResource(url: string | null): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url, window.location.href);
+    return IGNORED_RESOURCE_HOSTS.has(parsed.hostname)
+      || IGNORED_RESOURCE_PATHS.has(parsed.pathname);
+  } catch {
+    return false;
+  }
+}
+
+function isIgnoredCspViolation(
+  blockedUri: string | null,
+  sourceFile: string | null,
+): boolean {
+  const extensionUri = /^(?:chrome-extension|edge-extension|moz-extension|ms-browser-extension|safari-web-extension):/i;
+  if (extensionUri.test(blockedUri ?? "") || extensionUri.test(sourceFile ?? "")) {
+    return true;
+  }
+  if (!blockedUri) return false;
+  try {
+    const parsed = new URL(blockedUri, window.location.href);
+    return IGNORED_RESOURCE_HOSTS.has(parsed.hostname)
+      || parsed.pathname.toLowerCase().startsWith("/cdn-cgi/rum");
+  } catch {
+    return false;
+  }
+}
+
+function cspSourceIdentity(blockedUri: string | null): string {
+  const value = (blockedUri ?? "").trim();
+  if (!value) return "unknown";
+  if (["inline", "eval", "blob", "data"].includes(value.toLowerCase())) {
+    return value.toLowerCase() === "blob" ? "blob:" : value.toLowerCase();
+  }
+  try {
+    const parsed = new URL(value, window.location.href);
+    if (["http:", "https:", "ws:", "wss:"].includes(parsed.protocol)) {
+      return parsed.origin.toLowerCase();
+    }
+    if (parsed.protocol === "blob:") return "blob:";
+    return parsed.protocol || "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+function isExpectedAbortRejection(value: unknown): boolean {
+  return typeof value === "object"
+    && value !== null
+    && "name" in value
+    && value.name === "AbortError";
+}
+
+function isNextChunk(url: string | null): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url, window.location.href);
+    return parsed.origin === window.location.origin
+      && parsed.pathname.startsWith("/_next/static/chunks/");
+  } catch {
+    return false;
+  }
+}
+
+function isNextStylesheet(url: string | null): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url, window.location.href);
+    return parsed.origin === window.location.origin
+      && parsed.pathname.startsWith("/_next/static/")
+      && parsed.pathname.endsWith(".css");
+  } catch {
+    return false;
+  }
+}
+
+function chunkFailureUrl(message: string): string | null {
+  if (!/Loading chunk|ChunkLoadError|Failed to fetch dynamically imported module|Importing a module script failed/i.test(message)) {
+    return null;
+  }
+  return message.match(/https?:\/\/[^\s)]+|\/_next\/static\/chunks\/[^\s)]+/)?.[0] ?? null;
+}
+
+function recoverFromChunkFailure(url: string | null): boolean {
+  if ((!isNextChunk(url) && !isNextStylesheet(url)) || navigator.onLine === false) return false;
+  if (chunkReloadPending) return true;
+
+  try {
+    const previousReloadAt = Number(sessionStorage.getItem(CHUNK_RELOAD_KEY) ?? 0);
+    if (previousReloadAt && Date.now() - previousReloadAt <= CHUNK_RELOAD_COOLDOWN_MS) {
+      return false;
+    }
+    sessionStorage.setItem(CHUNK_RELOAD_KEY, String(Date.now()));
+  } catch {
+    // Without a persistent guard, reloading can trap private browsing in a loop.
+    return false;
+  }
+
+  chunkReloadPending = true;
+  let reloadStarted = false;
+  const reload = () => {
+    if (reloadStarted) return;
+    reloadStarted = true;
+    chunkReloadPending = false;
+    window.location.reload();
+  };
+  const deadline = window.setTimeout(reload, 1_000);
+  const finish = () => {
+    window.clearTimeout(deadline);
+    if (!reloadStarted) window.setTimeout(reload, 50);
+  };
+  try {
+    navigator.serviceWorker?.controller?.postMessage({ type: "CLEAR_STATIC_CACHE" });
+    if ("caches" in window) {
+      void window.caches.delete(STATIC_CACHE_NAME).catch(() => undefined).finally(finish);
+    } else {
+      finish();
+    }
+  } catch {
+    // Cache Storage and service worker messaging are best-effort recovery steps.
+    finish();
+  }
+  return true;
+}
+
+function isIgnoredWindowError(message: string): boolean {
+  return message === "Script error."
+    || /window\.ethereum\.selectedAddress\s*=\s*undefined/i.test(message)
+    || /Error invoking postMessage:\s*Java object is gone/i.test(message)
+    || /window\.webkit\.messageHandlers/i.test(message);
+}
+
+function normalizedTransientResourceUrl(url: string | null): string {
+  if (!url) return "unknown";
+  try {
+    const parsed = new URL(url, window.location.href);
+    if (!["http:", "https:"].includes(parsed.protocol)) {
+      return parsed.protocol || "unknown";
+    }
+    parsed.search = "";
+    parsed.hash = "";
+    parsed.pathname = parsed.pathname.replace(/\b[a-f\d]{16,}\b/gi, "{asset}");
+    return parsed.href;
+  } catch {
+    return "unknown";
+  }
+}
+
+function safeHttpOrigin(value: string | null): string | undefined {
+  if (!value) return undefined;
+  try {
+    const parsed = new URL(value, window.location.href);
+    return ["http:", "https:"].includes(parsed.protocol) ? parsed.origin : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function resourceEvidence(url: string | null): ClientErrorDiagnostics {
+  if (!url) return {};
+  try {
+    const parsed = new URL(url, window.location.href);
+    if (!["http:", "https:"].includes(parsed.protocol)) return {};
+    const entries = typeof performance.getEntriesByName === "function"
+      ? performance.getEntriesByName(parsed.href, "resource") : [];
+    // Diagnostic HEAD probes must not be mistaken for the failed image request.
+    const timing = entries.filter(entry => (entry as PerformanceResourceTiming).initiatorType !== "fetch")
+      .at(-1) as PerformanceResourceTiming | undefined;
+    return {
+      resource_path: parsed.pathname.slice(0, MAX_PATH_LENGTH),
+      resource_timing_available: Boolean(timing),
+      ...(timing ? {
+        ...(typeof timing.responseStatus === "number" ? { resource_status: timing.responseStatus } : {}),
+        resource_duration_ms: timing.duration,
+        resource_transfer_bytes: timing.transferSize,
+        resource_encoded_bytes: timing.encodedBodySize,
+        resource_protocol: timing.nextHopProtocol.slice(0, 32),
+      } : {}),
+    };
+  } catch {
+    return { resource_timing_available: false };
+  }
+}
+
+/** 安裝 window error / unhandledrejection 入口，涵蓋未經 React boundary 的錯誤。 */
+export function installGlobalClientErrorReporter(): () => void {
+  if (typeof window === "undefined") return () => undefined;
+
+  let active = true;
+  let probeCount = 0;
+  const imageProbes = new Map<string, Promise<ClientErrorDiagnostics>>();
+  const probeImage = (url: string | null): Promise<ClientErrorDiagnostics> => {
+    const skipped = { resource_probe_result: "skipped" as const };
+    if (!url) return Promise.resolve(skipped);
+    let parsed: URL;
+    try {
+      parsed = new URL(url, window.location.href);
+    } catch {
+      return Promise.resolve(skipped);
+    }
+    // Only probe our public shop assets, never API URLs, signed URLs or third parties.
+    if (parsed.origin !== window.location.origin || parsed.search
+      || !/^\/shop\/[^?#]+\.(?:webp|avif|png|jpe?g)$/i.test(parsed.pathname)) {
+      return Promise.resolve(skipped);
+    }
+    const existing = imageProbes.get(parsed.href);
+    if (existing) return existing;
+    if (probeCount >= 4 || navigator.onLine === false) return Promise.resolve(skipped);
+    probeCount += 1;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 3_000);
+    const probe = Promise.resolve().then(() => fetch(parsed.href, {
+      method: "HEAD", credentials: "same-origin", cache: "no-store", redirect: "error",
+      signal: controller.signal,
+    })).then((response): ClientErrorDiagnostics => ({
+      resource_probe_result: "response", resource_probe_status: response.status,
+    })).catch((): ClientErrorDiagnostics => ({ resource_probe_result: "network_error" }))
+      .finally(() => {
+        window.clearTimeout(timer);
+        imageProbes.delete(parsed.href);
+      });
+    imageProbes.set(parsed.href, probe);
+    return probe;
+  };
+
+  const recentCspReports = new Map<string, number>();
+  const shouldReportCspViolation = (fingerprint: string): boolean => {
+    const now = Date.now();
+    const lastReportedAt = recentCspReports.get(fingerprint) ?? 0;
+    if (now - lastReportedAt < 30_000) return false;
+
+    recentCspReports.delete(fingerprint);
+    recentCspReports.set(fingerprint, now);
+    for (const [key, timestamp] of recentCspReports) {
+      if (now - timestamp >= 30_000) recentCspReports.delete(key);
+    }
+    while (recentCspReports.size > MAX_RECENT_REPORTS) {
+      const oldestKey = recentCspReports.keys().next().value as string | undefined;
+      if (!oldestKey) break;
+      recentCspReports.delete(oldestKey);
+    }
+    return true;
+  };
+
+  const onError = (event: ErrorEvent) => {
+    const target = event.target;
+    const details = errorDetails(event.error ?? event.message);
+    const resource = target instanceof Element;
+    const failedResource = resource ? resourceUrl(target) : null;
+    // Inline style failures already have a CSP event with the blocked directive.
+    if (target instanceof HTMLStyleElement && !failedResource) return;
+    if (isIgnoredWindowError(details.message) || isIgnoredResource(failedResource)) return;
+    if (
+      resource
+      && (target instanceof HTMLScriptElement
+        || (target instanceof HTMLLinkElement && target.relList.contains("stylesheet")))
+      && recoverFromChunkFailure(failedResource)
+    ) {
+      return;
+    }
+    const safeResource = normalizedTransientResourceUrl(failedResource);
+    const resourceOrigin = safeHttpOrigin(failedResource);
+    const input: ClientErrorInput = {
+      ...details,
+      pathname: window.location.pathname,
+      message: resource
+        ? `${details.message || "資源載入失敗"}${failedResource ? ` [${safeResource}]` : ""}`
+        : details.message,
+      scope: resource ? `resource:${target.tagName.toLowerCase()}` : "window.error",
+      ...(resource ? { dedupeKey: `resource:${normalizedTransientResourceUrl(failedResource)}` } : {}),
+      ...(resource
+        ? {
+            diagnostics: {
+              failure_kind: "resource" as const,
+              ...(resourceOrigin ? { resource_origin: resourceOrigin } : {}),
+              ...resourceEvidence(failedResource),
+            },
+          }
+        : {
+            diagnostics: {
+              ...(event.filename ? { error_source: event.filename.split(/[?#]/, 1)[0].slice(0, MAX_PATH_LENGTH) } : {}),
+              error_line: event.lineno,
+              error_column: event.colno,
+              ...(event.error instanceof Error ? { error_name: event.error.name.slice(0, 100) } : {}),
+              ...(event.error && typeof event.error.digest === "string"
+                ? { error_digest: event.error.digest.slice(0, 128) } : {}),
+              document_ready_state: document.readyState,
+            },
+          }),
+    };
+    if (target instanceof HTMLImageElement) {
+      const image = target;
+      const evidence: ClientErrorDiagnostics = {
+        ...input.diagnostics,
+        image_connected: image.isConnected,
+        image_complete: image.complete,
+        image_natural_width: image.naturalWidth,
+        image_loading: image.loading || "auto",
+      };
+      // Let the element's own error handler finish replacing a failed source.
+      void Promise.resolve().then(async () => {
+        if (!active || !image.isConnected || resourceUrl(image) !== failedResource
+          || (image.complete && image.naturalWidth > 0)) return;
+        const probe = await probeImage(failedResource);
+        if (!active || !image.isConnected || resourceUrl(image) !== failedResource
+          || (image.complete && image.naturalWidth > 0)) return;
+        await reportClientError({
+          ...input, diagnostics: { ...evidence, ...resourceEvidence(failedResource), ...probe },
+        });
+      }).catch(() => undefined);
+    } else {
+      void reportClientError(input);
+    }
+  };
+  const onUnhandledRejection = (event: PromiseRejectionEvent) => {
+    if (isExpectedAbortRejection(event.reason)) return;
+    const details = errorDetails(event.reason);
+    reportClientError({ ...details, scope: "unhandledrejection" });
+  };
+  const onSecurityPolicyViolation = (event: SecurityPolicyViolationEvent) => {
+    if (event.disposition === "report") return;
+    const blockedUri = event.blockedURI || null;
+    if (isIgnoredCspViolation(blockedUri, event.sourceFile || null)) return;
+    const directive = event.effectiveDirective || "resource";
+    const source = cspSourceIdentity(blockedUri);
+    const state = event.disposition === "enforce" ? "blocked" : "violated";
+    const dedupeKey = `${directive}:${source}`;
+    if (!shouldReportCspViolation(dedupeKey)) return;
+    const sourceOrigin = safeHttpOrigin(event.sourceFile || null);
+    reportClientError({
+      message: `CSP ${state} ${directive}: ${source}`,
+      scope: "securitypolicyviolation",
+      dedupeKey,
+      diagnostics: {
+        failure_kind: "csp",
+        csp_directive: directive,
+        ...(event.disposition === "enforce" ? { csp_disposition: "enforce" as const } : {}),
+        csp_blocked_source: source,
+        ...(sourceOrigin ? { csp_source_origin: sourceOrigin } : {}),
+        ...(event.lineNumber > 0 ? { csp_line_number: event.lineNumber } : {}),
+        ...(event.columnNumber > 0 ? { csp_column_number: event.columnNumber } : {}),
+      },
+    });
+  };
+
+  window.addEventListener("error", onError, true);
+  window.addEventListener("unhandledrejection", onUnhandledRejection);
+  window.addEventListener("securitypolicyviolation", onSecurityPolicyViolation);
+  return () => {
+    active = false;
+    window.removeEventListener("error", onError, true);
+    window.removeEventListener("unhandledrejection", onUnhandledRejection);
+    window.removeEventListener("securitypolicyviolation", onSecurityPolicyViolation);
+  };
+}

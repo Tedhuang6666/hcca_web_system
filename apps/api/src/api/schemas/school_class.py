@@ -36,6 +36,65 @@ class ClassStudentRangeOut(BaseModel):
     student_id_end: str
 
 
+# ── 班級名冊 ──────────────────────────────────────────────────────────────────
+
+
+class ClassRosterEntryCreate(BaseModel):
+    seat_number: int = Field(..., ge=1, le=999, description="座號")
+    student_id: str = Field(..., min_length=1, max_length=20, description="學號")
+
+
+class ClassRosterEntryUpdate(BaseModel):
+    seat_number: int | None = Field(None, ge=1, le=999, description="座號")
+    student_id: str | None = Field(None, min_length=1, max_length=20, description="學號")
+
+
+class ClassRosterEntryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    class_id: uuid.UUID
+    seat_number: int
+    student_id: str
+    user_id: uuid.UUID | None = None
+    user: ClassUserBrief | None = None
+
+
+class ClassRosterSummary(BaseModel):
+    """人員與帳號詳情使用的班級座號資訊。"""
+
+    class_id: uuid.UUID
+    academic_year: int
+    class_code: str
+    class_label: str | None = None
+    is_active: bool
+    seat_number: int
+    student_id: str
+
+
+class ClassRosterBulkCreate(BaseModel):
+    entries: list[ClassRosterEntryCreate] = Field(..., min_length=1, max_length=999)
+
+
+class ClassRosterBulkOut(BaseModel):
+    total: int
+    created: int
+    updated: int
+    entries: list[ClassRosterEntryOut]
+
+
+class ClassRosterPdfImportOut(BaseModel):
+    academic_year: int
+    class_codes: list[str]
+    classes_created: int
+    total: int
+    people_created: int
+    people_updated: int
+    affiliations_created: int
+    roster_created: int
+    roster_updated: int
+
+
 # ── 班級幹部 ──────────────────────────────────────────────────────────────────
 
 
@@ -91,6 +150,29 @@ class ClassRoleHolderOut(BaseModel):
     end_date: date | None = None
 
 
+class ClassRolePersonAssign(BaseModel):
+    person_id: uuid.UUID | None = None
+    student_id: str | None = Field(None, min_length=1, max_length=20)
+    display_name: str | None = Field(None, min_length=1, max_length=100)
+
+
+class ClassRolePersonAssignOut(BaseModel):
+    person_affiliation_id: uuid.UUID
+    person_id: uuid.UUID
+    status: str
+
+
+class ClassRolePersonHolderOut(BaseModel):
+    affiliation_id: uuid.UUID
+    person_id: uuid.UUID
+    display_name: str
+    email: str
+    student_id: str | None = None
+    start_date: date
+    end_date: date | None = None
+    status: str
+
+
 class ClassRoleOut(BaseModel):
     id: uuid.UUID
     class_id: uuid.UUID
@@ -99,6 +181,7 @@ class ClassRoleOut(BaseModel):
     position_id: uuid.UUID
     permission_codes: list[str] = []
     holders: list[ClassRoleHolderOut] = []
+    person_holders: list[ClassRolePersonHolderOut] = Field(default_factory=list)
 
 
 class ClassRoleAssign(BaseModel):
@@ -209,6 +292,45 @@ class SchoolClassListItem(BaseModel):
     is_active: bool
 
 
+class ClassRepresentativeOverviewItemOut(SchoolClassListItem):
+    representatives: list[str]
+
+
+class MySchoolClassOut(SchoolClassListItem):
+    seat_number: int | None = None
+
+
+class ClassCorrectionRequestCreate(BaseModel):
+    requested_class_id: uuid.UUID
+    message: str | None = Field(None, max_length=2000)
+
+
+class ClassCorrectionRequestReview(BaseModel):
+    status: str = Field(..., pattern="^(approved|rejected)$")
+    class_id: uuid.UUID | None = None
+    review_note: str | None = Field(None, max_length=2000)
+
+
+class ClassCorrectionRequestOut(BaseModel):
+    id: uuid.UUID
+    user_id: uuid.UUID
+    user_display_name: str
+    user_email: str
+    user_student_id: str | None = None
+    reported_class_id: uuid.UUID | None = None
+    reported_class_label: str | None = None
+    requested_class_id: uuid.UUID
+    requested_class_label: str
+    resolved_class_id: uuid.UUID | None = None
+    resolved_class_label: str | None = None
+    message: str | None = None
+    status: str
+    created_at: datetime
+    reviewed_by_id: uuid.UUID | None = None
+    reviewed_at: datetime | None = None
+    review_note: str | None = None
+
+
 class SchoolClassOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -223,6 +345,7 @@ class SchoolClassOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     ranges: list[ClassStudentRangeOut] = []
+    roster_entries: list[ClassRosterEntryOut] = []
     cadres: list[ClassCadreOut] = []
     memberships: list[ClassMembershipOut] = []
     role_bindings: list[ClassRoleBindingOut] = []
@@ -269,9 +392,12 @@ class ClassMemberOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    user_id: uuid.UUID | None = None
+    roster_entry_id: uuid.UUID | None = None
     display_name: str
     student_id: str | None
     email: str
+    seat_number: int | None = None
     is_cadre: bool = False
     source: str = "range"
     manual_member_id: uuid.UUID | None = None
@@ -285,10 +411,19 @@ __all__ = [
     "ClassMembershipCreate",
     "ClassMembershipOut",
     "ClassMemberOut",
+    "ClassRosterBulkCreate",
+    "ClassRosterBulkOut",
+    "ClassRosterEntryCreate",
+    "ClassRosterEntryOut",
+    "ClassRosterSummary",
+    "ClassRosterEntryUpdate",
     "ClassRoleAssign",
     "ClassRoleBindingOut",
     "ClassRoleHolderOut",
     "ClassRoleOut",
+    "ClassRolePersonAssign",
+    "ClassRolePersonAssignOut",
+    "ClassRolePersonHolderOut",
     "ClassStudentRangeCreate",
     "ClassStudentRangeOverride",
     "ClassStudentRangeOut",

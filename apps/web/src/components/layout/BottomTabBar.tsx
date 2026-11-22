@@ -1,16 +1,30 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "@/components/ui/IntentLink";
 import { usePathname } from "next/navigation";
 import { LogIn, MoreHorizontal } from "lucide-react";
-import { notificationsApi, tasksApi } from "@/lib/api";
 import { useWS } from "@/hooks/useWS";
+import { useInboxCountsContext } from "@/contexts/InboxCountsContext";
+import { useModuleStatus } from "@/contexts/ModuleStatusContext";
+import { navigationProfilesApi } from "@/lib/api/navigation-profiles";
+import { AUTH_CACHE_EVENT } from "@/lib/auth-cache";
+import { NAV_ID_TO_MODULE, moduleForPath } from "@/lib/modules";
 import {
   filterNavItems,
+  constrainMobileHidden,
+  DEFAULT_NAV_PREFERENCES,
+  hasSavedNavPreferences,
+  isNavItemVisible,
   NAV_PREF_EVENT,
+  navItemsFromEntries,
+  NAVIGATION_PROFILES,
+  NAV_ITEMS,
+  navProfileFromApi,
   orderedItems,
   readNavPreferences,
+  resolveNavigationProfile,
   type NavItem,
+  type NavigationProfileConfig,
 } from "@/lib/navigation";
 import NavIcon from "./NavIcon";
 
@@ -34,22 +48,43 @@ type Role = "guest" | "student" | "cadre";
 
 const CADRE_PREFIXES = ["document:", "regulation:", "audit:"] as const;
 
+const MOBILE_LABELS: Record<string, string> = {
+  documents: "公文",
+  shop: "商品",
+  surveys: "問卷",
+};
+
+function dockCenter(index: number, width: number, count: number) {
+  return ((index + 0.5) / count) * width;
+}
+
 /**
- * 手機底部 tab bar（< md 顯示）。
+ * 平板與手機底部 tab bar（< lg 顯示）。
  * 依使用者身分顯示三套不同 tab：
  *  - guest：法規/公告/特約/陳情/登入（皆公開可讀）
- *  - student：首頁/學餐/校商/問卷/更多
+ *  - student：依個人導覽偏好取前四個項目
+ *  - teacher：依專屬視角取常用模組
  *  - cadre：首頁/待辦/公文/法規/更多（有公文、法規或審計權限者）
  */
 export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
   const pathname = usePathname();
+  const dockRef = useRef<HTMLDivElement>(null);
+  const [dockWidth, setDockWidth] = useState(0);
   const [role, setRole] = useState<Role>("guest");
   const [roleResolved, setRoleResolved] = useState(false);
-  const [taskCount, setTaskCount] = useState(0);
-  const [notifCount, setNotifCount] = useState(0);
   const [userRoom, setUserRoom] = useState<string | null>(null);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
-  const [navPrefs, setNavPrefs] = useState(() => readNavPreferences());
+  const [navPrefs, setNavPrefs] = useState(() => DEFAULT_NAV_PREFERENCES);
+  const [hasCustomNav, setHasCustomNav] = useState(false);
+  const [serverProfile, setServerProfile] = useState<NavigationProfileConfig | null>(null);
+  const [authVersion, setAuthVersion] = useState(0);
+  const { isModuleClosed } = useModuleStatus();
+  const {
+    taskCount,
+    unreadCount: notifCount,
+    setUnreadCount: setNotifCount,
+    refresh: refreshCounts,
+  } = useInboxCountsContext();
 
   // 解析身分（依登入狀態與權限分桶）
   useEffect(() => {
@@ -61,11 +96,11 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
       setRoleResolved(true);
       return;
     }
-    const superuser = localStorage.getItem("is_superuser") === "true";
-    const owner = localStorage.getItem("is_owner") === "true";
+    const superuser = sessionStorage.getItem("is_superuser") === "true";
+    const owner = sessionStorage.getItem("is_owner") === "true";
     let perms: string[] = [];
     try {
-      const raw = localStorage.getItem("permissions");
+      const raw = sessionStorage.getItem("permissions");
       perms = raw ? JSON.parse(raw) : [];
     } catch { /* ignore */ }
     const isCadre =
@@ -75,11 +110,21 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
       || perms.some((p) => CADRE_PREFIXES.some((pre) => p.startsWith(pre)));
     setRole(isCadre ? "cadre" : "student");
     setRoleResolved(true);
+  }, [authVersion]);
+
+  useEffect(() => {
+    const syncAuth = () => setAuthVersion((version) => version + 1);
+    window.addEventListener(AUTH_CACHE_EVENT, syncAuth);
+    return () => window.removeEventListener(AUTH_CACHE_EVENT, syncAuth);
   }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const syncPrefs = () => setNavPrefs(readNavPreferences());
+    const syncPrefs = () => {
+      setNavPrefs(readNavPreferences());
+      setHasCustomNav(hasSavedNavPreferences());
+    };
+    syncPrefs();
     window.addEventListener(NAV_PREF_EVENT, syncPrefs);
     window.addEventListener("storage", syncPrefs);
     return () => {
@@ -88,30 +133,37 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
     };
   }, []);
 
-  const fetchCounts = useCallback(async () => {
-    try {
-      const inbox = await tasksApi.list();
-      setTaskCount(inbox.total);
-    } catch { /* ignore */ }
-    try {
-      const { unread } = await notificationsApi.count();
-      setNotifCount(unread);
-    } catch { /* ignore */ }
-  }, []);
-
-  useEffect(() => {
-    if (role === "guest") return;
-    fetchCounts();
-    const timer = setInterval(fetchCounts, 60_000);
-    return () => clearInterval(timer);
-  }, [fetchCounts, role]);
-
   useWS(userRoom, useCallback((msg) => {
+    if (msg.type === "inbox.changed") {
+      refreshCounts();
+      return;
+    }
     if (msg.type !== "notification.created") return;
     const unread = typeof msg.unread === "number" ? msg.unread : null;
     if (unread !== null) setNotifCount(unread);
-    else void fetchCounts();
-  }, [fetchCounts]), role !== "guest");
+    refreshCounts();
+  }, [refreshCounts, setNotifCount]), role !== "guest");
+
+  useEffect(() => {
+    if (role === "guest") {
+      setServerProfile(null);
+      return;
+    }
+    let alive = true;
+    navigationProfilesApi.me()
+      .then((result) => {
+        if (!alive) return;
+        setServerProfile(
+          result.source === "default" || !result.profile ? null : navProfileFromApi(result.profile),
+        );
+      })
+      .catch(() => {
+        if (alive) setServerProfile(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [authVersion, role]);
 
   // 鍵盤彈起偵測：visualViewport 高度顯著縮小時隱藏
   useEffect(() => {
@@ -127,28 +179,81 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
 
   const tabs: Tab[] = useMemo(() => {
     if (role === "guest") {
-      return [
+      const guestTabs: Tab[] = [
         { href: "/regulations",   label: "法規", iconKey: "regulations",   match: (p) => p.startsWith("/regulations") },
         { href: "/announcements", label: "公告", iconKey: "announcement",  match: (p) => p.startsWith("/announcements") },
         { href: "/partner-map",   label: "特約", iconKey: "partnerMap",    match: (p) => p.startsWith("/partner-map") },
         { href: "/petitions/new", label: "陳情", iconKey: "petition",      match: (p) => p.startsWith("/petitions") },
         { href: "/login",         label: "登入", icon: (p) => <LogIn {...p} />,         match: (p) => p === "/login" },
       ];
+      return guestTabs.filter(
+        (tab) => !tab.href || !isModuleClosed(moduleForPath(tab.href)),
+      );
     }
     const superuser = typeof window !== "undefined" && (
-      localStorage.getItem("is_superuser") === "true" || localStorage.getItem("is_owner") === "true"
+      sessionStorage.getItem("is_superuser") === "true" || sessionStorage.getItem("is_owner") === "true"
     );
     let perms = new Set<string>();
     try {
-      perms = new Set(JSON.parse(localStorage.getItem("permissions") || "[]"));
+      perms = new Set(JSON.parse(sessionStorage.getItem("permissions") || "[]"));
     } catch { /* ignore */ }
     const can = (code: string) => superuser || perms.has("admin:all") || perms.has(code);
     const hasPrefix = (prefix: string) =>
       superuser || perms.has("admin:all") || Array.from(perms).some((perm) => perm.startsWith(prefix));
-    const available = filterNavItems(orderedItems(navPrefs.mobileOrder, navPrefs.mobileHidden), can, hasPrefix);
-    const topTabs = available.slice(0, 4).map(navItemToTab);
+    const profile = resolveNavigationProfile(perms, superuser);
+    const isAdmin = superuser || sessionStorage.getItem("is_owner") === "true";
+    const activeProfile = isAdmin || perms.has("admin:all")
+      ? NAVIGATION_PROFILES.default
+      : serverProfile ?? NAVIGATION_PROFILES[profile];
+    const profileItems = navItemsFromEntries(activeProfile.desktopSections);
+    const profileItemIds = new Set([
+      ...profileItems.map((item) => item.id),
+      ...activeProfile.mobileOrder,
+    ]);
+    const profileNavItems = NAV_ITEMS.filter((item) => profileItemIds.has(item.id));
+    const available = filterNavItems(
+      profileNavItems,
+      can,
+      hasPrefix,
+    );
+    const isVisible = (item: NavItem) => isNavItemVisible(item, {
+      can,
+      hasPrefix,
+      isAdmin,
+      navigationProfile: activeProfile.id,
+      isModuleClosed: (item) => isModuleClosed(NAV_ID_TO_MODULE[item.id] ?? null),
+    });
+    const visibleProfileItems = available.filter(isVisible);
+    const defaultMobileItems = orderedItems(activeProfile.mobileOrder, [], visibleProfileItems);
+    const mobileOrder = hasCustomNav ? navPrefs.mobileOrder : activeProfile.mobileOrder;
+    const mobileHidden = hasCustomNav
+      ? navPrefs.mobileHidden
+      : defaultMobileItems.slice(4).map((item) => item.id);
+    const constrainedHidden = constrainMobileHidden(mobileOrder, mobileHidden, visibleProfileItems);
+    const topTabs = orderedItems(mobileOrder, constrainedHidden, profileNavItems)
+      .filter(isVisible)
+      .slice(0, 5)
+      .map(navItemToTab);
     return [...topTabs, { label: "更多", icon: (p) => <MoreHorizontal {...p} />, onClick: onMoreClick }];
-  }, [navPrefs, role, onMoreClick]);
+  }, [hasCustomNav, isModuleClosed, navPrefs, onMoreClick, role, serverProfile]);
+
+  const activeIndex = useMemo(() => {
+    const matchingIndex = tabs.findIndex((tab) => tab.match?.(pathname) ?? false);
+    return matchingIndex >= 0 ? matchingIndex : tabs.length - 1;
+  }, [pathname, tabs]);
+
+  useEffect(() => {
+    const dock = dockRef.current;
+    if (!dock) return;
+
+    const updateWidth = () => setDockWidth(dock.clientWidth);
+    updateWidth();
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(dock);
+    return () => observer.disconnect();
+  }, [tabs.length]);
+
+  const beadX = dockWidth > 0 && tabs.length > 0 ? dockCenter(activeIndex, dockWidth, tabs.length) : 0;
 
   if (keyboardOpen) return null;
   if (!roleResolved) return null;
@@ -156,41 +261,48 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
   return (
     <nav
       aria-label="底部主選單"
-      className="md:hidden fixed bottom-0 left-0 right-0 z-30 flex"
+      className="bottom-tab-bar fixed bottom-0 left-0 right-0 z-30 flex lg:hidden"
       style={{
-        height: "56px",
-        background: "var(--bg-elevated)",
-        borderTop: "1px solid var(--border)",
-        paddingBottom: "env(safe-area-inset-bottom)",
-        boxShadow: "0 -2px 8px rgba(0,0,0,0.04)",
+        height: "calc(76px + env(safe-area-inset-bottom))",
+        boxSizing: "border-box",
+        alignItems: "flex-start",
+        justifyContent: "center",
+        padding: "0 0.75rem max(0.5rem, env(safe-area-inset-bottom))",
       }}>
-      {tabs.map((t) => {
-        const active = t.match ? t.match(pathname) : false;
-        const badge =
-          t.badgeKey === "tasks" ? taskCount :
-          t.badgeKey === "notifs" ? notifCount : 0;
-        const Icon = t.icon;
+      <div
+        ref={dockRef}
+        className="bottom-tab-bar__dock relative flex h-[60px] w-full max-w-2xl overflow-visible"
+        style={{ isolation: "isolate" }}>
+        <span
+          aria-hidden="true"
+          className="bottom-tab-bar__bead pointer-events-none absolute"
+          style={{ left: beadX, opacity: dockWidth ? 1 : 0 }} />
 
-        const inner = (
-          <div className="relative flex flex-col items-center justify-center gap-0.5 flex-1 h-full"
-            style={{
-              color: active ? "var(--primary)" : "var(--text-muted)",
-              transition: "color 150ms",
-            }}>
-            <span className="relative">
-              {t.iconKey ? <NavIcon iconKey={t.iconKey} size={20} /> : Icon?.({ size: 20, "aria-hidden": true })}
-              {badge > 0 && (
-                <span
-                  className="absolute -top-1 -right-2 min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center text-[9px] font-bold"
-                  style={{ background: "var(--danger)", color: "#fff" }}
-                  aria-hidden="true">
-                  {badge > 99 ? "99+" : badge}
-                </span>
-              )}
-            </span>
-            <span className="text-[10px] font-medium" style={{ letterSpacing: 0 }}>
-              {t.label}
-            </span>
+        {tabs.map((t, index) => {
+          const active = t.match ? t.match(pathname) : false;
+          const visualActive = activeIndex === index;
+          const badge =
+            t.badgeKey === "tasks" ? taskCount :
+            t.badgeKey === "notifs" ? notifCount : 0;
+          const Icon = t.icon;
+
+          const inner = (
+            <div
+              className="bottom-tab-bar__item relative flex flex-col items-center justify-center gap-0.5 flex-1 h-full"
+              data-visual-active={visualActive}>
+              <span className="relative">
+                {t.iconKey ? <NavIcon iconKey={t.iconKey} size={22} /> : Icon?.({ size: 22, "aria-hidden": true })}
+                {badge > 0 && (
+                  <span
+                    className="bottom-tab-bar__badge absolute -top-1 -right-2 min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center text-[9px] font-bold"
+                    aria-hidden="true">
+                    {badge > 99 ? "99+" : badge}
+                  </span>
+                )}
+              </span>
+              <span className="bottom-tab-bar__label text-xs font-medium">
+                {t.label}
+              </span>
           </div>
         );
 
@@ -199,8 +311,7 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
             <Link
               key={t.label}
               href={t.href}
-              className="flex-1 flex"
-              style={{ textDecoration: "none", minHeight: 44 }}
+              className="bottom-tab-bar__link relative z-[2] flex min-h-[44px] flex-1"
               aria-current={active ? "page" : undefined}
               aria-label={`${t.label}${badge > 0 ? `（${badge}）` : ""}`}>
               {inner}
@@ -211,14 +322,14 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
           <button
             key={t.label}
             type="button"
-            onClick={t.onClick}
-            className="flex-1 flex bg-transparent border-0 p-0"
-            style={{ minHeight: 44 }}
+            onClick={() => t.onClick?.()}
+            className="bottom-tab-bar__button relative z-[2] flex min-h-[44px] flex-1 border-0 bg-transparent p-0"
             aria-label={t.label}>
             {inner}
           </button>
         );
       })}
+      </div>
     </nav>
   );
 }
@@ -226,7 +337,7 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
 function navItemToTab(item: NavItem): Tab {
   return {
     href: item.href,
-    label: item.label.replace("系統", "").replace("專區", "").replace("訂購", ""),
+    label: MOBILE_LABELS[item.id] ?? item.label,
     iconKey: item.iconKey,
     match: (pathname) => item.end
       ? pathname === item.href

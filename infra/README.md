@@ -1,28 +1,34 @@
 # infra/
 
-對應企業級路線圖 Phase A1-A2 部署基礎設施。
+正式環境的 reverse proxy。監控設定與 dashboard 採用共用的
+[observability 設定](../observability/README.md)，由各環境 Compose 掛載。
 
-| 子目錄 | 內容 | 對應 ADR |
-|---|---|---|
-| `caddy/` | reverse proxy + LB 設定 | [ADR-002](../docs/adr/002-ha-two-replica.md) |
-| `prometheus/` | metrics 抓取設定 | [ADR-001](../docs/adr/001-cloudflare-edge.md) |
-| `grafana/` | dashboard 與資料源 provisioning | — |
+| 子目錄 | 內容 |
+|---|---|
+| `caddy/` | reverse proxy + LB 設定 |
+| `../observability/prometheus/` | Prometheus 環境設定與 alert rules |
+| `../observability/grafana/` | Grafana dashboard 與 datasource provisioning |
 
 ## 套用方式
 
 ```bash
-# Production：
+# Production
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
-# Production blue-green（零停機部署）：
+# Monitoring（Prometheus + Grafana）
+docker compose --env-file .env.production -f docker-compose.prod.yml \
+  --profile monitoring up -d prometheus grafana
+
+# Production blue-green（零停機部署）
 docker compose --env-file .env.production -f docker-compose.bluegreen.yml up -d db redis proxy
 bash scripts/zero-downtime-deploy.sh blue
 
-# Dev 維持原樣：
+# Development
 bash dev.sh
 ```
 
-零停機部署細節請看 [docs/ZERO_DOWNTIME_DEPLOY.md](../docs/ZERO_DOWNTIME_DEPLOY.md)。
+正式部署入口請看版本庫中的 [production Compose 設定](../docker-compose.prod.yml) 與
+[智慧部署腳本](../scripts/deploy-smart.sh)。
 
 ## 預設 ports
 
@@ -38,11 +44,9 @@ bash dev.sh
 | PgBouncer | （內網） | no |
 | Redis | （內網） | no |
 
-## TODO（Phase A 期間補）
+## 待完成
 
 - [ ] Caddy + Origin TLS（Cloudflare Origin Certificate）
-- [ ] Prometheus rule files（SLO 違反告警）
-- [ ] Grafana dashboards JSON（請求延遲、5xx、Celery queue depth）
 - [ ] redis_exporter + postgres_exporter
-- [ ] Alertmanager（可選；初期用 Sentry 即可）
+- [ ] Alertmanager 通知接 Discord / Email
 - [ ] backup volume mount for cross-host sync

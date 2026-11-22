@@ -22,39 +22,48 @@ logger = logging.getLogger(__name__)
     bind=True,
     max_retries=1,
     default_retry_delay=600,
+    autoretry_for=(Exception,),
 )
 def run_safe_purges(self) -> dict:  # type: ignore[type-arg]
     """掃所有 danger_level='safe' 規則並以預設保留天數執行清理。"""
-    try:
-        return asyncio.run(_run())
-    except Exception as exc:
-        logger.exception("run_safe_purges failed")
-        raise self.retry(exc=exc) from exc
+    return asyncio.run(_run())
+
+
+@celery_app.task(
+    name="api.services.data_lifecycle_tasks.purge_expired_privacy_exports",
+    bind=True,
+    max_retries=1,
+    default_retry_delay=600,
+    autoretry_for=(Exception,),
+)
+def purge_expired_privacy_exports(self) -> dict[str, int]:
+    """每小時清除共享私有 volume 中超過 24 小時的個資匯出檔。"""
+    from api.services.privacy import purge_expired_exports
+
+    removed = purge_expired_exports()
+    logger.info("privacy export purge done removed=%d", removed)
+    return {"purged": removed}
 
 
 async def _run() -> dict:
-    from api.core.database import AsyncSessionLocal
+    from api.core.database import task_session
     from api.services import data_lifecycle as svc
 
     results: list[dict] = []
-    async with AsyncSessionLocal() as session:
+    async with task_session() as session:
         for rule in svc.RULES:
             if rule.danger_level != "safe":
                 continue
-            try:
-                result = await svc.execute(session, rule_id=rule.id)
-                results.append(
-                    {
-                        "rule_id": rule.id,
-                        "action": result.action,
-                        "matched": result.matched_count,
-                        "archived": result.archived_count,
-                        "purged": result.purged_count,
-                    }
-                )
-            except Exception:
-                logger.exception("safe purge failed rule=%s", rule.id)
-                results.append({"rule_id": rule.id, "error": True})
+            result = await svc.execute(session, rule_id=rule.id)
+            results.append(
+                {
+                    "rule_id": rule.id,
+                    "action": result.action,
+                    "matched": result.matched_count,
+                    "archived": result.archived_count,
+                    "purged": result.purged_count,
+                }
+            )
         await session.commit()
     logger.info("data_lifecycle.run_safe_purges done results=%s", results)
     return {"results": results}

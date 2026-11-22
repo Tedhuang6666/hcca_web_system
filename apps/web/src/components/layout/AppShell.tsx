@@ -1,129 +1,369 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
+import { toast } from "sonner";
 import { PermissionProvider } from "@/contexts/PermissionContext";
+import { SessionSnapshotProvider } from "@/contexts/SessionSnapshotContext";
+import { InboxCountsProvider } from "@/contexts/InboxCountsContext";
 import { ModuleStatusProvider, useModuleStatus } from "@/contexts/ModuleStatusContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useInboxCounts } from "@/hooks/useInboxCounts";
 import { moduleForPath } from "@/lib/modules";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 import BottomTabBar from "./BottomTabBar";
-import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
+import PageTransition from "./PageTransition";
+import { LoadingState } from "@/components/ui/LoadingState";
 import ModuleMaintenance from "@/components/ui/ModuleMaintenance";
-import UrgentAnnouncementPopup from "@/components/announcements/UrgentAnnouncementPopup";
+import ImportantAnnouncementBanner from "@/components/site/ImportantAnnouncementBanner";
 import CommandMenu from "./CommandMenu";
-import { PolicyConsentBanner } from "@/components/legal/PolicyConsentBanner";
+const UrgentAnnouncementPopup = dynamic(() => import("@/components/announcements/UrgentAnnouncementPopup"), { ssr: false });
+const PasskeySetupPrompt = dynamic(() => import("@/components/auth/PasskeySetupPrompt"), { ssr: false });
+import { isBareRoute, isPublicRoute, requiresAuthentication } from "@/lib/route-access";
+import { ApiError } from "@/lib/api-helpers";
+import { authApi } from "@/lib/api/auth";
+import { cacheCurrentUser, clearAuthCache } from "@/lib/auth-cache";
+import { PERMISSION_DENIED_EVENT, type PermissionDeniedDetail } from "@/lib/permission-events";
+import type { ServerImportantAnnouncement, ServerSessionUser } from "@/lib/server/session";
 
-/** 完全裸頁（不渲染 Shell）：公開官網、login、auth callback、Email 退訂落地頁 */
-const BARE_PATHS = [
-  "/",
-  "/about",
-  "/links",
-  "/news",
-  "/officers",
-  "/pages",
-  "/login",
-  "/auth",
-  "/maintenance",
-  "/profile/complete",
-  "/public",
-  "/unsubscribe",
-];
+const AUTH_CHECK_TIMEOUT_MS = 8_000;
+const AUTH_RETRY_DELAY_MS = 5_000;
+type PermissionSnapshot = Pick<ServerSessionUser, "is_superuser" | "is_owner" | "permissions">;
 
-function isBare(pathname: string) {
-  return BARE_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
+function hasCachedPermissionSnapshot(): boolean {
+  return ["permissions", "is_superuser", "is_owner"].every(
+    (key) => sessionStorage.getItem(key) !== null,
+  );
 }
 
-/** 是否需要登入 */
-function requiresAuth(pathname: string): boolean {
-  if (isBare(pathname)) return false;
-  if (pathname === "/about" || pathname.startsWith("/legal")) return false;
-  if (pathname === "/regulations") return false;
-  // 法規詳細頁與條文深度連結（/regulations/{id}/第N條...）皆為公開可讀；
-  // 僅 /edit、/amendment 子頁需要登入。
-  const regMatch = pathname.match(/^\/regulations\/([^/]+)(\/.*)?$/);
-  if (regMatch) {
-    const [, regId, rest = ""] = regMatch;
-    if (regId !== "new" && regId !== "pending") {
-      if (
-        rest !== "/edit"
-        && rest !== "/amendment"
-        && !rest.startsWith("/edit/")
-        && !rest.startsWith("/amendment/")
-      ) {
-        return false;
-      }
-    }
+function cachedPermissionCodes(): string[] {
+  try {
+    const value: unknown = JSON.parse(sessionStorage.getItem("permissions") ?? "[]");
+    return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
   }
-  if (pathname === "/documents") return false;
-  if (pathname === "/documents/delegations") return true;
-  if (/^\/documents\/[^/]+$/.test(pathname) && !pathname.endsWith("/edit")) return false;
-  if (pathname === "/announcements") return false;
-  if (/^\/announcements\/[^/]+$/.test(pathname)) return false;
-  // 問卷列表與詳情頁皆公開可讀（依問卷的開放對象設定）；/surveys/new 仍需登入
-  if (pathname === "/surveys") return false;
-  if (/^\/surveys\/[^/]+$/.test(pathname) && pathname !== "/surveys/new") return false;
-  if (pathname === "/petitions") return false;
-  if (pathname === "/petitions/new") return false;
-  if (pathname === "/council-proposals") return false;
-  if (pathname === "/judicial-petitions") return false;
-  if (pathname === "/partner-map") return false;
-  return true;
 }
 
-function AppShellContent({ children }: { children: React.ReactNode }) {
-  const { can, isAdmin } = usePermissions();
-  const { isModuleDown } = useModuleStatus();
-  const router = useRouter();
+function permissionSignature(user: PermissionSnapshot): string {
+  return JSON.stringify({
+    is_superuser: user.is_superuser ?? false,
+    is_owner: user.is_owner ?? false,
+    permissions: [...user.permissions].sort(),
+  });
+}
+
+async function withAuthCheckTimeout<T>(promise: Promise<T>): Promise<T> {
+  let timeoutId: number | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      reject(new ApiError(0, "登入服務回應逾時"));
+    }, AUTH_CHECK_TIMEOUT_MS);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+  }
+}
+
+function SessionGate({
+  children,
+  initialUser,
+  initialImportantAnnouncement,
+}: {
+  children: React.ReactNode;
+  initialUser: ServerSessionUser | null;
+  initialImportantAnnouncement: ServerImportantAnnouncement | null | undefined;
+}) {
   const pathname = usePathname();
-  const moduleId = moduleForPath(pathname);
-  const moduleDown = isModuleDown(moduleId);
-  const suppressPolicyConsent = pathname.startsWith("/legal");
-  const [authReady, setAuthReady] = useState(false);
+  const router = useRouter();
+  const [authReady, setAuthReady] = useState(Boolean(initialUser));
   const [redirecting, setRedirecting] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(Boolean(initialUser));
+  const authCheckStarted = useRef(false);
+  const authVerified = useRef(Boolean(initialUser));
+  const redirectedFrom = useRef<string | null>(null);
+  const permissionRefreshInFlight = useRef(false);
 
   useEffect(() => {
-    if (!requiresAuth(pathname)) {
+    let cancelled = false;
+    let retryTimer: number | undefined;
+
+    if (!requiresAuthentication(pathname)) {
       setIsLoggedIn(Boolean(localStorage.getItem("user_id")));
       setRedirecting(false);
       setAuthReady(true);
-      return;
+      return () => {
+        cancelled = true;
+      };
     }
-    const userId = localStorage.getItem("user_id");
-    setIsLoggedIn(Boolean(userId));
-    if (!userId) {
-      setRedirecting(true);
-      router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+
+    // 首次進入受保護頁面才需要遮住 Shell 等待驗證；站內換頁時保留既有
+    // Shell，避免底部導覽列跟著整個 AppShellContent 被卸載又重新掛載。
+    const isInitialAuthCheck = !authCheckStarted.current;
+    authCheckStarted.current = true;
+    if (isInitialAuthCheck && !initialUser) {
+      const hasLocalLogin = Boolean(localStorage.getItem("user_id"));
+      // localStorage 只用來辨認上次登入者；沒有權限快照時不能把空集合當成拒絕。
+      setIsLoggedIn(hasLocalLogin);
+      setAuthReady(hasLocalLogin && hasCachedPermissionSnapshot());
+    }
+    const verifySession = async () => {
+      const loggedIn = Boolean(localStorage.getItem("user_id"));
+      if (!loggedIn) {
+        if (cancelled) return;
+        setRedirecting(true);
+        setAuthReady(true);
+        if (redirectedFrom.current !== pathname) {
+          redirectedFrom.current = pathname;
+          router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+        }
+        return;
+      }
+
+      try {
+        const me = await withAuthCheckTimeout(authApi.me());
+        if (cancelled) return;
+        cacheCurrentUser(me);
+        authVerified.current = true;
+        setIsLoggedIn(true);
+        redirectedFrom.current = null;
+        setRedirecting(false);
+        setAuthReady(true);
+      } catch (error) {
+        if (cancelled) return;
+        // 暫時性網路/API 失敗不能清除登入快取，否則短暫 503 會被誤判成
+        // 登入失效，導致管理權限畫面消失，使用者只能重新登入。
+        if (error instanceof ApiError && (error.status === 0 || error.status >= 500)) {
+          authVerified.current = true;
+          setIsLoggedIn(true);
+          setRedirecting(false);
+          const hasCachedPermissions = hasCachedPermissionSnapshot();
+          setAuthReady(hasCachedPermissions);
+          if (!hasCachedPermissions) {
+            retryTimer = window.setTimeout(() => {
+              if (!cancelled) void verifySession();
+            }, AUTH_RETRY_DELAY_MS);
+          }
+          return;
+        }
+        clearAuthCache();
+        setIsLoggedIn(false);
+        setRedirecting(true);
+        setAuthReady(true);
+        if (redirectedFrom.current !== pathname) {
+          redirectedFrom.current = pathname;
+          router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+        }
+      }
+    };
+
+    // 伺服器已在受保護 layout 驗證並傳入 session；首屏 hydration 不再重複
+    // 呼叫 /auth/me。仍在視窗重新取得焦點時驗證，確保長時間停留後可收斂狀態。
+    if (initialUser) {
+      authVerified.current = true;
+      setIsLoggedIn(true);
+      setRedirecting(false);
       setAuthReady(true);
-      return;
+      const revalidate = () => {
+        if (document.visibilityState === "visible") void verifySession();
+      };
+      window.addEventListener("focus", revalidate);
+      document.addEventListener("visibilitychange", revalidate);
+      return () => {
+        cancelled = true;
+        window.removeEventListener("focus", revalidate);
+        document.removeEventListener("visibilitychange", revalidate);
+      };
     }
-    setRedirecting(false);
-    setAuthReady(true);
-  }, [pathname, router]);
+
+    // server session 暫時失敗時，首次瀏覽器驗證成功後不要在每次 pathname
+    // 變更時再次阻塞頁面；focus/visibility 事件仍會在背景重新驗證。
+    if (!isInitialAuthCheck && authVerified.current && hasCachedPermissionSnapshot()) {
+      const revalidate = () => {
+        if (document.visibilityState === "visible") void verifySession();
+      };
+      window.addEventListener("focus", revalidate);
+      document.addEventListener("visibilitychange", revalidate);
+      return () => {
+        cancelled = true;
+        window.removeEventListener("focus", revalidate);
+        document.removeEventListener("visibilitychange", revalidate);
+      };
+    }
+
+    void verifySession();
+    const revalidate = () => {
+      if (document.visibilityState === "visible") void verifySession();
+    };
+    window.addEventListener("focus", revalidate);
+    document.addEventListener("visibilitychange", revalidate);
+    return () => {
+      cancelled = true;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+      window.removeEventListener("focus", revalidate);
+      document.removeEventListener("visibilitychange", revalidate);
+    };
+  }, [initialUser, pathname, router]);
+
+  useEffect(() => {
+    const refreshPermissionsAfterDenied = async (event: Event) => {
+      if (permissionRefreshInFlight.current) return;
+      permissionRefreshInFlight.current = true;
+      const detail = (event as CustomEvent<PermissionDeniedDetail>).detail;
+      const before = {
+        is_superuser: sessionStorage.getItem("is_superuser") === "true",
+        is_owner: sessionStorage.getItem("is_owner") === "true",
+        permissions: cachedPermissionCodes(),
+      } satisfies PermissionSnapshot;
+
+      try {
+        const current = await withAuthCheckTimeout(authApi.refresh());
+        cacheCurrentUser(current);
+        if (permissionSignature(before) !== permissionSignature(current)) {
+          toast.warning("你的權限已更新，畫面已同步最新可用功能。");
+          router.refresh();
+        } else {
+          toast.error(detail?.message || "你目前沒有使用這項功能的權限。");
+        }
+      } catch {
+        toast.error("無法同步最新權限，請稍後重試。");
+      } finally {
+        permissionRefreshInFlight.current = false;
+      }
+    };
+
+    window.addEventListener(PERMISSION_DENIED_EVENT, refreshPermissionsAfterDenied);
+    return () => window.removeEventListener(PERMISSION_DENIED_EVENT, refreshPermissionsAfterDenied);
+  }, [router]);
+
+  // 公開詳情頁不需要等待瀏覽器端驗證；讓伺服器預先輸出的正文直接進入首屏。
+  // 受保護路徑仍沿用原本的驗證閘門與登入導向。
+  if (isPublicRoute(pathname)) {
+    // 公開 layout 已有 PublicModuleStatusProvider；AppShell 的 authenticated
+    // module endpoint 只服務登入後功能，避免訪客首屏多打一個背景請求。
+    return (
+      <AppShellContent
+        isLoggedIn={false}
+        initialImportantAnnouncement={initialImportantAnnouncement}
+      >
+        {children}
+      </AppShellContent>
+    );
+  }
+
+  if (!authReady || redirecting) {
+    return (
+      <div className="app-content-loading" aria-live="polite">
+        <LoadingState
+          title={redirecting ? "正在前往登入頁" : "正在確認登入狀態"}
+        />
+      </div>
+    );
+  }
+
+  // 個人商品登記使用公開商品頁的版型，但仍需先確認登入狀態。
+  if (isBareRoute(pathname)) {
+    return <>{children}</>;
+  }
+
+  return (
+    <ModuleStatusProvider authenticated={isLoggedIn} pollEnabled={isLoggedIn}>
+      <AppShellContent
+        isLoggedIn={isLoggedIn}
+        initialImportantAnnouncement={initialImportantAnnouncement}
+      >
+        {children}
+      </AppShellContent>
+    </ModuleStatusProvider>
+  );
+}
+
+function AppShellContent({
+  children,
+  isLoggedIn,
+  initialImportantAnnouncement,
+}: {
+  children: React.ReactNode;
+  isLoggedIn: boolean;
+  initialImportantAnnouncement: ServerImportantAnnouncement | null | undefined;
+}) {
+  const { can, isAdmin, isReady, permissions } = usePermissions();
+  const { isModuleDown, moduleInfo: getModuleInfo } = useModuleStatus();
+  const pathname = usePathname();
+  const moduleId = moduleForPath(pathname);
+  const moduleDown = isModuleDown(moduleId);
+  const moduleInfo = getModuleInfo(moduleId);
+  const hasTaskAccess = isAdmin
+    || permissions.has("admin:all")
+    || Array.from(permissions).some(
+      (permission) => permission.startsWith("document:") || permission.startsWith("regulation:"),
+    );
+  const inboxCounts = useInboxCounts(isLoggedIn && hasTaskAccess);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
+
+  const [isDesktop, setIsDesktop] = useState(true);
 
   // 路由變更時自動關閉行動版側邊欄
   useEffect(() => {
     setSidebarOpen(false);
   }, [pathname]);
 
-  if (!authReady || redirecting) {
-    return <div className="min-h-screen" style={{ background: "var(--bg-base)" }} />;
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 1024px)");
+    const update = () => setIsDesktop(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
+  // 行動版側欄開啟時可用 Esc 關閉
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSidebarOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [sidebarOpen]);
+
+  if (isLoggedIn && !isReady) {
+    return (
+      <div className="app-content-loading" aria-live="polite">
+        <LoadingState
+          title="正在同步權限"
+        />
+      </div>
+    );
   }
 
-  if (isBare(pathname)) {
-    return <>{children}</>;
-  }
+  const toggleSidebar = () => {
+    if (window.matchMedia("(min-width: 1024px)").matches) {
+      setDesktopSidebarOpen((open) => !open);
+      return;
+    }
+    setSidebarOpen((open) => !open);
+  };
 
   return (
     <PermissionProvider can={can}>
-      <ConfirmProvider>
-      <div className="flex h-screen overflow-hidden" style={{ background: "var(--bg-base)" }}>
-        {/* 行動版側邊欄遮罩 */}
+      <InboxCountsProvider value={inboxCounts}>
+      <div className="app-shell flex h-[100dvh] overflow-hidden">
+        <a
+          href="#main-content"
+          className="fixed left-3 top-3 z-[200] -translate-y-20 rounded-md px-3 py-2 text-sm font-medium transition-transform focus:translate-y-0"
+          style={{ background: "var(--primary)", color: "var(--primary-fg)" }}
+        >
+          跳到主要內容
+        </a>
+        {/* 平板與行動版側邊欄遮罩 */}
         {sidebarOpen && (
           <div
-            className="fixed inset-0 z-40 md:hidden"
+            className="fixed inset-0 z-[105] lg:hidden"
             style={{ background: "var(--bg-overlay)" }}
             onClick={() => setSidebarOpen(false)}
             aria-hidden="true"
@@ -133,25 +373,31 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
         {/* 側邊欄 */}
         <div
           className={`
-            fixed inset-y-0 left-0 z-50 transition-transform duration-300
-            md:relative md:translate-x-0 md:z-auto
+            fixed inset-y-0 left-0 z-[110] transition-transform duration-300
+            lg:relative lg:z-auto
             ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+            ${desktopSidebarOpen ? "lg:block lg:translate-x-0" : "lg:hidden"}
           `}
-          style={{ width: "var(--sidebar-w, 240px)" }}>
+          style={{ width: "var(--sidebar-w, 240px)" }}
+          // 收合時移出鍵盤與螢幕閱讀器的瀏覽順序，避免 Tab 經過看不見的連結。
+          inert={isDesktop ? !desktopSidebarOpen : !sidebarOpen}
+          aria-hidden={(isDesktop ? !desktopSidebarOpen : !sidebarOpen) || undefined}>
           <Sidebar />
         </div>
 
         {/* 主內容區 */}
         <div className="flex flex-col flex-1 overflow-hidden min-w-0">
-          <Topbar onMenuClick={() => setSidebarOpen((p) => !p)} />
+          <ImportantAnnouncementBanner announcement={initialImportantAnnouncement} />
+          <Topbar onMenuClick={toggleSidebar} menuExpanded={isDesktop ? desktopSidebarOpen : sidebarOpen} />
           <main
             id="main-content"
-            className="flex-1 overflow-y-auto p-5 md:p-6 pb-20 md:pb-6 animate-slide-in"
-            style={{ background: "var(--bg-base)" }}>
-            {moduleDown && moduleId && !isAdmin ? (
+            className="app-main min-w-0 flex-1 overflow-y-auto p-5 pb-[calc(5rem+env(safe-area-inset-bottom))] md:p-6 lg:pb-6"
+            aria-busy="false"
+          >
+            {moduleDown && moduleId && (!isAdmin || moduleInfo?.mode === "closed") ? (
               <ModuleMaintenance moduleId={moduleId} />
             ) : (
-              <>
+              <PageTransition>
                 {moduleDown && moduleId && isAdmin && (
                   <div
                     className="mb-4 flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium"
@@ -165,24 +411,43 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
                   </div>
                 )}
                 {children}
-              </>
+              </PageTransition>
             )}
           </main>
         </div>
         {!sidebarOpen && <BottomTabBar onMoreClick={() => setSidebarOpen((p) => !p)} />}
-        <UrgentAnnouncementPopup />
+        {isLoggedIn && <UrgentAnnouncementPopup />}
         <CommandMenu />
-        <PolicyConsentBanner isAuthenticated={isLoggedIn && !suppressPolicyConsent} />
       </div>
-      </ConfirmProvider>
+      {isLoggedIn && <PasskeySetupPrompt />}
+      </InboxCountsProvider>
     </PermissionProvider>
   );
 }
 
-export default function AppShell({ children }: { children: React.ReactNode }) {
+export default function AppShell({
+  children,
+  initialUser = null,
+  initialImportantAnnouncement,
+}: {
+  children: React.ReactNode;
+  initialUser?: ServerSessionUser | null;
+  initialImportantAnnouncement?: ServerImportantAnnouncement | null;
+}) {
+  const pathname = usePathname();
+
+  if (isBareRoute(pathname) && !requiresAuthentication(pathname)) {
+    return <SessionSnapshotProvider user={initialUser ?? null}>{children}</SessionSnapshotProvider>;
+  }
+
   return (
-    <ModuleStatusProvider>
-      <AppShellContent>{children}</AppShellContent>
-    </ModuleStatusProvider>
+    <SessionSnapshotProvider user={requiresAuthentication(pathname) ? initialUser : null}>
+      <SessionGate
+        initialUser={initialUser}
+        initialImportantAnnouncement={initialImportantAnnouncement}
+      >
+        {children}
+      </SessionGate>
+    </SessionSnapshotProvider>
   );
 }

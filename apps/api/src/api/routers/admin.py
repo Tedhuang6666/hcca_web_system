@@ -9,15 +9,19 @@
 from __future__ import annotations
 
 import uuid
+from collections import defaultdict
 from datetime import date
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import String, cast, func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import load_only, selectinload
 
+from api.core.cache import cache_invalidate_user_permissions
+from api.core.clock import local_today
 from api.core.config import settings
 from api.core.database import get_db
 from api.core.permission_codes import (
@@ -25,21 +29,44 @@ from api.core.permission_codes import (
     PermissionCode,
     validate_permission_codes,
 )
+from api.core.security import revoke_user
 from api.dependencies.permissions import require_permission
 from api.models.org import Org, Permission, Position, PositionCategory, UserPosition
-from api.models.person import PersonAffiliationKind, PersonAffiliationSource
+from api.models.school_class import ClassRosterEntry, SchoolClass
 from api.models.user import User
+from api.models.user_identity import UserIdentity
+from api.schemas.cadre_import import CadreDirectoryImportOut
+from api.schemas.school_class import ClassRosterSummary
 from api.services import audit as audit_svc
+from api.services import cadre_import as cadre_import_svc
+from api.services import mfa as mfa_svc
+from api.services import org as org_svc
 from api.services import person as person_svc
+from api.services import user_position as tenure_svc
+from api.services import user_registration as user_registration_svc
+from api.services import user_session as user_session_svc
 from api.services.discord_bot import enqueue_role_sync
-from api.services.permission import get_user_permission_codes
+from api.services.notification_pref import (
+    DIGEST_FREQUENCIES,
+    KNOWN_MODULES,
+    NOTIFICATION_TYPES,
+    get_digest_frequency,
+    get_muted_modules,
+    normalize_preferences,
+    set_digest_frequency,
+    set_muted_modules,
+)
+from api.services.permission import get_user_permission_codes, get_user_permission_codes_batch
+from api.services.user_registration import UserRegistrationError
 
-router = APIRouter(prefix="/admin", tags=["管理員"])
+router = APIRouter(
+    prefix="/admin",
+    tags=["管理員"],
+)
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 AdminUser = Annotated[User, Depends(require_permission(PermissionCode.ADMIN_ALL))]
-
-SCHOOL_EMAIL_DOMAIN = "hchs.hc.edu.tw"
+MAX_CADRE_DIRECTORY_IMPORT_BYTES = 10 * 1024 * 1024
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
 
@@ -64,17 +91,26 @@ class UserDetail(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
     email: str
+    linked_emails: list[str] = Field(default_factory=list)
     display_name: str
     student_id: str | None
     avatar_url: str | None
     is_active: bool
-    allow_external_login: bool
+    is_verified: bool
+    show_email: bool
+    ui_theme: str
+    ui_locale: str
+    notification_preferences: dict[str, dict[str, bool]] = Field(default_factory=dict)
+    notification_digest_frequency: str = "off"
+    muted_notification_modules: list[str] = Field(default_factory=list)
+    mfa_enabled: bool
     is_superuser: bool
     # Owner 為環境變數 OWNER_EMAILS 驅動的最高權限角色，由路由層注入
     is_owner: bool = False
     created_at: str
     positions: list[PositionSummary] = []
     effective_permissions: list[str] = []
+    class_roster: list[ClassRosterSummary] = Field(default_factory=list)
 
 
 class UserPreRegister(BaseModel):
@@ -82,9 +118,10 @@ class UserPreRegister(BaseModel):
 
     student_id: str | None = Field(None, min_length=1, max_length=20, description="學號")
     email: str | None = Field(None, min_length=5, max_length=255, description="自訂登入信箱")
-    allow_external_login: bool = Field(
-        False,
-        description="允許校外信箱繞過 LOGIN_ALLOWED_EMAIL_DOMAINS 登入",
+    linked_emails: list[str] = Field(
+        default_factory=list,
+        max_length=10,
+        description="可登入同一帳戶的其他 Email",
     )
     display_name: str = Field(..., min_length=1, max_length=100, description="姓名")
     position_ids: list[uuid.UUID] = Field(
@@ -96,14 +133,64 @@ class UserPreRegister(BaseModel):
     end_date: date | None = Field(None, description="任期結束日（None = 無期限）")
 
 
-class AssignPositionsRequest(BaseModel):
-    """指派/替換使用者的所有職位"""
+class UserBatchPreRegister(BaseModel):
+    users: list[UserPreRegister] = Field(..., min_length=1, max_length=200)
 
-    assignments: list[dict] = Field(
-        ...,
-        description="[{position_id, start_date, end_date?}, ...]",
-        examples=[[{"position_id": "uuid", "start_date": "2026-01-01"}]],
+
+class UserBatchPreRegisterItem(BaseModel):
+    index: int
+    success: bool
+    display_name: str
+    email: str | None = None
+    student_id: str | None = None
+    user_id: uuid.UUID | None = None
+    error: str | None = None
+
+
+class UserBatchPreRegisterResult(BaseModel):
+    total: int
+    created: int
+    failed: int
+    results: list[UserBatchPreRegisterItem]
+
+
+class LinkUserEmailsRequest(BaseModel):
+    emails: list[str] = Field(..., min_length=1, max_length=10)
+
+
+class MergeUserAccountsRequest(BaseModel):
+    source_user_id: uuid.UUID | None = Field(None, description="相容舊版的單一次要帳戶 ID")
+    source_user_ids: list[uuid.UUID] = Field(
+        default_factory=list,
+        max_length=20,
+        description="要被歸戶的次要帳戶 ID 清單",
     )
+    conflict_resolutions: dict[str, str] = Field(
+        default_factory=dict,
+        description="衝突 key 對應要保留的資料 record id",
+    )
+
+
+class MergeConflictRecord(BaseModel):
+    id: str
+    side: Literal["target", "source"]
+    owner_user_id: str
+    owner_name: str
+    label: str
+    fields: dict[str, str] = {}
+
+
+class MergeConflict(BaseModel):
+    key: str
+    category: Literal["record", "field"]
+    resolvable: bool = False
+    title: str
+    message: str
+    records: list[MergeConflictRecord]
+
+
+class MergePreview(BaseModel):
+    conflicts: list[MergeConflict]
 
 
 class AddSinglePosition(BaseModel):
@@ -119,9 +206,16 @@ class UpdateUserPositionRequest(BaseModel):
 
 class UpdateUserRequest(BaseModel):
     display_name: str | None = Field(None, max_length=100)
+    student_id: str | None = Field(None, max_length=20)
     is_active: bool | None = None
-    allow_external_login: bool | None = None
+    is_verified: bool | None = None
+    show_email: bool | None = None
+    ui_theme: Literal["auto", "light", "dark"] | None = None
+    ui_locale: Literal["zh-TW"] | None = None
     is_superuser: bool | None = None
+    notification_preferences: dict[str, dict[str, bool]] | None = None
+    notification_digest_frequency: Literal["off", "daily", "weekly"] | None = None
+    muted_notification_modules: list[str] | None = None
 
 
 class PositionCreate(BaseModel):
@@ -145,19 +239,88 @@ class PositionUpdate(BaseModel):
     parent_id: uuid.UUID | None = None
 
 
+class CopyPositionPermissionsRequest(BaseModel):
+    source_position_id: uuid.UUID
+
+
 class PermissionCatalogItem(BaseModel):
+    category: str
     group: str
     code: str
     label: str
     desc: str
 
 
+class AdminDashboardStats(BaseModel):
+    active_user_count: int
+    position_count: int
+
+
+@router.post(
+    "/imports/hchs-cadre-directory",
+    response_model=CadreDirectoryImportOut,
+    summary="一鍵匯入新竹高中班聯會幹部通訊錄",
+)
+async def import_hchs_cadre_directory(
+    db: DbDep,
+    admin_user: AdminUser,
+    file: UploadFile = File(..., description="Google 表單匯出的幹部通訊錄 PDF"),
+    academic_year: int = Form(115, ge=1, le=999),
+    term_start: date = Form(date(2026, 8, 1)),
+    term_end: date | None = Form(date(2027, 7, 31)),
+) -> CadreDirectoryImportOut:
+    """以 PDF 的班級與座號建立名冊，再套用已核對的班聯會職務與權限。"""
+    file_bytes = await file.read(MAX_CADRE_DIRECTORY_IMPORT_BYTES + 1)
+    if len(file_bytes) > MAX_CADRE_DIRECTORY_IMPORT_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="匯入檔不可超過 10 MB",
+        )
+    try:
+        result = await cadre_import_svc.import_hchs_cadre_directory(
+            db,
+            file_bytes=file_bytes,
+            filename=file.filename,
+            academic_year=academic_year,
+            term_start=term_start,
+            term_end=term_end,
+            actor=admin_user,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    await audit_svc.record(
+        db,
+        entity_type="cadre_directory_import",
+        entity_id=str(academic_year),
+        action="cadre_directory.import",
+        actor_id=str(admin_user.id),
+        actor_email=admin_user.email,
+        meta=result.model_dump(),
+        summary=f"匯入 {academic_year} 學年度新竹高中班聯會幹部通訊錄",
+    )
+    return result
+
+
 # ── 輔助 ─────────────────────────────────────────────────────────────────────
+
+
+def _user_preference_fields(user: User) -> dict[str, object]:
+    preferences = user.notification_preferences or {}
+    return {
+        "show_email": user.show_email,
+        "is_verified": user.is_verified,
+        "ui_theme": user.ui_theme,
+        "ui_locale": user.ui_locale,
+        "notification_preferences": normalize_preferences(preferences),
+        "notification_digest_frequency": get_digest_frequency(preferences),
+        "muted_notification_modules": get_muted_modules(preferences),
+    }
 
 
 async def _enrich_user(db: AsyncSession, user: User) -> UserDetail:
     """組裝 UserDetail（含職位 + 有效權限碼）"""
-    # 載入 UserPosition → Position → Permission
     result = await db.execute(
         select(UserPosition)
         .options(
@@ -189,23 +352,131 @@ async def _enrich_user(db: AsyncSession, user: User) -> UserDetail:
         )
 
     effective = await get_user_permission_codes(db, user.id)
+    identity_emails = (
+        await db.scalars(
+            select(UserIdentity.email)
+            .where(UserIdentity.user_id == user.id, UserIdentity.email.is_not(None))
+            .distinct()
+        )
+    ).all()
     return UserDetail(
         id=user.id,
         email=user.email,
+        linked_emails=sorted({user.email, *(email for email in identity_emails if email)}),
         display_name=user.display_name,
         student_id=user.student_id,
         avatar_url=user.avatar_url,
         is_active=user.is_active,
-        allow_external_login=user.allow_external_login,
+        mfa_enabled=bool(user.mfa_enabled),
         is_superuser=user.is_superuser,
         is_owner=user.email.lower() in settings.OWNER_EMAILS,
         created_at=user.created_at.isoformat(),
         positions=positions,
         effective_permissions=sorted(effective),
+        **_user_preference_fields(user),
     )
 
 
+async def _enrich_users_batch(db: AsyncSession, users: list[User]) -> list[UserDetail]:
+    """批量組裝 UserDetail，避免 N+1：UserPosition/UserIdentity/權限各一次查詢。"""
+    if not users:
+        return []
+
+    user_ids = [u.id for u in users]
+
+    # 一次拿所有人的 UserPosition（含 position.permissions + position.org）
+    up_result = await db.execute(
+        select(UserPosition)
+        .options(
+            selectinload(UserPosition.position).selectinload(Position.permissions),
+            selectinload(UserPosition.position).selectinload(Position.org),
+        )
+        .where(UserPosition.user_id.in_(user_ids))
+        .order_by(UserPosition.start_date)
+    )
+    ups_by_user: dict[uuid.UUID, list[UserPosition]] = defaultdict(list)
+    for up in up_result.scalars().all():
+        ups_by_user[up.user_id].append(up)
+
+    # 一次拿所有人的 linked email
+    id_result = await db.execute(
+        select(UserIdentity.user_id, UserIdentity.email)
+        .where(UserIdentity.user_id.in_(user_ids), UserIdentity.email.is_not(None))
+        .distinct()
+    )
+    emails_by_user: dict[uuid.UUID, set[str]] = defaultdict(set)
+    for uid, email in id_result.all():
+        if email:
+            emails_by_user[uid].add(email)
+
+    # 一次查所有人的 permission codes，避免同一 AsyncSession 上並行 N+1 查詢。
+    permissions_by_user = await get_user_permission_codes_batch(db, user_ids)
+
+    details: list[UserDetail] = []
+    for user in users:
+        effective = permissions_by_user.get(user.id, frozenset())
+        user_ups = ups_by_user.get(user.id, [])
+        positions = []
+        for up in user_ups:
+            pos = up.position
+            positions.append(
+                PositionSummary(
+                    id=pos.id,
+                    name=pos.name,
+                    org_id=pos.org_id,
+                    org_name=pos.org.name if pos.org else "",
+                    org_is_active=pos.org.is_active if pos.org else True,
+                    description=pos.description,
+                    category=pos.category,
+                    weight=pos.weight,
+                    parent_id=pos.parent_id,
+                    permission_codes=[p.code for p in pos.permissions],
+                    user_position_id=up.id,
+                )
+            )
+        linked = emails_by_user.get(user.id, set())
+        details.append(
+            UserDetail(
+                id=user.id,
+                email=user.email,
+                linked_emails=sorted({user.email, *linked}),
+                display_name=user.display_name,
+                student_id=user.student_id,
+                avatar_url=user.avatar_url,
+                is_active=user.is_active,
+                mfa_enabled=bool(user.mfa_enabled),
+                is_superuser=user.is_superuser,
+                is_owner=user.email.lower() in settings.OWNER_EMAILS,
+                created_at=user.created_at.isoformat(),
+                positions=positions,
+                effective_permissions=sorted(effective),
+                **_user_preference_fields(user),
+            )
+        )
+    return details
+
+
 # ── 使用者管理 ────────────────────────────────────────────────────────────────
+
+
+@router.get(
+    "/dashboard-stats",
+    response_model=AdminDashboardStats,
+    summary="取得管理總覽統計",
+)
+async def dashboard_stats(db: DbDep, _: AdminUser) -> AdminDashboardStats:
+    active_users, positions = (
+        await db.execute(
+            select(
+                select(func.count(User.id)).where(User.is_active == True).scalar_subquery(),  # noqa: E712
+                select(func.count(Position.id)).scalar_subquery(),
+            )
+        )
+    ).one()
+    return AdminDashboardStats(
+        active_user_count=active_users,
+        position_count=positions,
+    )
 
 
 @router.get(
@@ -216,28 +487,95 @@ async def _enrich_user(db: AsyncSession, user: User) -> UserDetail:
 async def list_users(
     db: DbDep,
     _: AdminUser,
-    keyword: str | None = Query(None, description="搜尋姓名/Email/學號"),
+    keyword: str | None = Query(None, description="搜尋姓名、Email、學號、班級或座號"),
+    class_id: uuid.UUID | None = Query(None, description="依班級名冊篩選"),
     active_only: bool = Query(False, description="僅顯示啟用中帳號"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> list[UserDetail]:
-    q = select(User).order_by(User.created_at.desc()).limit(limit).offset(offset)
+    q = (
+        select(User)
+        .options(
+            load_only(
+                User.id,
+                User.email,
+                User.display_name,
+                User.student_id,
+                User.avatar_url,
+                User.is_active,
+                User.is_verified,
+                User.show_email,
+                User.ui_theme,
+                User.ui_locale,
+                User.notification_preferences,
+                User.mfa_enabled,
+                User.is_superuser,
+                User.created_at,
+            )
+        )
+        .order_by(User.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
     if active_only:
         q = q.where(User.is_active == True)  # noqa: E712
+    roster_identity_filter = or_(
+        ClassRosterEntry.user_id == User.id,
+        ClassRosterEntry.student_id == User.student_id,
+    )
+    if class_id:
+        class_roster_match = (
+            select(ClassRosterEntry.id)
+            .where(ClassRosterEntry.class_id == class_id, roster_identity_filter)
+            .correlate(User)
+            .exists()
+        )
+        q = q.where(class_roster_match)
     if keyword:
-        pattern = f"%{keyword}%"
-        from sqlalchemy import or_
+        from api.core.search import like_contains
+
+        normalized_keyword = keyword.strip()
+        pattern = like_contains(normalized_keyword)
+        roster_filters = [
+            SchoolClass.class_code.ilike(pattern),
+            SchoolClass.label.ilike(pattern),
+            cast(SchoolClass.academic_year, String).ilike(pattern),
+        ]
+        if (
+            normalized_keyword.isascii()
+            and normalized_keyword.isdecimal()
+            and len(normalized_keyword) <= 9
+        ):
+            roster_filters.append(ClassRosterEntry.seat_number == int(normalized_keyword))
+        roster_match = (
+            select(ClassRosterEntry.id)
+            .join(SchoolClass, SchoolClass.id == ClassRosterEntry.class_id)
+            .where(
+                roster_identity_filter,
+                or_(*roster_filters),
+            )
+            .correlate(User)
+            .exists()
+        )
 
         q = q.where(
             or_(
                 User.display_name.ilike(pattern),
                 User.email.ilike(pattern),
                 User.student_id.ilike(pattern),
+                roster_match,
             )
         )
     result = await db.execute(q)
     users = result.scalars().all()
-    return [await _enrich_user(db, u) for u in users]
+    details = await _enrich_users_batch(db, list(users))
+    class_rosters = await person_svc.class_rosters_for_identities(
+        db,
+        [(detail.id, detail.student_id) for detail in details],
+    )
+    for detail in details:
+        detail.class_roster = class_rosters.get(detail.id, [])
+    return details
 
 
 @router.post(
@@ -256,137 +594,66 @@ async def pre_register_user(
     Email 格式：g0{student_id}@hchs.hc.edu.tw。
     學生首次以 Google 帳號登入時，系統依 email 自動匹配並連結帳號。
     """
-    if body.email and body.email.strip():
-        email = body.email.strip().lower()
-    else:
-        if not body.student_id or not body.student_id.strip():
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="未提供 email 時，student_id 為必填",
-            )
-        email = f"g0{body.student_id.strip()}@{SCHOOL_EMAIL_DOMAIN}"
-
-    # 檢查 email 或學號是否已存在
-    cond = User.email == email
-    if body.student_id:
-        cond = cond | (User.student_id == body.student_id)
-    dup_check = await db.execute(select(User).where(cond))
-    if dup_check.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="學號或 Email 已存在",
-        )
-
-    user = User(
-        email=email,
-        display_name=body.display_name,
-        student_id=body.student_id,
-        is_verified=False,
-        is_active=True,
-        allow_external_login=body.allow_external_login,
-        is_superuser=False,
-    )
-    db.add(user)
-    await db.flush()
-
-    # 指派職位
-    for pos_id in body.position_ids:
-        pos_check = await db.execute(
-            select(Position).options(selectinload(Position.org)).where(Position.id == pos_id)
-        )
-        position = pos_check.scalar_one_or_none()
-        if not position:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"職位 {pos_id} 不存在",
-            )
-        if position.org and not position.org.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"職位 {position.name} 所屬組織已停用，無法指派",
-            )
-        db.add(
-            user_position := UserPosition(
-                user_id=user.id,
-                position_id=pos_id,
-                start_date=body.start_date,
-                end_date=body.end_date,
-            )
-        )
-        await db.flush()
-        await person_svc.record_affiliation_for_user_position(
+    try:
+        user = await user_registration_svc.pre_register_user(
             db,
-            user=user,
-            kind=PersonAffiliationKind.ORG_POSITION,
-            position_id=pos_id,
-            start_date=user_position.start_date,
-            end_date=user_position.end_date,
-            synced_user_position_id=user_position.id,
-            source=PersonAffiliationSource.RBAC_SYNC,
+            **body.model_dump(),
+            actor=admin_user,
         )
-
-    # 自訂權限：自動建立一個使用者專用職位並掛上權限碼
-    if body.custom_permission_codes:
-        invalid_codes = validate_permission_codes(body.custom_permission_codes)
-        if invalid_codes:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"存在未知權限碼：{', '.join(invalid_codes)}",
-            )
-        if body.custom_permission_org_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="使用自訂權限時，custom_permission_org_id 為必填",
-            )
-        org_check = await db.execute(select(Org).where(Org.id == body.custom_permission_org_id))
-        org = org_check.scalar_one_or_none()
-        if org is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="自訂權限組織不存在")
-        if not org.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="自訂權限組織已停用，無法使用",
-            )
-
-        custom_pos = Position(
-            org_id=org.id,
-            name=f"外部協作-{body.display_name}",
-            description=f"系統自動建立：{user.email} 的自訂權限職位",
-            category=PositionCategory.SYSTEM,
-        )
-        db.add(custom_pos)
-        await db.flush()
-        for code in sorted(set(body.custom_permission_codes)):
-            db.add(Permission(position_id=custom_pos.id, code=code))
-        db.add(
-            UserPosition(
-                user_id=user.id,
-                position_id=custom_pos.id,
-                start_date=body.start_date,
-                end_date=body.end_date,
-            )
-        )
-
-    await db.flush()
-    await audit_svc.record(
-        db,
-        entity_type="user",
-        entity_id=str(user.id),
-        action="user.pre_register",
-        actor_id=str(admin_user.id),
-        actor_email=admin_user.email,
-        meta={
-            "email": user.email,
-            "student_id": user.student_id,
-            "position_ids": [str(pos_id) for pos_id in body.position_ids],
-            "custom_permission_codes": sorted(set(body.custom_permission_codes)),
-            "custom_permission_org_id": (
-                str(body.custom_permission_org_id) if body.custom_permission_org_id else None
-            ),
-        },
-        summary=f"預先建立使用者「{user.display_name}」",
-    )
+    except UserRegistrationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     return await _enrich_user(db, user)
+
+
+@router.post(
+    "/users/pre-register/batch",
+    response_model=UserBatchPreRegisterResult,
+    status_code=status.HTTP_201_CREATED,
+    summary="批次預先建立帳號",
+)
+async def batch_pre_register_users(
+    body: UserBatchPreRegister,
+    db: DbDep,
+    admin_user: AdminUser,
+) -> UserBatchPreRegisterResult:
+    results: list[UserBatchPreRegisterItem] = []
+    for index, item in enumerate(body.users):
+        try:
+            async with db.begin_nested():
+                user = await user_registration_svc.pre_register_user(
+                    db,
+                    **item.model_dump(),
+                    actor=admin_user,
+                )
+            results.append(
+                UserBatchPreRegisterItem(
+                    index=index,
+                    success=True,
+                    display_name=user.display_name,
+                    email=user.email,
+                    student_id=user.student_id,
+                    user_id=user.id,
+                )
+            )
+        except UserRegistrationError as exc:
+            results.append(
+                UserBatchPreRegisterItem(
+                    index=index,
+                    success=False,
+                    display_name=item.display_name,
+                    email=item.email,
+                    student_id=item.student_id,
+                    error=exc.detail,
+                )
+            )
+
+    created = sum(result.success for result in results)
+    return UserBatchPreRegisterResult(
+        total=len(results),
+        created=created,
+        failed=len(results) - created,
+        results=results,
+    )
 
 
 @router.get(
@@ -399,13 +666,200 @@ async def get_user(user_id: uuid.UUID, db: DbDep, _: AdminUser) -> UserDetail:
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="使用者不存在")
+    detail = await _enrich_user(db, user)
+    detail.class_roster = await person_svc.class_roster_for_identity(
+        db,
+        user_id=user.id,
+        student_id=user.student_id,
+    )
+    return detail
+
+
+@router.delete(
+    "/users/{user_id}/mfa",
+    response_model=UserDetail,
+    summary="清除使用者的 2FA 設定",
+)
+async def clear_user_mfa(
+    user_id: uuid.UUID,
+    db: DbDep,
+    admin_user: AdminUser,
+) -> UserDetail:
+    """管理員清除使用者的 TOTP 設定，讓使用者可重新註冊。"""
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="使用者不存在")
+
+    before = {
+        "mfa_enabled": user.mfa_enabled,
+        "has_pending_setup": user.mfa_pending_secret is not None,
+        "backup_code_count": mfa_svc.backup_code_count(user),
+    }
+    await mfa_svc.clear_mfa(db, user)
+    await audit_svc.record(
+        db,
+        entity_type="user",
+        entity_id=str(user.id),
+        action="user.mfa.clear",
+        actor_id=str(admin_user.id),
+        actor_email=admin_user.email,
+        meta={
+            "before": before,
+            "after": {"mfa_enabled": False, "has_pending_setup": False, "backup_code_count": 0},
+        },
+        summary=f"清除使用者「{user.display_name}」的 2FA 設定",
+    )
     return await _enrich_user(db, user)
+
+
+@router.post(
+    "/users/{user_id}/emails",
+    response_model=UserDetail,
+    summary="連結其他登入 Email 到既有帳號",
+)
+async def link_user_emails(
+    user_id: uuid.UUID,
+    body: LinkUserEmailsRequest,
+    db: DbDep,
+    admin_user: AdminUser,
+) -> UserDetail:
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="使用者不存在")
+    try:
+        await user_registration_svc.link_user_emails(
+            db,
+            user=user,
+            emails=body.emails,
+            actor=admin_user,
+            merge_existing_accounts=True,
+        )
+    except UserRegistrationError as exc:
+        await db.rollback()
+        detail = {"message": exc.detail, **exc.payload} if exc.payload else exc.detail
+        raise HTTPException(status_code=exc.status_code, detail=detail) from exc
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="帳戶合併遇到資料一致性衝突，未套用任何變更",
+        ) from exc
+    return await _enrich_user(db, user)
+
+
+def _merge_source_ids(body: MergeUserAccountsRequest) -> list[uuid.UUID]:
+    values = [*body.source_user_ids]
+    if body.source_user_id is not None:
+        values.append(body.source_user_id)
+    return list(dict.fromkeys(values))
+
+
+async def _load_merge_users(
+    db: AsyncSession,
+    *,
+    target_user_id: uuid.UUID,
+    source_user_ids: list[uuid.UUID],
+) -> tuple[User, list[User]]:
+    if not source_user_ids:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="至少要選擇一個次要帳戶",
+        )
+    if len(source_user_ids) > 20:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="一次最多合併 20 個次要帳戶",
+        )
+    if target_user_id in source_user_ids:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="不可合併主要帳戶本身",
+        )
+    target_user = await db.get(User, target_user_id)
+    if target_user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到主要帳戶")
+    result = await db.execute(select(User).where(User.id.in_(source_user_ids)))
+    source_users = list(result.scalars().all())
+    if len(source_users) != len(source_user_ids):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到次要帳戶")
+    if any(not source.is_active for source in source_users):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="已停用的帳戶不可再次合併",
+        )
+    return target_user, source_users
+
+
+@router.post(
+    "/users/{user_id}/merge/preview",
+    response_model=MergePreview,
+    summary="預覽多個帳戶合併衝突",
+)
+async def preview_user_account_merge(
+    user_id: uuid.UUID,
+    body: MergeUserAccountsRequest,
+    db: DbDep,
+    _: AdminUser,
+) -> MergePreview:
+    source_user_ids = _merge_source_ids(body)
+    target_user, source_users = await _load_merge_users(
+        db,
+        target_user_id=user_id,
+        source_user_ids=source_user_ids,
+    )
+    try:
+        conflicts = await user_registration_svc.preview_merge_user_accounts(
+            db,
+            user=target_user,
+            source_users=source_users,
+        )
+    except UserRegistrationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    return MergePreview(conflicts=conflicts)
+
+
+@router.post(
+    "/users/{user_id}/merge",
+    response_model=UserDetail,
+    summary="將另一個帳戶的身分與歷史資料歸戶",
+)
+async def merge_user_accounts(
+    user_id: uuid.UUID,
+    body: MergeUserAccountsRequest,
+    db: DbDep,
+    admin_user: AdminUser,
+) -> UserDetail:
+    source_user_ids = _merge_source_ids(body)
+    target_user, source_users = await _load_merge_users(
+        db,
+        target_user_id=user_id,
+        source_user_ids=source_user_ids,
+    )
+    try:
+        await user_registration_svc.merge_user_accounts(
+            db,
+            user=target_user,
+            source_users=source_users,
+            actor=admin_user,
+            conflict_resolutions=body.conflict_resolutions,
+        )
+    except UserRegistrationError as exc:
+        await db.rollback()
+        detail = {"message": exc.detail, **exc.payload} if exc.payload else exc.detail
+        raise HTTPException(status_code=exc.status_code, detail=detail) from exc
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="帳戶合併遇到資料一致性衝突，未套用任何變更",
+        ) from exc
+    return await _enrich_user(db, target_user)
 
 
 @router.patch(
     "/users/{user_id}",
     response_model=UserDetail,
-    summary="更新使用者資料（啟用/停用、改名、設定超管）",
+    summary="更新使用者資料與偏好設定",
 )
 async def update_user(
     user_id: uuid.UUID,
@@ -419,11 +873,31 @@ async def update_user(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="使用者不存在")
     before = {
         "display_name": user.display_name,
+        "student_id": user.student_id,
         "is_active": user.is_active,
-        "allow_external_login": user.allow_external_login,
+        "is_verified": user.is_verified,
+        "show_email": user.show_email,
+        "ui_theme": user.ui_theme,
+        "ui_locale": user.ui_locale,
         "is_superuser": user.is_superuser,
+        "notification_preferences": user.notification_preferences or {},
     }
     is_owner = user.email.lower() in settings.OWNER_EMAILS
+    # 職責分離：is_superuser 是比 admin:all 更高的層級（繞過全部 RBAC 與 owner 以外的保護），
+    # 故唯有操作者本身為 superuser 時，才允許變更他人的 is_superuser，或修改既有 superuser 帳號。
+    # 否則持 admin:all 的非 superuser 可對自己送 is_superuser=true 自我提權，
+    # 或停用／降權合法 superuser 造成接管。
+    if not admin_user.is_superuser:
+        if body.is_superuser is not None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="僅超級管理員可變更超級管理員身分",
+            )
+        if user.is_superuser:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="僅超級管理員可修改其他超級管理員帳號",
+            )
     if is_owner and body.is_active is False:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -436,18 +910,82 @@ async def update_user(
         )
     if body.display_name is not None:
         user.display_name = body.display_name
+    if "student_id" in body.model_fields_set:
+        user.student_id = (body.student_id.strip() or None) if body.student_id else None
     if body.is_active is not None:
         user.is_active = body.is_active
-    if body.allow_external_login is not None:
-        user.allow_external_login = body.allow_external_login
+    if body.is_verified is not None:
+        user.is_verified = body.is_verified
+    if body.show_email is not None:
+        user.show_email = body.show_email
+    if body.ui_theme is not None:
+        user.ui_theme = body.ui_theme
+    if body.ui_locale is not None:
+        user.ui_locale = body.ui_locale
     if body.is_superuser is not None:
         user.is_superuser = body.is_superuser
-    await db.flush()
+    if body.notification_preferences is not None:
+        unknown_types = sorted(set(body.notification_preferences) - set(NOTIFICATION_TYPES))
+        if unknown_types:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"未知的通知類型：{', '.join(unknown_types)}",
+            )
+        merged_preferences = normalize_preferences(user.notification_preferences)
+        for notification_type, channels in body.notification_preferences.items():
+            merged_preferences[notification_type] = {
+                "inapp": bool(channels.get("inapp", True)),
+                "email": bool(channels.get("email", False)),
+                "line": bool(channels.get("line", False)),
+                "discord": bool(channels.get("discord", False)),
+            }
+        preserved = {
+            key: value
+            for key, value in (user.notification_preferences or {}).items()
+            if key.startswith("__")
+        }
+        user.notification_preferences = {**merged_preferences, **preserved}
+    if body.notification_digest_frequency is not None:
+        if body.notification_digest_frequency not in DIGEST_FREQUENCIES:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="通知摘要頻率必須是 off、daily 或 weekly",
+            )
+        user.notification_preferences = set_digest_frequency(
+            user.notification_preferences,
+            body.notification_digest_frequency,
+        )
+    if body.muted_notification_modules is not None:
+        invalid_modules = sorted(set(body.muted_notification_modules) - KNOWN_MODULES)
+        if invalid_modules:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"未知的通知模組：{', '.join(invalid_modules)}",
+            )
+        user.notification_preferences = set_muted_modules(
+            user.notification_preferences,
+            body.muted_notification_modules,
+        )
+    try:
+        await db.flush()
+    except IntegrityError as exc:
+        await db.rollback()
+        if "student_id" in str(exc.orig):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="此學號已被其他帳號使用，請確認學號是否正確",
+            ) from None
+        raise
     after = {
         "display_name": user.display_name,
+        "student_id": user.student_id,
         "is_active": user.is_active,
-        "allow_external_login": user.allow_external_login,
+        "is_verified": user.is_verified,
+        "show_email": user.show_email,
+        "ui_theme": user.ui_theme,
+        "ui_locale": user.ui_locale,
         "is_superuser": user.is_superuser,
+        "notification_preferences": user.notification_preferences or {},
     }
     await audit_svc.record(
         db,
@@ -459,7 +997,41 @@ async def update_user(
         meta={"before": before, "after": after},
         summary=f"更新使用者「{user.display_name}」資料",
     )
+    if before["is_active"] and not user.is_active:
+        await user_session_svc.revoke_all(db, user.id, reason="account_disabled")
+    elif before["is_superuser"] != user.is_superuser:
+        await user_session_svc.revoke_all(db, user.id, reason="permission_changed")
     return await _enrich_user(db, user)
+
+
+@router.post(
+    "/users/{user_id}/sessions/revoke",
+    response_model=dict[str, int | str],
+    summary="撤銷使用者全部登入工作階段",
+)
+async def revoke_user_sessions(
+    user_id: uuid.UUID,
+    db: DbDep,
+    admin_user: AdminUser,
+) -> dict[str, int | str]:
+    user = await db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="使用者不存在")
+    legacy_revoked_count = await revoke_user(str(user.id))
+    revoked_count = legacy_revoked_count + await user_session_svc.revoke_all(
+        db, user.id, reason="admin_revoke_all"
+    )
+    await audit_svc.record(
+        db,
+        entity_type="user",
+        entity_id=str(user.id),
+        action="user.sessions.revoke",
+        actor_id=str(admin_user.id),
+        actor_email=admin_user.email,
+        meta={"revoked_count": revoked_count},
+        summary=f"撤銷使用者「{user.display_name}」的全部登入工作階段",
+    )
+    return {"user_id": str(user.id), "revoked_count": revoked_count}
 
 
 @router.post(
@@ -474,41 +1046,15 @@ async def add_user_position(
     db: DbDep,
     admin_user: AdminUser,
 ) -> UserDetail:
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="使用者不存在")
-
-    pos_check = await db.execute(
-        select(Position).options(selectinload(Position.org)).where(Position.id == body.position_id)
-    )
-    position = pos_check.scalar_one_or_none()
-    if not position:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="職位不存在")
-    if position.org and not position.org.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="此職位所屬組織已停用，無法新增任期",
-        )
-
-    user_position = UserPosition(
+    user_position = await tenure_svc.assign(
+        db,
         user_id=user_id,
         position_id=body.position_id,
         start_date=body.start_date,
         end_date=body.end_date,
     )
-    db.add(user_position)
-    await db.flush()
-    await person_svc.record_affiliation_for_user_position(
-        db,
-        user=user,
-        kind=PersonAffiliationKind.ORG_POSITION,
-        position_id=body.position_id,
-        start_date=user_position.start_date,
-        end_date=user_position.end_date,
-        synced_user_position_id=user_position.id,
-        source=PersonAffiliationSource.RBAC_SYNC,
-    )
+    user = user_position.user
+    position = user_position.position
     await audit_svc.record(
         db,
         entity_type="user_position",
@@ -526,7 +1072,6 @@ async def add_user_position(
         },
         summary=f"指派「{position.name}」給「{user.display_name}」",
     )
-    await enqueue_role_sync(db, user_id)
     return await _enrich_user(db, user)
 
 
@@ -569,9 +1114,7 @@ async def remove_user_position(
         },
         summary="移除使用者職位任期",
     )
-    await db.delete(up)
-    await db.flush()
-    await enqueue_role_sync(db, user_id)
+    await tenure_svc.remove(db, up)
 
 
 @router.patch(
@@ -602,21 +1145,11 @@ async def update_user_position(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="至少需提供 start_date 或 end_date",
         )
-    start_date = body.start_date or up.start_date
-    end_date = body.end_date if "end_date" in body.model_fields_set else up.end_date
-    if end_date is not None and end_date < start_date:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="任期結束日不可早於開始日",
-        )
-
     before = {
         "start_date": up.start_date.isoformat(),
         "end_date": up.end_date.isoformat() if up.end_date else None,
     }
-    up.start_date = start_date
-    up.end_date = end_date
-    await db.flush()
+    up = await tenure_svc.update_term(db, up, body.model_dump(exclude_unset=True))
     await audit_svc.record(
         db,
         entity_type="user_position",
@@ -636,7 +1169,6 @@ async def update_user_position(
         },
         summary="更新使用者職位任期",
     )
-    await enqueue_role_sync(db, up.user_id)
     if up.user is None:
         user_result = await db.execute(select(User).where(User.id == user_id))
         user = user_result.scalar_one()
@@ -655,6 +1187,8 @@ async def update_user_position(
 async def list_all_positions(
     db: DbDep,
     _: AdminUser,
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
 ) -> list[PositionSummary]:
     result = await db.execute(
         select(Position)
@@ -663,6 +1197,8 @@ async def list_all_positions(
             selectinload(Position.org),
         )
         .order_by(Position.name)
+        .limit(limit)
+        .offset(offset)
     )
     positions = result.scalars().all()
     return [
@@ -861,6 +1397,15 @@ async def replace_position_permissions(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="職位不存在")
     before_codes = sorted(perm.code for perm in position.permissions)
     after_codes = sorted(set(permission_codes))
+    holder_ids = set(
+        (
+            await db.execute(
+                select(UserPosition.user_id).where(UserPosition.position_id == position_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     # 清除舊有
     for p in position.permissions:
@@ -871,6 +1416,9 @@ async def replace_position_permissions(
     for code in after_codes:
         db.add(Permission(position_id=position_id, code=code))
     await db.flush()
+    for user_id in holder_ids:
+        await cache_invalidate_user_permissions(str(user_id))
+        await user_session_svc.revoke_all(db, user_id, reason="permission_changed")
     await audit_svc.record(
         db,
         entity_type="position",
@@ -902,6 +1450,89 @@ async def replace_position_permissions(
     )
 
 
+@router.post(
+    "/positions/{position_id}/permissions/copy",
+    summary="從其他職位複製權限碼",
+)
+async def copy_position_permissions(
+    position_id: uuid.UUID,
+    body: CopyPositionPermissionsRequest,
+    db: DbDep,
+    admin_user: AdminUser,
+) -> PositionSummary:
+    if position_id == body.source_position_id:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="來源與目標職位不可相同")
+
+    target_result = await db.execute(
+        select(Position)
+        .options(selectinload(Position.permissions), selectinload(Position.org))
+        .where(Position.id == position_id)
+    )
+    target = target_result.scalar_one_or_none()
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="目標職位不存在")
+
+    source_result = await db.execute(
+        select(Position)
+        .options(selectinload(Position.permissions))
+        .where(Position.id == body.source_position_id)
+    )
+    source = source_result.scalar_one_or_none()
+    if source is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="來源職位不存在")
+
+    before_codes = sorted(permission.code for permission in target.permissions)
+    after_codes = sorted({permission.code for permission in source.permissions})
+    holder_ids = set(
+        (
+            await db.execute(
+                select(UserPosition.user_id).where(UserPosition.position_id == position_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    for permission in target.permissions:
+        await db.delete(permission)
+    await db.flush()
+    for code in after_codes:
+        db.add(Permission(position_id=position_id, code=code))
+    await db.flush()
+    for user_id in holder_ids:
+        await cache_invalidate_user_permissions(str(user_id))
+        await user_session_svc.revoke_all(db, user_id, reason="permission_changed")
+    await audit_svc.record(
+        db,
+        entity_type="position",
+        entity_id=str(target.id),
+        action="permission.copy",
+        actor_id=str(admin_user.id),
+        actor_email=admin_user.email,
+        meta={
+            "org_id": str(target.org_id),
+            "source_position_id": str(source.id),
+            "source_position_name": source.name,
+            "before": before_codes,
+            "after": after_codes,
+        },
+        summary=f"從職位「{source.name}」複製權限至「{target.name}」",
+    )
+
+    return PositionSummary(
+        id=target.id,
+        name=target.name,
+        org_id=target.org_id,
+        org_name=target.org.name if target.org else "",
+        org_is_active=target.org.is_active if target.org else True,
+        description=target.description,
+        category=target.category,
+        weight=target.weight,
+        parent_id=target.parent_id,
+        permission_codes=after_codes,
+    )
+
+
 @router.delete(
     "/positions/{position_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -920,6 +1551,15 @@ async def delete_position(
     position = result.scalar_one_or_none()
     if not position:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="職位不存在")
+    holder_ids = set(
+        (
+            await db.execute(
+                select(UserPosition.user_id).where(UserPosition.position_id == position_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
     await audit_svc.record(
         db,
         entity_type="position",
@@ -935,7 +1575,12 @@ async def delete_position(
         },
         summary=f"刪除職位「{position.name}」",
     )
-    await db.delete(position)
+    await person_svc.end_affiliations_for_position(db, position.id)
+    await org_svc.delete_position(db, position)
+    for user_id in holder_ids:
+        await cache_invalidate_user_permissions(str(user_id))
+        await user_session_svc.revoke_all(db, user_id, reason="permission_changed")
+        await enqueue_role_sync(db, user_id)
 
 
 # ── 系統資訊 ──────────────────────────────────────────────────────────────────
@@ -956,12 +1601,15 @@ async def list_permission_codes(_: AdminUser) -> list[dict]:
 )
 async def query_permission_codes(
     _: AdminUser,
+    category: str | None = Query(None, description="上層分類精確篩選"),
     group: str | None = Query(None, description="群組精確篩選"),
     keyword: str | None = Query(None, description="模糊搜尋 code/label/desc"),
-    sort_by: Literal["group", "code", "label"] = Query("group"),
+    sort_by: Literal["category", "group", "code", "label"] = Query("group"),
     order: Literal["asc", "desc"] = Query("asc"),
 ) -> list[PermissionCatalogItem]:
     items = ALL_PERMISSION_CODES
+    if category:
+        items = [item for item in items if item["category"] == category]
     if group:
         items = [item for item in items if item["group"] == group]
     if keyword:
@@ -1011,3 +1659,113 @@ async def list_orgs_with_positions(db: DbDep, _: AdminUser) -> list[dict]:
         }
         for o in orgs
     ]
+
+
+# ── 殭屍權限稽核 ────────────────────────────────────────────────────────────
+
+
+class ZombieCredentialEntry(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    user_id: str
+    user_email: str
+    display_name: str
+    last_position_end_date: str | None
+    active_api_keys: int
+    active_webhooks: int
+    has_active_session: bool
+
+
+@router.get(
+    "/zombie-credentials",
+    response_model=list[ZombieCredentialEntry],
+    summary="殭屍權限稽核：列出任期已過但仍持有長效憑證的帳號",
+    dependencies=[Depends(require_permission(PermissionCode.ADMIN_ALL))],
+)
+async def list_zombie_credentials(db: DbDep, _: AdminUser) -> list[ZombieCredentialEntry]:
+    from datetime import UTC, datetime
+
+    from sqlalchemy import and_, func
+
+    from api.core.security import USER_TOKENS_PREFIX, redis_client
+    from api.models.api_key import ApiKey
+    from api.models.webhook import WebhookSubscription
+
+    today = local_today()
+    now_utc = datetime.now(UTC)
+
+    subq = (
+        select(
+            UserPosition.user_id,
+            func.max(UserPosition.end_date).label("last_end_date"),
+        )
+        .where(UserPosition.end_date.is_not(None))
+        .group_by(UserPosition.user_id)
+        .having(func.max(UserPosition.end_date) < today)
+        .subquery()
+    )
+
+    users_q = await db.execute(
+        select(User, subq.c.last_end_date)
+        .join(subq, User.id == subq.c.user_id)
+        .where(User.is_active.is_(True))
+    )
+    rows = users_q.all()
+    if not rows:
+        return []
+
+    ak_q = await db.execute(
+        select(ApiKey.owner_user_id, func.count(ApiKey.id).label("cnt"))
+        .where(
+            and_(
+                ApiKey.owner_user_id.in_([r.User.id for r in rows]),
+                ApiKey.is_active.is_(True),
+                ApiKey.revoked_at.is_(None),
+            )
+        )
+        .where((ApiKey.expires_at.is_(None)) | (ApiKey.expires_at > now_utc))
+        .group_by(ApiKey.owner_user_id)
+    )
+    ak_counts: dict[str, int] = {str(r.owner_user_id): r.cnt for r in ak_q}
+
+    wh_q = await db.execute(
+        select(WebhookSubscription.owner_user_id, func.count(WebhookSubscription.id).label("cnt"))
+        .where(
+            and_(
+                WebhookSubscription.owner_user_id.in_([r.User.id for r in rows]),
+                WebhookSubscription.is_active.is_(True),
+            )
+        )
+        .group_by(WebhookSubscription.owner_user_id)
+    )
+    wh_counts: dict[str, int] = {str(r.owner_user_id): r.cnt for r in wh_q}
+
+    session_flags: dict[str, bool] = {}
+    for row in rows:
+        uid = str(row.User.id)
+        try:
+            count = await redis_client.scard(f"{USER_TOKENS_PREFIX}{uid}")
+            session_flags[uid] = bool(count and count > 0)
+        except Exception:
+            session_flags[uid] = False
+
+    result: list[ZombieCredentialEntry] = []
+    for row in rows:
+        uid = str(row.User.id)
+        api_key_cnt = ak_counts.get(uid, 0)
+        webhook_cnt = wh_counts.get(uid, 0)
+        has_session = session_flags.get(uid, False)
+        if api_key_cnt == 0 and webhook_cnt == 0 and not has_session:
+            continue
+        result.append(
+            ZombieCredentialEntry(
+                user_id=uid,
+                user_email=row.User.email,
+                display_name=row.User.display_name,
+                last_position_end_date=str(row.last_end_date) if row.last_end_date else None,
+                active_api_keys=api_key_cnt,
+                active_webhooks=webhook_cnt,
+                has_active_session=has_session,
+            )
+        )
+    result.sort(key=lambda x: x.last_position_end_date or "", reverse=True)
+    return result

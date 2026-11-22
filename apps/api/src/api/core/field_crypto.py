@@ -1,4 +1,4 @@
-"""欄位級加密 helper（Fernet + MultiFernet）。對應 ADR-006、Phase B3。
+"""欄位級加密 helper（Fernet + MultiFernet），對應 ADR-006。
 
 設計考量：
 - 透明：service 層用 hybrid_property 包，呼叫端不感知加解密
@@ -112,7 +112,7 @@ def decrypt_field(token: str | None) -> str | None:
         FieldEncryptionNotConfigured: FIELD_ENCRYPTION_KEYS 未設定
         FieldEncryptionError: token 無效或所有 keys 都解不開
     """
-    if token is None or token == "":
+    if not token:
         return token
     cipher = _get_cipher()
     if cipher is None:
@@ -136,7 +136,7 @@ def rotate_token(token: str | None) -> str | None:
 
     在 MultiFernet 下，rotate 等同於「用第一個 key 重新加密」。
     """
-    if token is None or token == "":
+    if not token:
         return token
     cipher = _get_cipher()
     if cipher is None:

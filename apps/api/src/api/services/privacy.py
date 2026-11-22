@@ -34,6 +34,7 @@ from api.core.config import settings
 from api.models.audit_log import AuditLog
 from api.models.notification import Notification
 from api.models.user import User
+from api.services import user_session as user_session_svc
 
 logger = logging.getLogger(__name__)
 
@@ -57,48 +58,112 @@ class AnonymizeResult:
 # ── 路徑 ────────────────────────────────────────────────────────────────────
 
 
-def exports_root() -> Path:
+def _legacy_exports_root() -> Path:
     base = Path(getattr(settings, "DB_BACKUP_DIR", "uploads/backups")).parent
-    root = base / "privacy_exports"
+    return base / "privacy_exports"
+
+
+def exports_root() -> Path:
+    configured = getattr(settings, "PRIVACY_EXPORT_DIR", None)
+    root = Path(configured) if configured else _legacy_exports_root()
     root.mkdir(parents=True, exist_ok=True)
     return root
 
 
+def _export_roots() -> tuple[Path, ...]:
+    """包含共享新目錄與舊版 API 容器目錄，讓 24 小時內的匯出可完成下載。"""
+    current = exports_root()
+    legacy = _legacy_exports_root()
+    return (current,) if current == legacy else (current, legacy)
+
+
+# 匯出檔含完整個資且未加密，不可無限期留在主機上。
+EXPORT_TTL_SECONDS = 24 * 3600
+
+
+def purge_expired_exports(*, max_age_seconds: int = EXPORT_TTL_SECONDS) -> int:
+    """刪除超過保存期限的匯出檔，回傳刪除數量。"""
+    cutoff = datetime.now(UTC).timestamp() - max_age_seconds
+    removed = 0
+    for root in _export_roots():
+        for export_file in root.glob("export_*.zip"):
+            try:
+                if export_file.stat().st_mtime < cutoff:
+                    export_file.unlink()
+                    removed += 1
+            except OSError:
+                logger.warning("無法刪除過期個資匯出檔 %s", export_file.name, exc_info=True)
+    return removed
+
+
+def delete_user_exports(user_id: uuid.UUID) -> int:
+    """假名化時一併刪除該使用者先前的匯出檔。"""
+    removed = 0
+    for root in _export_roots():
+        for export_file in root.glob(f"export_{user_id}_*.zip"):
+            try:
+                export_file.unlink()
+                removed += 1
+            except OSError:
+                logger.warning("無法刪除個資匯出檔 %s", export_file.name, exc_info=True)
+    return removed
+
+
 def list_exports() -> list[dict[str, Any]]:
-    root = exports_root()
-    if not root.exists():
-        return []
-    out: list[dict[str, Any]] = []
-    for p in sorted(root.glob("*.zip")):
-        try:
-            stat = p.stat()
-            out.append(
-                {
-                    "filename": p.name,
-                    "size_bytes": stat.st_size,
-                    "modified_at": datetime.fromtimestamp(stat.st_mtime, UTC).isoformat(),
-                }
-            )
-        except OSError:
-            continue
+    purge_expired_exports()
+    exports_by_name: dict[str, dict[str, Any]] = {}
+    for root in _export_roots():
+        for path in sorted(root.glob("*.zip")):
+            try:
+                stat = path.stat()
+                exports_by_name.setdefault(
+                    path.name,
+                    {
+                        "filename": path.name,
+                        "size_bytes": stat.st_size,
+                        "modified_at": datetime.fromtimestamp(stat.st_mtime, UTC).isoformat(),
+                    },
+                )
+            except OSError:
+                continue
+    out = list(exports_by_name.values())
     out.sort(key=lambda x: x["modified_at"], reverse=True)
     return out
 
 
 def read_export_bytes(filename: str) -> bytes:
-    root = exports_root()
-    target = (root / filename).resolve()
-    if not str(target).startswith(str(root.resolve())) or not target.exists():
+    if Path(filename).name != filename:
         raise FileNotFoundError(filename)
-    return target.read_bytes()
+    for root in _export_roots():
+        export_file = root / filename
+        if export_file.is_file():
+            return export_file.read_bytes()
+    raise FileNotFoundError(filename)
 
 
 # ── 序列化 ─────────────────────────────────────────────────────────────────
 
 
+# 認證秘密與外部身分識別碼不屬於當事人可攜資料；匯出檔外流時也不能成為登入憑據。
+_EXPORT_EXCLUDED_COLUMNS = frozenset(
+    {
+        "mfa_secret",
+        "mfa_pending_secret",
+        "mfa_backup_code_hashes",
+        "mfa_pending_backup_code_hashes",
+        "google_sub",
+        "refresh_jti_hash",
+        "token_hash",
+        "key_hash",
+    }
+)
+
+
 def _serialize(obj: Any) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for col in obj.__table__.columns:
+        if col.name in _EXPORT_EXCLUDED_COLUMNS:
+            continue
         v = getattr(obj, col.name)
         if isinstance(v, datetime):
             out[col.name] = v.isoformat()
@@ -170,25 +235,11 @@ async def _collect_user_related_tables(
     except Exception:
         logger.debug("export petitions skipped", exc_info=True)
 
-    # 學餐 / 購票訂單
-    for model_path, fname in (
-        ("api.models.meal:MealOrder", "meal_orders.json"),
-        ("api.models.shop:Order", "shop_orders.json"),
-    ):
-        try:
-            import importlib
+    # 商品訂單是固定模型；查詢失敗應終止匯出，避免交付缺漏的個資副本。
+    from api.models.shop import Order
 
-            mod_name, cls_name = model_path.split(":")
-            mod = importlib.import_module(mod_name)
-            cls = getattr(mod, cls_name, None)
-            if cls is None or not hasattr(cls, "user_id"):
-                continue
-            rows = (
-                (await session.execute(select(cls).where(cls.user_id == user.id))).scalars().all()
-            )
-            bundle[fname] = [_serialize(r) for r in rows]
-        except Exception:
-            logger.debug("export %s skipped", model_path, exc_info=True)
+    orders = (await session.scalars(select(Order).where(Order.user_id == user.id))).all()
+    bundle["shop_orders.json"] = [_serialize(order) for order in orders]
 
     # 問卷回應
     try:
@@ -233,6 +284,7 @@ async def export_user_data(
         ),
     }
 
+    purge_expired_exports()
     root = exports_root()
     fname = f"export_{user.id}_{now.strftime('%Y%m%d_%H%M%S')}.zip"
     out_path = root / fname
@@ -298,7 +350,45 @@ async def anonymize_user(
     if hasattr(user, "is_active"):
         user.is_active = False  # type: ignore[attr-defined]
         updated.append("is_active")
+    # 原本遺漏的可識別資料：學號、Google 身分、2FA 秘密。
+    for field_name in (
+        "student_id",
+        "google_sub",
+        "mfa_secret",
+        "mfa_pending_secret",
+        "mfa_backup_code_hashes",
+        "mfa_pending_backup_code_hashes",
+    ):
+        if getattr(user, field_name, None) is not None:
+            setattr(user, field_name, None)
+            updated.append(field_name)
+    if getattr(user, "mfa_enabled", False):
+        user.mfa_enabled = False
+        updated.append("mfa_enabled")
 
+    # 外部登入身分保留 email 與顯示名稱，必須一併移除，否則仍可回推當事人並重新登入。
+    from sqlalchemy import delete
+
+    from api.models.person import Person
+    from api.models.user_identity import UserIdentity
+
+    removed_identities = await session.execute(
+        delete(UserIdentity).where(UserIdentity.user_id == user.id)
+    )
+    if getattr(removed_identities, "rowcount", 0):
+        updated.append("user_identities")
+    person = await session.scalar(select(Person).where(Person.user_id == user.id))
+    if person is not None:
+        person.display_name = f"已假名化人員_{_hash_token(seed, prefix='p')}"
+        person.legal_name = None
+        person.email = None
+        person.student_id = None
+        person.note = None
+        updated.append("person")
+    if delete_user_exports(user.id):
+        updated.append("privacy_exports")
+
+    await user_session_svc.revoke_all(session, user.id)
     await session.flush()
     now = datetime.now(UTC)
     logger.info("User anonymized id=%s by=%s fields=%s", user.id, requested_by_email, updated)

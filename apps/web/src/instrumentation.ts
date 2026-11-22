@@ -1,8 +1,12 @@
 import * as Sentry from "@sentry/nextjs";
+import type { Instrumentation } from "next";
+import { reportServerError } from "./lib/server-error-reporter";
 
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     await import("../sentry.server.config");
+    const { initOpenTelemetry } = await import("./lib/observability");
+    await initOpenTelemetry();
   }
 
   if (process.env.NEXT_RUNTIME === "edge") {
@@ -10,4 +14,9 @@ export async function register() {
   }
 }
 
-export const onRequestError = Sentry.captureRequestError;
+export const onRequestError: Instrumentation.onRequestError = async (...args) => {
+  await Promise.allSettled([
+    Promise.resolve().then(() => Sentry.captureRequestError(...args)),
+    reportServerError(...args),
+  ]);
+};

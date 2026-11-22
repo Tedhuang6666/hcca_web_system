@@ -3,8 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type { OrgRead, UserSummary } from "@/lib/api";
-import { usersApi } from "@/lib/api";
-import type { RecipientType } from "@/lib/types";
+import { emailApi, usersApi } from "@/lib/api";
+import type {
+  DeliveryMethod,
+  EmailRecipientListOut,
+  RecipientType,
+  SchoolClassListItem,
+} from "@/lib/types";
 import { getRecentRecipients, pushRecentRecipients, type RecentRecipient } from "@/lib/recentRecipients";
 
 // 收件者沒有穩定 id（可自由輸入），用 name + email 以 JSON 編碼成去重鍵。
@@ -52,32 +57,63 @@ export type RecipientDraft = {
   recipient_type: RecipientType;
   name: string;
   email: string;
+  target_user_id?: string;
+  target_org_id?: string;
+  target_class_id?: string;
+  delivery_method?: DeliveryMethod;
 };
 
 export function RecipientSearch({
   onAdd,
+  onAddMany,
   inputStyle,
   selectStyle,
   isMeetingNotice,
+  isInspectionNotice,
   isRecord,
   orgs,
+  classes,
 }: {
   onAdd: (r: RecipientDraft) => void;
+  onAddMany: (recipients: RecipientDraft[]) => void;
   inputStyle: React.CSSProperties;
   selectStyle: React.CSSProperties;
   isMeetingNotice: boolean;
+  isInspectionNotice?: boolean;
   isRecord: boolean;
   orgs: OrgRead[];
+  classes: SchoolClassListItem[];
 }) {
-  const [type, setType] = useState<RecipientType>(isMeetingNotice ? "primary" : "main");
+  const isNotice = isMeetingNotice || Boolean(isInspectionNotice);
+  const [type, setType] = useState<RecipientType>(isNotice || isRecord ? "attendee" : "main");
   const [query, setQuery] = useState("");
   const [email, setEmail] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const [recents, setRecents] = useState<RecentRecipient[]>([]);
+  const [recipientLists, setRecipientLists] = useState<EmailRecipientListOut[]>([]);
+  const [recipientListError, setRecipientListError] = useState(false);
+  const [selectedTarget, setSelectedTarget] = useState<
+    Pick<RecipientDraft, "target_user_id" | "target_org_id" | "target_class_id">
+  >({});
 
   useEffect(() => {
     setRecents(getRecentRecipients());
   }, []);
+
+  useEffect(() => {
+    if (!isMeetingNotice) return;
+    let active = true;
+    emailApi.listRecipientLists()
+      .then((lists) => {
+        if (active) setRecipientLists(lists);
+      })
+      .catch(() => {
+        if (active) setRecipientListError(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [isMeetingNotice]);
 
   const suggestions = useDebouncedUserSuggestions(query);
 
@@ -90,6 +126,7 @@ export function RecipientSearch({
   const selectUser = (u: UserSummary) => {
     setQuery(u.display_name);
     setEmail(u.email);
+    setSelectedTarget({ target_user_id: u.id });
     setShowDropdown(false);
   };
 
@@ -97,10 +134,17 @@ export function RecipientSearch({
     if (!query.trim()) return;
     const name = query.trim();
     const mail = email.trim();
-    onAdd({ recipient_type: type, name, email: mail });
+    onAdd({
+      recipient_type: type,
+      name,
+      email: mail,
+      delivery_method: mail ? "email" : "none",
+      ...selectedTarget,
+    });
     remember(name, mail);
     setQuery("");
     setEmail("");
+    setSelectedTarget({});
   };
 
   // 過濾並排序：query 為空時，依名稱排序顯示前 8 個組織；有 query 時做名稱/前綴 fuzzy match
@@ -114,9 +158,42 @@ export function RecipientSearch({
     return filtered.slice(0, 8);
   }, [orgs, query]);
 
+  const classSuggestions = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const filtered = q
+      ? classes.filter((item) =>
+          [item.label, item.class_code, `${item.academic_year}`]
+            .filter(Boolean)
+            .some((value) => value!.toLowerCase().includes(q)),
+        )
+      : classes;
+    return filtered.slice(0, 8);
+  }, [classes, query]);
+
   const selectOrg = (o: OrgRead) => {
-    onAdd({ recipient_type: type, name: o.name, email: "" });
+    onAdd({
+      recipient_type: type,
+      name: o.name,
+      email: "",
+      delivery_method: "none",
+      target_org_id: o.id,
+    });
     remember(o.name, "");
+    setQuery("");
+    setEmail("");
+    setShowDropdown(false);
+  };
+
+  const selectClass = (schoolClass: SchoolClassListItem) => {
+    const name = schoolClass.label || `${schoolClass.academic_year} 學年度 ${schoolClass.class_code} 班`;
+    onAdd({
+      recipient_type: type,
+      name,
+      email: "",
+      delivery_method: "none",
+      target_class_id: schoolClass.id,
+    });
+    remember(name, "");
     setQuery("");
     setEmail("");
     setShowDropdown(false);
@@ -125,15 +202,30 @@ export function RecipientSearch({
   // 點擊「最近使用」chip：用目前選擇的收件人類型重新加入。
   const addRecent = (recipient: RecentRecipient) => {
     const { name, email: mail } = decodeRecipientId(recipient.id);
-    onAdd({ recipient_type: type, name, email: mail });
+    onAdd({
+      recipient_type: type,
+      name,
+      email: mail,
+      delivery_method: mail ? "email" : "none",
+    });
     remember(name, mail);
+  };
+
+  const addRecipientList = (list: EmailRecipientListOut) => {
+    const attendees = list.members.map((member) => ({
+      recipient_type: "attendee" as const,
+      name: member.name?.trim() || member.email,
+      email: member.email,
+      delivery_method: "email" as const,
+    }));
+    onAddMany(attendees);
   };
 
   return (
     <div className="space-y-2">
       {recents.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-[10px] font-semibold" style={{ color: "var(--text-muted)" }}>
+          <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
             最近使用：
           </span>
           {recents.map((r) => (
@@ -141,7 +233,7 @@ export function RecipientSearch({
               key={r.id}
               type="button"
               onClick={() => addRecent(r)}
-              className="text-[11px] px-2 py-0.5 rounded-full transition-opacity hover:opacity-80"
+              className="text-xs px-2 py-0.5 rounded-full transition-opacity hover:opacity-80"
               style={{
                 background: "var(--bg-surface)",
                 color: "var(--text-secondary)",
@@ -154,6 +246,34 @@ export function RecipientSearch({
           ))}
         </div>
       )}
+      {isMeetingNotice && (recipientLists.length > 0 || recipientListError) && (
+        <div className="space-y-1.5">
+          <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
+            通知群組（加入全部出席者）
+          </p>
+          {recipientListError ? (
+            <p className="text-xs" style={{ color: "var(--danger)" }}>無法載入通知群組，請稍後再試。</p>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {recipientLists.map((list) => (
+                <button
+                  key={list.id}
+                  type="button"
+                  onClick={() => addRecipientList(list)}
+                  className="rounded-full border px-2.5 py-1 text-xs transition-opacity hover:opacity-80"
+                  style={{
+                    background: "var(--primary-dim)",
+                    borderColor: "var(--primary-dim)",
+                    color: "var(--primary-text)",
+                  }}
+                >
+                  {list.name} · {list.members.length} 人
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       <div className="flex flex-wrap gap-2">
       <select
         value={type}
@@ -161,17 +281,18 @@ export function RecipientSearch({
         style={{ ...selectStyle, width: "7rem", flexShrink: 0 }}
         aria-label="收件人類型"
       >
-        {isMeetingNotice ? (
+        {isNotice ? (
           <>
             <option value="main">受文者</option>
-            <option value="primary">正本（出席）</option>
-            <option value="copy">副本（列席）</option>
+            <option value="attendee">出席者</option>
+            <option value="observer">列席者</option>
+            <option value="copy">副本</option>
           </>
         ) : isRecord ? (
           <>
-            <option value="main">出席者</option>
-            <option value="primary">出席者</option>
-            <option value="copy">列席者</option>
+            <option value="attendee">出席者</option>
+            <option value="observer">列席者</option>
+            <option value="copy">副本</option>
           </>
         ) : (
           <>
@@ -187,6 +308,7 @@ export function RecipientSearch({
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
+            setSelectedTarget({});
             setShowDropdown(true);
           }}
           onKeyDown={(e) => {
@@ -199,7 +321,7 @@ export function RecipientSearch({
           aria-label="收件人姓名或單位"
           aria-autocomplete="list"
         />
-        {showDropdown && (suggestions.length > 0 || orgSuggestions.length > 0) && (
+        {showDropdown && (suggestions.length > 0 || orgSuggestions.length > 0 || classSuggestions.length > 0) && (
           <div
             className="absolute z-20 left-0 right-0 top-full mt-1 rounded-xl overflow-hidden shadow-lg max-h-72 overflow-y-auto"
             style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
@@ -208,7 +330,7 @@ export function RecipientSearch({
             {suggestions.length > 0 && (
               <>
                 <p
-                  className="px-3 py-1 text-[10px] font-semibold"
+                  className="px-3 py-1 text-xs font-semibold"
                   style={{ color: "var(--text-muted)", background: "var(--bg-surface)" }}
                 >
                   使用者
@@ -223,15 +345,15 @@ export function RecipientSearch({
                     aria-selected="false"
                   >
                     <div
-                      className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold"
-                      style={{ background: "var(--primary-dim)", color: "var(--primary)" }}
+                      className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold"
+                      style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}
                     >
                       {u.display_name.charAt(0)}
                     </div>
                     <div className="min-w-0">
                       <p style={{ color: "var(--text-primary)" }}>{u.display_name}</p>
                       <p
-                        className="truncate text-[10px]"
+                        className="truncate text-xs"
                         style={{ color: "var(--text-muted)" }}
                       >
                         {u.email}
@@ -244,7 +366,7 @@ export function RecipientSearch({
             {orgSuggestions.length > 0 && (
               <>
                 <p
-                  className="px-3 py-1 text-[10px] font-semibold"
+                  className="px-3 py-1 text-xs font-semibold"
                   style={{ color: "var(--text-muted)", background: "var(--bg-surface)" }}
                 >
                   組織單位（點選快速新增）
@@ -274,13 +396,43 @@ export function RecipientSearch({
                     <div className="min-w-0 flex-1">
                       <p style={{ color: "var(--text-primary)" }}>{o.name}</p>
                       {o.prefix && (
-                        <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+                        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                           前綴：{o.prefix}
                         </p>
                       )}
                     </div>
                   </button>
                 ))}
+              </>
+            )}
+            {classSuggestions.length > 0 && (
+              <>
+                <p
+                  className="px-3 py-1 text-xs font-semibold"
+                  style={{ color: "var(--text-muted)", background: "var(--bg-surface)" }}
+                >
+                  班級（點選快速新增）
+                </p>
+                {classSuggestions.map((schoolClass) => {
+                  const name = schoolClass.label || `${schoolClass.academic_year} 學年度 ${schoolClass.class_code} 班`;
+                  return (
+                    <button
+                      key={schoolClass.id}
+                      type="button"
+                      onMouseDown={() => selectClass(schoolClass)}
+                      className="flex items-center gap-2 w-full px-3 py-2 text-left text-xs hover:opacity-80"
+                      role="option"
+                      aria-selected="false"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p style={{ color: "var(--text-primary)" }}>{name}</p>
+                        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                          班級受文者
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
               </>
             )}
           </div>

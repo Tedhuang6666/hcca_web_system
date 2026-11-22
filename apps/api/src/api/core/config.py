@@ -1,16 +1,45 @@
 """應用程式設定 - 使用 Pydantic Settings 管理環境變數"""
 
 import warnings
+from pathlib import Path
 from typing import Annotated
 from urllib.parse import urlsplit
 
-from pydantic import Field, PostgresDsn, RedisDsn, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
-_DEFAULT_SECRET = "CHANGE_ME_IN_PRODUCTION_USE_256_BIT_KEY"
+_FALLBACK_SIGNING_KEY = "CHANGE_ME_IN_PRODUCTION_USE_256_BIT_KEY"
+
+# 已知不安全金鑰清單：dev/CI 環境使用的固定字串，生產環境必須拒絕。
+_KNOWN_INSECURE_KEYS: frozenset[str] = frozenset(
+    {
+        _FALLBACK_SIGNING_KEY,
+        "ci-test-secret-key-32-characters-min",
+        "test-secret-key",
+        "secret",
+        "dev",
+    }
+)
 
 # 視為「本機預設」的 host；這些值代表尚未為部署環境設定，可被部署網址自動覆寫。
-_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0"})
+_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+_DEFAULT_RELEASE_VERSION = "01.00.00.00.00"
+
+
+def _read_release_version() -> str:
+    """讀取 repository 的五段式版本；容器與本機開發均可用。"""
+    candidates = [Path("/app/VERSION")]
+    parents = Path(__file__).resolve().parents
+    if len(parents) > 5:
+        candidates.append(parents[5] / "VERSION")
+    for path in candidates:
+        try:
+            value = path.read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+        if value:
+            return value
+    return _DEFAULT_RELEASE_VERSION
 
 
 def _is_local_url(value: str) -> bool:
@@ -22,6 +51,8 @@ def _is_local_url(value: str) -> bool:
 
 
 class Settings(BaseSettings):
+    API_HOST: str = Field(default="127.0.0.1")
+
     model_config = SettingsConfigDict(
         # 依序搜尋：apps/api/.env → 工作區根目錄 .env（monorepo 支援）
         env_file=[".env", "../../.env"],
@@ -31,8 +62,60 @@ class Settings(BaseSettings):
     )
 
     # --- 應用程式基本設定 ---
-    APP_NAME: str = "校園自治整合平台"
-    APP_VERSION: str = "0.1.0"
+    APP_NAME: str = "新竹高中班聯會數位整合系統"
+    APP_VERSION: str = _read_release_version()
+    APP_RELEASE: str = ""
+    GOOGLE_PAGESPEED_API_KEY: str = ""
+    GOOGLE_CRUX_API_KEY: str = ""
+    OBSERVABILITY_CRITICAL_URLS: list[str] = [
+        "/",
+        "/announcements",
+        "/laws",
+        "/petitions",
+        "/partner-map",
+        "/login",
+        "/merchandise-submissions",
+    ]
+    # 受保護頁面的合成效能探針使用短效 access token；只允許部署端以獨立
+    # secret 取得，避免把管理員 Cookie 或 OAuth 憑證放進 CI。
+    PERFORMANCE_MONITOR_TOKEN: str = ""
+    PERFORMANCE_MONITOR_USER_ID: str = ""
+    PERFORMANCE_AUTHENTICATED_URLS: list[str] = [
+        "/dashboard",
+        "/tasks",
+        "/work-items",
+        "/documents",
+        "/regulations",
+        "/council-proposals",
+        "/judicial-petitions",
+        "/petitions",
+        "/shop",
+        "/surveys",
+        "/partner-map",
+        "/recommended-vendors",
+        "/exam-papers",
+        "/credential",
+        "/announcements",
+        "/publications",
+        "/email",
+        "/finance",
+        "/operations",
+        "/admin/system/observability",
+        "/orgs",
+        "/audit-logs",
+        "/merchandise-submissions",
+        "/settings/security",
+        "/settings/integrations",
+    ]
+    # 由 CI 在 image build 時寫入；不可在容器啟動後覆寫，才能正確識別實際執行映像。
+    BUILD_COMMIT: str = ""
+    BUILD_REF: str = ""
+    BUILD_TIME: str = ""
+    GITHUB_REPOSITORY: str = "Tedhuang6666/hcca_web_system"
+    GITHUB_DEFAULT_BRANCH: str = "main"
+    # 私有 repository 請填 fine-grained token（Contents: Read）；公開 repository 可留空。
+    GITHUB_TOKEN: str = ""
+    GITHUB_VERSION_CACHE_SECONDS: int = Field(default=60, ge=0, le=3600)
     ENVIRONMENT: str = "development"
     DEBUG: bool = False
     ENABLE_API_DOCS: bool = False
@@ -43,7 +126,7 @@ class Settings(BaseSettings):
     ACCESS_LOG_ENABLED: bool = True
 
     # --- 資料庫設定 ---
-    DATABASE_URL: PostgresDsn = Field(
+    DATABASE_URL: str = Field(
         default="postgresql+asyncpg://postgres:password@localhost:5432/campus_platform"
     )
     DATABASE_URL_SYNC: str = Field(
@@ -54,14 +137,31 @@ class Settings(BaseSettings):
     DB_MAX_OVERFLOW: int = Field(default=20, ge=0)
     DB_POOL_TIMEOUT_SECONDS: int = Field(default=30, ge=1)
     DB_POOL_RECYCLE_SECONDS: int = Field(default=1800, ge=60)
+    # 走 PgBouncer（transaction pooling）時設 true：app 端改用 NullPool 並關閉
+    # asyncpg server-side prepared statement cache，避免 "prepared statement does not exist"。
+    DB_USE_PGBOUNCER: bool = Field(default=False)
 
     # --- 健康檢查 ---
     HEALTHCHECK_TIMEOUT_SECONDS: float = Field(default=2.0, gt=0)
+    # 啟動時等待 DB / Redis 就緒的總上限（退避重試）；逾時才 app exit。
+    STARTUP_READINESS_MAX_WAIT_SECONDS: float = Field(default=60.0, ge=0)
     SLOW_REQUEST_THRESHOLD_MS: int = Field(default=1000, ge=1)
 
     # --- Redis 設定 ---
-    REDIS_URL: RedisDsn = Field(default="redis://localhost:6379/0")
+    REDIS_URL: str = Field(default="redis://localhost:6379/0")
+    # 應用狀態（token revoke、rate limit、idempotency）仍由 REDIS_URL 承擔；
+    # 快取、即時 pub/sub、Celery broker 可在正式環境分離故障域。
+    REDIS_CACHE_URL: str = Field(default="")
+    REDIS_REALTIME_URL: str = Field(default="")
+    CELERY_BROKER_URL: str = Field(default="")
+    CELERY_RESULT_BACKEND: str = Field(default="")
     REDIS_MAX_CONNECTIONS: int = Field(default=50, ge=1)
+    # State Redis is shared by auth, rate limiting, idempotency and defense
+    # middleware. Keep enough waiters for a protected page's parallel API burst
+    # without changing the bounded-pool/timeout failure behavior.
+    REDIS_STATE_MAX_CONNECTIONS: int = Field(default=40, ge=1)
+    REDIS_CACHE_MAX_CONNECTIONS: int = Field(default=20, ge=1)
+    REDIS_REALTIME_MAX_CONNECTIONS: int = Field(default=8, ge=1)
     REDIS_SOCKET_TIMEOUT: float = Field(default=2.0, gt=0)
     REDIS_HEALTH_CHECK_INTERVAL: int = Field(default=30, ge=1)
 
@@ -92,10 +192,31 @@ class Settings(BaseSettings):
     SENTRY_DSN: str = Field(default="")
     SENTRY_TRACES_SAMPLE_RATE: float = Field(default=0.1, ge=0.0, le=1.0)
     SENTRY_PROFILES_SAMPLE_RATE: float = Field(default=0.0, ge=0.0, le=1.0)
+    SENTRY_API_URL: str = "https://sentry.io/api/0"
+    SENTRY_AUTH_TOKEN: str = ""
+    SENTRY_ORG: str = ""
+    SENTRY_PROJECT: str = ""
+    # --- OpenTelemetry / Trace ---
+    OTEL_ENABLED: bool = False
+    OTEL_SERVICE_NAME: str = "hcca-api"
+    OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://localhost:4317"
+    # 逗號分隔的 OTLP headers，例如 authorization=Bearer <token>。
+    OTEL_EXPORTER_OTLP_HEADERS: str = ""
+    OTEL_TRACES_SAMPLE_RATE: float = Field(default=0.1, ge=0.0, le=1.0)
+
+    # --- Incident persistence / recovery guardrails ---
+    INCIDENT_DB_ENABLED: bool = True
+    INCIDENT_AUTO_RECOVERY_ENABLED: bool = False
+    INCIDENT_AUTO_RESOLVE_ENABLED: bool = True
+    INCIDENT_AUTO_RESOLVE_AFTER_HOURS: int = Field(default=24, ge=1, le=720)
+    RECOVERY_AGENT_URL: str = ""
+    RECOVERY_AGENT_TOKEN: str = ""
+    RECOVERY_MAX_RESTARTS_PER_HOUR: int = Field(default=2, ge=1, le=10)
 
     # --- PostHog 產品分析 ---
     POSTHOG_API_KEY: str = Field(default="")
     POSTHOG_HOST: str = Field(default="https://us.i.posthog.com")
+    POSTHOG_PERSONAL_API_KEY: str = ""
 
     # --- Search / Meilisearch ---
     MEILISEARCH_URL: str = Field(default="")
@@ -106,11 +227,6 @@ class Settings(BaseSettings):
     VAPID_PUBLIC_KEY: str = Field(default="")
     VAPID_PRIVATE_KEY: str = Field(default="")
     VAPID_SUBJECT: str = Field(default="mailto:admin@example.com")
-
-    # --- Passkeys / WebAuthn ---
-    PASSKEY_RP_ID: str = Field(default="localhost")
-    PASSKEY_RP_NAME: str = Field(default="HCCA 校園自治整合平台")
-    PASSKEY_ORIGIN: str = Field(default="http://localhost:3000")
 
     # --- WebSocket pub/sub backend ---
     # redis：跨 worker / 跨節點廣播（生產建議）；memory：單一進程（測試 / 開發單 worker）
@@ -127,7 +243,6 @@ class Settings(BaseSettings):
     MODULE_CIRCUIT_ENABLED: bool = Field(default=True)
     MODULE_CIRCUIT_5XX_THRESHOLD: int = Field(default=10, ge=1)
     MODULE_CIRCUIT_WINDOW_SECONDS: int = Field(default=60, ge=1)
-    MODULE_CIRCUIT_COOLDOWN_SECONDS: int = Field(default=120, ge=1)
 
     # --- 模組斷路器：升級門檻（依錯誤嚴重度）---
     # 1h 滾動窗口內跳閘次數達門檻 → 升級為 manual 維護（不自動恢復）
@@ -145,12 +260,26 @@ class Settings(BaseSettings):
     MODULE_ALERT_DISCORD_CHANNEL_ID: str = Field(default="")
 
     # --- JWT 設定 ---
-    SECRET_KEY: str = Field(default=_DEFAULT_SECRET)
+    SECRET_KEY: str = Field(default=_FALLBACK_SIGNING_KEY)
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    JWT_ISSUER: str = "hcca-api"
+    JWT_AUDIENCE: str = "hcca-web"
+    JWT_ACTIVE_KID: str = "v2"
+    # 留空時向下相容既有 SECRET_KEY；正式環境建議使用獨立的隨機 JWT_SIGNING_KEY。
+    JWT_SIGNING_KEY: str = ""
+    JWT_PREVIOUS_SIGNING_KEYS: Annotated[list[str], NoDecode] = Field(default_factory=list)
+    JWT_SESSION_HASH_KEY: str = ""
+    # 無 kid 的舊 JWT 僅能在受控遷移期間於非正式環境暫時開啟；正式環境一律拒絕。
+    AUTH_LEGACY_TOKEN_COMPAT_ENABLED: bool = False
+    OAUTH_SESSION_SECRET: str = ""
+    OAUTH_SESSION_MAX_AGE_SECONDS: int = Field(default=600, ge=60, le=3600)
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    REFRESH_TOKEN_ABSOLUTE_DAYS: int = Field(default=30, ge=7, le=90)
     ACCESS_TOKEN_COOKIE_NAME: str = "hcca_access_token"
     REFRESH_TOKEN_COOKIE_NAME: str = "hcca_refresh_token"
+    LEGACY_ACCESS_TOKEN_COOKIE_NAME: str = "hcca_access_token"
+    LEGACY_REFRESH_TOKEN_COOKIE_NAME: str = "hcca_refresh_token"
     SESSION_COOKIE_NAME: str = "hcca_session"
     COOKIE_SECURE: bool = False
     COOKIE_SAMESITE: str = "lax"
@@ -158,7 +287,9 @@ class Settings(BaseSettings):
     # --- Google OAuth2 設定 ---
     GOOGLE_CLIENT_ID: str = Field(default="")
     GOOGLE_CLIENT_SECRET: str = Field(default="")
+    GOOGLE_DRIVE_API_KEY: str = Field(default="", description="公開法規與活動照片的 Drive API 金鑰")
     GOOGLE_REDIRECT_URI: str = "http://localhost:8000/auth/google/callback"
+    GOOGLE_TASKS_REDIRECT_URI: str = "http://localhost:8000/user/google-tasks/callback"
     LOGIN_ALLOWED_EMAIL_DOMAINS: list[str] = Field(
         default_factory=lambda: ["hchs.hc.edu.tw"],
         description="允許一般使用者登入的 Email 網域；不含 @",
@@ -168,7 +299,7 @@ class Settings(BaseSettings):
         description="額外允許登入的完整 Email，適合管理員 Gmail 例外",
     )
     LOGIN_ALLOW_EXTERNAL_USERS: bool = Field(
-        default=False,
+        default=True,
         description=(
             "允許任何 Google 帳號登入；校外/外校帳號登入後不會被分配職位，"
             "僅有公開頁等級的檢視權限與陳情送件功能。"
@@ -179,14 +310,28 @@ class Settings(BaseSettings):
     # --- Email / Resend 設定 ---
     RESEND_API_KEY: str = Field(default="")
     MAIL_FROM: str = Field(default="noreply@hct.works")
-    MAIL_FROM_NAME: str = Field(default="新竹高中班聯會 HCCA")
+    MAIL_FROM_NAME: str = Field(default="新竹高中班聯會")
     # 部署網址單一來源 — 整個系統對外的基底 URL（前端入口；/api、/ws、OAuth 回呼皆同源轉發）。
-    # 只要在此填入正式網址（例如 https://hcca40.hct.works），derive_public_urls 會自動推導
-    # ALLOWED_ORIGINS / ALLOWED_HOSTS / 各 OAuth 回呼 / Passkey 等仍停留在 localhost 預設的欄位，
+    # 只要在此填入正式網址（例如 https://hcca.tw），derive_public_urls 會自動推導
+    # ALLOWED_ORIGINS / ALLOWED_HOSTS / 各 OAuth 回呼等仍停留在 localhost 預設的欄位，
     # 不需逐一手動填寫。email 內的絕對連結（退訂、CTA、通知偏好頁）亦以此為基底。
     FRONTEND_BASE_URL: str = Field(default="http://localhost:3000")
+    # Email 客戶端載入使用者上傳檔案（/uploads/...）時需要可公開存取的 API base。
+    API_PUBLIC_BASE_URL: str = Field(default="http://localhost:8000")
+    # Email 內前端連結使用的公開 base；避免本機開發網址出現在寄出的信件中。
+    EMAIL_LINK_BASE_URL: str = Field(default="https://hcca.tw")
+    # Email header 會徽圖片 URL；可填外部圖床或正式站 public 圖片的完整網址。
+    # 若填外部 host，須同步把該 host 加進 proxy.ts 與下方 SECURITY_CSP 的 img-src，
+    # 否則寄信頁預覽 iframe 會被 CSP 擋下。
+    EMAIL_BRAND_LOGO_URL: str = Field(
+        default="https://hcca.buckets.hct.works/images/hcca-emblem.png"
+    )
     # 每位使用者每日透過平台寄送 email 的「人次」上限（防濫用）
     EMAIL_DAILY_QUOTA_PER_USER: int = Field(default=500)
+    EMAIL_ATTACHMENT_INLINE_MAX_BYTES: int = Field(default=8 * 1024 * 1024)
+    EMAIL_ATTACHMENT_LINK_EXPIRES_SECONDS: int = Field(default=7 * 24 * 3600)
+    EMAIL_SEND_BATCH_SIZE: int = Field(default=100)
+    RESEND_WEBHOOK_SECRET: str = Field(default="")
 
     # --- 超級管理員 ---
     OWNER_EMAILS: list[str] = Field(
@@ -211,11 +356,23 @@ class Settings(BaseSettings):
         default=5,
         description="OAuth 登入完成後 MFA challenge token 有效分鐘數",
     )
+    PASSKEY_RP_ID: str = Field(default="localhost", description="WebAuthn relying party ID")
+    PASSKEY_RP_NAME: str = Field(default="新竹高中班聯會數位整合系統")
+    PASSKEY_ORIGIN: str = Field(default="http://localhost:3000")
+    PASSKEY_ALLOWED_ORIGINS: list[str] = Field(default_factory=list)
+    PASSKEY_CHALLENGE_TTL_SECONDS: int = Field(default=300, ge=60, le=900)
 
     # --- 簡易 Rate Limit ---
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_REQUESTS: int = 120
     RATE_LIMIT_WINDOW_SECONDS: int = 60
+    # 自己人 IP 白名單（逗號分隔字串或 JSON array，支援 CIDR，例如 1.2.3.4,127.0.0.1,10.0.0.0/8）。
+    # 命中者豁免 rate limit 與 IP 黑名單（含 WAF autoblock 後的封鎖），避免管理者 / CI /
+    # 家用固定 IP 被自家防護鎖在門外。仍受 WAF 單次特徵攔截，但不會被 autoblock 計數。
+    RATE_LIMIT_TRUSTED_IPS: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        description="逗號分隔的信任 IP / CIDR；豁免 rate limit 與 IP 黑名單",
+    )
 
     # --- Idempotency ---
     IDEMPOTENCY_ENABLED: bool = True
@@ -226,11 +383,15 @@ class Settings(BaseSettings):
     # --- 瀏覽器安全標頭 ---
     SECURITY_HEADERS_ENABLED: bool = True
     SECURITY_HSTS_MAX_AGE_SECONDS: int = 31_536_000
+    # 此 CSP 套在 API（FastAPI）回應上：JSON API 與 /uploads 靜態檔。
+    # script-src 不含 'unsafe-inline'——API 不需行內腳本，移除後可大幅降低
+    # 同源 /uploads 若被上傳惡意 HTML 時的 XSS 風險。
+    # 前端 HTML 頁面的 CSP 由 Next.js proxy.ts 以 per-request nonce 另行套用。
     SECURITY_CSP: str = (
         "default-src 'self'; "
-        "img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com; "
-        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://hcca.buckets.hct.works; "
+        "style-src 'self' 'unsafe-inline'; "
+        "script-src 'self'; "
         "frame-ancestors 'none'; "
         "object-src 'none'; "
         "base-uri 'self'"
@@ -252,6 +413,16 @@ class Settings(BaseSettings):
     WAF_AUTOBLOCK_TTL_SECONDS: int = Field(default=3600, ge=60)
     # 整條 URL（path + query）長度上限，防超長 URL 灌爆 / 規避。
     WAF_MAX_URL_LENGTH: int = Field(default=8192, ge=256)
+    # 是否對 application/json POST body 掃描高信心規則（JNDI / 路徑穿越 / null byte）。
+    # 僅讀前 64 KB，不影響 streaming 端點。預設關閉（opt-in）。
+    WAF_SCAN_JSON_BODY: bool = False
+    # 主動弱掃繞過 token：請求帶 `X-Security-Scan: <token>` 時完全繞過 WAF / rate limit /
+    # IP 黑名單，供 Nuclei 等掃描器對自家站台施測。須夠長（>= 16 字元）；未設定 / 過短時
+    # header 一律無效（避免空 token 漏洞）。比對採 constant-time。
+    SECURITY_SCAN_BYPASS_TOKEN: str = Field(
+        default="",
+        description="X-Security-Scan header 的繞過 token；空字串或少於 16 字元代表停用",
+    )
 
     # --- LINE Bot 設定 ---
     LINE_CHANNEL_SECRET: str = Field(default="")
@@ -260,8 +431,8 @@ class Settings(BaseSettings):
     # --- Discord Bot / OAuth 設定 ---
     DISCORD_CLIENT_ID: str = Field(default="")
     DISCORD_CLIENT_SECRET: str = Field(default="")
-    DISCORD_BOT_TOKEN: str = Field(default="")
     DISCORD_REDIRECT_URI: str = Field(default="http://localhost:8000/discord/callback")
+    DISCORD_LOGIN_REDIRECT_URI: str = Field(default="http://localhost:8000/auth/discord/callback")
     DISCORD_GUILD_ID: str = Field(default="")
     DISCORD_COMMAND_SYNC_GUILD_ID: str = Field(default="")
 
@@ -280,9 +451,13 @@ class Settings(BaseSettings):
         default="backups",
         description="本地備份輸出目錄；若搭配 STORAGE_BACKEND=s3 則同步上傳",
     )
-    DB_BACKUP_RETENTION_DAYS: int = Field(default=7)
+    PRIVACY_EXPORT_DIR: str | None = Field(
+        default=None,
+        description="個資匯出檔目錄；API 與 Celery worker 應共用私有持久化 volume",
+    )
+    DB_BACKUP_RETENTION_DAYS: int = Field(default=35, ge=1)
 
-    # --- 異地備份（Phase A3）---
+    # --- 異地備份 ---
     # 對應 docs/DR_OBJECTIVES.md。設定後備份檔會 gpg 加密 + 上傳到指定異地 bucket。
     BACKUP_GPG_PASSPHRASE: str = Field(
         default="",
@@ -305,23 +480,7 @@ class Settings(BaseSettings):
         description="上傳前計算 sha256 並寫入 BackupRecord，還原時驗證",
     )
 
-    # --- OIDC provider（Phase D1 / ADR-005）---
-    # 對接學校 OIDC IdP 時設定。未設則 OIDCProvider.enabled=False。
-    OIDC_DISCOVERY_URL: str = Field(
-        default="",
-        description="OIDC issuer 的 /.well-known/openid-configuration URL",
-    )
-    OIDC_CLIENT_ID: str = Field(default="")
-    OIDC_CLIENT_SECRET: str = Field(default="")
-    OIDC_REDIRECT_URI: str = Field(default="http://localhost:8000/auth/oidc/callback")
-
-    # --- SAML provider（Phase D1 / ADR-005）---
-    SAML_METADATA_URL: str = Field(
-        default="",
-        description="IdP metadata XML URL；未設則 SAMLProvider.enabled=False",
-    )
-
-    # --- 欄位級加密（Phase B3、ADR-006）---
+    # --- 欄位級加密 ---
     # 用於敏感欄位（MFA secret、API key 明文 mirror、第三方 token）。
     # 支援多 key（new first、舊 key 允許解密）以平滑輪替。
     # 格式：comma-separated Fernet base64 keys，例如：
@@ -338,12 +497,36 @@ class Settings(BaseSettings):
     @field_validator("SECRET_KEY")
     @classmethod
     def secret_key_must_be_set(cls, v: str) -> str:
-        if v == _DEFAULT_SECRET:
-            import os
+        import os
 
-            if os.getenv("ENVIRONMENT", "development").lower() in {"prod", "production"}:
-                raise ValueError("生產環境必須設定非預設的 SECRET_KEY")
-            warnings.warn("SECRET_KEY 使用預設值，僅允許本機開發環境使用。", stacklevel=2)
+        is_prod = os.getenv("ENVIRONMENT", "development").lower() in {"prod", "production"}
+        if v in _KNOWN_INSECURE_KEYS:
+            if is_prod:
+                raise ValueError(
+                    "生產環境禁止使用已知不安全的 SECRET_KEY（dev/CI 固定字串），"
+                    "請使用 openssl rand -hex 32 產生專屬金鑰。"
+                )
+            warnings.warn("SECRET_KEY 使用已知不安全值，僅允許本機開發/CI 環境。", stacklevel=2)
+        elif len(v) < 32:
+            if is_prod:
+                raise ValueError("生產環境 SECRET_KEY 長度必須 ≥ 32 字元")
+            warnings.warn("SECRET_KEY 長度過短，建議使用 256-bit（64 hex chars）。", stacklevel=2)
+        return v
+
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def database_url_must_be_postgres(cls, v: str) -> str:
+        scheme = urlsplit(v).scheme.lower()
+        if not scheme.startswith("postgres"):
+            raise ValueError("DATABASE_URL 必須使用 postgresql:// 或 postgresql+asyncpg:// 協定")
+        return v
+
+    @field_validator("REDIS_URL")
+    @classmethod
+    def redis_url_must_be_redis(cls, v: str) -> str:
+        scheme = urlsplit(v).scheme.lower()
+        if scheme not in {"redis", "rediss", "redis+sentinel"}:
+            raise ValueError("REDIS_URL 必須使用 redis:// 協定")
         return v
 
     @field_validator("COOKIE_SAMESITE")
@@ -388,6 +571,41 @@ class Settings(BaseSettings):
             return [str(item).strip() for item in value if str(item).strip()]
         raise ValueError("FIELD_ENCRYPTION_KEYS 必須是 JSON array 或逗號分隔字串")
 
+    @field_validator("JWT_PREVIOUS_SIGNING_KEYS", mode="before")
+    @classmethod
+    def parse_jwt_previous_signing_keys(cls, value: object) -> list[str]:
+        if value is None or value == "":
+            return []
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        if isinstance(value, list):
+            return [str(item).strip() for item in value if str(item).strip()]
+        raise ValueError("JWT_PREVIOUS_SIGNING_KEYS 必須是 kid:secret 的逗號分隔字串")
+
+    @field_validator("RATE_LIMIT_TRUSTED_IPS", mode="before")
+    @classmethod
+    def parse_trusted_ips(cls, value: object) -> list[str]:
+        if value is None or value == "":
+            return []
+        if isinstance(value, str):
+            raw = value.strip()
+            if not raw:
+                return []
+            if raw.startswith("["):
+                import json
+
+                try:
+                    parsed = json.loads(raw)
+                except json.JSONDecodeError:
+                    parsed = [item.strip() for item in raw.strip("[]").split(",") if item.strip()]
+                if not isinstance(parsed, list):
+                    raise ValueError("RATE_LIMIT_TRUSTED_IPS 必須是 JSON array 或逗號分隔字串")
+                return [str(item).strip() for item in parsed if str(item).strip()]
+            return [item.strip() for item in raw.split(",") if item.strip()]
+        if isinstance(value, list):
+            return [str(item).strip() for item in value if str(item).strip()]
+        raise ValueError("RATE_LIMIT_TRUSTED_IPS 必須是 JSON array 或逗號分隔字串")
+
     @model_validator(mode="after")
     def derive_public_urls(self) -> "Settings":
         """以 FRONTEND_BASE_URL 為單一來源，自動套用部署網址到尚未設定的 URL 家族。
@@ -411,13 +629,17 @@ class Settings(BaseSettings):
 
         if _is_local_url(self.GOOGLE_REDIRECT_URI):
             self.GOOGLE_REDIRECT_URI = f"{origin}/auth/google/callback"
+        if _is_local_url(self.GOOGLE_TASKS_REDIRECT_URI):
+            self.GOOGLE_TASKS_REDIRECT_URI = f"{origin}/user/google-tasks/callback"
         if _is_local_url(self.DISCORD_REDIRECT_URI):
             self.DISCORD_REDIRECT_URI = f"{origin}/discord/callback"
-        if _is_local_url(self.OIDC_REDIRECT_URI):
-            self.OIDC_REDIRECT_URI = f"{origin}/auth/oidc/callback"
+        if _is_local_url(self.DISCORD_LOGIN_REDIRECT_URI):
+            self.DISCORD_LOGIN_REDIRECT_URI = f"{origin}/auth/discord/callback"
+        if _is_local_url(self.API_PUBLIC_BASE_URL):
+            self.API_PUBLIC_BASE_URL = origin
         if _is_local_url(self.PASSKEY_ORIGIN):
             self.PASSKEY_ORIGIN = origin
-        if host and (self.PASSKEY_RP_ID in _LOCAL_HOSTS or not self.PASSKEY_RP_ID):
+        if self.PASSKEY_RP_ID in _LOCAL_HOSTS:
             self.PASSKEY_RP_ID = host
 
         return self
@@ -425,20 +647,84 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def production_security_must_be_explicit(self) -> "Settings":
         is_prod = self.ENVIRONMENT.lower() in {"prod", "production"}
-        if is_prod and self.SECRET_KEY == _DEFAULT_SECRET:
-            raise ValueError("生產環境必須設定強 SECRET_KEY，不能使用預設值")
+        if is_prod and self.SECRET_KEY in _KNOWN_INSECURE_KEYS:
+            raise ValueError(
+                "生產環境必須設定強 SECRET_KEY，不能使用已知不安全值（dev/CI 固定字串）"
+            )
+        if is_prod and len(self.SECRET_KEY.encode("utf-8")) < 32:
+            raise ValueError("生產環境 SECRET_KEY 至少需要 32 bytes 的隨機值")
+        if is_prod and len(self.JWT_SIGNING_KEY.encode("utf-8")) < 32:
+            raise ValueError("生產環境 JWT_SIGNING_KEY 至少需要 32 bytes 的獨立隨機值")
+        if is_prod and len(self.JWT_SESSION_HASH_KEY.encode("utf-8")) < 32:
+            raise ValueError("生產環境 JWT_SESSION_HASH_KEY 至少需要 32 bytes 的獨立隨機值")
+        if is_prod and len(self.OAUTH_SESSION_SECRET.encode("utf-8")) < 32:
+            raise ValueError("生產環境 OAUTH_SESSION_SECRET 至少需要 32 bytes 的獨立隨機值")
+        if (
+            is_prod
+            and len(
+                {
+                    self.SECRET_KEY,
+                    self.JWT_SIGNING_KEY,
+                    self.JWT_SESSION_HASH_KEY,
+                    self.OAUTH_SESSION_SECRET,
+                }
+            )
+            != 4
+        ):
+            raise ValueError("生產環境的 SECRET_KEY、JWT 與 OAuth session 金鑰必須彼此獨立")
         if is_prod and self.DEBUG:
             raise ValueError("生產環境不可啟用 DEBUG")
+        if is_prod and self.ENABLE_ENV_EDITOR:
+            raise ValueError("生產環境不可啟用 ENABLE_ENV_EDITOR")
         if is_prod and self.ENABLE_API_DOCS:
             raise ValueError("生產環境不可公開 API 文件；請關閉 ENABLE_API_DOCS")
+        if is_prod and self.AUTH_LEGACY_TOKEN_COMPAT_ENABLED:
+            raise ValueError("生產環境不可啟用 AUTH_LEGACY_TOKEN_COMPAT_ENABLED")
         if is_prod and self.SUPERUSER_EMAILS:
             raise ValueError("生產環境不可使用 SUPERUSER_EMAILS 自動繞過 RBAC")
         if is_prod and not self.COOKIE_SECURE:
             raise ValueError("生產環境必須啟用 COOKIE_SECURE")
+        if self.COOKIE_SECURE:
+            self.ACCESS_TOKEN_COOKIE_NAME = "__Host-hcca_access_token"
+            self.REFRESH_TOKEN_COOKIE_NAME = "__Host-hcca_refresh_token"
+            self.SESSION_COOKIE_NAME = "__Host-hcca_oauth_session"
         if "*" in self.ALLOWED_ORIGINS:
             raise ValueError("ALLOWED_ORIGINS 不可包含 '*'；請明確列出允許來源")
         if is_prod and "*" in self.ALLOWED_HOSTS:
             raise ValueError("生產環境 ALLOWED_HOSTS 不可包含 '*'；請明確列出允許 Host")
+        if is_prod:
+            database_host = (urlsplit(self.DATABASE_URL).hostname or "").lower()
+            database_port = urlsplit(self.DATABASE_URL).port
+            if self.DB_USE_PGBOUNCER and (
+                database_host in {"db", "localhost", "127.0.0.1", "::1"} or database_port == 5432
+            ):
+                raise ValueError(
+                    "生產環境 DB_USE_PGBOUNCER=true 時，DATABASE_URL 必須指向 PgBouncer，"
+                    "不可直接連 db:5432"
+                )
+            if not self.DB_USE_PGBOUNCER and database_host == "pgbouncer":
+                raise ValueError(
+                    "生產環境 DB_USE_PGBOUNCER=false 時，DATABASE_URL 不可指向 PgBouncer"
+                )
+            service_urls = (
+                ("DATABASE_URL", self.DATABASE_URL),
+                ("REDIS_URL", self.REDIS_URL),
+                ("REDIS_CACHE_URL", self.REDIS_CACHE_URL or self.REDIS_URL),
+                ("REDIS_REALTIME_URL", self.REDIS_REALTIME_URL or self.REDIS_URL),
+                ("CELERY_BROKER_URL", self.CELERY_BROKER_URL or self.REDIS_URL),
+            )
+            if self.CELERY_RESULT_BACKEND:
+                service_urls += (("CELERY_RESULT_BACKEND", self.CELERY_RESULT_BACKEND),)
+            for name, url in service_urls:
+                if _is_local_url(url):
+                    raise ValueError(f"生產環境 {name} 不可使用 localhost 或 loopback 位址")
+        if is_prod and self.VAPID_PRIVATE_KEY and len(self.VAPID_PRIVATE_KEY) > 20:
+            import logging as _logging
+
+            _logging.getLogger(__name__).warning(
+                "VAPID_PRIVATE_KEY 以明文存在環境變數中；建議改用 Secrets Manager 或加密 vault 管理，"
+                "避免透過 /admin/settings 或 env dump 洩漏此金鑰（洩漏後可偽造推播通知給所有使用者）"
+            )
         return self
 
 

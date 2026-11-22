@@ -1,0 +1,39 @@
+import type { Metadata } from "next";
+
+import AppShell from "@/components/layout/AppShell";
+import AppEnhancements from "@/components/layout/AppEnhancements";
+import NavigationProgress from "@/components/layout/NavigationProgress";
+import AccessBlockGuard from "@/components/security/AccessBlockGuard";
+import { getServerImportantAnnouncement, getServerSession } from "@/lib/server/session";
+import "../design-system.css";
+
+// 管理頁面同樣使用 per-request CSP nonce，必須避免靜態 HTML 快取造成 nonce 不一致。
+export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
+
+export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  const [initialUser, initialImportantAnnouncement] = await Promise.all([
+    getServerSession(),
+    getServerImportantAnnouncement(),
+  ]);
+
+  return (
+    <>
+      <AccessBlockGuard />
+      <NavigationProgress />
+      <AppShell
+        initialUser={initialUser}
+        initialImportantAnnouncement={initialImportantAnnouncement}
+      >
+        {children}
+      </AppShell>
+      <AppEnhancements />
+    </>
+  );
+}

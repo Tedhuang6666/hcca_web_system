@@ -1,4 +1,4 @@
-"""Webhook 投遞 Celery worker。Phase D2。
+"""Webhook 投遞 Celery worker。
 
 兩個 task：
 1. process_webhook_deliveries（每 30 秒）— 拉取 due 的 delivery 並逐一送出
@@ -13,7 +13,6 @@
 - 失敗：mark_failed_and_schedule_retry（exponential backoff）
 - 達 max_retries：標 DEAD（會出現在 deliveries 列表給 admin）
 
-對應路線圖：Phase D2 「Webhook 投遞 Celery task」。
 """
 
 from __future__ import annotations
@@ -24,7 +23,8 @@ import logging
 import httpx
 
 from api.core.celery_app import celery_app
-from api.core.ssrf import UnsafeURLError, assert_safe_url
+from api.core.database import task_session as _task_session
+from api.core.prometheus_metrics import record_webhook_delivery
 from api.services import webhook as webhook_svc
 
 logger = logging.getLogger(__name__)
@@ -35,10 +35,9 @@ USER_AGENT = "HCCA-Webhook/1.0 (+https://hcca.example/legal/security-policy)"
 
 async def _deliver_one_async(delivery_id: str) -> dict:
     """送出單一 delivery、處理結果。回傳 summary dict。"""
-    from api.core.database import AsyncSessionLocal
     from api.models.webhook import WebhookDelivery, WebhookSubscription
 
-    async with AsyncSessionLocal() as db:
+    async with _task_session() as db:
         import uuid as _uuid
 
         delivery = await db.get(WebhookDelivery, _uuid.UUID(delivery_id))
@@ -47,21 +46,6 @@ async def _deliver_one_async(delivery_id: str) -> dict:
         sub = await db.get(WebhookSubscription, delivery.subscription_id)
         if sub is None or not sub.is_active:
             return {"status": "skipped", "reason": "subscription gone or inactive"}
-
-        # 投遞當下重新驗證目標 URL（防 DNS rebinding / 建立後 DNS 被改指內網）。
-        try:
-            await assert_safe_url(sub.url)
-        except UnsafeURLError as exc:
-            await webhook_svc.mark_failed_and_schedule_retry(
-                db,
-                delivery.id,
-                response_status=None,
-                response_snippet=None,
-                error_message=f"SSRF guard 拒絕目標 URL：{exc}",
-                max_retries=0,  # 直接標 DEAD，不重試（重試也只會再被擋）
-            )
-            await db.commit()
-            return {"status": "blocked", "delivery_id": str(delivery.id), "error": str(exc)}
 
         body_bytes = webhook_svc.serialize_payload(delivery.payload)
         signature = webhook_svc.sign_payload(sub.secret, body_bytes)
@@ -74,12 +58,13 @@ async def _deliver_one_async(delivery_id: str) -> dict:
         }
 
         try:
+            await webhook_svc.validate_delivery_url(sub.url)
             async with httpx.AsyncClient(
                 timeout=HTTP_TIMEOUT_SECONDS, follow_redirects=False
             ) as client:
                 resp = await client.post(sub.url, content=body_bytes, headers=headers)
             snippet = resp.text[:2000] if resp.text else None
-        except httpx.RequestError as exc:
+        except (httpx.RequestError, webhook_svc.UnsafeWebhookUrlError) as exc:
             ok = await webhook_svc.mark_failed_and_schedule_retry(
                 db,
                 delivery.id,
@@ -89,6 +74,7 @@ async def _deliver_one_async(delivery_id: str) -> dict:
                 max_retries=sub.max_retries,
             )
             await db.commit()
+            record_webhook_delivery(delivery.event_type, "retry" if ok else "dead")
             return {
                 "status": "retry" if ok else "dead",
                 "delivery_id": str(delivery.id),
@@ -103,6 +89,7 @@ async def _deliver_one_async(delivery_id: str) -> dict:
                 response_snippet=snippet,
             )
             await db.commit()
+            record_webhook_delivery(delivery.event_type, "success")
             return {
                 "status": "ok",
                 "delivery_id": str(delivery.id),
@@ -118,6 +105,7 @@ async def _deliver_one_async(delivery_id: str) -> dict:
             max_retries=sub.max_retries,
         )
         await db.commit()
+        record_webhook_delivery(delivery.event_type, "retry" if ok else "dead")
         return {
             "status": "retry" if ok else "dead",
             "delivery_id": str(delivery.id),
@@ -133,9 +121,7 @@ def deliver_webhook(delivery_id: str) -> dict:
 
 async def _process_due_async(batch_size: int) -> dict:
     """批次拉取 due deliveries、為每筆 enqueue 一個 deliver_webhook task。"""
-    from api.core.database import AsyncSessionLocal
-
-    async with AsyncSessionLocal() as db:
+    async with _task_session() as db:
         rows = await webhook_svc.list_due_deliveries(db, limit=batch_size)
         for row in rows:
             try:
@@ -145,7 +131,14 @@ async def _process_due_async(batch_size: int) -> dict:
     return {"status": "ok", "dispatched": len(rows)}
 
 
-@celery_app.task(name="api.services.webhook_tasks.process_webhook_deliveries")
+@celery_app.task(
+    name="api.services.webhook_tasks.process_webhook_deliveries",
+    max_retries=5,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+)
 def process_webhook_deliveries(batch_size: int = 100) -> dict:
     """掃 due 的 webhook delivery、派發投遞。每 30 秒跑一次（建議）。"""
     return asyncio.run(_process_due_async(batch_size))

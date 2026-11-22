@@ -4,14 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import date
+from datetime import timedelta
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from api.core.cache import cache_invalidate_user_permissions
 from api.core.celery_app import celery_app
-from api.core.config import settings
+from api.core.clock import local_today
+from api.core.database import task_session
+from api.models.notification import Notification
 from api.models.org import UserPosition
 
 logger = logging.getLogger(__name__)
@@ -28,26 +29,60 @@ def invalidate_expired_user_caches(self) -> dict:  # type: ignore[type-arg]
 
 
 async def _invalidate_async() -> dict:
-    today = date.today()
-    engine = create_async_engine(str(settings.DATABASE_URL))
+    # notification service 會排入本 task 的 email 批次，延遲匯入避免循環依賴。
+    from api.services.notification import create_notification
+
+    today = local_today()
     user_ids: set[str] = set()
-    try:
-        async with AsyncSession(engine) as session:
-            rows = (
-                (
-                    await session.execute(
-                        select(UserPosition.user_id).where(
-                            UserPosition.end_date.is_not(None),
-                            UserPosition.end_date < today,
-                        )
+    async with task_session() as session:
+        rows = (
+            (
+                await session.execute(
+                    select(UserPosition.user_id).where(
+                        UserPosition.end_date.is_not(None),
+                        UserPosition.end_date < today,
                     )
                 )
-                .scalars()
-                .all()
             )
-            user_ids = {str(uid) for uid in rows}
-    finally:
-        await engine.dispose()
+            .scalars()
+            .all()
+        )
+        user_ids = {str(uid) for uid in rows}
+        expired_rows = (
+            await session.execute(
+                select(UserPosition.id, UserPosition.user_id).where(
+                    UserPosition.end_date == today - timedelta(days=1),
+                )
+            )
+        ).all()
+        expired_ids = [position_id for position_id, _ in expired_rows]
+        already_notified = set()
+        if expired_ids:
+            already_notified = set(
+                (
+                    await session.scalars(
+                        select(Notification.related_id).where(
+                            Notification.type == "system",
+                            Notification.title == "你的職位任期已結束",
+                            Notification.related_id.in_(expired_ids),
+                        )
+                    )
+                ).all()
+            )
+        for position_id, user_id in expired_rows:
+            if position_id in already_notified:
+                continue
+            await create_notification(
+                session,
+                user_id=user_id,
+                type="system",
+                title="你的職位任期已結束",
+                body="系統已更新你的可用功能。若認為有誤，請聯絡組織管理員。",
+                link="/notifications",
+                related_id=position_id,
+                email_allowed=False,
+            )
+        await session.commit()
 
     for uid in user_ids:
         await cache_invalidate_user_permissions(uid)

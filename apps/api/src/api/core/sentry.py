@@ -9,6 +9,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from sentry_sdk.types import Event
+
 from api.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -47,8 +49,20 @@ def _scrub(value: Any) -> Any:
     return value
 
 
-def _before_send(event: dict[str, Any], _hint: dict[str, Any]) -> dict[str, Any] | None:
+def _before_send(event: Event, _hint: dict[str, Any]) -> Event | None:
     """過濾 request headers / cookies / data 中的敏感欄位。"""
+    from api.core.structured_logging import get_request_id
+    from api.core.trace_context import get_trace_id
+
+    request_id = get_request_id()
+    if request_id:
+        event.setdefault("tags", {})["request_id"] = request_id
+        event.setdefault("extra", {})["request_id"] = request_id
+    trace_id = get_trace_id()
+    if trace_id:
+        event.setdefault("tags", {})["trace_id"] = trace_id
+        event.setdefault("extra", {})["trace_id"] = trace_id
+
     request = event.get("request")
     if isinstance(request, dict):
         if "headers" in request:
@@ -64,7 +78,7 @@ def _before_send(event: dict[str, Any], _hint: dict[str, Any]) -> dict[str, Any]
                 if any(key in qs.lower() for key in ("token=", "secret=", "password=")):
                     request["query_string"] = "[Filtered]"
             except Exception:
-                pass
+                logger.debug("Sentry query_string 過濾失敗", exc_info=True)
     extra = event.get("extra")
     if isinstance(extra, dict):
         event["extra"] = _scrub(extra)
@@ -89,7 +103,7 @@ def init_sentry() -> bool:
     sentry_sdk.init(
         dsn=settings.SENTRY_DSN,
         environment=settings.ENVIRONMENT,
-        release=settings.APP_VERSION,
+        release=settings.APP_RELEASE or settings.APP_VERSION,
         traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
         profiles_sample_rate=settings.SENTRY_PROFILES_SAMPLE_RATE,
         send_default_pii=False,

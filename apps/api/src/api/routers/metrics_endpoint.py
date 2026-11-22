@@ -1,4 +1,4 @@
-"""Prometheus /metrics endpoint。Phase A2。
+"""Prometheus /metrics endpoint。
 
 不需 auth（依 ADR-001、Cloudflare Access 或 IP 白名單於 edge 保護）。
 未安裝 prometheus_client → 回 503 + 安裝指示。

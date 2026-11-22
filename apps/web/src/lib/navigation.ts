@@ -1,3 +1,9 @@
+import type { NavigationProfileOut } from "./types";
+import { NAVIGATION_PROFILE_RULES, type NavigationProfile } from "./navigation-profile";
+
+export type { NavigationProfile } from "./navigation-profile";
+export { resolveNavigationProfile } from "./navigation-profile";
+
 export type NavItem = {
   id: string;
   href: string;
@@ -5,6 +11,7 @@ export type NavItem = {
   label: string;
   end?: boolean;
   perm?: string;
+  perms?: string[];
 };
 
 export type NavSection = {
@@ -17,6 +24,28 @@ export type NavSection = {
 
 export type NavEntry = NavItem | NavSection;
 
+export type NavVisibilityOptions = {
+  can: (code: string) => boolean;
+  hasPrefix: (prefix: string) => boolean;
+  isAdmin: boolean;
+  navigationProfile?: RuntimeNavigationProfile;
+  isModuleClosed?: (item: NavItem) => boolean;
+};
+
+export type RuntimeNavigationProfile = NavigationProfile | string;
+
+export type NavigationProfileConfig = {
+  id: RuntimeNavigationProfile;
+  label: string;
+  description: string;
+  audience: string;
+  matchAnyPrefixes?: string[];
+  matchAnyPermissions?: string[];
+  excludePrefixes?: string[];
+  desktopSections: NavEntry[];
+  mobileOrder: string[];
+};
+
 export type NavPreferences = {
   desktopOrder: string[];
   desktopHidden: string[];
@@ -24,59 +53,84 @@ export type NavPreferences = {
   mobileHidden: string[];
 };
 
+export const MOBILE_NAV_MIN_ITEMS = 4;
+export const MOBILE_NAV_MAX_ITEMS = 4;
+
 export const NAV_ITEMS: NavItem[] = [
   { id: "dashboard", href: "/dashboard", iconKey: "dashboard", label: "平台首頁", end: true },
   { id: "tasks", href: "/tasks", iconKey: "tasks", label: "我的待辦" },
+  { id: "workItems", href: "/work-items", iconKey: "tasks", label: "我的工作" },
   { id: "announcements", href: "/announcements", iconKey: "announcement", label: "校內公告" },
+  { id: "publicRegulations", href: "/regulations", iconKey: "regulations", label: "法規查詢" },
+  { id: "publicDocuments", href: "/documents", iconKey: "documents", label: "公文查詢" },
+  { id: "publicAnnouncements", href: "/announcements", iconKey: "announcement", label: "校內公告" },
+  { id: "publicPartnerMap", href: "/partner-map", iconKey: "partnerMap", label: "特約地圖" },
+  { id: "publicRecommendedVendors", href: "/recommended-vendors", iconKey: "shopOrders", label: "推薦商家" },
+  { id: "publicPetition", href: "/petitions/public", iconKey: "petition", label: "公開陳情" },
+  { id: "publicAbout", href: "/about", iconKey: "info", label: "關於本系統" },
   { id: "documents", href: "/documents", iconKey: "documents", label: "公文系統" },
-  { id: "calendar", href: "/calendar", iconKey: "calendar", label: "行事曆" },
-  { id: "meetings", href: "/meetings", iconKey: "meetings", label: "議事系統" },
-  { id: "councilProposals", href: "/council-proposals", iconKey: "meetings", label: "議會提案" },
+  { id: "councilProposals", href: "/council-proposals", iconKey: "regulations", label: "議會提案" },
   { id: "regulations", href: "/regulations", iconKey: "regulations", label: "法規查詢" },
-  { id: "meal", href: "/meal", iconKey: "meal", label: "學餐訂購" },
-  { id: "shop", href: "/shop", iconKey: "shop", label: "校商訂購" },
-  {
-    id: "shopOrders",
-    href: "/shop/class-orders",
-    iconKey: "shopOrders",
-    label: "班級訂單",
-    perm: "class:shop_collect",
-  },
+  { id: "shop", href: "/shop", iconKey: "shop", label: "商品訂購" },
+  { id: "merchandiseSubmissions", href: "/merchandise-submissions", iconKey: "shop", label: "校商投稿" },
   { id: "partnerMap", href: "/partner-map", iconKey: "partnerMap", label: "特約地圖" },
+  { id: "credential", href: "/credential", iconKey: "credential", label: "電子證件" },
+  { id: "recommendedVendors", href: "/recommended-vendors", iconKey: "shopOrders", label: "推薦商家" },
   { id: "surveys", href: "/surveys", iconKey: "survey", label: "問卷專區" },
   { id: "petitions", href: "/petitions", iconKey: "petition", label: "陳情中心" },
   { id: "judicialPetitions", href: "/judicial-petitions", iconKey: "shield", label: "評議訴訟" },
   { id: "examPapers", href: "/exam-papers", iconKey: "examPapers", label: "段考題庫" },
   { id: "about", href: "/about", iconKey: "info", label: "關於本系統" },
-  { id: "analytics", href: "/analytics", iconKey: "analytics", label: "績效統計", perm: "analytics:view" },
-  { id: "orgs", href: "/orgs", iconKey: "org", label: "組織管理", perm: "org:*" },
+  { id: "orgs", href: "/orgs", iconKey: "org", label: "組織總覽", perm: "org:*" },
   {
-    id: "activitiesAdmin",
-    href: "/admin/activities",
-    iconKey: "calendar",
-    label: "活動管理",
-    perm: "activity:manage",
+    id: "raffleAdmin",
+    href: "/admin/raffle",
+    iconKey: "raffle",
+    label: "現場抽獎",
+    perm: "admin:all",
+  },
+  { id: "finance", href: "/finance", iconKey: "analytics", label: "預算與收支", perm: "finance:view" },
+  {
+    id: "publications",
+    href: "/publications",
+    iconKey: "announcement",
+    label: "發布中心",
+    perm: "announcement:create",
   },
   {
-    id: "permissions",
-    href: "/admin/permissions",
-    iconKey: "permissions",
-    label: "權限管理",
-    perm: "admin:all",
+    id: "operations",
+    href: "/operations",
+    iconKey: "analytics",
+    label: "營運中心",
+  },
+  {
+    id: "qrCode",
+    href: "/qr-code",
+    iconKey: "link",
+    label: "經營工具",
+    perm: "qr_code:manage",
+  },
+  {
+    id: "adminDashboard",
+    href: "/admin",
+    iconKey: "dashboard",
+    label: "系統總覽",
+    perms: ["admin:users", "admin:all"],
+    end: true,
   },
   {
     id: "peopleAdmin",
     href: "/admin/people",
     iconKey: "people",
-    label: "人員身分",
-    perm: "admin:users",
+    label: "人員與組織",
+    perms: ["admin:users", "admin:all", "class:manage", "org:manage_members"],
   },
   {
-    id: "systemDefense",
+    id: "systemOperations",
     href: "/admin/system",
-    iconKey: "systemDefense",
-    label: "系統防護",
-    perm: "admin:all",
+    iconKey: "systemOperations",
+    label: "系統營運",
+    perms: ["admin:all", "analytics:view"],
   },
   {
     id: "systemSettings",
@@ -114,11 +168,10 @@ export const NAV_ITEMS: NavItem[] = [
     perm: "site:manage",
   },
   {
-    id: "classes",
-    href: "/admin/classes",
-    iconKey: "classes",
-    label: "班級管理",
-    perm: "class:manage",
+    id: "moduleBackoffice",
+    href: "/backoffice",
+    iconKey: "modules",
+    label: "模組後台",
   },
   { id: "audit", href: "/audit-logs", iconKey: "audit", label: "稽核日誌", perm: "audit:view_org" },
   {
@@ -137,14 +190,58 @@ export const NAV_ITEMS: NavItem[] = [
   },
   { id: "email", href: "/email", iconKey: "email", label: "電子郵件", perm: "email:*" },
   { id: "examPaperAdmin", href: "/exam-papers/admin", iconKey: "examPaperAdmin", label: "題庫管理", perm: "exam:manage" },
-  { id: "shopAdmin", href: "/shop/admin", iconKey: "shopAdmin", label: "校商後台", perm: "shop:manage" },
-  { id: "mealVendor", href: "/meal/vendor", iconKey: "mealVendor", label: "餐商管理", perm: "meal:manage" },
+  { id: "shopAdmin", href: "/shop/admin", iconKey: "shopAdmin", label: "商品設定", perm: "shop:manage" },
+  {
+    id: "councilOrders",
+    href: "/shop/council-orders",
+    iconKey: "shopOrders",
+    label: "全校收款與訂單",
+    perms: ["shop:view_all", "shop:manage_orders", "shop:manage"],
+  },
+  {
+    id: "classOrders",
+    href: "/shop/class-orders",
+    iconKey: "shopOrders",
+    label: "班級收款與代訂",
+    perm: "class:shop_collect",
+  },
+  {
+    id: "merchandiseSubmissionsAdmin",
+    href: "/merchandise-submissions/admin",
+    iconKey: "shopAdmin",
+    label: "校商投稿管理",
+    perms: [
+      "merchandise_submission:view",
+      "merchandise_submission:manage",
+      "merchandise_submission:review",
+      "shop:manage",
+    ],
+  },
   {
     id: "partnerMapAdmin",
     href: "/partner-map/admin",
     iconKey: "partnerMap",
     label: "特約管理",
-    perm: "partner_map:manage",
+    perms: [
+      "partner_map:manage",
+      "partner_map:business_manage",
+      "partner_map:submission_review",
+      "electronic_credential:manage",
+    ],
+  },
+  {
+    id: "recommendedVendorsAdmin",
+    href: "/recommended-vendors/admin",
+    iconKey: "shopAdmin",
+    label: "推薦商家管理",
+    perm: "recommended_vendor:manage",
+  },
+  {
+    id: "electionsAdmin",
+    href: "/admin/elections",
+    iconKey: "elections",
+    label: "開票控制台",
+    perm: "election:manage",
   },
   {
     id: "petitionsManage",
@@ -189,79 +286,74 @@ export const NAV_ITEMS_BY_ID: Record<string, NavItem> = Object.fromEntries(
   NAV_ITEMS.map((item) => [item.id, item]),
 );
 
+const PRIVATE_PUBLIC_NAV_ITEM_IDS = new Set([
+  "credential",
+  "recommendedVendors",
+  "publicRecommendedVendors",
+]);
+
+/** 管理工具直接列出、依權限過濾，不再先進入營運中心或模組後台再找一次。 */
 export const NAV_DEF: NavEntry[] = [
-  NAV_ITEMS[0],
-  NAV_ITEMS[1],
   {
-    id: "news",
-    heading: "最新資訊",
-    items: byIds(["announcements"]),
+    id: "work",
+    heading: "工作",
+    items: byIds(["dashboard", "tasks"]),
   },
   {
     id: "governance",
-    heading: "自治核心",
-    items: byIds(["documents", "calendar", "meetings", "councilProposals", "regulations", "judicialPetitions"]),
-  },
-  {
-    id: "campusServices",
-    heading: "校園服務",
-    items: byIds(["meal", "shop", "partnerMap", "surveys", "petitions", "examPapers"]),
-  },
-  {
-    id: "classWork",
-    heading: "班級工作",
-    items: byIds(["shopOrders", "classes"]),
-  },
-  {
-    id: "operations",
-    heading: "營運管理",
+    heading: "治理與公開",
     collapsible: true,
-    defaultCollapsed: true,
-    items: byIds(["analytics", "orgs", "activitiesAdmin", "peopleAdmin", "email"]),
-  },
-  {
-    id: "serviceBackoffice",
-    heading: "服務後台",
-    collapsible: true,
-    defaultCollapsed: true,
     items: byIds([
-      "documentTemplates",
-      "serialTemplates",
-      "examPaperAdmin",
-      "shopAdmin",
-      "mealVendor",
-      "partnerMapAdmin",
-      "petitionsManage",
+      "documents",
+      "regulations",
+      "councilProposals",
+      "judicialPetitions",
+      "petitions",
+      "announcements",
     ]),
   },
   {
-    id: "systemAdmin",
-    heading: "系統管理",
+    id: "services",
+    heading: "校園服務",
     collapsible: true,
-    defaultCollapsed: true,
+    items: byIds(["shop", "surveys", "partnerMap", "credential", "merchandiseSubmissions", "recommendedVendors", "examPapers"]),
+  },
+  {
+    id: "manage",
+    heading: "管理工作",
+    collapsible: true,
     items: byIds([
-      "permissions",
-      "systemDefense",
+      "publications",
+      "email",
+      "classOrders",
+      "councilOrders",
+      "shopAdmin",
+      "finance",
+      "petitionsManage",
+      "merchandiseSubmissionsAdmin",
+      "partnerMapAdmin",
+      "recommendedVendorsAdmin",
+      "electionsAdmin",
+      "raffleAdmin",
+      "examPaperAdmin",
+      "documentTemplates",
+      "serialTemplates",
+      "qrCode",
+      "publicSiteAdmin",
+      "peopleAdmin",
+    ]),
+  },
+  {
+    id: "system",
+    heading: "系統",
+    collapsible: true,
+    items: byIds([
+      "adminDashboard",
+      "systemOperations",
       "systemSettings",
       "policies",
       "privacyAdmin",
-      "publicSiteAdmin",
-      "discordAdmin",
       "audit",
-    ]),
-  },
-  {
-    id: "settings",
-    heading: "設定",
-    collapsible: true,
-    defaultCollapsed: true,
-    items: byIds([
-      "settingsNavigation",
-      "settingsNotifications",
-      "settingsDataSaver",
-      "settingsPrivacy",
-      "settingsSecurity",
-      "about",
     ]),
   },
 ];
@@ -270,16 +362,53 @@ export const NAV_DEF_LOGGED_OUT: NavEntry[] = [
   {
     id: "public",
     heading: "公開",
-    items: [
-      { id: "publicRegulations", href: "/regulations", iconKey: "regulations", label: "法規查詢" },
-      { id: "publicDocuments", href: "/documents", iconKey: "documents", label: "公文查詢" },
-      { id: "publicAnnouncements", href: "/announcements", iconKey: "announcement", label: "校內公告" },
-      { id: "publicPartnerMap", href: "/partner-map", iconKey: "partnerMap", label: "特約地圖" },
-      { id: "publicPetition", href: "/petitions/new", iconKey: "petition", label: "我要陳情" },
-      { id: "publicCouncilProposal", href: "/council-proposals", iconKey: "meetings", label: "議會提案" },
-      { id: "publicJudicialPetition", href: "/judicial-petitions", iconKey: "shield", label: "評議訴訟" },
-      { id: "publicAbout", href: "/about", iconKey: "info", label: "關於本系統" },
-    ],
+    items: byIds([
+      "publicRegulations",
+      "publicDocuments",
+      "publicAnnouncements",
+      "publicPartnerMap",
+      "publicPetition",
+      "publicAbout",
+    ]),
+  },
+];
+
+export const NAV_DEF_TEACHER: NavEntry[] = [
+  {
+    id: "teacher-main",
+    heading: "教職員工作台",
+    items: byIds(["dashboard", "tasks", "announcements"]),
+  },
+  {
+    id: "teacher-services",
+    heading: "常用模組",
+    items: byIds(["surveys", "examPapers", "shop", "merchandiseSubmissions", "credential", "recommendedVendors"]),
+  },
+];
+
+export const NAV_DEF_STUDENT: NavEntry[] = [
+  {
+    id: "student-main",
+    heading: "我的校園服務",
+    items: byIds(["dashboard", "announcements", "documents", "regulations", "surveys", "petitions"]),
+  },
+  {
+    id: "student-services",
+    heading: "常用入口",
+    items: byIds(["shop", "merchandiseSubmissions", "partnerMap", "credential", "recommendedVendors", "examPapers"]),
+  },
+];
+
+export const NAV_DEF_VENDOR: NavEntry[] = [
+  {
+    id: "vendor-main",
+    heading: "合作夥伴工作台",
+    items: byIds(["dashboard", "tasks", "partnerMap", "credential", "partnerMapAdmin", "recommendedVendors", "recommendedVendorsAdmin"]),
+  },
+  {
+    id: "vendor-services",
+    heading: "營運入口",
+    items: byIds(["announcements"]),
   },
 ];
 
@@ -287,22 +416,20 @@ export const DEFAULT_DESKTOP_ORDER = NAV_ITEMS.map((item) => item.id);
 export const DEFAULT_MOBILE_ORDER = [
   "dashboard",
   "tasks",
-  "calendar",
+  "announcements",
+  "publications",
   "councilProposals",
   "documents",
   "regulations",
+  "shop",
+  "merchandiseSubmissions",
+  "surveys",
+  "petitions",
   "judicialPetitions",
   "examPapers",
-  "meal",
-  "shop",
-  "shopOrders",
-  "surveys",
-  "announcements",
   "partnerMap",
-  "petitions",
-  "settingsNavigation",
-  "settingsDataSaver",
-  "settingsPrivacy",
+  "credential",
+  "recommendedVendors",
 ];
 
 export const DEFAULT_NAV_PREFERENCES: NavPreferences = {
@@ -310,6 +437,43 @@ export const DEFAULT_NAV_PREFERENCES: NavPreferences = {
   desktopHidden: [],
   mobileOrder: DEFAULT_MOBILE_ORDER,
   mobileHidden: [],
+};
+
+export const NAVIGATION_PROFILES: Record<NavigationProfile, NavigationProfileConfig> = {
+  default: {
+    id: "default",
+    label: "完整平台視角",
+    description: "提供學生會幹部、管理員與一般平台使用者完整導覽，再依權限隱藏不可用項目。",
+    audience: "學生代表、學生會幹部、系統管理員",
+    desktopSections: NAV_DEF,
+    mobileOrder: DEFAULT_MOBILE_ORDER,
+  },
+  student: {
+    id: "student",
+    label: "學生服務視角",
+    description: "把一般學生常用的公告、問卷、陳情、商品與特約地圖集中成服務入口。",
+    audience: "一般學生、未持有行政或商家權限的登入使用者",
+    desktopSections: NAV_DEF_STUDENT,
+    mobileOrder: ["dashboard", "announcements", "surveys", "shop", "merchandiseSubmissions", "petitions", "partnerMap", "credential"],
+  },
+  teacher: {
+    id: "teacher",
+    label: "教職員視角",
+    description: "保留教職員常用的通知、行事曆、問卷、題庫與商品入口。",
+    audience: "導師、行政老師、協助班級或教學服務的教職員",
+    ...NAVIGATION_PROFILE_RULES.teacher,
+    desktopSections: NAV_DEF_TEACHER,
+    mobileOrder: ["dashboard", "tasks", "surveys", "examPapers", "shop", "merchandiseSubmissions"],
+  },
+  vendor: {
+    id: "vendor",
+    label: "校商與廠商視角",
+    description: "把合作商家需要的特約管理、合作活動、公告與待辦集中起來。",
+    audience: "校商、合作廠商、外部合作窗口",
+    ...NAVIGATION_PROFILE_RULES.vendor,
+    desktopSections: NAV_DEF_VENDOR,
+    mobileOrder: ["dashboard", "tasks", "partnerMapAdmin", "partnerMap", "credential", "announcements"],
+  },
 };
 
 export const NAV_PREF_EVENT = "hcca:navigation-preferences-changed";
@@ -320,6 +484,114 @@ function byIds(ids: string[]) {
 
 export function isSection(entry: NavEntry): entry is NavSection {
   return "heading" in entry;
+}
+
+export function navItemsFromEntries(entries: NavEntry[]): NavItem[] {
+  const seen = new Set<string>();
+  return entries.flatMap((entry) => {
+    const items = isSection(entry) ? entry.items : [entry];
+    return items.filter((item) => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    });
+  });
+}
+
+export function isNavItemVisible(item: NavItem, options: NavVisibilityOptions): boolean {
+  if (item.id === "userAccountAdmin") return false;
+  if (options.isModuleClosed?.(item)) return false;
+  if (item.id === "tasks" && !options.hasPrefix("document:") && !options.hasPrefix("regulation:")) {
+    return false;
+  }
+  if (item.id === "moduleBackoffice") {
+    return (
+      options.isAdmin
+      || options.hasPrefix("class:")
+      || options.hasPrefix("document:")
+      || options.hasPrefix("serial:")
+      || options.hasPrefix("exam:")
+      || options.hasPrefix("shop:")
+      || options.hasPrefix("merchandise_submission:")
+      || options.hasPrefix("partner_map:")
+      || options.hasPrefix("recommended_vendor:")
+      || options.hasPrefix("election:")
+      || options.hasPrefix("petition:")
+      || options.hasPrefix("org:")
+    );
+  }
+  if (item.id === "operations") {
+    return (
+      options.isAdmin
+      || options.hasPrefix("announcement:")
+      || options.hasPrefix("email:")
+      || options.hasPrefix("activity:")
+      || options.hasPrefix("site:")
+      || options.hasPrefix("finance:")
+      || options.hasPrefix("merchandise_submission:")
+    );
+  }
+  return filterNavItems([item], options.can, options.hasPrefix).length > 0;
+}
+
+export function navDefinitionForProfile(profile: RuntimeNavigationProfile): NavEntry[] {
+  if (!(profile in NAVIGATION_PROFILES)) return NAV_DEF;
+  return NAVIGATION_PROFILES[profile as NavigationProfile].desktopSections;
+}
+
+function ensureCredentialEntry(entries: NavEntry[]): NavEntry[] {
+  if (navItemsFromEntries(entries).some((item) => item.id === "credential")) return entries;
+
+  const servicesIndex = entries.findIndex(
+    (entry) => isSection(entry) && entry.id === "services",
+  );
+  if (servicesIndex < 0) return [...entries, NAV_ITEMS_BY_ID.credential];
+
+  return entries.map((entry, index) => (
+    index === servicesIndex && isSection(entry)
+      ? { ...entry, items: [...entry.items, NAV_ITEMS_BY_ID.credential] }
+      : entry
+  ));
+}
+
+function ensurePetitionEntry(entries: NavEntry[]): NavEntry[] {
+  if (navItemsFromEntries(entries).some((item) => item.id === "petitions")) return entries;
+
+  const sectionIndex = entries.findIndex(isSection);
+  if (sectionIndex < 0) return [...entries, NAV_ITEMS_BY_ID.petitions];
+
+  return entries.map((entry, index) => (
+    index === sectionIndex && isSection(entry)
+      ? { ...entry, items: [...entry.items, NAV_ITEMS_BY_ID.petitions] }
+      : entry
+  ));
+}
+
+export function navProfileFromApi(profile: NavigationProfileOut): NavigationProfileConfig {
+  const sections = (profile.desktop_sections ?? []).map((section) => ({
+    id: section.id,
+    heading: section.heading,
+    collapsible: section.collapsible,
+    defaultCollapsed: section.default_collapsed,
+    items: byIds(section.items ?? []).filter(
+      (item) => profile.key !== "public" || !PRIVATE_PUBLIC_NAV_ITEM_IDS.has(item.id),
+    ),
+  }));
+  const profileSections = profile.key === "public" ? sections : ensureCredentialEntry(sections);
+  const desktopSections = profile.key === "student"
+    ? ensurePetitionEntry(profileSections)
+    : profileSections;
+  return {
+    id: profile.key,
+    label: profile.label,
+    description: profile.description ?? "",
+    audience: profile.audience ?? "",
+    matchAnyPrefixes: profile.match_any_prefixes,
+    matchAnyPermissions: profile.match_any_permissions ?? [],
+    excludePrefixes: profile.exclude_prefixes ?? [],
+    desktopSections,
+    mobileOrder: profile.mobile_order ?? [],
+  };
 }
 
 export function navPrefsStorageKey() {
@@ -368,12 +640,34 @@ export function orderedItems(order: string[], hidden: string[], availableItems =
   return ids.map((id) => available.get(id)).filter((item): item is NavItem => !!item && !hiddenSet.has(item.id));
 }
 
+export function constrainMobileHidden(order: string[], hidden: string[], availableItems: NavItem[]) {
+  const ordered = orderedItems(order, [], availableItems);
+  const hiddenSet = new Set(hidden);
+  const visible = ordered.filter((item) => !hiddenSet.has(item.id));
+  if (visible.length > MOBILE_NAV_MAX_ITEMS) {
+    visible.slice(MOBILE_NAV_MAX_ITEMS).forEach((item) => hiddenSet.add(item.id));
+  } else if (visible.length < MOBILE_NAV_MIN_ITEMS) {
+    ordered
+      .filter((item) => hiddenSet.has(item.id))
+      .slice(0, MOBILE_NAV_MIN_ITEMS - visible.length)
+      .forEach((item) => hiddenSet.delete(item.id));
+  }
+  return Array.from(hiddenSet);
+}
+
 export function filterNavItems(
   items: NavItem[],
   can: (code: string) => boolean,
   hasPrefix: (prefix: string) => boolean,
 ) {
   return items.filter((item) => {
+    if (item.perms?.length) {
+      return item.perms.some((permission) =>
+        permission.endsWith(":*")
+          ? hasPrefix(permission.slice(0, -1))
+          : can(permission),
+      );
+    }
     if (!item.perm) return true;
     if (item.perm.endsWith(":*")) return hasPrefix(item.perm.slice(0, -1));
     return can(item.perm);

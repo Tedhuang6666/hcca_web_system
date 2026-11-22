@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from api.models.petition import (
     PetitionAttachmentVisibility,
     PetitionEventType,
     PetitionEventVisibility,
+    PetitionPublicStatus,
     PetitionStatus,
 )
 
@@ -46,31 +48,60 @@ class PetitionTypeUpdate(BaseModel):
 
 class PetitionCreate(BaseModel):
     type_id: uuid.UUID
-    is_named: bool = True
-    contact_name: str | None = Field(None, max_length=100)
-    contact_email: EmailStr | None = None
+    title: str = Field(..., min_length=1, max_length=200)
+    content: str = Field(..., min_length=1, max_length=10000)
+
+
+class PetitionAdminCreate(BaseModel):
+    """管理員代收其他管道陳情時建立案件。"""
+
+    type_id: uuid.UUID
+    contact_name: str = Field(..., min_length=1, max_length=100)
+    contact_email: EmailStr
     title: str = Field(..., min_length=1, max_length=200)
     content: str = Field(..., min_length=1, max_length=10000)
 
     @field_validator("contact_name")
     @classmethod
-    def strip_optional(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        stripped = value.strip()
-        return stripped or None
+    def strip_contact_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("陳情人姓名不可為空白")
+        return value
+
+
+class PetitionSubmitterUpdate(BaseModel):
+    """管理員補登尚未綁定平台帳號的外部陳情人。"""
+
+    contact_name: str = Field(..., min_length=1, max_length=100)
+    contact_email: EmailStr
+
+    @field_validator("contact_name")
+    @classmethod
+    def strip_contact_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("陳情人姓名不可為空白")
+        return value
 
 
 class PetitionCreatedOut(BaseModel):
     id: uuid.UUID
     case_number: str
-    verification_code: str
+    share_token: str
     status: PetitionStatus
     title: str
+    is_confidential: bool = False
     status_label: str
     status_public_message: str
     next_action: str
     created_at: datetime
+
+
+class PetitionConfidentialityOut(BaseModel):
+    id: uuid.UUID
+    is_confidential: bool
+    confidential_reason: str
 
 
 class PetitionSubmitterOut(BaseModel):
@@ -100,6 +131,7 @@ class PetitionEventOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    related_document_id: uuid.UUID | None = None
     event_type: PetitionEventType
     visibility: PetitionEventVisibility
     actor_id: uuid.UUID | None
@@ -110,6 +142,8 @@ class PetitionEventOut(BaseModel):
     title: str
     content: str | None
     created_at: datetime
+    updated_at: datetime
+    can_edit: bool = False
 
 
 class PetitionCaseListItem(BaseModel):
@@ -119,8 +153,9 @@ class PetitionCaseListItem(BaseModel):
     case_number: str
     type_id: uuid.UUID
     status: PetitionStatus
-    is_named: bool
+    public_status: PetitionPublicStatus
     title: str
+    is_confidential: bool
     current_org_id: uuid.UUID
     assigned_to_id: uuid.UUID | None
     submitted_at: datetime
@@ -137,8 +172,15 @@ class PetitionCaseListItem(BaseModel):
 
 
 class PetitionCaseOut(PetitionCaseListItem):
+    confidential_reason: str | None = None
+    confidential_blocked: bool = False
     content: str
     public_reply: str | None
+    public_title: str | None
+    public_content: str | None
+    public_requested_at: datetime | None
+    public_user_responded_at: datetime | None
+    public_published_at: datetime | None
     latest_internal_note: str | None = None
     supplement_request: str | None
     rejection_reason: str | None
@@ -150,7 +192,9 @@ class PetitionCaseOut(PetitionCaseListItem):
     first_response_at: datetime | None
     resolved_at: datetime | None
     closed_at: datetime | None
+    can_edit_content: bool = False
     can_supplement: bool = False
+    can_respond_public: bool = False
     can_view_submitter: bool = False
     submitter: PetitionSubmitterOut | None = None
     events: list[PetitionEventOut] = []
@@ -161,9 +205,40 @@ class PetitionLookupOut(PetitionCaseOut):
     pass
 
 
+class PetitionShareLookup(BaseModel):
+    """以高熵分享 token 查詢案件；token 僅透過 request body 傳送。"""
+
+    share_token: str = Field(..., min_length=32, max_length=256)
+
+
+class PetitionConfidentialityCreate(BaseModel):
+    reason: str = Field(..., min_length=1, max_length=2000)
+
+    @field_validator("reason")
+    @classmethod
+    def strip_reason(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("密件原因不可為空白")
+        return value
+
+
 class PetitionSupplementCreate(BaseModel):
     content: str = Field(..., min_length=1, max_length=10000)
-    verification_code: str | None = Field(None, min_length=5, max_length=5, pattern=r"^\d{5}$")
+
+
+class PetitionContentUpdate(BaseModel):
+    title: str | None = Field(None, min_length=1, max_length=200)
+    content: str | None = Field(None, min_length=1, max_length=10000)
+
+    @model_validator(mode="after")
+    def require_content_change(self) -> PetitionContentUpdate:
+        if not any(
+            field in self.model_fields_set and getattr(self, field) is not None
+            for field in ("title", "content")
+        ):
+            raise ValueError("至少要提供標題或內容")
+        return self
 
 
 class PetitionAssignUpdate(BaseModel):
@@ -179,7 +254,9 @@ class PetitionTransferUpdate(BaseModel):
 class PetitionReplyCreate(BaseModel):
     public_content: str = Field(..., min_length=1, max_length=10000)
     internal_note: str | None = Field(None, max_length=3000)
+    attachment_ids: list[uuid.UUID] = Field(default_factory=list, max_length=10)
     resolve: bool = True
+    close: bool = False
 
 
 class PetitionStatusUpdate(BaseModel):
@@ -190,6 +267,50 @@ class PetitionStatusUpdate(BaseModel):
 
 class PetitionInternalNoteCreate(BaseModel):
     content: str = Field(..., min_length=1, max_length=3000)
+
+
+class PetitionEventUpdate(BaseModel):
+    title: str | None = Field(None, min_length=1, max_length=200)
+    content: str | None = Field(None, min_length=1, max_length=10000)
+
+    @model_validator(mode="after")
+    def require_change(self) -> PetitionEventUpdate:
+        if not self.model_fields_set:
+            raise ValueError("至少要提供標題或訊息內容")
+        return self
+
+
+class PetitionPublicRequest(BaseModel):
+    title: str | None = Field(None, min_length=1, max_length=200)
+    content: str | None = Field(None, min_length=1, max_length=10000)
+
+
+class PetitionPublicResponse(BaseModel):
+    decision: Literal["approve", "approve_with_changes", "reject"]
+    title: str | None = Field(None, min_length=1, max_length=200)
+    content: str | None = Field(None, min_length=1, max_length=10000)
+
+    @model_validator(mode="after")
+    def require_changes(self) -> PetitionPublicResponse:
+        if self.decision == "approve_with_changes" and (not self.title or not self.content):
+            raise ValueError("修改後同意需同時提供公開標題與公開內容")
+        if self.decision != "approve_with_changes" and (self.title or self.content):
+            raise ValueError("只有修改後同意可以提供修改內容")
+        return self
+
+
+class PetitionPublicListItem(BaseModel):
+    id: uuid.UUID
+    case_number: str
+    type_name: str
+    current_org_name: str
+    title: str
+    reply: str | None
+    published_at: datetime
+
+
+class PetitionPublicOut(PetitionPublicListItem):
+    content: str
 
 
 class PetitionOrgStatsItem(BaseModel):
@@ -218,3 +339,16 @@ class PetitionStatsOut(BaseModel):
     resolved: int
     closed_this_month: int
     by_org: list[PetitionOrgStatsItem] = []
+
+
+class PetitionMonthlyTypeStatsItem(BaseModel):
+    type_name: str
+    count: int
+
+
+class PetitionMonthlyStatsOut(BaseModel):
+    month: str
+    received_total: int
+    completed_total: int
+    average_completion_hours: float | None
+    by_type: list[PetitionMonthlyTypeStatsItem]

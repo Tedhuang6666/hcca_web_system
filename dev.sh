@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# dev.sh — 校園自治整合平台一鍵開發環境啟動腳本（自動排錯版）
+# dev.sh — 竹嶺班聯數位整合系統一鍵開發環境啟動腳本（自動排錯版）
 # 使用方式：bash dev.sh
 # 注意：此腳本須以 LF 換行符儲存（CRLF 會自動轉換但建議編輯器設定 LF）
 #
@@ -8,8 +8,8 @@
 #   - CRLF → LF 轉換
 #   - .env 從 .env.example 自動複製
 #   - .env 缺漏 .env.example 中的 key 時提示（避免靜默吃預設）
-#   - 舊 dev.sh / uvicorn / next-server 殘留行程清理
-#   - port 3000 / 8000 佔用者自動終止
+#   - 舊 dev.sh / uvicorn / next-server / Discord Bot 殘留行程清理
+#   - port 3000 / 8000 佔用者（含 Docker container）自動終止
 #   - 孤兒 / 死亡 Docker 容器自動移除
 #   - PostgreSQL 資料庫不存在自動建立
 #   - Meilisearch 不在線時自動以 Docker 啟動（已有 native 7700 則沿用）
@@ -20,6 +20,7 @@
 #   - Email Celery worker 自動啟動，避免寄信任務只排隊不送出
 #   - uv sync 失敗自動清 .venv 重試
 #   - npm install 失敗自動清 node_modules 重試
+#   - Next.js Turbopack dev cache 自動清理，避免快取資料庫損壞造成 panic
 #   - Docker daemon 沒在跑時自動嘗試啟動
 # =============================================================================
 set -uo pipefail  # 不使用 -e，改用明確的錯誤處理流程實現自動修復
@@ -177,17 +178,17 @@ _require() {
 _missing=0
 _require docker "https://docs.docker.com/desktop/install/windows-install/（並啟用 WSL Integration）" || _missing=1
 _require uv     "curl -LsSf https://astral.sh/uv/install.sh | sh" || _missing=1
-_require node   "nvm install 20 && nvm use 20" || _missing=1
+_require node   "nvm install 22 && nvm use 22" || _missing=1
 _require npm    "（隨 node 安裝）" || _missing=1
 _require curl   "sudo apt install -y curl" || _missing=1
 [[ $_missing -eq 1 ]] && exit 1
 
-# 0.4 Node 版本（package.json engines.node >=20.9.0）
+# 0.4 Node 版本（apps/web/package.json engines.node >=22.13.0）
 NODE_VERSION=$(node -v | sed 's/^v//')
-NODE_MAJOR=${NODE_VERSION%%.*}
-if [[ "$NODE_MAJOR" -lt 20 ]]; then
-    error "Node.js 版本過舊：v${NODE_VERSION}（需要 >=20.9.0）"
-    error "升級：nvm install 20 && nvm use 20"
+IFS=. read -r NODE_MAJOR NODE_MINOR NODE_PATCH <<< "$NODE_VERSION"
+if (( NODE_MAJOR < 22 || (NODE_MAJOR == 22 && NODE_MINOR < 13) )); then
+    error "Node.js 版本過舊：v${NODE_VERSION}（需要 >=22.13.0）"
+    error "升級：nvm install 22 && nvm use 22"
     exit 1
 fi
 
@@ -299,6 +300,21 @@ _pids_on_port() {
 
 _kill_port() {
     local port="$1"; local name="$2"
+    local containers=""
+    containers=$(docker ps --filter "publish=${port}" --format '{{.ID}} {{.Names}}' 2>/dev/null)
+    if [[ -n "$containers" ]]; then
+        local container_names
+        container_names=$(echo "$containers" | awk '{print $2}' | tr '\n' ' ')
+        warn "Port ${port} (${name}) 被 Docker container 佔用：${container_names}→ 停止"
+        echo "$containers" | awk '{print $1}' | xargs -r docker stop --time 10 >/dev/null 2>&1 || true
+        sleep 1
+        containers=$(docker ps --filter "publish=${port}" --format '{{.ID}} {{.Names}}' 2>/dev/null)
+        if [[ -n "$containers" ]]; then
+            error "Port ${port} 的 Docker container 無法停止：$(echo "$containers" | awk '{print $2}')"
+            return 1
+        fi
+    fi
+
     local pids; pids=$(_pids_on_port "$port")
     [[ -z "$pids" ]] && return 0
     local procinfo; procinfo=$(ps -o pid=,comm= -p $pids 2>/dev/null | tr -s ' ' | tr '\n' ';' | sed 's/;$//')
@@ -322,9 +338,9 @@ _kill_port() {
 _kill_port 3000 "Next.js" || exit 1
 _kill_port 8000 "FastAPI" || exit 1
 
-# 2.3 清理孤兒 uvicorn / next-server / next dev / celery worker / discord_worker
+# 2.3 清理孤兒 uvicorn / next-server / next dev / celery worker / Discord Bot
 # Celery 重點：殘留 worker 會跟新 worker 共用 -n nodename，造成 DuplicateNodenameWarning。
-ORPHAN_PATTERN="uvicorn[[:space:]]+api:app|next-server|next[[:space:]]+dev|celery.*worker|api\\.discord_worker"
+ORPHAN_PATTERN="uvicorn[[:space:]]+api(\\.main)?:app|next-server|next[[:space:]]+dev|celery.*worker|hcca_discord_bot"
 ORPHAN=$(pgrep -f "$ORPHAN_PATTERN" 2>/dev/null || true)
 if [[ -n "$ORPHAN" ]]; then
     warn "終止孤兒行程：$(echo $ORPHAN | tr '\n' ' ')"
@@ -383,7 +399,7 @@ done
 info "等待 Redis 健康..."
 for i in $(seq 1 30); do
     if docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T redis \
-            redis-cli ping 2>/dev/null | grep -q PONG; then
+            redis-cli -a "${REDIS_PASSWORD:-dev-redis-change-in-prod}" --no-auth-warning ping 2>/dev/null | grep -q PONG; then
         success "Redis 已就緒"
         break
     fi
@@ -633,7 +649,12 @@ step "7/8 啟動 FastAPI（port 8000）"
     # 中環境變數會壓過 .env），這裡強制覆寫，避免 console 變成 JSON 大水缸。
     # 想要 json log 請手動跑 `LOG_FORMAT=json uv run ...`。
     export LOG_FORMAT=text
-    exec uv run --project "${REPO_ROOT}/apps/api" python -m uvicorn api:app \
+    VERSION_BASE="$(tr -d '[:space:]' < "${REPO_ROOT}/VERSION")"
+    export APP_VERSION="${VERSION_BASE}.$(printf '%02d' "$(git -C "${REPO_ROOT}" rev-list --count HEAD)")"
+    export BUILD_COMMIT="$(git -C "${REPO_ROOT}" rev-parse HEAD)"
+    export BUILD_REF="$(git -C "${REPO_ROOT}" branch --show-current)"
+    export BUILD_TIME="$(git -C "${REPO_ROOT}" log -1 --format=%cI)"
+    exec uv run --project "${REPO_ROOT}/apps/api" python -m uvicorn api.main:app \
         --host 0.0.0.0 \
         --port 8000 \
         --reload \
@@ -670,22 +691,29 @@ success "FastAPI 已啟動 PID=${API_PID} → http://localhost:8000/docs"
 # ──────────────────────────────────────────────────────────────────────────
 if [[ -n "${DISCORD_BOT_TOKEN:-}" ]]; then
     step "7.5/8 啟動 Discord Bot"
-    : > "$DISCORD_LOG"
-    (
-        cd "${REPO_ROOT}/apps/api"
-        export PYTHONPATH="${REPO_ROOT}/apps/api/src"
-        exec uv run --project "${REPO_ROOT}/apps/api" python -m api.discord_worker \
-            > >(_stream_log "discord" "$DISCORD_LOG" "$C_CYAN") 2>&1
-    ) &
-    DISCORD_PID=$!
-
-    sleep 2
-    if kill -0 "$DISCORD_PID" 2>/dev/null; then
-        success "Discord Bot 已啟動 PID=${DISCORD_PID} → log: ${DISCORD_LOG}"
+    DISCORD_API_KEY="${HCCA_DISCORD_BOT_API_KEY:-${HCCA_API_KEY:-}}"
+    if [[ -z "$DISCORD_API_KEY" ]]; then
+        warn "HCCA_DISCORD_BOT_API_KEY 未設定，略過 Discord Bot 啟動"
+        warn "可在平台後台建立具 discord:bot scope 的 API Key 後寫入 .env"
     else
-        error "Discord Bot 啟動後立即退出，最後 40 行 log："
-        tail -n 40 "$DISCORD_LOG" >&2
-        exit 1
+        : > "$DISCORD_LOG"
+        (
+            cd "${REPO_ROOT}/apps/discord-bot"
+            export HCCA_API_KEY="$DISCORD_API_KEY"
+            export HCCA_API_URL="${HCCA_DISCORD_BOT_API_URL:-http://localhost:8000}"
+            exec uv run --project "${REPO_ROOT}/apps/discord-bot" python -m hcca_discord_bot \
+                > >(_stream_log "discord" "$DISCORD_LOG" "$C_CYAN") 2>&1
+        ) &
+        DISCORD_PID=$!
+
+        sleep 2
+        if kill -0 "$DISCORD_PID" 2>/dev/null; then
+            success "Discord Bot 已啟動 PID=${DISCORD_PID} → log: ${DISCORD_LOG}"
+        else
+            error "Discord Bot 啟動後立即退出，最後 40 行 log："
+            tail -n 40 "$DISCORD_LOG" >&2
+            exit 1
+        fi
     fi
 else
     info "DISCORD_BOT_TOKEN 未設定，略過 Discord Bot 啟動"
@@ -706,6 +734,8 @@ step "7.6/8 啟動 Email Worker（Celery email queue）"
         --loglevel=info \
         --concurrency=1 \
         --queues=email \
+        --without-gossip \
+        --without-mingle \
         -n email-dev@%h \
         > >(_stream_log "email" "$EMAIL_WORKER_LOG" "$C_CYAN") 2>&1
 ) &
@@ -732,6 +762,10 @@ NEED_INSTALL=0
 NEED_REASON=""
 if [[ ! -d "${WEB_DIR}/node_modules" ]]; then
     NEED_INSTALL=1; NEED_REASON="node_modules 不存在"
+elif [[ ! -f "${WEB_DIR}/node_modules/next/package.json" ]]; then
+    NEED_INSTALL=1; NEED_REASON="Next.js 套件缺失"
+elif ! (cd "${WEB_DIR}" && node -e "require.resolve('next/package.json')" >/dev/null 2>&1); then
+    NEED_INSTALL=1; NEED_REASON="Next.js 套件無法解析"
 elif [[ "${WEB_DIR}/package-lock.json" -nt "${WEB_DIR}/node_modules" ]]; then
     NEED_INSTALL=1; NEED_REASON="package-lock.json 比 node_modules 新"
 elif [[ "${WEB_DIR}/package.json" -nt "${WEB_DIR}/node_modules" ]]; then
@@ -751,12 +785,37 @@ if [[ $NEED_INSTALL -eq 1 ]]; then
     fi
 fi
 
+if ! (cd "${WEB_DIR}" && node -e "require('@tailwindcss/oxide')" >/dev/null 2>&1); then
+    warn "Tailwind CSS 原生 binding 無法載入，清理前端依賴與編譯快取後重建"
+    rm -rf "${WEB_DIR}/node_modules" "${WEB_DIR}/.next" 2>/dev/null || true
+    if ! (cd "${WEB_DIR}" && npm install --include=optional --no-audit --no-fund); then
+        error "Tailwind CSS 依賴重建失敗，請檢查 npm error log"
+        exit 1
+    fi
+    if ! (cd "${WEB_DIR}" && node -e "require('@tailwindcss/oxide')" >/dev/null 2>&1); then
+        error "Tailwind CSS 原生 binding 仍無法載入"
+        exit 1
+    fi
+    fix "Tailwind CSS 原生 binding 與 Next.js 編譯快取已重建"
+fi
+
+if [[ -d "${WEB_DIR}/.next/dev/cache/turbopack" ]]; then
+    warn "清理 Next.js Turbopack dev cache，避免快取資料庫損壞導致啟動 panic"
+    rm -rf "${WEB_DIR}/.next/dev/cache/turbopack" 2>/dev/null || true
+    fix "Turbopack dev cache 已清理"
+fi
+
 : > "$WEB_LOG"
 (
     cd "${WEB_DIR}"
     # DEBUG 是後端 FastAPI 旗標；若繼承到此處會讓 @tailwindcss/postcss
     # 在每次 CSS rebuild 噴出 [Xms] 計時 log，故前端行程不繼承它
     unset DEBUG
+    VERSION_BASE="$(tr -d '[:space:]' < "${REPO_ROOT}/VERSION")"
+    export NEXT_PUBLIC_APP_VERSION="${VERSION_BASE}.$(printf '%02d' "$(git -C "${REPO_ROOT}" rev-list --count HEAD)")"
+    export NEXT_PUBLIC_BUILD_COMMIT="$(git -C "${REPO_ROOT}" rev-parse HEAD)"
+    export NEXT_PUBLIC_BUILD_REF="$(git -C "${REPO_ROOT}" branch --show-current)"
+    export NEXT_PUBLIC_BUILD_TIME="$(git -C "${REPO_ROOT}" log -1 --format=%cI)"
     exec npm run dev > >(_stream_log "web" "$WEB_LOG" "$C_MAGENTA") 2>&1
 ) &
 WEB_PID=$!

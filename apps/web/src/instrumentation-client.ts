@@ -1,31 +1,76 @@
-// This file configures the initialization of Sentry on the client.
-// The added config here will be used whenever a users loads a page in their browser.
-// https://docs.sentry.io/platforms/javascript/guides/nextjs/
+import { getPublicSentryDsn } from "./lib/sentry-config";
+import { redactShopDelegationSecrets } from "./lib/shop-delegation-link";
 
-import * as Sentry from "@sentry/nextjs";
+function installNonceStyleGuard(): void {
+  if (typeof document === "undefined") return;
 
-Sentry.init({
-  dsn: "https://75b0db5f282b58c897387ad6ee8ee27b@o4511483173601280.ingest.us.sentry.io/4511483186511872",
+  const nonce = document.querySelector<HTMLScriptElement>("script[nonce]")?.nonce;
+  if (!nonce) return;
 
-  // Add optional integrations for additional features
-  integrations: [Sentry.replayIntegration()],
+  const createElement = document.createElement.bind(document);
+  document.createElement = ((tagName: string, options?: ElementCreationOptions) => {
+    const element = createElement(tagName, options);
+    if (tagName.toLowerCase() === "style") element.setAttribute("nonce", nonce);
+    return element;
+  }) as typeof document.createElement;
+}
 
-  // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
-  tracesSampleRate: 1,
-  // Enable logs to be sent to Sentry
-  enableLogs: true,
+// Third-party clients such as Sonner inject a runtime <style>. Attach the
+// request nonce before async route chunks can evaluate, without weakening CSP.
+installNonceStyleGuard();
 
-  // Define how likely Replay events are sampled.
-  // This sets the sample rate to be 10%. You may want this to be 100% while
-  // in development and sample at a lower rate in production
-  replaysSessionSampleRate: 0.1,
+const dsn = getPublicSentryDsn();
+type SentryClient = typeof import("@sentry/nextjs");
+type RouterTransitionArgs = Parameters<SentryClient["captureRouterTransitionStart"]>;
 
-  // Define how likely Replay events are sampled when an error occurs.
-  replaysOnErrorSampleRate: 1.0,
+let sentryPromise: Promise<SentryClient> | null = null;
 
-  // Enable sending user PII (Personally Identifiable Information)
-  // https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/#sendDefaultPii
-  sendDefaultPii: true,
-});
+function loadSentry(): Promise<SentryClient> {
+  if (!sentryPromise) {
+    sentryPromise = import("@sentry/nextjs").then((Sentry) => {
+      Sentry.init({
+        dsn,
+        environment: process.env.NEXT_PUBLIC_ENVIRONMENT || process.env.NODE_ENV,
+        tracesSampleRate: Number(process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE || "0.05"),
+        sendDefaultPii: false,
+        beforeBreadcrumb: (breadcrumb) => redactShopDelegationSecrets(breadcrumb),
+        beforeSendTransaction: (event) => redactShopDelegationSecrets(event),
+        beforeSendSpan: (span) => redactShopDelegationSecrets(span),
+        beforeSend(event) {
+          const values = event.exception?.values ?? [];
+          const messages = [event.message, ...values.map((value) => value.value)]
+            .filter((message): message is string => Boolean(message));
+          if (messages.some((message) =>
+            message === "Script error."
+            || /window\.ethereum\.selectedAddress\s*=\s*undefined/i.test(message)
+          )) {
+            return null;
+          }
 
-export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;
+          const frames = values.flatMap((value) => value.stacktrace?.frames ?? []);
+          const extensionFrame = /^(chrome|moz|safari-web|ms-browser)-extension:\/\//i;
+          if (frames.length > 0 && frames.every((frame) => extensionFrame.test(frame.filename ?? ""))) {
+            return null;
+          }
+          return redactShopDelegationSecrets(event);
+        },
+      });
+      return Sentry;
+    });
+  }
+  return sentryPromise;
+}
+
+if (dsn) {
+  const load = () => void loadSentry();
+  if (typeof window.requestIdleCallback === "function") {
+    window.requestIdleCallback(load, { timeout: 5_000 });
+  } else {
+    window.setTimeout(load, 3_000);
+  }
+}
+
+export function onRouterTransitionStart(...args: RouterTransitionArgs): void {
+  if (!dsn) return;
+  void loadSentry().then((Sentry) => Sentry.captureRouterTransitionStart(...args));
+}

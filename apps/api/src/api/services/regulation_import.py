@@ -10,22 +10,34 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from io import BytesIO
-from xml.etree import ElementTree as ET
 from zipfile import BadZipFile, ZipFile
 
+from defusedxml import ElementTree as ET
+from defusedxml.common import DefusedXmlException
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 
 from api.models.regulation import ArticleType
 
+# DOCX 內 word/document.xml 解壓後的容量上限：正常法規正文遠小於此；設上限以防
+# 解壓縮炸彈（小 zip 解出 GB 級 XML）拖垮解析執行緒 / 記憶體。
+_MAX_DOCUMENT_XML_BYTES = 50 * 1024 * 1024
+
 _WORD_NS = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
 _NUMERAL_CHARS = "零〇一二三四五六七八九十百千兩"
 _STRUCTURAL_RE = re.compile(rf"^第\s*([{_NUMERAL_CHARS}0-9０-９\-]+)\s*(編|章|節)\s*(.*)$")
-_ARTICLE_RE = re.compile(rf"^第\s*([{_NUMERAL_CHARS}0-9０-９\-]+)\s*條\s*(.*)$")
+_LEGAL_NUMERAL = rf"[{_NUMERAL_CHARS}0-9０-９]+"
+_ARTICLE_RE = re.compile(
+    rf"^第\s*(?P<number>{_LEGAL_NUMERAL}(?:\s*[之\-－]\s*{_LEGAL_NUMERAL})*)"
+    rf"\s*條(?:\s*之\s*(?P<suffix>{_LEGAL_NUMERAL}))?\s*(?P<body>.*)$"
+)
 _PARAGRAPH_RE = re.compile(rf"^第\s*([{_NUMERAL_CHARS}0-9０-９\-]+)\s*項\s*(.*)$")
 _SUBPARAGRAPH_LINE_RE = re.compile(rf"^([{_NUMERAL_CHARS}0-9０-９]+)、\s*(.*)$")
 _ITEM_LINE_RE = re.compile(rf"^(?:（([{_NUMERAL_CHARS}0-9０-９]+)）|\((\d+)\))\s*(.*)$")
-_SUBPARAGRAPH_RE = re.compile(rf"(^|[：:。；;\n])([{_NUMERAL_CHARS}0-9０-９]+)、")
+_SUBPARAGRAPH_RE = re.compile(rf"(^|[：:。；;\n])\s*([{_NUMERAL_CHARS}0-9０-９]+)、")
+_MARKDOWN_RULE_RE = re.compile(r"^\s*(?:-{3,}|\*{3,}|_{3,})\s*$")
+_MARKDOWN_NUMERIC_HEADING_RE = re.compile(rf"^([{_NUMERAL_CHARS}0-9０-９]+)[、．.]\s*(.*)$")
+_MARKDOWN_PAREN_HEADING_RE = re.compile(rf"^[（(]([{_NUMERAL_CHARS}0-9０-９]+)[）)]\s*(.*)$")
 _HISTORY_KEYWORDS = (
     "制定",
     "制訂",
@@ -68,20 +80,19 @@ class ImportedRegulationDraft:
     warnings: list[str]
 
 
+@dataclass(frozen=True)
+class _MarkdownLine:
+    text: str
+    heading_level: int | None = None
+    list_kind: str | None = None
+    list_number: str | None = None
+    indent: int = 0
+
+
 def parse_regulation_document(
     file_bytes: bytes, filename: str | None = None
 ) -> ImportedRegulationDraft:
     return _parse_regulation_paragraphs(_extract_paragraphs(file_bytes, filename=filename))
-
-
-def parse_regulation_docx(
-    file_bytes: bytes, filename: str | None = None
-) -> ImportedRegulationDraft:
-    return _parse_regulation_paragraphs(_extract_docx_paragraphs(file_bytes, filename=filename))
-
-
-def parse_regulation_pdf(file_bytes: bytes, filename: str | None = None) -> ImportedRegulationDraft:
-    return _parse_regulation_paragraphs(_extract_pdf_paragraphs(file_bytes, filename=filename))
 
 
 def parse_regulation_text(
@@ -90,8 +101,429 @@ def parse_regulation_text(
     content: str,
     preface: str | None = None,
 ) -> ImportedRegulationDraft:
+    if _looks_like_markdown_outline(content):
+        return _parse_markdown_outline(title=title, content=content, preface=preface)
     paragraphs = _extract_text_paragraphs(title=title, content=content, preface=preface)
     return _parse_regulation_paragraphs(paragraphs)
+
+
+def _looks_like_markdown_outline(content: str) -> bool:
+    return any(
+        (heading := _parse_markdown_heading(line)) is not None and heading[0] >= 2
+        for line in content.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    )
+
+
+def _parse_markdown_outline(
+    *,
+    title: str,
+    content: str,
+    preface: str | None = None,
+) -> ImportedRegulationDraft:
+    """解析常見的 Markdown 大綱格式，讓貼上的純文字可直接變成條文樹。"""
+    lines = _extract_markdown_lines(content)
+    if not lines:
+        raise ValueError("文件內沒有可匯入的文字內容")
+
+    h1 = next((line.text for line in lines if line.heading_level == 1), None)
+    resolved_title = _strip_markdown_emphasis(h1 or title).strip()
+    if not resolved_title:
+        raise ValueError("找不到法規名稱")
+
+    articles: list[ImportedRegulationArticle] = []
+    warnings: list[str] = []
+    sibling_count: defaultdict[str | None, int] = defaultdict(int)
+    stack: dict[ArticleType, str] = {}
+    preface_parts = _split_text_lines(preface) if preface else []
+    history_parts: list[str] = []
+    saw_structure = False
+    current_article_key: str | None = None
+    current_paragraph_key: str | None = None
+    current_subparagraph_key: str | None = None
+    last_content_index: int | None = None
+    current_list_indent: int | None = None
+    current_unordered_indent: int | None = None
+    current_marker_indent: int | None = None
+
+    def add_node(
+        *,
+        article_type: ArticleType,
+        parent_key: str | None,
+        content: str | None = None,
+        title: str = "",
+        legal_number: str | None = None,
+    ) -> str:
+        sort_index = len(articles) + 1
+        sibling_count[parent_key] += 1
+        key = f"node-{sort_index}"
+        articles.append(
+            ImportedRegulationArticle(
+                key=key,
+                parent_key=parent_key,
+                article_type=article_type,
+                title=_strip_markdown_emphasis(title).strip(),
+                legal_number=_normalize_legal_number(legal_number) if legal_number else None,
+                content=_clean_content(content),
+                sort_index=sort_index,
+                order_index=sibling_count[parent_key] - 1,
+            )
+        )
+        return key
+
+    def nearest_structural_key() -> str | None:
+        return (
+            stack.get(ArticleType.SECTION)
+            or stack.get(ArticleType.CHAPTER)
+            or stack.get(ArticleType.VOLUME)
+        )
+
+    def append_content(line: str) -> None:
+        nonlocal last_content_index
+        if last_content_index is None:
+            preface_parts.append(line)
+            return
+        current = articles[last_content_index]
+        merged = "\n".join(part for part in (current.content, line) if part)
+        articles[last_content_index] = ImportedRegulationArticle(
+            **{**current.__dict__, "content": merged}
+        )
+
+    def add_implicit_article(line: str) -> None:
+        nonlocal current_article_key, current_paragraph_key, current_subparagraph_key
+        nonlocal last_content_index, current_list_indent, current_unordered_indent
+        nonlocal current_marker_indent
+        key = add_node(
+            article_type=ArticleType.ARTICLE,
+            parent_key=nearest_structural_key(),
+            content=line,
+        )
+        current_article_key = key
+        current_paragraph_key = None
+        current_subparagraph_key = None
+        last_content_index = len(articles) - 1
+        current_list_indent = None
+        current_unordered_indent = None
+        current_marker_indent = None
+
+    for line in lines:
+        if line.heading_level == 1:
+            continue
+
+        text = line.text
+        structural_match = _STRUCTURAL_RE.match(text)
+        article_match = _ARTICLE_RE.match(text)
+        if structural_match:
+            raw_number, kind, heading = structural_match.groups()
+            article_type = _structural_type(kind)
+            parent_key = _parent_for_structural(article_type, stack)
+            key = add_node(
+                article_type=article_type,
+                parent_key=parent_key,
+                title=heading,
+                legal_number=raw_number,
+            )
+            _reset_stack_for_structural(article_type, stack)
+            stack[article_type] = key
+            current_article_key = None
+            current_paragraph_key = None
+            current_subparagraph_key = None
+            last_content_index = None
+            saw_structure = True
+            continue
+
+        if article_match:
+            raw_number = article_match.group("number")
+            if article_match.group("suffix"):
+                raw_number += "-" + article_match.group("suffix")
+            body = article_match.group("body")
+            key = add_node(
+                article_type=ArticleType.ARTICLE,
+                parent_key=nearest_structural_key(),
+                content=body,
+                legal_number=raw_number,
+            )
+            current_article_key = key
+            current_paragraph_key = None
+            current_subparagraph_key = None
+            last_content_index = len(articles) - 1
+            saw_structure = True
+            continue
+
+        if line.heading_level is not None:
+            heading_type = {
+                2: ArticleType.CHAPTER,
+                3: ArticleType.SECTION,
+                4: ArticleType.ARTICLE,
+                5: ArticleType.PARAGRAPH,
+                6: ArticleType.SUBPARAGRAPH,
+            }.get(line.heading_level)
+            if heading_type is None:
+                continue
+            raw_number, heading = _parse_markdown_heading_marker(text)
+            if heading_type == ArticleType.CHAPTER:
+                parent_key = stack.get(ArticleType.VOLUME)
+            elif heading_type == ArticleType.SECTION:
+                parent_key = stack.get(ArticleType.CHAPTER) or stack.get(ArticleType.VOLUME)
+            elif heading_type == ArticleType.ARTICLE:
+                parent_key = nearest_structural_key()
+            elif heading_type == ArticleType.PARAGRAPH:
+                parent_key = current_article_key
+            else:
+                parent_key = current_paragraph_key or current_article_key
+            key = add_node(
+                article_type=heading_type,
+                parent_key=parent_key,
+                title=heading if heading_type in {ArticleType.CHAPTER, ArticleType.SECTION} else "",
+                content=heading
+                if heading_type not in {ArticleType.CHAPTER, ArticleType.SECTION}
+                else None,
+                legal_number=raw_number,
+            )
+            if heading_type == ArticleType.CHAPTER:
+                stack.pop(ArticleType.SECTION, None)
+                stack[ArticleType.CHAPTER] = key
+            elif heading_type == ArticleType.SECTION:
+                stack[ArticleType.SECTION] = key
+            if heading_type == ArticleType.ARTICLE:
+                current_article_key = key
+                current_paragraph_key = None
+                current_subparagraph_key = None
+                last_content_index = len(articles) - 1
+            elif heading_type == ArticleType.PARAGRAPH:
+                current_paragraph_key = key
+                current_subparagraph_key = None
+                last_content_index = len(articles) - 1
+            elif heading_type == ArticleType.SUBPARAGRAPH:
+                current_subparagraph_key = key
+                last_content_index = len(articles) - 1
+            else:
+                current_article_key = None
+                current_paragraph_key = None
+                current_subparagraph_key = None
+                last_content_index = None
+            current_list_indent = None
+            current_unordered_indent = None
+            current_marker_indent = None
+            saw_structure = True
+            continue
+
+        marker_number, marker_body, marker_kind = _parse_outline_marker(text)
+        if marker_kind is not None and current_article_key is not None:
+            same_marker_level = current_marker_indent == line.indent
+            if marker_kind == "paren" and (current_marker_indent is None or same_marker_level):
+                parent_key = current_article_key
+                article_type = ArticleType.PARAGRAPH
+                current_paragraph_key = add_node(
+                    article_type=article_type,
+                    parent_key=parent_key,
+                    content=marker_body,
+                    legal_number=marker_number,
+                )
+                current_subparagraph_key = None
+                last_content_index = len(articles) - 1
+                current_marker_indent = line.indent
+                saw_structure = True
+                continue
+            parent_key = current_paragraph_key or current_article_key
+            article_type = (
+                ArticleType.SUBPARAGRAPH if current_paragraph_key else ArticleType.SUBPARAGRAPH
+            )
+            current_subparagraph_key = add_node(
+                article_type=article_type,
+                parent_key=parent_key,
+                content=marker_body,
+                legal_number=marker_number,
+            )
+            last_content_index = len(articles) - 1
+            current_marker_indent = line.indent
+            saw_structure = True
+            continue
+
+        if line.list_kind == "ordered":
+            nested = current_list_indent is not None and line.indent > current_list_indent
+            if current_article_key is not None and nested:
+                current_paragraph_key = add_node(
+                    article_type=ArticleType.PARAGRAPH,
+                    parent_key=current_article_key,
+                    content=text,
+                    legal_number=line.list_number,
+                )
+                current_subparagraph_key = None
+                last_content_index = len(articles) - 1
+            else:
+                current_article_key = add_node(
+                    article_type=ArticleType.ARTICLE,
+                    parent_key=nearest_structural_key(),
+                    content=text,
+                    legal_number=line.list_number,
+                )
+                current_paragraph_key = None
+                current_subparagraph_key = None
+                last_content_index = len(articles) - 1
+            current_list_indent = line.indent
+            current_unordered_indent = None
+            current_marker_indent = None
+            saw_structure = True
+            continue
+
+        if line.list_kind == "unordered" and current_article_key is not None:
+            nested = current_unordered_indent is not None and line.indent > current_unordered_indent
+            parent_key = current_paragraph_key if nested else current_article_key
+            article_type = ArticleType.SUBPARAGRAPH if nested else ArticleType.PARAGRAPH
+            current_paragraph_key = (
+                current_paragraph_key
+                if nested
+                else add_node(
+                    article_type=article_type,
+                    parent_key=parent_key,
+                    content=text,
+                )
+            )
+            if nested:
+                current_subparagraph_key = add_node(
+                    article_type=article_type,
+                    parent_key=parent_key,
+                    content=text,
+                )
+            else:
+                current_subparagraph_key = None
+            last_content_index = len(articles) - 1
+            current_unordered_indent = line.indent
+            current_marker_indent = None
+            saw_structure = True
+            continue
+
+        if not saw_structure:
+            if _looks_like_history(text):
+                history_parts.extend(_split_history_line(text))
+            else:
+                preface_parts.append(text)
+        elif current_article_key is None:
+            add_implicit_article(text)
+        else:
+            append_content(text)
+
+    if not any(a.article_type == ArticleType.ARTICLE for a in articles):
+        raise ValueError("找不到可辨識的條文或 Markdown 清單")
+
+    rendered = _render_markdown(resolved_title, history_parts, preface_parts, articles)
+    return ImportedRegulationDraft(
+        title=resolved_title,
+        preface="\n".join(preface_parts).strip() or None,
+        legislative_history="\n".join(history_parts).strip() or None,
+        content=rendered,
+        articles=articles,
+        warnings=warnings,
+    )
+
+
+def _extract_markdown_lines(value: str) -> list[_MarkdownLine]:
+    lines: list[_MarkdownLine] = []
+    value = value.translate(str.maketrans("", "", "\u200b\u200c\u200d\ufeff\u00ad"))
+    for raw in value.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        if not raw.strip() or _MARKDOWN_RULE_RE.match(raw):
+            continue
+        heading = _parse_markdown_heading(raw)
+        if heading:
+            heading_level, heading_text = heading
+            lines.append(
+                _MarkdownLine(
+                    text=heading_text,
+                    heading_level=heading_level,
+                )
+            )
+            continue
+        ordered_item = _parse_markdown_ordered_item(raw)
+        if ordered_item:
+            text, list_number, indent = ordered_item
+            lines.append(
+                _MarkdownLine(
+                    text=text,
+                    list_kind="ordered",
+                    list_number=list_number,
+                    indent=indent,
+                )
+            )
+            continue
+        unordered_item = _parse_markdown_unordered_item(raw)
+        if unordered_item:
+            text, indent = unordered_item
+            lines.append(
+                _MarkdownLine(
+                    text=text,
+                    list_kind="unordered",
+                    indent=indent,
+                )
+            )
+            continue
+        lines.append(_MarkdownLine(text=_normalize_spacing(raw)))
+    return lines
+
+
+def _parse_markdown_heading(value: str) -> tuple[int, str] | None:
+    stripped = value.lstrip()
+    marker_end = 0
+    while marker_end < len(stripped) and stripped[marker_end] == "#":
+        marker_end += 1
+    if not 1 <= marker_end <= 6 or marker_end == len(stripped):
+        return None
+    if not stripped[marker_end].isspace():
+        return None
+    heading = _strip_markdown_heading_suffix(stripped[marker_end:].strip())
+    return (marker_end, heading) if heading else None
+
+
+def _strip_markdown_heading_suffix(value: str) -> str:
+    heading = value.strip()
+    hash_start = len(heading)
+    while hash_start > 0 and heading[hash_start - 1] == "#":
+        hash_start -= 1
+    if hash_start < len(heading) and hash_start > 0 and heading[hash_start - 1].isspace():
+        heading = heading[:hash_start].rstrip()
+    return heading
+
+
+def _parse_markdown_ordered_item(value: str) -> tuple[str, str, int] | None:
+    indent = len(value) - len(value.lstrip())
+    stripped = value[indent:]
+    number_end = 0
+    while number_end < len(stripped) and stripped[number_end].isdigit():
+        number_end += 1
+    if number_end == 0 or number_end >= len(stripped) or stripped[number_end] not in ".)":
+        return None
+    remainder = stripped[number_end + 1 :]
+    if not remainder or not remainder[0].isspace():
+        return None
+    text = remainder.strip()
+    return (text, stripped[:number_end], indent) if text else None
+
+
+def _parse_markdown_unordered_item(value: str) -> tuple[str, int] | None:
+    indent = len(value) - len(value.lstrip())
+    stripped = value[indent:]
+    if len(stripped) < 2 or stripped[0] not in "-*+" or not stripped[1].isspace():
+        return None
+    text = stripped[1:].strip()
+    return (text, indent) if text else None
+
+
+def _parse_markdown_heading_marker(value: str) -> tuple[str | None, str]:
+    number, body, _ = _parse_outline_marker(value)
+    return number, body or value
+
+
+def _parse_outline_marker(value: str) -> tuple[str | None, str, str | None]:
+    match = _MARKDOWN_NUMERIC_HEADING_RE.match(value)
+    if match:
+        return match.group(1), match.group(2).strip(), "numeric"
+    match = _MARKDOWN_PAREN_HEADING_RE.match(value)
+    if match:
+        return match.group(1), match.group(2).strip(), "paren"
+    return None, value.strip(), None
+
+
+def _strip_markdown_emphasis(value: str) -> str:
+    return re.sub(r"(\*\*|__)(.*?)\1", r"\2", value)
 
 
 def _parse_regulation_paragraphs(paragraphs: list[str]) -> ImportedRegulationDraft:
@@ -178,7 +610,10 @@ def _parse_regulation_paragraphs(paragraphs: list[str]) -> ImportedRegulationDra
 
         article_match = _ARTICLE_RE.match(line)
         if article_match:
-            raw_number, body = article_match.groups()
+            raw_number = article_match.group("number")
+            if article_match.group("suffix"):
+                raw_number += "-" + article_match.group("suffix")
+            body = article_match.group("body")
             parent_key = _nearest_parent_key(stack)
             key = add_article(
                 article_type=ArticleType.ARTICLE,
@@ -291,12 +726,19 @@ def _extract_docx_paragraphs(file_bytes: bytes, *, filename: str | None = None) 
     if filename and not filename.lower().endswith(".docx"):
         raise ValueError("請上傳 .docx Word 文件")
     try:
-        with ZipFile(BytesIO(file_bytes)) as docx:
-            document_xml = docx.read("word/document.xml")
+        with ZipFile(BytesIO(file_bytes)) as docx, docx.open("word/document.xml") as entry:
+            # 以串流方式只讀有限位元組（不信任 zip 宣告的大小），防解壓縮炸彈。
+            document_xml = entry.read(_MAX_DOCUMENT_XML_BYTES + 1)
     except (BadZipFile, KeyError) as exc:
         raise ValueError("無法讀取 DOCX 內容，請確認檔案格式正確") from exc
 
-    root = ET.fromstring(document_xml)
+    if len(document_xml) > _MAX_DOCUMENT_XML_BYTES:
+        raise ValueError("DOCX 內容過大，無法處理")
+
+    try:
+        root = ET.fromstring(document_xml)
+    except (DefusedXmlException, ET.ParseError) as exc:
+        raise ValueError("DOCX 內含無效或不安全的 XML") from exc
     paragraphs: list[str] = []
     for paragraph in root.findall(".//w:p", _WORD_NS):
         parts = [text.text or "" for text in paragraph.findall(".//w:t", _WORD_NS)]
@@ -360,10 +802,12 @@ def _looks_like_history(line: str) -> bool:
 # 用於把整段沿革切成「逐筆事件」，即使事件之間沒有空白分隔
 # （例：「…112學年度…修訂113學年度…修訂」需切成兩筆）。
 _HISTORY_EVENT_START_RE = re.compile(
-    r"(?:中華民國|民國)?\s*\d{2,4}\s*學年度"  # 102學年度…
-    r"|(?:中華民國|民國)\s*\d{2,4}\s*年"  # 民國114年…
-    r"|(?<!學)\d{2,4}\s*年\s*\d{1,2}\s*月"  # 114年5月…（排除「學年度」誤判）
-    r"|\d{2,4}[./-]\d{1,2}[./-]\d{1,2}"  # 2025/5/19
+    # _normalize_spacing() leaves at most one ASCII space between tokens. Keep
+    # these spaces bounded so matching untrusted imported text stays linear.
+    r"(?:中華民國|民國)?+ ?+\d{2,4}+ ?+學年度"  # 102學年度…
+    r"|(?:中華民國|民國) ?+\d{2,4}+ ?+年"  # 民國114年…
+    r"|(?<!學)\d{2,4}+ ?+年 ?+\d{1,2}+ ?+月"  # 114年5月…（排除「學年度」誤判）
+    r"|\d{2,4}+[./-]\d{1,2}+[./-]\d{1,2}+"  # 2025/5/19
 )
 
 
@@ -438,6 +882,38 @@ def parse_history_date(event: str) -> datetime | None:
     if match:
         return _build_date(int(match.group(1)), 1, 1)
     return None
+
+
+def parse_history_date_info(event: str) -> tuple[datetime | None, str, int | None]:
+    """解析沿革日期與精度，保留只有年份或日期不詳的語意。"""
+    parsed = parse_history_date(event)
+    if parsed is None:
+        return None, "unknown", None
+
+    full_date = re.search(
+        r"(?:中華民國|民國)?\s*(\d{2,4})\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日",
+        event,
+    )
+    if full_date:
+        return parsed, "date", int(full_date.group(1))
+
+    western_date = re.search(r"(\d{4})[./-]\d{1,2}[./-]\d{1,2}", event)
+    if western_date:
+        return parsed, "date", int(western_date.group(1))
+
+    academic_year = re.search(r"(\d{2,4})\s*學年度", event)
+    if academic_year:
+        return parsed, "year", int(academic_year.group(1))
+
+    month = re.search(r"(?:中華民國|民國)?\s*(\d{2,4})\s*年\s*\d{1,2}\s*月", event)
+    if month:
+        return parsed, "month", int(month.group(1))
+
+    year = re.search(r"(?:中華民國|民國)?\s*(\d{2,4})\s*年", event)
+    if year:
+        return parsed, "year", int(year.group(1))
+
+    return parsed, "date", parsed.year
 
 
 def _roc_year(value: int) -> int:
@@ -565,8 +1041,14 @@ def _render_markdown(
             if row.content:
                 lines.append(row.content)
             continue
+        if row.article_type == ArticleType.PARAGRAPH and row.content:
+            lines.extend(["", f"#### 第 {row.legal_number or '?'} 項", row.content])
+            continue
         if row.article_type == ArticleType.SUBPARAGRAPH and row.content:
-            lines.append(f"{row.legal_number or ''}. {row.content}".strip())
+            lines.append(f"{row.legal_number or ''}、{row.content}".strip())
+            continue
+        if row.article_type == ArticleType.ITEM and row.content:
+            lines.append(f"（{row.legal_number or ''}）{row.content}".strip())
     return "\n".join(lines).strip()
 
 
@@ -580,10 +1062,10 @@ def _format_structural_label(row: ImportedRegulationArticle) -> str:
 
 
 def _normalize_legal_number(value: str) -> str:
-    normalized = value.translate(str.maketrans("０１２３４５６７８９", "0123456789")).strip()
-    if re.fullmatch(r"\d+(?:-\d+)?", normalized):
-        return normalized
-    return str(_chinese_to_int(normalized))
+    normalized = re.sub(r"\s+", "", value).translate(
+        str.maketrans("０１２３４５６７８９－之", "0123456789--")
+    )
+    return "-".join(str(_chinese_to_int(part)) for part in normalized.split("-"))
 
 
 def _chinese_to_int(value: str) -> int:
@@ -618,6 +1100,8 @@ def _chinese_to_int(value: str) -> int:
 
 
 def _normalize_spacing(value: str) -> str:
+    # Word/PDF 常夾入零寬空白；它不能把「第五條」切成無法辨識的條號。
+    value = value.translate(str.maketrans("", "", "\u200b\u200c\u200d\ufeff\u00ad"))
     return re.sub(r"\s+", " ", value).strip()
 
 

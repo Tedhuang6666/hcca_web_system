@@ -6,39 +6,67 @@ on:
   pull_request:
     branches: [main, develop]
 
+permissions:
+  contents: read
+
+# Keep only the newest run for a branch or pull request.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     name: Ruff Lint & Mypy Types
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Validate Celery queue consumers
+        run: python scripts/validate-celery-topology.py
+
+      - name: Prevent technical debt growth
+        run: bash scripts/check.sh debt
+
+      - name: Validate Compose entrypoints and image parity
+        run: |
+          python -m unittest discover -s scripts/tests -p 'test_compose_validation.py'
+          python -m unittest discover -s scripts/tests -p 'test_*deploy*.py'
+          python scripts/validate-compose.py
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
           version: "latest"
 
       - name: Set up Python 3.12
         run: uv python install 3.12
 
+      - name: Validate agent maintenance setup
+        run: |
+          uv run --no-project --python 3.12 python scripts/check-agent-setup.py
+          uv run --no-project --python 3.12 python -m unittest discover -s scripts/tests -p 'test_agent_setup.py'
+          bash -n scripts/check.sh scripts/update-openapi.sh scripts/refresh-code-index.sh
+
       - name: Install dependencies (dev)
-        run: uv sync --project apps/api
+        run: uv sync --locked --project apps/api
+
+      - name: Verify API worker recycling behavior
+        run: uv run --locked --project apps/api python -m unittest discover -s scripts/tests -p 'test_gunicorn_runtime.py'
 
       - name: Run Ruff linter
-        run: uv run --project apps/api ruff check apps/api/src libs/shared/src
+        run: uv run --locked --project apps/api ruff check apps/api/src libs/shared/src scripts/check-agent-setup.py scripts/tests/test_agent_setup.py apps/api/gunicorn.conf.py scripts/tests/test_gunicorn_runtime.py
 
       - name: Run Ruff formatter check
-        run: uv run --project apps/api ruff format --check apps/api/src libs/shared/src
+        run: uv run --locked --project apps/api ruff format --check apps/api/src libs/shared/src scripts/check-agent-setup.py scripts/tests/test_agent_setup.py apps/api/gunicorn.conf.py scripts/tests/test_gunicorn_runtime.py
 
       # 型別檢查 gate（漸進式採用）：範圍由 pyproject [tool.mypy] files 控制，
       # 清乾淨一個模組就加進清單，逐步擴大覆蓋面。
       - name: Run Mypy (type-check gate)
-        run: uv run --project apps/api mypy
+        run: uv run --locked --project apps/api mypy
 
   test:
-    name: Pytest + Coverage
+    name: PostgreSQL Pytest + Coverage
     runs-on: ubuntu-latest
-    needs: lint
 
     services:
       postgres:
@@ -68,18 +96,16 @@ jobs:
     env:
       DATABASE_URL: postgresql+asyncpg://postgres:password@localhost:5432/campus_platform_test
       DATABASE_URL_SYNC: postgresql+psycopg2://postgres:password@localhost:5432/campus_platform_test
-      # 注意：測試 fixture（conftest.py）以 TEST_DATABASE_URL 選 test DB，未設時用
-      # sqlite in-memory。目前刻意維持 sqlite —— 改指 postgres 會掀出部分測試的外鍵
-      # 資料設定 bug（如 shop_class 未先建 org，sqlite 不強制 FK 而矇混）。待那批
-      # 測試修好後，再把 TEST_DATABASE_URL 指向上方 postgres service 以提升保真度。
+      TEST_DATABASE_URL: postgresql+asyncpg://postgres:password@localhost:5432/campus_platform_test
+      REQUIRE_POSTGRES_TEST_DB: "true"
       REDIS_URL: redis://localhost:6379/0
       SECRET_KEY: ci-test-secret-key-32-characters-min
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
           version: "latest"
 
@@ -87,12 +113,15 @@ jobs:
         run: uv python install 3.12
 
       - name: Install dependencies (with dev)
-        run: uv sync --project apps/api
+        run: uv sync --locked --project apps/api
+
+      - name: Apply all database migrations
+        run: uv run --locked --directory apps/api alembic -x baseline=true upgrade head
 
       # 覆蓋率門檻由 pyproject [tool.coverage.report] fail_under 控制（ratchet：補測試後逐步調高）。
       - name: Run Pytest with coverage
         run: |
-          uv run --project apps/api pytest apps/api/tests \
+          uv run --locked --project apps/api pytest apps/api/tests \
             --tb=short \
             --asyncio-mode=auto \
             --cov \
@@ -101,25 +130,211 @@ jobs:
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: coverage-xml
           path: coverage.xml
           if-no-files-found: ignore
 
+  schema:
+    name: Alembic Schema Drift
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: campus_platform_schema_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:password@localhost:5432/campus_platform_schema_test
+      DATABASE_URL_SYNC: postgresql+psycopg2://postgres:password@localhost:5432/campus_platform_schema_test
+      REDIS_URL: redis://localhost:6379/0
+      SECRET_KEY: ci-test-secret-key-32-characters-min
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          version: "latest"
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --locked --project apps/api
+
+      - name: Upgrade database to head
+        run: uv run --locked --directory apps/api alembic upgrade head
+
+      - name: Verify models match migration head
+        run: uv run --locked --directory apps/api alembic check
+
+      - name: Compare baseline with complete migration history
+        env:
+          TEST_DATABASE_URL: postgresql+asyncpg://postgres:password@localhost:5432/campus_platform_schema_test
+        run: uv run --locked --project apps/api python -m unittest discover -s scripts/tests -p 'test_migration_baseline.py'
+
+  api-contract:
+    name: OpenAPI Contract Drift
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:password@localhost:5432/campus_platform
+      REDIS_URL: redis://localhost:6379/0
+      SECRET_KEY: ci-test-secret-key-32-characters-min
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          version: "latest"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+      - name: Install dependencies
+        run: |
+          uv sync --locked --project apps/api
+          npm ci --prefix apps/web
+      - name: Regenerate OpenAPI types
+        run: |
+          uv run --locked --project apps/api python apps/api/scripts/export_openapi.py openapi.json
+          npm run --prefix apps/web generate:types
+      - name: Verify generated contract is current
+        run: git diff --exit-code -- apps/web/src/lib/api-types.ts
+
+  secret-scan:
+    name: Secret Scanning (gitleaks)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+  security:
+    name: Dependency Security Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          version: "latest"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Audit Python production dependencies
+        run: |
+          uv export --project apps/api --frozen --no-dev --no-emit-project \
+            --format requirements-txt -o /tmp/requirements.txt
+          uvx pip-audit -r /tmp/requirements.txt
+      - name: Audit frontend production dependencies
+        run: |
+          npm ci --prefix apps/web
+          node scripts/npm-audit-gate.mjs
+
+  performance-smoke:
+    name: k6 Public API Smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: campus_platform_perf
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:password@localhost:5432/campus_platform_perf
+      DATABASE_URL_SYNC: postgresql+psycopg2://postgres:password@localhost:5432/campus_platform_perf
+      REDIS_URL: redis://localhost:6379/0
+      SECRET_KEY: ci-test-secret-key-32-characters-min
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          version: "latest"
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+      - name: Install API dependencies
+        run: uv sync --locked --project apps/api
+      - name: Prepare database
+        run: uv run --locked --directory apps/api alembic upgrade head
+      - name: Start API
+        run: |
+          uv run --locked --project apps/api uvicorn api.main:app --host 127.0.0.1 --port 8000 &
+          for _ in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8000/ready && exit 0
+            sleep 2
+          done
+          exit 1
+      - name: Run k6 public smoke
+        run: |
+          docker run --rm --network host \
+            -e BASE_URL=http://127.0.0.1:8000 \
+            -e VUS=2 \
+            -e DURATION=10s \
+            -v "$PWD:/workspace" \
+            grafana/k6:latest run \
+            --summary-export=/workspace/k6-summary.json \
+            /workspace/scripts/load-test.js
+      - name: Upload k6 summary
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: k6-public-smoke
+          path: k6-summary.json
+          if-no-files-found: ignore
+
   web:
-    name: Web — Lint & Type-check
+    name: Web — Lint, Types & Build
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: apps/web
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up Node 20
-        uses: actions/setup-node@v6
+      - name: Set up Node from .nvmrc
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
         with:
-          node-version: "20"
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
 
@@ -129,5 +344,96 @@ jobs:
       - name: ESLint
         run: npm run lint
 
+      - name: Validate frontend/backend module registry
+        run: npm run check:module-registry
+
       - name: TypeScript type-check
         run: npm run type-check
+
+      - name: Unit tests with coverage
+        run: npm test
+
+      - name: Upload frontend coverage
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: web-coverage
+          path: apps/web/coverage
+          if-no-files-found: ignore
+
+      - name: Production build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: ""
+          NEXT_PUBLIC_WS_URL: "ws://localhost:8000"
+
+      - name: Validate social share previews
+        run: |
+          npm run start -- --hostname 127.0.0.1 --port 3000 > /tmp/hcca-next.log 2>&1 &
+          next_pid=$!
+          trap 'kill "$next_pid"' EXIT
+          ready=false
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3000/ > /dev/null; then
+              ready=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" != true ]; then
+            cat /tmp/hcca-next.log
+            exit 1
+          fi
+          SHARE_PREVIEW_URLS="http://127.0.0.1:3000/,http://127.0.0.1:3000/news" \
+          SHARE_PREVIEW_IMAGE_BASE_URL="http://127.0.0.1:3000" \
+            npm run validate:share-previews
+
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: next-build-output
+          path: |
+            apps/web/.next/build-manifest.json
+            apps/web/.next/routes-manifest.json
+          if-no-files-found: ignore
+
+  web-e2e:
+    name: Web — Playwright
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/web
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node from .nvmrc
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run public workflow tests
+        run: npm run test:e2e
+        env:
+          NEXT_PUBLIC_API_URL: ""
+          NEXT_PUBLIC_WS_URL: "ws://localhost:8000"
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: playwright-report
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
+          if-no-files-found: ignore

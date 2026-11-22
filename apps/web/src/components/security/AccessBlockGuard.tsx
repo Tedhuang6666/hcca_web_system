@@ -1,0 +1,61 @@
+"use client";
+
+import { useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
+
+import { apiUrl } from "@/lib/config";
+
+const ACCESS_CHECK_INTERVAL_MS = 5 * 60 * 1000;
+const ACCESS_CHECK_START_DELAY_MS = 3_000;
+
+export default function AccessBlockGuard() {
+  const pathname = usePathname();
+  const pathnameRef = useRef(pathname);
+  pathnameRef.current = pathname;
+
+  useEffect(() => {
+    if (pathnameRef.current === "/blocked") return;
+    let cancelled = false;
+
+    async function checkAccess() {
+      if (pathnameRef.current === "/blocked") return;
+      try {
+        const response = await fetch(apiUrl("/system/access-status"), {
+          credentials: "include",
+          cache: "no-store",
+        });
+        if (!response.ok || cancelled) return;
+        const state = (await response.json()) as {
+          blocked?: boolean;
+          reason?: string;
+          expires_at?: number | null;
+        };
+        if (!state.blocked || cancelled) return;
+        const params = new URLSearchParams();
+        if (state.reason) params.set("reason", state.reason);
+        if (state.expires_at) params.set("until", String(state.expires_at));
+        window.location.replace(`/blocked?${params.toString()}`);
+      } catch {
+        // 狀態檢查失敗不應中斷目前頁面。
+      }
+    }
+
+    const startTimer = window.setTimeout(checkAccess, ACCESS_CHECK_START_DELAY_MS);
+    const interval = window.setInterval(checkAccess, ACCESS_CHECK_INTERVAL_MS);
+    const resume = () => {
+      if (document.visibilityState === "visible") void checkAccess();
+    };
+    const onFocus = () => void checkAccess();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", resume);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(startTimer);
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", resume);
+    };
+  }, []);
+
+  return null;
+}

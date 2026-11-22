@@ -1,4 +1,4 @@
-"""Public API（外部讀取 / 開放資料）。Phase D2。
+"""Public API（外部讀取 / 開放資料）。
 
 對應 ADR-005 規劃：第三方系統可用 ApiKey 拉取公開資料。
 
@@ -10,7 +10,6 @@
 scope 規範：
 - read:announcements
 - read:regulations
-- read:calendar
 """
 
 from __future__ import annotations
@@ -65,15 +64,32 @@ async def list_public_announcements(
 ) -> list[PublicAnnouncementItem]:
     """已發布、全站可見的公告。不含草稿、不含內文（避免大 payload）。"""
     stmt = (
-        select(Announcement)
+        select(
+            Announcement.id,
+            Announcement.title,
+            Announcement.org_id,
+            Announcement.is_urgent,
+            Announcement.published_at,
+            Announcement.created_at,
+        )
         .where(Announcement.is_published.is_(True))
         .where(Announcement.audience_type == "all")
         .order_by(desc(Announcement.published_at), desc(Announcement.created_at))
         .offset(offset)
         .limit(limit)
     )
-    rows = (await db.execute(stmt)).scalars().all()
-    return [PublicAnnouncementItem.model_validate(r) for r in rows]
+    rows = (await db.execute(stmt)).all()
+    return [
+        PublicAnnouncementItem(
+            id=row.id,
+            title=row.title,
+            org_id=row.org_id,
+            is_urgent=row.is_urgent,
+            published_at=row.published_at,
+            created_at=row.created_at,
+        )
+        for row in rows
+    ]
 
 
 @router.get(
@@ -111,11 +127,11 @@ async def list_public_regulations(
 ) -> list[PublicRegulationItem]:
     """已公布、生效中的法規清單。"""
     stmt = (
-        select(Regulation)
+        select(Regulation.id, Regulation.title.label("name"), Regulation.category)
         .where(Regulation.published_at.is_not(None))
         .where(Regulation.published_document_id.is_not(None))
-        .order_by(Regulation.name)
+        .order_by(Regulation.title)
         .limit(limit)
     )
-    rows = (await db.execute(stmt)).scalars().all()
-    return [PublicRegulationItem.model_validate(r) for r in rows]
+    rows = (await db.execute(stmt)).all()
+    return [PublicRegulationItem(id=row.id, name=row.name, category=row.category) for row in rows]

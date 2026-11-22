@@ -1,75 +1,61 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
+import { Loader2 } from "lucide-react";
 
+import { authApi } from "@/lib/api";
 import { cacheCurrentUser } from "@/lib/auth-cache";
-import { apiUrl } from "@/lib/config";
 import { safeNextPath } from "@/lib/safe-redirect";
+import { loginDestination } from "@/lib/login-destination";
 
 export default function AuthCallbackPage() {
   const searchParams = useSearchParams();
+  const bootstrapStarted = useRef(false);
 
   useEffect(() => {
+    // React Strict Mode 會在開發環境重跑 effect；登入 callback 不能因此同時
+    // 旋轉兩次 refresh token，否則第一次登入會被其中一個競態請求判定失敗。
+    if (bootstrapStarted.current) return;
+    bootstrapStarted.current = true;
+
     const error = searchParams.get("error");
     const next = safeNextPath(searchParams.get("next"));
-
-    async function fetchMeFromCookie(): Promise<boolean> {
-      try {
-        const res = await fetch(apiUrl("/auth/me"), {
-          credentials: "include",
-        });
-        if (!res.ok) return false;
-        const me = await res.json();
-        if (me?.id) {
-          cacheCurrentUser(me);
-          return true;
-        }
-      } catch {
-        // 交由 refresh fallback 處理，避免 callback 卡住。
-      }
-      return false;
-    }
-
-    async function refreshFromCookie(): Promise<boolean> {
-      try {
-        const res = await fetch(apiUrl("/auth/refresh"), {
-          method: "POST",
-          credentials: "include",
-        });
-        return res.ok;
-      } catch {
-        return false;
-      }
-    }
-
-    async function bootstrapFromCookie() {
-      if (await fetchMeFromCookie()) {
-        window.location.replace(next);
-        return;
-      }
-
-      if (await refreshFromCookie() && await fetchMeFromCookie()) {
-        window.location.replace(next);
-        return;
-      }
-
-      window.location.replace("/login?error=缺少 Token，請重新登入");
-    }
 
     if (error) {
       window.location.replace(`/login?error=${encodeURIComponent(error)}`);
       return;
     }
 
-    void bootstrapFromCookie();
+    // Google callback 已在 API response 設定 HttpOnly cookies，但公開頁面不會
+    // 經過受保護 layout，因此仍需同步本機登入快取，讓問卷等公開頁面知道目前
+    // 是登入狀態。
+    //
+    // 307 redirect 的 Set-Cookie 有時比 JS 的第一次 XHR 晚到（約 400ms），
+    // 造成 /auth/me 以 q=0 回傳 401。等候一次後 token 即可用，故 retry 一次。
+    const fetchMe = () => authApi.me().catch(async (err) => {
+      await new Promise<void>((r) => setTimeout(r, 400));
+      return authApi.me().catch(() => Promise.reject(err));
+    });
+
+    void fetchMe()
+      .then((user) => {
+        cacheCurrentUser(user);
+        window.location.replace(loginDestination(next));
+      })
+      .catch(() => {
+        const query = new URLSearchParams({
+          error: "登入狀態同步失敗，請重新登入",
+          next,
+        });
+        window.location.replace(`/login?${query.toString()}`);
+      });
   }, [searchParams]);
 
   return (
     <div className="min-h-screen flex items-center justify-center"
       style={{ background: "var(--primary-fg)" }}>
       <div className="text-center space-y-3">
-        <div className="w-10 h-10 border-2 border-t-transparent rounded-full animate-spin mx-auto"
-          style={{ borderColor: "var(--primary)", borderTopColor: "transparent" }} />
+        <Loader2 size={40} className="mx-auto animate-spin" style={{ color: "var(--primary-text)" }} aria-label="載入中" />
         <p className="text-slate-400 text-sm">正在完成登入...</p>
       </div>
     </div>

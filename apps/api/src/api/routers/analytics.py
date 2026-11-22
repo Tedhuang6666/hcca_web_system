@@ -3,25 +3,49 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
-from typing import Annotated
+from datetime import UTC, date, datetime, timedelta
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
+from api.core.posthog import get_posthog_client
+from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_any, require_permission
 from api.models.announcement import Announcement, AnnouncementRead
-from api.models.document import Document, DocumentApproval
+from api.models.document import ApprovalStepStatus, Document, DocumentApproval
 from api.models.org import Org
+from api.models.petition import PetitionCase, PetitionStatus
+from api.models.regulation import Regulation, RegulationWorkflowStatus
 from api.models.survey import Survey, SurveyResponse, SurveyStatus
+from api.models.user import User
+from api.schemas.analytics import (
+    ArticleAnalyticsOut,
+    ClientMetricBatchCreate,
+    ClientMetricCreate,
+    ComponentMetricBatchCreate,
+    ComponentMetricCreate,
+    PageViewCreate,
+    ProductAnalyticsOut,
+)
+from api.services.analytics import get_article_analytics, get_product_analytics, record_page_view
+from api.services.observability import record_client_metrics
 
 router = APIRouter(prefix="/analytics", tags=["數據分析"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
+CurrentUser = Annotated[User, Depends(get_current_active_user)]
+
+
+def _epoch_seconds(db: AsyncSession, later: object, earlier: object):
+    """Return a portable SQL expression for the duration between two timestamps."""
+    if db.get_bind().dialect.name == "sqlite":
+        return (func.julianday(later) - func.julianday(earlier)) * 86400
+    return func.extract("epoch", later - earlier)
 
 
 class DocumentEfficiencyOut(BaseModel):
@@ -62,6 +86,126 @@ class SurveyParticipationItem(BaseModel):
     created_at: datetime
 
 
+InsightSeverity = Literal["info", "warning", "critical"]
+
+
+class InsightItem(BaseModel):
+    id: str
+    module: str
+    title: str
+    description: str
+    severity: InsightSeverity
+    score: int
+    href: str
+    reason: str
+    recommended_action: str
+    created_at: datetime
+
+
+class AnalyticsInsightsOut(BaseModel):
+    items: list[InsightItem]
+    total: int
+
+
+@router.post("/page-views", status_code=204, summary="記錄目前使用者的頁面瀏覽")
+async def create_page_view(body: PageViewCreate, db: DbDep, current_user: CurrentUser) -> None:
+    await record_page_view(db, current_user.id, body.path)
+    await db.commit()
+
+
+@router.post("/client-metrics", status_code=status.HTTP_202_ACCEPTED, include_in_schema=False)
+async def create_client_metric(body: ClientMetricCreate, request: Request) -> dict[str, str]:
+    """接收匿名前端 Web Vitals／API latency，交由產品分析平台聚合。"""
+    payload = body.model_dump()
+    await record_client_metrics([payload])
+    posthog = get_posthog_client()
+    if posthog:
+        posthog.capture(
+            distinct_id=request.headers.get("X-Client-ID", "anonymous"),
+            event="web_client_metric",
+            properties=payload,
+        )
+    return {"status": "accepted"}
+
+
+@router.post("/client-metrics/batch", status_code=status.HTTP_202_ACCEPTED, include_in_schema=False)
+async def create_client_metric_batch(
+    body: ClientMetricBatchCreate, request: Request
+) -> dict[str, str | int]:
+    """批次接收匿名前端 Web Vitals／API latency，避免每筆指標各自發送請求。"""
+    payloads = [metric.model_dump() for metric in body.items]
+    await record_client_metrics(payloads)
+    posthog = get_posthog_client()
+    if posthog:
+        posthog.capture(
+            distinct_id=request.headers.get("X-Client-ID", "anonymous"),
+            event="web_client_metrics_batch",
+            properties={"count": len(payloads), "items": payloads},
+        )
+    return {"status": "accepted", "accepted": len(body.items)}
+
+
+@router.post("/component-metrics", status_code=status.HTTP_202_ACCEPTED, include_in_schema=False)
+async def create_component_metric(body: ComponentMetricCreate, request: Request) -> dict[str, str]:
+    """接收元件級 React Profiler 指標，交由產品分析平台聚合。"""
+    posthog = get_posthog_client()
+    if posthog:
+        posthog.capture(
+            distinct_id=request.headers.get("X-Client-ID", "anonymous"),
+            event="component_performance",
+            properties=body.model_dump(),
+        )
+    return {"status": "accepted"}
+
+
+@router.post(
+    "/component-metrics/batch", status_code=status.HTTP_202_ACCEPTED, include_in_schema=False
+)
+async def create_component_metric_batch(
+    body: ComponentMetricBatchCreate, request: Request
+) -> dict[str, str | int]:
+    """批次接收元件級 React Profiler 指標，避免每筆指標各自發送請求。"""
+    posthog = get_posthog_client()
+    if posthog:
+        posthog.capture(
+            distinct_id=request.headers.get("X-Client-ID", "anonymous"),
+            event="component_performance_batch",
+            properties={
+                "count": len(body.items),
+                "items": [metric.model_dump() for metric in body.items],
+            },
+        )
+    return {"status": "accepted", "accepted": len(body.items)}
+
+
+@router.get("/product", response_model=ProductAnalyticsOut, summary="平台產品使用統計")
+async def product_analytics(
+    db: DbDep,
+    _: Annotated[
+        object, Depends(require_any(PermissionCode.ANALYTICS_VIEW, PermissionCode.ADMIN_ALL))
+    ],
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+) -> ProductAnalyticsOut:
+    if date_from and date_to and date_from > date_to:
+        raise HTTPException(status_code=422, detail="起始日期不得晚於結束日期")
+    return await get_product_analytics(db, date_from, date_to)
+
+
+@router.get("/articles", response_model=ArticleAnalyticsOut, summary="公開文章閱讀統計")
+async def article_analytics(
+    db: DbDep,
+    _: Annotated[
+        object, Depends(require_any(PermissionCode.ANALYTICS_VIEW, PermissionCode.ADMIN_ALL))
+    ],
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+) -> ArticleAnalyticsOut:
+    if date_from and date_to and date_from > date_to:
+        raise HTTPException(status_code=422, detail="起始日期不得晚於結束日期")
+    return await get_article_analytics(db, date_from, date_to)
+
+
 # ── 公文效率統計 ───────────────────────────────────────────────────────────────
 
 
@@ -92,12 +236,12 @@ async def document_efficiency(
     completed_q = base.where(Document.completed_at.isnot(None))
     completed = await db.scalar(select(func.count()).select_from(completed_q.subquery()))
 
-    avg_seconds = await db.scalar(
-        select(
-            func.avg(func.extract("epoch", Document.completed_at - Document.submitted_at))
-        ).select_from(completed_q.subquery())
+    completed_subquery = completed_q.subquery()
+    duration_expr = _epoch_seconds(
+        db, completed_subquery.c.completed_at, completed_subquery.c.submitted_at
     )
-    avg_hours = float(avg_seconds) / 3600 if avg_seconds else None
+    avg_seconds = await db.scalar(select(func.avg(duration_expr)))
+    avg_hours = round(float(avg_seconds) / 3600, 6) if avg_seconds else None
 
     overdue = await db.scalar(
         select(func.count()).select_from(
@@ -132,19 +276,18 @@ async def dept_ranking(
     date_from: datetime | None = Query(None),
     date_to: datetime | None = Query(None),
 ) -> list[DeptRankingItem]:
+    duration_expr = _epoch_seconds(db, Document.completed_at, Document.submitted_at)
     q = (
         select(
             Document.org_id,
             Org.name.label("org_name"),
             func.count(Document.id).label("total_docs"),
-            func.avg(func.extract("epoch", Document.completed_at - Document.submitted_at)).label(
-                "avg_seconds"
-            ),
+            func.avg(duration_expr).label("avg_seconds"),
         )
         .join(Org, Org.id == Document.org_id)
         .where(Document.submitted_at.isnot(None))
         .group_by(Document.org_id, Org.name)
-        .order_by(func.avg(func.extract("epoch", Document.completed_at - Document.submitted_at)))
+        .order_by(func.avg(duration_expr))
     )
     if date_from:
         q = q.where(Document.submitted_at >= date_from)
@@ -176,20 +319,19 @@ async def pending_alerts(
     from api.models.document import ApprovalStepStatus
 
     threshold_seconds = threshold_hours * 3600
+    waiting_expr = _epoch_seconds(db, func.now(), DocumentApproval.created_at)
     q = (
         select(
             DocumentApproval.id,
             DocumentApproval.document_id,
             Document.title.label("document_title"),
             DocumentApproval.step_order,
-            func.extract("epoch", func.now() - DocumentApproval.created_at).label(
-                "waiting_seconds"
-            ),
+            waiting_expr.label("waiting_seconds"),
         )
         .join(Document, Document.id == DocumentApproval.document_id)
         .where(DocumentApproval.status == ApprovalStepStatus.PENDING)
-        .where(func.extract("epoch", func.now() - DocumentApproval.created_at) > threshold_seconds)
-        .order_by(func.extract("epoch", func.now() - DocumentApproval.created_at).desc())
+        .where(waiting_expr > threshold_seconds)
+        .order_by(waiting_expr.desc())
     )
     rows = (await db.execute(q)).all()
     return [
@@ -202,6 +344,213 @@ async def pending_alerts(
         )
         for row in rows
     ]
+
+
+@router.get(
+    "/insights",
+    response_model=AnalyticsInsightsOut,
+    summary="治理異常洞察與優先處理建議",
+)
+async def governance_insights(
+    db: DbDep,
+    _: Annotated[
+        object, Depends(require_any(PermissionCode.ANALYTICS_VIEW, PermissionCode.ADMIN_ALL))
+    ],
+    limit: int = Query(20, ge=1, le=50),
+) -> AnalyticsInsightsOut:
+    now = datetime.now(UTC)
+    items: list[InsightItem] = []
+
+    pending_wait_expr = _epoch_seconds(db, func.now(), DocumentApproval.created_at)
+    pending_rows = (
+        await db.execute(
+            select(
+                DocumentApproval.id,
+                DocumentApproval.document_id,
+                Document.title,
+                Document.serial_number,
+                DocumentApproval.step_order,
+                pending_wait_expr.label("waiting_seconds"),
+            )
+            .join(Document, Document.id == DocumentApproval.document_id)
+            .where(DocumentApproval.status == ApprovalStepStatus.PENDING)
+            .where(pending_wait_expr > 48 * 3600)
+            .order_by(pending_wait_expr.desc())
+            .limit(8)
+        )
+    ).all()
+    for row in pending_rows:
+        waiting_hours = float(row.waiting_seconds or 0) / 3600
+        severity: InsightSeverity = "critical" if waiting_hours >= 96 else "warning"
+        items.append(
+            InsightItem(
+                id=f"document-bottleneck:{row.id}",
+                module="document",
+                title=f"公文簽核可能卡關：{row.title}",
+                description=f"第 {row.step_order} 關已等待 {waiting_hours:.1f} 小時。",
+                severity=severity,
+                score=95 if severity == "critical" else 78,
+                href=f"/documents/{row.serial_number or row.document_id}",
+                reason="待簽核時間超過 48 小時",
+                recommended_action="聯繫簽核人或指派代理人推進流程",
+                created_at=now,
+            )
+        )
+
+    workload_count_expr = func.count(DocumentApproval.id)
+    workload_rows = (
+        await db.execute(
+            select(
+                DocumentApproval.approver_id,
+                User.display_name,
+                User.email,
+                workload_count_expr.label("pending_count"),
+            )
+            .join(User, User.id == DocumentApproval.approver_id)
+            .where(DocumentApproval.status == ApprovalStepStatus.PENDING)
+            .group_by(DocumentApproval.approver_id, User.display_name, User.email)
+            .having(workload_count_expr >= 6)
+            .order_by(workload_count_expr.desc())
+            .limit(5)
+        )
+    ).all()
+    for row in workload_rows:
+        name = row.display_name or row.email or str(row.approver_id)
+        count = int(row.pending_count or 0)
+        items.append(
+            InsightItem(
+                id=f"document-workload:{row.approver_id}",
+                module="document",
+                title=f"簽核負載集中：{name}",
+                description=f"目前有 {count} 件公文等待同一人處理。",
+                severity="warning",
+                score=min(70 + count * 2, 92),
+                href="/analytics",
+                reason="同一簽核人待辦量偏高",
+                recommended_action="檢查是否需要代理、分流或提醒",
+                created_at=now,
+            )
+        )
+
+    delayed_regs = (
+        await db.execute(
+            select(Regulation.id, Regulation.title)
+            .where(Regulation.workflow_status == RegulationWorkflowStatus.COUNCIL_APPROVED)
+            .where(Regulation.updated_at < now - timedelta(hours=72))
+            .order_by(Regulation.updated_at.asc())
+            .limit(5)
+        )
+    ).all()
+    for reg in delayed_regs:
+        items.append(
+            InsightItem(
+                id=f"regulation-publish-delay:{reg.id}",
+                module="regulation",
+                title=f"法規公布延遲：{reg.title}",
+                description="已議會核定超過 72 小時，尚未完成主席公布。",
+                severity="critical",
+                score=94,
+                href=f"/regulations/{reg.id}",
+                reason="核定後長時間未公布",
+                recommended_action="確認公布令與法規版本後完成公布",
+                created_at=now,
+            )
+        )
+
+    stale_petitions = (
+        await db.execute(
+            select(PetitionCase.id, PetitionCase.title, PetitionCase.case_number)
+            .where(PetitionCase.status == PetitionStatus.NEEDS_INFO)
+            .where(PetitionCase.updated_at < now - timedelta(hours=72))
+            .order_by(PetitionCase.updated_at.asc())
+            .limit(5)
+        )
+    ).all()
+    for petition in stale_petitions:
+        items.append(
+            InsightItem(
+                id=f"petition-needs-info:{petition.id}",
+                module="petition",
+                title=f"陳情補件追蹤：{petition.title}",
+                description="案件停在補充資料狀態超過 72 小時。",
+                severity="warning",
+                score=72,
+                href=f"/petitions/{petition.case_number}",
+                reason="補件狀態停留過久",
+                recommended_action="提醒當事人補件，或更新承辦狀態",
+                created_at=now,
+            )
+        )
+
+    low_read_announcements = (
+        await db.execute(
+            select(
+                Announcement.id,
+                Announcement.title,
+                Announcement.published_at,
+                func.count(AnnouncementRead.id).label("reader_count"),
+            )
+            .outerjoin(AnnouncementRead, AnnouncementRead.announcement_id == Announcement.id)
+            .where(Announcement.is_published == True)  # noqa: E712
+            .where(Announcement.published_at.is_not(None))
+            .where(Announcement.published_at < now - timedelta(hours=24))
+            .group_by(Announcement.id, Announcement.title, Announcement.published_at)
+            .having(func.count(AnnouncementRead.id) <= 2)
+            .order_by(Announcement.published_at.desc())
+            .limit(5)
+        )
+    ).all()
+    for ann in low_read_announcements:
+        items.append(
+            InsightItem(
+                id=f"announcement-low-read:{ann.id}",
+                module="announcement",
+                title=f"公告閱讀偏低：{ann.title}",
+                description=f"發布超過 24 小時，目前僅 {ann.reader_count} 次閱讀。",
+                severity="info",
+                score=52,
+                href=f"/announcements/{ann.id}",
+                reason="發布後閱讀數偏低",
+                recommended_action="檢查受眾、置頂或補發通知",
+                created_at=now,
+            )
+        )
+
+    low_response_surveys = (
+        await db.execute(
+            select(
+                Survey.id,
+                Survey.title,
+                Survey.created_at,
+                func.count(SurveyResponse.id).label("response_count"),
+            )
+            .outerjoin(SurveyResponse, SurveyResponse.survey_id == Survey.id)
+            .where(Survey.status == SurveyStatus.OPEN)
+            .where(Survey.created_at < now - timedelta(hours=48))
+            .group_by(Survey.id, Survey.title, Survey.created_at)
+            .having(func.count(SurveyResponse.id) <= 3)
+            .order_by(Survey.created_at.asc())
+            .limit(5)
+        )
+    ).all()
+    for survey in low_response_surveys:
+        items.append(
+            InsightItem(
+                id=f"survey-low-response:{survey.id}",
+                module="survey",
+                title=f"問卷回應偏低：{survey.title}",
+                description=f"開放超過 48 小時，目前僅 {survey.response_count} 份回應。",
+                severity="info",
+                score=50,
+                href=f"/surveys/{survey.id}",
+                reason="開放後回應數偏低",
+                recommended_action="調整公告位置或補發提醒",
+                created_at=now,
+            )
+        )
+
+    items.sort(key=lambda item: (-item.score, item.module, item.title))
+    return AnalyticsInsightsOut(items=items[:limit], total=len(items))
 
 
 # ── 公告參與率統計 ─────────────────────────────────────────────────────────────

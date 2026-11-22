@@ -50,12 +50,12 @@ async def _rotate_model_async(
     if not is_configured():
         return {"status": "skipped", "reason": "FIELD_ENCRYPTION_KEYS not set"}
 
-    from api.core.database import AsyncSessionLocal
+    from api.core.database import task_session
 
     rotated = 0
     examined = 0
 
-    async with AsyncSessionLocal() as db:
+    async with task_session() as db:
         col = getattr(model_class, enc_attr)
         stmt = (
             select(model_class).where(col.is_not(None)).order_by(model_class.id).limit(batch_size)
@@ -69,7 +69,7 @@ async def _rotate_model_async(
             except FieldEncryptionNotConfigured:
                 return {"status": "skipped", "reason": "keys cleared during run"}
             except Exception:
-                logger.exception("rotate token failed for %s.id=%s", model_class.__name__, row.id)
+                logger.exception("欄位加密輪替失敗")
                 continue
             if new_token != current:
                 setattr(row, enc_attr, new_token)
@@ -86,8 +86,16 @@ async def _rotate_model_async(
     }
 
 
-@celery_app.task(name="api.services.field_crypto_tasks.rotate_user_mfa_secrets")
-def rotate_user_mfa_secrets(batch_size: int = BATCH_SIZE) -> dict:
+@celery_app.task(
+    name="api.services.field_crypto_tasks.rotate_user_mfa_secrets",
+    bind=True,
+    max_retries=3,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+)
+def rotate_user_mfa_secrets(self, batch_size: int = BATCH_SIZE) -> dict:  # type: ignore[type-arg]
     """Batch rotate User.mfa_secret 欄位。"""
     from api.models.user import User
 

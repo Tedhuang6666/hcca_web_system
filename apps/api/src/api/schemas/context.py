@@ -1,0 +1,35 @@
+"""跨模組情境脈絡 schemas。"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+
+from pydantic import BaseModel, Field
+
+
+class ContextLink(BaseModel):
+    title: str
+    href: str
+    kind: str
+    timestamp: datetime | None = None
+
+
+class DocumentApprovalContextOut(BaseModel):
+    document_id: uuid.UUID
+    previous_comments: list[str] = Field(default_factory=list)
+    recommended_actions: list[str] = Field(default_factory=list)
+
+
+class PetitionResolutionContextOut(BaseModel):
+    petition_id: uuid.UUID
+    related_regulations: list[ContextLink] = Field(default_factory=list)
+    similar_petitions: list[ContextLink] = Field(default_factory=list)
+    recommended_actions: list[str] = Field(default_factory=list)
+
+
+class RegulationUsageContextOut(BaseModel):
+    regulation_id: uuid.UUID
+    related_documents: list[ContextLink] = Field(default_factory=list)
+    related_petitions: list[ContextLink] = Field(default_factory=list)
+    related_announcements: list[ContextLink] = Field(default_factory=list)

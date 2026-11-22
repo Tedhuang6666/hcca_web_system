@@ -4,8 +4,11 @@
 的暫時黑名單（預設 1 小時），讓 LoadShedMiddleware 在下個 request 直接擋下。
 """
 
+import json
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
+
+from redis.exceptions import RedisError
 
 from api.core.ip_blocklist import block as ip_block
 from api.core.security import redis_client
@@ -17,9 +20,54 @@ _AUTO_BLOCK_TTL_SECONDS = 3600
 
 async def record_login(user_id: str, ip: str, user_agent: str | None = None) -> None:
     """記錄用戶登入"""
-    key = f"login:{user_id}"
-    value = f"{ip}|{user_agent or 'unknown'}|{datetime.utcnow().isoformat()}"
-    await redis_client.set(key, value, ex=30 * 24 * 3600)  # 保留 30 天
+    try:
+        key = f"login:{user_id}"
+        value = f"{ip}|{user_agent or 'unknown'}|{datetime.now(UTC).isoformat()}"
+        await redis_client.set(key, value, ex=30 * 24 * 3600)  # 保留 30 天
+        history_key = f"login_history:{user_id}"
+        await redis_client.zadd(
+            history_key,
+            {
+                json.dumps({"ip": ip, "user_agent": user_agent or "unknown"}): datetime.now(
+                    UTC
+                ).timestamp()
+            },
+        )
+        await redis_client.zremrangebyscore(
+            history_key,
+            "-inf",
+            (datetime.now(UTC) - timedelta(days=30)).timestamp(),
+        )
+        await redis_client.expire(history_key, 30 * 24 * 3600)
+    except (RedisError, TimeoutError):
+        # 登入稽核是輔助功能；Redis 短暫故障不能阻斷合法登入。
+        logger.warning("登入紀錄暫時無法寫入 Redis", exc_info=True)
+
+
+async def get_login_ips(user_id: str) -> list[str]:
+    try:
+        rows = await redis_client.zrevrange(f"login_history:{user_id}", 0, 99)
+        legacy = await redis_client.get(f"login:{user_id}")
+    except (RedisError, TimeoutError):
+        # 這是管理頁的輔助資訊；Redis 暫時失效時回傳空清單，不能讓
+        # 使用者封鎖預覽整個 endpoint 變成 500。
+        logger.warning("登入 IP 歷史暫時無法讀取 Redis", exc_info=True)
+        return []
+
+    ips: list[str] = []
+    for raw in rows:
+        try:
+            value = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        ip = str(value.get("ip", "")).strip()
+        if ip and ip != "unknown" and ip not in ips:
+            ips.append(ip)
+    if legacy:
+        legacy_ip = str(legacy).split("|", maxsplit=1)[0].strip()
+        if legacy_ip and legacy_ip != "unknown" and legacy_ip not in ips:
+            ips.append(legacy_ip)
+    return ips
 
 
 async def check_suspicious_login(user_id: str, current_ip: str) -> tuple[bool, str | None]:
@@ -29,7 +77,12 @@ async def check_suspicious_login(user_id: str, current_ip: str) -> tuple[bool, s
     返回 (is_suspicious, reason)
     """
     key = f"login:{user_id}"
-    last_login = await redis_client.get(key)
+    try:
+        last_login = await redis_client.get(key)
+    except (RedisError, TimeoutError):
+        # 無法取得稽核資料時採不阻斷策略，並保留後續登入流程。
+        logger.warning("登入異常檢查暫時無法讀取 Redis", exc_info=True)
+        return False, None
 
     if not last_login:
         return False, None
@@ -44,7 +97,9 @@ async def check_suspicious_login(user_id: str, current_ip: str) -> tuple[bool, s
 
         # 同一用戶在短時間內（< 30 分鐘）從不同地點登入 → 可疑
         last_time = datetime.fromisoformat(last_time_str)
-        time_diff = datetime.utcnow() - last_time
+        if last_time.tzinfo is None:
+            last_time = last_time.replace(tzinfo=UTC)
+        time_diff = datetime.now(UTC) - last_time
         if time_diff < timedelta(minutes=30):
             reason = f"短時間內 IP 改變：{last_ip} → {current_ip}（{time_diff.total_seconds() / 60:.0f} 分鐘）"
             return True, reason

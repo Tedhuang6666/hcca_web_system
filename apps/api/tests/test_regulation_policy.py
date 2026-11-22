@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import uuid
 from io import BytesIO
 from zipfile import ZipFile
@@ -12,16 +13,15 @@ from api.models.regulation import (
     Regulation,
     RegulationArticle,
     RegulationCategory,
+    RegulationRevision,
     RegulationWorkflowStatus,
 )
-from api.schemas.regulation import RegulationArticleCreate, RegulationPublishRequest
-from api.services import regulation as reg_svc
 from api.services.official_print import render_regulation_print_html
 from api.services.regulation_consistency import audit_regulation_document_consistency
 from api.services.regulation_import import (
     parse_regulation_document,
-    parse_regulation_docx,
     parse_regulation_text,
+    split_history_events,
 )
 
 
@@ -48,14 +48,11 @@ def _build_docx(lines: list[str]) -> bytes:
     return buf.getvalue()
 
 
-def test_create_article_with_legacy_type_rejected() -> None:
-    with pytest.raises(ValueError):
-        RegulationArticleCreate(
-            sort_index=10,
-            article_type="clause",
-            title="第一條",
-            content="測試",
-        )
+def _build_docx_xml(document_xml: str) -> bytes:
+    buf = BytesIO()
+    with ZipFile(buf, "w") as docx:
+        docx.writestr("word/document.xml", document_xml)
+    return buf.getvalue()
 
 
 def test_parse_regulation_docx_maps_legal_document_to_articles() -> None:
@@ -72,7 +69,7 @@ def test_parse_regulation_docx_maps_legal_document_to_articles() -> None:
         ]
     )
 
-    draft = parse_regulation_docx(raw, "學生代表法.docx")
+    draft = parse_regulation_document(raw, "學生代表法.docx")
 
     assert draft.title == "國立新竹高級中學學生代表法"
     assert draft.legislative_history == "114 年 12 月 15 日學生議會制訂通過"
@@ -91,6 +88,19 @@ def test_parse_regulation_docx_maps_legal_document_to_articles() -> None:
     assert draft.articles[3].parent_key == draft.articles[2].key
     assert draft.articles[3].legal_number == "1"
     assert draft.articles[4].content == "提出建議。"
+
+
+def test_parse_regulation_docx_rejects_xml_entity_declarations() -> None:
+    raw = _build_docx_xml(
+        """<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE document [<!ENTITY payload "expanded">]>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body><w:p><w:r><w:t>&payload;</w:t></w:r></w:p></w:body>
+</w:document>"""
+    )
+
+    with pytest.raises(ValueError, match="不安全的 XML"):
+        parse_regulation_document(raw, "malicious.docx")
 
 
 def test_parse_regulation_pdf_maps_text_pdf_to_articles(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -157,6 +167,60 @@ def test_parse_regulation_text_maps_nested_standalone_lines_precisely() -> None:
     assert draft.articles[6].legal_number == "2"
 
 
+def test_parse_markdown_regulation_outline_imports_pasted_plain_text() -> None:
+    draft = parse_regulation_text(
+        title="舊法規名稱",
+        content="""
+# 國立新竹高級中學社團博覽會攤位設置及管理規範（草案）
+
+## 一、目的
+
+為維護社團博覽會現場秩序，特訂定本規範。
+
+---
+
+## 三、攤位使用規定
+
+### （一）攤位範圍
+
+1. 各社團應於主辦單位指定之攤位範圍內設置攤位。
+2. 社團之桌椅不得妨礙公共通道。
+
+### （二）音響及聲音管理
+
+1. 各社團**不得使用任何擴音設備**，包括但不限於：
+
+   * 麥克風
+   * 擴音器
+""",
+    )
+
+    assert draft.title == "國立新竹高級中學社團博覽會攤位設置及管理規範（草案）"
+    assert any(row.article_type == ArticleType.CHAPTER for row in draft.articles)
+    assert any(row.article_type == ArticleType.SECTION for row in draft.articles)
+    assert any(row.article_type == ArticleType.ARTICLE for row in draft.articles)
+    assert any(row.article_type == ArticleType.PARAGRAPH for row in draft.articles)
+    assert any("**不得使用任何擴音設備**" in (row.content or "") for row in draft.articles)
+    assert "---" not in draft.content
+
+
+def test_parse_markdown_outline_handles_long_untrusted_lines() -> None:
+    draft = parse_regulation_text(
+        title="舊法規名稱",
+        content="\n".join(
+            [
+                "# " + "法規名稱" + "x" * 10_000,
+                "## 一、" + "目的" + "x" * 10_000 + " ###",
+                "1. " + "條文內容" + "x" * 10_000,
+                "   * " + "補充內容" + "x" * 10_000,
+            ]
+        ),
+    )
+
+    assert draft.title.startswith("法規名稱")
+    assert any(row.content and row.content.startswith("條文內容") for row in draft.articles)
+
+
 def test_parse_regulation_docx_collects_history_heading_block() -> None:
     raw = _build_docx(
         [
@@ -168,7 +232,7 @@ def test_parse_regulation_docx_collects_history_heading_block() -> None:
         ]
     )
 
-    draft = parse_regulation_docx(raw, "選罷辦法.docx")
+    draft = parse_regulation_document(raw, "選罷辦法.docx")
 
     assert draft.legislative_history == "\n".join(
         [
@@ -177,6 +241,12 @@ def test_parse_regulation_docx_collects_history_heading_block() -> None:
         ]
     )
     assert draft.articles[0].legal_number == "1"
+
+
+def test_split_history_events_handles_long_whitespace_runs() -> None:
+    history = "112" + " " * 10_000 + "學年度修訂113" + " " * 10_000 + "學年度修訂"
+
+    assert split_history_events(history) == ["112 學年度修訂", "113 學年度修訂"]
 
 
 def test_regulation_print_renders_title_history_and_nested_numbering() -> None:
@@ -255,45 +325,90 @@ def test_regulation_print_renders_title_history_and_nested_numbering() -> None:
     )
 
 
-@pytest.mark.asyncio
-async def test_publish_regulation_disabled_requires_president_publish() -> None:
-    with pytest.raises(ValueError, match="president_publish"):
-        await reg_svc.publish_regulation(
-            session=None,  # type: ignore[arg-type]
-            reg=None,  # type: ignore[arg-type]
-            data=RegulationPublishRequest(change_brief="test"),
-            published_by=uuid.uuid4(),
-        )
-
-
-@pytest.mark.asyncio
-async def test_transition_reject_requires_note() -> None:
-    from api.models.regulation import Regulation, RegulationCategory
-
-    class FakeSession:
-        def add(self, _obj) -> None:
-            return None
-
-        async def flush(self) -> None:
-            return None
-
+def test_regulation_print_prefers_curated_history_and_standard_page_layout() -> None:
     reg = Regulation(
+        id=uuid.uuid4(),
+        title="國立新竹高級中學班級聯合自治會組織章程",
+        category=RegulationCategory.ORDINANCE,
+        content="第一條 本章程規範班聯會組織。",
+        legislative_history="113 學年度第二學期第一次學生議會修訂",
+        org_id=uuid.uuid4(),
+        created_by=uuid.uuid4(),
+    )
+    reg.revisions = [
+        RegulationRevision(
+            regulation_id=reg.id,
+            version=1,
+            change_brief="修訂",
+            amended_at=dt.datetime(2025, 9, 1, tzinfo=dt.UTC),
+            amended_by=uuid.uuid4(),
+        )
+    ]
+
+    rendered = render_regulation_print_html(reg)
+
+    assert "size: letter portrait;" in rendered
+    assert "margin: 4mm 24mm 20mm;" in rendered
+    assert "line-height: 1.5;" in rendered
+    assert "font-weight: 700 !important;" in rendered
+    assert "font-synthesis: weight;" in rendered
+    assert 'content: "第 " counter(page)' not in rendered
+    assert "column-gap: 2mm;" in rendered
+    assert ".chapter-row {\n      margin: 4mm 0 1mm;" in rendered
+    assert "break-after: avoid;" in rendered
+    assert ".article-row {\n      margin: 3.3mm 0;\n      break-inside: auto;" in rendered
+    assert ".article-with-nested { margin-bottom: 0; }" in rendered
+    assert ".nested-article-row {\n      margin: 0;" in rendered
+    assert ".item-row { margin-left: 27mm; }" in rendered
+    assert "<div>國立新竹高級中學</div><div>班級聯合自治會組織章程</div>" in rendered
+    assert rendered.count("113 學年度第二學期第一次學生議會修訂") == 1
+    assert "114學年度第一學期第一次學生議會修訂" not in rendered
+
+
+def test_regulation_print_splits_merged_subparagraphs() -> None:
+    reg_id = uuid.uuid4()
+    reg = Regulation(
+        id=reg_id,
         title="測試法規",
         category=RegulationCategory.ORDINANCE,
         content="",
         org_id=uuid.uuid4(),
         created_by=uuid.uuid4(),
-        workflow_status=RegulationWorkflowStatus.UNDER_REVIEW,
     )
+    reg.articles = [
+        RegulationArticle(
+            id=uuid.uuid4(),
+            regulation_id=reg_id,
+            sort_index=1,
+            order_index=0,
+            article_type=ArticleType.ARTICLE,
+            legal_number="6",
+            content="會員應有以下義務： 一、配合行政。",
+        ),
+        RegulationArticle(
+            id=uuid.uuid4(),
+            regulation_id=reg_id,
+            sort_index=2,
+            order_index=0,
+            article_type=ArticleType.SUBPARAGRAPH,
+            legal_number="2",
+            content="監督行政。補充分項。 三、參與投票。 四、弘揚民主精神。",
+        ),
+    ]
 
-    with pytest.raises(ValueError, match="退回法規必須填寫退回原因"):
-        await reg_svc.transition_workflow(
-            FakeSession(),  # type: ignore[arg-type]
-            reg,
-            to_status=RegulationWorkflowStatus.REJECTED,
-            actor_id=uuid.uuid4(),
-            note="",
-        )
+    rendered = render_regulation_print_html(reg)
+
+    assert '<div class="article-row article-with-nested">' in rendered
+    assert '<div class="article-body">會員應有以下義務：</div>' in rendered
+    assert '<span class="nested-label">一、</span><span class="nested-body">配合行政。' in rendered
+    assert (
+        '<span class="nested-label">二、</span><span class="nested-body">監督行政。<br>補充分項。'
+        in rendered
+    )
+    assert '<span class="nested-label">三、</span><span class="nested-body">參與投票。' in rendered
+    assert (
+        '<span class="nested-label">四、</span><span class="nested-body">弘揚民主精神。' in rendered
+    )
 
 
 @pytest.mark.asyncio

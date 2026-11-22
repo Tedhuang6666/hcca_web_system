@@ -4,19 +4,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { API_BASE } from "@/lib/config";
-
-export function markdownFromContent(content: Record<string, unknown> | null | undefined): string {
-  if (!content) return "";
-  const markdown = content.markdown;
-  if (typeof markdown === "string") return markdown;
-  const text = content.text;
-  if (typeof text === "string") return text;
-  return "";
-}
-
-export function contentFromMarkdown(markdown: string): Record<string, unknown> {
-  return { format: "markdown", markdown };
-}
+import remarkBreaks from "@/lib/remarkBreaks";
+import { markdownFromContent } from "./announcementContent";
 
 function parseImageMeta(alt: string | undefined): {
   alt: string;
@@ -47,7 +36,7 @@ export default function AnnouncementMarkdown({
   return (
     <div className={`announcement-markdown ${className}`}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkBreaks]}
         components={{
           a: ({ href, children }) => (
             <a href={href} target="_blank" rel="noreferrer">

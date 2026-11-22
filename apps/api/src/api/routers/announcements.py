@@ -8,7 +8,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.config import settings
+from api.core.cache import cache_get, cache_invalidate, cache_invalidate_dashboard, cache_set
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user, get_optional_user
@@ -26,7 +26,8 @@ from api.services import activity as activity_svc
 from api.services import announcement as ann_svc
 from api.services import audit as audit_svc
 from api.services.discord_bot import emit_announcement_notice
-from api.services.permission import get_user_org_ids, get_user_permission_codes
+from api.services.permission import get_user_permission_codes
+from api.services.realtime_events import broadcast_public_urgent_changed
 from api.services.storage import get_storage
 
 router = APIRouter(prefix="/announcements", tags=["公告系統"])
@@ -34,6 +35,20 @@ router = APIRouter(prefix="/announcements", tags=["公告系統"])
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
 OptionalUser = Annotated[User | None, Depends(get_optional_user)]
+
+_PUBLIC_ACTIVE_URGENT_CACHE_KEY = "announcement:active-urgent:public:v1"
+_PUBLIC_ACTIVE_URGENT_CACHE_TTL_SECONDS = 10
+_PUBLIC_ANNOUNCEMENT_LIST_CACHE_TTL_SECONDS = 30
+
+
+def _public_announcement_list_cache_key(
+    org_id: uuid.UUID | None,
+    activity_id: uuid.UUID | None,
+    skip: int,
+    limit: int,
+) -> str:
+    return f"announcement:public-list:v1:{org_id or 'all'}:{activity_id or 'all'}:{skip}:{limit}"
+
 
 # 持有任一公告管理權限者可檢視所有公告（不受對象限制）
 _MANAGE_CODES = frozenset(
@@ -52,21 +67,9 @@ _MANAGE_CODES = frozenset(
 )
 
 
-def _is_school_email(email: str) -> bool:
-    domain = email.strip().lower().rsplit("@", maxsplit=1)[-1]
-    return domain in settings.LOGIN_ALLOWED_EMAIL_DOMAINS
-
-
 async def _viewer_scope(db: AsyncSession, user: User | None) -> ann_svc.ViewerScope:
     """組裝檢視者的公告可見範圍。"""
-    if user is None:
-        return ann_svc.ViewerScope()
-    org_ids = await get_user_org_ids(db, user.id)
-    return ann_svc.ViewerScope(
-        user_id=user.id,
-        org_ids=frozenset(org_ids),
-        is_school=_is_school_email(user.email),
-    )
+    return await ann_svc.get_viewer_scope(db, user)
 
 
 async def _can_manage(db: AsyncSession, user: User | None) -> bool:
@@ -120,15 +123,33 @@ def _enrich(ann: object, storage_url_fn: object = None) -> AnnouncementOut:
 
 
 @router.get(
-    "/active-urgent", response_model=AnnouncementOut | None, summary="取得目前有效的緊急公告"
+    "/active-urgent", response_model=AnnouncementOut | None, summary="取得目前有效的重要公告"
 )
 async def get_active_urgent(db: DbDep, viewer: OptionalUser) -> AnnouncementOut | None:
-    """回傳目前有效且檢視者可見的緊急公告（首頁 Popup 使用）；無則回傳 null。"""
+    """回傳目前有效且檢視者可見的重要公告（首頁 Popup 使用）；無則回傳 null。"""
+    if viewer is None:
+        cached = await cache_get(_PUBLIC_ACTIVE_URGENT_CACHE_KEY)
+        if isinstance(cached, dict) and "value" in cached:
+            value = cached["value"]
+            return AnnouncementOut.model_validate(value) if isinstance(value, dict) else None
     scope = await _viewer_scope(db, viewer)
     ann = await ann_svc.get_active_urgent(db, scope=scope)
     if ann is None:
+        if viewer is None:
+            await cache_set(
+                _PUBLIC_ACTIVE_URGENT_CACHE_KEY,
+                {"value": None},
+                ttl=_PUBLIC_ACTIVE_URGENT_CACHE_TTL_SECONDS,
+            )
         return None
-    return _enrich(ann)
+    result = _enrich(ann)
+    if viewer is None:
+        await cache_set(
+            _PUBLIC_ACTIVE_URGENT_CACHE_KEY,
+            {"value": result.model_dump(mode="json")},
+            ttl=_PUBLIC_ACTIVE_URGENT_CACHE_TTL_SECONDS,
+        )
+    return result
 
 
 @router.get("", response_model=list[AnnouncementListItem], summary="列出已發布公告")
@@ -141,6 +162,15 @@ async def list_announcements(
     limit: int = Query(20, ge=1, le=100),
 ) -> list[AnnouncementListItem]:
     """列出已發布且檢視者可見的公告，依發布時間倒序排列。"""
+    cache_key = None
+    if viewer is None:
+        cache_key = _public_announcement_list_cache_key(org_id, activity_id, skip, limit)
+        cached = await cache_get(cache_key)
+        if isinstance(cached, list):
+            try:
+                return [AnnouncementListItem.model_validate(item) for item in cached]
+            except Exception:
+                pass
     scope = await _viewer_scope(db, viewer)
     anns = await ann_svc.list_announcements(
         db,
@@ -158,6 +188,12 @@ async def list_announcements(
         if author:
             item.author_name = getattr(author, "display_name", "")
         result.append(item)
+    if cache_key is not None:
+        await cache_set(
+            cache_key,
+            [item.model_dump(mode="json") for item in result],
+            ttl=_PUBLIC_ANNOUNCEMENT_LIST_CACHE_TTL_SECONDS,
+        )
     return result
 
 
@@ -258,6 +294,9 @@ async def create_announcement(
         summary=f"建立公告「{ann.title}」",
     )
     await emit_announcement_notice(db, ann)
+    await cache_invalidate_dashboard()
+    await cache_invalidate(_PUBLIC_ACTIVE_URGENT_CACHE_KEY)
+    await broadcast_public_urgent_changed(ann.id)
     return _enrich(ann)
 
 
@@ -304,6 +343,9 @@ async def update_announcement(
         },
         summary=f"更新公告「{ann.title}」",
     )
+    await cache_invalidate_dashboard()
+    await cache_invalidate(_PUBLIC_ACTIVE_URGENT_CACHE_KEY)
+    await broadcast_public_urgent_changed(ann.id)
     return _enrich(ann)
 
 
@@ -333,6 +375,26 @@ async def publish_announcement(
         summary=f"發布公告「{ann.title}」",
     )
     await emit_announcement_notice(db, ann)
+    await cache_invalidate_dashboard()
+    await cache_invalidate(_PUBLIC_ACTIVE_URGENT_CACHE_KEY)
+    try:
+        from api.services.outbox import emit as outbox_emit
+
+        await outbox_emit(
+            db,
+            event_type="announcement.published",
+            payload={
+                "announcement_id": str(ann.id),
+                "title": ann.title,
+                "org_id": str(ann.org_id) if ann.org_id else None,
+                "actor_id": str(user.id),
+            },
+        )
+    except Exception:
+        pass
+    await broadcast_public_urgent_changed(ann.id)
+    # 治理匯流：公告發布經 audit_svc.record()（action="announcement.publish"）統一橋接，
+    # 不再於此手寫 ingest。
     return _enrich(ann)
 
 
@@ -361,13 +423,16 @@ async def unpublish_announcement(
         meta={"published_at": ann.published_at.isoformat() if ann.published_at else None},
         summary=f"取消發布公告「{ann.title}」",
     )
+    await cache_invalidate_dashboard()
+    await cache_invalidate(_PUBLIC_ACTIVE_URGENT_CACHE_KEY)
+    await broadcast_public_urgent_changed(ann.id)
     return _enrich(ann)
 
 
 @router.patch(
     "/{ann_id}/urgent",
     response_model=AnnouncementOut,
-    summary="設定緊急狀態（需 announcement:set_urgent）",
+    summary="設定重要公告狀態（需 announcement:set_urgent）",
 )
 async def set_urgent(
     ann_id: uuid.UUID,
@@ -375,12 +440,16 @@ async def set_urgent(
     db: DbDep,
     user: CurrentUser,
 ) -> AnnouncementOut:
-    """僅允許修改 is_urgent 與 urgent_until 欄位。"""
+    """僅允許修改重要公告的顯示與期限設定。"""
     before = await ann_svc.get(db, ann_id)
     await _require_announcement_action(
         db, user, PermissionCode.ANNOUNCEMENT_SET_URGENT, before.activity_id
     )
-    filtered = AnnouncementUpdate(is_urgent=body.is_urgent, urgent_until=body.urgent_until)
+    filtered = AnnouncementUpdate(
+        is_urgent=body.is_urgent,
+        urgent_until=body.urgent_until,
+        show_on_every_visit=body.show_on_every_visit,
+    )
     ann = await ann_svc.update(db, ann_id, filtered, user)
     await audit_svc.record(
         db,
@@ -392,9 +461,13 @@ async def set_urgent(
         meta={
             "is_urgent": ann.is_urgent,
             "urgent_until": ann.urgent_until.isoformat() if ann.urgent_until else None,
+            "show_on_every_visit": ann.show_on_every_visit,
         },
-        summary=f"設定公告「{ann.title}」緊急狀態",
+        summary=f"設定公告「{ann.title}」重要狀態",
     )
+    await cache_invalidate_dashboard()
+    await cache_invalidate(_PUBLIC_ACTIVE_URGENT_CACHE_KEY)
+    await broadcast_public_urgent_changed(ann.id)
     return _enrich(ann)
 
 
@@ -421,6 +494,9 @@ async def delete_announcement(
         summary=f"刪除公告「{ann.title}」",
     )
     await ann_svc.delete(db, ann_id)
+    await cache_invalidate_dashboard()
+    await cache_invalidate(_PUBLIC_ACTIVE_URGENT_CACHE_KEY)
+    await broadcast_public_urgent_changed(ann_id)
 
 
 # ── 媒體管理 ───────────────────────────────────────────────────────────────────

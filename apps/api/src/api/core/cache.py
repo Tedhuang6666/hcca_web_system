@@ -1,22 +1,44 @@
 """Redis 應用層快取 - 組織、權限、公文列表"""
 
+import asyncio
 import json
 import logging
 from typing import Any
 
-from api.core.security import redis_client
+import redis.asyncio as aioredis
+
+from api.core.config import settings
+from api.core.prometheus_metrics import set_redis_client_healthy
 
 logger = logging.getLogger(__name__)
+
+_CACHE_READ_TIMEOUT_SECONDS = 0.25
+_CACHE_WRITE_TIMEOUT_SECONDS = 0.25
+
+cache_client: aioredis.Redis = aioredis.from_url(
+    str(settings.REDIS_CACHE_URL or settings.REDIS_URL),
+    encoding="utf-8",
+    decode_responses=True,
+    max_connections=settings.REDIS_CACHE_MAX_CONNECTIONS,
+    socket_timeout=settings.REDIS_SOCKET_TIMEOUT,
+    socket_connect_timeout=settings.REDIS_SOCKET_TIMEOUT,
+    health_check_interval=settings.REDIS_HEALTH_CHECK_INTERVAL,
+)
 
 
 async def cache_get(key: str) -> Any | None:
     """從 Redis 快取取得值；Redis 異常時 fallback 為 cache miss 並記錄。"""
     try:
-        value = await redis_client.get(key)
+        value = await asyncio.wait_for(
+            cache_client.get(key),
+            timeout=_CACHE_READ_TIMEOUT_SECONDS,
+        )
+        set_redis_client_healthy("cache", True)
         if value is None:
             return None
         return json.loads(value)
     except Exception:
+        set_redis_client_healthy("cache", False)
         logger.warning("cache_get failed (fallback to miss) key=%s", key, exc_info=True)
         return None
 
@@ -25,37 +47,55 @@ async def cache_set(key: str, value: Any, ttl: int = 60) -> None:
     """設定 Redis 快取值；Redis 異常時記錄但不中斷業務邏輯。"""
     try:
         serialized = json.dumps(value, default=str)
-        await redis_client.setex(key, ttl, serialized)
+        await asyncio.wait_for(
+            cache_client.setex(key, ttl, serialized),
+            timeout=_CACHE_WRITE_TIMEOUT_SECONDS,
+        )
     except Exception:
         logger.error("cache_set failed key=%s ttl=%d", key, ttl, exc_info=True)
 
 
-async def cache_invalidate(pattern: str) -> None:
+async def cache_invalidate(pattern: str, max_iterations: int = 500) -> None:
     """清除符合 glob pattern 的所有快取鍵；Redis 異常時記錄但不中斷。"""
     try:
-        keys = []
+        keys: list[str] = []
         cursor = 0
-        while True:
-            cursor, batch = await redis_client.scan(cursor, match=pattern, count=100)
+        for _ in range(max_iterations):
+            cursor, batch = await cache_client.scan(cursor, match=pattern, count=100)
             keys.extend(batch)
             if cursor == 0:
                 break
+        else:
+            logger.warning(
+                "cache_invalidate iteration limit reached pattern=%s keys_so_far=%d",
+                pattern,
+                len(keys),
+            )
         if keys:
-            await redis_client.delete(*keys)
+            await cache_client.unlink(*keys)
     except Exception:
         logger.error("cache_invalidate failed pattern=%s", pattern, exc_info=True)
-
-
-async def cache_invalidate_org(org_id: str) -> None:
-    """清除組織相關快取"""
-    await cache_invalidate(f"org:tree:{org_id}")
 
 
 async def cache_invalidate_user_permissions(user_id: str) -> None:
     """清除使用者權限快取"""
     await cache_invalidate(f"perm:{user_id}*")
+    await cache_invalidate_dashboard(user_id)
 
 
-async def cache_invalidate_doc_list() -> None:
-    """清除公文列表快取"""
-    await cache_invalidate("doc:list:*")
+async def cache_invalidate_dashboard(user_id: str | None = None) -> None:
+    """清除 dashboard composite 使用的所有使用者範圍快取。"""
+    if user_id:
+        patterns = (
+            f"dashboard:{user_id}*",
+            f"task_inbox:{user_id}",
+            f"dashboard:announcements:{user_id}",
+        )
+    else:
+        patterns = (
+            "dashboard:*",
+            "task_inbox:*",
+            "dashboard:announcements:*",
+        )
+    for pattern in patterns:
+        await cache_invalidate(pattern)

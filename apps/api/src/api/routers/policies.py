@@ -1,4 +1,4 @@
-"""政策版本與同意路由。Phase B1 / ADR-003。
+"""政策版本與同意路由（ADR-003）。
 
 公開：
     GET  /policies/public/{kind}                取得目前生效版本（含未登入）

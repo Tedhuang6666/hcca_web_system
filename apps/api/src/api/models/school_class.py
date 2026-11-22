@@ -7,7 +7,19 @@ import uuid
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -56,6 +68,9 @@ class SchoolClass(Base, TimestampMixin):
     ranges: Mapped[list[ClassStudentRange]] = relationship(
         "ClassStudentRange", back_populates="school_class", cascade="all, delete-orphan"
     )
+    roster_entries: Mapped[list[ClassRosterEntry]] = relationship(
+        "ClassRosterEntry", back_populates="school_class", cascade="all, delete-orphan"
+    )
     manual_members: Mapped[list[ClassManualMember]] = relationship(
         "ClassManualMember", back_populates="school_class", cascade="all, delete-orphan"
     )
@@ -86,10 +101,6 @@ class ClassRoleKey(enum.StrEnum):
     CLASS_LEADER = "class_leader"
     CLASS_REPRESENTATIVE = "class_representative"
     VICE_LEADER = "vice_leader"
-    DISCIPLINE = "discipline"
-    LUNCH_MANAGER = "lunch_manager"
-    TREASURER = "treasurer"
-    GENERAL_AFFAIRS = "general_affairs"
 
 
 class ClassMembership(Base, TimestampMixin):
@@ -159,6 +170,32 @@ class ClassStudentRange(Base, TimestampMixin):
     school_class: Mapped[SchoolClass] = relationship("SchoolClass", back_populates="ranges")
 
 
+class ClassRosterEntry(Base, TimestampMixin):
+    """班級名冊中的座號與學號對照，可先建立再等待學生帳號註冊。"""
+
+    __tablename__ = "class_roster_entries"
+    __table_args__ = (
+        UniqueConstraint("class_id", "seat_number", name="uq_class_roster_seat"),
+        UniqueConstraint("class_id", "student_id", name="uq_class_roster_student_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    class_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("school_classes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    seat_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    student_id: Mapped[str] = mapped_column(String(20), nullable=False)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
+    school_class: Mapped[SchoolClass] = relationship("SchoolClass", back_populates="roster_entries")
+    user: Mapped[User | None] = relationship("User")
+
+
 class ClassManualMember(Base, TimestampMixin):
     """班級手動成員（補足轉班、無學號或特殊帳號，不依賴學號區間）。"""
 
@@ -178,6 +215,62 @@ class ClassManualMember(Base, TimestampMixin):
 
     school_class: Mapped[SchoolClass] = relationship("SchoolClass", back_populates="manual_members")
     user: Mapped[User] = relationship("User")
+
+
+class ClassCorrectionRequest(Base, TimestampMixin):
+    """使用者回報班級歸戶錯誤，由班級管理員審核。"""
+
+    __tablename__ = "class_correction_requests"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'approved', 'rejected')",
+            name="ck_class_correction_requests_status",
+        ),
+        Index("ix_class_correction_requests_status_created", "status", "created_at"),
+        Index("ix_class_correction_requests_user_status", "user_id", "status"),
+        Index(
+            "uq_class_correction_pending_user",
+            "user_id",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+            sqlite_where=text("status = 'pending'"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    reported_class_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("school_classes.id", ondelete="SET NULL"), nullable=True
+    )
+    requested_class_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("school_classes.id", ondelete="RESTRICT"), nullable=False
+    )
+    resolved_class_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("school_classes.id", ondelete="SET NULL"), nullable=True
+    )
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pending", server_default="pending"
+    )
+    reviewed_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    user: Mapped[User] = relationship("User", foreign_keys=[user_id])
+    reported_class: Mapped[SchoolClass | None] = relationship(
+        "SchoolClass", foreign_keys=[reported_class_id]
+    )
+    requested_class: Mapped[SchoolClass] = relationship(
+        "SchoolClass", foreign_keys=[requested_class_id]
+    )
+    resolved_class: Mapped[SchoolClass | None] = relationship(
+        "SchoolClass", foreign_keys=[resolved_class_id]
+    )
+    reviewer: Mapped[User | None] = relationship("User", foreign_keys=[reviewed_by_id])
 
 
 class ClassCadre(Base, TimestampMixin):
@@ -208,7 +301,7 @@ class ClassConsolidationMixin:
     """
     可重用的「班級結單 / 繳費」欄位 Mixin。
 
-    本次套用於 shop.Order；學餐 meal.MealOrder 日後可直接 mixin 共用同一套欄位，
+    本次套用於 shop.Order，
     讓兩系統共享「依班級歸戶、幹部標示繳費」的制度。
     """
 
@@ -230,6 +323,7 @@ class ClassConsolidationMixin:
 
 __all__ = [
     "ClassCadre",
+    "ClassCorrectionRequest",
     "ClassConsolidationMixin",
     "ClassManualMember",
     "ClassMembership",
@@ -237,6 +331,7 @@ __all__ = [
     "ClassMembershipStatus",
     "ClassRoleBinding",
     "ClassRoleKey",
+    "ClassRosterEntry",
     "ClassStudentRange",
     "SchoolClass",
 ]

@@ -5,28 +5,44 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.cache import cache_invalidate_user_permissions
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
-from api.dependencies.permissions import require_permission
-from api.models.school_class import SchoolClass
+from api.dependencies.permissions import require_any, require_permission
+from api.models.school_class import ClassCorrectionRequest, SchoolClass
 from api.models.user import User
+from api.routers._common import or_404
+from api.schemas.class_confirmation import ClassConfirmationCreate, ClassConfirmationOut
 from api.schemas.school_class import (
     ClassCadreCreate,
     ClassCadreOut,
+    ClassCorrectionRequestCreate,
+    ClassCorrectionRequestOut,
+    ClassCorrectionRequestReview,
     ClassManualMemberCreate,
     ClassManualMemberOut,
     ClassMemberOut,
     ClassMembershipCreate,
     ClassMembershipOut,
+    ClassRepresentativeOverviewItemOut,
     ClassRoleAssign,
     ClassRoleOut,
+    ClassRolePersonAssign,
+    ClassRolePersonAssignOut,
+    ClassRosterBulkCreate,
+    ClassRosterBulkOut,
+    ClassRosterEntryCreate,
+    ClassRosterEntryOut,
+    ClassRosterEntryUpdate,
+    ClassRosterPdfImportOut,
     ClassStudentRangeCreate,
     ClassStudentRangeOut,
+    MySchoolClassOut,
     SchoolClassBulkAction,
     SchoolClassBulkActionOut,
     SchoolClassBulkCreate,
@@ -36,20 +52,23 @@ from api.schemas.school_class import (
     SchoolClassOut,
     SchoolClassUpdate,
 )
+from api.services import class_confirmation as confirmation_svc
+from api.services import class_correction as correction_svc
 from api.services import school_class as class_svc
+from api.services import school_class_import as class_import_svc
+from api.services.permission import get_user_permission_codes
 
 router = APIRouter(prefix="/classes", tags=["班級系統"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
 ManagerUser = Annotated[User, Depends(require_permission(PermissionCode.CLASS_MANAGE))]
+MAX_ROSTER_IMPORT_BYTES = 10 * 1024 * 1024
 
 
 async def _get_class_or_404(class_id: uuid.UUID, session: AsyncSession) -> SchoolClass:
     sc = await class_svc.get_class(session, class_id)
-    if sc is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此班級")
-    return sc
+    return or_404(sc, "找不到此班級")
 
 
 # ── 班級 ──────────────────────────────────────────────────────────────────────
@@ -63,6 +82,58 @@ async def list_classes(
     is_active: bool | None = Query(None, description="篩選是否為當前學年度班級"),
 ) -> list[SchoolClass]:
     return await class_svc.list_classes(session, academic_year=academic_year, is_active=is_active)
+
+
+@router.get(
+    "/representative-overview",
+    response_model=list[ClassRepresentativeOverviewItemOut],
+    summary="彙總目前班級的班代任命狀態",
+)
+async def list_class_representative_overview(
+    session: DbDep, _: ManagerUser
+) -> list[dict[str, object]]:
+    return await class_svc.list_class_representative_overview(session)
+
+
+@router.get(
+    "/recipient-options",
+    response_model=list[SchoolClassListItem],
+    summary="列出可作為公文受文者的現行班級",
+)
+async def list_recipient_options(session: DbDep, _: CurrentUser) -> list[SchoolClass]:
+    return await class_svc.list_recipient_options(session)
+
+
+@router.post(
+    "/roster/import",
+    response_model=ClassRosterPdfImportOut,
+    summary="匯入 PDF 或 UTF-8 CSV 編班名單",
+)
+async def import_roster_file(
+    session: DbDep,
+    current_user: ManagerUser,
+    file: UploadFile = File(..., description="編班名單 PDF 或 UTF-8 CSV"),
+    academic_year: int | None = Form(
+        None, ge=1, le=999, description="學年度；CSV 無法從檔名判斷時必填"
+    ),
+) -> ClassRosterPdfImportOut:
+    file_bytes = await file.read(MAX_ROSTER_IMPORT_BYTES + 1)
+    if len(file_bytes) > MAX_ROSTER_IMPORT_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="匯入檔不可超過 10 MB"
+        )
+    try:
+        return await class_import_svc.import_roster_pdf(
+            session,
+            file_bytes=file_bytes,
+            filename=file.filename,
+            academic_year=academic_year,
+            created_by=current_user.id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
 
 
 @router.post(
@@ -121,9 +192,149 @@ async def bulk_action_classes(
         ) from e
 
 
-@router.get("/me", response_model=SchoolClassListItem | None, summary="查詢我目前的班級")
+def _correction_request_out(item: ClassCorrectionRequest) -> ClassCorrectionRequestOut:
+    return ClassCorrectionRequestOut(
+        id=item.id,
+        user_id=item.user_id,
+        user_display_name=item.user.display_name,
+        user_email=item.user.email,
+        user_student_id=item.user.student_id,
+        reported_class_id=item.reported_class_id,
+        reported_class_label=class_svc.class_display_label(item.reported_class),
+        requested_class_id=item.requested_class_id,
+        requested_class_label=class_svc.class_display_label(item.requested_class) or "",
+        resolved_class_id=item.resolved_class_id,
+        resolved_class_label=class_svc.class_display_label(item.resolved_class),
+        message=item.message,
+        status=item.status,
+        created_at=item.created_at,
+        reviewed_by_id=item.reviewed_by_id,
+        reviewed_at=item.reviewed_at,
+        review_note=item.review_note,
+    )
+
+
+@router.post(
+    "/correction-requests",
+    response_model=ClassCorrectionRequestOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="提交班級歸戶更正申請",
+)
+async def create_correction_request(
+    payload: ClassCorrectionRequestCreate, session: DbDep, user: CurrentUser
+) -> ClassCorrectionRequestOut:
+    school_class = await class_svc.resolve_user_class(session, user)
+    try:
+        request = await correction_svc.create_request(
+            session,
+            user=user,
+            reported_class=school_class,
+            requested_class_id=payload.requested_class_id,
+            message=payload.message,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+    except IntegrityError as e:
+        raise HTTPException(status_code=409, detail="你已有一筆待審核的班級更正申請") from e
+    return _correction_request_out(request)
+
+
+@router.get(
+    "/correction-requests/mine",
+    response_model=list[ClassCorrectionRequestOut],
+    summary="查詢我的班級更正申請",
+)
+async def list_my_correction_requests(
+    session: DbDep, user: CurrentUser
+) -> list[ClassCorrectionRequestOut]:
+    items = await correction_svc.list_user_requests(session, user.id)
+    return [_correction_request_out(item) for item in items]
+
+
+@router.get(
+    "/correction-requests",
+    response_model=list[ClassCorrectionRequestOut],
+    summary="列出待審核班級更正申請",
+)
+async def list_correction_requests(
+    session: DbDep, _: ManagerUser
+) -> list[ClassCorrectionRequestOut]:
+    items = await correction_svc.list_pending_requests(session)
+    return [_correction_request_out(item) for item in items]
+
+
+@router.post(
+    "/correction-requests/{request_id}/review",
+    response_model=ClassCorrectionRequestOut,
+    summary="審核班級更正申請",
+)
+async def review_correction_request(
+    request_id: uuid.UUID,
+    payload: ClassCorrectionRequestReview,
+    session: DbDep,
+    reviewer: ManagerUser,
+) -> ClassCorrectionRequestOut:
+    request = await correction_svc.get_request(session, request_id)
+    if request is None:
+        raise HTTPException(status_code=404, detail="找不到此申請")
+    resolved_class_id = None
+    if payload.status == "approved":
+        target_class_id = payload.class_id or request.requested_class_id
+        target_class = await class_svc.get_class(session, target_class_id)
+        if target_class is None or not target_class.is_active:
+            raise HTTPException(status_code=422, detail="請選擇目前有效的班級")
+        try:
+            await class_svc.reassign_user_class(session, request.user_id, target_class)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e)) from e
+        resolved_class_id = target_class.id
+    try:
+        resolved = await correction_svc.resolve_request(
+            session,
+            request,
+            status=payload.status,
+            resolved_class_id=resolved_class_id,
+            reviewer_id=reviewer.id,
+            review_note=payload.review_note,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+    return _correction_request_out(resolved)
+
+
+@router.get("/me", response_model=MySchoolClassOut | None, summary="查詢我目前的班級")
 async def get_my_class(session: DbDep, user: CurrentUser) -> SchoolClass | None:
-    return await class_svc.resolve_user_class(session, user)
+    school_class = await class_svc.resolve_user_class(session, user)
+    if school_class is not None:
+        school_class.seat_number = await class_svc.get_user_class_seat_number(
+            session, school_class, user
+        )
+    return school_class
+
+
+@router.get(
+    "/me/confirmation", response_model=ClassConfirmationOut, summary="查詢首次登入班級確認資料"
+)
+async def get_my_class_confirmation(session: DbDep, user: CurrentUser) -> ClassConfirmationOut:
+    return await confirmation_svc.get_confirmation(session, user)
+
+
+@router.post(
+    "/me/confirmation", response_model=ClassConfirmationOut, summary="確認本人的班級與座號"
+)
+async def confirm_my_class(
+    payload: ClassConfirmationCreate, session: DbDep, user: CurrentUser
+) -> ClassConfirmationOut:
+    try:
+        return await confirmation_svc.confirm_class(session, user, payload)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except IntegrityError as exc:
+        raise HTTPException(
+            status_code=409, detail="班級座號已有異動，請重新確認或聯絡管理員"
+        ) from exc
 
 
 @router.get("/{class_id}", response_model=SchoolClassOut, summary="取得班級詳情")
@@ -158,8 +369,31 @@ async def delete_class(class_id: uuid.UUID, session: DbDep, _: ManagerUser) -> N
     "/{class_id}/members",
     response_model=list[ClassMemberOut],
     summary="列出班級成員（依學號區間推導）",
+    dependencies=[
+        Depends(
+            require_any(
+                PermissionCode.CLASS_MANAGE,
+                PermissionCode.CLASS_VIEW_MEMBERS,
+                PermissionCode.CLASS_SHOP_COLLECT,
+            )
+        )
+    ],
 )
-async def list_members(class_id: uuid.UUID, session: DbDep, _: ManagerUser) -> list[ClassMemberOut]:
+async def list_members(
+    class_id: uuid.UUID,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> list[ClassMemberOut]:
+    if not current_user.is_superuser:
+        permission_codes = await get_user_permission_codes(session, current_user.id)
+        can_manage_classes = PermissionCode.CLASS_MANAGE.value in permission_codes
+        if not can_manage_classes:
+            cadre_class_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
+            if class_id not in cadre_class_ids:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="僅可查看任職班級的成員名冊",
+                )
     sc = await _get_class_or_404(class_id, session)
     return await class_svc.list_class_members(session, sc)
 
@@ -172,6 +406,90 @@ async def list_members(class_id: uuid.UUID, session: DbDep, _: ManagerUser) -> l
 async def list_memberships(class_id: uuid.UUID, session: DbDep, _: ManagerUser) -> list:
     sc = await _get_class_or_404(class_id, session)
     return await class_svc.list_memberships(session, sc)
+
+
+@router.get(
+    "/{class_id}/roster",
+    response_model=list[ClassRosterEntryOut],
+    summary="列出班級座號與學號名冊",
+)
+async def list_roster(
+    class_id: uuid.UUID, session: DbDep, _: ManagerUser
+) -> list[ClassRosterEntryOut]:
+    sc = await _get_class_or_404(class_id, session)
+    entries = await class_svc.list_roster_entries(session, sc)
+    return [ClassRosterEntryOut.model_validate(entry) for entry in entries]
+
+
+@router.post(
+    "/{class_id}/roster",
+    response_model=ClassRosterEntryOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="新增班級座號與學號對照",
+)
+async def add_roster_entry(
+    class_id: uuid.UUID,
+    payload: ClassRosterEntryCreate,
+    session: DbDep,
+    _: ManagerUser,
+) -> ClassRosterEntryOut:
+    sc = await _get_class_or_404(class_id, session)
+    try:
+        entry = await class_svc.add_roster_entry(session, sc, data=payload)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    return ClassRosterEntryOut.model_validate(entry)
+
+
+@router.post(
+    "/{class_id}/roster/bulk",
+    response_model=ClassRosterBulkOut,
+    status_code=status.HTTP_200_OK,
+    summary="批量匯入班級座號與學號名冊",
+)
+async def bulk_roster(
+    class_id: uuid.UUID,
+    payload: ClassRosterBulkCreate,
+    session: DbDep,
+    _: ManagerUser,
+) -> ClassRosterBulkOut:
+    sc = await _get_class_or_404(class_id, session)
+    try:
+        return await class_svc.bulk_upsert_roster(session, sc, data=payload)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+
+
+@router.patch(
+    "/{class_id}/roster/{entry_id}",
+    response_model=ClassRosterEntryOut,
+    summary="更新班級座號與學號對照",
+)
+async def update_roster_entry(
+    class_id: uuid.UUID,
+    entry_id: uuid.UUID,
+    payload: ClassRosterEntryUpdate,
+    session: DbDep,
+    _: ManagerUser,
+) -> ClassRosterEntryOut:
+    sc = await _get_class_or_404(class_id, session)
+    try:
+        entry = await class_svc.update_roster_entry(session, sc, entry_id, data=payload)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    return ClassRosterEntryOut.model_validate(entry)
+
+
+@router.delete(
+    "/{class_id}/roster/{entry_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="刪除班級座號與學號對照",
+)
+async def delete_roster_entry(
+    class_id: uuid.UUID, entry_id: uuid.UUID, session: DbDep, _: ManagerUser
+) -> None:
+    if not await class_svc.delete_roster_entry(session, class_id, entry_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此名冊資料")
 
 
 @router.post(
@@ -232,7 +550,37 @@ async def assign_class_role(
         up = await class_svc.assign_class_role(session, sc, role_key=role_key, data=payload)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    await cache_invalidate_user_permissions(str(up.user_id))
     return {"user_position_id": up.id, "position_id": up.position_id}
+
+
+@router.post(
+    "/{class_id}/roles/{role_key}/assign-person",
+    response_model=ClassRolePersonAssignOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="登記未註冊班級成員的職位任命",
+)
+async def assign_class_person_role(
+    class_id: uuid.UUID,
+    role_key: str,
+    payload: ClassRolePersonAssign,
+    session: DbDep,
+    _: ManagerUser,
+) -> ClassRolePersonAssignOut:
+    sc = await _get_class_or_404(class_id, session)
+    try:
+        affiliation = await class_svc.assign_class_person_role(
+            session, sc, role_key=role_key, data=payload
+        )
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)
+        ) from error
+    return ClassRolePersonAssignOut(
+        person_affiliation_id=affiliation.id,
+        person_id=affiliation.person_id,
+        status=affiliation.status,
+    )
 
 
 # ── 學號區間 ──────────────────────────────────────────────────────────────────
@@ -305,13 +653,14 @@ async def list_manual_members(
 @router.delete(
     "/{class_id}/members/{user_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="移除手動加入的班級成員",
+    summary="將成員轉出本班（支援帳號、人員或名冊 ID）",
 )
 async def remove_manual_member(
     class_id: uuid.UUID, user_id: uuid.UUID, session: DbDep, _: ManagerUser
 ) -> None:
-    if not await class_svc.remove_manual_member(session, class_id, user_id):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此手動成員")
+    sc = await _get_class_or_404(class_id, session)
+    if not await class_svc.remove_class_member(session, sc, user_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此班級成員")
 
 
 # ── 班級幹部 ──────────────────────────────────────────────────────────────────

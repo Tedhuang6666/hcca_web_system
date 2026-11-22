@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
 export interface ComboboxOption {
@@ -17,6 +17,8 @@ export interface ComboboxOption {
 interface ComboboxProps {
   value: string;
   onChange: (value: string) => void;
+  /** 搜尋時通知呼叫端補載遠端選項，仍保留本地篩選。 */
+  onSearch?: (keyword: string) => void;
   options: ComboboxOption[];
   placeholder?: string;
   /** 是否允許清空 */
@@ -43,6 +45,7 @@ interface ComboboxProps {
 export default function Combobox({
   value,
   onChange,
+  onSearch,
   options,
   placeholder = "搜尋或選擇",
   clearable = false,
@@ -57,6 +60,7 @@ export default function Combobox({
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listboxId = `combobox-listbox-${useId().replaceAll(":", "")}`;
 
   const selectedLabel = useMemo(
     () => options.find((o) => o.value === value)?.label ?? "",
@@ -77,6 +81,7 @@ export default function Combobox({
 
   const commit = (opt: ComboboxOption) => {
     onChange(opt.value);
+    onSearch?.("");
     setKeyword("");
     setOpen(false);
     inputRef.current?.blur();
@@ -88,21 +93,30 @@ export default function Combobox({
     inputRef.current?.focus();
   };
 
+  const activeOptionId = open && filtered[activeIndex]
+    ? `${listboxId}-option-${activeIndex}`
+    : undefined;
+
   return (
-    <div className={`relative ${className}`}>
+    <div
+      className={`combobox relative ${className}`}
+      data-state={open ? "open" : "closed"}
+      data-disabled={disabled || undefined}
+    >
       <input
         ref={inputRef}
         type="text"
         role="combobox"
         aria-expanded={open}
-        aria-controls="combobox-listbox"
+        aria-controls={listboxId}
+        aria-activedescendant={activeOptionId}
         aria-autocomplete="list"
         aria-label={ariaLabel ?? placeholder}
         disabled={disabled}
         value={open ? keyword : (selectedLabel || "")}
         placeholder={selectedLabel ? "" : placeholder}
-        onChange={(e) => { setKeyword(e.target.value); setOpen(true); }}
-        onFocus={() => { setOpen(true); setKeyword(""); }}
+        onChange={(e) => { setKeyword(e.target.value); setOpen(true); onSearch?.(e.target.value); }}
+        onFocus={() => { setOpen(true); setKeyword(""); onSearch?.(""); }}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         onKeyDown={(e) => {
           if (!open && e.key !== "Tab") setOpen(true);
@@ -121,7 +135,7 @@ export default function Combobox({
             inputRef.current?.blur();
           }
         }}
-        className="w-full text-sm px-3 py-2 pr-8 rounded-lg outline-none disabled:opacity-50"
+        className="combobox-input w-full text-sm px-3 py-2 pr-8 rounded-lg outline-none disabled:opacity-50"
         style={{
           background: "var(--bg-surface)",
           border: "1px solid var(--border)",
@@ -134,7 +148,7 @@ export default function Combobox({
           type="button"
           onMouseDown={(e) => { e.preventDefault(); clear(); }}
           aria-label="清除選擇"
-          className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full flex items-center justify-center text-[10px] hover:opacity-70"
+          className="combobox-clear absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full text-sm"
           style={{ background: "var(--bg-hover)", color: "var(--text-muted)" }}
         >
           ×
@@ -142,9 +156,9 @@ export default function Combobox({
       )}
       {open && filtered.length > 0 && (
         <ul
-          id="combobox-listbox"
+            id={listboxId}
           role="listbox"
-          className="absolute z-30 left-0 right-0 top-full mt-1 rounded-xl shadow-lg overflow-y-auto"
+          className="combobox-menu absolute z-30 left-0 right-0 top-full mt-1 rounded-xl shadow-lg overflow-y-auto"
           style={{
             background: "var(--bg-elevated)",
             border: "1px solid var(--border)",
@@ -154,15 +168,20 @@ export default function Combobox({
           {filtered.map((opt, idx) => {
             const isActive = idx === activeIndex;
             return (
-              <li key={opt.value} role="option" aria-selected={value === opt.value}>
+              <li
+                id={`${listboxId}-option-${idx}`}
+                key={opt.value}
+                role="option"
+                aria-selected={value === opt.value}
+              >
                 <button
                   type="button"
                   onMouseEnter={() => setActiveIndex(idx)}
                   onMouseDown={(e) => { e.preventDefault(); commit(opt); }}
-                  className="w-full text-left px-3 py-2 transition-colors"
+                  className={`combobox-option w-full text-left px-3 py-2 transition-colors ${isActive ? "is-active" : ""} ${value === opt.value ? "is-selected" : ""}`}
                   style={{
                     background: isActive ? "var(--primary-dim)" : "transparent",
-                    color: value === opt.value ? "var(--primary)" : "var(--text-primary)",
+                    color: value === opt.value ? "var(--primary-text)" : "var(--text-primary)",
                     borderBottom: "1px solid var(--border)",
                   }}
                 >
@@ -170,7 +189,7 @@ export default function Combobox({
                     <>
                       <p className="text-sm">{opt.label}</p>
                       {opt.description && (
-                        <p className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>
+                        <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
                           {opt.description}
                         </p>
                       )}
@@ -184,7 +203,7 @@ export default function Combobox({
       )}
       {open && filtered.length === 0 && (
         <div
-          className="absolute z-30 left-0 right-0 top-full mt-1 rounded-xl px-3 py-2 text-xs text-center"
+          className="combobox-empty absolute z-30 left-0 right-0 top-full mt-1 rounded-xl px-3 py-2 text-xs text-center"
           style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-muted)" }}
         >
           無相符選項

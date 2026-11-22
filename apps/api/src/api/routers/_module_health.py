@@ -68,3 +68,5 @@ def attach_module_health(
         include_in_schema=False,
         name=route_name,
     )
+    # 健康檢查必須排在 `/{id}` 等動態路由之前，避免被當成業務識別碼解析。
+    router.routes.insert(0, router.routes.pop())

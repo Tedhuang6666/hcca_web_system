@@ -38,9 +38,7 @@ async def test_below_threshold_not_locked(ident: str):
 async def test_lock_triggers_at_threshold(ident: str):
     for _ in range(2):
         await login_lockout.record_failure(ident, max_failures=3, lockout_seconds=120)
-    remaining = await login_lockout.record_failure(
-        ident, max_failures=3, lockout_seconds=120
-    )
+    remaining = await login_lockout.record_failure(ident, max_failures=3, lockout_seconds=120)
     assert remaining == 120
     locked_for = await login_lockout.is_locked(ident)
     assert locked_for is not None and 0 < locked_for <= 120

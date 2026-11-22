@@ -15,9 +15,12 @@ export async function enableWebPush() {
   if (!config.enabled || !config.public_key) {
     throw new Error("後端尚未設定 VAPID key");
   }
+  if (Notification.permission === "denied") {
+    throw new Error("通知權限已被封鎖。請至瀏覽器網址列旁的「網站設定」→「通知」，將封鎖改為允許，再重新嘗試。");
+  }
   const permission = await Notification.requestPermission();
   if (permission !== "granted") {
-    throw new Error("通知權限未開啟");
+    throw new Error("通知權限未開啟，請在彈出視窗中選擇「允許」。");
   }
   const registration = await navigator.serviceWorker.register("/sw.js");
   const existing = await registration.pushManager.getSubscription();

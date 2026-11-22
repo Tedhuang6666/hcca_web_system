@@ -5,18 +5,15 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 TaskModule = Literal[
     "document",
-    "meeting",
     "regulation",
     "petition",
-    "meal",
     "shop",
     "survey",
     "announcement",
-    "calendar",
     "work_item",
 ]
 
@@ -52,6 +49,9 @@ class TaskItem(BaseModel):
     due_at: datetime | None = None
     severity: TaskSeverity = "info"
     created_at: datetime
+    priority_score: int = 0
+    priority_reasons: list[str] = Field(default_factory=list)
+    recommended_action: str | None = None
 
 
 class TaskInboxResponse(BaseModel):
@@ -60,3 +60,11 @@ class TaskInboxResponse(BaseModel):
     items: list[TaskItem]
     total: int
     by_module: dict[str, int]
+
+
+class TaskCountResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    total: int
+    by_module: dict[str, int]
+    urgent_count: int

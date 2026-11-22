@@ -1,13 +1,12 @@
-"""政策文件與同意紀錄。對應 ADR-003、Phase B1。
+"""政策文件與同意紀錄，對應 ADR-003。
 
 PolicyDocument 是「我們的隱私政策 / ToS / 無障礙聲明 / Cookie 政策」的版本化容器：
 - 同 kind 同時只能一個 is_active=True（DB partial unique index 強制）
 - 新版發布 = 新增一筆 + 舊版標記 is_active=False
 - 內容 markdown、版本 semver
 
-PolicyConsent 是「使用者同意了哪一版」的法律證據：
-- 首次登入或政策更新時強制同意
-- 紀錄 ip / user_agent，將來爭議可舉證
+PolicyConsent 記錄使用者提交過同意的政策版本：
+- 紀錄 ip / user_agent，供稽核查詢
 - 同 user × policy_document 唯一（同意一次就夠）
 """
 
@@ -66,6 +65,7 @@ class PolicyDocument(Base, TimestampMixin):
             "kind",
             unique=True,
             postgresql_where=text("is_active IS true"),
+            sqlite_where=text("is_active = 1"),
         ),
     )
 
@@ -78,7 +78,7 @@ class PolicyDocument(Base, TimestampMixin):
     """semver，例如 "1.0.0"。"""
 
     title: Mapped[str] = mapped_column(String(200), nullable=False)
-    """顯示用標題。例如「校園自治平台隱私政策 v1.0」。"""
+    """顯示用標題。例如「竹嶺班聯數位整合平台隱私政策 v1.0」。"""
 
     content_md: Mapped[str] = mapped_column(Text, nullable=False)
     """完整政策內容，markdown。"""
@@ -87,18 +87,18 @@ class PolicyDocument(Base, TimestampMixin):
     """變更摘要（給使用者看「這次改了什麼」）。"""
 
     effective_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    """生效日期。早於此日的同意視為對前一版。"""
+    """生效日期。"""
 
     is_active: Mapped[bool] = mapped_column(default=False, nullable=False)
     """是否為當前生效版本。同 kind 只能一個 True。"""
 
     published_by: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     """發布者；可為 NULL（系統初次匯入）。"""
 
     requires_explicit_consent: Mapped[bool] = mapped_column(default=True, nullable=False)
-    """True：首次登入 / 更新時強制 modal；False：僅 footer 顯示。"""
+    """是否將生效版本列入待同意清單；不限制平台存取。"""
 
     def __repr__(self) -> str:
         return (
@@ -125,11 +125,11 @@ class PolicyConsent(Base, TimestampMixin):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
 
     policy_document_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("policy_documents.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("policy_documents.id", ondelete="RESTRICT"), nullable=False
     )
 
     agreed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -159,7 +159,7 @@ class PrivacyRequest(Base, TimestampMixin):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
 
     request_type: Mapped[str] = mapped_column(String(24), nullable=False)
@@ -172,7 +172,7 @@ class PrivacyRequest(Base, TimestampMixin):
     submitted_user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
     response_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     handled_by: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     handled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

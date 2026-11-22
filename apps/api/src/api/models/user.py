@@ -1,7 +1,7 @@
 """User ORM 模型"""
 
 import uuid
-from typing import TYPE_CHECKING
+from typing import Any
 
 from sqlalchemy import Boolean, String, Text
 from sqlalchemy.dialects.postgresql import UUID
@@ -10,9 +10,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from api.core.database import Base
 from api.models.base import TimestampMixin
 from api.models.types import JSONDict
-
-if TYPE_CHECKING:
-    from api.models.notification import Notification
 
 
 class User(Base, TimestampMixin):
@@ -37,8 +34,6 @@ class User(Base, TimestampMixin):
     # 帳號狀態
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    # 是否允許校外信箱繞過 LOGIN_ALLOWED_EMAIL_DOMAINS 登入
-    allow_external_login: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # 超級管理員（繞過所有 RBAC 檢查，由 SUPERUSER_EMAILS 環境變數自動授予）
     is_superuser: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
@@ -58,20 +53,20 @@ class User(Base, TimestampMixin):
         JSONDict, nullable=False, default=dict, server_default="{}"
     )
 
-    # UI 主題偏好（Phase C4）：auto = 跟系統 prefers-color-scheme
+    # UI 主題偏好：auto 跟隨系統 prefers-color-scheme。
     ui_theme: Mapped[str] = mapped_column(
         String(10), nullable=False, default="auto", server_default="auto"
     )
-    # UI 語言偏好（為 Phase C2 i18n 預留；zh-TW only 啟用）
+    # UI 語言偏好，目前僅啟用 zh-TW。
     ui_locale: Mapped[str] = mapped_column(
         String(10), nullable=False, default="zh-TW", server_default="zh-TW"
     )
 
-    # 關聯 (P2 展開)
+    # 關聯
     positions: Mapped[list["UserPosition"]] = relationship(  # noqa: F821
         "UserPosition", back_populates="user", lazy="select"
     )
-    notifications: Mapped[list["Notification"]] = relationship(
+    notifications: Mapped[list[Any]] = relationship(
         "Notification", back_populates="user", lazy="select", cascade="all, delete-orphan"
     )
 

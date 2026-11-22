@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import pytest
+from httpx import ASGITransport, AsyncClient
 from pydantic import ValidationError
 
-from api.core.config import _DEFAULT_SECRET, Settings
+from api.core.config import _FALLBACK_SIGNING_KEY as _DEFAULT_SECRET
+from api.core.config import Settings
 
 
 def _make(**overrides: object) -> Settings:
@@ -16,6 +18,9 @@ def _make(**overrides: object) -> Settings:
         "DEBUG": False,
         "ENABLE_API_DOCS": False,
         "COOKIE_SECURE": False,
+        "JWT_SIGNING_KEY": "j" * 64,
+        "JWT_SESSION_HASH_KEY": "h" * 64,
+        "OAUTH_SESSION_SECRET": "o" * 64,
         "ALLOWED_ORIGINS": ["http://localhost:3000"],
         "ALLOWED_HOSTS": ["localhost", "127.0.0.1", "test"],
         "SUPERUSER_EMAILS": [],
@@ -30,6 +35,10 @@ def test_development_with_default_secret_warns_but_succeeds() -> None:
     assert s.SECRET_KEY == _DEFAULT_SECRET
 
 
+def test_legacy_token_compatibility_is_disabled_by_default() -> None:
+    assert _make().AUTH_LEGACY_TOKEN_COMPAT_ENABLED is False
+
+
 def test_production_rejects_default_secret() -> None:
     with pytest.raises(ValidationError) as exc:
         _make(
@@ -40,14 +49,58 @@ def test_production_rejects_default_secret() -> None:
     assert "SECRET_KEY" in str(exc.value)
 
 
+def test_production_rejects_short_secret() -> None:
+    with pytest.raises(ValidationError, match="至少需要 32 bytes"):
+        _make(ENVIRONMENT="production", SECRET_KEY="too-short", COOKIE_SECURE=True)
+
+
 def test_production_rejects_debug_true() -> None:
     with pytest.raises(ValidationError, match="DEBUG"):
         _make(ENVIRONMENT="production", DEBUG=True, COOKIE_SECURE=True)
 
 
+def test_production_rejects_environment_editor() -> None:
+    with pytest.raises(ValidationError, match="ENABLE_ENV_EDITOR"):
+        _make(ENVIRONMENT="production", ENABLE_ENV_EDITOR=True, COOKIE_SECURE=True)
+    assert _make(ENVIRONMENT="development", ENABLE_ENV_EDITOR=True).ENABLE_ENV_EDITOR
+
+
 def test_production_rejects_public_api_docs() -> None:
     with pytest.raises(ValidationError, match="ENABLE_API_DOCS"):
         _make(ENVIRONMENT="production", ENABLE_API_DOCS=True, COOKIE_SECURE=True)
+
+
+def test_disabled_api_docs_do_not_expose_openapi_route(monkeypatch: pytest.MonkeyPatch) -> None:
+    from api.core.config import settings
+    from api.main import create_app
+
+    monkeypatch.setattr(settings, "DEBUG", False)
+    monkeypatch.setattr(settings, "ENABLE_API_DOCS", False)
+    app = create_app()
+
+    assert app.openapi_url is None
+    assert not {"/docs", "/redoc", "/openapi.json"} & {
+        getattr(route, "path", None) for route in app.routes
+    }
+    assert app.openapi()["paths"]  # 離線型別產生仍需能輸出 schema
+
+
+async def test_query_timing_headers_only_appear_in_debug(monkeypatch: pytest.MonkeyPatch) -> None:
+    from api.core.config import settings
+    from api.main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        monkeypatch.setattr(settings, "DEBUG", False)
+        production_response = await client.get("/health")
+        assert production_response.status_code == 200
+        for name in ("X-Process-Time-Ms", "X-DB-Queries", "X-DB-Time-Ms"):
+            assert name not in production_response.headers
+
+        monkeypatch.setattr(settings, "DEBUG", True)
+        debug_response = await client.get("/health")
+        assert debug_response.status_code == 200
+        for name in ("X-Process-Time-Ms", "X-DB-Queries", "X-DB-Time-Ms"):
+            assert name in debug_response.headers
 
 
 def test_production_rejects_superuser_emails_autograms() -> None:
@@ -64,6 +117,15 @@ def test_production_requires_cookie_secure() -> None:
         _make(ENVIRONMENT="production", COOKIE_SECURE=False)
 
 
+def test_production_rejects_legacy_token_compatibility() -> None:
+    with pytest.raises(ValidationError, match="AUTH_LEGACY_TOKEN_COMPAT_ENABLED"):
+        _make(
+            ENVIRONMENT="production",
+            COOKIE_SECURE=True,
+            AUTH_LEGACY_TOKEN_COMPAT_ENABLED=True,
+        )
+
+
 def test_allowed_origins_wildcard_rejected_anywhere() -> None:
     with pytest.raises(ValidationError, match="ALLOWED_ORIGINS"):
         _make(ALLOWED_ORIGINS=["*"])
@@ -72,6 +134,45 @@ def test_allowed_origins_wildcard_rejected_anywhere() -> None:
 def test_production_allowed_hosts_wildcard_rejected() -> None:
     with pytest.raises(ValidationError, match="ALLOWED_HOSTS"):
         _make(ENVIRONMENT="production", COOKIE_SECURE=True, ALLOWED_HOSTS=["*"])
+
+
+@pytest.mark.parametrize(
+    ("field_name", "local_url"),
+    (
+        ("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost:5432/campus"),
+        ("REDIS_URL", "redis://127.0.0.1:6379/0"),
+    ),
+)
+def test_production_rejects_local_service_urls(field_name: str, local_url: str) -> None:
+    with pytest.raises(ValidationError, match=field_name):
+        overrides: dict[str, object] = {
+            "ENVIRONMENT": "production",
+            "COOKIE_SECURE": True,
+            "DATABASE_URL": "postgresql+asyncpg://user:pass@db:5432/campus",
+            "REDIS_URL": "redis://redis:6379/0",
+        }
+        overrides[field_name] = local_url
+        _make(**overrides)
+
+
+def test_production_rejects_direct_db_when_pgbouncer_is_enabled() -> None:
+    with pytest.raises(ValidationError, match="DB_USE_PGBOUNCER"):
+        _make(
+            ENVIRONMENT="production",
+            COOKIE_SECURE=True,
+            DB_USE_PGBOUNCER=True,
+            DATABASE_URL="postgresql+asyncpg://user:pass@db:5432/campus",
+        )
+
+
+def test_production_rejects_pgbouncer_url_when_disabled() -> None:
+    with pytest.raises(ValidationError, match="DB_USE_PGBOUNCER"):
+        _make(
+            ENVIRONMENT="production",
+            COOKIE_SECURE=True,
+            DB_USE_PGBOUNCER=False,
+            DATABASE_URL="postgresql+asyncpg://user:pass@pgbouncer:6432/campus",
+        )
 
 
 def test_email_lists_are_lowercased_and_stripped() -> None:

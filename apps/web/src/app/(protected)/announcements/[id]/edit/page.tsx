@@ -1,0 +1,311 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import { toast } from "sonner";
+import { announcementsApi, apiErrorMessage } from "@/lib/api";
+import type { AnnouncementMediaOut, AnnouncementOut } from "@/lib/types";
+import AnnouncementEditor from "@/components/announcements/AnnouncementEditor";
+import AnnouncementAudiencePicker, {
+  type AudienceValue,
+} from "@/components/announcements/AnnouncementAudiencePicker";
+import { contentFromMarkdown, markdownFromContent } from "@/components/announcements/announcementContent";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useDraftAutosave } from "@/hooks/useDraftAutosave";
+import { confirmAction } from "@/components/ui/ConfirmDialog";
+
+const DEFAULT_AUDIENCE: AudienceValue = {
+  audience_type: "all",
+  audience_org_ids: [],
+  audience_user_ids: [],
+};
+
+type AnnouncementEditDraft = {
+  title: string;
+  markdown: string;
+  linkUrl: string;
+  linkLabel: string;
+};
+
+export default function EditAnnouncementPage() {
+  const { id } = useParams<{ id: string }>();
+  const router = useRouter();
+  const { can } = usePermissions();
+  const [item, setItem] = useState<AnnouncementOut | null>(null);
+  const [title, setTitle] = useState("");
+  const [markdown, setMarkdown] = useState("");
+  const [isUrgent, setIsUrgent] = useState(false);
+  const [urgentUntil, setUrgentUntil] = useState("");
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkLabel, setLinkLabel] = useState("");
+  const [showOnEveryVisit, setShowOnEveryVisit] = useState(false);
+  const [media, setMedia] = useState<AnnouncementMediaOut[]>([]);
+  const [audience, setAudience] = useState<AudienceValue>(DEFAULT_AUDIENCE);
+  const [saving, setSaving] = useState(false);
+
+  const canEdit = can("announcement:edit");
+  const canPublish = can("announcement:publish");
+  const canUrgent = can("announcement:set_urgent");
+  const canMedia = can("announcement:media_manage");
+  const draftValue = useMemo<AnnouncementEditDraft>(
+    () => ({ title, markdown, linkUrl, linkLabel }),
+    [linkLabel, linkUrl, markdown, title],
+  );
+  const originalDraft = useMemo<AnnouncementEditDraft | null>(() => item ? ({
+    title: item.title,
+    markdown: markdownFromContent(item.content),
+    linkUrl: item.link_url ?? "",
+    linkLabel: item.link_label ?? "",
+  }) : null, [item]);
+  const restoreDraft = useCallback((draft: AnnouncementEditDraft) => {
+    setTitle(draft.title ?? "");
+    setMarkdown(draft.markdown ?? "");
+    setLinkUrl(draft.linkUrl ?? "");
+    setLinkLabel(draft.linkLabel ?? "");
+    toast.info("已復原未儲存的公告編輯草稿");
+  }, []);
+  const { clearDraft, flushDraft } = useDraftAutosave({
+    key: `announcements:${id}:edit`,
+    value: draftValue,
+    onRestore: restoreDraft,
+    enabled: Boolean(item),
+    isEmpty: useCallback((draft: AnnouncementEditDraft) => {
+      if (!originalDraft) return true;
+      return JSON.stringify(draft) === JSON.stringify(originalDraft);
+    }, [originalDraft]),
+  });
+
+  useEffect(() => {
+    announcementsApi.get(id)
+      .then((data) => {
+        setItem(data);
+        setTitle(data.title);
+        setMarkdown(markdownFromContent(data.content));
+        setIsUrgent(data.is_urgent);
+        setUrgentUntil(data.urgent_until ? data.urgent_until.slice(0, 16) : "");
+        setLinkUrl(data.link_url ?? "");
+        setLinkLabel(data.link_label ?? "");
+        setShowOnEveryVisit(data.show_on_every_visit);
+        setMedia(data.media);
+      })
+      .catch((e) => toast.error(apiErrorMessage(e, "載入公告失敗")));
+  }, [id]);
+
+  const saveContent = async () => {
+    if (!canEdit || !item) return;
+    if (!title.trim()) {
+      toast.error("請輸入公告標題");
+      return;
+    }
+    if (audience.audience_type === "orgs" && audience.audience_org_ids.length === 0) {
+      toast.error("對象為特定組織時，請至少選擇一個組織");
+      return;
+    }
+    if (audience.audience_type === "members" && audience.audience_user_ids.length === 0) {
+      toast.error("對象為特定成員時，請至少選擇一位成員");
+      return;
+    }
+    setSaving(true);
+    try {
+      const updated = await announcementsApi.update(item.id, {
+        title: title.trim(),
+        content: contentFromMarkdown(markdown),
+        link_url: linkUrl.trim() || null,
+        link_label: linkUrl.trim() ? linkLabel.trim() || null : null,
+        audience_type: audience.audience_type,
+        audience_org_ids: audience.audience_org_ids,
+        audience_user_ids: audience.audience_user_ids,
+      });
+      setItem(updated);
+      clearDraft();
+      toast.success("公告已儲存");
+    } catch (e) {
+      flushDraft();
+      toast.error(apiErrorMessage(e, "儲存失敗"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveUrgent = async () => {
+    if (!canUrgent || !item) return;
+    setSaving(true);
+    try {
+      const updated = await announcementsApi.setUrgent(item.id, {
+        is_urgent: isUrgent,
+        urgent_until: urgentUntil ? new Date(urgentUntil).toISOString() : null,
+        show_on_every_visit: isUrgent && showOnEveryVisit,
+      });
+      setItem(updated);
+      toast.success("重要公告設定已更新");
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "更新重要公告設定失敗"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const togglePublish = async () => {
+    if (!canPublish || !item) return;
+    setSaving(true);
+    try {
+      const updated = item.is_published
+        ? await announcementsApi.unpublish(item.id)
+        : await announcementsApi.publish(item.id);
+      setItem(updated);
+      toast.success(updated.is_published ? "公告已發布" : "公告已取消發布");
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "發布狀態更新失敗"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!canEdit || !item || !(await confirmAction({ title: "確定刪除這則公告？", danger: true }))) return;
+    setSaving(true);
+    try {
+      await announcementsApi.delete(item.id);
+      toast.success("公告已刪除");
+      router.push("/announcements");
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "刪除失敗"));
+      setSaving(false);
+    }
+  };
+
+  if (!item) {
+    return <div className="py-20 text-center" style={{ color: "var(--text-muted)" }}>載入中…</div>;
+  }
+
+  return (
+    <div className="mx-auto max-w-5xl space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-xl font-semibold">編輯公告</h1>
+          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+            {item.is_published ? "已發布" : "草稿"} · 公告人：{item.author_name || "未命名"}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link href={`/announcements/${item.id}`} className="btn btn-ghost">查看</Link>
+          {canPublish && (
+            <button type="button" className="btn btn-secondary" disabled={saving} onClick={togglePublish}>
+              {item.is_published ? "取消發布" : "發布"}
+            </button>
+          )}
+          {canEdit && (
+            <button type="button" className="btn btn-danger-ghost" disabled={saving} onClick={remove}>
+              刪除
+            </button>
+          )}
+        </div>
+      </div>
+
+      <input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        className="input text-lg"
+        placeholder="公告標題"
+        maxLength={200}
+        disabled={!canEdit}
+      />
+
+      <AnnouncementEditor
+        value={markdown}
+        onChange={setMarkdown}
+        announcementId={item.id}
+        media={media}
+        canManageMedia={canMedia}
+        onMediaUploaded={(uploaded) => setMedia((current) => [...current, uploaded])}
+      />
+
+      {canEdit && (
+        <section className="card space-y-3 p-4">
+          <div>
+            <h2 className="text-sm font-semibold">行動連結</h2>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              支援站內路徑或完整 HTTP(S) 網址。
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]">
+            <label className="space-y-1 text-sm">
+              <span>連結網址</span>
+              <input
+                type="url"
+                value={linkUrl}
+                onChange={(e) => setLinkUrl(e.target.value)}
+                className="input w-full"
+                placeholder="https://example.com 或 /merchandise-submissions"
+                maxLength={500}
+              />
+            </label>
+            <label className="space-y-1 text-sm">
+              <span>按鈕文字</span>
+              <input
+                value={linkLabel}
+                onChange={(e) => setLinkLabel(e.target.value)}
+                className="input w-full"
+                placeholder="前往連結"
+                maxLength={60}
+                disabled={!linkUrl.trim()}
+              />
+            </label>
+          </div>
+        </section>
+      )}
+
+      {canEdit && (
+        <>
+          <AnnouncementAudiencePicker
+            initialType={item.audience_type}
+            initialOrgs={item.audience_orgs}
+            initialMembers={item.audience_members}
+            onChange={setAudience}
+          />
+        </>
+      )}
+
+      {canUrgent && (
+        <section className="card p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <label className="flex shrink-0 items-center gap-2 whitespace-nowrap text-sm">
+              <input
+                type="checkbox"
+                checked={isUrgent}
+                onChange={(e) => setIsUrgent(e.target.checked)}
+              />
+              設為重要公告
+            </label>
+            <input
+              type="datetime-local"
+              value={urgentUntil}
+              onChange={(e) => setUrgentUntil(e.target.value)}
+              className="input sm:!w-64"
+              disabled={!isUrgent}
+            />
+            <button type="button" className="btn btn-secondary shrink-0" disabled={saving} onClick={saveUrgent}>
+              更新重要公告設定
+            </button>
+          </div>
+          <label className="mt-3 flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={showOnEveryVisit}
+              onChange={(e) => setShowOnEveryVisit(e.target.checked)}
+              disabled={!isUrgent}
+            />
+            每次進入系統時顯示
+          </label>
+        </section>
+      )}
+
+      <div className="flex justify-end">
+        <button type="button" className="btn btn-primary" disabled={!canEdit || saving} onClick={saveContent}>
+          儲存內容
+        </button>
+      </div>
+    </div>
+  );
+}

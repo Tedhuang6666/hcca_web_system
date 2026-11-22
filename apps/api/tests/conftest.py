@@ -3,11 +3,36 @@
 from __future__ import annotations
 
 import contextlib
+import html
 import os
+import uuid
+from pathlib import Path
+
+# 必須在載入 app/settings 前選定測試庫，避免獨立 session 讀寫開發資料。
+TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", "")
+_IS_POSTGRES = TEST_DATABASE_URL.startswith("postgresql+asyncpg://")
+_ALLOW_SQLITE = os.getenv("ALLOW_SQLITE_TEST_DB", "").lower() == "true"
+if not _IS_POSTGRES and not (
+    _ALLOW_SQLITE
+    and TEST_DATABASE_URL.startswith("sqlite+aiosqlite://")
+    and os.getenv("REQUIRE_POSTGRES_TEST_DB", "").lower() != "true"
+):
+    raise RuntimeError(
+        "Tests require explicit TEST_DATABASE_URL=postgresql+asyncpg://... . "
+        "SQLite approximation requires ALLOW_SQLITE_TEST_DB=true and an explicit SQLite URL."
+    )
+os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+if _IS_POSTGRES:
+    os.environ["DATABASE_URL_SYNC"] = TEST_DATABASE_URL.replace(
+        "postgresql+asyncpg://", "postgresql+psycopg2://", 1
+    )
+
+# 測試故意觸發的例外不應送到正式 Sentry 專案，避免污染 production issue。
+os.environ["SENTRY_DSN"] = ""
 
 # 測試用 HTTP client 以 base_url="http://test" 發送請求；
 # 確保 TrustedHostMiddleware 不會在使用者本機 .env 限縮 ALLOWED_HOSTS 時
-# 把所有測試 status 變 400 Invalid host header。必須在 `from api import app` 之前設定。
+# 把所有測試 status 變 400 Invalid host header。必須在 `from api.main import app` 之前設定。
 os.environ.setdefault(
     "ALLOWED_HOSTS",
     '["localhost","127.0.0.1","api","test","testserver"]',
@@ -16,10 +41,19 @@ os.environ.setdefault(
 # 在 pytest 連續執行多 test 時，前面 test 故意觸發的 5xx 會污染同進程的滑動視窗，
 # 導致後面 test 全部 503。測試環境一律關閉。
 os.environ.setdefault("LOAD_SHED_ENABLED", "false")
+# 全域 rate limit 的計數器跨測試案例共用，長測試序列會讓無關端點被 429；
+# 需要驗證限流的案例會透過 defense config 明確開啟。
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
+# 測試 middleware 的 IP block 行為時，不能把 loopback 預設視為正式環境的信任來源；
+# 個別 trust unit test 會自行 monkeypatch settings.RATE_LIMIT_TRUSTED_IPS。
+os.environ["RATE_LIMIT_TRUSTED_IPS"] = "[]"
 # 同理：測試不使用真實 Redis broker，避免事件迴圈跨 test 互鎖。
 os.environ.setdefault("WS_PUBSUB_BACKEND", "memory")
 
-from collections.abc import AsyncGenerator  # noqa: E402
+import hashlib  # noqa: E402
+import hmac  # noqa: E402
+import secrets  # noqa: E402
+from collections.abc import AsyncGenerator, Callable  # noqa: E402
 from typing import Any  # noqa: E402
 
 import pytest  # noqa: E402
@@ -31,13 +65,36 @@ from sqlalchemy.ext.asyncio import (  # noqa: E402
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import NullPool, StaticPool  # noqa: E402
 
-from api import app  # noqa: E402
+from api.core import database as database_core  # noqa: E402
+from api.core.config import settings  # noqa: E402
 from api.core.database import Base, get_db  # noqa: E402
+from api.core.security import create_access_token  # noqa: E402
+from api.main import app  # noqa: E402
+from api.models.user import User  # noqa: E402
 
 
-@pytest.fixture(autouse=True)
-def _isolate_redis_client_per_test():
+@pytest.fixture
+def render_pdf_with_project_font() -> Callable[[str], bytes]:
+    """Render deterministic CJK PDF fixtures with the bundled project font."""
+    from api.services.official_print import _font_faces, render_print_pdf
+
+    def render(text: str) -> bytes:
+        content = html.escape(text)
+        markup = f"""<!doctype html><html lang="zh-TW">
+<head><meta charset="UTF-8"><style>
+{_font_faces()}
+body {{ font-family: "OfficialKai", serif; }}
+</style></head>
+<body>{content}</body></html>"""
+        return render_print_pdf(markup)
+
+    return render
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _isolate_redis_client_per_test():
     """每個 test 前替換 redis_client 的 connection_pool。
 
     `redis_client` 是 module-level singleton，aioredis 的 connection 在首次 await
@@ -48,6 +105,7 @@ def _isolate_redis_client_per_test():
     """
     import redis.asyncio as _aioredis
 
+    from api.core import cache as _cache
     from api.core import security as _security
     from api.core.config import settings as _settings
 
@@ -58,18 +116,169 @@ def _isolate_redis_client_per_test():
         max_connections=_settings.REDIS_MAX_CONNECTIONS,
     )
     old_pool = _security.redis_client.connection_pool
+    fresh_cache_pool = _aioredis.ConnectionPool.from_url(
+        str(_settings.REDIS_CACHE_URL or _settings.REDIS_URL),
+        encoding="utf-8",
+        decode_responses=True,
+        max_connections=_settings.REDIS_MAX_CONNECTIONS,
+    )
+    old_cache_pool = _cache.cache_client.connection_pool
     _security.redis_client.connection_pool = fresh_pool
+    _cache.cache_client.connection_pool = fresh_cache_pool
     try:
         yield
     finally:
         with contextlib.suppress(Exception):
-            fresh_pool.disconnect(inuse_connections=True)
+            await fresh_pool.disconnect(inuse_connections=True)
+        with contextlib.suppress(Exception):
+            await fresh_cache_pool.disconnect(inuse_connections=True)
         _security.redis_client.connection_pool = old_pool
+        _cache.cache_client.connection_pool = old_cache_pool
 
 
-# 優先使用 PostgreSQL test DB，支援 TSVECTOR 等 PG-specific 特性
-# 若無法連線，退回到 aiosqlite in-memory
-TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+@pytest_asyncio.fixture(autouse=True)
+async def _dispose_app_db_engine_per_test():
+    """避免 app 的 asyncpg pool 跨 pytest event loop 重用連線。
+
+    測試資料庫 session 使用獨立的 NullPool；部分 webhook／內部 API 流程則會
+    建立自己的 app session。pytest-asyncio 每個 test 使用新 event loop，故需在
+    test 邊界 dispose app engine，避免上一個 loop 的連線被下一個 test 取回。
+    """
+    await database_core.engine.dispose()
+    yield
+    await database_core.engine.dispose()
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _reset_storage_cache_per_test():
+    """每個 test 前後清掉 get_storage() 的 lru_cache。
+
+    api.services.storage.get_storage 用 @lru_cache(maxsize=1) 快取儲存後端
+    （生產環境設定不變，故意這樣做避免重複建物件）。測試若用 monkeypatch 改
+    settings.STORAGE_LOCAL_DIR 想切到 tmp_path，只有「本次測試是全程序第一個
+    呼叫 get_storage() 的測試」才會生效；一旦被前面任何測試快取過，之後所有
+    測試都會拿到指向別人 tmp_path 的舊實例，檔案永遠 404。每個測試前後清快取，
+    讓 monkeypatch 過的設定值當場生效，也不會汙染下一個測試。
+    """
+    from api.services.storage import get_storage
+
+    get_storage.cache_clear()
+    yield
+    get_storage.cache_clear()
+
+
+def _worker_schema_name() -> str:
+    """每個 pytest process 用專屬 schema，避免互相 DROP/CREATE 撞名。
+
+    xdist worker 用 worker id；沒有 xdist 時退回 PID 而非固定字串 "test_master"——
+    本機常常會有多個 pytest process 同時跑（例如多個背景 agent 各自起一個
+    `uv run pytest`），固定名稱會讓後結束的那個 process 的 session teardown
+    把還在跑的另一個 process 的 schema 整個 DROP 掉，其餘測試全部
+    「relation does not exist」。crash 留下的殘骸交給 session fixture 開頭的
+    DROP IF EXISTS 清，不影響下次全新 PID 的執行。
+    """
+    worker_id = os.environ.get("PYTEST_XDIST_WORKER")
+    return f"test_{worker_id}" if worker_id else f"test_master_{os.getpid()}"
+
+
+_SCHEMA_NAME = _worker_schema_name()
+# 跨 worker 序列化 schema 建立/砍除用的 advisory lock key（任意常數，只要不撞 app 自己用的即可）。
+_SCHEMA_DDL_LOCK_KEY = 947210001
+_SCHEMA_ENGINE_KWARGS: dict[str, Any] = {
+    "echo": False,
+    # SQLite :memory: 的資料庫生命週期綁定在 connection；NullPool 每次重開新連線
+    # 會讓 schema fixture 建出的表消失。PostgreSQL 維持 NullPool 避免跨 event loop。
+    "poolclass": NullPool if _IS_POSTGRES else StaticPool,
+}
+if _IS_POSTGRES:
+    # NullPool：每次 connect() 都建全新連線，不同 test 各自的 event loop 不會共用到
+    # 同一條底層 asyncpg 連線，因此可以放心讓 schema engine 跨越整個 session／多個
+    # test function 的 event loop 存活，不會撞「Future attached to a different loop」。
+    _SCHEMA_ENGINE_KWARGS["connect_args"] = {"server_settings": {"search_path": _SCHEMA_NAME}}
+
+_schema_engine = create_async_engine(TEST_DATABASE_URL, **_SCHEMA_ENGINE_KWARGS)
+
+
+def _upgrade_test_schema(connection) -> None:
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import inspect
+
+    api_root = Path(__file__).resolve().parents[1]
+    config = Config(str(api_root / "alembic.ini"))
+    config.set_main_option("script_location", str(api_root / "alembic"))
+    config.attributes["connection"] = connection
+    config.attributes["bootstrap_baseline"] = True
+    command.upgrade(config, "head")
+    # 行為測試自行建立各案例資料；保留 migration 的完整 schema，清空初始種子列。
+    # 種子資料的正確性由獨立的基線／完整歷史比較驗證。
+    quote = connection.dialect.identifier_preparer.quote
+    schema = connection.exec_driver_sql("SELECT current_schema()").scalar_one()
+    tables = [name for name in inspect(connection).get_table_names() if name != "alembic_version"]
+    names = ", ".join(f"{quote(schema)}.{quote(name)}" for name in tables)
+    connection.exec_driver_sql(f"TRUNCATE {names} RESTART IDENTITY CASCADE")
+
+
+@pytest_asyncio.fixture(scope="session", loop_scope="session", autouse=True)
+async def _build_schema_once() -> AsyncGenerator[None, None]:
+    """整個測試 session（每個 xdist worker 各一份）只建一次 schema。
+
+    每個 worker 從 migration 基線建立專屬
+    schema（test_master / test_gw0...）彼此不衝突，不需要額外的每 worker 獨立 DB。
+    每個 worker 的建表是一次性的重 DDL；xdist 下多個 worker
+    幾乎同時起跑會讓 Postgres 共用鎖表爆掉（`out of shared memory` /
+    max_locks_per_transaction），故用 pg_advisory_lock 把「建表／砍表」這段序列化，
+    僅此階段排隊，測試本體仍然全平行跑。
+    """
+    if _IS_POSTGRES:
+        lock_conn = await _schema_engine.connect()
+        await lock_conn.execute(text("SELECT pg_advisory_lock(:k)"), {"k": _SCHEMA_DDL_LOCK_KEY})
+        try:
+            async with _schema_engine.begin() as conn:
+                # DROP 在前：若前一次執行被中斷（crash／Ctrl+C）留下殘骸，這裡先清乾淨再重建。
+                await conn.execute(text(f'DROP SCHEMA IF EXISTS "{_SCHEMA_NAME}" CASCADE'))
+                await conn.execute(text(f'CREATE SCHEMA "{_SCHEMA_NAME}"'))
+
+            async with _schema_engine.begin() as conn:
+                # 使用正式 migration 基線，包含 create_all 缺少的序號、trigger 與資料庫約束。
+                await conn.run_sync(_upgrade_test_schema)
+        finally:
+            await lock_conn.execute(
+                text("SELECT pg_advisory_unlock(:k)"), {"k": _SCHEMA_DDL_LOCK_KEY}
+            )
+            await lock_conn.close()
+    else:
+        async with _schema_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+    yield
+
+    if _IS_POSTGRES:
+        lock_conn = await _schema_engine.connect()
+        await lock_conn.execute(text("SELECT pg_advisory_lock(:k)"), {"k": _SCHEMA_DDL_LOCK_KEY})
+        try:
+            async with _schema_engine.begin() as conn:
+                await conn.execute(text(f'DROP SCHEMA IF EXISTS "{_SCHEMA_NAME}" CASCADE'))
+        finally:
+            await lock_conn.execute(
+                text("SELECT pg_advisory_unlock(:k)"), {"k": _SCHEMA_DDL_LOCK_KEY}
+            )
+            await lock_conn.close()
+    await _schema_engine.dispose()
+
+
+def _make_valid_csrf_token() -> str:
+    """簽出一個 CSRFMiddleware 會接受的 token。
+
+    CSRFMiddleware._is_valid_token 要求 cookie 值必須是 `nonce.hmac簽章` 格式
+    （見 api/core/csrf.py），單純 secrets.token_urlsafe() 產生的隨機字串沒有
+    「.」分隔符，一定會被判定為無效，讓所有已登入 client 的 POST/PATCH/PUT/
+    DELETE 一律先被 CSRF 擋下（403），不會真的打到 route handler。這裡比照
+    CSRFMiddleware._make_token 的簽章方式，讓測試 client 一開始就帶有效 token。
+    """
+    nonce = secrets.token_urlsafe(32)
+    signature = hmac.new(settings.SECRET_KEY.encode(), nonce.encode(), hashlib.sha256).hexdigest()
+    return f"{nonce}.{signature}"
 
 
 class CSRFAwareAsyncClient(AsyncClient):
@@ -121,45 +330,170 @@ class CSRFAwareAsyncClient(AsyncClient):
 
 
 @pytest_asyncio.fixture(scope="function")
-async def db_session() -> AsyncGenerator[AsyncSession, None]:
-    """每個測試函式建立全新的資料庫（PostgreSQL）或 in-memory（SQLite）"""
-    engine = create_async_engine(TEST_DATABASE_URL, echo=False)
+async def db_session(_build_schema_once: None) -> AsyncGenerator[AsyncSession, None]:
+    """每個測試在獨立連線＋外層交易內執行，結束一律 rollback（schema 只建一次，不逐測試重建）。
 
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    app 內 router/service 會直接呼叫 session.commit()；join_transaction_mode=
+    "create_savepoint" 讓這些 commit 落成 SAVEPOINT release 而非真的提交，外層
+    交易在測試結束時 rollback，一次清掉整個測試的資料異動。
+    """
+    connection = await _schema_engine.connect()
+    outer_transaction = await connection.begin()
 
-    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    session_factory = async_sessionmaker(
+        bind=connection,
+        expire_on_commit=False,
+        join_transaction_mode="create_savepoint",
+    )
 
     async with session_factory() as session:
         yield session
 
-    # 清理測試資料（PostgreSQL 用 CASCADE，SQLite 用 DROP ALL）
-    async with engine.begin() as conn:
-        if "postgresql" in TEST_DATABASE_URL:
-            # PostgreSQL：用 CASCADE 忽略外鍵約束
+    await outer_transaction.rollback()
+    await connection.close()
+    if not _IS_POSTGRES:
+        # SQLite 對「外層 transaction + released savepoint」的 rollback 語意與 PostgreSQL
+        # 不同：路由內 commit 的 savepoint 可能已永久寫入 StaticPool 共用的 :memory: DB。
+        # 逐 test 清表，避免固定 email 的共用 fixture 汙染下一個案例。
+        async with _schema_engine.begin() as cleanup_connection:
             for table in reversed(Base.metadata.sorted_tables):
-                await conn.execute(text(f"DROP TABLE IF EXISTS {table.name} CASCADE"))
-        else:
-            await conn.run_sync(Base.metadata.drop_all)
+                await cleanup_connection.execute(table.delete())
 
-    await engine.dispose()
+
+@pytest_asyncio.fixture(autouse=True)
+async def _bind_standalone_app_sessions_to_test_db(db_session, monkeypatch):
+    """讓不經 get_db override 的 app session 也使用本 test 的資料庫交易。"""
+    from api.dependencies import api_key_auth
+    from api.routers import discord_internal, ws
+    from api.services import line_bot
+
+    factory = async_sessionmaker(
+        bind=db_session.bind,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autoflush=False,
+        join_transaction_mode="create_savepoint",
+    )
+    monkeypatch.setattr(api_key_auth, "AsyncSessionLocal", factory)
+    monkeypatch.setattr(discord_internal, "AsyncSessionLocal", factory)
+    monkeypatch.setattr(line_bot, "AsyncSessionLocal", factory)
+    monkeypatch.setattr(ws, "AsyncSessionLocal", factory)
+
+
+def _make_override_get_db(
+    session: AsyncSession,
+) -> Callable[[], AsyncGenerator[AsyncSession, None]]:
+    """比照 api.core.database.get_db 的 commit-on-success 語意（僅此半邊，見下）。
+
+    client/authed_client_factory 讓整個測試共用同一個 db_session（供測試直接
+    db_session.add() 用）；若這裡只是單純 yield、不管 commit，遇到某個 request
+    handler 成功回傳但從未自己 commit 過（例如 site.py 多個 admin 端點，正式
+    環境全靠 get_db() 這層自動 commit）時，會讓這次異動一直卡在未提交的
+    SAVEPOINT 裡，被下一個觸發 rollback 的 request 一併撤銷——包含這個 request
+    之前、甚至 db_session fixture 本身已 add 但從未 commit 過的東西，因為它們
+    全部共用同一個 SAVEPOINT。故此處補上 commit-on-success。
+
+    刻意不比照 get_db() 在例外時做 `except Exception: await session.rollback()`：
+    session.rollback()（不論是否為 SAVEPOINT）會無條件 expire 整個 identity
+    map，這對正式環境的短生命週期 session 無感，但會讓測試裡常見的
+    `app.dependency_overrides[get_current_active_user] = lambda: captured_user`
+    模式（直接回傳先前建立的 Python 物件、不重新查詢）在該物件的欄位被 expire
+    後，任何後續同步存取都需要重新從 DB 讀取，而在非 await 鏈中觸發的隱式
+    reload 會直接以 MissingGreenlet 炸掉。DB 層級真正失敗（IntegrityError 等）
+    的 rollback 全部由各 router 自己的 except 區塊處理（本專案既有慣例），
+    不需要這裡再補。
+    """
+
+    async def _override() -> AsyncGenerator[AsyncSession, None]:
+        yield session
+        await session.commit()
+
+    return _override
 
 
 @pytest_asyncio.fixture(scope="function")
 async def client(db_session: AsyncSession) -> AsyncGenerator[CSRFAwareAsyncClient, None]:
     """帶 DB override 的 TestClient（自動處理 CSRF token）"""
-    import secrets
 
-    async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
-        yield db_session
-
-    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_db] = _make_override_get_db(db_session)
 
     async with CSRFAwareAsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        # 為測試生成 CSRF token，手動設定到 cookies
-        csrf_token = secrets.token_urlsafe(32)
+        # 為測試生成一個 CSRFMiddleware 會接受的合法簽章 token，手動設定到 cookies
+        csrf_token = _make_valid_csrf_token()
         ac.cookies.set("csrf_token", csrf_token)
         ac._csrf_token = csrf_token
         yield ac
 
+    app.dependency_overrides.clear()
+
+
+# ---------------------------------------------------------------------------
+# 共用 fixture：使用者建立與已登入 client
+# 目的：避免每個測試檔各自重寫 _make_user / _make_authed_client。
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def make_user(db_session: AsyncSession) -> Callable[..., Any]:
+    """回傳可重複呼叫的使用者工廠：await make_user(is_superuser=True, mfa_enabled=True)"""
+
+    async def _factory(**overrides: Any) -> User:
+        defaults: dict[str, Any] = {
+            "email": f"test-{uuid.uuid4().hex[:8]}@school.edu",
+            "display_name": "測試使用者",
+            "is_active": True,
+            "is_verified": True,
+        }
+        defaults.update(overrides)
+        user = User(**defaults)
+        db_session.add(user)
+        await db_session.flush()
+        return user
+
+    return _factory
+
+
+@pytest_asyncio.fixture
+async def admin_user(make_user: Callable[..., Any]) -> User:
+    """系統管理員帳號，供管理員端點測試使用。"""
+    return await make_user(
+        email="admin@school.edu",
+        display_name="系統管理員",
+        is_superuser=True,
+        mfa_enabled=True,
+    )
+
+
+@pytest_asyncio.fixture
+async def member_user(make_user: Callable[..., Any]) -> User:
+    """一般使用者帳號（無特殊權限）。"""
+    return await make_user(email="member@school.edu", display_name="一般使用者")
+
+
+@pytest_asyncio.fixture
+async def authed_client_factory(
+    db_session: AsyncSession,
+) -> AsyncGenerator[Callable[[User], CSRFAwareAsyncClient], None]:
+    """回傳 make_authed_client(user) -> 已登入的測試 client，可為任意 user 建立。"""
+
+    override_get_db = _make_override_get_db(db_session)
+    clients: list[CSRFAwareAsyncClient] = []
+
+    def _factory(user: User) -> CSRFAwareAsyncClient:
+        app.dependency_overrides[get_db] = override_get_db
+        token = create_access_token(str(user.id))
+        csrf_token = _make_valid_csrf_token()
+        ac = CSRFAwareAsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+            cookies={settings.ACCESS_TOKEN_COOKIE_NAME: token, "csrf_token": csrf_token},
+        )
+        ac._csrf_token = csrf_token
+        clients.append(ac)
+        return ac
+
+    yield _factory
+
+    for ac in clients:
+        await ac.aclose()
     app.dependency_overrides.clear()

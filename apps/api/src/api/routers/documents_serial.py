@@ -297,6 +297,7 @@ async def create_serial_template(
                 "org_prefix": template.org_prefix,
                 "category_char": template.category_char,
                 "year_mode": template.year_mode.value,
+                "inherit_parent_prefix": template.inherit_parent_prefix,
                 "is_default": template.is_default,
                 "is_default_president_publish": template.is_default_president_publish,
             },
@@ -443,7 +444,7 @@ async def update_serial_template(
     session: DbDep,
     current_user: CurrentUser,
 ) -> object:
-    """更新字號模板的描述、年份制度或重置設定。"""
+    """更新字號模板的設定，並可調整是否串接上級組織前綴。"""
     template = await doc_svc.get_serial_template(session, template_id)
     if template is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此字號模板")
@@ -459,19 +460,28 @@ async def update_serial_template(
     before = {
         "description": template.description,
         "year_mode": template.year_mode.value,
+        "inherit_parent_prefix": template.inherit_parent_prefix,
         "reset_on_new_year": template.reset_on_new_year,
         "is_active": template.is_active,
         "is_default": template.is_default,
         "is_default_president_publish": template.is_default_president_publish,
     }
-    template = await doc_svc.update_serial_template(
-        session,
-        template,
-        updates=payload.model_dump(exclude_none=True),
-    )
+    try:
+        template = await doc_svc.update_serial_template(
+            session, template, updates=payload.model_dump(exclude_none=True)
+        )
+    except IntegrityError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="變更繼承設定後會與既有字號模板重複",
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     after = {
         "description": template.description,
         "year_mode": template.year_mode.value,
+        "inherit_parent_prefix": template.inherit_parent_prefix,
         "reset_on_new_year": template.reset_on_new_year,
         "is_active": template.is_active,
         "is_default": template.is_default,

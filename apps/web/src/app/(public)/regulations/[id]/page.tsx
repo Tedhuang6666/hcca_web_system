@@ -1,0 +1,33 @@
+import { notFound } from "next/navigation";
+
+import RegulationDetailPageClient from "./RegulationDetailPageClient";
+import {
+  fetchPublicRegulationResult,
+  firstSearchParam,
+  type RegulationDetailSearchParams,
+} from "./regulationPageData";
+
+// 處理 /regulations/{id}
+export default async function Page({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<RegulationDetailSearchParams>;
+}) {
+  const [{ id }, query] = await Promise.all([params, searchParams]);
+  const result = await fetchPublicRegulationResult(id);
+  if (result.status === 404) notFound();
+  const initialRegulation = result.data;
+
+  return (
+    <RegulationDetailPageClient
+      initialId={id}
+      initialTitle={initialRegulation?.title ?? null}
+      initialRegulation={initialRegulation}
+      initialTab={firstSearchParam(query, "tab")}
+      initialArticleRef={firstSearchParam(query, "article_ref")}
+      initialUnitRef={firstSearchParam(query, "unit_ref")}
+    />
+  );
+}

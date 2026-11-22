@@ -1,2 +1,1 @@
-def hello() -> str:
-    return "Hello from shared!"
+"""保留給未來確有多套件消費者的共用型別。"""

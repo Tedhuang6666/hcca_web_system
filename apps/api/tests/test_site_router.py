@@ -1,0 +1,666 @@
+"""公開官網 / Linktree 路由測試（apps/api/src/api/routers/site.py）。"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import UTC, datetime, timedelta
+
+from sqlalchemy import select
+
+
+async def _grant(db_session, user, code: str) -> None:
+    from api.core.clock import local_today
+    from api.models.org import Org, Permission, Position, UserPosition
+
+    org = Org(name=f"site-org-{uuid.uuid4().hex[:6]}")
+    db_session.add(org)
+    await db_session.flush()
+    position = Position(org_id=org.id, name="官網管理員")
+    db_session.add(position)
+    await db_session.flush()
+    db_session.add(Permission(position_id=position.id, code=code))
+    db_session.add(
+        UserPosition(
+            user_id=user.id,
+            position_id=position.id,
+            start_date=local_today() - timedelta(days=1),
+            end_date=None,
+        )
+    )
+    await db_session.flush()
+
+
+def _settings_payload(**overrides) -> dict:
+    defaults = {
+        "site_title": "學生會官網",
+        "hero_title": "歡迎光臨",
+        "about_title": "關於我們",
+        "about_body_md": "介紹內容",
+        "cta_label": "了解更多",
+        "cta_href": "/about",
+        "public_database_label": "公開資料庫",
+    }
+    defaults.update(overrides)
+    return defaults
+
+
+def _link_category_payload(**overrides) -> dict:
+    defaults = {"slug": f"cat-{uuid.uuid4().hex[:6]}", "title": "社群媒體"}
+    defaults.update(overrides)
+    return defaults
+
+
+def _link_payload(**overrides) -> dict:
+    defaults = {"title": "Instagram", "url": "https://instagram.com/example"}
+    defaults.update(overrides)
+    return defaults
+
+
+def _page_payload(**overrides) -> dict:
+    defaults = {
+        "slug": f"page-{uuid.uuid4().hex[:6]}",
+        "title": "組織架構",
+        "body_md": "# 組織架構\n內容",
+    }
+    defaults.update(overrides)
+    return defaults
+
+
+# ---------------------------------------------------------------------------
+# 公開端點（不需登入）
+# ---------------------------------------------------------------------------
+
+
+async def test_get_public_site_returns_bundle(client) -> None:
+    resp = await client.get("/site/public")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "settings" in body
+    assert body["links"] == []
+    assert body["nav_pages"] == []
+
+
+async def test_public_links_respect_scheduled_visibility(db_session, client) -> None:
+    from api.models.site import PublicLink
+
+    now = datetime.now(UTC)
+    available = PublicLink(
+        title="目前公開",
+        url="https://example.com/current",
+        starts_at=now - timedelta(days=1),
+        ends_at=now + timedelta(days=1),
+    )
+    scheduled = PublicLink(
+        title="尚未開始",
+        url="https://example.com/future",
+        starts_at=now + timedelta(days=1),
+    )
+    expired = PublicLink(
+        title="已結束",
+        url="https://example.com/expired",
+        ends_at=now - timedelta(days=1),
+    )
+    disabled = PublicLink(
+        title="手動停用",
+        url="https://example.com/disabled",
+        is_active=False,
+    )
+    db_session.add_all([available, scheduled, expired, disabled])
+    await db_session.flush()
+
+    resp = await client.get("/site/links")
+    assert resp.status_code == 200
+    assert [link["id"] for link in resp.json()] == [str(available.id)]
+
+
+async def test_public_site_refreshes_links_when_bundle_is_cached(
+    db_session, client, monkeypatch
+) -> None:
+    from api.models.site import PublicLink
+
+    cached_bundle = None
+
+    async def cache_get(_key):
+        return cached_bundle
+
+    async def cache_set(_key, value, ttl=60):
+        nonlocal cached_bundle
+        cached_bundle = value
+
+    monkeypatch.setattr("api.routers.site.cache_get", cache_get)
+    monkeypatch.setattr("api.routers.site.cache_set", cache_set)
+
+    first = await client.get("/site/public")
+    assert first.status_code == 200
+    assert cached_bundle["links"] == []
+
+    link = PublicLink(title="排程連結", url="https://example.com/scheduled")
+    db_session.add(link)
+    await db_session.flush()
+
+    second = await client.get("/site/public")
+    assert second.status_code == 200
+    assert [item["id"] for item in second.json()["links"]] == [str(link.id)]
+
+
+async def test_get_public_page_unpublished_returns_404(db_session, client) -> None:
+    from api.models.site import PublicSitePage
+
+    page = PublicSitePage(slug="draft-page", title="草稿頁", body_md="內容", is_published=False)
+    db_session.add(page)
+    await db_session.flush()
+
+    resp = await client.get("/site/pages/draft-page")
+    assert resp.status_code == 404
+
+
+async def test_get_public_page_published_succeeds(db_session, client) -> None:
+    from api.models.site import PublicSitePage
+
+    page = PublicSitePage(slug="published-page", title="公開頁", body_md="內容", is_published=True)
+    db_session.add(page)
+    await db_session.flush()
+
+    resp = await client.get("/site/pages/published-page")
+    assert resp.status_code == 200
+    assert resp.json()["title"] == "公開頁"
+
+
+async def test_public_article_view_records_anonymized_event(db_session, client) -> None:
+    from api.models.public_site_page_view import PublicSitePageView
+    from api.models.site import PublicSitePage
+
+    page = PublicSitePage(
+        slug="lunch-guide",
+        title="竹中訂餐指南",
+        body_md="# 內容",
+        page_kind="article",
+        is_published=True,
+    )
+    db_session.add(page)
+    await db_session.flush()
+    client.cookies.clear()
+
+    resp = await client.post(
+        "/site/pages/lunch-guide/view",
+        json={"visitor_id": "visitor-id-123456", "device_class": "mobile"},
+    )
+
+    assert resp.status_code == 204
+    event = await db_session.scalar(
+        select(PublicSitePageView).where(PublicSitePageView.page_id == page.id)
+    )
+    assert event is not None
+    assert event.visitor_hash != "visitor-id-123456"
+    assert len(event.visitor_hash) == 64
+    assert event.device_class == "mobile"
+
+
+async def test_public_article_view_ignores_unpublished_page(db_session, client) -> None:
+    from api.models.public_site_page_view import PublicSitePageView
+    from api.models.site import PublicSitePage
+
+    page = PublicSitePage(
+        slug="draft-article",
+        title="草稿文章",
+        body_md="# 草稿",
+        page_kind="article",
+        is_published=False,
+    )
+    db_session.add(page)
+    await db_session.flush()
+    client.cookies.clear()
+
+    resp = await client.post(
+        "/site/pages/draft-article/view",
+        json={"visitor_id": "visitor-id-123456", "device_class": "desktop"},
+    )
+
+    assert resp.status_code == 204
+    event = await db_session.scalar(
+        select(PublicSitePageView).where(PublicSitePageView.page_id == page.id)
+    )
+    assert event is None
+
+
+async def test_get_public_page_missing_returns_404(client) -> None:
+    resp = await client.get("/site/pages/does-not-exist")
+    assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# 管理員：權限檢查
+# ---------------------------------------------------------------------------
+
+
+async def test_admin_get_settings_without_permission_returns_403(
+    member_user, authed_client_factory
+) -> None:
+    ac = authed_client_factory(member_user)
+    resp = await ac.get("/site/admin/settings")
+    assert resp.status_code == 403
+
+
+async def test_admin_create_link_category_without_permission_returns_403(
+    member_user, authed_client_factory
+) -> None:
+    ac = authed_client_factory(member_user)
+    resp = await ac.post("/site/admin/link-categories", json=_link_category_payload())
+    assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# 管理員：設定
+# ---------------------------------------------------------------------------
+
+
+async def test_admin_update_settings_succeeds(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant(db_session, member_user, "site:manage")
+    ac = authed_client_factory(member_user)
+
+    resp = await ac.patch(
+        "/site/admin/settings",
+        json={
+            "site_title": "新標題",
+            "homepage_blocks": {
+                "special_agreement": {
+                    "intro_md": "自訂介紹",
+                    "info_md": "自訂資訊",
+                    "process": [],
+                    "files": [
+                        {
+                            "id": "guide",
+                            "title": "合作指南",
+                            "description": "說明",
+                            "url": "/uploads/public-site/guide.pdf",
+                            "mimeType": "application/pdf",
+                        }
+                    ],
+                }
+            },
+        },
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["site_title"] == "新標題"
+    assert resp.json()["homepage_blocks"]["special_agreement"]["files"][0]["title"] == "合作指南"
+
+
+async def test_site_manager_can_update_special_application_settings(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant(db_session, member_user, "site:manage")
+    ac = authed_client_factory(member_user)
+
+    resp = await ac.patch(
+        "/partner-map/admin/applications/settings",
+        json={"title": "特約合作申請"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["title"] == "特約合作申請"
+
+
+# ---------------------------------------------------------------------------
+# 管理員：連結分類
+# ---------------------------------------------------------------------------
+
+
+async def test_admin_link_category_crud_flow(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant(db_session, member_user, "site:manage")
+    ac = authed_client_factory(member_user)
+
+    created = await ac.post(
+        "/site/admin/link-categories", json=_link_category_payload(slug="social")
+    )
+    assert created.status_code == 201
+    category_id = created.json()["id"]
+
+    dup = await ac.post("/site/admin/link-categories", json=_link_category_payload(slug="social"))
+    assert dup.status_code == 409
+
+    updated = await ac.patch(
+        f"/site/admin/link-categories/{category_id}", json={"title": "社群連結（改）"}
+    )
+    assert updated.status_code == 200
+    assert updated.json()["title"] == "社群連結（改）"
+
+    listed = await ac.get("/site/admin/link-categories")
+    assert len(listed.json()) == 1
+
+    deleted = await ac.delete(f"/site/admin/link-categories/{category_id}")
+    assert deleted.status_code == 204
+
+
+async def test_admin_update_missing_link_category_returns_404(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant(db_session, member_user, "site:manage")
+    ac = authed_client_factory(member_user)
+
+    resp = await ac.patch(f"/site/admin/link-categories/{uuid.uuid4()}", json={"title": "x"})
+    assert resp.status_code == 404
+
+
+async def test_admin_delete_missing_link_category_returns_404(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant(db_session, member_user, "site:manage")
+    ac = authed_client_factory(member_user)
+
+    resp = await ac.delete(f"/site/admin/link-categories/{uuid.uuid4()}")
+    assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# 管理員：連結
+# ---------------------------------------------------------------------------
+
+
+async def test_admin_link_crud_flow(db_session, member_user, authed_client_factory) -> None:
+    await _grant(db_session, member_user, "site:manage")
+    ac = authed_client_factory(member_user)
+
+    starts_at = datetime.now(UTC) - timedelta(days=1)
+    ends_at = datetime.now(UTC) + timedelta(days=3)
+    created = await ac.post(
+        "/site/admin/links",
+        json=_link_payload(starts_at=starts_at.isoformat(), ends_at=ends_at.isoformat()),
+    )
+    assert created.status_code == 201
+    link_id = created.json()["id"]
+    assert created.json()["starts_at"] is not None
+    assert created.json()["ends_at"] is not None
+
+    updated = await ac.patch(f"/site/admin/links/{link_id}", json={"title": "IG（改）"})
+    assert updated.status_code == 200
+    assert updated.json()["title"] == "IG（改）"
+
+    invalid_schedule = await ac.patch(
+        f"/site/admin/links/{link_id}",
+        json={"starts_at": (ends_at + timedelta(days=1)).isoformat()},
+    )
+    assert invalid_schedule.status_code == 422
+
+    cleared = await ac.patch(f"/site/admin/links/{link_id}", json={"starts_at": None})
+    assert cleared.status_code == 200
+    assert cleared.json()["starts_at"] is None
+
+    listed = await ac.get("/site/admin/links")
+    assert len(listed.json()) == 1
+
+    deleted = await ac.delete(f"/site/admin/links/{link_id}")
+    assert deleted.status_code == 204
+
+
+async def test_admin_reorder_links_requires_permission(member_user, authed_client_factory) -> None:
+    ac = authed_client_factory(member_user)
+    resp = await ac.patch("/site/admin/links/reorder", json={"link_ids": [str(uuid.uuid4())]})
+    assert resp.status_code == 403
+
+
+async def test_admin_reorder_links_persists_complete_order(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant(db_session, member_user, "site:manage")
+    ac = authed_client_factory(member_user)
+
+    first = await ac.post("/site/admin/links", json=_link_payload(title="第一筆"))
+    second = await ac.post("/site/admin/links", json=_link_payload(title="第二筆"))
+    assert first.status_code == second.status_code == 201
+
+    reordered = await ac.patch(
+        "/site/admin/links/reorder",
+        json={"link_ids": [second.json()["id"], first.json()["id"]]},
+    )
+    assert reordered.status_code == 200
+    assert [link["id"] for link in reordered.json()] == [
+        second.json()["id"],
+        first.json()["id"],
+    ]
+    assert [link["sort_order"] for link in reordered.json()] == [0, 1]
+
+    incomplete = await ac.patch(
+        "/site/admin/links/reorder",
+        json={"link_ids": [first.json()["id"]]},
+    )
+    assert incomplete.status_code == 422
+
+
+async def test_admin_update_link_tree_requires_permission(
+    member_user, authed_client_factory
+) -> None:
+    ac = authed_client_factory(member_user)
+    response = await ac.patch("/site/admin/links/tree", json={"category_ids": [], "links": []})
+    assert response.status_code == 403
+
+
+async def test_admin_update_link_tree_persists_categories_membership_and_order(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant(db_session, member_user, "site:manage")
+    ac = authed_client_factory(member_user)
+
+    first_category = await ac.post(
+        "/site/admin/link-categories", json=_link_category_payload(title="第一分類")
+    )
+    second_category = await ac.post(
+        "/site/admin/link-categories", json=_link_category_payload(title="第二分類")
+    )
+    first_link = await ac.post(
+        "/site/admin/links",
+        json=_link_payload(title="第一連結", category_id=first_category.json()["id"]),
+    )
+    second_link = await ac.post(
+        "/site/admin/links",
+        json=_link_payload(title="第二連結", category_id=second_category.json()["id"]),
+    )
+    unassigned_link = await ac.post(
+        "/site/admin/links", json=_link_payload(title="未分類連結")
+    )
+
+    updated = await ac.patch(
+        "/site/admin/links/tree",
+        json={
+            "category_ids": [second_category.json()["id"], first_category.json()["id"]],
+            "links": [
+                {"id": second_link.json()["id"], "category_id": first_category.json()["id"]},
+                {"id": first_link.json()["id"], "category_id": first_category.json()["id"]},
+                {"id": unassigned_link.json()["id"], "category_id": None},
+            ],
+        },
+    )
+
+    assert updated.status_code == 200
+    body = updated.json()
+    assert [category["id"] for category in body["categories"]] == [
+        second_category.json()["id"],
+        first_category.json()["id"],
+    ]
+    assert [category["sort_order"] for category in body["categories"]] == [0, 1]
+    assert [link["id"] for link in body["links"]] == [
+        second_link.json()["id"],
+        first_link.json()["id"],
+        unassigned_link.json()["id"],
+    ]
+    assert [link["category_id"] for link in body["links"]] == [
+        first_category.json()["id"],
+        first_category.json()["id"],
+        None,
+    ]
+    assert [link["sort_order"] for link in body["links"]] == [0, 1, 2]
+
+
+async def test_admin_update_link_tree_rejects_incomplete_or_unknown_membership(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant(db_session, member_user, "site:manage")
+    ac = authed_client_factory(member_user)
+    category = await ac.post("/site/admin/link-categories", json=_link_category_payload())
+    link = await ac.post("/site/admin/links", json=_link_payload())
+
+    incomplete = await ac.patch(
+        "/site/admin/links/tree",
+        json={"category_ids": [category.json()["id"]], "links": []},
+    )
+    assert incomplete.status_code == 422
+
+    unknown_category = await ac.patch(
+        "/site/admin/links/tree",
+        json={
+            "category_ids": [category.json()["id"]],
+            "links": [{"id": link.json()["id"], "category_id": str(uuid.uuid4())}],
+        },
+    )
+    assert unknown_category.status_code == 422
+
+    current = await ac.get("/site/admin/links")
+    assert current.json()[0]["category_id"] is None
+
+
+async def test_admin_update_missing_link_returns_404(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant(db_session, member_user, "site:manage")
+    ac = authed_client_factory(member_user)
+
+    resp = await ac.patch(f"/site/admin/links/{uuid.uuid4()}", json={"title": "x"})
+    assert resp.status_code == 404
+
+
+async def test_admin_delete_missing_link_returns_404(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant(db_session, member_user, "site:manage")
+    ac = authed_client_factory(member_user)
+
+    resp = await ac.delete(f"/site/admin/links/{uuid.uuid4()}")
+    assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# 管理員：頁面
+# ---------------------------------------------------------------------------
+
+
+async def test_admin_page_crud_flow(db_session, member_user, authed_client_factory) -> None:
+    await _grant(db_session, member_user, "site:manage")
+    ac = authed_client_factory(member_user)
+
+    created = await ac.post("/site/admin/pages", json=_page_payload(slug="about-us"))
+    assert created.status_code == 201
+    page_id = created.json()["id"]
+
+    dup = await ac.post("/site/admin/pages", json=_page_payload(slug="about-us"))
+    assert dup.status_code == 409
+
+    updated = await ac.patch(f"/site/admin/pages/{page_id}", json={"title": "組織架構（改）"})
+    assert updated.status_code == 200
+    assert updated.json()["title"] == "組織架構（改）"
+
+    listed = await ac.get("/site/admin/pages")
+    assert len(listed.json()) == 1
+
+    deleted = await ac.delete(f"/site/admin/pages/{page_id}")
+    assert deleted.status_code == 204
+
+
+async def test_admin_update_missing_page_returns_404(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant(db_session, member_user, "site:manage")
+    ac = authed_client_factory(member_user)
+
+    resp = await ac.patch(f"/site/admin/pages/{uuid.uuid4()}", json={"title": "x"})
+    assert resp.status_code == 404
+
+
+async def test_admin_delete_missing_page_returns_404(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant(db_session, member_user, "site:manage")
+    ac = authed_client_factory(member_user)
+
+    resp = await ac.delete(f"/site/admin/pages/{uuid.uuid4()}")
+    assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# 管理員：圖片上傳
+# ---------------------------------------------------------------------------
+
+
+async def test_admin_upload_image_rejects_bad_content_type(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant(db_session, member_user, "site:manage")
+    ac = authed_client_factory(member_user)
+
+    resp = await ac.post(
+        "/site/admin/images",
+        files={"file": ("evil.txt", b"not an image", "text/plain")},
+    )
+    assert resp.status_code == 422
+
+
+async def test_admin_upload_image_succeeds(
+    db_session, member_user, authed_client_factory, tmp_path, monkeypatch
+) -> None:
+    from api.core import config as config_module
+
+    monkeypatch.setattr(config_module.settings, "STORAGE_LOCAL_DIR", str(tmp_path))
+    await _grant(db_session, member_user, "site:manage")
+    ac = authed_client_factory(member_user)
+
+    png_magic = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+    resp = await ac.post(
+        "/site/admin/images",
+        files={"file": ("logo.png", png_magic, "image/png")},
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["content_type"] == "image/png"
+    assert body["url"].startswith("/site/public/images/public-site/")
+
+    image_resp = await ac.get(body["url"])
+    assert image_resp.status_code == 200
+    assert image_resp.headers["content-type"].startswith("image/png")
+    assert image_resp.content.startswith(b"\x89PNG")
+
+
+async def test_admin_upload_public_file_succeeds(
+    db_session, member_user, authed_client_factory, tmp_path, monkeypatch
+) -> None:
+    from api.core import config as config_module
+
+    monkeypatch.setattr(config_module.settings, "STORAGE_LOCAL_DIR", str(tmp_path))
+    await _grant(db_session, member_user, "site:manage")
+    ac = authed_client_factory(member_user)
+
+    pdf_magic = b"%PDF-1.7\n" + b"0" * 32
+    resp = await ac.post(
+        "/site/admin/files",
+        files={"file": ("partner-guide.pdf", pdf_magic, "application/pdf")},
+    )
+
+    assert resp.status_code == 201
+    assert resp.json()["content_type"] == "application/pdf"
+    assert resp.json()["url"].startswith("/uploads/public-site/")
+
+
+async def test_admin_upload_public_file_rejects_unsupported_type(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant(db_session, member_user, "site:manage")
+    ac = authed_client_factory(member_user)
+
+    resp = await ac.post(
+        "/site/admin/files",
+        files={"file": ("partner-guide.txt", b"not allowed", "text/plain")},
+    )
+
+    assert resp.status_code == 422

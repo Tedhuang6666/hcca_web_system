@@ -2,9 +2,10 @@
 
 # 基礎
 # 公文系統（含字號模板、受文者、審核步驟等）[M-17, M-18]
-# 公告系統 [P8+]
+# 公告系統
 # 稽核日誌（不可變）
 from api.models.activity import Activity, ActivityConvener, ActivityStatus  # noqa: F401
+from api.models.analytics_page_view import AnalyticsPageView  # noqa: F401
 from api.models.announcement import (  # noqa: F401
     Announcement,
     AnnouncementAudience,
@@ -17,20 +18,10 @@ from api.models.api_key import ApiKey  # noqa: F401
 from api.models.audit_anchor import AuditLogAnchor  # noqa: F401
 from api.models.audit_log import AuditLog  # noqa: F401
 from api.models.backup_record import BackupKind, BackupRecord, BackupStatus  # noqa: F401
-from api.models.calendar import (  # noqa: F401
-    CalendarEvent,
-    CalendarEventChecklistItem,
-    CalendarEventLink,
-    CalendarEventParticipant,
-    CalendarEventStatus,
-    CalendarEventType,
-    CalendarLinkType,
-    CalendarParticipantResponse,
-    CalendarParticipantRole,
-    CalendarVisibility,
-)
+from api.models.class_confirmation import ClassConfirmation  # noqa: F401
 from api.models.council_proposal import (  # noqa: F401
     CouncilProposal,
+    CouncilProposalCaseType,
     CouncilProposalKind,
     CouncilProposalStatus,
 )
@@ -39,12 +30,15 @@ from api.models.discord_account import (  # noqa: F401
     DEFAULT_DM_CATEGORIES,
     DiscordAccountLink,
     DiscordGuildConfig,
+    DiscordMemberSyncState,
     DiscordNicknamePrefixRule,
     DiscordNotificationPreference,
     DiscordOrgChannelMapping,
     DiscordRoleMapping,
     DiscordRoleMappingKind,
+    DiscordRolePolicy,
 )
+from api.models.discord_notification_route import DiscordNotificationRoute  # noqa: F401
 from api.models.document import (  # noqa: F401
     ApprovalStepStatus,
     DelegateSource,
@@ -64,86 +58,134 @@ from api.models.document import (  # noqa: F401
     RecipientType,
     YearMode,
 )
+from api.models.election import (  # noqa: F401
+    BallotBox,
+    BallotBoxStatus,
+    Candidate,
+    CandidateMember,
+    Election,
+    ElectionStatus,
+    VoteEvent,
+    VoteEventKind,
+)
+from api.models.electronic_credential import (  # noqa: F401
+    ElectronicCredentialAuthorization,
+    ElectronicCredentialSettings,
+)
 from api.models.email_message import (  # noqa: F401
+    EmailAttachment,
+    EmailAttachmentMode,
     EmailCampaignRecipient,
+    EmailEventType,
     EmailMessage,
+    EmailRecipientEvent,
+    EmailRecipientList,
+    EmailRecipientListMember,
     EmailRecipientStatus,
+    EmailResourceVisibility,
     EmailStatus,
+    EmailSuppression,
+    EmailTemplate,
+    EmailTemplateVersion,
 )
 from api.models.exam_paper import ExamGradeTrack, ExamPaper, ExamPaperDownload  # noqa: F401
 
-# Feature Flag（Phase D3）
+# Feature Flag
 from api.models.feature_flag import FeatureFlag  # noqa: F401
+from api.models.finance import (  # noqa: F401
+    BudgetSubmissionKind,
+    BudgetSubmissionStatus,
+    ChartAccount,
+    ExpenseClaimItem,
+    ExpenseClaimItemEvidence,
+    ExpenseEvidenceType,
+    ExpensePaymentMethod,
+    FinanceAccountType,
+    FinanceBudget,
+    FinanceBudgetAllocation,
+    FinanceBudgetAllocationEvidence,
+    FinanceBudgetAllocationRevision,
+    FinanceBudgetExpense,
+    FinanceBudgetExpenseEvidence,
+    FinanceBudgetExpenseItem,
+    FinanceBudgetIncomeItem,
+    FinanceBudgetIncomeRecord,
+    FinanceBudgetNode,
+    FinanceBudgetSubmission,
+    FinanceLedger,
+    FiscalPeriod,
+    FundAccount,
+    FundStorageType,
+    JournalEntry,
+    JournalLine,
+    JournalStatus,
+)
+from api.models.gallery_sync import GalleryDriveSync  # noqa: F401
+from api.models.governance import (  # noqa: F401
+    AutomationRule,
+    AutomationRuleStatus,
+    CaseStatus,
+    Decision,
+    DecisionStatus,
+    EntityRelation,
+    GovernanceCase,
+    GovernanceDiscordEventRoute,
+    GovernanceDiscordWorkspace,
+    GovernanceEventType,
+    Matter,
+    MatterPriority,
+    MatterResource,
+    MatterResourceType,
+    MatterStatus,
+    MatterType,
+    MatterVisibility,
+    TimelineEvent,
+)
 from api.models.judicial_petition import (  # noqa: F401
     JudicialPetition,
     JudicialPetitionStatus,
     JudicialPetitionType,
 )
 from api.models.line_account import LineAccountLink  # noqa: F401
-from api.models.meal import (  # noqa: F401
-    MealClassPickupCode,
-    MealOrder,
-    MealOrderItem,
-    MealOrderStatus,
-    MealPickupSlot,
-    MealPickupStatus,
-    MealProduct,
-    MealProductAvailability,
-    MealVendor,
-    MealVendorApplication,
-    MealVendorManager,
-    MealVendorStatus,
-    MenuItem,
-    MenuSchedule,
+from api.models.merchandise_submission import (  # noqa: F401
+    MerchandiseSubmission,
+    MerchandiseSubmissionFile,
+    MerchandiseSubmissionItem,
+    MerchandiseSubmissionSettings,
+    MerchandiseSubmissionStatus,
 )
-from api.models.meeting import (  # noqa: F401
-    AgendaItemType,
-    ArtifactLinkType,
-    AttendanceRole,
-    AttendanceSourceType,
-    AttendanceStatus,
-    BallotChoice,
-    Meeting,
-    MeetingAgendaAttachment,
-    MeetingAgendaItem,
-    MeetingArtifactLink,
-    MeetingAttendance,
-    MeetingAttendanceSource,
-    MeetingBallot,
-    MeetingBillStage,
-    MeetingDecision,
-    MeetingDecisionStatus,
-    MeetingEvent,
-    MeetingMotion,
-    MeetingMotionStatus,
-    MeetingMotionType,
-    MeetingRequest,
-    MeetingRequestStatus,
-    MeetingRequestType,
-    MeetingScreenState,
-    MeetingStatus,
-    MeetingVote,
-    ScreenReadingMode,
-    VoteStatus,
-    VoteVisibility,
-)
+from api.models.navigation_profile import NavigationProfile, NavigationProfilePosition  # noqa: F401
 from api.models.notification import Notification  # noqa: F401
+from api.models.observability import (  # noqa: F401
+    CruxSnapshot,
+    ObservabilityRelease,
+    PageSpeedAudit,
+    PageSpeedRun,
+)
 from api.models.org import Org, Permission, Position, UserPosition  # noqa: F401
 
 # Outbox 事件表（at-least-once 通知保障）
 from api.models.outbox import OutboxEvent  # noqa: F401
+from api.models.partner_business_application import (  # noqa: F401
+    PartnerApplicationField,
+    PartnerApplicationFieldType,
+    PartnerApplicationSettings,
+    PartnerBusinessApplication,
+    PartnerBusinessApplicationStatus,
+)
 from api.models.partner_map import (  # noqa: F401
     PartnerBusiness,
+    PartnerBusinessAccount,
+    PartnerBusinessImage,
     PartnerBusinessStatus,
     PartnerLocation,
     PartnerOffer,
-    PartnerRating,
     PartnerSubmission,
     PartnerSubmissionStatus,
     PartnerTag,
     partner_business_tags,
 )
-from api.models.passkey import PasskeyCredential, WebAuthnChallenge  # noqa: F401
+from api.models.passkey import PasskeyCredential  # noqa: F401
 from api.models.person import (  # noqa: F401
     Person,
     PersonAffiliation,
@@ -159,11 +201,16 @@ from api.models.petition import (  # noqa: F401
     PetitionCaseEvent,
     PetitionEventType,
     PetitionEventVisibility,
+    PetitionPublicStatus,
     PetitionStatus,
     PetitionType,
 )
+from api.models.petition_notification import (  # noqa: F401
+    PetitionNotificationRule,
+    PetitionNotificationSettings,
+)
 
-# 政策版本與同意紀錄（Phase B1 / ADR-003）
+# 政策版本與同意紀錄
 from api.models.policy import (  # noqa: F401
     PolicyConsent,
     PolicyDocument,
@@ -171,6 +218,29 @@ from api.models.policy import (  # noqa: F401
     PrivacyRequest,
     PrivacyRequestStatus,
     PrivacyRequestType,
+)
+from api.models.public_site_page_view import PublicSitePageView  # noqa: F401
+from api.models.publication import (  # noqa: F401
+    PublicationCampaign,
+    PublicationDelivery,
+    PublicationDeliveryStatus,
+    PublicationStatus,
+)
+from api.models.raffle import (  # noqa: F401
+    RaffleDraw,
+    RaffleEvent,
+    RafflePrize,
+    RaffleSession,
+    RaffleStatus,
+)
+from api.models.receivable import Receivable, ReceivableSource, ReceivableStatus  # noqa: F401
+from api.models.recommended_vendor import (  # noqa: F401
+    RecommendedVendor,
+    RecommendedVendorCategory,
+    RecommendedVendorMenu,
+    RecommendedVendorMenuKind,
+    RecommendedVendorProduct,
+    RecommendedVendorStatus,
 )
 
 # 法規系統（含條文結構與修訂歷程）[M-20]
@@ -181,6 +251,7 @@ from api.models.regulation import (  # noqa: F401
     RegulationCategory,
     RegulationRevision,
 )
+from api.models.regulation_sync import RegulationSyncSource  # noqa: F401
 
 # 儲存常用篩選（公開檢索/檔案系統化查詢）
 from api.models.saved_filter import SavedFilter  # noqa: F401
@@ -189,17 +260,31 @@ from api.models.saved_filter import SavedFilter  # noqa: F401
 from api.models.school_class import (  # noqa: F401
     ClassCadre,
     ClassConsolidationMixin,
+    ClassCorrectionRequest,
     ClassManualMember,
     ClassMembership,
     ClassMembershipSource,
     ClassMembershipStatus,
     ClassRoleBinding,
     ClassRoleKey,
+    ClassRosterEntry,
     ClassStudentRange,
     SchoolClass,
 )
 
-# 校商訂購系統 [M-23]
+# 劃位 / 票券系統（商品票種延伸）
+from api.models.seating import (  # noqa: F401
+    Seat,
+    SeatAssignment,
+    SeatAssignmentStatus,
+    SeatHold,
+    SeatingMode,
+    SeatingWave,
+    SeatingZone,
+    SeatStatus,
+)
+
+# 商品訂購系統 [M-23]
 from api.models.shop import (  # noqa: F401
     Cart,
     CartItem,
@@ -208,11 +293,24 @@ from api.models.shop import (  # noqa: F401
     OrderStatus,
     Product,
     ProductCategory,
+    ProductMedia,
     ProductSeries,
     ProductStatus,
     ProductVariantGroup,
     ProductVariantOption,
+    ShopDiscountType,
+    ShopOrderClose,
+    ShopOrderPromotion,
+    ShopPromotion,
+    ShopPromotionProductPrice,
+    ShopPromotionStudentTarget,
 )
+from api.models.shop_class_collection import ShopClassCollection  # noqa: F401
+from api.models.shop_class_payment import ShopClassPayment  # noqa: F401
+from api.models.shop_order_receipt_print import ShopOrderReceiptPrint  # noqa: F401
+from api.models.shop_sheet import ShopSheetRow, ShopSheetSource  # noqa: F401
+from api.models.shop_teacher import ShopOffice, ShopTeacherProfile  # noqa: F401
+from api.models.short_link import ShortLink  # noqa: F401
 from api.models.site import (  # noqa: F401
     PublicLink,
     PublicLinkCategory,
@@ -220,16 +318,39 @@ from api.models.site import (  # noqa: F401
     PublicSitePage,
     PublicSiteSettings,
 )
+from api.models.survey import (  # noqa: F401
+    QuestionType,
+    Survey,
+    SurveyAnswer,
+    SurveyQuestion,
+    SurveyResponse,
+    SurveyStatus,
+)
+from api.models.system_incident import (  # noqa: F401
+    IncidentSeverity,
+    IncidentStatus,
+    SystemIncident,
+    SystemIncidentEvent,
+)
 from api.models.user import User  # noqa: F401
+from api.models.user_google_tasks import UserGoogleTasksConfig  # noqa: F401
 
-# 外部身份綁定（Phase D1 / ADR-005）
+# 外部身份綁定
 from api.models.user_identity import UserIdentity  # noqa: F401
+from api.models.user_session import UserSession  # noqa: F401
 from api.models.web_push import WebPushSubscription  # noqa: F401
 
-# Webhook 訂閱與投遞紀錄（Phase D2）
+# Webhook 訂閱與投遞紀錄
 from api.models.webhook import (  # noqa: F401
     DeliveryStatus,
     WebhookDelivery,
     WebhookSubscription,
 )
 from api.models.work_item import WorkItem, WorkItemStatus  # noqa: F401
+from api.models.workflow import (  # noqa: F401
+    WorkflowEvent,
+    WorkflowEventType,
+    WorkflowInstance,
+    WorkflowLink,
+    WorkflowSourceType,
+)

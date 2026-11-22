@@ -14,11 +14,13 @@ from collections import Counter
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import and_, desc, or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import and_, case, desc, func, literal, or_, select, union_all
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+from sqlalchemy.orm import load_only
 
+from api.core.cache import cache_get, cache_set
+from api.core.database import AsyncSessionLocal
 from api.models.announcement import Announcement
-from api.models.calendar import CalendarEvent, CalendarEventChecklistItem, CalendarEventParticipant
 from api.models.document import (
     ApprovalStepStatus,
     DelegateSource,
@@ -26,23 +28,24 @@ from api.models.document import (
     DocumentApproval,
     DocumentApprovalDelegation,
 )
-from api.models.meal import MenuSchedule
-from api.models.meeting import (
-    AttendanceStatus,
-    Meeting,
-    MeetingAttendance,
-    MeetingStatus,
-)
 from api.models.petition import PetitionCase, PetitionStatus
 from api.models.regulation import Regulation, RegulationWorkflowStatus
 from api.models.shop import Product, ProductStatus
-from api.models.survey import Survey, SurveyStatus
+from api.models.survey import Survey, SurveyResponse, SurveyStatus
 from api.models.user import User
 from api.models.work_item import WorkItem, WorkItemStatus
-from api.schemas.task import TaskInboxResponse, TaskItem
+from api.schemas.task import TaskCountResponse, TaskInboxResponse, TaskItem
 from api.services.permission import get_user_permission_codes
+from api.services.task_priority import prioritize_tasks
 
 logger = logging.getLogger(__name__)
+
+TASK_INBOX_CACHE_TTL_SECONDS = 45
+TASK_COUNT_CACHE_TTL_SECONDS = 30
+# 每個 worker 限制待辦來源的同時查詢數，避免多個使用者同時進入待辦中心時
+# 一次建立 12 條資料庫連線，進而拖慢其他頁面與 readiness 檢查。
+TASK_SOURCE_CONCURRENCY = 4
+_task_source_semaphore = asyncio.Semaphore(TASK_SOURCE_CONCURRENCY)
 
 
 def _has(perms: frozenset[str], is_admin: bool, code: str) -> bool:
@@ -65,10 +68,20 @@ def _severity_by_due(due_at: datetime | None) -> str:
     return "info"
 
 
+def _work_item_href(item: WorkItem) -> str:
+    """回到仍啟用的工作項目來源頁；沒有來源時回待辦中心。"""
+    return "/tasks"
+
+
 # ── Builders ─────────────────────────────────────────────────────────────────
 
 
-async def _docs_pending_my_approval(db: AsyncSession, user: User) -> list[TaskItem]:
+async def _docs_pending_my_approval(
+    db: AsyncSession, user: User, perms: frozenset[str], is_admin: bool
+) -> list[TaskItem]:
+    if not _has(perms, is_admin, "document:approve"):
+        return []
+
     now = datetime.now(UTC)
     active_assignment = select(DocumentApprovalDelegation.id).where(
         DocumentApprovalDelegation.principal_user_id == DocumentApproval.approver_id,
@@ -112,46 +125,12 @@ async def _docs_pending_my_approval(db: AsyncSession, user: User) -> list[TaskIt
                 title=f"簽核：{d.title}",
                 subtitle=d.serial_number,
                 href=f"/documents/{d.serial_number}" if d.serial_number else "/documents",
-                due_at=None,
+                due_at=d.due_date,
                 severity="warning",
                 created_at=d.updated_at or d.created_at,
             )
         )
     return items
-
-
-async def _meetings_upcoming(db: AsyncSession, user: User) -> list[TaskItem]:
-    now = datetime.now(UTC)
-    cutoff = now + timedelta(hours=72)
-    stmt = (
-        select(Meeting)
-        .join(MeetingAttendance, MeetingAttendance.meeting_id == Meeting.id)
-        .where(MeetingAttendance.user_id == user.id)
-        .where(MeetingAttendance.status != AttendanceStatus.ABSENT)
-        .where(
-            Meeting.status.in_([MeetingStatus.DRAFT, MeetingStatus.ACTIVE, MeetingStatus.PAUSED])
-        )
-        .where(Meeting.starts_at.is_not(None))
-        .where(Meeting.starts_at >= now)
-        .where(Meeting.starts_at <= cutoff)
-        .order_by(Meeting.starts_at)
-        .limit(20)
-    )
-    rows = (await db.execute(stmt)).scalars().all()
-    return [
-        TaskItem(
-            id=f"meeting:{m.id}:attend",
-            module="meeting",
-            action="attend",
-            title=f"出席：{m.title}",
-            subtitle=m.location or None,
-            href=f"/meetings/{m.id}",
-            due_at=m.starts_at,
-            severity=_severity_by_due(m.starts_at),
-            created_at=m.created_at,
-        )
-        for m in rows
-    ]
 
 
 async def _regulations_to_publish(
@@ -163,6 +142,14 @@ async def _regulations_to_publish(
         (
             await db.execute(
                 select(Regulation)
+                .options(
+                    load_only(
+                        Regulation.id,
+                        Regulation.title,
+                        Regulation.version,
+                        Regulation.updated_at,
+                    )
+                )
                 .where(Regulation.workflow_status == RegulationWorkflowStatus.COUNCIL_APPROVED)
                 .order_by(desc(Regulation.updated_at))
                 .limit(20)
@@ -199,6 +186,15 @@ async def _regulations_to_review(
         (
             await db.execute(
                 select(Regulation)
+                .options(
+                    load_only(
+                        Regulation.id,
+                        Regulation.title,
+                        Regulation.version,
+                        Regulation.workflow_status,
+                        Regulation.updated_at,
+                    )
+                )
                 .where(
                     Regulation.workflow_status.in_(
                         [
@@ -271,11 +267,26 @@ async def _petitions_assigned(
 
 
 async def _surveys_to_fill(db: AsyncSession, user: User) -> list[TaskItem]:
+    completed_response = (
+        select(SurveyResponse.id)
+        .where(
+            SurveyResponse.survey_id == Survey.id,
+            SurveyResponse.respondent_id == user.id,
+        )
+        .exists()
+    )
     rows = (
         (
             await db.execute(
                 select(Survey)
                 .where(Survey.status == SurveyStatus.OPEN)
+                .where(
+                    or_(
+                        Survey.is_anonymous.is_(True),
+                        Survey.allow_multiple.is_(True),
+                        ~completed_response,
+                    )
+                )
                 .order_by(desc(Survey.updated_at))
                 .limit(20)
             )
@@ -294,73 +305,6 @@ async def _surveys_to_fill(db: AsyncSession, user: User) -> list[TaskItem]:
             created_at=s.updated_at or s.created_at,
         )
         for s in rows
-    ]
-
-
-async def _calendar_checklist_assigned(db: AsyncSession, user: User) -> list[TaskItem]:
-    rows = (
-        await db.execute(
-            select(CalendarEventChecklistItem, CalendarEvent)
-            .join(CalendarEvent, CalendarEvent.id == CalendarEventChecklistItem.event_id)
-            .where(CalendarEventChecklistItem.assignee_id == user.id)
-            .where(CalendarEventChecklistItem.is_done.is_(False))
-            .where(CalendarEvent.is_active.is_(True))
-            .order_by(
-                CalendarEventChecklistItem.due_at.asc().nulls_last(),
-                desc(CalendarEventChecklistItem.created_at),
-            )
-            .limit(30)
-        )
-    ).all()
-    return [
-        TaskItem(
-            id=f"calendar:{item.id}:prepare",
-            module="calendar",
-            action="prepare",
-            title=f"準備：{item.title}",
-            subtitle=event.title,
-            href=f"/calendar?event={event.id}",
-            due_at=item.due_at,
-            severity=_severity_by_due(item.due_at),
-            created_at=item.created_at,
-        )
-        for item, event in rows
-    ]
-
-
-async def _calendar_events_to_attend(db: AsyncSession, user: User) -> list[TaskItem]:
-    now = datetime.now(UTC)
-    cutoff = now + timedelta(hours=72)
-    rows = (
-        (
-            await db.execute(
-                select(CalendarEvent)
-                .join(
-                    CalendarEventParticipant, CalendarEventParticipant.event_id == CalendarEvent.id
-                )
-                .where(CalendarEventParticipant.user_id == user.id)
-                .where(CalendarEvent.starts_at >= now, CalendarEvent.starts_at <= cutoff)
-                .where(CalendarEvent.is_active.is_(True))
-                .order_by(CalendarEvent.starts_at.asc())
-                .limit(30)
-            )
-        )
-        .scalars()
-        .all()
-    )
-    return [
-        TaskItem(
-            id=f"calendar:{event.id}:attend",
-            module="calendar",
-            action="attend",
-            title=f"行程：{event.title}",
-            subtitle=event.location,
-            href=event.href or f"/calendar?event={event.id}",
-            due_at=event.starts_at,
-            severity=_severity_by_due(event.starts_at),
-            created_at=event.created_at,
-        )
-        for event in rows
     ]
 
 
@@ -431,46 +375,6 @@ async def _shop_sales_to_manage(
     ]
 
 
-async def _meal_deadlines_to_manage(
-    db: AsyncSession, user: User, perms: frozenset[str], is_admin: bool
-) -> list[TaskItem]:
-    if not (
-        is_admin
-        or _has(perms, is_admin, "meal:manage")
-        or _has(perms, is_admin, "meal:manage_schedule")
-    ):
-        return []
-    now = datetime.now(UTC)
-    cutoff = now + timedelta(hours=48)
-    rows = (
-        (
-            await db.execute(
-                select(MenuSchedule)
-                .where(MenuSchedule.is_closed.is_(False))
-                .where(MenuSchedule.order_deadline >= now, MenuSchedule.order_deadline <= cutoff)
-                .order_by(MenuSchedule.order_deadline.asc())
-                .limit(20)
-            )
-        )
-        .scalars()
-        .all()
-    )
-    return [
-        TaskItem(
-            id=f"meal:{schedule.id}:manage",
-            module="meal",
-            action="manage",
-            title="學餐即將結單",
-            subtitle=schedule.note,
-            href="/meal/vendor",
-            due_at=schedule.order_deadline,
-            severity=_severity_by_due(schedule.order_deadline),
-            created_at=schedule.created_at,
-        )
-        for schedule in rows
-    ]
-
-
 async def _work_items_assigned(db: AsyncSession, user: User) -> list[TaskItem]:
     rows = (
         (
@@ -493,7 +397,7 @@ async def _work_items_assigned(db: AsyncSession, user: User) -> list[TaskItem]:
             action="complete",
             title=f"工作：{item.title}",
             subtitle=item.description[:80] if item.description else None,
-            href="/tasks",
+            href=_work_item_href(item),
             due_at=item.due_at,
             severity=_severity_by_due(item.due_at),
             created_at=item.created_at,
@@ -513,35 +417,293 @@ async def _safe(name: str, fn: Callable[[], Awaitable[list[TaskItem]]]) -> list[
         return []
 
 
+async def _run_source(
+    db: AsyncSession,
+    name: str,
+    builder: Callable[[AsyncSession], Awaitable[list[TaskItem]]],
+) -> list[TaskItem]:
+    """執行一個待辦來源；並行查詢不可共用同一個 AsyncSession。"""
+
+    async def run() -> list[TaskItem]:
+        async with _task_source_semaphore:
+            # 正式 request session 綁定 AsyncEngine，可安全各取一條連線並行。
+            # 測試與外部 transaction 可能綁定 AsyncConnection，改用原 session
+            # 讓測試資料與外層交易一致，並由 gather 的單一連線序列化執行。
+            if isinstance(db.bind, AsyncEngine):
+                async with AsyncSessionLocal() as source_db:
+                    return await builder(source_db)
+            return await builder(db)
+
+    return await _safe(name, run)
+
+
 async def build_task_inbox(db: AsyncSession, user: User) -> TaskInboxResponse:
     perms = await get_user_permission_codes(db, user.id)
     is_admin = bool(getattr(user, "is_superuser", False))
 
-    groups = await asyncio.gather(
-        _safe("docs_approve", lambda: _docs_pending_my_approval(db, user)),
-        _safe("meetings_upcoming", lambda: _meetings_upcoming(db, user)),
-        _safe("regulations_publish", lambda: _regulations_to_publish(db, user, perms, is_admin)),
-        _safe("regulations_review", lambda: _regulations_to_review(db, user, perms, is_admin)),
-        _safe("petitions_assigned", lambda: _petitions_assigned(db, user, perms, is_admin)),
-        _safe("surveys_fill", lambda: _surveys_to_fill(db, user)),
-        _safe("calendar_prepare", lambda: _calendar_checklist_assigned(db, user)),
-        _safe("calendar_attend", lambda: _calendar_events_to_attend(db, user)),
-        _safe(
-            "announcements_publish", lambda: _announcements_to_publish(db, user, perms, is_admin)
+    source_calls = [
+        _run_source(db, "surveys_fill", lambda source_db: _surveys_to_fill(source_db, user)),
+        _run_source(
+            db,
+            "work_items_assigned",
+            lambda source_db: _work_items_assigned(source_db, user),
         ),
-        _safe("shop_sales", lambda: _shop_sales_to_manage(db, user, perms, is_admin)),
-        _safe("meal_deadlines", lambda: _meal_deadlines_to_manage(db, user, perms, is_admin)),
-        _safe("work_items_assigned", lambda: _work_items_assigned(db, user)),
-    )
+    ]
+    if _has(perms, is_admin, "document:approve"):
+        source_calls.append(
+            _run_source(
+                db,
+                "docs_approve",
+                lambda source_db: _docs_pending_my_approval(source_db, user, perms, is_admin),
+            )
+        )
+    if _has(perms, is_admin, "president:publish"):
+        source_calls.append(
+            _run_source(
+                db,
+                "regulations_publish",
+                lambda source_db: _regulations_to_publish(source_db, user, perms, is_admin),
+            )
+        )
+    if _has(perms, is_admin, "regulation:schedule") or _has(
+        perms, is_admin, "regulation:council_approve"
+    ):
+        source_calls.append(
+            _run_source(
+                db,
+                "regulations_review",
+                lambda source_db: _regulations_to_review(source_db, user, perms, is_admin),
+            )
+        )
+    if is_admin or any(permission.startswith("petition:") for permission in perms):
+        source_calls.append(
+            _run_source(
+                db,
+                "petitions_assigned",
+                lambda source_db: _petitions_assigned(source_db, user, perms, is_admin),
+            )
+        )
+    if _has(perms, is_admin, "announcement:publish"):
+        source_calls.append(
+            _run_source(
+                db,
+                "announcements_publish",
+                lambda source_db: _announcements_to_publish(source_db, user, perms, is_admin),
+            )
+        )
+    if _has(perms, is_admin, "shop:manage"):
+        source_calls.append(
+            _run_source(
+                db,
+                "shop_sales",
+                lambda source_db: _shop_sales_to_manage(source_db, user, perms, is_admin),
+            )
+        )
+    if isinstance(db.bind, AsyncEngine):
+        groups = await asyncio.gather(*source_calls)
+    else:
+        # 外層測試 transaction / savepoint 綁定單一 AsyncConnection，不能併發操作。
+        groups = [await source_call for source_call in source_calls]
     items: list[TaskItem] = [it for g in groups for it in g]
 
-    # 排序：critical → warning → info；同等級內 due_at 越近越前；其餘按 created_at desc
-    def _sort_key(t: TaskItem) -> tuple:
-        sev_order = {"critical": 0, "warning": 1, "info": 2}.get(t.severity, 3)
-        due = t.due_at.timestamp() if t.due_at else float("inf")
-        return (sev_order, due, -t.created_at.timestamp())
-
-    items.sort(key=_sort_key)
+    items = prioritize_tasks(items)
 
     by_module: dict[str, int] = dict(Counter(t.module for t in items))
     return TaskInboxResponse(items=items, total=len(items), by_module=by_module)
+
+
+async def build_task_count_cached(db: AsyncSession, user: User) -> TaskCountResponse:
+    """以 COUNT 查詢取得徽章數量，避免為共用 Topbar 載入完整待辦資料。"""
+    cache_key = f"task_count:{user.id}"
+    cached = await cache_get(cache_key)
+    if isinstance(cached, dict):
+        try:
+            return TaskCountResponse.model_validate(cached)
+        except Exception:
+            logger.debug("task count cache payload invalid user=%s", user.id, exc_info=True)
+
+    perms = await get_user_permission_codes(db, user.id)
+    is_admin = bool(getattr(user, "is_superuser", False))
+    now = datetime.now(UTC)
+    cutoff_48h = now + timedelta(hours=48)
+    count_queries: list[tuple[str, object]] = []
+    completed_response = (
+        select(SurveyResponse.id)
+        .where(
+            SurveyResponse.survey_id == Survey.id,
+            SurveyResponse.respondent_id == user.id,
+        )
+        .exists()
+    )
+
+    if _has(perms, is_admin, "document:approve"):
+        active_assignment = select(DocumentApprovalDelegation.id).where(
+            DocumentApprovalDelegation.principal_user_id == DocumentApproval.approver_id,
+            DocumentApprovalDelegation.delegate_user_id == user.id,
+            DocumentApprovalDelegation.org_id == Document.org_id,
+            DocumentApprovalDelegation.is_active.is_(True),
+            DocumentApprovalDelegation.start_at <= now,
+            or_(
+                DocumentApprovalDelegation.end_at.is_(None),
+                DocumentApprovalDelegation.end_at >= now,
+            ),
+        )
+        count_queries.append(
+            (
+                "document",
+                select(func.count(DocumentApproval.id), literal(0))
+                .select_from(DocumentApproval)
+                .join(Document, DocumentApproval.document_id == Document.id)
+                .where(DocumentApproval.status == ApprovalStepStatus.PENDING)
+                .where(
+                    or_(
+                        DocumentApproval.approver_id == user.id,
+                        and_(
+                            DocumentApproval.delegate_source == DelegateSource.MANUAL,
+                            DocumentApproval.delegate_id == user.id,
+                        ),
+                        and_(
+                            DocumentApproval.delegate_source == DelegateSource.ASSIGNMENT,
+                            active_assignment.exists(),
+                        ),
+                    )
+                ),
+            )
+        )
+
+    count_queries.extend(
+        [
+            (
+                "survey",
+                select(func.count(Survey.id), literal(0))
+                .select_from(Survey)
+                .where(Survey.status == SurveyStatus.OPEN)
+                .where(
+                    or_(
+                        Survey.is_anonymous.is_(True),
+                        Survey.allow_multiple.is_(True),
+                        ~completed_response,
+                    )
+                ),
+            ),
+            (
+                "work_item",
+                select(
+                    func.count(WorkItem.id),
+                    func.count(case((WorkItem.due_at < now, 1))),
+                )
+                .select_from(WorkItem)
+                .where(WorkItem.assigned_to_id == user.id)
+                .where(WorkItem.status == WorkItemStatus.OPEN)
+                .where(WorkItem.is_active.is_(True)),
+            ),
+        ]
+    )
+
+    if is_admin or _has(perms, is_admin, "president:publish"):
+        count_queries.append(
+            (
+                "regulation",
+                select(func.count(Regulation.id), func.count(Regulation.id))
+                .select_from(Regulation)
+                .where(Regulation.workflow_status == RegulationWorkflowStatus.COUNCIL_APPROVED),
+            )
+        )
+    if (
+        is_admin
+        or _has(perms, is_admin, "regulation:schedule")
+        or _has(perms, is_admin, "regulation:council_approve")
+    ):
+        count_queries.append(
+            (
+                "regulation",
+                select(func.count(Regulation.id), literal(0))
+                .select_from(Regulation)
+                .where(
+                    Regulation.workflow_status.in_(
+                        [RegulationWorkflowStatus.UNDER_REVIEW, RegulationWorkflowStatus.SCHEDULED]
+                    )
+                ),
+            )
+        )
+    if is_admin or any(permission.startswith("petition:") for permission in perms):
+        count_queries.append(
+            (
+                "petition",
+                select(func.count(PetitionCase.id), literal(0))
+                .select_from(PetitionCase)
+                .where(PetitionCase.assigned_to_id == user.id)
+                .where(
+                    PetitionCase.status.in_(
+                        [
+                            PetitionStatus.SUBMITTED,
+                            PetitionStatus.IN_PROGRESS,
+                            PetitionStatus.NEEDS_INFO,
+                        ]
+                    )
+                ),
+            )
+        )
+    if is_admin or _has(perms, is_admin, "announcement:publish"):
+        count_queries.append(
+            (
+                "announcement",
+                select(func.count(Announcement.id), literal(0))
+                .select_from(Announcement)
+                .where(Announcement.is_published.is_(False)),
+            )
+        )
+    if is_admin or _has(perms, is_admin, "shop:manage"):
+        count_queries.append(
+            (
+                "shop",
+                select(func.count(Product.id), literal(0))
+                .select_from(Product)
+                .where(Product.status == ProductStatus.ACTIVE)
+                .where(Product.sale_end.is_not(None))
+                .where(Product.sale_end >= now, Product.sale_end <= cutoff_48h),
+            )
+        )
+    combined = (
+        union_all(
+            *[
+                statement.with_only_columns(
+                    literal(module).label("module"),
+                    *statement.selected_columns,
+                    maintain_column_froms=True,
+                )
+                for module, statement in count_queries
+            ]
+        )
+        if count_queries
+        else None
+    )
+    results = (await db.execute(combined)).all() if combined is not None else []
+
+    by_module: dict[str, int] = {}
+    urgent_count = 0
+    for module, total, urgent in results:
+        if total:
+            by_module[module] = by_module.get(module, 0) + total
+        urgent_count += urgent
+    response = TaskCountResponse(
+        total=sum(by_module.values()),
+        by_module=by_module,
+        urgent_count=urgent_count,
+    )
+    await cache_set(cache_key, response.model_dump(mode="json"), ttl=TASK_COUNT_CACHE_TTL_SECONDS)
+    return response
+
+
+async def build_task_inbox_cached(db: AsyncSession, user: User) -> TaskInboxResponse:
+    cache_key = f"task_inbox:{user.id}"
+    cached = await cache_get(cache_key)
+    if isinstance(cached, dict):
+        try:
+            return TaskInboxResponse.model_validate(cached)
+        except Exception:
+            logger.debug("task inbox cache payload invalid user=%s", user.id, exc_info=True)
+
+    inbox = await build_task_inbox(db, user)
+    await cache_set(cache_key, inbox.model_dump(mode="json"), ttl=TASK_INBOX_CACHE_TTL_SECONDS)
+    return inbox

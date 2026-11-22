@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly HCCA active low-rate ffuf path discovery
+
+[Timer]
+OnCalendar=Sun *-*-* 08:11:00
+AccuracySec=1min
+Unit=hcca-security@path-fuzz.service
+
+[Install]
+WantedBy=timers.target

@@ -11,22 +11,36 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
+import logging
 import time
 import uuid
-from datetime import datetime
-from typing import Annotated, Literal
+from datetime import UTC, datetime
+from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from redis.exceptions import RedisError
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core import app_settings as app_settings_svc
 from api.core import recovery
+from api.core.anomaly_detection import get_login_ips
 from api.core.config import settings
 from api.core.database import engine, get_db
-from api.core.error_audit import clear_errors, get_recent_errors
+from api.core.defense import find_identity_block
+from api.core.defense import get_rules as get_defense_rules
+from api.core.error_audit import (
+    clear_errors,
+    find_error_by_id,
+    get_recent_errors,
+    record_client_error,
+)
 from api.core.ip_blocklist import block as ip_block
+from api.core.ip_blocklist import get_block as get_ip_block
 from api.core.ip_blocklist import list_blocked as ip_list_blocked
 from api.core.ip_blocklist import unblock as ip_unblock
 from api.core.load_signals import snapshot as load_snapshot
@@ -52,23 +66,49 @@ from api.core.module_health import (
     get_trip_meta,
     module_5xx_count,
     module_severity_breakdown,
+    recent_trip_events,
 )
 from api.core.module_recovery import attempt_recovery, probe_module
 from api.core.modules import MODULES
 from api.core.query_audit import get_slow_queries
 from api.core.security import redis_client, revoke_user
 from api.core.ws_manager import manager as ws_manager
-from api.dependencies.auth import get_current_active_user
+from api.dependencies.auth import get_current_active_user, get_identity_for_access_status
+from api.models.email_message import EmailMessage
+from api.models.system_incident import IncidentSeverity, IncidentStatus
 from api.models.user import User
+from api.models.user_identity import UserIdentity
 from api.services import audit as audit_svc
 from api.services import defense as defense_svc
 from api.services import mfa as mfa_svc
+from api.services import user_session as user_session_svc
+from api.services import version as version_svc
 from api.services.discord_bot import emit_security_alert
+from api.services.incident import (
+    append_incident_event,
+    get_incident,
+    list_incident_events,
+    list_incidents,
+    persist_client_error_incident,
+)
+from api.services.recovery_agent import RecoveryAction, execute_recovery
 
-router = APIRouter(prefix="/admin/system", tags=["管理員 / 系統"])
+router = APIRouter(
+    prefix="/admin/system",
+    tags=["管理員 / 系統"],
+)
 public_router = APIRouter(prefix="/system", tags=["系統"])
+logger = logging.getLogger(__name__)
+
+_IDENTITY_EMAIL_LOOKUP_RULE = "email_block"
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
+
+# 進程啟動時間（用於 diagnostics uptime；模組載入 ≈ app 啟動）
+_PROCESS_START_MONO = time.monotonic()
+
+# diagnostics 觀測的 Celery queue（與 docker-compose worker --queues 對齊）
+_DIAGNOSTIC_QUEUES = ["default", "email", "documents", "backup", "recovery", "celery"]
 
 
 async def require_superuser(user: User = Depends(get_current_active_user)) -> User:
@@ -179,6 +219,7 @@ class ModuleStatusOut(BaseModel):
     id: str
     label: str
     on: bool
+    mode: Literal["maintenance", "closed"] = "maintenance"
     source: str | None = None
     reason: str = ""
     since: float | None = None
@@ -217,13 +258,21 @@ class ModuleStatusPublic(BaseModel):
     id: str
     label: str
     on: bool
+    mode: Literal["maintenance", "closed"] = "maintenance"
     reason: str = ""
     until: float | None = None
 
 
 class ModuleMaintenanceBody(BaseModel):
     on: bool
+    mode: Literal["maintenance", "closed"] = "maintenance"
     reason: str = Field("", max_length=500)
+
+
+class AccessBlockStatus(BaseModel):
+    blocked: bool
+    reason: str = ""
+    expires_at: float | None = None
 
 
 @public_router.get(
@@ -239,11 +288,61 @@ async def public_module_status() -> list[ModuleStatusPublic]:
                 id=mid,
                 label=spec.label,
                 on=bool(st and st.get("on")),
+                mode=(st or {}).get("mode", "maintenance"),
                 reason=(st or {}).get("reason", "") if st else "",
                 until=(st or {}).get("until") if st else None,
             )
         )
     return out
+
+
+@public_router.get(
+    "/access-status",
+    response_model=AccessBlockStatus,
+    summary="檢查目前訪客是否遭封鎖",
+)
+async def public_access_status(
+    request: Request,
+    session: DbDep,
+    user: User | None = Depends(get_identity_for_access_status),
+) -> AccessBlockStatus:
+    ip = request.client.host if request.client else "unknown"
+    ip_block = await get_ip_block(ip)
+    if ip_block:
+        return AccessBlockStatus(
+            blocked=True,
+            reason=str(ip_block.get("reason") or "未提供原因"),
+            expires_at=ip_block.get("expires_at"),
+        )
+    if user is None:
+        return AccessBlockStatus(blocked=False)
+
+    # Most requests only need the user-id block check.  Avoid opening a DB
+    # connection for linked identities unless the active defense policy has an
+    # email block that could match one of them.  This is especially important
+    # because this public probe runs on many authenticated page loads.
+    rules = await get_defense_rules()
+    has_email_blocks = any(rule.get("rule_type") == _IDENTITY_EMAIL_LOOKUP_RULE for rule in rules)
+    identity_emails = {user.email}
+    if has_email_blocks:
+        identity_rows = await session.scalars(
+            select(UserIdentity.email).where(
+                UserIdentity.user_id == user.id,
+                UserIdentity.email.is_not(None),
+            )
+        )
+        identity_emails.update(email for email in identity_rows.all() if email)
+    identity_block = await find_identity_block(
+        user_id=str(user.id),
+        emails=identity_emails,
+    )
+    if not identity_block:
+        return AccessBlockStatus(blocked=False)
+    return AccessBlockStatus(
+        blocked=True,
+        reason=str(identity_block.get("reason") or "未提供原因"),
+        expires_at=identity_block.get("expires_at"),
+    )
 
 
 class IpBlockBody(BaseModel):
@@ -266,6 +365,8 @@ DefenseRuleTypeLiteral = Literal[
     "ip_block",
     "cidr_block",
     "ip_allow",
+    "user_block",
+    "email_block",
     "rate_limit_override",
     "endpoint_lockdown",
     "bot_challenge_placeholder",
@@ -325,6 +426,27 @@ class DefenseSummary(BaseModel):
     recent_status_counts: dict[str, int]
 
 
+class UserBlockPreview(BaseModel):
+    user_id: uuid.UUID
+    email: str
+    display_name: str
+    emails: list[str]
+    ips: list[str]
+
+
+class UserBlockBody(BaseModel):
+    identifier: str = Field(..., min_length=1, max_length=255)
+    reason: str = Field(..., min_length=1, max_length=1000)
+    expires_at: datetime | None = None
+    include_emails: bool = True
+    include_ips: bool = False
+
+
+class UserBlockResult(UserBlockPreview):
+    rules: list[DefenseRuleOut]
+    revoked_count: int
+
+
 class DeadLetterItem(BaseModel):
     timestamp: str | None = None
     status: str | None = None
@@ -336,11 +458,18 @@ class DeadLetterItem(BaseModel):
     exception: str | None = None
     args: list[str] = Field(default_factory=list)
     kwargs: dict[str, str] = Field(default_factory=dict)
+    replay_args: list[Any] | None = None
+    replay_kwargs: dict[str, Any] | None = None
+    replay_sig: str | None = None
 
 
 class DeadLetterResponse(BaseModel):
     key: str
     items: list[DeadLetterItem]
+
+
+class DeadLetterReplayBody(BaseModel):
+    expected_task: str = Field(..., min_length=1, max_length=200)
 
 
 # ── 即時指標總集 ─────────────────────────────────────────────────────────────
@@ -356,24 +485,28 @@ def _to_db_view(s: DbPoolSnapshot) -> DbPoolView:
     )
 
 
+def _ws_view() -> WsView:
+    ws_stats = ws_manager.stats()
+    return WsView(
+        total=int(ws_stats["total"]),
+        rooms=int(ws_stats["rooms"]),
+        unique_ips=int(ws_stats["unique_ips"]),
+        per_room=[WsRoomCount(**r) for r in ws_manager.list_rooms()],
+        limits=ws_stats["limits"],
+    )
+
+
 @router.get("/status", response_model=SystemMetricsSnapshot, summary="即時系統指標")
 async def system_status(_admin: AdminUser) -> SystemMetricsSnapshot:
     db = get_db_pool_stats(engine)
     redis = await get_redis_stats()
     celery = await get_celery_stats()
-    ws_stats = ws_manager.stats()
     maintenance = await get_maintenance_state()
     return SystemMetricsSnapshot(
         timestamp=time.time(),
         db_pool=_to_db_view(db),
         redis=RedisView(**redis),
-        ws=WsView(
-            total=int(ws_stats["total"]),
-            rooms=int(ws_stats["rooms"]),
-            unique_ips=int(ws_stats["unique_ips"]),
-            per_room=[WsRoomCount(**r) for r in ws_manager.list_rooms()],
-            limits=ws_stats["limits"],
-        ),
+        ws=_ws_view(),
         celery=CeleryView(
             queues=[CeleryQueueView(**q) for q in celery.get("queues", [])],
             error=celery.get("error"),
@@ -381,6 +514,131 @@ async def system_status(_admin: AdminUser) -> SystemMetricsSnapshot:
         load_signals=LoadSignalsView(**load_snapshot()),
         maintenance=MaintenanceView(**maintenance),
         load_shed_mode=await get_load_shed_force_mode(),
+    )
+
+
+class DiagnosticsCheck(BaseModel):
+    ok: bool
+    detail: str | None = None
+
+
+class QueueDepth(BaseModel):
+    name: str
+    pending: int  # broker backlog（-1 代表查詢失敗）
+
+
+class DiagnosticsView(BaseModel):
+    timestamp: float
+    version: str
+    uptime_seconds: float
+    db: DiagnosticsCheck
+    redis: DiagnosticsCheck
+    celery: DiagnosticsCheck
+    workers: list[CeleryQueueView]
+    queue_depths: list[QueueDepth]
+    email_queue_pending: int
+    email_outbox: dict[str, int]  # status -> 件數（含 retrying / dead）
+    ws: WsView
+
+
+class RuntimeVersionView(BaseModel):
+    app_version: str
+    commit: str | None
+    ref: str | None
+    built_at: str | None
+    environment: str
+
+
+class GitHubVersionView(BaseModel):
+    repository: str
+    branch: str
+    sha: str | None
+    short_sha: str | None
+    message: str | None
+    pushed_at: str | None
+    url: str | None
+    version: str | None
+
+
+class VersionStatusView(BaseModel):
+    runtime: RuntimeVersionView
+    github: GitHubVersionView | None
+    sync_status: Literal["current", "outdated", "unknown"]
+    github_error: str | None = None
+
+
+@router.get("/version", response_model=VersionStatusView, summary="運行與 GitHub 版本")
+async def system_version(_admin: AdminUser) -> VersionStatusView:
+    runtime = RuntimeVersionView(**version_svc.runtime_version())
+    github_data, github_error = await version_svc.github_version()
+    github = GitHubVersionView(**github_data) if github_data else None
+    sync_status: Literal["current", "outdated", "unknown"] = "unknown"
+    if runtime.commit and github and github.sha:
+        sync_status = "current" if github.sha.startswith(runtime.commit) else "outdated"
+    return VersionStatusView(
+        runtime=runtime,
+        github=github,
+        sync_status=sync_status,
+        github_error=github_error,
+    )
+
+
+@router.get("/diagnostics", response_model=DiagnosticsView, summary="一鍵健康診斷（管理員）")
+async def system_diagnostics(_admin: AdminUser, db: DbDep) -> DiagnosticsView:
+    """彙整 DB / Redis / Celery / queue 積壓 / email outbox / WebSocket / uptime / 版本，
+    供管理員一眼判斷系統健康與寄信積壓。每項皆容錯，不因單一子系統故障而整體 500。"""
+    # DB
+    try:
+        await db.execute(text("SELECT 1"))
+        db_check = DiagnosticsCheck(ok=True)
+    except Exception as exc:  # noqa: BLE001
+        db_check = DiagnosticsCheck(ok=False, detail=exc.__class__.__name__)
+
+    # Redis
+    redis = await get_redis_stats()
+    redis_check = DiagnosticsCheck(ok=redis.get("error") is None, detail=redis.get("error"))
+
+    # Celery workers
+    celery = await get_celery_stats()
+    workers = [CeleryQueueView(**q) for q in celery.get("queues", [])]
+    celery_err = celery.get("error") or (None if workers else "no_workers")
+    celery_check = DiagnosticsCheck(ok=celery_err is None, detail=celery_err)
+
+    # Queue 積壓（Celery on Redis：每個 queue 是一條 Redis list）
+    depths: list[QueueDepth] = []
+    email_pending = 0
+    for q in _DIAGNOSTIC_QUEUES:
+        try:
+            n = int(await redis_client.llen(q))
+        except RedisError:
+            n = -1
+        depths.append(QueueDepth(name=q, pending=n))
+        if q == "email":
+            email_pending = max(n, 0)
+
+    # Email outbox 狀態彙總
+    try:
+        rows = (
+            await db.execute(
+                select(EmailMessage.status, func.count()).group_by(EmailMessage.status)
+            )
+        ).all()
+        outbox = {str(row[0]): int(row[1]) for row in rows}
+    except Exception:  # noqa: BLE001
+        outbox = {}
+
+    return DiagnosticsView(
+        timestamp=time.time(),
+        version=settings.APP_VERSION,
+        uptime_seconds=round(time.monotonic() - _PROCESS_START_MONO, 1),
+        db=db_check,
+        redis=redis_check,
+        celery=celery_check,
+        workers=workers,
+        queue_depths=depths,
+        email_queue_pending=email_pending,
+        email_outbox=outbox,
+        ws=_ws_view(),
     )
 
 
@@ -407,9 +665,84 @@ async def list_dead_letters(_admin: AdminUser, limit: int = 50) -> DeadLetterRes
     response_model=dict,
     summary="清空 Celery Dead Letter Queue",
 )
-async def clear_dead_letters(_admin: AdminUser) -> dict:
+async def clear_dead_letters(session: DbDep, _admin: AdminUser) -> dict:
     removed = await redis_client.delete(settings.CELERY_DLQ_REDIS_KEY)
+    await audit_svc.record(
+        session,
+        entity_type="celery_dead_letter",
+        entity_id=settings.CELERY_DLQ_REDIS_KEY,
+        action="clear",
+        actor_id=str(_admin.id),
+        meta={"removed": bool(removed)},
+        summary="清空 Celery Dead Letter Queue",
+    )
+    await session.commit()
     return {"cleared": bool(removed), "key": settings.CELERY_DLQ_REDIS_KEY}
+
+
+@router.post(
+    "/dead-letters/{index}/replay",
+    response_model=dict,
+    summary="安全重放單筆 Celery Dead Letter",
+)
+async def replay_dead_letter(
+    index: int,
+    body: DeadLetterReplayBody,
+    session: DbDep,
+    _admin: AdminUser,
+) -> dict:
+    if index < 0:
+        raise HTTPException(status_code=400, detail="index 不可小於 0")
+    raw = await redis_client.lindex(settings.CELERY_DLQ_REDIS_KEY, index)
+    if raw is None:
+        raise HTTPException(status_code=404, detail="Dead letter 不存在")
+    try:
+        payload = json.loads(raw)
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=409, detail="Dead letter 格式損壞") from exc
+
+    task = payload.get("task") if isinstance(payload, dict) else None
+    replay_args = payload.get("replay_args") if isinstance(payload, dict) else None
+    replay_kwargs = payload.get("replay_kwargs") if isinstance(payload, dict) else None
+    if task != body.expected_task:
+        raise HTTPException(status_code=409, detail="expected_task 與 dead letter 不符")
+    if not isinstance(task, str) or not task.startswith("api.services."):
+        raise HTTPException(status_code=409, detail="只允許重放平台內部 task")
+    if not isinstance(replay_args, list) or not isinstance(replay_kwargs, dict):
+        raise HTTPException(status_code=409, detail="此舊項目未保存可安全重放的原始參數")
+
+    # 驗證 HMAC 簽名，防止 Redis 內容遭篡改後注入惡意 args
+    replay_sig = payload.get("replay_sig") if isinstance(payload, dict) else None
+    if not replay_sig:
+        raise HTTPException(status_code=409, detail="此項目缺少驗簽資料（舊格式），請清除後重試")
+    expected_sig_body = json.dumps(
+        {"task": task, "replay_args": replay_args, "replay_kwargs": replay_kwargs},
+        sort_keys=True,
+        ensure_ascii=False,
+    ).encode()
+    expected_sig = hmac.new(
+        settings.SECRET_KEY.encode(),
+        expected_sig_body,
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(expected_sig, replay_sig):
+        raise HTTPException(status_code=409, detail="Dead letter 驗簽失敗，可能遭篡改，拒絕執行")
+
+    from api.core.celery_app import celery_app
+
+    result = celery_app.send_task(task, args=replay_args, kwargs=replay_kwargs)
+    await redis_client.lrem(settings.CELERY_DLQ_REDIS_KEY, 1, raw)
+    await audit_svc.record(
+        session,
+        entity_type="celery_dead_letter",
+        entity_id=str(payload.get("task_id") or index),
+        action="replay",
+        actor_id=str(_admin.id),
+        meta={"task": task, "new_task_id": result.id},
+        summary=f"重放 Celery task：{task}",
+    )
+    await session.commit()
+    return {"replayed": True, "task": task, "task_id": result.id}
 
 
 # ── Maintenance ──────────────────────────────────────────────────────────────
@@ -453,7 +786,10 @@ async def list_flags(_admin: AdminUser) -> list[FeatureFlagItem]:
     return [FeatureFlagItem(**i) for i in items]
 
 
-@router.patch("/feature-flags/{key:path}", response_model=FeatureFlagItem)
+@router.patch(
+    "/feature-flags/{key:path}",
+    response_model=FeatureFlagItem,
+)
 async def update_flag(
     key: str, body: SetFlagBody, session: DbDep, _admin: AdminUser
 ) -> FeatureFlagItem:
@@ -519,6 +855,7 @@ async def list_modules(_admin: AdminUser) -> list[ModuleStatusOut]:
                 id=mid,
                 label=spec.label,
                 on=bool(st.get("on")),
+                mode=st.get("mode", "maintenance"),
                 source=st.get("source"),
                 reason=st.get("reason", ""),
                 since=st.get("since"),
@@ -532,12 +869,21 @@ async def list_modules(_admin: AdminUser) -> list[ModuleStatusOut]:
     return out
 
 
-@router.put("/modules/{module_id}/maintenance", response_model=ModuleStatusOut)
+@router.put(
+    "/modules/{module_id}/maintenance",
+    response_model=ModuleStatusOut,
+)
 async def update_module_maintenance(
     module_id: str, body: ModuleMaintenanceBody, session: DbDep, _admin: AdminUser
 ) -> ModuleStatusOut:
     _validate_module(module_id)
-    state = await set_module_maintenance(module_id, on=body.on, source="manual", reason=body.reason)
+    state = await set_module_maintenance(
+        module_id,
+        on=body.on,
+        mode=body.mode,
+        source="manual",
+        reason=body.reason,
+    )
     await audit_svc.record(
         session,
         entity_type="defense_rule",
@@ -545,21 +891,31 @@ async def update_module_maintenance(
         action="set_module_maintenance",
         actor_id=str(_admin.id),
         actor_email=_admin.email,
-        meta={"module": module_id, "on": body.on, "reason": body.reason},
-        summary=f"{'開啟' if body.on else '關閉'}模組維護：{MODULES[module_id].label}",
+        meta={"module": module_id, "on": body.on, "mode": body.mode, "reason": body.reason},
+        summary=(
+            f"關閉模組：{MODULES[module_id].label}"
+            if body.on and body.mode == "closed"
+            else f"{'開啟' if body.on else '關閉'}模組維護：{MODULES[module_id].label}"
+        ),
     )
     await emit_security_alert(
         session,
         title="模組維護狀態已更新",
-        body=f"module={module_id} on={body.on} actor={_admin.email}",
+        body=f"module={module_id} on={body.on} mode={body.mode} actor={_admin.email}",
     )
     await ws_manager.broadcast_all(
-        {"type": "module_maintenance", "module": module_id, "on": body.on}
+        {
+            "type": "module_maintenance",
+            "module": module_id,
+            "on": body.on,
+            "mode": body.mode,
+        }
     )
     return ModuleStatusOut(
         id=module_id,
         label=MODULES[module_id].label,
         on=bool(state.get("on")),
+        mode=state.get("mode", "maintenance"),
         source=state.get("source"),
         reason=state.get("reason", ""),
         since=state.get("since"),
@@ -655,7 +1011,9 @@ async def module_trip_history(module_id: str, _admin: AdminUser) -> ModuleTripHi
         max_severity=str(meta["max_severity"]),
         recent_5xx_count=module_5xx_count(module_id),
         severity_breakdown=breakdown,
-        recent_events=[],  # 未來：可從 audit_log 撈 module-trip 事件
+        recent_events=[
+            ModuleTripHistoryItem.model_validate(item) for item in recent_trip_events(module_id)
+        ],
     )
 
 
@@ -822,7 +1180,11 @@ async def list_defense_rules(
     return [DefenseRuleOut(**defense_svc.rule_to_dict(row)) for row in rows]
 
 
-@router.post("/defense/rules", response_model=DefenseRuleOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/defense/rules",
+    response_model=DefenseRuleOut,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_defense_rule(
     body: DefenseRuleCreate, session: DbDep, _admin: AdminUser
 ) -> DefenseRuleOut:
@@ -843,7 +1205,10 @@ async def create_defense_rule(
     return DefenseRuleOut(**defense_svc.rule_to_dict(rule))
 
 
-@router.patch("/defense/rules/{rule_id}", response_model=DefenseRuleOut)
+@router.patch(
+    "/defense/rules/{rule_id}",
+    response_model=DefenseRuleOut,
+)
 async def update_defense_rule(
     rule_id: uuid.UUID, body: DefenseRuleUpdate, session: DbDep, _admin: AdminUser
 ) -> DefenseRuleOut:
@@ -857,7 +1222,10 @@ async def update_defense_rule(
     return DefenseRuleOut(**defense_svc.rule_to_dict(rule))
 
 
-@router.delete("/defense/rules/{rule_id}", response_model=DefenseRuleOut)
+@router.delete(
+    "/defense/rules/{rule_id}",
+    response_model=DefenseRuleOut,
+)
 async def deactivate_defense_rule(
     rule_id: uuid.UUID, session: DbDep, _admin: AdminUser
 ) -> DefenseRuleOut:
@@ -868,6 +1236,80 @@ async def deactivate_defense_rule(
         body=f"rule={rule_id}\nactor={_admin.email}",
     )
     return DefenseRuleOut(**defense_svc.rule_to_dict(rule))
+
+
+@router.get("/defense/users/{identifier}", response_model=UserBlockPreview)
+async def preview_user_block(
+    identifier: str,
+    session: DbDep,
+    _admin: AdminUser,
+) -> UserBlockPreview:
+    user, emails = await defense_svc.get_user_block_targets(session, identifier)
+    return UserBlockPreview(
+        user_id=user.id,
+        email=user.email,
+        display_name=user.display_name,
+        emails=emails,
+        ips=await get_login_ips(str(user.id)),
+    )
+
+
+@router.post(
+    "/defense/user-blocks",
+    response_model=UserBlockResult,
+    status_code=status.HTTP_201_CREATED,
+)
+async def block_user(
+    body: UserBlockBody,
+    session: DbDep,
+    _admin: AdminUser,
+) -> UserBlockResult:
+    user, emails = await defense_svc.get_user_block_targets(session, body.identifier)
+    if user.id == _admin.id:
+        raise HTTPException(status_code=409, detail="不可封鎖目前登入的管理員帳號")
+
+    ips = await get_login_ips(str(user.id))
+    targets = [("user_block", str(user.id))]
+    if body.include_emails:
+        targets.extend(("email_block", email) for email in emails)
+    if body.include_ips:
+        targets.extend(("ip_block", ip) for ip in ips)
+
+    # 先確認撤銷標記能持久寫入，避免 Redis 故障時已建立封鎖規則、卻無法立即
+    # 使既有 access token 失效的半完成狀態。
+    legacy_revoked_count = await revoke_user(str(user.id))
+    rules = [
+        await defense_svc.create_rule(
+            session,
+            actor=_admin,
+            rule_type=rule_type,
+            target=target,
+            reason=body.reason,
+            expires_at=body.expires_at,
+            config={"source": "user_block", "user_id": str(user.id)},
+        )
+        for rule_type, target in targets
+    ]
+    revoked_count = legacy_revoked_count + await user_session_svc.revoke_all(
+        session, user.id, reason="account_blocked"
+    )
+    await emit_security_alert(
+        session,
+        title="封鎖使用者",
+        body=(
+            f"user={user.id}\nemail={user.email}\nactor={_admin.email}\n"
+            f"rules={len(rules)}\nreason={body.reason}"
+        ),
+    )
+    return UserBlockResult(
+        user_id=user.id,
+        email=user.email,
+        display_name=user.display_name,
+        emails=emails,
+        ips=ips,
+        rules=[DefenseRuleOut(**defense_svc.rule_to_dict(rule)) for rule in rules],
+        revoked_count=revoked_count,
+    )
 
 
 @router.get("/rate-limit", response_model=dict)
@@ -891,7 +1333,11 @@ async def get_ip_blocklist(_admin: AdminUser) -> list[IpBlockedItem]:
     return [IpBlockedItem(**i) for i in await ip_list_blocked()]
 
 
-@router.post("/ip-blocklist", response_model=IpBlockedItem, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/ip-blocklist",
+    response_model=IpBlockedItem,
+    status_code=status.HTTP_201_CREATED,
+)
 async def add_ip_block(body: IpBlockBody, session: DbDep, _admin: AdminUser) -> IpBlockedItem:
     await ip_block(body.ip, reason=body.reason, ttl_seconds=body.ttl_seconds)
     expires_at = (time.time() + body.ttl_seconds) if body.ttl_seconds else None
@@ -941,7 +1387,10 @@ async def remove_ip_block(ip: str, session: DbDep, _admin: AdminUser) -> dict:
 
 @router.post("/revoke-user-tokens", response_model=dict)
 async def force_logout_user(body: RevokeUserBody, session: DbDep, _admin: AdminUser) -> dict:
-    count = await revoke_user(str(body.user_id))
+    legacy_count = await revoke_user(str(body.user_id))
+    count = legacy_count + await user_session_svc.revoke_all(
+        session, body.user_id, reason="admin_revoke_all"
+    )
     await audit_svc.record(
         session,
         entity_type="defense_rule",
@@ -975,10 +1424,15 @@ async def ws_rooms_overview(_admin: AdminUser) -> dict:
 # ── 慢查詢監控（query_audit ring buffer） ───────────────────────────────────
 
 
-@router.get("/metrics/slow-queries", response_model=dict, summary="近期慢查詢樣本")
+@router.get(
+    "/metrics/slow-queries",
+    response_model=dict,
+    summary="近期慢查詢樣本",
+)
+@router.get("/slow-queries", response_model=dict, include_in_schema=False)
 async def metrics_slow_queries(
     _admin: AdminUser,
-    top: int = 10,
+    top: int = Query(10, ge=1, le=100),
 ) -> dict:
     """
     回傳記憶體 ring buffer 中聚合過的慢查詢樣本（>50ms）。
@@ -987,11 +1441,49 @@ async def metrics_slow_queries(
     return {"top": top, "items": get_slow_queries(top=top)}
 
 
+@router.get("/metrics/pg-stat-statements", response_model=dict, summary="PostgreSQL 慢查詢統計")
+async def metrics_pg_stat_statements(
+    db: DbDep,
+    _admin: AdminUser,
+    limit: int = Query(20, ge=1, le=100),
+) -> dict:
+    """讀取 pg_stat_statements；未啟用 extension 時回傳可診斷結果。"""
+    try:
+        result = await db.execute(
+            text(
+                """
+                SELECT query, calls, mean_exec_time, total_exec_time, rows
+                FROM pg_stat_statements
+                WHERE dbid = (SELECT oid FROM pg_database WHERE datname = current_database())
+                ORDER BY mean_exec_time DESC
+                LIMIT :limit
+                """
+            ),
+            {"limit": limit},
+        )
+    except Exception:
+        logger.warning("pg_stat_statements is unavailable", exc_info=True)
+        return {
+            "available": False,
+            "reason": "pg_stat_statements 未啟用或目前資料庫帳號無權限",
+            "items": [],
+        }
+
+    return {
+        "available": True,
+        "items": [dict(row) for row in result.mappings().all()],
+    }
+
+
 # ── 近期錯誤（error_audit ring buffer） ──────────────────────────────────────
 
 
 class RecentErrorItem(BaseModel):
     error_id: str
+    request_id: str | None = None
+    trace_id: str | None = None
+    client_ip: str | None = None
+    user_agent: str | None = None
     category: str
     exc_type: str
     message: str
@@ -999,9 +1491,11 @@ class RecentErrorItem(BaseModel):
     path: str
     status_code: int
     traceback_head: str
+    context: dict[str, object] = Field(default_factory=dict)
     first_seen: float
     last_seen: float
     occurrences: int
+    source: str = "memory"
 
 
 class RecentErrorsResponse(BaseModel):
@@ -1009,22 +1503,363 @@ class RecentErrorsResponse(BaseModel):
     items: list[RecentErrorItem]
 
 
+class IncidentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    error_id: str
+    fingerprint: str
+    severity: IncidentSeverity
+    status: IncidentStatus
+    service: str
+    environment: str
+    release_version: str | None = None
+    title: str
+    summary: str | None = None
+    first_seen_at: datetime
+    last_seen_at: datetime
+    occurrence_count: int
+    trace_id: str | None = None
+    request_id: str | None = None
+    automatic_recovery_attempted: bool
+    automatic_recovery_succeeded: bool | None = None
+    recovery_action: str | None = None
+    assigned_to: uuid.UUID | None = None
+    resolved_at: datetime | None = None
+    resolution_note: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class IncidentEventOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    incident_id: uuid.UUID
+    event_type: str
+    actor_type: str
+    actor_id: uuid.UUID | None = None
+    details: dict
+    created_at: datetime
+
+
+class IncidentDetailOut(IncidentOut):
+    events: list[IncidentEventOut] = Field(default_factory=list)
+
+
+class IncidentUpdateBody(BaseModel):
+    status: IncidentStatus | None = None
+    resolution_note: str | None = Field(None, max_length=2000)
+
+
+class IncidentEventBody(BaseModel):
+    event_type: str = Field(..., min_length=1, max_length=64)
+    details: dict = Field(default_factory=dict)
+
+
+class RecoveryActionBody(BaseModel):
+    action: RecoveryAction
+    target: str = Field(..., min_length=1, max_length=64)
+    task_id: str | None = Field(None, max_length=200)
+
+
+@router.get("/incidents", response_model=list[IncidentOut], summary="查詢事故紀錄")
+async def admin_incidents(
+    _admin: AdminUser,
+    session: DbDep,
+    incident_status: IncidentStatus | None = None,
+    limit: int = 50,
+) -> list[IncidentOut]:
+    items = await list_incidents(
+        session,
+        status=incident_status.value if incident_status else None,
+        limit=limit,
+    )
+    return [IncidentOut.model_validate(item) for item in items]
+
+
+@router.get(
+    "/incidents/{incident_id}",
+    response_model=IncidentDetailOut,
+    summary="查詢事故與事件歷程",
+)
+async def admin_incident_detail(
+    incident_id: uuid.UUID,
+    _admin: AdminUser,
+    session: DbDep,
+) -> IncidentDetailOut:
+    incident = await get_incident(session, incident_id)
+    if incident is None:
+        raise HTTPException(status_code=404, detail="事故不存在")
+    events = await list_incident_events(session, incident_id)
+    return IncidentDetailOut(
+        **IncidentOut.model_validate(incident).model_dump(),
+        events=[IncidentEventOut.model_validate(event) for event in events],
+    )
+
+
+@router.patch(
+    "/incidents/{incident_id}",
+    response_model=IncidentOut,
+    summary="更新事故狀態",
+)
+async def update_incident(
+    incident_id: uuid.UUID,
+    body: IncidentUpdateBody,
+    _admin: AdminUser,
+    session: DbDep,
+) -> IncidentOut:
+    incident = await get_incident(session, incident_id)
+    if incident is None:
+        raise HTTPException(status_code=404, detail="事故不存在")
+    if body.status is not None:
+        incident.status = body.status
+        incident.resolved_at = datetime.now(UTC) if body.status == IncidentStatus.RESOLVED else None
+        await append_incident_event(
+            session,
+            incident_id=incident.id,
+            event_type="status_changed",
+            actor_id=_admin.id,
+            details={"status": body.status.value},
+        )
+    if body.resolution_note is not None:
+        incident.resolution_note = body.resolution_note
+    await session.commit()
+    await session.refresh(incident)
+    return IncidentOut.model_validate(incident)
+
+
+@router.post(
+    "/incidents/{incident_id}/events",
+    response_model=IncidentEventOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="新增事故事件",
+)
+async def create_incident_event(
+    incident_id: uuid.UUID,
+    body: IncidentEventBody,
+    _admin: AdminUser,
+    session: DbDep,
+) -> IncidentEventOut:
+    incident = await get_incident(session, incident_id)
+    if incident is None:
+        raise HTTPException(status_code=404, detail="事故不存在")
+    event = await append_incident_event(
+        session,
+        incident_id=incident_id,
+        event_type=body.event_type,
+        actor_id=_admin.id,
+        details=body.details,
+    )
+    await session.commit()
+    await session.refresh(event)
+    return IncidentEventOut.model_validate(event)
+
+
+@router.post(
+    "/incidents/{incident_id}/recover",
+    response_model=dict,
+    summary="執行白名單事故緩解動作",
+)
+async def recover_incident(
+    incident_id: uuid.UUID,
+    body: RecoveryActionBody,
+    _admin: AdminUser,
+    session: DbDep,
+) -> dict[str, Any]:
+    incident = await get_incident(session, incident_id)
+    if incident is None:
+        raise HTTPException(status_code=404, detail="事故不存在")
+    try:
+        result = await execute_recovery(
+            action=body.action,
+            target=body.target,
+            task_id=body.task_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    incident.automatic_recovery_attempted = True
+    incident.automatic_recovery_succeeded = result.success
+    incident.recovery_action = f"{result.action}:{result.target}"
+    await append_incident_event(
+        session,
+        incident_id=incident.id,
+        event_type="recovery_executed",
+        actor_id=_admin.id,
+        details={
+            "action": result.action,
+            "target": result.target,
+            "success": result.success,
+            "detail": result.detail,
+        },
+    )
+    if result.success and incident.status == IncidentStatus.OPEN:
+        incident.status = IncidentStatus.MITIGATED
+    await session.commit()
+    return {
+        "ok": result.success,
+        "action": result.action,
+        "target": result.target,
+        "detail": result.detail,
+    }
+
+
+class ClientErrorDiagnostics(BaseModel):
+    """Bounded, typed details for diagnosing browser and API transport failures."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    failure_kind: Literal["offline", "network", "timeout", "csp", "resource"] | None = None
+    request_method: (
+        Literal["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "UNKNOWN"] | None
+    ) = None
+    request_path: str | None = Field(None, max_length=500)
+    request_attempts: int | None = Field(None, ge=0, le=10)
+    request_timeout_ms: int | None = Field(None, ge=0, le=120_000)
+    request_elapsed_ms: float | None = Field(None, ge=0, le=86_400_000, allow_inf_nan=False)
+    request_trace_id: str | None = Field(None, pattern=r"^[0-9a-f]{32}$")
+    request_phase: Literal["headers", "body"] | None = None
+    online_at_start: bool | None = None
+    visibility_at_start: Literal["visible", "hidden", "prerender"] | None = None
+    request_hidden_ms: float | None = Field(None, ge=0, le=86_400_000, allow_inf_nan=False)
+    timeout_timer_delay_ms: float | None = Field(None, ge=0, le=86_400_000, allow_inf_nan=False)
+    error_name: str | None = Field(None, max_length=100)
+    error_source: str | None = Field(None, max_length=500)
+    error_line: int | None = Field(None, ge=0)
+    error_column: int | None = Field(None, ge=0)
+    error_digest: str | None = Field(None, max_length=128)
+    render_source: str | None = Field(None, max_length=100)
+    route_path: str | None = Field(None, max_length=500)
+    response_request_id: str | None = Field(None, max_length=100)
+    csp_directive: str | None = Field(None, max_length=100)
+    csp_disposition: Literal["enforce", "report"] | None = None
+    csp_blocked_source: str | None = Field(None, max_length=256)
+    csp_source_origin: str | None = Field(None, max_length=256)
+    csp_line_number: int | None = Field(None, ge=0)
+    csp_column_number: int | None = Field(None, ge=0)
+    resource_origin: str | None = Field(None, max_length=256)
+    resource_path: str | None = Field(None, max_length=500)
+    resource_timing_available: bool | None = None
+    resource_status: int | None = Field(None, ge=0, le=599)
+    resource_duration_ms: float | None = Field(None, ge=0, le=86_400_000, allow_inf_nan=False)
+    resource_transfer_bytes: int | None = Field(None, ge=0)
+    resource_encoded_bytes: int | None = Field(None, ge=0)
+    resource_protocol: str | None = Field(None, max_length=32)
+    resource_probe_status: int | None = Field(None, ge=100, le=599)
+    resource_probe_result: Literal["response", "network_error", "skipped"] | None = None
+    image_connected: bool | None = None
+    image_complete: bool | None = None
+    image_natural_width: int | None = Field(None, ge=0)
+    image_loading: str | None = Field(None, max_length=16)
+    document_ready_state: str | None = Field(None, max_length=16)
+
+    @field_validator("request_path", "resource_path", "error_source", "route_path", mode="before")
+    @classmethod
+    def remove_request_query_and_fragment(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        return value.split("?", 1)[0].split("#", 1)[0][:500]
+
+
+class ClientErrorContext(BaseModel):
+    """有限且無 query string 的瀏覽器診斷欄位。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    release: str | None = Field(None, max_length=128)
+    language: str | None = Field(None, max_length=32)
+    timezone: str | None = Field(None, max_length=100)
+    viewport: str | None = Field(None, max_length=32)
+    page_origin: str | None = Field(None, max_length=256)
+    api_origin: str | None = Field(None, max_length=256)
+    connection_type: str | None = Field(None, max_length=32)
+    referrer_path: str | None = Field(None, max_length=500)
+    online: bool | None = None
+    visibility_state: str | None = Field(None, max_length=32)
+    diagnostics: ClientErrorDiagnostics | None = None
+
+
+class ClientErrorReport(BaseModel):
+    """瀏覽器 runtime error 的最小且有長度限制的回報格式。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    scope: str = Field(default="unknown", max_length=100)
+    message: str = Field(min_length=1, max_length=1000)
+    stack: str = Field(default="", max_length=6000)
+    pathname: str = Field(default="", max_length=500)
+    context: ClientErrorContext = Field(default_factory=ClientErrorContext)
+
+
+@public_router.post(
+    "/client-errors",
+    response_model=dict,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="接收瀏覽器錯誤回報",
+)
+async def report_client_error(body: ClientErrorReport, request: Request) -> dict[str, str]:
+    """接收匿名前端錯誤；不依賴登入，才能記錄登入頁與公開頁面的崩潰。"""
+    path = body.pathname.split("?", 1)[0].split("#", 1)[0]
+    error_id = await record_client_error(
+        message=body.message,
+        stack=body.stack,
+        scope=body.scope,
+        path=path,
+        request_id=getattr(request.state, "request_id", None),
+        trace_id=getattr(request.state, "trace_id", None),
+        client_ip=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+        context=body.context.model_dump(exclude_none=True),
+    )
+    await persist_client_error_incident(
+        error_id=error_id,
+        message=body.message,
+        stack=body.stack,
+        scope=body.scope,
+        path=path,
+        context=body.context.model_dump(exclude_none=True),
+        request_id=getattr(request.state, "request_id", None),
+        trace_id=getattr(request.state, "trace_id", None),
+        client_ip=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
+    return {
+        "error_id": error_id,
+        "request_id": str(getattr(request.state, "request_id", "")),
+        "trace_id": str(getattr(request.state, "trace_id", "")),
+    }
+
+
 @router.get("/errors", response_model=RecentErrorsResponse, summary="近期伺服器錯誤")
 async def recent_errors(_admin: AdminUser, top: int = 50) -> RecentErrorsResponse:
-    """記憶體 ring buffer 中最近的 5xx／未處理例外，依 last_seen 由新到舊。重啟後清空。"""
-    items = get_recent_errors(top=top)
+    """跨 worker 的最近錯誤，依 last_seen 由新到舊。"""
+    items = await get_recent_errors(top=top)
     return RecentErrorsResponse(count=len(items), items=[RecentErrorItem(**i) for i in items])
+
+
+@router.get("/errors/{error_id}", response_model=RecentErrorItem, summary="依錯誤代碼查詢錯誤報告")
+async def error_by_id(error_id: str, _admin: AdminUser) -> RecentErrorItem:
+    """依使用者回報的 error_id 查詢該次錯誤摘要；會查 memory ring buffer 與 Redis 報告事件。"""
+    item = await find_error_by_id(error_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="找不到此錯誤代碼")
+    return RecentErrorItem(**item)
 
 
 @router.post("/errors/clear", response_model=dict, summary="清空錯誤緩衝")
 async def clear_recent_errors(_admin: AdminUser) -> dict:
-    return {"cleared": clear_errors()}
+    return {"cleared": await clear_errors()}
 
 
 # ── 復原工具（清快取 / 升級資料庫 / 重啟） ──────────────────────────────────
 
 
-@router.post("/recovery/clear-cache", response_model=dict, summary="清除應用層快取")
+@router.post(
+    "/recovery/clear-cache",
+    response_model=dict,
+    summary="清除應用層快取",
+)
 async def recovery_clear_cache(session: DbDep, _admin: AdminUser) -> dict:
     result = await recovery.clear_app_cache()
     await audit_svc.record(
@@ -1045,18 +1880,26 @@ async def recovery_clear_cache(session: DbDep, _admin: AdminUser) -> dict:
     return {"ok": True, **result}
 
 
-@router.post("/recovery/db-upgrade", response_model=dict, summary="升級資料庫到最新版本")
+@router.post(
+    "/recovery/db-upgrade",
+    response_model=dict,
+    summary="升級資料庫到最新版本",
+)
 async def recovery_db_upgrade(session: DbDep, _admin: AdminUser) -> dict:
-    """執行 alembic upgrade head。失敗時以 ok=False + error 回傳完整訊息供超管除錯。"""
+    """執行 alembic upgrade head。"""
     try:
         result = await recovery.run_db_upgrade()
-    except Exception as exc:  # noqa: BLE001 — 超管需要看到完整遷移錯誤
+    except Exception:  # noqa: BLE001
+        logger.exception("Database upgrade failed")
         await emit_security_alert(
             session,
             title="資料庫升級失敗",
-            body=f"error={exc} actor={_admin.email}",
+            body=f"actor={_admin.email}",
         )
-        return {"ok": False, "error": str(exc)}
+        return {
+            "ok": False,
+            "error": "資料庫升級失敗，詳細資訊已記錄於伺服器日誌",
+        }
     await audit_svc.record(
         session,
         entity_type="defense_rule",
@@ -1076,7 +1919,11 @@ async def recovery_db_upgrade(session: DbDep, _admin: AdminUser) -> dict:
     return {"ok": True, **result}
 
 
-@router.post("/recovery/restart", response_model=dict, summary="重啟服務")
+@router.post(
+    "/recovery/restart",
+    response_model=dict,
+    summary="重啟服務",
+)
 async def recovery_restart(background: BackgroundTasks, session: DbDep, _admin: AdminUser) -> dict:
     """依環境觸發重啟（dev 熱重載 / prod SIGHUP gunicorn master）。回應送出後才執行。"""
     await audit_svc.record(

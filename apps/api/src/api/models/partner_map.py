@@ -37,6 +37,21 @@ class PartnerBusinessStatus(enum.StrEnum):
     ARCHIVED = "archived"
 
 
+class PartnerBusinessListingType(enum.StrEnum):
+    """特約合作型態：實體店家或線上合作。"""
+
+    PHYSICAL = "physical"
+    ONLINE = "online"
+
+
+class PartnerOfferBenefitType(enum.StrEnum):
+    DISCOUNT = "discount"
+    GIFT = "gift"
+    BUNDLE = "bundle"
+    MEMBER_PRICE = "member_price"
+    OTHER = "other"
+
+
 class PartnerSubmissionStatus(enum.StrEnum):
     PENDING = "pending"
     APPROVED = "approved"
@@ -70,6 +85,7 @@ class PartnerTag(Base, TimestampMixin):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(80), nullable=False)
     color: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    icon_key: Mapped[str | None] = mapped_column(String(40), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="true", index=True
@@ -93,17 +109,31 @@ class PartnerBusiness(Base, TimestampMixin):
     social_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     logo_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     cover_image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    flyer_storage_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    flyer_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    flyer_content_type: Mapped[str | None] = mapped_column(String(120), nullable=True)
     category: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     business_hours_text: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    business_hours: Mapped[dict] = mapped_column(
+        JSONDict, nullable=False, default=dict, server_default="{}"
+    )
+    listing_type: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default=PartnerBusinessListingType.PHYSICAL.value,
+        server_default=PartnerBusinessListingType.PHYSICAL.value,
+        index=True,
+    )
+    contact_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    contact_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    contact_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    instagram_handle: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    line_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    other_contact: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default=PartnerBusinessStatus.DRAFT.value, index=True
     )
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    view_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
-    click_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
-    checkin_count: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0, server_default="0"
-    )
     internal_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
@@ -125,8 +155,71 @@ class PartnerBusiness(Base, TimestampMixin):
         cascade="all, delete-orphan",
         order_by="PartnerOffer.sort_order",
     )
-    ratings: Mapped[list[PartnerRating]] = relationship(
-        "PartnerRating", back_populates="business", cascade="all, delete-orphan"
+    promo_images: Mapped[list[PartnerBusinessImage]] = relationship(
+        "PartnerBusinessImage",
+        back_populates="business",
+        cascade="all, delete-orphan",
+        order_by="PartnerBusinessImage.sort_order",
+    )
+    accounts: Mapped[list[PartnerBusinessAccount]] = relationship(
+        "PartnerBusinessAccount",
+        back_populates="business",
+        cascade="all, delete-orphan",
+        order_by="PartnerBusinessAccount.created_at",
+    )
+
+
+class PartnerBusinessAccount(Base, TimestampMixin):
+    """可代表特約店家更新公開資料的登入帳號。"""
+
+    __tablename__ = "partner_business_accounts"
+    __table_args__ = (
+        UniqueConstraint(
+            "business_id", "user_id", name="uq_partner_business_accounts_business_user"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("partner_businesses.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    granted_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true", index=True
+    )
+
+    business: Mapped[PartnerBusiness] = relationship("PartnerBusiness", back_populates="accounts")
+    user: Mapped[User] = relationship("User", foreign_keys=[user_id])
+    grantor: Mapped[User | None] = relationship("User", foreign_keys=[granted_by])
+
+
+class PartnerBusinessImage(Base, TimestampMixin):
+    """特約店家的宣傳圖片。"""
+
+    __tablename__ = "partner_business_images"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("partner_businesses.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    storage_key: Mapped[str] = mapped_column(Text, nullable=False)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+
+    business: Mapped[PartnerBusiness] = relationship(
+        "PartnerBusiness", back_populates="promo_images"
     )
 
 
@@ -149,6 +242,7 @@ class PartnerLocation(Base, TimestampMixin):
     phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     business_hours: Mapped[dict] = mapped_column(JSONDict, nullable=False, default=dict)
     google_place_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    google_maps_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="true", index=True
@@ -170,6 +264,13 @@ class PartnerOffer(Base, TimestampMixin):
         index=True,
     )
     title: Mapped[str] = mapped_column(String(200), nullable=False)
+    benefit_type: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default=PartnerOfferBenefitType.OTHER.value,
+        server_default=PartnerOfferBenefitType.OTHER.value,
+    )
+    benefit_value: Mapped[str | None] = mapped_column(String(120), nullable=True)
     public_summary: Mapped[str | None] = mapped_column(String(300), nullable=True)
     full_description: Mapped[str | None] = mapped_column(Text, nullable=True)
     instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -184,33 +285,6 @@ class PartnerOffer(Base, TimestampMixin):
     business: Mapped[PartnerBusiness] = relationship("PartnerBusiness", back_populates="offers")
 
 
-class PartnerRating(Base, TimestampMixin):
-    """學生對特約店家的評價。"""
-
-    __tablename__ = "partner_ratings"
-    __table_args__ = (UniqueConstraint("business_id", "user_id", name="uq_partner_rating_user"),)
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    business_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("partner_businesses.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    user_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
-    )
-    rating: Mapped[int] = mapped_column(Integer, nullable=False)
-    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
-    visit_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
-    is_public: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True, server_default="true", index=True
-    )
-
-    business: Mapped[PartnerBusiness] = relationship("PartnerBusiness", back_populates="ratings")
-    user: Mapped[User | None] = relationship("User")
-
-
 class PartnerSubmission(Base, TimestampMixin):
     """學生投稿的新特約店家候選。"""
 
@@ -220,6 +294,7 @@ class PartnerSubmission(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     category: Mapped[str | None] = mapped_column(String(50), nullable=True)
     address: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    google_maps_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -247,10 +322,12 @@ class PartnerSubmission(Base, TimestampMixin):
 
 __all__ = [
     "PartnerBusiness",
+    "PartnerBusinessAccount",
+    "PartnerBusinessImage",
+    "PartnerBusinessListingType",
     "PartnerBusinessStatus",
     "PartnerLocation",
     "PartnerOffer",
-    "PartnerRating",
     "PartnerTag",
     "PartnerSubmission",
     "PartnerSubmissionStatus",

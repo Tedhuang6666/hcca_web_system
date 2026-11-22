@@ -1,0 +1,151 @@
+import type {
+  PetitionAdminCreate, PetitionCaseListItem, PetitionCaseOut, PetitionCreate, PetitionCreatedOut,
+  PetitionReplyCreate,
+  PetitionMonthlyStatsOut, PetitionStatsOut, PetitionStatus, PetitionSubmitterUpdate, PetitionTypeOut,
+  PetitionPublicListItem, PetitionPublicOut,
+  PetitionNotificationRuleCreate, PetitionNotificationRuleOut, PetitionNotificationRuleUpdate,
+  PetitionNotificationSettingsOut, PetitionNotificationSettingsUpdate,
+} from "../types";
+import { authFetch, BASE, get, post, patch, put, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
+
+// ── 陳情系統 ──────────────────────────────────────────────────────────────────
+
+async function uploadPetitionFile<T>(path: string, fd: FormData, onProgress?: (progress: number) => void): Promise<T> {
+  const doFetch = () =>
+    uploadWithProgress(`${BASE}${path}`, {
+      method: "POST",
+      credentials: "include",
+      headers: csrfHeaders("POST"),
+      body: fd,
+    }, onProgress);
+  let res = await doFetch();
+  if (res.status === 401) {
+    const ok = await silentRefresh();
+    if (ok) res = await doFetch();
+  }
+  if (!res.ok) {
+    throw new ApiError(res.status, await errorMessageFromResponse(res));
+  }
+  return res.json();
+}
+
+export const petitionsApi = {
+  listTypes: () => get<PetitionTypeOut[]>("/petitions/types"),
+  listAdminTypes: () => get<PetitionTypeOut[]>("/petitions/admin/types"),
+  createType: (body: {
+    name: string;
+    description?: string | null;
+    responsible_org_id: string;
+    is_active?: boolean;
+    sort_order?: number;
+  }) => post<PetitionTypeOut>("/petitions/admin/types", body),
+  updateType: (id: string, body: Partial<{
+    name: string;
+    description: string | null;
+    responsible_org_id: string;
+    is_active: boolean;
+    sort_order: number;
+  }>) => patch<PetitionTypeOut>(`/petitions/admin/types/${id}`, body),
+  deleteType: (id: string) => del<void>(`/petitions/admin/types/${id}`),
+  createAdminCase: (body: PetitionAdminCreate) =>
+    post<PetitionCreatedOut>("/petitions/admin/cases", body),
+  getNotificationSettings: () =>
+    get<PetitionNotificationSettingsOut>("/petitions/admin/notification-settings"),
+  updateNotificationSettings: (body: PetitionNotificationSettingsUpdate) =>
+    put<PetitionNotificationSettingsOut>("/petitions/admin/notification-settings", body),
+  listNotificationRules: () =>
+    get<PetitionNotificationRuleOut[]>("/petitions/admin/notification-rules"),
+  createNotificationRule: (body: PetitionNotificationRuleCreate) =>
+    post<PetitionNotificationRuleOut>("/petitions/admin/notification-rules", body),
+  updateNotificationRule: (id: string, body: PetitionNotificationRuleUpdate) =>
+    patch<PetitionNotificationRuleOut>(`/petitions/admin/notification-rules/${id}`, body),
+  deleteNotificationRule: (id: string) =>
+    del<void>(`/petitions/admin/notification-rules/${id}`),
+  create: (body: PetitionCreate) => post<PetitionCreatedOut>("/petitions", body),
+  submit: (body: PetitionCreate, attachments: File[]) => {
+    const formData = new FormData();
+    formData.append("type_id", body.type_id);
+    formData.append("title", body.title);
+    formData.append("content", body.content);
+    attachments.forEach((file) => formData.append("attachments", file));
+    return uploadPetitionFile<PetitionCreatedOut>("/petitions/submit", formData);
+  },
+  lookup: (caseNumber: string) =>
+    get<PetitionCaseOut>(`/petitions/lookup?${new URLSearchParams({ case_number: caseNumber }).toString()}`),
+  lookupShare: (shareToken: string) => post<PetitionCaseOut>("/petitions/share", { share_token: shareToken }),
+  publicList: (params?: { limit?: number; offset?: number }) => {
+    const p = new URLSearchParams();
+    if (params?.limit !== undefined) p.set("limit", String(params.limit));
+    if (params?.offset !== undefined) p.set("offset", String(params.offset));
+    return get<PetitionPublicListItem[]>(`/petitions/public${p.size ? `?${p}` : ""}`);
+  },
+  publicGet: (id: string) => get<PetitionPublicOut>(`/petitions/public/${id}`),
+  my: (params?: { status?: PetitionStatus; keyword?: string; limit?: number; offset?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.set("status", params.status);
+    if (params?.keyword?.trim()) query.set("keyword", params.keyword.trim());
+    if (params?.limit !== undefined) query.set("limit", String(params.limit));
+    if (params?.offset !== undefined) query.set("offset", String(params.offset));
+    const qs = query.size ? `?${query}` : "";
+    return get<PetitionCaseListItem[]>(`/petitions/my${qs}`);
+  },
+  manage: (params?: { status?: PetitionStatus; keyword?: string; assigned_to_me?: boolean }) => {
+    const p: Record<string, string> = {};
+    if (params?.status) p.status = params.status;
+    if (params?.keyword) p.keyword = params.keyword;
+    if (params?.assigned_to_me !== undefined) p.assigned_to_me = String(params.assigned_to_me);
+    const qs = Object.keys(p).length ? `?${new URLSearchParams(p).toString()}` : "";
+    return get<PetitionCaseListItem[]>(`/petitions/manage${qs}`);
+  },
+  stats: () => get<PetitionStatsOut>("/petitions/stats"),
+  monthlyStats: (month: string) =>
+    get<PetitionMonthlyStatsOut>(`/petitions/stats/monthly?${new URLSearchParams({ month })}`),
+  get: (id: string) => get<PetitionCaseOut>(`/petitions/${id}`),
+  printPdf: async (id: string): Promise<Blob> => {
+    const res = await authFetch(`${BASE}/petitions/${id}/print`, { credentials: "include" });
+    if (!res.ok) throw new ApiError(res.status, await errorMessageFromResponse(res));
+    return res.blob();
+  },
+  updateContent: (id: string, body: { title?: string; content?: string }) =>
+    patch<PetitionCaseOut>(`/petitions/${id}/content`, body),
+  assignableUsers: (id: string) =>
+    get<{ id: string; display_name: string; email: string }[]>(`/petitions/${id}/assignable-users`),
+  updateSubmitter: (id: string, body: PetitionSubmitterUpdate) =>
+    patch<PetitionCaseOut>(`/petitions/${id}/submitter`, body),
+  setConfidential: (id: string, reason: string) =>
+    post<{ id: string; is_confidential: boolean; confidential_reason: string }>(
+      `/petitions/${id}/confidential`,
+      { reason },
+    ),
+  supplement: (id: string, body: { content: string }) =>
+    post<PetitionCaseOut>(`/petitions/${id}/supplement`, body),
+  assign: (id: string, body: { assigned_to_id: string; internal_note?: string | null }) =>
+    patch<PetitionCaseOut>(`/petitions/${id}/assign`, body),
+  transfer: (id: string, body: { to_org_id: string; reason: string }) =>
+    patch<PetitionCaseOut>(`/petitions/${id}/transfer`, body),
+  reply: (id: string, body: PetitionReplyCreate) =>
+    post<PetitionCaseOut>(`/petitions/${id}/reply`, body),
+  requestPublic: (id: string, body: { title?: string | null; content?: string | null }) =>
+    post<PetitionCaseOut>(`/petitions/${id}/public-request`, body),
+  respondPublic: (id: string, body: {
+    decision: "approve" | "approve_with_changes" | "reject";
+    title?: string;
+    content?: string;
+  }) => post<PetitionCaseOut>(`/petitions/${id}/public-response`, body),
+  confirmPublic: (id: string) => post<PetitionCaseOut>(`/petitions/${id}/public-confirm`, {}),
+  editEvent: (id: string, eventId: string, body: { title?: string; content?: string | null }) =>
+    patch<PetitionCaseOut>(`/petitions/${id}/events/${eventId}`, body),
+  updateStatus: (id: string, body: { status: PetitionStatus; public_message?: string | null; internal_note?: string | null }) =>
+    patch<PetitionCaseOut>(`/petitions/${id}/status`, body),
+  addNote: (id: string, content: string) => post<PetitionCaseOut>(`/petitions/${id}/notes`, { content }),
+  uploadAttachment: (id: string, file: File, options?: { visibility?: "public" | "internal" }, onProgress?: (progress: number) => void) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    if (options?.visibility) fd.append("visibility", options.visibility);
+    return uploadPetitionFile<{ id: string; filename: string; url: string }>(`/petitions/${id}/attachments`, fd, onProgress);
+  },
+  attachmentDownloadUrl: (id: string, attachmentId: string) =>
+    `${BASE}/petitions/${id}/attachments/${attachmentId}/download`,
+  attachmentPreviewUrl: (id: string, attachmentId: string) =>
+    `${BASE}/petitions/${id}/attachments/${attachmentId}/preview`,
+};

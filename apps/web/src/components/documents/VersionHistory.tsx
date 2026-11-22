@@ -8,10 +8,10 @@ export function VersionHistory({ revisions }: { revisions: RevisionOut[] }) {
   if (revisions.length === 0) {
     return (
       <div className="card p-4">
-        <h3 className="text-xs font-semibold uppercase tracking-widest mb-2"
+        <h2 className="text-xs font-semibold uppercase tracking-widest mb-2"
           style={{ color: "var(--text-muted)" }}>
           版本歷程
-        </h3>
+        </h2>
         <p className="text-xs" style={{ color: "var(--text-disabled)" }}>尚無版本記錄</p>
       </div>
     );
@@ -22,13 +22,13 @@ export function VersionHistory({ revisions }: { revisions: RevisionOut[] }) {
   return (
     <div className="card p-4">
       <div className="flex items-center gap-2 mb-3">
-        <h3 className="text-xs font-semibold uppercase tracking-widest"
+        <h2 className="text-xs font-semibold uppercase tracking-widest"
           style={{ color: "var(--text-muted)" }}>
           版本歷程
-        </h3>
+        </h2>
         <span
-          className="badge text-[10px]"
-          style={{ color: "var(--primary)", background: "var(--primary-dim)", borderColor: "var(--primary-dim)" }}>
+          className="badge text-xs"
+          style={{ color: "var(--primary-text)", background: "var(--primary-dim)", borderColor: "var(--primary-dim)" }}>
           {revisions.length}
         </span>
       </div>
@@ -41,14 +41,14 @@ export function VersionHistory({ revisions }: { revisions: RevisionOut[] }) {
               <button
                 onClick={() => setExpanded(isOpen ? null : rev.id)}
                 aria-expanded={isOpen}
-                className="w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-xl transition-all"
+                className="w-full flex items-center justify-between text-xs px-3 py-2.5 rounded-xl transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                 style={{
                   background: isOpen ? "var(--primary-dim)" : "var(--bg-elevated)",
                   border: `1px solid ${isOpen ? "var(--border-focus)" : "var(--border)"}`,
-                  color: isOpen ? "var(--primary)" : "var(--text-secondary)",
+                  color: isOpen ? "var(--primary-text)" : "var(--text-secondary)",
                 }}>
                 <div className="flex items-center gap-2">
-                  <span className="font-mono font-bold" style={{ color: "var(--primary)" }}>
+                  <span className="font-mono font-bold" style={{ color: "var(--primary-text)" }}>
                     v{rev.revision_number}
                   </span>
                   <span className="truncate max-w-36" style={{ color: "var(--text-primary)" }}>

@@ -1,0 +1,4 @@
+.gallery-section-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; min-width: 0; }
+.gallery-section-filter button { min-height: 44px; padding-inline: 0.25rem; color: var(--archive-muted, var(--text-secondary)); font-size: 0.875rem; text-decoration: underline; text-underline-offset: 0.2em; }
+.gallery-section-filter :is(select, button):focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.gallery-collections-empty { padding: 4rem 1rem; text-align: center; color: var(--text-secondary); }

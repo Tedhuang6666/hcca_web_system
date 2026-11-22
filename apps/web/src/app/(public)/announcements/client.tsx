@@ -1,0 +1,146 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import Link from "next/link";
+import { announcementsApi } from "@/lib/api/announcements";
+import type { AnnouncementListItem } from "@/lib/types";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useFetch } from "@/hooks/useFetch";
+import { ListPageSkeleton } from "@/components/ui/Skeleton";
+import { isAnnouncementExpired } from "@/lib/announcement-expiration";
+
+const AUDIENCE_LABEL: Record<string, string> = {
+  all: "全體",
+  school: "全體竹中生",
+  orgs: "特定組織",
+  members: "特定成員",
+};
+
+function StatusBadge({ item }: { item: AnnouncementListItem }) {
+  if (isAnnouncementExpired(item)) {
+    return (
+      <span className="badge" style={{ color: "var(--text-muted)", background: "var(--bg-elevated)", borderColor: "var(--border)" }}>
+        已過期
+      </span>
+    );
+  }
+  if (item.is_urgent) {
+    return (
+      <span className="badge" style={{ color: "var(--warning)", background: "var(--warning-dim)", borderColor: "var(--warning-border)" }}>
+        重要
+      </span>
+    );
+  }
+  if (!item.is_published) {
+    return (
+      <span className="badge" style={{ color: "var(--text-muted)", background: "var(--bg-elevated)", borderColor: "var(--border)" }}>
+        草稿
+      </span>
+    );
+  }
+  return null;
+}
+
+export default function AnnouncementsClient({
+  initialItems = [],
+}: {
+  initialItems?: AnnouncementListItem[];
+}) {
+  const [showDrafts, setShowDrafts] = useState(false);
+  const { can } = usePermissions();
+  const canCreate = can("announcement:create");
+  const canListDrafts = can("announcement:create");
+
+  const [items, loading] = useFetch(
+    () => {
+      const params = { limit: 100 };
+      return showDrafts && canListDrafts
+        ? announcementsApi.listAll(params)
+        : announcementsApi.list(params);
+    },
+    [showDrafts, canListDrafts],
+    "載入公告失敗",
+    initialItems,
+    "announcements/list",
+    true,
+  );
+
+  const sorted = useMemo(
+    () => [...items].sort((a, b) => (
+      (b.published_at ?? b.created_at).localeCompare(a.published_at ?? a.created_at)
+    )),
+    [items],
+  );
+
+  return (
+    <div className="mx-auto max-w-5xl space-y-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-xl font-semibold">公告檢視</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          {canListDrafts && (
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => setShowDrafts((value) => !value)}>
+              {showDrafts ? "只看公開" : "顯示草稿"}
+            </button>
+          )}
+          {canCreate && (
+            <Link href="/announcements/new" className="btn btn-primary">
+              新增公告
+            </Link>
+          )}
+        </div>
+      </div>
+
+      {loading ? (
+        <ListPageSkeleton rows={5} showHeader={false} showFilters={false} />
+      ) : sorted.length === 0 ? (
+        <div className="card p-10 text-center" style={{ color: "var(--text-muted)" }}>
+          目前沒有公告
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {sorted.map((item) => {
+            const expired = isAnnouncementExpired(item);
+            return (
+              <Link
+                key={item.id}
+                href={`/announcements/${item.id}`}
+                className={`card card-hover block p-5${expired ? " announcement-expired" : ""}`}
+                style={{ textDecoration: "none" }}>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                      <StatusBadge item={item} />
+                      {item.audience_type !== "all" && (
+                        <span className="badge" style={{ color: "var(--primary-text)", background: "var(--primary-dim)", borderColor: "var(--border-strong)" }}>
+                          {AUDIENCE_LABEL[item.audience_type] ?? item.audience_type}
+                        </span>
+                      )}
+                      <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                        {item.published_at
+                          ? new Date(item.published_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" }).replace(/\s+/gu, " ")
+                          : new Date(item.created_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" }).replace(/\s+/gu, " ")}
+                      </span>
+                    </div>
+                    <h2 className={`text-base font-semibold leading-snug${expired ? " text-[var(--text-muted)]" : ""}`}>
+                      {item.title}
+                    </h2>
+                    {item.author_name && (
+                      <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+                        公告人：{item.author_name}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
