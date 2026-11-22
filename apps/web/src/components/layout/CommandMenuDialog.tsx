@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Command } from "cmdk";
 import { Clock, Search } from "lucide-react";
 import { searchApi } from "@/lib/api";
+import Modal from "@/components/ui/Modal";
 import type { SearchResultOut } from "@/lib/types";
 import {
   filterNavItems,
@@ -136,26 +137,19 @@ export default function CommandMenuDialog({ query, setQuery, onClose }: {
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[160] flex items-start justify-center px-3 pt-[14vh]"
-      style={{ background: "var(--bg-overlay)" }}
-      onMouseDown={onClose}
+    <Modal
+      title="搜尋功能或資料"
+      onClose={onClose}
+      size="xl"
+      mobileFullscreen={false}
     >
-      <Command
-        className="w-full max-w-xl overflow-hidden rounded-xl"
-        style={{
-          background: "var(--bg-surface)",
-          border: "1px solid var(--border-strong)",
-          boxShadow: "0 14px 32px rgba(0,0,0,0.28)",
-        }}
-        onMouseDown={(event) => event.stopPropagation()}
-        label="搜尋功能或資料"
-      >
+      <Command className="w-full overflow-hidden" label="搜尋功能或資料">
         {/* 對話框只有這一個輸入欄且自動聚焦；以底線顏色表示焦點，避免外框被圓角裁切。 */}
         <div className="command-menu-search flex items-center gap-2 px-4">
           <Search size={17} aria-hidden={true} style={{ color: "var(--text-muted)" }} />
           <Command.Input
             autoFocus
+            data-autofocus=""
             value={query}
             onValueChange={setQuery}
             placeholder="搜尋功能、公文、法規或公告"
@@ -164,7 +158,7 @@ export default function CommandMenuDialog({ query, setQuery, onClose }: {
             style={{ color: "var(--text-primary)" }}
           />
         </div>
-        <Command.List className="max-h-[min(56vh,420px)] overflow-y-auto px-4 py-3">
+        <Command.List className="max-h-[min(56dvh,420px)] overflow-y-auto px-4 py-3">
           <Command.Empty
             className="px-3 py-8 text-center text-sm"
             style={{ color: "var(--text-muted)" }}
@@ -233,6 +227,6 @@ export default function CommandMenuDialog({ query, setQuery, onClose }: {
           )}
         </Command.List>
       </Command>
-    </div>
+    </Modal>
   );
 }

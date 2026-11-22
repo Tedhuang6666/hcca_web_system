@@ -114,24 +114,25 @@ export default function UrgentAnnouncementPopup() {
   }, !lowDataMode);
 
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
 
-  // 彈窗可能在使用者操作中途由推播開啟：移入焦點、支援 Esc，關閉後把焦點還原。
+  // 原生 modal dialog 會限制背景焦點；關閉時把焦點還給開啟前的控制項。
   useEffect(() => {
-    if (!open || !item) return;
+    if (!open) return;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    closeButtonRef.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      rememberUrgentDismissal(item);
-      setOpen(false);
-    };
-    document.addEventListener("keydown", onKeyDown);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    if (!dialog.open) dialog.showModal();
+    const focusFrame = requestAnimationFrame(() => closeButtonRef.current?.focus());
     return () => {
-      document.removeEventListener("keydown", onKeyDown);
+      cancelAnimationFrame(focusFrame);
+      if (dialog.open) dialog.close();
+      document.body.style.overflow = previousOverflow;
       if (previous?.isConnected) previous.focus();
     };
-  }, [open, item]);
+  }, [open]);
 
   if (!mounted || !item || !open) return null;
 
@@ -145,12 +146,13 @@ export default function UrgentAnnouncementPopup() {
   const opensExternal = /^https?:\/\//.test(target);
 
   return createPortal(
-    <div className="fixed inset-0 z-[140] flex items-center justify-center overflow-y-auto p-3 sm:p-4"
-      style={{ background: "var(--bg-overlay)" }}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="important-announcement-title">
-      <div className="absolute inset-0" onClick={dismiss} aria-hidden="true" />
+    <dialog
+      ref={dialogRef}
+      className="fixed inset-0 z-[140] m-0 flex h-dvh w-screen max-h-none max-w-none items-center justify-center overflow-y-auto border-0 bg-transparent p-3 backdrop:bg-[var(--bg-overlay)] sm:p-4"
+      aria-labelledby="important-announcement-title"
+      onCancel={(event) => { event.preventDefault(); dismiss(); }}
+      onClick={(event) => { if (event.target === event.currentTarget) dismiss(); }}
+    >
       <section className="relative flex w-full max-w-2xl flex-col overflow-hidden rounded-lg max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)]"
         style={{ background: "var(--bg-surface)", border: "1px solid var(--warning-border)", boxShadow: "var(--shadow-xl)" }}>
         <div className="flex items-center justify-between gap-3 px-5 py-3"
@@ -189,7 +191,7 @@ export default function UrgentAnnouncementPopup() {
           </a>
         </div>
       </section>
-    </div>
+    </dialog>
     , document.body,
   );
 }

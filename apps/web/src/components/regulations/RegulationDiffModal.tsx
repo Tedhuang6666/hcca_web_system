@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import type { RegulationRevisionOut } from "@/lib/types";
 import { buildRegulationDiffRows, type RegulationDiffSegment } from "./regulationDiff";
@@ -50,16 +50,32 @@ export default function RegulationDiffModal({
 
   const addCount = diffResult.filter((row) => row.type === "add").length;
   const removeCount = diffResult.filter((row) => row.type === "remove").length;
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    if (!dialog.open) dialog.showModal();
+    closeButtonRef.current?.focus();
+    return () => {
+      if (dialog.open) dialog.close();
+      document.body.style.overflow = previousOverflow;
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, []);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center"
-      style={{ background: "var(--bg-overlay)" }}
-      role="dialog"
-      aria-modal="true"
+    <dialog
+      ref={dialogRef}
+      className="fixed inset-0 z-50 m-0 flex h-dvh w-screen max-h-none max-w-none items-start justify-center overflow-y-auto border-0 bg-transparent p-4 backdrop:bg-[var(--bg-overlay)] sm:items-center"
       aria-labelledby="regulation-diff-title"
+      onCancel={(event) => { event.preventDefault(); onClose(); }}
+      onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}
     >
-      <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
       <div
         className="relative flex flex-col overflow-hidden rounded-2xl"
         style={{
@@ -92,7 +108,7 @@ export default function RegulationDiffModal({
               新 {newLabel}
             </span>
           </div>
-          <button onClick={onClose} className="topbar-icon-btn ml-3 mt-1 flex-shrink-0 sm:mt-0" aria-label="關閉">
+          <button ref={closeButtonRef} type="button" onClick={onClose} className="topbar-icon-btn ml-3 mt-1 flex-shrink-0 sm:mt-0" aria-label="關閉">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
@@ -159,6 +175,6 @@ export default function RegulationDiffModal({
           </span>
         </div>
       </div>
-    </div>
+    </dialog>
   );
 }

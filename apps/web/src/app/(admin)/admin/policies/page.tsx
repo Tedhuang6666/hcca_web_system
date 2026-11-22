@@ -14,6 +14,7 @@ import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import Modal from "@/components/ui/Modal";
 import {
   policiesApi,
   type PolicyDocumentListItem,
@@ -440,88 +441,76 @@ function CreateModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "var(--bg-overlay)" }}
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true">
-      <div
-        className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-lg border p-5"
-        style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
-        onClick={(e) => e.stopPropagation()}>
-        <h3 className="mb-3 text-base font-semibold text-[var(--text-primary)]">
-          新增政策版本
-        </h3>
-        <div className="space-y-2">
-          <div className="grid grid-cols-2 gap-2">
-            <label className="text-xs">
-              <span className="text-[var(--text-secondary)]">類型</span>
-              <select
-                value={kind}
-                onChange={(e) => setKind(e.target.value as PolicyKind)}
-                className="input mt-1">
-                {Object.entries(KIND_LABEL).map(([k, l]) => (
-                  <option key={k} value={k}>
-                    {l}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-xs">
-              <span className="text-[var(--text-secondary)]">版本（例：2026-06-01 或 1.2）</span>
-              <input
-                className="input mt-1 font-mono"
-                value={version}
-                onChange={(e) => setVersion(e.target.value)}
-              />
-            </label>
-          </div>
+    <Modal title="新增政策版本" onClose={onClose} size="2xl" mobileFullscreen={false}>
+      <div className="space-y-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <label className="text-xs">
-            <span className="text-[var(--text-secondary)]">標題</span>
-            <input
-              className="input mt-1"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
+            <span className="text-[var(--text-secondary)]">類型</span>
+            <select
+              data-autofocus=""
+              value={kind}
+              onChange={(e) => setKind(e.target.value as PolicyKind)}
+              className="input mt-1">
+              {Object.entries(KIND_LABEL).map(([k, l]) => (
+                <option key={k} value={k}>
+                  {l}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="text-xs">
-            <span className="text-[var(--text-secondary)]">生效時間</span>
+            <span className="text-[var(--text-secondary)]">版本（例：2026-06-01 或 1.2）</span>
             <input
-              type="datetime-local"
-              className="input mt-1"
-              value={effectiveAt}
-              onChange={(e) => setEffectiveAt(e.target.value)}
-            />
-          </label>
-          <label className="text-xs">
-            <span className="text-[var(--text-secondary)]">內文（Markdown）</span>
-            <textarea
-              rows={10}
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              className="input mt-1 font-mono text-xs"
+              className="input mt-1 font-mono"
+              value={version}
+              onChange={(e) => setVersion(e.target.value)}
             />
           </label>
         </div>
-        <div className="mt-3 flex justify-end gap-2">
-          <button type="button" className="btn btn-ghost" onClick={onClose}>
-            取消
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={onCreate}
-            disabled={busy}>
-            <Plus size={14} aria-hidden />
-            建立（不啟用）
-          </button>
-        </div>
-        <p className="mt-2 text-xs text-[var(--text-muted)]">
-          建立後為草稿；啟用時自動停用同類別舊版本。
-        </p>
+        <label className="text-xs">
+          <span className="text-[var(--text-secondary)]">標題</span>
+          <input
+            className="input mt-1"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+        </label>
+        <label className="text-xs">
+          <span className="text-[var(--text-secondary)]">生效時間</span>
+          <input
+            type="datetime-local"
+            className="input mt-1"
+            value={effectiveAt}
+            onChange={(e) => setEffectiveAt(e.target.value)}
+          />
+        </label>
+        <label className="text-xs">
+          <span className="text-[var(--text-secondary)]">內文（Markdown）</span>
+          <textarea
+            rows={10}
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            className="input mt-1 font-mono text-xs"
+          />
+        </label>
       </div>
-    </div>
+      <div className="mt-3 flex flex-col-reverse justify-end gap-2 sm:flex-row">
+        <button type="button" className="btn btn-ghost w-full sm:w-auto" onClick={onClose}>
+          取消
+        </button>
+        <button
+          type="button"
+          className="btn btn-primary w-full sm:w-auto"
+          onClick={onCreate}
+          disabled={busy}>
+          <Plus size={14} aria-hidden />
+          建立（不啟用）
+        </button>
+      </div>
+      <p className="mt-2 text-xs text-[var(--text-muted)]">
+        建立後為草稿；啟用時自動停用同類別舊版本。
+      </p>
+    </Modal>
   );
 }
 
@@ -641,71 +630,59 @@ function PrivacyRequestsTab() {
       </section>
 
       {active && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: "var(--bg-overlay)" }}
-          onClick={() => setActive(null)}
-          role="dialog"
-          aria-modal="true">
-          <div
-            className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-lg border p-5"
-            style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
-            onClick={(e) => e.stopPropagation()}>
-            <h3 className="mb-2 text-base font-semibold text-[var(--text-primary)]">
-              {active.subject}
-            </h3>
-            <p className="mb-2 text-xs text-[var(--text-muted)]">
-              {STATUS_LABEL[active.status]} · {active.request_type} ·{" "}
-              {new Date(active.created_at).toLocaleString()}
-            </p>
-            <div className="mb-3 rounded bg-[var(--bg-base)] p-2 text-xs whitespace-pre-wrap">
-              {active.description}
-            </div>
-            {active.response_message && (
-              <div className="mb-3 text-xs">
-                <div className="text-[var(--text-secondary)]">前次回覆：</div>
-                <div className="rounded bg-[var(--bg-base)] p-2 whitespace-pre-wrap">
-                  {active.response_message}
-                </div>
-              </div>
-            )}
-            <label className="text-xs">
-              <span className="text-[var(--text-secondary)]">回覆訊息（會寄給當事人）</span>
-              <textarea
-                rows={4}
-                value={respMsg}
-                onChange={(e) => setRespMsg(e.target.value)}
-                className="input mt-1"
-              />
-            </label>
-            <div className="mt-3 flex flex-wrap justify-end gap-2">
-              <button type="button" className="btn btn-ghost" onClick={() => setActive(null)}>
-                取消
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                disabled={busy}
-                onClick={() => updateStatus("in_review")}>
-                標為處理中
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={busy}
-                onClick={() => updateStatus("completed")}>
-                標為完成
-              </button>
-              <button
-                type="button"
-                className="btn btn-danger"
-                disabled={busy}
-                onClick={() => updateStatus("rejected")}>
-                拒絕
-              </button>
-            </div>
+        <Modal title={active.subject} onClose={() => setActive(null)} size="2xl" mobileFullscreen={false}>
+          <p className="mb-2 text-xs text-[var(--text-muted)]">
+            {STATUS_LABEL[active.status]} · {active.request_type} ·{" "}
+            {new Date(active.created_at).toLocaleString()}
+          </p>
+          <div className="mb-3 rounded bg-[var(--bg-base)] p-2 text-xs whitespace-pre-wrap">
+            {active.description}
           </div>
-        </div>
+          {active.response_message && (
+            <div className="mb-3 text-xs">
+              <div className="text-[var(--text-secondary)]">前次回覆：</div>
+              <div className="rounded bg-[var(--bg-base)] p-2 whitespace-pre-wrap">
+                {active.response_message}
+              </div>
+            </div>
+          )}
+          <label className="text-xs">
+            <span className="text-[var(--text-secondary)]">回覆訊息（會寄給當事人）</span>
+            <textarea
+              data-autofocus=""
+              rows={4}
+              value={respMsg}
+              onChange={(e) => setRespMsg(e.target.value)}
+              className="input mt-1"
+            />
+          </label>
+          <div className="mt-3 flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+            <button type="button" className="btn btn-ghost w-full sm:w-auto" onClick={() => setActive(null)}>
+              取消
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost w-full sm:w-auto"
+              disabled={busy}
+              onClick={() => updateStatus("in_review")}>
+              標為處理中
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary w-full sm:w-auto"
+              disabled={busy}
+              onClick={() => updateStatus("completed")}>
+              標為完成
+            </button>
+            <button
+              type="button"
+              className="btn btn-danger w-full sm:w-auto"
+              disabled={busy}
+              onClick={() => updateStatus("rejected")}>
+              拒絕
+            </button>
+          </div>
+        </Modal>
       )}
     </div>
   );

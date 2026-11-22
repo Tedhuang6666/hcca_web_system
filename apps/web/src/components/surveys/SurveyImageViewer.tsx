@@ -33,6 +33,7 @@ export default function SurveyImageViewer({
 }: SurveyImageViewerProps) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const touchStartX = useRef<number | null>(null);
   const allImages = gallery?.length
     ? gallery
@@ -48,28 +49,23 @@ export default function SurveyImageViewer({
     return Math.min(current + 1, allImages.length - 1);
   });
 
+  const isOpen = activeIndex !== null;
+
   useEffect(() => {
-    if (activeIndex === null) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setActiveIndex(null);
-      if (event.key === "ArrowRight") setActiveIndex((current) => {
-        if (current === null) return current;
-        return Math.min(current + 1, allImages.length - 1);
-      });
-      if (event.key === "ArrowLeft") setActiveIndex((current) => {
-        if (current === null) return current;
-        return Math.max(current - 1, 0);
-      });
-    };
-    document.addEventListener("keydown", onKeyDown);
+    if (!isOpen) return;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    if (!dialog.open) dialog.showModal();
     closeButtonRef.current?.focus();
     return () => {
-      document.removeEventListener("keydown", onKeyDown);
+      if (dialog.open) dialog.close();
       document.body.style.overflow = previousOverflow;
+      if (previousFocus?.isConnected) previousFocus.focus();
     };
-  }, [activeIndex, allImages.length]);
+  }, [isOpen]);
 
   if (images.length === 0) return null;
 
@@ -108,12 +104,22 @@ export default function SurveyImageViewer({
       </div>
 
       {activeItem && activeIndex !== null && typeof document !== "undefined" && createPortal((
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 p-3 sm:p-6"
-          role="dialog"
-          aria-modal="true"
+        <dialog
+          ref={dialogRef}
+          className="fixed inset-0 z-[100] m-0 flex h-dvh w-screen max-h-none max-w-none items-center justify-center border-0 bg-black/95 p-3 backdrop:bg-black/95 sm:p-6"
           aria-label={`「${optionLabel}」完整圖片`}
-          onClick={() => setActiveIndex(null)}
+          onCancel={(event) => { event.preventDefault(); setActiveIndex(null); }}
+          onClick={(event) => { if (event.target === event.currentTarget) setActiveIndex(null); }}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowRight") {
+              event.preventDefault();
+              goToNext();
+            }
+            if (event.key === "ArrowLeft") {
+              event.preventDefault();
+              goToPrevious();
+            }
+          }}
         >
           <div
             className="relative flex h-full w-full items-center justify-center"
@@ -194,7 +200,7 @@ export default function SurveyImageViewer({
               )}
             </div>
           </div>
-        </div>
+        </dialog>
       ), document.body)}
     </>
   );

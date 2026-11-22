@@ -48,6 +48,7 @@ import type {
   SchoolClassListItem,
 } from "@/lib/types";
 import { confirmAction } from "@/components/ui/ConfirmDialog";
+import Modal from "@/components/ui/Modal";
 
 const STATUS_LABEL: Record<PersonStatus, string> = {
   active: "在校",
@@ -1113,7 +1114,7 @@ function ImportRosterDialog({
   };
 
   return (
-    <Dialog title="匯入名冊" onClose={onClose} maxWidth="max-w-3xl">
+    <Dialog title="匯入名冊" onClose={onClose} size="3xl">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <label className="text-xs" style={{ color: "var(--text-muted)" }}>
           指定班級
@@ -1290,25 +1291,17 @@ function Dialog({
   title,
   children,
   onClose,
-  maxWidth = "max-w-2xl",
+  size = "2xl",
 }: {
   title: string;
   children: React.ReactNode;
   onClose: () => void;
-  maxWidth?: string;
+  size?: "2xl" | "3xl";
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.48)" }}>
-      <div className={`max-h-[90vh] w-full ${maxWidth} overflow-auto rounded-md`} style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
-        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "1px solid var(--border)" }}>
-          <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>{title}</h2>
-          <button type="button" onClick={onClose} className="cursor-pointer rounded p-1" style={{ color: "var(--text-muted)" }} aria-label="關閉">
-            <X size={18} />
-          </button>
-        </div>
-        <div className="space-y-4 p-5">{children}</div>
-      </div>
-    </div>
+    <Modal title={title} onClose={onClose} size={size} mobileFullscreen={false}>
+      <div className="space-y-4">{children}</div>
+    </Modal>
   );
 }
 

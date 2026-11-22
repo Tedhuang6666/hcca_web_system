@@ -111,22 +111,42 @@ function DetailPanel({
   onShare: () => void;
   onClose: () => void;
 }) {
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const isOpen = Boolean(business) || loading;
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeButtonRef.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      onCloseRef.current();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [isOpen]);
+
   if (!business && !loading) return null;
   const panel = (
     <aside
       className="partner-map-detail-panel fixed inset-x-3 bottom-3 max-h-[calc(100dvh-1.5rem)] overflow-y-auto rounded-lg border p-4 shadow-xl lg:top-20 lg:right-5 lg:bottom-5 lg:left-auto lg:w-96"
       role="dialog"
-      aria-modal="true"
-      aria-label="特約詳情"
+      aria-labelledby="partner-business-detail-title"
       style={{ background: "var(--bg)", borderColor: "var(--border)" }}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-medium" style={{ color: "var(--primary-text)" }}>特約詳情</p>
-          <h2 className="mt-1 text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
+          <h2 id="partner-business-detail-title" className="mt-1 text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
             {loading ? "載入中..." : business?.name}
           </h2>
         </div>
-        <button type="button" className="topbar-icon-btn" onClick={onClose} aria-label="關閉詳情">×</button>
+        <button ref={closeButtonRef} type="button" className="topbar-icon-btn" onClick={onClose} aria-label="關閉詳情">×</button>
       </div>
       {loading || !business ? (
         <div className="mt-6 text-sm" style={{ color: "var(--text-muted)" }}>載入店家資料中...</div>
@@ -315,20 +335,40 @@ function RecommendedDetailPanel({
   vendor: RecommendedVendorOutWithHours | null;
   onClose: () => void;
 }) {
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const isOpen = Boolean(vendor);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeButtonRef.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      onCloseRef.current();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [isOpen]);
+
   if (!vendor) return null;
   const panel = (
     <aside
       className="partner-map-detail-panel fixed inset-x-3 bottom-3 max-h-[calc(100dvh-1.5rem)] overflow-y-auto rounded-lg border p-4 shadow-xl lg:top-20 lg:right-5 lg:bottom-5 lg:left-auto lg:w-96"
       role="dialog"
-      aria-modal="true"
-      aria-label="推薦商家詳情"
+      aria-labelledby="recommended-vendor-detail-title"
       style={{ background: "var(--bg)", borderColor: "var(--border)" }}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold" style={{ color: "var(--tag-blue-fg)" }}>推薦商家</p>
-          <h2 className="mt-1 text-lg font-semibold" style={{ color: "var(--text-primary)" }}>{vendor.name}</h2>
+          <h2 id="recommended-vendor-detail-title" className="mt-1 text-lg font-semibold" style={{ color: "var(--text-primary)" }}>{vendor.name}</h2>
         </div>
-        <button className="topbar-icon-btn" onClick={onClose} aria-label="關閉推薦商家詳情">×</button>
+        <button ref={closeButtonRef} type="button" className="topbar-icon-btn" onClick={onClose} aria-label="關閉推薦商家詳情">×</button>
       </div>
       <div className="mt-4 space-y-4">
         {vendor.category && <p className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>{vendor.category}</p>}

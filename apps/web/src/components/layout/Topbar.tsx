@@ -98,6 +98,8 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
   const visibleTaskCount = hasTaskAccess ? taskCount : 0;
   const menuRef = useRef<HTMLDivElement>(null);
   const bellRef = useRef<HTMLDivElement>(null);
+  const bellTriggerRef = useRef<HTMLButtonElement>(null);
+  const bellDialogRef = useRef<HTMLDivElement>(null);
 
   const crumbRoot = isLoggedIn ? APP_HOME_CRUMB : PUBLIC_HOME_CRUMB;
   const crumbs = useMemo(() => getBreadcrumbs(pathname, crumbRoot), [crumbRoot, pathname]);
@@ -128,6 +130,24 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
     if (showMenu || showBell) document.addEventListener("mousedown", handle);
     return () => document.removeEventListener("mousedown", handle);
   }, [showMenu, showBell]);
+
+  useEffect(() => {
+    if (!showBell) return;
+    const dialog = bellDialogRef.current;
+    const firstFocusable = dialog?.querySelector<HTMLElement>(
+      'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    );
+    (firstFocusable ?? dialog)?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setShowBell(false);
+      bellTriggerRef.current?.focus();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [showBell]);
 
   useWS(
     userRoom,
@@ -268,11 +288,14 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
         {isLoggedIn && (
         <div className="relative" ref={bellRef}>
           <button
+            ref={bellTriggerRef}
+            type="button"
             onClick={openBell}
             className="topbar-icon-btn topbar-notification-trigger relative"
             aria-label={`通知與待辦${(unreadCount + visibleTaskCount) > 0 ? `（${unreadCount} 則未讀通知、${visibleTaskCount} 件待辦）` : ""}`}
             aria-expanded={showBell}
-            aria-haspopup="true">
+            aria-haspopup="dialog"
+            aria-controls="topbar-notification-preview">
             <svg className="topbar-bell-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
@@ -291,8 +314,11 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
 
           {showBell && (
             <div
+              ref={bellDialogRef}
+              id="topbar-notification-preview"
               role="dialog"
               aria-label="通知預覽"
+              tabIndex={-1}
               className="motion-popover absolute right-0 top-full mt-1.5 w-72 max-w-[calc(100vw-1rem)] rounded-xl z-50 overflow-hidden"
               style={{
                 background: "var(--bg-elevated)",
