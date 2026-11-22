@@ -32,6 +32,25 @@ def run_safe_purges(self) -> dict:  # type: ignore[type-arg]
         raise self.retry(exc=exc) from exc
 
 
+@celery_app.task(
+    name="api.services.data_lifecycle_tasks.purge_expired_privacy_exports",
+    bind=True,
+    max_retries=1,
+    default_retry_delay=600,
+)
+def purge_expired_privacy_exports(self) -> dict[str, int]:
+    """每小時清除共享私有 volume 中超過 24 小時的個資匯出檔。"""
+    try:
+        from api.services.privacy import purge_expired_exports
+
+        removed = purge_expired_exports()
+        logger.info("privacy export purge done removed=%d", removed)
+        return {"purged": removed}
+    except Exception as exc:
+        logger.exception("purge_expired_privacy_exports failed")
+        raise self.retry(exc=exc) from exc
+
+
 async def _run() -> dict:
     from api.core.database import task_session
     from api.services import data_lifecycle as svc
