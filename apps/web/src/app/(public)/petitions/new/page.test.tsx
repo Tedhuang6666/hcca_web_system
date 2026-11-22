@@ -62,8 +62,24 @@ describe("我要陳情", () => {
     await fillAndSubmit();
 
     expect(await screen.findByText("P-0001")).toBeVisible();
-    expect(screen.getByRole("alert")).toHaveTextContent("證據.pdf");
+    expect(await screen.findByText("上傳失敗")).toBeVisible();
+    expect(screen.getByRole("button", { name: "重試上傳 證據.pdf" })).toBeVisible();
     expect(api.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the case number while upload is pending and retries only the attachment", async () => {
+    let rejectUpload!: (error: Error) => void;
+    api.uploadAttachment.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectUpload = reject; }));
+    api.uploadAttachment.mockResolvedValueOnce({});
+
+    await fillAndSubmit();
+    expect(await screen.findByText("P-0001")).toBeVisible();
+    expect(screen.getByRole("status")).toHaveTextContent("附件上傳中");
+    rejectUpload(new Error("upload failed"));
+    fireEvent.click(await screen.findByRole("button", { name: "重試上傳 證據.pdf" }));
+    expect(await screen.findByText("已上傳")).toBeVisible();
+    expect(api.create).toHaveBeenCalledTimes(1);
+    expect(api.uploadAttachment).toHaveBeenCalledTimes(2);
   });
 
   it("keeps the form and shows an inline error when the case cannot be created", async () => {

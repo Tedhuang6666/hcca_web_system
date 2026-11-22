@@ -195,13 +195,14 @@ async def _shortlink(client, raw_key: str, discord_user_id: str) -> str:
     return response.json()["data"]["url"]
 
 
-async def test_shortlink_for_member_returns_open_link(client, db_session):
+async def test_shortlink_for_member_requires_normal_login(client, db_session):
     raw_key = await _bot_key(db_session)
     await _linked_user(db_session, email="member-link@example.com", discord_user_id="2001")
 
     url = await _shortlink(client, raw_key, "2001")
 
-    assert "/discord/open?token=" in url
+    assert "token=" not in url
+    assert url.endswith("/admin/system")
 
 
 async def test_shortlink_never_issues_login_link_for_superuser(client, db_session):
@@ -214,3 +215,24 @@ async def test_shortlink_never_issues_login_link_for_superuser(client, db_sessio
 
     assert "token=" not in url
     assert url.endswith("/admin/system")
+
+
+async def test_discord_task_and_dashboard_links_require_normal_login(client, db_session):
+    raw_key = await _bot_key(db_session)
+    await _linked_user(db_session, email="task-link@example.com", discord_user_id="2003")
+
+    for operation in ("tasks", "dashboard"):
+        response = await client.post(
+            f"/internal/discord/commands/{operation}",
+            headers={"X-API-Key": raw_key},
+            json={
+                "discord_user_id": "2003",
+                "interaction_id": "1",
+                "guild_id": "111",
+                "arguments": {},
+            },
+        )
+        assert response.status_code == 200
+        url = response.json()["data"]["open_url"]
+        assert "token=" not in url
+        assert url.endswith("/dashboard")
