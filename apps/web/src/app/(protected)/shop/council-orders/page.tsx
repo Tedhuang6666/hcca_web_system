@@ -716,7 +716,7 @@ export default function CouncilOrdersPage() {
     <div className="shop-council-page mx-auto max-w-7xl space-y-5 px-4 py-5">
       <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
+          <h1 className="flex items-center gap-2 text-2xl font-semibold text-fg-primary!">
             <BarChart2 size={22} /> 班聯工作
           </h1>
         </div>
@@ -764,12 +764,12 @@ export default function CouncilOrdersPage() {
         onRejoined={() => { setSupplementRefresh((value) => value + 1); void loadOrders(); void loadSummary(); }} />
       </div>}
 
-      {hasOrderFilters && <section className="space-y-3 rounded-lg p-4" aria-label="統計範圍" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+      {hasOrderFilters && <section className="space-y-3 rounded-lg p-4 border! border-border! bg-card!" aria-label="統計範圍" >
         <fieldset disabled={mutationBusy} className="min-w-0 space-y-3">
         <legend className="sr-only">篩選訂單</legend>
         <div className="flex flex-wrap items-end gap-3">
           {!(tab === "summary" && canConfirmClassPayment) && <label className="grid gap-1 text-sm">
-            <span style={{ color: "var(--text-muted)" }}>{tab === "analytics" ? "分析活動" : "活動"}</span>
+            <span className="text-fg-muted!">{tab === "analytics" ? "分析活動" : "活動"}</span>
             <select className="input" value={tab === "analytics" ? analyticsCategory?.id ?? "" : categoryId} onChange={(e) => {
               setCategoryId(e.target.value);
               setProductId("");
@@ -817,7 +817,7 @@ export default function CouncilOrdersPage() {
             </>
           )}
           {tab === "analytics" && <label className="grid gap-1 text-sm">
-            <span style={{ color: "var(--text-muted)" }}>商品</span>
+            <span className="text-fg-muted!">商品</span>
             <select className="input" value={analyticsProductId} onChange={(e) => setProductId(e.target.value)}>
               <option value="">全部商品</option>
               {allProducts.filter((p) => p.catId === analyticsCategory?.id).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -825,13 +825,13 @@ export default function CouncilOrdersPage() {
           </label>}
           {hasFilters && <button type="button" className="btn btn-ghost" onClick={resetFilters}>清除篩選</button>}
         </div>
-        {optionsError && <div role="alert" className="text-sm" style={{ color: "var(--danger)" }}>活動與班級選項載入失敗。<button type="button" className="btn btn-ghost" onClick={() => setOptionsRetry((value) => value + 1)}>重新載入選項</button></div>}
+        {optionsError && <div role="alert" className="text-sm text-danger!">活動與班級選項載入失敗。<button type="button" className="btn btn-ghost" onClick={() => setOptionsRetry((value) => value + 1)}>重新載入選項</button></div>}
       {/* 篩選列 */}
       <details>
         <summary className="min-h-11 cursor-pointer font-medium">更多篩選：班級、商品、收款與日期</summary>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {tab === "summary" && <label className="grid gap-1 text-sm">
-            <span style={{ color: "var(--text-muted)" }}>統計方式</span>
+            <span className="text-fg-muted!">統計方式</span>
             <select className="input" value={groupBy} onChange={(e) => setGroupBy(e.target.value as "class" | "grade" | "user")}>
               <option value="class">依班級</option>
               <option value="grade">依年級</option>
@@ -839,14 +839,14 @@ export default function CouncilOrdersPage() {
             </select>
           </label>}
           <label className="grid gap-1 text-sm">
-            <span style={{ color: "var(--text-muted)" }}>年級</span>
+            <span className="text-fg-muted!">年級</span>
             <select className="input" value={grade} onChange={(e) => { setGrade(e.target.value); setClassId(""); }}>
               <option value="">全部年級</option>
               {gradeOptions.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
             </select>
           </label>
           <label className="grid gap-1 text-sm">
-            <span style={{ color: "var(--text-muted)" }}>班級</span>
+            <span className="text-fg-muted!">班級</span>
             <select className="input" value={classId} onChange={(e) => setClassId(e.target.value)}>
               <option value="">全部班級</option>
               {classes.filter((item) => !grade || item.grade === Number(grade)).map((item) => (
@@ -855,7 +855,7 @@ export default function CouncilOrdersPage() {
             </select>
           </label>
           {tab !== "analytics" && <label className="grid gap-1 text-sm">
-              <span style={{ color: "var(--text-muted)" }}>商品</span>
+              <span className="text-fg-muted!">商品</span>
               <select className="input" value={productId} onChange={(e) => setProductId(e.target.value)}>
                 <option value="">全部商品</option>
                 {allProducts.filter((p) => visibleCategoryIds.has(p.catId) && (!categoryId || p.catId === categoryId)
@@ -864,7 +864,7 @@ export default function CouncilOrdersPage() {
               </select>
           </label>}
           <label className="grid gap-1 text-sm">
-            <span style={{ color: "var(--text-muted)" }}>班聯收款狀態</span>
+            <span className="text-fg-muted!">班聯收款狀態</span>
             <select className="input" value={isPaid} onChange={(e) => setIsPaid(e.target.value)}>
               <option value="">全部</option>
               <option value="true">班聯已確認</option>
@@ -872,7 +872,7 @@ export default function CouncilOrdersPage() {
             </select>
           </label>
           {tab === "orders" && <label className="grid gap-1 text-sm">
-            <span style={{ color: "var(--text-muted)" }}>班代代收狀態</span>
+            <span className="text-fg-muted!">班代代收狀態</span>
             <select className="input" value={classCollectedFilter} onChange={(event) => setClassCollectedFilter(event.target.value)}>
               <option value="">全部</option>
               <option value="false">尚未交班代收款</option>
@@ -880,7 +880,7 @@ export default function CouncilOrdersPage() {
             </select>
           </label>}
           {tab !== "analytics" && <label className="grid gap-1 text-sm">
-            <span style={{ color: "var(--text-muted)" }}>訂單狀態</span>
+            <span className="text-fg-muted!">訂單狀態</span>
             <select className="input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
               <option value="">{tab === "orders" ? "全部訂單狀態" : "排除取消與退款"}</option>
               <option value="pending">待確認</option>
@@ -890,15 +890,15 @@ export default function CouncilOrdersPage() {
             </select>
           </label>}
           <label className="grid gap-1 text-sm">
-            <span style={{ color: "var(--text-muted)" }}>訂購起日</span>
+            <span className="text-fg-muted!">訂購起日</span>
             <input className="input" type="date" value={dateFrom} max={dateTo || undefined} onChange={(e) => setDateFrom(e.target.value)} />
           </label>
           <label className="grid gap-1 text-sm">
-            <span style={{ color: "var(--text-muted)" }}>訂購迄日</span>
+            <span className="text-fg-muted!">訂購迄日</span>
             <input className="input" type="date" value={dateTo} min={dateFrom || undefined} onChange={(e) => setDateTo(e.target.value)} />
           </label>
           {tab === "orders" && <label className="grid gap-1 text-sm lg:col-span-2">
-            <span style={{ color: "var(--text-muted)" }}>搜尋訂單編號或學生姓名</span>
+            <span className="text-fg-muted!">搜尋訂單編號或學生姓名</span>
             <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} maxLength={100} placeholder="輸入編號或姓名" />
           </label>}
         </div>
@@ -906,8 +906,8 @@ export default function CouncilOrdersPage() {
         </fieldset>
       </section>}
 
-      {reminderError && <p role="alert" className="text-sm" style={{ color: "var(--danger)" }}>{reminderError}</p>}
-      {reminderStatus && <p role="status" className="text-sm" style={{ color: "var(--success)" }}>{reminderStatus}</p>}
+      {reminderError && <p role="alert" className="text-sm text-danger!">{reminderError}</p>}
+      {reminderStatus && <p role="status" className="text-sm text-success!">{reminderStatus}</p>}
 
       {tab === "profit" && <ShopProfitAnalysis refresh={analyticsRefresh} />}
       {tab === "analytics" && analyticsCategory && <ShopSalesAnalytics key={analyticsCategory.id} refresh={analyticsRefresh} live={canViewAdvancedStats} scope={scopeLabels.join(" · ")} filters={{
@@ -916,7 +916,7 @@ export default function CouncilOrdersPage() {
         ...(isPaid ? { is_paid: isPaid } : {}), ...(dateFrom ? { date_from: dateFrom } : {}),
         ...(dateTo ? { date_to: dateTo } : {}),
       }} />}
-      {tab === "analytics" && !analyticsCategory && <p role="status" className="p-4" style={{ color: "var(--text-secondary)" }}>
+      {tab === "analytics" && !analyticsCategory && <p role="status" className="p-4 text-fg-secondary!">
         {optionsLoading ? "正在載入分析活動…" : optionsError ? "請先重新載入活動，再查看銷售分析。" : "尚無可分析的活動。"}
       </p>}
       {tab === "summary" && canConfirmClassPayment && <ClassPaymentWorkspace
@@ -943,12 +943,12 @@ export default function CouncilOrdersPage() {
         }}
         onCreated={() => { setSupplementRefresh((value) => value + 1); void loadSummary({ refreshCloseStatus: true }); }} />}
           {tab === "daily" && canViewClassPaymentReport && (
-            <section className="mb-5 space-y-3 rounded-lg p-4"
+            <section className="mb-5 space-y-3 rounded-lg p-4 border! border-border! bg-card!"
               aria-labelledby="daily-class-payments-heading"
-              style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+              >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h2 id="daily-class-payments-heading" className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
+                  <h2 id="daily-class-payments-heading" className="text-lg font-semibold text-fg-primary!">
                     每日收款
                   </h2>
                 </div>
@@ -983,17 +983,17 @@ export default function CouncilOrdersPage() {
 
               <div className="flex flex-wrap items-end gap-3">
                 <label className="grid gap-1 text-sm">
-                  <span style={{ color: "var(--text-muted)" }}>收款日期（起）</span>
+                  <span className="text-fg-muted!">收款日期（起）</span>
                   <input type="date" className="input min-h-11" value={collectionDateFrom}
                     onChange={(event) => setCollectionDateFrom(event.target.value)} />
                 </label>
                 <label className="grid gap-1 text-sm">
-                  <span style={{ color: "var(--text-muted)" }}>收款日期（迄）</span>
+                  <span className="text-fg-muted!">收款日期（迄）</span>
                   <input type="date" className="input min-h-11" value={collectionDateTo}
                     onChange={(event) => setCollectionDateTo(event.target.value)} />
                 </label>
                 <label className="grid min-w-48 gap-1 text-sm">
-                  <span style={{ color: "var(--text-muted)" }}>收款活動</span>
+                  <span className="text-fg-muted!">收款活動</span>
                   <select className="input min-h-11" value={collectionCategoryId}
                     onChange={(event) => setCollectionCategoryId(event.target.value)}>
                     <option value="">全部活動</option>
@@ -1003,7 +1003,7 @@ export default function CouncilOrdersPage() {
                   </select>
                 </label>
                 <label className="grid min-w-36 gap-1 text-sm">
-                  <span style={{ color: "var(--text-muted)" }}>收款年級</span>
+                  <span className="text-fg-muted!">收款年級</span>
                   <select className="input min-h-11" value={collectionGrade}
                     onChange={(event) => setCollectionGrade(event.target.value)}>
                     <option value="">全部年級</option>
@@ -1013,7 +1013,7 @@ export default function CouncilOrdersPage() {
                   </select>
                 </label>
                 <label className="grid min-w-48 flex-1 gap-1 text-sm">
-                  <span style={{ color: "var(--text-muted)" }}>搜尋班級</span>
+                  <span className="text-fg-muted!">搜尋班級</span>
                   <input className="input min-h-11" type="search" value={collectionClassSearch}
                     onChange={(event) => setCollectionClassSearch(event.target.value)}
                     placeholder="輸入班級名稱" />
@@ -1021,15 +1021,15 @@ export default function CouncilOrdersPage() {
               </div>
 
               {classPaymentsError && (
-                <div className="flex flex-wrap items-center justify-between gap-2" role="alert"
-                  style={{ color: "var(--danger)" }}>
+                <div className="flex flex-wrap items-center justify-between gap-2 text-danger!" role="alert"
+                  >
                   <span>{classPaymentsError}</span>
                   <button type="button" className="btn btn-ghost min-h-11 px-3"
                     onClick={() => void loadClassPayments()}>重試</button>
                 </div>
               )}
               {classPaymentsLoading ? (
-                <p role="status" className="py-6 text-center text-sm" style={{ color: "var(--text-secondary)" }}>
+                <p role="status" className="py-6 text-center text-sm text-fg-secondary!">
                   正在載入收款明細…
                 </p>
               ) : classPaymentsError ? null : (
@@ -1037,65 +1037,65 @@ export default function CouncilOrdersPage() {
                   <dl role="group" className="flex flex-wrap gap-x-8 gap-y-2 rounded-md px-3 py-2 text-sm"
                     aria-label="收款統計">
                     <div className="flex items-baseline gap-2">
-                      <dt style={{ color: "var(--text-secondary)" }}>收款金額</dt>
-                      <dd className="text-lg font-semibold tabular-nums" style={{ color: "var(--primary-text)" }}>
+                      <dt className="text-fg-secondary!">收款金額</dt>
+                      <dd className="text-lg font-semibold tabular-nums text-accent-text!">
                         {money(collectionAmount)}
                       </dd>
                     </div>
                     <div className="flex items-baseline gap-2">
-                      <dt style={{ color: "var(--text-secondary)" }}>收款班級</dt>
-                      <dd className="text-lg font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>
+                      <dt className="text-fg-secondary!">收款班級</dt>
+                      <dd className="text-lg font-semibold tabular-nums text-fg-primary!">
                         {collectionClassCount} 班
                       </dd>
                     </div>
                     <div className="flex items-baseline gap-2">
-                      <dt style={{ color: "var(--text-secondary)" }}>收款項目</dt>
-                      <dd className="font-medium tabular-nums" style={{ color: "var(--text-primary)" }}>
+                      <dt className="text-fg-secondary!">收款項目</dt>
+                      <dd className="font-medium tabular-nums text-fg-primary!">
                         {visibleClassPayments.length} 筆
                       </dd>
                     </div>
                   </dl>
                   {collectionDateRangeInvalid ? (
-                    <p role="alert" className="py-4 text-center text-sm" style={{ color: "var(--danger)" }}>
+                    <p role="alert" className="py-4 text-center text-sm text-danger!">
                       起始日期不可晚於結束日期。
                     </p>
                   ) : visibleClassPayments.length === 0 ? (
-                    <p role="status" className="py-6 text-center text-sm" style={{ color: "var(--text-secondary)" }}>
+                    <p role="status" className="py-6 text-center text-sm text-fg-secondary!">
                       這個日期與篩選條件沒有收款紀錄；可調整日期或清除篩選。
                     </p>
                   ) : (
-                    <div className="overflow-x-auto rounded-md" style={{ border: "1px solid var(--border)" }}>
+                    <div className="overflow-x-auto rounded-md border! border-border!">
                       <table className="shop-mobile-table w-full min-w-[680px] text-sm" aria-label="收款明細">
                         <thead>
-                          <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                          <tr className="border-b! border-b-border!">
                             {["收款時間", "班級", "年級", "收款活動", "訂單數", "收款金額"].map((label) => (
-                              <th key={label} scope="col" className="px-3 py-3 text-left text-xs font-semibold"
-                                style={{ color: "var(--text-muted)" }}>{label}</th>
+                              <th key={label} scope="col" className="px-3 py-3 text-left text-xs font-semibold text-fg-muted!"
+                                >{label}</th>
                             ))}
                           </tr>
                         </thead>
                         <tbody>
                           {visibleClassPayments.map((payment) => (
                             <tr key={`${payment.collection_type}:${payment.record_id}:${payment.category_id ?? "__uncategorized__"}`}
-                              style={{ borderBottom: "1px solid var(--border)" }}>
-                              <td data-label="收款時間" className="px-3 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>
+                               className="border-b! border-b-border!">
+                              <td data-label="收款時間" className="px-3 py-3 tabular-nums text-fg-secondary!">
                                 {taipeiDateTime(payment.confirmed_at)}
                               </td>
-                              <td data-label="班級" className="px-3 py-3 font-medium" style={{ color: "var(--text-primary)" }}>
+                              <td data-label="班級" className="px-3 py-3 font-medium text-fg-primary!">
                                 {payment.collection_type === "individual_order"
                                   ? `${payment.class_label}（個人訂單）`
                                   : payment.class_label}
                               </td>
-                              <td data-label="年級" className="px-3 py-3" style={{ color: "var(--text-secondary)" }}>
+                              <td data-label="年級" className="px-3 py-3 text-fg-secondary!">
                                 {payment.grade} 年級
                               </td>
-                              <td data-label="收款活動" className="px-3 py-3" style={{ color: "var(--text-secondary)" }}>
+                              <td data-label="收款活動" className="px-3 py-3 text-fg-secondary!">
                                 {payment.category_label ?? "未分類商品"}
                               </td>
-                              <td data-label="訂單數" className="px-3 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>
+                              <td data-label="訂單數" className="px-3 py-3 tabular-nums text-fg-secondary!">
                                 {payment.order_count}
                               </td>
-                              <td data-label="收款金額" className="px-3 py-3 font-semibold tabular-nums" style={{ color: "var(--success)" }}>
+                              <td data-label="收款金額" className="px-3 py-3 font-semibold tabular-nums text-success!">
                                 {money(payment.amount)}
                               </td>
                             </tr>
@@ -1108,7 +1108,7 @@ export default function CouncilOrdersPage() {
               )}
             </section>
           )}
-      {hasOrderFilters && tab !== "analytics" && loadError && <p role="alert" className="p-4" style={{ color: "var(--danger)" }}>{loadError}</p>}
+      {hasOrderFilters && tab !== "analytics" && loadError && <p role="alert" className="p-4 text-danger!">{loadError}</p>}
       <div hidden={hasOrderFilters && tab !== "analytics" && Boolean(loadError)}>
       {/* Tab 1：班級彙總 */}
       {showsSummary && (tab !== "summary" || !canConfirmClassPayment || (paymentScope && summaryScopeKey === paymentScope.key)) && (
@@ -1120,19 +1120,19 @@ export default function CouncilOrdersPage() {
                 { label: "班聯已確認", value: money(summary.paid_amount) },
                 { label: "班聯未確認", value: money(summary.unpaid_amount) },
               ].map((item) => (
-                <div key={item.label} className="rounded-lg p-4" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
-                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>{item.label}</p>
-                  <p className="mt-1 text-xl font-bold" style={{ color: "var(--primary-text)" }}>{item.value}</p>
+                <div key={item.label} className="rounded-lg p-4 border! border-border! bg-card!">
+                  <p className="text-xs text-fg-muted!">{item.label}</p>
+                  <p className="mt-1 text-xl font-bold text-accent-text!">{item.value}</p>
                 </div>
               ))}
             </div>
           )}
 
           {tab === "summary" && canCreateBatchReminders && (
-            <div className="mb-4 flex flex-col gap-3 rounded-lg p-4 sm:flex-row sm:items-center sm:justify-between"
-              style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+            <div className="mb-4 flex flex-col gap-3 rounded-lg p-4 sm:flex-row sm:items-center sm:justify-between border! border-border! bg-card!"
+              >
               <div>
-                <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>班代繳款提醒</h2>
+                <h2 className="text-base font-semibold text-fg-primary!">班代繳款提醒</h2>
               </div>
               <button
                 type="button"
@@ -1147,15 +1147,15 @@ export default function CouncilOrdersPage() {
           )}
 
 
-          {receiptError && <p role="alert" className="mb-3 text-sm" style={{ color: "var(--danger)" }}>{receiptError}</p>}
+          {receiptError && <p role="alert" className="mb-3 text-sm text-danger!">{receiptError}</p>}
           {canBatchDownloadReceipts && (
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg p-3"
-              style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg p-3 border! border-border! bg-card!"
+              >
               <div>
-                <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>收款單據</p>
+                <p className="text-sm font-medium text-fg-primary!">收款單據</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <label className="grid gap-1 text-xs" style={{ color: "var(--text-secondary)" }}>
+                <label className="grid gap-1 text-xs text-fg-secondary!">
                   收據範圍
                   <select
                     className="input min-h-11"
@@ -1174,7 +1174,7 @@ export default function CouncilOrdersPage() {
                     ))}
                   </select>
                 </label>
-                <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                <span className="text-xs text-fg-secondary!">
                   已選 {selectedReceiptClasses.size} 班
                 </span>
                 <AnimatedDownloadButton
@@ -1234,16 +1234,16 @@ export default function CouncilOrdersPage() {
               </div>
             </div>
           )}
-          <div className="overflow-hidden rounded-lg" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+          <div className="overflow-hidden rounded-lg border! border-border! bg-card!">
             {loading ? (
-              <div role="status" className="py-16 text-center text-sm" style={{ color: "var(--text-muted)" }}>載入中...</div>
+              <div role="status" className="py-16 text-center text-sm text-fg-muted!">載入中...</div>
             ) : !summary?.rows.length ? (
-              <div role="status" className="py-16 text-center text-sm" style={{ color: "var(--text-muted)" }}>目前範圍沒有資料，可清除篩選或改選其他活動。</div>
+              <div role="status" className="py-16 text-center text-sm text-fg-muted!">目前範圍沒有資料，可清除篩選或改選其他活動。</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="shop-mobile-table w-full min-w-[720px] text-sm" aria-label="班級訂購與收款彙總">
                   <thead>
-                    <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                    <tr className="border-b! border-b-border!">
                       {canBatchDownloadReceipts && <th className="px-3 py-3 text-left">
                         <input
                           type="checkbox"
@@ -1261,7 +1261,7 @@ export default function CouncilOrdersPage() {
                         />
                       </th>}
                       {[groupBy === "class" ? "班級" : groupBy === "grade" ? "年級" : "學生", "訂單數", "訂購金額", "班聯已確認", "班聯未確認", ...(groupBy === "class" ? actionActivityGroups.map((group) => group.label + "訂購狀態") : [])].map((h, i) => (
-                        <th key={i} className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "var(--text-muted)" }}>{h}</th>
+                        <th key={i} className="px-4 py-3 text-left text-xs font-semibold text-fg-muted!">{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -1282,7 +1282,7 @@ export default function CouncilOrdersPage() {
                             })}
                           />
                         </td>}
-                        <td className="px-4 py-3 font-medium" style={{ color: "var(--text-primary)" }}>
+                        <td className="px-4 py-3 font-medium text-fg-primary!">
                           {groupBy === "class" && row.key !== "none" ? <button type="button"
                             className="min-h-11 text-left underline underline-offset-4" disabled={mutationBusy}
                             data-class-orders-id={row.key} data-class-orders-source="summary"
@@ -1290,10 +1290,10 @@ export default function CouncilOrdersPage() {
                             {row.label}
                           </button> : row.label}
                         </td>
-                        <td data-label="訂單數" className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>{row.order_count}</td>
+                        <td data-label="訂單數" className="px-4 py-3 text-xs text-fg-secondary!">{row.order_count}</td>
                         <td data-label="應繳" className="px-4 py-3 text-xs">{money(row.total_amount)}</td>
-                        <td data-label="班聯已確認" className="px-4 py-3 text-xs" style={{ color: "var(--success)" }}>{money(row.paid_amount)}</td>
-                        <td data-label="班聯未確認" className="px-4 py-3 text-xs" style={{ color: "var(--danger)" }}>{money(row.unpaid_amount)}</td>
+                        <td data-label="班聯已確認" className="px-4 py-3 text-xs text-success!">{money(row.paid_amount)}</td>
+                        <td data-label="班聯未確認" className="px-4 py-3 text-xs text-danger!">{money(row.unpaid_amount)}</td>
                         {groupBy === "class" && actionActivityGroups.map((group) => {
                           const statuses = group.categories.map((category) => closeStatus[row.key]?.[category.id]);
                           const closedCount = statuses.filter((item) => item?.is_closed).length;
@@ -1335,16 +1335,15 @@ export default function CouncilOrdersPage() {
               onError={(error) => toast.error(apiErrorMessage(error, "訂單統計詳情下載失敗，請重試。"))} />}
             <AnimatedDownloadButton
               href="/api/shop/reports/orders.xlsx"
-              className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs"
-              style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}
+              className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs border! border-border! text-fg-secondary!"
               filename="orders.xlsx"
               label="匯出全部訂單 Excel" />
           </div>
-          <div className="overflow-hidden rounded-lg" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+          <div className="overflow-hidden rounded-lg border! border-border! bg-card!">
             {loading ? (
-              <div role="status" className="py-16 text-center text-sm" style={{ color: "var(--text-muted)" }}>載入中...</div>
+              <div role="status" className="py-16 text-center text-sm text-fg-muted!">載入中...</div>
             ) : !quantities.length ? (
-              <div role="status" className="py-16 text-center text-sm" style={{ color: "var(--text-muted)" }}>目前範圍沒有資料，可清除篩選或改選其他活動。</div>
+              <div role="status" className="py-16 text-center text-sm text-fg-muted!">目前範圍沒有資料，可清除篩選或改選其他活動。</div>
             ) : (
               <ProductQuantitySummary rows={quantities} />
             )}
@@ -1359,10 +1358,10 @@ export default function CouncilOrdersPage() {
           {quantityResult && <p role="status" className="mb-3 text-sm">{quantityResult}</p>}
           {canConfirmClassPayment && <OrderRecalcBar recalc={recalc} disabled={loading || mutationBusy} onDone={async () => { await Promise.all([loadOrders(), loadSummary()]); }} />}
           {canCreateBatchReminders && (
-            <div className="mb-3 flex flex-col gap-3 rounded-lg p-4 sm:flex-row sm:items-center sm:justify-between"
-              style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+            <div className="mb-3 flex flex-col gap-3 rounded-lg p-4 sm:flex-row sm:items-center sm:justify-between border! border-border! bg-card!"
+              >
               <div>
-                <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>訂購人繳款提醒</h2>
+                <h2 className="text-base font-semibold text-fg-primary!">訂購人繳款提醒</h2>
               </div>
               <button
                 type="button"
@@ -1376,21 +1375,21 @@ export default function CouncilOrdersPage() {
             </div>
           )}
           {(
-            <div className="overflow-hidden rounded-lg" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+            <div className="overflow-hidden rounded-lg border! border-border! bg-card!">
               {loading ? (
-                <div role="status" className="py-16 text-center text-sm" style={{ color: "var(--text-muted)" }}>載入中...</div>
+                <div role="status" className="py-16 text-center text-sm text-fg-muted!">載入中...</div>
               ) : !visibleOrders.length ? (
-                <div role="status" className="py-16 text-center text-sm" style={{ color: "var(--text-muted)" }}>目前範圍沒有訂單，可清除篩選或改用其他關鍵字。</div>
+                <div role="status" className="py-16 text-center text-sm text-fg-muted!">目前範圍沒有訂單，可清除篩選或改用其他關鍵字。</div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="shop-mobile-table w-full min-w-[700px] text-sm">
                     <thead>
-                      <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                      <tr className="border-b! border-b-border!">
                         {canConfirmClassPayment && <OrderRecalcSelectAll recalc={recalc} orderIds={visibleOrders.map((row) => row.id)} />}
                         {["訂單編號", "訂購人", "班級／處室", "狀態", "金額", "班聯收款", "建立時間"].map((h) => (
-                          <th key={h} className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "var(--text-muted)" }}>{h}</th>
+                          <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-fg-muted!">{h}</th>
                         ))}
-                        {canConfirmClassPayment && <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "var(--text-muted)" }}>操作</th>}
+                        {canConfirmClassPayment && <th className="px-4 py-3 text-left text-xs font-semibold text-fg-muted!">操作</th>}
                       </tr>
                     </thead>
                     <tbody>
@@ -1399,10 +1398,10 @@ export default function CouncilOrdersPage() {
                           <tr style={idx < visibleOrders.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}>
                             {canConfirmClassPayment && <OrderRecalcCheckbox recalc={recalc} order={order} />}
                             <td className="px-4 py-3">
-                              <Link href={`/shop/orders/${order.id}?from=council`} className="text-sm underline" style={{ color: "var(--primary-text)" }}>{order.serial_number}</Link>
+                              <Link href={`/shop/orders/${order.id}?from=council`} className="text-sm underline text-accent-text!">{order.serial_number}</Link>
                             </td>
-                            <td data-label="訂購人" className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>{order.user_name ?? "-"}</td>
-                            <td data-label="班級／處室" className="px-4 py-3 text-xs" style={{ color: "var(--text-muted)" }}>{order.buyer_office ?? order.class_label ?? "-"}</td>
+                            <td data-label="訂購人" className="px-4 py-3 text-xs text-fg-secondary!">{order.user_name ?? "-"}</td>
+                            <td data-label="班級／處室" className="px-4 py-3 text-xs text-fg-muted!">{order.buyer_office ?? order.class_label ?? "-"}</td>
                             <td className="px-4 py-3">
                               <OrderStatusBadge status={order.status} />
                             </td>
@@ -1415,7 +1414,7 @@ export default function CouncilOrdersPage() {
                                 {order.is_paid ? "班聯已確認" : "班聯未確認"}
                               </span>
                             </td>
-                            <td className="px-4 py-3 text-xs" style={{ color: "var(--text-muted)" }}>
+                            <td className="px-4 py-3 text-xs text-fg-muted!">
                               {new Date(order.created_at).toLocaleDateString("zh-TW")}
                             </td>
                             {canConfirmClassPayment && <td data-label="操作" className="px-4 py-3">
@@ -1433,7 +1432,7 @@ export default function CouncilOrdersPage() {
                                 )}
                                 {(order.status === "pending" || order.status === "confirmed") && (
                                   order.is_paid || order.is_class_collected
-                                    ? <span className="text-xs" style={{ color: "var(--text-secondary)" }}>已收款，請先撤銷收款再調整或取消</span>
+                                    ? <span className="text-xs text-fg-secondary!">已收款，請先撤銷收款再調整或取消</span>
                                     : <button
                                       type="button"
                                       className="btn btn-danger-ghost min-h-11 whitespace-nowrap"
@@ -1450,30 +1449,30 @@ export default function CouncilOrdersPage() {
                             </td>}
                           </tr>
                           {quantityTarget?.id === order.id && (
-                            <tr id={`quantity-editor-${order.id}`} style={{ borderBottom: "1px solid var(--border)" }}>
-                              <td colSpan={canConfirmClassPayment ? 9 : 7} className="px-4 py-4" style={{ background: "var(--bg-elevated)" }}>
+                            <tr id={`quantity-editor-${order.id}`}  className="border-b! border-b-border!">
+                              <td colSpan={canConfirmClassPayment ? 9 : 7} className="px-4 py-4 bg-elevated!">
                                 <fieldset className="space-y-3">
-                                  <legend className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                                  <legend className="text-sm font-semibold text-fg-primary!">
                                     調整 {order.user_name ?? "訂購人"} 的訂購數量
                                   </legend>
                                   {(quantityTarget.items ?? []).map((item) => {
                                     const quantity = quantityDrafts[item.id] ?? item.quantity;
                                     const canRemove = (quantityTarget.items?.length ?? 0) > 1;
                                     return (
-                                      <div key={item.id} className="flex flex-col gap-3 rounded-md p-3 sm:flex-row sm:items-center sm:justify-between" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+                                      <div key={item.id} className="flex flex-col gap-3 rounded-md p-3 sm:flex-row sm:items-center sm:justify-between border! border-border! bg-card!">
                                         <div className="min-w-0">
-                                          <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{item.product_name ?? "商品"}</p>
+                                          <p className="text-sm font-medium text-fg-primary!">{item.product_name ?? "商品"}</p>
                                           {item.selected_options.length > 0 && (
-                                            <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>
+                                            <p className="mt-1 text-xs text-fg-secondary!">
                                               {item.selected_options.map((option) => `${option.group_name}：${option.value}`).join("、")}
                                             </p>
                                           )}
-                                          <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>
+                                          <p className="mt-1 text-xs text-fg-secondary!">
                                             原訂單單價 {money(item.unit_price)} · 目前 {item.quantity} 件
                                           </p>
                                         </div>
                                         <div className="flex items-end gap-2">
-                                          <label className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                                          <label className="text-xs text-fg-secondary!">
                                             訂購數量
                                             <NumberInput
                                               className="input mt-1 block min-h-11 w-24"
@@ -1494,7 +1493,7 @@ export default function CouncilOrdersPage() {
                                       </div>
                                     );
                                   })}
-                                  {quantityError && <p role="alert" className="text-sm" style={{ color: "var(--danger)" }}>{quantityError}</p>}
+                                  {quantityError && <p role="alert" className="text-sm text-danger!">{quantityError}</p>}
                                 </fieldset>
                               </td>
                             </tr>
@@ -1520,7 +1519,7 @@ export default function CouncilOrdersPage() {
             取消原因（選填）
             <textarea className="input mt-2 w-full" rows={3} maxLength={500} value={cancelReason} disabled={cancelBusy} onChange={(event) => setCancelReason(event.target.value)} />
           </label>
-          {cancelError && <p role="alert" className="text-sm" style={{ color: "var(--danger)" }}>{cancelError}</p>}
+          {cancelError && <p role="alert" className="text-sm text-danger!">{cancelError}</p>}
           <div className="flex flex-wrap justify-end gap-2">
             <button type="button" className="btn btn-ghost min-h-11" disabled={cancelBusy} onClick={() => setCancelTarget(null)}>返回</button>
             <button type="submit" className="btn btn-danger min-h-11" disabled={cancelBusy}>{cancelBusy ? "取消中…" : "確認取消訂單"}</button>

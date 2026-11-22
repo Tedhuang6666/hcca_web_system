@@ -938,7 +938,7 @@ export default function ClassOrdersPage() {
     <div className="shop-class-orders-page mx-auto min-w-0 w-full max-w-7xl space-y-5 px-4 py-5">
       <header className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="break-words text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>班代工作</h1>
+          <h1 className="break-words text-2xl font-semibold text-fg-primary!">班代工作</h1>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => void load()} className="btn btn-ghost min-h-11 min-w-11" aria-label="重新整理">
@@ -964,22 +964,22 @@ export default function ClassOrdersPage() {
             setSelectedIds([]); setOrderPage(0); setSeatSearch(""); setSeatFilter("all");
             setStudentId(""); setBatchStudentIds([]); setNotes(""); setOrderProductSearch(""); setSubmitMessage("");
           }} />
-        {(assistedItems.length > 0 || assistedOrderDrafts.length > 0 || orderProductId || editOrder) && <p className="text-sm" style={{ color: "var(--text-secondary)" }}>請先完成目前的代訂或修改，再切換活動。</p>}
+        {(assistedItems.length > 0 || assistedOrderDrafts.length > 0 || orderProductId || editOrder) && <p className="text-sm text-fg-secondary!">請先完成目前的代訂或修改，再切換活動。</p>}
         <p className="font-semibold">目前活動：{ledgerActivityLabel}</p>
       </section>}
       {!activeLedgerKey && !loading && activityRows.length > 0 && <p role="status">尚未選擇活動</p>}
 
       {loadFailed && (
-        <p className="rounded-md px-3 py-2 text-sm" role="alert"
-          style={{ border: "1px solid var(--danger-border)", background: "var(--danger-dim)", color: "var(--danger)" }}>
+        <p className="rounded-md px-3 py-2 text-sm border! border-danger-border! bg-danger-soft! text-danger!" role="alert"
+          >
           載入失敗，目前顯示上次載入的資料。請重新整理後再操作。
         </p>
       )}
 
       {!formOpen && assistedOrderDraftRows.length > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg px-4 py-3"
-          style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
-          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg px-4 py-3 border! border-border! bg-elevated!"
+          >
+          <p className="text-sm text-fg-secondary!">
             尚有 {assistedOrderDraftRows.length} 位同學、{assistedOrderDraftRows.reduce((count, row) => count + row.items.length, 0)} 項商品待送出
           </p>
           <button type="button" onClick={openCreate} className="btn btn-ghost min-h-11 px-3 text-xs">
@@ -1002,7 +1002,7 @@ export default function ClassOrdersPage() {
       </div>
 
       <details className="shop-class-tools">
-        <summary className="min-h-11 cursor-pointer py-3 text-sm" style={{ color: "var(--text-secondary)" }}>訂單查詢與其他工具</summary>
+        <summary className="min-h-11 cursor-pointer py-3 text-sm text-fg-secondary!">訂單查詢與其他工具</summary>
         <div className="space-y-3 pb-4">
           <button type="button" className="btn btn-ghost min-h-11 text-sm"
             aria-pressed={workspace === "details"} onClick={(event) => {
@@ -1017,7 +1017,7 @@ export default function ClassOrdersPage() {
           </details>
           <details>
             <summary className="min-h-11 cursor-pointer py-3 text-sm">加購與繳款說明</summary>
-            <p className="max-w-prose text-sm" style={{ color: "var(--text-secondary)" }}>
+            <p className="max-w-prose text-sm text-fg-secondary!">
               班聯結單或統一截止後停止代購；繳款後追加由同學自行補繳。
             </p>
           </details>
@@ -1032,18 +1032,18 @@ export default function ClassOrdersPage() {
             <option value="all">目前活動全部商品</option>
             {filterActivityRows.map((row) => <option key={row.key} value={row.key}>{row.label}</option>)}
           </select>
-          <span style={{ color: "var(--text-muted)" }}>商品統計與訂單清單依所選活動整理</span>
+          <span className="text-fg-muted!">商品統計與訂單清單依所選活動整理</span>
         </label>
       )}
 
-      {submitMessage && <p role="status" className="rounded-md p-3 text-sm" style={{ background: "var(--bg-elevated)" }}>{submitMessage}</p>}
+      {submitMessage && <p role="status" className="rounded-md p-3 text-sm bg-elevated!">{submitMessage}</p>}
       {workspace === "order" && catalogFailed && (
         <p role="alert">無法載入可訂購商品。<button type="button" className="btn btn-ghost min-h-11" onClick={() => window.location.reload()}>重新載入</button></p>
       )}
       {workspace === "order" && (formOpen || hasCurrentComposerInput) && activeLedgerKey && (
-        <section id="class-order-form" className="scroll-mt-5 rounded-lg p-4" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+        <section id="class-order-form" className="scroll-mt-5 rounded-lg p-4 border! border-border! bg-card!">
           {editOrder && <div className="mb-3 flex items-center justify-between">
-            <h2 className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-fg-primary!">
               {editOrder ? <Edit2 size={15} /> : <Plus size={15} />}
               {editOrder ? `修改訂單 ${editOrder.serial_number}` : "代同學登記商品"}
             </h2>
@@ -1063,11 +1063,11 @@ export default function ClassOrdersPage() {
               setNotes("");
               setAssistedItems([]);
             }}
-              className="min-h-11 min-w-11" style={{ color: "var(--text-muted)" }} aria-label="關閉下單表單">
+              className="min-h-11 min-w-11 text-fg-muted!"  aria-label="關閉下單表單">
               <X size={15} />
             </button>
           </div>}
-          {(editOrder || composerActivityKey) && <p className="mb-3 text-sm" style={{ color: "var(--text-secondary)" }}>
+          {(editOrder || composerActivityKey) && <p className="mb-3 text-sm text-fg-secondary!">
             {editOrder ? "修改品項與數量後儲存。" : `目前代訂 ${activityRows.find((row) => row.key === composerActivityKey)?.label ?? "所選活動"}`}
           </p>}
           {!editOrder && <div className="mb-5">
@@ -1079,13 +1079,13 @@ export default function ClassOrdersPage() {
                 </li>;
               })}
             </ol>
-            <h2 className="mt-4 text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
+            <h2 className="mt-4 text-lg font-semibold text-fg-primary!">
               {!recipientIds.length ? "先選一位同學" : "替同學選商品，確認後送出"}
             </h2>
           </div>}
           {!editOrder && (
             <details className="mb-4">
-            <summary className="min-h-11 cursor-pointer py-3 text-sm" style={{ color: "var(--text-secondary)" }}>
+            <summary className="min-h-11 cursor-pointer py-3 text-sm text-fg-secondary!">
               {recipientMode === "batch" ? "正在幫多人訂購相同商品" : "要幫多人訂購相同商品？"}
             </summary>
             <div className="flex flex-wrap gap-2 pb-3" role="group" aria-label="代訂方式">
@@ -1125,7 +1125,7 @@ export default function ClassOrdersPage() {
             <section className="mb-5" aria-label="訂購同學">
               {studentId ? (
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+                  <p className="text-base font-semibold text-fg-primary!">
                     {selectedStudent?.seat_number != null && <span className="mr-2 tabular-nums">{selectedStudent.seat_number} 號</span>}
                     {selectedStudent?.display_name ?? orders.find((order) => order.id === editOrder?.id)?.user_name ?? "訂購同學"}
                   </p>
@@ -1183,19 +1183,19 @@ export default function ClassOrdersPage() {
           )}
           {!editOrder && recipientMode === "batch" && (
             <fieldset disabled={creating || membersLoading || membersLoadFailed || currentDraftItemCount > 0 || Boolean(orderProductId)}
-              className="mb-5 grid min-w-0 gap-3 rounded-md p-3"
-              style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
-              <legend className="px-1 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>一次套用給多位同學</legend>
+              className="mb-5 grid min-w-0 gap-3 rounded-md p-3 border! border-border! bg-elevated!"
+              >
+              <legend className="px-1 text-sm font-semibold text-fg-primary!">一次套用給多位同學</legend>
               {membersLoading ? (
-                <p role="status" className="text-sm" style={{ color: "var(--text-muted)" }}>正在載入本班名冊...</p>
+                <p role="status" className="text-sm text-fg-muted!">正在載入本班名冊...</p>
               ) : membersLoadFailed ? (
-                <p role="alert" className="text-sm" style={{ color: "var(--danger)" }}>無法載入本班名冊，請重新整理後再試。</p>
+                <p role="alert" className="text-sm text-danger!">無法載入本班名冊，請重新整理後再試。</p>
               ) : members.length === 0 ? (
-                <p role="status" className="text-sm" style={{ color: "var(--text-muted)" }}>本班名冊目前沒有可選的學生。</p>
+                <p role="status" className="text-sm text-fg-muted!">本班名冊目前沒有可選的學生。</p>
               ) : (
                 <>
                   <label className="grid max-w-lg gap-1 text-sm">
-                    <span style={{ color: "var(--text-secondary)" }}>搜尋座號或姓名</span>
+                    <span className="text-fg-secondary!">搜尋座號或姓名</span>
                     <input className="input min-h-11" type="search" value={recipientFilter}
                       onChange={(event) => setRecipientFilter(event.target.value)} placeholder="例如：12 或 王小明" />
                   </label>
@@ -1212,17 +1212,17 @@ export default function ClassOrdersPage() {
                       disabled={batchStudentIds.length === 0} onClick={() => setBatchStudentIds([])}>
                       清除選取
                     </button>
-                    <span role="status" className="text-sm font-medium" style={{ color: "var(--primary-text)" }}>
+                    <span role="status" className="text-sm font-medium text-accent-text!">
                       已選 {batchStudentIds.length} 位同學
                     </span>
                   </div>
-                  <div className="max-h-56 overflow-y-auto rounded-md"
+                  <div className="max-h-56 overflow-y-auto rounded-md border! border-border! bg-card!"
                     role="group" aria-label="批次代訂同學名單"
-                    style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+                    >
                     {filteredRecipients.length === 0 ? (
-                      <p role="status" className="px-3 py-4 text-sm" style={{ color: "var(--text-muted)" }}>找不到符合的同學，請調整搜尋內容。</p>
+                      <p role="status" className="px-3 py-4 text-sm text-fg-muted!">找不到符合的同學，請調整搜尋內容。</p>
                     ) : (
-                      <ul className="divide-y" style={{ borderColor: "var(--border)" }}>
+                      <ul className="divide-y border-border!">
                         {filteredRecipients.map((member) => (
                           <li key={member.id}>
                             <label className="flex min-h-11 cursor-pointer items-center gap-3 px-3 py-2 text-sm">
@@ -1230,10 +1230,10 @@ export default function ClassOrdersPage() {
                                 onChange={() => setBatchStudentIds((current) => current.includes(member.id)
                                   ? current.filter((id) => id !== member.id)
                                   : [...current, member.id])} />
-                              <span className="tabular-nums" style={{ color: "var(--text-muted)" }}>
+                              <span className="tabular-nums text-fg-muted!">
                                 {member.seat_number == null ? "未編座號" : member.seat_number + " 號"}
                               </span>
-                              <span className="font-medium" style={{ color: "var(--text-primary)" }}>{member.display_name}</span>
+                              <span className="font-medium text-fg-primary!">{member.display_name}</span>
                             </label>
                           </li>
                         ))}
@@ -1246,33 +1246,33 @@ export default function ClassOrdersPage() {
           )}
           {recipientIds.length > 0 && <>
           {(!editOrder || editProductsOpen) && <>
-          <h3 className="mb-3 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>選商品與規格</h3>
+          <h3 className="mb-3 text-sm font-semibold text-fg-primary!">選商品與規格</h3>
           {!purchaseOptionsReady && <p role={purchaseOptionsFailed ? "alert" : "status"} className="mb-3 text-sm">
             {purchaseOptionsFailed ? "無法確認同學的購買資格，請重新載入。" : "正在確認同學可訂購的商品…"}
             {purchaseOptionsFailed && <button type="button" className="btn btn-ghost min-h-11 ml-2" onClick={() => setPurchaseOptionsRetry((value) => value + 1)}>重新確認購買資格</button>}
           </p>}
-          {recipientMode === "batch" && purchaseOptionsReady && <p className="mb-3 text-sm" style={{ color: "var(--text-muted)" }}>只顯示所有已選同學都能訂購的商品。</p>}
+          {recipientMode === "batch" && purchaseOptionsReady && <p className="mb-3 text-sm text-fg-muted!">只顯示所有已選同學都能訂購的商品。</p>}
           <fieldset ref={productOptionsRef} disabled={creating || catalogFailed || !purchaseOptionsReady || !recipientIds.length || membersLoading || membersLoadFailed} className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <legend className="sr-only">加入商品與規格</legend>
             <div className="grid min-w-0 gap-2 sm:col-span-2 xl:col-span-3">
               {!orderProductId && <>
               <label className="grid max-w-xl gap-1 text-sm">
-                <span style={{ color: "var(--text-muted)" }}>搜尋商品</span>
+                <span className="text-fg-muted!">搜尋商品</span>
                 <input ref={productSearchRef} className="input min-h-11" type="search" value={orderProductSearch}
                   onChange={(event) => setOrderProductSearch(event.target.value)}
                   placeholder="輸入關鍵字篩選，或直接選擇商品" />
               </label>
-              <div className="max-h-56 overflow-y-auto rounded-md"
+              <div className="max-h-56 overflow-y-auto rounded-md border! border-border! bg-card!"
                 role="group" aria-label="商品搜尋結果"
-                style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+                >
                 {orderProductResults.length === 0 ? (
-                  <p role="status" className="px-3 py-4 text-sm" style={{ color: "var(--text-muted)" }}>
+                  <p role="status" className="px-3 py-4 text-sm text-fg-muted!">
                     {orderProductSearch.trim()
                       ? "找不到符合的商品，請試試商品名稱、分類或系列。"
                       : "目前沒有符合所選同學資格的可訂商品。"}
                   </p>
                 ) : (
-                  <ul className="divide-y" style={{ borderColor: "var(--border)" }}>
+                  <ul className="divide-y border-border!">
                     {orderProductResults.map((product) => (
                       <li key={product.id}>
                         <button type="button" aria-pressed={orderProductId === product.id}
@@ -1286,7 +1286,7 @@ export default function ClassOrdersPage() {
                             ? { background: "var(--primary-dim)", color: "var(--primary-text)" }
                             : { color: "var(--text-primary)" }}>
                           <span className="font-medium">{product.name}</span>
-                          <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                          <span className="text-xs text-fg-secondary!">
                             {product.category} / {product.series} · {money(product.price)}
                           </span>
                         </button>
@@ -1296,14 +1296,14 @@ export default function ClassOrdersPage() {
                 )}
               </div>
               {orderProductResults.length > 12 && (
-                <p role="status" className="text-xs" style={{ color: "var(--text-muted)" }}>
+                <p role="status" className="text-xs text-fg-muted!">
                   共 {orderProductResults.length} 項可訂商品
                 </p>
               )}
               </>}
               {selectedOrderProduct && (
                 <div className="flex items-center justify-between gap-3">
-                <p role="status" className="text-sm font-medium" style={{ color: "var(--primary-text)" }}>
+                <p role="status" className="text-sm font-medium text-accent-text!">
                   {selectedOrderProduct.name} · {money(currentUnitPrice)} / 件
                 </p>
                 <button type="button" className="btn btn-ghost min-h-11 shrink-0 text-sm"
@@ -1326,7 +1326,7 @@ export default function ClassOrdersPage() {
                 : options;
               return (
                 <fieldset key={group.id} className="grid min-w-0 gap-1 text-sm">
-                  <legend className="mb-1" style={{ color: "var(--text-muted)" }}>{group.name}</legend>
+                  <legend className="mb-1 text-fg-muted!">{group.name}</legend>
                   {options.length > 0 ? (
                     <>
                       {searchableOptions && (
@@ -1338,12 +1338,12 @@ export default function ClassOrdersPage() {
                         </label>
                       )}
                       {searchableOptions && !optionNeedle && (
-                        <p role="status" className="text-xs" style={{ color: "var(--text-muted)" }}>
+                        <p role="status" className="text-xs text-fg-muted!">
                           輸入規格關鍵字後選擇；目前已選：{options.find((option) => option.id === optionIds[group.id])?.value ?? "尚未選擇"}
                         </p>
                       )}
                       {searchableOptions && optionNeedle && visibleOptions.length === 0 && (
-                        <p role="status" className="text-xs" style={{ color: "var(--text-muted)" }}>找不到符合的規格，請調整搜尋內容。</p>
+                        <p role="status" className="text-xs text-fg-muted!">找不到符合的規格，請調整搜尋內容。</p>
                       )}
                       <div className="flex flex-wrap gap-2">
                       {visibleOptions.map((option) => {
@@ -1365,7 +1365,7 @@ export default function ClassOrdersPage() {
                                 : { border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
                               {option.value}
                               {option.price_delta !== 0 && (
-                                <span className="text-xs tabular-nums" style={{ color: "var(--text-muted)" }}>
+                                <span className="text-xs tabular-nums text-fg-muted!">
                                   {option.price_delta > 0 ? "+" : "−"}{money(Math.abs(option.price_delta))}
                                 </span>
                               )}
@@ -1375,13 +1375,13 @@ export default function ClassOrdersPage() {
                       })}
                       </div>
                       {searchableOptions && optionNeedle && options.filter((option) => option.value.toLocaleLowerCase("zh-Hant").includes(optionNeedle)).length > 12 && (
-                        <p role="status" className="text-xs" style={{ color: "var(--text-muted)" }}>
+                        <p role="status" className="text-xs text-fg-muted!">
                           符合多於 12 個規格，請輸入更多關鍵字縮小範圍。
                         </p>
                       )}
                     </>
                   ) : (
-                    <p className="text-xs" role="status" style={{ color: "var(--text-muted)" }}>
+                    <p className="text-xs text-fg-muted!" role="status" >
                       目前沒有可選規格，請通知商品管理者。
                     </p>
                   )}
@@ -1389,7 +1389,7 @@ export default function ClassOrdersPage() {
               );
             })}
             {orderProductId && <label className="grid max-w-32 gap-1 text-sm">
-              <span style={{ color: "var(--text-muted)" }}>{recipientMode === "batch" ? "每位數量" : "數量"}</span>
+              <span className="text-fg-muted!">{recipientMode === "batch" ? "每位數量" : "數量"}</span>
               <NumberInput className="input min-h-11" type="number" min={1} max={quantityLimit} value={quantity}
                 onChange={(e) => setQuantity(Math.max(1, Math.min(quantityLimit, Number(e.target.value) || 1)))} />
             </label>}
@@ -1407,26 +1407,26 @@ export default function ClassOrdersPage() {
             {productDetailFailed ? "無法載入訂單品項，請重新整理後再試。" : "正在載入訂單品項…"}
           </p>}
           {(assistedItems.length > 0 || (editOrder && orderProductId && currentItemReady)) && (
-            <div className="mt-4 rounded-md" style={{ border: "1px solid var(--border)" }}>
-              <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-2"
-                style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
-                <h3 className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>
+            <div className="mt-4 rounded-md border! border-border!">
+              <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-2 border-b! border-b-border! bg-elevated!"
+                >
+                <h3 className="text-xs font-semibold text-fg-secondary!">
                   {recipientMode === "batch"
                     ? recipientIds.length + " 位同學的商品清單"
                     : (selectedStudent?.display_name ?? "這位同學") + "的商品清單"}
                 </h3>
-                <span className="text-xs tabular-nums" style={{ color: "var(--text-muted)" }}>
+                <span className="text-xs tabular-nums text-fg-muted!">
                   {recipientMode === "batch"
                     ? "每人 " + money(assistedTotal) + " · " + recipientIds.length + " 位合計 " + money(assistedTotal * recipientIds.length)
                     : currentComposerItems().length + " 項 · 商品小計 " + money(assistedTotal)}
                 </span>
               </div>
-              <ul className="divide-y" style={{ borderColor: "var(--border)" }}>
+              <ul className="divide-y border-border!">
                 {currentComposerItems().map((item) => (
                   <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2">
                     <div className="w-full min-w-0 sm:w-auto sm:flex-1">
-                      <p className="break-words text-sm font-medium" style={{ color: "var(--text-primary)" }}>{item.product_name}</p>
-                      <p className="mt-0.5 text-xs" style={{ color: "var(--text-secondary)" }}>
+                      <p className="break-words text-sm font-medium text-fg-primary!">{item.product_name}</p>
+                      <p className="mt-0.5 text-xs text-fg-secondary!">
                         {activityLabel(item.scope_key)} · {item.option_label || "標準規格"} · {money(item.unit_price)} / 件
                       </p>
                     </div>
@@ -1459,9 +1459,9 @@ export default function ClassOrdersPage() {
               setEditProductsOpen(true);
             }}><Plus size={14} /> 新增商品</button>}
           <details className="mt-3" key={editOrder?.id ?? studentId} open={notes.trim() ? true : undefined}>
-            <summary className="min-h-11 cursor-pointer py-3 text-sm" style={{ color: "var(--text-secondary)" }}>備註（選填）</summary>
+            <summary className="min-h-11 cursor-pointer py-3 text-sm text-fg-secondary!">備註（選填）</summary>
           <label className="grid gap-1 text-sm">
-            <span style={{ color: "var(--text-muted)" }}>
+            <span className="text-fg-muted!">
               {recipientMode === "batch" ? "備註（所有同學相同）" : "備註"}
             </span>
             <input className="input min-h-11" disabled={creating || !recipientIds.length} value={notes} maxLength={500}
@@ -1484,8 +1484,8 @@ export default function ClassOrdersPage() {
                 : pendingDraftStudentCount === 0
                   || hasIncompleteCurrentItem
                   || (currentDraftItemCount > 0 && !recipientIds.length))}
-              className="btn min-h-11 whitespace-normal disabled:opacity-50"
-              style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
+              className="btn min-h-11 whitespace-normal disabled:opacity-50 bg-accent! text-accent-foreground! border-0!"
+              >
               {creating ? "處理中..." : editOrder
                 ? `儲存修改 · 小計 ${money(assistedTotal)}`
                 : assistedOrderDrafts.length > 0
@@ -1504,16 +1504,16 @@ export default function ClassOrdersPage() {
           />
 
           {membersLoading && (
-            <p className="mt-3 text-sm" role="status" style={{ color: "var(--text-muted)" }}>正在載入本班名冊...</p>
+            <p className="mt-3 text-sm text-fg-muted!" role="status" >正在載入本班名冊...</p>
           )}
           {!membersLoading && membersLoadFailed && (
-            <p className="mt-3 text-sm" role="alert" style={{ color: "var(--danger)" }}>無法載入本班名冊，請重新整理頁面；若問題持續，請洽系統管理員。</p>
+            <p className="mt-3 text-sm text-danger!" role="alert" >無法載入本班名冊，請重新整理頁面；若問題持續，請洽系統管理員。</p>
           )}
           {!membersLoading && !membersLoadFailed && !myClassId && (
-            <p className="mt-3 text-sm" role="alert" style={{ color: "var(--danger)" }}>找不到你任職的班級，暫時無法建立代訂。</p>
+            <p className="mt-3 text-sm text-danger!" role="alert" >找不到你任職的班級，暫時無法建立代訂。</p>
           )}
           {!membersLoading && !membersLoadFailed && myClassId && members.length === 0 && (
-            <p className="mt-3 text-sm" role="status" style={{ color: "var(--text-muted)" }}>本班名冊目前沒有可選的學生。</p>
+            <p className="mt-3 text-sm text-fg-muted!" role="status" >本班名冊目前沒有可選的學生。</p>
           )}
         </section>
       )}
@@ -1526,7 +1526,7 @@ export default function ClassOrdersPage() {
           <dt>{collectionConfirmation.collected ? "本次合計" : "撤銷合計"}</dt>
           <dd className="text-lg font-semibold tabular-nums">{money(collectionConfirmation.amount)}</dd>
         </dl>
-        <p className="mt-4 text-sm" style={{ color: "var(--text-secondary)" }}>只登記上列活動的款項。</p>
+        <p className="mt-4 text-sm text-fg-secondary!">只登記上列活動的款項。</p>
         <div className="mt-5 flex flex-wrap justify-end gap-2">
           <button type="button" className="btn btn-ghost min-h-11" disabled={busy !== null}
             onClick={() => setCollectionConfirmation(null)}>返回核對</button>
@@ -1607,48 +1607,48 @@ export default function ClassOrdersPage() {
       </div>
 
       <details>
-        <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium" style={{ color: "var(--text-secondary)" }}>商品統計</summary>
+        <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium text-fg-secondary!">商品統計</summary>
       <section aria-labelledby="product-collection-heading" className="space-y-3">
         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-          <h2 id="product-collection-heading" className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>商品收款明細 · {selectedActivityLabel}</h2>
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>收款紀錄代表班代已向同學收款；整班繳款由班聯會確認。</p>
+          <h2 id="product-collection-heading" className="text-lg font-semibold text-fg-primary!">商品收款明細 · {selectedActivityLabel}</h2>
+          <p className="text-xs text-fg-muted!">收款紀錄代表班代已向同學收款；整班繳款由班聯會確認。</p>
         </div>
         {loading && productSummary.product_rows.length === 0 ? (
-          <p className="rounded-lg px-4 py-8 text-center text-sm" style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}>
+          <p className="rounded-lg px-4 py-8 text-center text-sm border! border-border! text-fg-muted!">
             正在載入商品收款狀況...
           </p>
         ) : loadFailed && productSummary.product_rows.length === 0 ? (
-          <p className="rounded-lg px-4 py-8 text-center text-sm" role="alert"
-            style={{ border: "1px solid var(--danger-border)", background: "var(--danger-dim)", color: "var(--danger)" }}>
+          <p className="rounded-lg px-4 py-8 text-center text-sm border! border-danger-border! bg-danger-soft! text-danger!" role="alert"
+            >
             無法載入商品收款狀況，請重新整理後再試。
           </p>
         ) : productRows.length === 0 ? (
-          <div className="rounded-lg px-4 py-8 text-center" style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
-            <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>目前沒有可追蹤的商品</p>
-            <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>商品開放或有新登記後，收款進度會顯示在這裡。</p>
+          <div className="rounded-lg px-4 py-8 text-center border! border-border! bg-elevated!">
+            <p className="text-sm font-medium text-fg-primary!">目前沒有可追蹤的商品</p>
+            <p className="mt-1 text-sm text-fg-muted!">商品開放或有新登記後，收款進度會顯示在這裡。</p>
             {activeProducts.length > 0 && (
               <button type="button" onClick={openCreate} className="btn btn-ghost mt-3 min-h-11">替同學下單</button>
             )}
           </div>
         ) : (
-          <div className="overflow-hidden rounded-lg" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
-            <div className="divide-y md:hidden" style={{ borderColor: "var(--border)" }}>
+          <div className="overflow-hidden rounded-lg border! border-border! bg-card!">
+            <div className="divide-y md:hidden border-border!">
               {productRows.map((row) => {
                 const orderCount = row.collected_order_count + row.uncollected_order_count;
                 return (
                   <article key={row.product_id} className="px-4 py-3">
                     <div className="flex items-start justify-between gap-3">
-                      <h3 className="min-w-0 break-words text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{row.product_name}</h3>
-                      <span className="shrink-0 text-xs tabular-nums" style={{ color: "var(--text-muted)" }}>{row.quantity} 件</span>
+                      <h3 className="min-w-0 break-words text-sm font-semibold text-fg-primary!">{row.product_name}</h3>
+                      <span className="shrink-0 text-xs tabular-nums text-fg-muted!">{row.quantity} 件</span>
                     </div>
                     <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
-                      <div><p style={{ color: "var(--text-muted)" }}>應收</p><p className="mt-0.5 font-medium tabular-nums" style={{ color: "var(--text-primary)" }}>{money(row.total_amount)}</p></div>
-                      <div><p style={{ color: "var(--text-muted)" }}>已收</p><p className="mt-0.5 font-medium tabular-nums" style={{ color: "var(--success)" }}>{money(row.collected_amount)}</p></div>
-                      <div><p style={{ color: "var(--text-muted)" }}>待收</p><p className="mt-0.5 font-medium tabular-nums" style={{ color: "var(--warning)" }}>{money(row.uncollected_amount)}</p></div>
+                      <div><p className="text-fg-muted!">應收</p><p className="mt-0.5 font-medium tabular-nums text-fg-primary!">{money(row.total_amount)}</p></div>
+                      <div><p className="text-fg-muted!">已收</p><p className="mt-0.5 font-medium tabular-nums text-success!">{money(row.collected_amount)}</p></div>
+                      <div><p className="text-fg-muted!">待收</p><p className="mt-0.5 font-medium tabular-nums text-warning!">{money(row.uncollected_amount)}</p></div>
                     </div>
                     <button type="button" onClick={() => showProductCollection(row.product_id, row.uncollected_order_count > 0)}
-                      className="mt-2 min-h-11 w-full rounded-md px-3 text-left text-xs font-medium"
-                      style={{ border: "1px solid var(--border)", color: "var(--primary-text)" }}>
+                      className="mt-2 min-h-11 w-full rounded-md px-3 text-left text-xs font-medium border! border-border! text-accent-text!"
+                      >
                       {row.uncollected_order_count ? `查看 ${row.uncollected_order_count} 筆待收訂單` : `查看 ${orderCount} 筆訂單`}
                     </button>
                   </article>
@@ -1658,10 +1658,10 @@ export default function ClassOrdersPage() {
             <div className="hidden overflow-x-auto md:block">
               <table className="w-full min-w-[760px] text-sm" aria-label="各商品訂購與收款金額">
                 <thead>
-                  <tr style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
+                  <tr className="border-b! border-b-border! bg-elevated!">
                     {["商品", "件數／訂單", "應收總額", "已收", "待收", ""].map((heading) => (
-                      <th key={heading || "action"} scope="col" className="px-4 py-3 text-left text-xs font-semibold"
-                        style={{ color: "var(--text-muted)" }}>{heading}</th>
+                      <th key={heading || "action"} scope="col" className="px-4 py-3 text-left text-xs font-semibold text-fg-muted!"
+                        >{heading}</th>
                     ))}
                   </tr>
                 </thead>
@@ -1669,16 +1669,16 @@ export default function ClassOrdersPage() {
                   {productRows.map((row) => {
                     const orderCount = row.collected_order_count + row.uncollected_order_count;
                     return (
-                      <tr key={row.product_id} style={{ borderBottom: "1px solid var(--border)" }}>
-                        <th scope="row" className="max-w-xs px-4 py-3 text-left font-medium" style={{ color: "var(--text-primary)" }}>{row.product_name}</th>
-                        <td className="px-4 py-3 text-xs tabular-nums" style={{ color: "var(--text-secondary)" }}>{row.quantity} 件 · {orderCount} 筆</td>
-                        <td className="px-4 py-3 font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>{money(row.total_amount)}</td>
-                        <td className="px-4 py-3 tabular-nums" style={{ color: "var(--success)" }}>{money(row.collected_amount)}</td>
-                        <td className="px-4 py-3 tabular-nums" style={{ color: "var(--warning)" }}>{money(row.uncollected_amount)}</td>
+                      <tr key={row.product_id}  className="border-b! border-b-border!">
+                        <th scope="row" className="max-w-xs px-4 py-3 text-left font-medium text-fg-primary!">{row.product_name}</th>
+                        <td className="px-4 py-3 text-xs tabular-nums text-fg-secondary!">{row.quantity} 件 · {orderCount} 筆</td>
+                        <td className="px-4 py-3 font-semibold tabular-nums text-fg-primary!">{money(row.total_amount)}</td>
+                        <td className="px-4 py-3 tabular-nums text-success!">{money(row.collected_amount)}</td>
+                        <td className="px-4 py-3 tabular-nums text-warning!">{money(row.uncollected_amount)}</td>
                         <td className="px-4 py-2 text-right">
                           <button type="button" onClick={() => showProductCollection(row.product_id, row.uncollected_order_count > 0)}
-                            className="min-h-11 rounded-md px-3 text-xs font-medium"
-                            style={{ border: "1px solid var(--border)", color: "var(--primary-text)" }}>
+                            className="min-h-11 rounded-md px-3 text-xs font-medium border! border-border! text-accent-text!"
+                            >
                             {row.uncollected_order_count ? `看 ${row.uncollected_order_count} 筆待收` : "查看訂單"}
                           </button>
                         </td>
@@ -1709,12 +1709,12 @@ export default function ClassOrdersPage() {
               </button>
             </>
           }>
-          <p className="mb-4 text-sm" style={{ color: "var(--text-secondary)" }}>
+          <p className="mb-4 text-sm text-fg-secondary!">
             訂單 <span className="font-mono font-semibold">{cancelTarget.serial_number}</span>（{cancelTarget.user_name}）
             取消後將退回庫存，無法復原。
           </p>
           <label className="block text-sm">
-            <span className="mb-1 block" style={{ color: "var(--text-muted)" }}>取消原因（選填）</span>
+            <span className="mb-1 block text-fg-muted!">取消原因（選填）</span>
             <input className="input w-full" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} placeholder="填寫取消原因" />
           </label>
         </Modal>

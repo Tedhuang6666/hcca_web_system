@@ -182,7 +182,7 @@ export default function PeopleAdminPage() {
 
   if (!canManagePeople) {
     return (
-      <div className="py-24 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+      <div className="py-24 text-center text-sm text-fg-muted!">
         需要人員、班級或組織成員管理權限才能使用此工作台。
       </div>
     );
@@ -330,7 +330,7 @@ function PersonDirectoryPanel() {
 
   if (!allowed) {
     return (
-      <div className="py-24 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+      <div className="py-24 text-center text-sm text-fg-muted!">
         需要人員、班級或組織成員管理權限才能使用此工作台。
       </div>
     );
@@ -340,7 +340,7 @@ function PersonDirectoryPanel() {
     <div className="mx-auto flex min-h-0 min-w-0 w-full max-w-7xl flex-col gap-4 p-3 sm:p-5 xl:h-full xl:flex-1">
       <header className={`${showingPersonDetail ? "hidden xl:flex" : "flex"} flex-col gap-3 md:flex-row md:items-end md:justify-between`}>
         <div>
-          <h1 className="text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
+          <h1 className="text-2xl font-semibold text-fg-primary!">
             人員與身分
           </h1>
         </div>
@@ -376,12 +376,8 @@ function PersonDirectoryPanel() {
               type="button"
               aria-pressed={directoryView === view}
               onClick={() => { setAccountId(null); setMobileDetailOpen(false); setDirectoryView(view); }}
-              className="min-h-11 shrink-0 rounded-lg px-4 text-sm font-medium"
-              style={{
-                color: directoryView === view ? "var(--primary-text)" : "var(--text-muted)",
-                background: directoryView === view ? "var(--primary-dim)" : "var(--bg-surface)",
-                border: "1px solid var(--border)",
-              }}
+              className="min-h-11 shrink-0 rounded-lg px-4 text-sm font-medium border! border-border!"
+              style={{ color: directoryView === view ? "var(--primary-text)" : "var(--text-muted)", background: directoryView === view ? "var(--primary-dim)" : "var(--bg-surface)" }}
             >
               {label}
             </button>
@@ -392,7 +388,7 @@ function PersonDirectoryPanel() {
       {directoryView === "people" ? (
         <>
       <details className={`${showingPersonDetail ? "hidden xl:block" : ""} rounded-lg border px-3`} style={{ borderColor: "var(--border)" }}>
-        <summary className="min-h-11 cursor-pointer py-3 text-xs" style={{ color: "var(--text-muted)" }}>名冊統計</summary>
+        <summary className="min-h-11 cursor-pointer py-3 text-xs text-fg-muted!">名冊統計</summary>
       <div className="grid grid-cols-2 gap-2 pb-3 md:grid-cols-3 xl:grid-cols-5">
         <Stat icon={<UsersRound size={15} />} label="平台帳號" value={stats?.account_count ?? null} />
         <Stat icon={<UserRound size={15} />} label="人員主檔" value={stats?.people_count ?? null} />
@@ -404,10 +400,10 @@ function PersonDirectoryPanel() {
 
       <div className="grid min-w-0 grid-cols-1 gap-4 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)]">
         <Panel className={`${showingPersonDetail ? "hidden xl:flex" : "flex"} min-w-0 min-h-0 flex-col overflow-hidden`}>
-          <div className="space-y-2 p-3" style={{ borderBottom: "1px solid var(--border)" }}>
+          <div className="space-y-2 p-3 border-b! border-b-border!">
             <div className="flex items-center gap-2">
-              <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-2" style={{ border: "1px solid var(--border)" }}>
-                <Search size={15} style={{ color: "var(--text-muted)" }} />
+              <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-2 border! border-border!">
+                <Search size={15}   className="text-fg-muted!"/>
                 <input
                   ref={searchRef}
                   value={query}
@@ -415,21 +411,16 @@ function PersonDirectoryPanel() {
                     setPageIndex(0);
                     setQuery(event.target.value);
                   }}
-                  className="min-h-7 min-w-0 w-full bg-transparent text-sm outline-none"
+                  className="min-h-7 min-w-0 w-full bg-transparent text-sm outline-none text-fg-primary!"
                   aria-label="搜尋人員"
                   placeholder="搜尋姓名、學號、Email"
-                  style={{ color: "var(--text-primary)" }}
                 />
               </div>
               <button
                 type="button"
                 onClick={() => setFilterOpen((v) => !v)}
-                className="md:hidden inline-flex min-h-11 flex-shrink-0 items-center gap-1 rounded-md px-2.5 py-2 text-xs font-medium"
-                style={{
-                  border: "1px solid var(--border)",
-                  color: (status || classId) ? "var(--primary-text)" : "var(--text-muted)",
-                  background: (status || classId) ? "var(--primary-dim)" : "transparent",
-                }}
+                className="md:hidden inline-flex min-h-11 flex-shrink-0 items-center gap-1 rounded-md px-2.5 py-2 text-xs font-medium border! border-border!"
+                style={{ color: (status || classId) ? "var(--primary-text)" : "var(--text-muted)", background: (status || classId) ? "var(--primary-dim)" : "transparent" }}
                 aria-expanded={filterOpen}
               >
                 <SlidersHorizontal size={13} />
@@ -459,9 +450,9 @@ function PersonDirectoryPanel() {
           </div>
           <div className="min-h-0 flex-1 overflow-auto">
             {loading ? (
-              <div className="p-4 text-sm" style={{ color: "var(--text-muted)" }}>載入中...</div>
+              <div className="p-4 text-sm text-fg-muted!">載入中...</div>
             ) : people.length === 0 ? (
-              <div className="p-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+              <div className="p-8 text-center text-sm text-fg-muted!">
                 找不到符合條件的人員。
               </div>
             ) : (
@@ -471,39 +462,36 @@ function PersonDirectoryPanel() {
                   type="button"
                   onClick={() => openPerson(person.id)}
                   aria-current={selectedId === person.id ? "true" : undefined}
-                  className="w-full cursor-pointer px-4 py-3 text-left transition-colors"
-                  style={{
-                    borderBottom: "1px solid var(--border)",
-                    background: selectedId === person.id ? "var(--primary-dim)" : "transparent",
-                  }}
+                  className="w-full cursor-pointer px-4 py-3 text-left transition-colors border-b! border-b-border!"
+                  style={{ background: selectedId === person.id ? "var(--primary-dim)" : "transparent" }}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                      <p className="truncate text-sm font-semibold text-fg-primary!">
                         {person.display_name}
                       </p>
-                      <p className="mt-0.5 truncate text-xs" style={{ color: "var(--text-muted)" }}>
+                      <p className="mt-0.5 truncate text-xs text-fg-muted!">
                         {person.student_id ?? "無學號"} · {person.email ?? "未填 Email"}
                       </p>
                     </div>
-                    <span className="shrink-0 whitespace-nowrap rounded px-2 py-0.5 text-xs" style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+                    <span className="shrink-0 whitespace-nowrap rounded px-2 py-0.5 text-xs border! border-border! text-fg-secondary!">
                       {STATUS_LABEL[person.status]}
                     </span>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {person.class_labels.slice(0, 2).map((label) => (
-                      <span key={label} className="rounded px-1.5 py-0.5 text-xs" style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}>{label}</span>
+                      <span key={label} className="rounded px-1.5 py-0.5 text-xs bg-elevated! text-fg-secondary!">{label}</span>
                     ))}
                     {person.role_titles.slice(0, 2).map((label) => (
-                      <span key={label} className="rounded px-1.5 py-0.5 text-xs" style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>{label}</span>
+                      <span key={label} className="rounded px-1.5 py-0.5 text-xs bg-accent-soft! text-accent-text!">{label}</span>
                     ))}
                   </div>
                 </button>
               ))
             )}
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2" style={{ borderTop: "1px solid var(--border)" }}>
-            <p className="text-xs" style={{ color: "var(--text-muted)" }} aria-live="polite">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-t! border-t-border!">
+            <p className="text-xs text-fg-muted!"  aria-live="polite">
               {loading
                 ? "更新名單中…"
                 : matchedCount === null
@@ -519,7 +507,7 @@ function PersonDirectoryPanel() {
                 <ChevronLeft size={14} />
                 <span className="sr-only">上一頁</span>
               </IconButton>
-              <span className="min-w-12 text-center text-xs tabular-nums" style={{ color: "var(--text-muted)" }}>
+              <span className="min-w-12 text-center text-xs tabular-nums text-fg-muted!">
                 {pageIndex + 1} / {pageCount}
               </span>
               <IconButton
@@ -543,7 +531,7 @@ function PersonDirectoryPanel() {
               }} />
             </div>
           {detailLoading ? (
-            <div className="p-8 text-sm" style={{ color: "var(--text-muted)" }}>載入人員詳情...</div>
+            <div className="p-8 text-sm text-fg-muted!">載入人員詳情...</div>
           ) : detail ? (
             <PersonDetailPanel
               key={detail.id}
@@ -558,7 +546,7 @@ function PersonDirectoryPanel() {
               onOpenAccount={(id) => { setAccountId(id); setDirectoryView("accounts"); }}
             />
           ) : (
-            <div className="p-10 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+            <div className="p-10 text-center text-sm text-fg-muted!">
               請先選擇一位人員。
             </div>
           )}
@@ -620,7 +608,7 @@ function PersonDirectoryPanel() {
 
 function WorkspaceLoading() {
   return (
-    <div className="p-6 text-sm" role="status" style={{ color: "var(--text-muted)" }}>
+    <div className="p-6 text-sm text-fg-muted!" role="status" >
       載入管理工具…
     </div>
   );
@@ -629,11 +617,11 @@ function WorkspaceLoading() {
 function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; value: number | null }) {
   return (
     <Panel className="p-3">
-      <div className="flex items-center gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
+      <div className="flex items-center gap-2 text-xs text-fg-muted!">
         {icon}
         {label}
       </div>
-      <p className="mt-1 text-2xl font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>
+      <p className="mt-1 text-2xl font-semibold tabular-nums text-fg-primary!">
         {value === null ? "—" : value.toLocaleString("zh-TW")}
       </p>
     </Panel>
@@ -745,19 +733,19 @@ function PersonDetailPanel({
 
   return (
     <div className={styles.person}>
-      <div className="flex-shrink-0 p-5" style={{ borderBottom: "1px solid var(--border)" }}>
+      <div className="flex-shrink-0 p-5 border-b! border-b-border!">
         <div className="flex min-w-0 flex-col gap-4">
           <div>
             <div className="flex min-w-0 items-start gap-2">
-              <UserRound size={22} className="shrink-0" style={{ color: "var(--primary-text)" }} />
-              <h2 className="min-w-0 break-words text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
+              <UserRound size={22} className="shrink-0 text-accent-text!"  />
+              <h2 className="min-w-0 break-words text-xl font-semibold text-fg-primary!">
                 {person.display_name}
               </h2>
             </div>
-            <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+            <p className="mt-1 text-sm text-fg-muted!">
               {person.student_id ?? "無學號"} · {person.user_id ? "已連結平台帳號" : "尚未連結平台帳號"}
             </p>
-            {person.email && <p className="mt-1 break-all text-xs" style={{ color: "var(--text-muted)" }}>{person.email}</p>}
+            {person.email && <p className="mt-1 break-all text-xs text-fg-muted!">{person.email}</p>}
           </div>
           <div className="flex flex-wrap gap-2">
             {canManageAccounts && person.user_id && active.some((item) => item.status === "pending_user") && <IconButton onClick={syncPending}>
@@ -769,22 +757,22 @@ function PersonDetailPanel({
           </div>
         </div>
 
-        {canManageMasterData && <details className="mt-4 border-t" style={{ borderColor: "var(--border)" }}>
-          <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium" style={{ color: "var(--text-secondary)" }}>編輯基本資料</summary>
+        {canManageMasterData && <details className="mt-4 border-t border-border!">
+          <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium text-fg-secondary!">編輯基本資料</summary>
           <div className={styles.personForm}>
-          <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+          <label className="text-xs text-fg-muted!">
             顯示姓名
             <TextInput className="mt-1" value={edit.display_name} onChange={(event) => setEdit({ ...edit, display_name: event.target.value })} />
           </label>
-          <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+          <label className="text-xs text-fg-muted!">
             法定姓名
             <TextInput className="mt-1" value={edit.legal_name} onChange={(event) => setEdit({ ...edit, legal_name: event.target.value })} placeholder="選填" />
           </label>
-          <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+          <label className="text-xs text-fg-muted!">
             學號
             <TextInput className="mt-1" value={edit.student_id} onChange={(event) => setEdit({ ...edit, student_id: event.target.value })} />
           </label>
-          <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+          <label className="text-xs text-fg-muted!">
             狀態
             <SelectInput className="mt-1" value={edit.status} onChange={(event) => setEdit({ ...edit, status: event.target.value as PersonStatus })}>
               {Object.entries(STATUS_LABEL).map(([value, label]) => (
@@ -792,11 +780,11 @@ function PersonDetailPanel({
               ))}
             </SelectInput>
           </label>
-          <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+          <label className="text-xs text-fg-muted!">
             Email
             <TextInput className="mt-1" value={edit.email} onChange={(event) => setEdit({ ...edit, email: event.target.value })} />
           </label>
-          <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+          <label className="text-xs text-fg-muted!">
             連結平台帳號
             <SelectInput className="mt-1" value={edit.user_id} onChange={(event) => setEdit({ ...edit, user_id: event.target.value })}>
               <option value="">尚未連結</option>
@@ -823,15 +811,15 @@ function PersonDetailPanel({
       <div className="min-w-0 space-y-4 p-4 sm:p-5 xl:min-h-0 xl:flex-1 xl:overflow-y-auto">
         <AffiliationSection title="有效身分" items={active} onChanged={onChanged} />
         {ended.length > 0 && (
-          <details className="min-w-0 rounded-md border" style={{ borderColor: "var(--border)" }}>
-            <summary className="min-h-11 cursor-pointer px-4 py-3 text-sm" style={{ color: "var(--text-secondary)" }}>歷史身分（{ended.length} 筆）</summary>
+          <details className="min-w-0 rounded-md border border-border!">
+            <summary className="min-h-11 cursor-pointer px-4 py-3 text-sm text-fg-secondary!">歷史身分（{ended.length} 筆）</summary>
             <AffiliationSection title="歷史紀錄" items={ended} onChanged={onChanged} muted />
           </details>
         )}
         <Panel className="h-fit p-4">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>班級與座號</h3>
-            <Link href="/admin/people?section=classes" className="inline-flex min-h-11 shrink-0 items-center gap-1 text-xs font-medium" style={{ color: "var(--primary-text)" }}>
+            <h3 className="text-sm font-semibold text-fg-primary!">班級與座號</h3>
+            <Link href="/admin/people?section=classes" className="inline-flex min-h-11 shrink-0 items-center gap-1 text-xs font-medium text-accent-text!">
               管理<ChevronRight size={14} />
             </Link>
           </div>
@@ -850,15 +838,15 @@ function PersonDetailPanel({
               </SelectInput>
             )}
           {(person.class_roster ?? []).length === 0 ? (
-            <p className="mt-3 text-xs" style={{ color: "var(--text-muted)" }}>尚無班級座號名冊資料。</p>
+            <p className="mt-3 text-xs text-fg-muted!">尚無班級座號名冊資料。</p>
           ) : (
             <div className="mt-3 space-y-2">
               {(person.class_roster ?? []).map((entry) => (
-                <div key={`${entry.class_id}-${entry.student_id}-${entry.seat_number}`} className="rounded-md px-3 py-2.5" style={{ background: "var(--bg-elevated)" }}>
-                  <p className="text-xs font-medium" style={{ color: "var(--text-primary)" }}>
+                <div key={`${entry.class_id}-${entry.student_id}-${entry.seat_number}`} className="rounded-md px-3 py-2.5 bg-elevated!">
+                  <p className="text-xs font-medium text-fg-primary!">
                     {entry.class_label ?? `${entry.academic_year} 學年度 ${entry.class_code} 班`}
                   </p>
-                  <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                  <p className="mt-1 text-xs text-fg-muted!">
                     {entry.is_active ? "目前班級" : "歷史班級"} · 座號 {entry.seat_number} · 學號 {entry.student_id}
                   </p>
                 </div>
@@ -872,10 +860,10 @@ function PersonDetailPanel({
         </Panel>
         {person.user_id && canManageAccounts && (
           <button type="button" onClick={() => { if (person.user_id) onOpenAccount(person.user_id); }}
-            className="flex min-h-14 w-full min-w-0 items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left"
-            style={{ borderColor: "var(--border)", color: "var(--primary-text)" }}>
+            className="flex min-h-14 w-full min-w-0 items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left border-border! text-accent-text!"
+            >
             <span className="min-w-0"><span className="block text-sm font-medium">管理連結帳號</span>
-              <span className="mt-1 block break-all text-xs" style={{ color: "var(--text-muted)" }}>學籍、幹部任期、登入與安全設定</span>
+              <span className="mt-1 block break-all text-xs text-fg-muted!">學籍、幹部任期、登入與安全設定</span>
             </span>
             <ChevronRight size={18} className="shrink-0" />
           </button>
@@ -898,12 +886,12 @@ function AffiliationSection({
 }) {
   return (
     <Panel className="overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
-        <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{title}</h3>
-        <span className="text-xs" style={{ color: "var(--text-muted)" }}>{items.length} 筆</span>
+      <div className="flex items-center justify-between px-4 py-3 border-b! border-b-border!">
+        <h3 className="text-sm font-semibold text-fg-primary!">{title}</h3>
+        <span className="text-xs text-fg-muted!">{items.length} 筆</span>
       </div>
       {items.length === 0 ? (
-        <div className="p-6 text-center text-sm" style={{ color: "var(--text-muted)" }}>尚無資料。</div>
+        <div className="p-6 text-center text-sm text-fg-muted!">尚無資料。</div>
       ) : (
         <div>
           {items.map((item) => (
@@ -952,26 +940,26 @@ function AffiliationRow({
   };
   const color = roleTone(item.kind);
   return (
-    <div className="grid grid-cols-1 gap-3 px-4 py-3 md:grid-cols-[1fr_auto]" style={{ borderBottom: "1px solid var(--border)", opacity: muted ? 0.7 : 1 }}>
+    <div className="grid grid-cols-1 gap-3 px-4 py-3 md:grid-cols-[1fr_auto] border-b! border-b-border!" style={{ opacity: muted ? 0.7 : 1 }}>
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <span className="h-2 w-2 rounded-full" style={{ background: color }} />
-          <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+          <p className="text-sm font-semibold text-fg-primary!">
             {item.title ?? item.position_name ?? item.role_key ?? KIND_LABEL[item.kind]}
           </p>
           <span className="rounded px-1.5 py-0.5 text-xs" style={{ background: `color-mix(in srgb, ${color} 9%, transparent)`, color }}>
             {KIND_LABEL[item.kind]}
           </span>
           {item.status === "pending_user" && (
-            <span className="rounded px-1.5 py-0.5 text-xs" style={{ color: "var(--warning)", background: "var(--warning-dim)" }}>
+            <span className="rounded px-1.5 py-0.5 text-xs text-warning! bg-warning-soft!">
               待連帳號
             </span>
           )}
         </div>
-        <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+        <p className="mt-1 text-xs text-fg-muted!">
           {[item.class_label, item.org_name, item.position_name].filter(Boolean).join(" · ") || "全域身分"}
         </p>
-        <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+        <p className="mt-1 text-xs text-fg-muted!">
           {item.start_date} 起 {item.end_date ? `至 ${item.end_date}` : "，目前有效"}
           {item.synced_user_position_id ? " · 已同步 RBAC" : ""}
         </p>
@@ -1029,15 +1017,15 @@ function CreatePersonDialog({
   return (
     <Dialog title="新增人員" onClose={onClose}>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <label className="text-xs md:col-span-2" style={{ color: "var(--text-muted)" }}>
+        <label className="text-xs md:col-span-2 text-fg-muted!">
           姓名
           <TextInput className="mt-1" value={form.display_name} onChange={(event) => setForm({ ...form, display_name: event.target.value })} />
         </label>
-        <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+        <label className="text-xs text-fg-muted!">
           學號
           <TextInput className="mt-1" value={form.student_id} onChange={(event) => setForm({ ...form, student_id: event.target.value })} />
         </label>
-        <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+        <label className="text-xs text-fg-muted!">
           狀態
           <SelectInput className="mt-1" value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value as PersonStatus })}>
             {Object.entries(STATUS_LABEL).map(([value, label]) => (
@@ -1045,11 +1033,11 @@ function CreatePersonDialog({
             ))}
           </SelectInput>
         </label>
-        <label className="text-xs md:col-span-2" style={{ color: "var(--text-muted)" }}>
+        <label className="text-xs md:col-span-2 text-fg-muted!">
           Email
           <TextInput className="mt-1" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
         </label>
-        <label className="text-xs md:col-span-2" style={{ color: "var(--text-muted)" }}>
+        <label className="text-xs md:col-span-2 text-fg-muted!">
           可選：連結既有 User
           <SelectInput className="mt-1" value={form.user_id} onChange={(event) => setForm({ ...form, user_id: event.target.value })}>
             <option value="">不連結</option>
@@ -1116,7 +1104,7 @@ function ImportRosterDialog({
   return (
     <Dialog title="匯入名冊" onClose={onClose} size="3xl">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+        <label className="text-xs text-fg-muted!">
           指定班級
           <SelectInput className="mt-1" value={classId} onChange={(event) => setClassId(event.target.value)}>
             {!classRequired && <option value="">只建立學生主檔</option>}
@@ -1125,17 +1113,16 @@ function ImportRosterDialog({
             ))}
           </SelectInput>
         </label>
-        <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+        <label className="text-xs text-fg-muted!">
           學年度
           <TextInput className="mt-1" value={academicYear} onChange={(event) => setAcademicYear(event.target.value)} placeholder="例如 115" />
         </label>
-        <label className="text-xs md:col-span-2" style={{ color: "var(--text-muted)" }}>
+        <label className="text-xs md:col-span-2 text-fg-muted!">
           CSV 內容
           <textarea
             value={raw}
             onChange={(event) => setRaw(event.target.value)}
-            className="mt-1 h-72 w-full rounded-md border bg-transparent p-3 font-mono text-xs outline-none"
-            style={{ borderColor: "var(--border)", color: "var(--text-primary)" }}
+            className="mt-1 h-72 w-full rounded-md border bg-transparent p-3 font-mono text-xs outline-none border-border! text-fg-primary!"
           />
         </label>
       </div>
@@ -1225,7 +1212,7 @@ function AffiliationDialog({
             ))}
         </div>
         {(kind === "class_member" || kind === "class_role") && (
-          <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+          <label className="text-xs text-fg-muted!">
             班級
             <SelectInput className="mt-1" value={classId} onChange={(event) => setClassId(event.target.value)}>
               <option value="">選擇班級</option>
@@ -1236,7 +1223,7 @@ function AffiliationDialog({
           </label>
         )}
         {kind === "class_role" && (
-          <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+          <label className="text-xs text-fg-muted!">
             班級職位
             <SelectInput className="mt-1" value={roleKey} onChange={(event) => setRoleKey(event.target.value)}>
               {CLASS_ROLE_OPTIONS.map((item) => (
@@ -1247,7 +1234,7 @@ function AffiliationDialog({
         )}
         {kind === "org_position" && (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+            <label className="text-xs text-fg-muted!">
               組織
               <SelectInput className="mt-1" value={orgId} onChange={(event) => setOrgId(event.target.value)}>
                 <option value="">全部組織</option>
@@ -1256,7 +1243,7 @@ function AffiliationDialog({
                 ))}
               </SelectInput>
             </label>
-            <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+            <label className="text-xs text-fg-muted!">
               職位
               <SelectInput className="mt-1" value={positionId} onChange={(event) => setPositionId(event.target.value)}>
                 <option value="">選擇職位</option>
@@ -1267,16 +1254,16 @@ function AffiliationDialog({
             </label>
           </div>
         )}
-        <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+        <label className="text-xs text-fg-muted!">
           顯示職稱（選填）
           <TextInput className="mt-1" value={title} onChange={(event) => setTitle(event.target.value)} />
         </label>
         <div className="grid grid-cols-2 gap-3">
-          <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+          <label className="text-xs text-fg-muted!">
             起始日
             <TextInput className="mt-1" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
           </label>
-          <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+          <label className="text-xs text-fg-muted!">
             結束日
             <TextInput className="mt-1" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
           </label>

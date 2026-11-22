@@ -32,7 +32,7 @@ function showSuccessToast(message: string): void {
 
 function MapLoadingState() {
   return (
-    <div className="flex h-full items-center justify-center text-sm" role="status" aria-live="polite" style={{ color: "var(--text-muted)" }}>
+    <div className="flex h-full items-center justify-center text-sm text-fg-muted!" role="status" aria-live="polite" >
       互動地圖載入中…
     </div>
   );
@@ -135,21 +135,21 @@ function DetailPanel({
   if (!business && !loading) return null;
   const panel = (
     <aside
-      className="partner-map-detail-panel fixed inset-x-3 bottom-3 max-h-[calc(100dvh-1.5rem)] overflow-y-auto rounded-lg border p-4 shadow-xl lg:top-20 lg:right-5 lg:bottom-5 lg:left-auto lg:w-96"
+      className="partner-map-detail-panel fixed inset-x-3 bottom-3 max-h-[calc(100dvh-1.5rem)] overflow-y-auto rounded-lg border p-4 shadow-xl lg:top-20 lg:right-5 lg:bottom-5 lg:left-auto lg:w-96 bg-page! border-border!"
       role="dialog"
       aria-labelledby="partner-business-detail-title"
-      style={{ background: "var(--bg)", borderColor: "var(--border)" }}>
+      >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-medium" style={{ color: "var(--primary-text)" }}>特約詳情</p>
-          <h2 id="partner-business-detail-title" className="mt-1 text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
+          <p className="text-xs font-medium text-accent-text!">特約詳情</p>
+          <h2 id="partner-business-detail-title" className="mt-1 text-lg font-semibold text-fg-primary!">
             {loading ? "載入中..." : business?.name}
           </h2>
         </div>
         <button ref={closeButtonRef} type="button" className="topbar-icon-btn" onClick={onClose} aria-label="關閉詳情">×</button>
       </div>
       {loading || !business ? (
-        <div className="mt-6 text-sm" style={{ color: "var(--text-muted)" }}>載入店家資料中...</div>
+        <div className="mt-6 text-sm text-fg-muted!">載入店家資料中...</div>
       ) : (
         <div className="mt-4 space-y-4">
           <div className="flex flex-wrap gap-2" aria-label="店家連結操作">
@@ -184,28 +184,27 @@ function DetailPanel({
                 width={48}
                 height={48}
                 unoptimized
-                className="h-12 w-12 rounded-lg border object-cover"
-                style={{ borderColor: "var(--border)" }}
+                className="h-12 w-12 rounded-lg border object-cover border-border!"
               />
             )}
             <div className="min-w-0 flex-1">
               {business.category && (
-                <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+                <p className="text-xs font-medium text-fg-secondary!">
                   {business.category}
                 </p>
               )}
               {(business.business_hours_text || formatBusinessHours(business.business_hours)) && (
-                <p className="mt-1 flex items-center gap-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                <p className="mt-1 flex items-center gap-1 text-xs text-fg-muted!">
                   <Clock size={13} aria-hidden="true" /> {business.business_hours_text || formatBusinessHours(business.business_hours)}
                 </p>
               )}
             </div>
           </div>
-          {business.summary && <p className="text-sm" style={{ color: "var(--text-secondary)" }}>{business.summary}</p>}
+          {business.summary && <p className="text-sm text-fg-secondary!">{business.summary}</p>}
           {business.description && (
             <section>
-              <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>合作介紹</h3>
-              <p className="mt-2 whitespace-pre-wrap text-sm" style={{ color: "var(--text-secondary)" }}>
+              <h3 className="text-sm font-semibold text-fg-primary!">合作介紹</h3>
+              <p className="mt-2 whitespace-pre-wrap text-sm text-fg-secondary!">
                 {business.description}
               </p>
             </section>
@@ -220,9 +219,9 @@ function DetailPanel({
             </a>
           )}
           {business.listing_type === "online" && (
-            <section className="rounded-lg border p-3" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
-              <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>聯絡方式</h3>
-              <div className="mt-2 space-y-2 text-sm" style={{ color: "var(--text-secondary)" }}>
+            <section className="rounded-lg border p-3 border-border! bg-elevated!">
+              <h3 className="text-sm font-semibold text-fg-primary!">聯絡方式</h3>
+              <div className="mt-2 space-y-2 text-sm text-fg-secondary!">
                 {business.contact_name && <p>聯絡人：{business.contact_name}</p>}
                 {business.contact_phone && (
                   <a className="flex items-center gap-2 hover:underline" href={`tel:${business.contact_phone}`}>
@@ -250,36 +249,36 @@ function DetailPanel({
             {business.tags.map((tag) => (
               <span
                 key={tag.id}
-                className="rounded-full px-2.5 py-1 text-xs"
-                style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}>
+                className="rounded-full px-2.5 py-1 text-xs bg-elevated! text-fg-secondary!"
+                >
                 {tag.name}
               </span>
             ))}
           </div>
 
           <section>
-            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>優惠</h3>
+            <h3 className="text-sm font-semibold text-fg-primary!">優惠</h3>
             {business.offers.length === 0 ? (
-              <p className="mt-2 text-sm" style={{ color: "var(--text-muted)" }}>目前沒有有效優惠</p>
+              <p className="mt-2 text-sm text-fg-muted!">目前沒有有效優惠</p>
             ) : (
               <div className="mt-2 space-y-2">
                 {business.offers.map((offer) => (
-                  <div key={offer.id} className="rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
-                    <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{offer.title}</p>
+                  <div key={offer.id} className="rounded-lg border p-3 border-border!">
+                    <p className="text-sm font-medium text-fg-primary!">{offer.title}</p>
                     {offer.public_summary && (
-                      <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>{offer.public_summary}</p>
+                      <p className="mt-1 text-xs text-fg-secondary!">{offer.public_summary}</p>
                     )}
                     {offer.full_description ? (
-                      <p className="mt-2 text-sm" style={{ color: "var(--text-primary)" }}>{offer.full_description}</p>
+                      <p className="mt-2 text-sm text-fg-primary!">{offer.full_description}</p>
                     ) : (
-                      <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+                      <p className="mt-2 text-xs text-fg-muted!">
                         登入後可查看完整優惠內容與使用方式
                       </p>
                     )}
                     {offer.instructions && (
-                      <div className="mt-3 rounded-md border p-2.5 text-xs" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
-                        <p className="font-semibold" style={{ color: "var(--text-primary)" }}>使用方式：</p>
-                        <p className="mt-1 whitespace-pre-wrap" style={{ color: "var(--text-secondary)" }}>{offer.instructions}</p>
+                      <div className="mt-3 rounded-md border p-2.5 text-xs border-border! bg-elevated!">
+                        <p className="font-semibold text-fg-primary!">使用方式：</p>
+                        <p className="mt-1 whitespace-pre-wrap text-fg-secondary!">{offer.instructions}</p>
                       </div>
                     )}
                   </div>
@@ -289,20 +288,19 @@ function DetailPanel({
           </section>
 
           {business.listing_type === "physical" && <section>
-            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>點位</h3>
+            <h3 className="text-sm font-semibold text-fg-primary!">點位</h3>
             <div className="mt-2 space-y-2">
               {business.locations.map((location) => (
-                <div key={location.id} className="rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
-                  <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+                <div key={location.id} className="rounded-lg border p-3 border-border!">
+                  <p className="text-sm font-medium text-fg-primary!">
                     {location.name || business.name}
                   </p>
-                  <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{location.address}</p>
+                  <p className="mt-1 text-xs text-fg-muted!">{location.address}</p>
                   {location.phone && (
-                    <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>{location.phone}</p>
+                    <p className="mt-1 text-xs text-fg-secondary!">{location.phone}</p>
                   )}
                   <a
-                    className="mt-2 inline-flex items-center gap-1 text-xs hover:underline"
-                    style={{ color: "var(--primary-text)" }}
+                    className="mt-2 inline-flex items-center gap-1 text-xs hover:underline text-accent-text!"
                     href={location.google_maps_url || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location.address)}`}
                     target="_blank"
                     rel="noreferrer">
@@ -316,8 +314,8 @@ function DetailPanel({
           {!business.can_view_private_details && (
             <Link
               href="/login"
-              className="btn w-full"
-              style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
+              className="btn w-full bg-accent! text-accent-foreground! border-0!"
+              >
               登入查看完整優惠
             </Link>
           )}
@@ -359,35 +357,35 @@ function RecommendedDetailPanel({
   if (!vendor) return null;
   const panel = (
     <aside
-      className="partner-map-detail-panel fixed inset-x-3 bottom-3 max-h-[calc(100dvh-1.5rem)] overflow-y-auto rounded-lg border p-4 shadow-xl lg:top-20 lg:right-5 lg:bottom-5 lg:left-auto lg:w-96"
+      className="partner-map-detail-panel fixed inset-x-3 bottom-3 max-h-[calc(100dvh-1.5rem)] overflow-y-auto rounded-lg border p-4 shadow-xl lg:top-20 lg:right-5 lg:bottom-5 lg:left-auto lg:w-96 bg-page! border-border!"
       role="dialog"
       aria-labelledby="recommended-vendor-detail-title"
-      style={{ background: "var(--bg)", borderColor: "var(--border)" }}>
+      >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold" style={{ color: "var(--tag-blue-fg)" }}>推薦商家</p>
-          <h2 id="recommended-vendor-detail-title" className="mt-1 text-lg font-semibold" style={{ color: "var(--text-primary)" }}>{vendor.name}</h2>
+          <p className="text-xs font-semibold text-tag-blue!">推薦商家</p>
+          <h2 id="recommended-vendor-detail-title" className="mt-1 text-lg font-semibold text-fg-primary!">{vendor.name}</h2>
         </div>
         <button ref={closeButtonRef} type="button" className="topbar-icon-btn" onClick={onClose} aria-label="關閉推薦商家詳情">×</button>
       </div>
       <div className="mt-4 space-y-4">
-        {vendor.category && <p className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>{vendor.category}</p>}
-        {vendor.summary && <p className="text-sm" style={{ color: "var(--text-secondary)" }}>{vendor.summary}</p>}
+        {vendor.category && <p className="text-xs font-semibold text-fg-secondary!">{vendor.category}</p>}
+        {vendor.summary && <p className="text-sm text-fg-secondary!">{vendor.summary}</p>}
         {vendor.description && (
-          <p className="whitespace-pre-wrap text-sm" style={{ color: "var(--text-secondary)" }}>{vendor.description}</p>
+          <p className="whitespace-pre-wrap text-sm text-fg-secondary!">{vendor.description}</p>
         )}
         {(vendor.address || vendor.contact_phone || vendor.contact_email) && (
-          <section className="rounded-lg border p-3" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
-            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>店家資訊</h3>
-            <div className="mt-2 space-y-2 text-sm" style={{ color: "var(--text-secondary)" }}>
+          <section className="rounded-lg border p-3 border-border! bg-elevated!">
+            <h3 className="text-sm font-semibold text-fg-primary!">店家資訊</h3>
+            <div className="mt-2 space-y-2 text-sm text-fg-secondary!">
               {vendor.address && <p className="flex items-start gap-2"><MapPin size={14} className="mt-0.5 shrink-0" aria-hidden="true" />{vendor.address}</p>}
               {vendor.contact_phone && <a className="flex items-center gap-2 hover:underline" href={`tel:${vendor.contact_phone}`}><Phone size={14} aria-hidden="true" />{vendor.contact_phone}</a>}
               {vendor.contact_email && <a className="flex items-center gap-2 hover:underline" href={`mailto:${vendor.contact_email}`}><Mail size={14} aria-hidden="true" />{vendor.contact_email}</a>}
             </div>
           </section>
         )}
-        {vendor.business_hours_text && <p className="flex items-center gap-2 text-sm" style={{ color: "var(--text-muted)" }}><Clock size={14} aria-hidden="true" />{vendor.business_hours_text}</p>}
-        {formatBusinessHours(vendor.business_hours) && <p className="text-xs" style={{ color: "var(--text-muted)" }}>{formatBusinessHours(vendor.business_hours)}</p>}
+        {vendor.business_hours_text && <p className="flex items-center gap-2 text-sm text-fg-muted!"><Clock size={14} aria-hidden="true" />{vendor.business_hours_text}</p>}
+        {formatBusinessHours(vendor.business_hours) && <p className="text-xs text-fg-muted!">{formatBusinessHours(vendor.business_hours)}</p>}
         {(vendor.website_url || vendor.social_url || vendor.google_maps_url || vendor.menu_url) && (
           <div className="flex flex-wrap gap-2">
             {(vendor.website_url || vendor.social_url) && <a className="btn btn-secondary w-fit" href={externalUrl(vendor.website_url || vendor.social_url || "")} target="_blank" rel="noreferrer">前往網站 <ExternalLink size={15} aria-hidden="true" /></a>}
@@ -395,7 +393,7 @@ function RecommendedDetailPanel({
             {vendor.menu_url && <a className="btn btn-secondary w-fit" href={vendor.menu_url} target="_blank" rel="noreferrer">查看菜單 <ExternalLink size={15} aria-hidden="true" /></a>}
           </div>
         )}
-        {vendor.hygiene_verified && <p className="text-xs font-semibold" style={{ color: "var(--success)" }}>衛生檢驗資訊已確認</p>}
+        {vendor.hygiene_verified && <p className="text-xs font-semibold text-success!">衛生檢驗資訊已確認</p>}
       </div>
     </aside>
   );
@@ -645,14 +643,14 @@ export default function PartnerMapClient({
   const MapComponent = mapComponent;
 
   return (
-    <div className="h-[calc(100dvh-158px)] min-h-0 overflow-hidden rounded-lg border partner-map-shell" style={{ borderColor: "var(--border)" }}>
+    <div className="h-[calc(100dvh-158px)] min-h-0 overflow-hidden rounded-lg border partner-map-shell border-border!">
       <div className="grid h-full grid-cols-1 lg:grid-cols-[360px_1fr]">
-        <aside className="hidden min-h-0 flex-col border-b lg:flex lg:border-b-0 lg:border-r" style={{ borderColor: "var(--border)", background: "var(--bg)" }}>
+        <aside className="hidden min-h-0 flex-col border-b lg:flex lg:border-b-0 lg:border-r border-border! bg-page!">
           <div className="space-y-4 p-4">
             <div>
-              <div className="flex items-center justify-between gap-2"><h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>店家地圖</h1>{myBusinesses.length > 0 && <Link href="/partner-map/my-businesses" className="text-xs font-medium hover:underline" style={{ color: "var(--primary-text)" }}>我的店家</Link>}</div>
+              <div className="flex items-center justify-between gap-2"><h1 className="text-xl font-semibold text-fg-primary!">店家地圖</h1>{myBusinesses.length > 0 && <Link href="/partner-map/my-businesses" className="text-xs font-medium hover:underline text-accent-text!">我的店家</Link>}</div>
             </div>
-            <label className="flex items-center gap-2 rounded-lg border px-3 py-2" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
+            <label className="flex items-center gap-2 rounded-lg border px-3 py-2 border-border! bg-elevated!">
               <Search size={16} aria-hidden="true" />
                <input
                  value={keyword}
@@ -660,8 +658,7 @@ export default function PartnerMapClient({
                  name="partner-map-search"
                  autoComplete="off"
                  placeholder="搜尋店名、地址、優惠…"
-                      className="min-w-0 flex-1 bg-transparent text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--border-focus)]"
-                 style={{ color: "var(--text-primary)" }}
+                      className="min-w-0 flex-1 bg-transparent text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--border-focus)] text-fg-primary!"
               />
             </label>
             <div className="flex items-center gap-2 overflow-x-auto pb-1">
@@ -707,34 +704,34 @@ export default function PartnerMapClient({
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
             {contactBusinesses.length > 0 && (
-              <div className="mb-3 rounded-lg border p-3" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
-                <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>合作夥伴聯絡資訊</p>
+              <div className="mb-3 rounded-lg border p-3 border-border! bg-elevated!">
+                <p className="text-xs font-semibold text-fg-primary!">合作夥伴聯絡資訊</p>
                 <div className="mt-2 space-y-2">
                   {contactBusinesses.map((business) => (
-                    <button type="button" key={business.id} onClick={() => openBusiness(business.id)} className="w-full rounded-lg border p-2 text-left transition-colors hover:border-[var(--primary)]" style={{ borderColor: "var(--border)", background: "var(--bg)" }}>
+                    <button type="button" key={business.id} onClick={() => openBusiness(business.id)} className="w-full rounded-lg border p-2 text-left transition-colors hover:border-[var(--primary)] border-border! bg-page!">
                       <div className="flex items-center justify-between gap-2">
-                        <p className="truncate text-xs font-semibold" style={{ color: "var(--text-primary)" }}>{business.name}</p>
-                        <span className="shrink-0 text-xs" style={{ color: "var(--primary-text)" }}>查看詳情 →</span>
+                        <p className="truncate text-xs font-semibold text-fg-primary!">{business.name}</p>
+                        <span className="shrink-0 text-xs text-accent-text!">查看詳情 →</span>
                       </div>
-                      <p className="mt-1 line-clamp-2 text-xs" style={{ color: "var(--text-muted)" }}>{business.summary || business.category || "合作聯絡窗口"}</p>
-                      {business.active_offer_count > 0 && <p className="mt-1 text-xs" style={{ color: "var(--primary-text)" }}>有 {business.active_offer_count} 筆優惠</p>}
+                      <p className="mt-1 line-clamp-2 text-xs text-fg-muted!">{business.summary || business.category || "合作聯絡窗口"}</p>
+                      {business.active_offer_count > 0 && <p className="mt-1 text-xs text-accent-text!">有 {business.active_offer_count} 筆優惠</p>}
                     </button>
                   ))}
                 </div>
               </div>
             )}
             {loading ? (
-              <div className="py-10 text-center text-sm" style={{ color: "var(--text-muted)" }}>載入中...</div>
+              <div className="py-10 text-center text-sm text-fg-muted!">載入中...</div>
             ) : filteredItems.length === 0 ? (
-              <div className="py-10 text-center text-sm" style={{ color: "var(--text-muted)" }}>沒有符合條件的特約店家</div>
+              <div className="py-10 text-center text-sm text-fg-muted!">沒有符合條件的特約店家</div>
             ) : (
                <div className="partner-map-list space-y-2">
                 {filteredItems.map((item) => (
                   <button
                     key={item.location_id}
                     onClick={() => openBusiness(item.business_id, item.source)}
-                    className="w-full rounded-lg border p-3 text-left transition-colors hover:border-[var(--primary)]"
-                    style={{ borderColor: "var(--border)", background: "var(--bg)" }}>
+                    className="w-full rounded-lg border p-3 text-left transition-colors hover:border-[var(--primary)] border-border! bg-page!"
+                    >
                     <div className="flex items-start justify-between gap-3">
                       {thumbFor(item) && (
                         <Image
@@ -747,25 +744,25 @@ export default function PartnerMapClient({
                         />
                       )}
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{item.business_name}</p>
-                        <p className="mt-0.5 flex items-center gap-1 text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+                        <p className="truncate text-sm font-semibold text-fg-primary!">{item.business_name}</p>
+                        <p className="mt-0.5 flex items-center gap-1 text-xs font-medium text-fg-secondary!">
                           <span className="h-1.5 w-1.5 rounded-full" style={{ background: markerColor(item) }} aria-hidden="true" />
                           {markerLabel(item)}
                         </p>
                         {(item.business_hours_text || formatBusinessHours(item.business_hours)) && (
-                          <p className="mt-0.5 flex items-center gap-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                          <p className="mt-0.5 flex items-center gap-1 text-xs text-fg-muted!">
                             <Clock size={11} aria-hidden="true" /> {item.business_hours_text || formatBusinessHours(item.business_hours)}
                           </p>
                         )}
-                        <p className="mt-1 line-clamp-2 text-xs" style={{ color: "var(--text-muted)" }}>{item.address}</p>
+                        <p className="mt-1 line-clamp-2 text-xs text-fg-muted!">{item.address}</p>
                       </div>
                       {item.has_active_offer && (
-                        <span className="shrink-0 rounded-full px-2 py-1 text-xs" style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
+                        <span className="shrink-0 rounded-full px-2 py-1 text-xs bg-accent-soft! text-accent-text!">
                           {item.has_discount_offer ? "★ 折扣" : "優惠"}
                         </span>
                       )}
                     </div>
-                    <p className="mt-2 truncate text-xs" style={{ color: "var(--text-secondary)" }}>{formatOffers(item)}</p>
+                    <p className="mt-2 truncate text-xs text-fg-secondary!">{formatOffers(item)}</p>
                   </button>
                 ))}
               </div>
@@ -777,8 +774,8 @@ export default function PartnerMapClient({
           <div className="partner-map-mobile-controls absolute left-2.5 right-2.5 top-2.5 z-[500] rounded-lg border p-3 lg:hidden">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="flex items-center gap-2"><h1 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>店家地圖</h1>{myBusinesses.length > 0 && <Link href="/partner-map/my-businesses" className="text-xs font-medium" style={{ color: "var(--primary-text)" }}>我的店家</Link>}</div>
-                <p className="text-xs" style={{ color: "var(--text-muted)" }}>特約與推薦商家</p>
+                <div className="flex items-center gap-2"><h1 className="text-base font-semibold text-fg-primary!">店家地圖</h1>{myBusinesses.length > 0 && <Link href="/partner-map/my-businesses" className="text-xs font-medium text-accent-text!">我的店家</Link>}</div>
+                <p className="text-xs text-fg-muted!">特約與推薦商家</p>
               </div>
               <div className="flex items-center gap-2">
                 <span className="partner-map-count-pill rounded-full px-2 py-1 text-xs">
@@ -805,8 +802,7 @@ export default function PartnerMapClient({
                      name="partner-map-mobile-search"
                      autoComplete="off"
                      placeholder="搜尋店家…"
-                      className="min-w-0 flex-1 bg-transparent text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--border-focus)]"
-                     style={{ color: "var(--text-primary)" }}
+                      className="min-w-0 flex-1 bg-transparent text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--border-focus)] text-fg-primary!"
                   />
                 </label>
                 <div className="flex gap-2 overflow-x-auto pb-1">
@@ -843,24 +839,24 @@ export default function PartnerMapClient({
               </div>
             )}
             {contactBusinesses.length > 0 && (
-              <section className="mt-3 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+              <section className="mt-3 border-t pt-3 border-border!">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>沒有地點的特約</p>
-                    <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>線上合作夥伴也在這裡</p>
+                    <p className="text-sm font-semibold text-fg-primary!">沒有地點的特約</p>
+                    <p className="mt-0.5 text-xs text-fg-muted!">線上合作夥伴也在這裡</p>
                   </div>
-                  <span className="rounded-full px-2 py-1 text-xs font-medium" style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
+                  <span className="rounded-full px-2 py-1 text-xs font-medium bg-accent-soft! text-accent-text!">
                     {contactBusinesses.length} 家
                   </span>
                 </div>
                 <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
                   {contactBusinesses.map((business) => (
-                    <button type="button" key={business.id} onClick={() => openBusiness(business.id)} className="min-w-[72vw] rounded-lg border p-3 text-left" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
+                    <button type="button" key={business.id} onClick={() => openBusiness(business.id)} className="min-w-[72vw] rounded-lg border p-3 text-left border-border! bg-elevated!">
                       <div className="flex items-center justify-between gap-2">
-                        <p className="truncate text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{business.name}</p>
-                        <span className="shrink-0 text-xs" style={{ color: "var(--primary-text)" }}>查看 →</span>
+                        <p className="truncate text-sm font-semibold text-fg-primary!">{business.name}</p>
+                        <span className="shrink-0 text-xs text-accent-text!">查看 →</span>
                       </div>
-                      <p className="mt-1 line-clamp-2 text-xs" style={{ color: "var(--text-secondary)" }}>{business.summary || business.category || "可線上聯絡"}</p>
+                      <p className="mt-1 line-clamp-2 text-xs text-fg-secondary!">{business.summary || business.category || "可線上聯絡"}</p>
                     </button>
                   ))}
                 </div>
@@ -883,8 +879,8 @@ export default function PartnerMapClient({
               <button
                 key={item.location_id}
                 onClick={() => openBusiness(item.business_id, item.source)}
-                className="min-w-[82vw] snap-center rounded-lg border p-3 text-left shadow-lg"
-                style={{ background: "var(--bg)", borderColor: "var(--border)" }}>
+                className="min-w-[82vw] snap-center rounded-lg border p-3 text-left shadow-lg bg-page! border-border!"
+                >
                 <div className="flex items-start justify-between gap-3">
                   {thumbFor(item) && (
                     <Image
@@ -897,20 +893,20 @@ export default function PartnerMapClient({
                     />
                   )}
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{item.business_name}</p>
+                    <p className="truncate text-sm font-semibold text-fg-primary!">{item.business_name}</p>
                     {(item.business_hours_text || formatBusinessHours(item.business_hours)) && (
-                      <p className="mt-0.5 flex items-center gap-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                      <p className="mt-0.5 flex items-center gap-1 text-xs text-fg-muted!">
                         <Clock size={11} aria-hidden="true" /> {item.business_hours_text || formatBusinessHours(item.business_hours)}
                       </p>
                     )}
-                    <p className="mt-1 line-clamp-2 text-xs" style={{ color: "var(--text-muted)" }}>{item.address}</p>
+                    <p className="mt-1 line-clamp-2 text-xs text-fg-muted!">{item.address}</p>
                   </div>
-                  <span className="flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-xs font-medium" style={{ background: "var(--bg-elevated)", borderColor: markerColor(item), color: "var(--text-secondary)" }}>
+                  <span className="flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-xs font-medium bg-elevated! text-fg-secondary!" style={{ borderColor: markerColor(item) }}>
                     <span className="h-1.5 w-1.5 rounded-full" style={{ background: markerColor(item) }} aria-hidden="true" />
                     {markerLabel(item)}
                   </span>
                 </div>
-                <p className="mt-2 truncate text-xs" style={{ color: "var(--text-secondary)" }}>
+                <p className="mt-2 truncate text-xs text-fg-secondary!">
                   {formatOffers(item)}
                 </p>
               </button>
@@ -935,7 +931,7 @@ export default function PartnerMapClient({
             vendor={selectedVendor}
             onClose={closeDetails}
           />
-          <div className="pointer-events-none absolute left-4 top-4 hidden rounded-lg border px-3 py-2 text-xs shadow lg:block" style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text-secondary)" }}>
+          <div className="pointer-events-none absolute left-4 top-4 hidden rounded-lg border px-3 py-2 text-xs shadow lg:block bg-page! border-border! text-fg-secondary!">
             <span className="inline-flex items-center gap-1"><MapPin size={13} aria-hidden="true" /> {filteredItems.length} 個點位</span>
           </div>
         </main>

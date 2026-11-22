@@ -4,6 +4,41 @@
    Light / Dark 兩套完整主題
    ══════════════════════════════════════════════════════════════════════════ */
 
+/* Tailwind v4 utilities backed by the active theme, including dark/high-contrast overrides. */
+@theme inline {
+  --color-canvas: var(--bg-base);
+  --color-page: var(--bg);
+  --color-surface: var(--bg-surface);
+  --color-elevated: var(--bg-elevated);
+  --color-hover: var(--bg-hover);
+  --color-fg-primary: var(--text-primary);
+  --color-fg-secondary: var(--text-secondary);
+  --color-fg-muted: var(--text-muted);
+  --color-fg-disabled: var(--text-disabled);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-border-focus: var(--border-focus);
+  --color-accent: var(--primary);
+  --color-accent-text: var(--primary-text);
+  --color-accent-foreground: var(--primary-fg);
+  --color-accent-contrast: var(--primary-contrast, white);
+  --color-accent-soft: var(--primary-dim);
+  --color-accent-tint: color-mix(in srgb, var(--primary) 8%, transparent);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-dim);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-dim);
+  --color-warning-border: var(--warning-border);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-dim);
+  --color-danger-border: var(--danger-border);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-dim);
+  --color-info-border: var(--info-border);
+  --color-card: var(--card-bg, var(--bg-elevated));
+  --color-tag-blue: var(--tag-blue-fg);
+}
+
 /* ── 淺色主題（預設）────────────────────────────────────────────────────── */
 :root {
   /* 背景（暖白米色，有紙張質感） */

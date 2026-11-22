@@ -718,7 +718,7 @@ export default function DocumentListClient({
       {/* 頁首 */}
       <div className="workspace-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
+          <h1 className="text-xl font-semibold text-fg-primary!">
             公文
           </h1>
         </div>
@@ -759,12 +759,7 @@ export default function DocumentListClient({
               key={item.label}
               type="button"
               onClick={() => applyQuickFilter(item.tab, item)}
-              className="document-quick-filter min-h-11 rounded-full px-4 text-xs font-medium"
-              style={{
-                background: "var(--bg-surface)",
-                border: "1px solid var(--border)",
-                color: "var(--text-secondary)",
-              }}
+              className="document-quick-filter min-h-11 rounded-full px-4 text-xs font-medium bg-surface! border! border-border! text-fg-secondary!"
             >
               {item.label}
             </button>
@@ -774,12 +769,11 @@ export default function DocumentListClient({
         {/* 常用篩選 */}
         {canViewAll && savedFilters.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs" style={{ color: "var(--text-muted)" }}>常用篩選：</span>
+            <span className="text-xs text-fg-muted!">常用篩選：</span>
             {savedFilters.slice(0, 8).map(sf => (
               <div
                 key={sf.id}
-                className="inline-flex min-h-11 overflow-hidden rounded-full"
-                style={{ color: "var(--text-secondary)", border: "1px solid var(--border)", background: "var(--bg-surface)" }}
+                className="inline-flex min-h-11 overflow-hidden rounded-full text-fg-secondary! border! border-border! bg-surface!"
               >
                 <button
                   type="button"
@@ -792,8 +786,7 @@ export default function DocumentListClient({
                 <button
                   type="button"
                   onClick={() => void deleteSavedFilter(sf.id)}
-                  className="inline-flex min-h-11 min-w-11 items-center justify-center border-l"
-                  style={{ color: "var(--danger)", borderColor: "var(--border)" }}
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center border-l text-danger! border-border!"
                   aria-label={`刪除常用篩選「${sf.name}」`}
                   title="刪除常用篩選"
                 >
@@ -806,10 +799,10 @@ export default function DocumentListClient({
         <div className="flex w-full flex-col gap-3">
           {/* 搜尋框 */}
           <div className="relative w-full">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-fg-muted!"
               width="14" height="14" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-              style={{ color: "var(--text-muted)" }} aria-hidden="true">
+               aria-hidden="true">
               <circle cx="11" cy="11" r="8" />
               <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
@@ -818,8 +811,7 @@ export default function DocumentListClient({
           </div>
 
           {/* Tab 切換 */}
-          <div className="document-tabs flex w-full gap-0.5 p-1 rounded-xl overflow-x-auto"
-            style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+          <div className="document-tabs flex w-full gap-0.5 p-1 rounded-xl overflow-x-auto bg-surface! border! border-border!"
             role="tablist" aria-label="公文狀態篩選">
             {visibleTabs.map(({ key, label }) => {
               const active = activeTab === key;
@@ -848,23 +840,22 @@ export default function DocumentListClient({
               </svg>
               進階篩選
               {hasActiveFilters && (
-                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full"
-                  style={{ background: "var(--primary)" }} />
+                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-accent!"
+                   />
               )}
             </button>}
 
             {canViewAll && hasActiveFilters && (
               <button onClick={clearFilters}
-                className="document-filter-toggle min-h-11 text-xs px-3 rounded-lg"
-                style={{ color: "var(--danger)", border: "1px solid rgba(220,38,38,0.3)", background: "rgba(220,38,38,0.06)" }}>
+                className="document-filter-toggle min-h-11 text-xs px-3 rounded-lg text-danger!"
+                style={{ border: "1px solid rgba(220,38,38,0.3)", background: "rgba(220,38,38,0.06)" }}>
                 清除篩選
               </button>
             )}
 
             {canViewAll && <button
               onClick={saveCurrentFilter}
-              className="min-h-11 text-xs px-3 rounded-lg hover:opacity-80"
-              style={{ color: "var(--primary-text)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }}
+              className="min-h-11 text-xs px-3 rounded-lg hover:opacity-80 text-accent-text! bg-accent-soft! border! border-border-strong!"
               title="將目前的 Tab/搜尋/篩選保存為常用篩選"
             >
               ＋ 儲存目前查詢
@@ -878,19 +869,18 @@ export default function DocumentListClient({
             <div className="flex flex-wrap gap-5">
               {/* 字號前綴 */}
               <div className="space-y-1.5">
-                <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>字號前綴</p>
+                <p className="text-xs font-semibold text-fg-muted!">字號前綴</p>
                 <input
                   value={filters.serialPrefix}
                   onChange={e => dispatchFilter({ type: "set", key: "serialPrefix", value: e.target.value })}
                   placeholder="例：嶺代生字第"
-                  className="min-h-11 w-56 rounded-lg px-3 text-sm outline-none"
-                  style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
+                  className="min-h-11 w-56 rounded-lg px-3 text-sm outline-none bg-elevated! border! border-border! text-fg-primary!"
                 />
               </div>
 
               {/* 類別 */}
               <div className="space-y-1.5">
-                <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>公文類別</p>
+                <p className="text-xs font-semibold text-fg-muted!">公文類別</p>
                 <div className="flex flex-wrap gap-1.5">
                   <button type="button" onClick={() => dispatchFilter({ type: "set", key: "category", value: "" })}
                     className="min-h-11 rounded-full px-3 text-xs transition-[color,background-color,border-color,opacity,box-shadow,transform]"
@@ -913,7 +903,7 @@ export default function DocumentListClient({
 
               {/* 密等 */}
               <div className="space-y-1.5">
-                <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>密等</p>
+                <p className="text-xs font-semibold text-fg-muted!">密等</p>
                 <div className="flex flex-wrap gap-1.5">
                   <button type="button" onClick={() => dispatchFilter({ type: "set", key: "classification", value: "" })}
                     className="min-h-11 rounded-full px-3 text-xs transition-[color,background-color,border-color,opacity,box-shadow,transform]"
@@ -936,7 +926,7 @@ export default function DocumentListClient({
 
               {/* 可見度 */}
               <div className="space-y-1.5">
-                <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>可見度</p>
+                <p className="text-xs font-semibold text-fg-muted!">可見度</p>
                 <div className="flex flex-wrap gap-1.5">
                   <button type="button" onClick={() => dispatchFilter({ type: "set", key: "visibility", value: "" })}
                     className="min-h-11 rounded-full px-3 text-xs transition-[color,background-color,border-color,opacity,box-shadow,transform]"
@@ -959,78 +949,75 @@ export default function DocumentListClient({
 
               {/* 日期範圍 */}
               <div className="space-y-1.5">
-                <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>建立日期</p>
+                <p className="text-xs font-semibold text-fg-muted!">建立日期</p>
                 <div className="flex items-center gap-2">
                   <input type="date" value={filters.dateFrom} onChange={e => dispatchFilter({ type: "set", key: "dateFrom", value: e.target.value })}
-                    className="min-h-11 rounded-lg px-3 text-sm outline-none"
-                    style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
-                  <span className="text-xs" style={{ color: "var(--text-muted)" }}>至</span>
+                    className="min-h-11 rounded-lg px-3 text-sm outline-none bg-elevated! border! border-border! text-fg-primary!"
+                     />
+                  <span className="text-xs text-fg-muted!">至</span>
                   <input type="date" value={filters.dateTo} onChange={e => dispatchFilter({ type: "set", key: "dateTo", value: e.target.value })}
-                    className="min-h-11 rounded-lg px-3 text-sm outline-none"
-                    style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+                    className="min-h-11 rounded-lg px-3 text-sm outline-none bg-elevated! border! border-border! text-fg-primary!"
+                     />
                 </div>
               </div>
 
               {/* 發文日期範圍 */}
               <div className="space-y-1.5">
-                <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>發文日期</p>
+                <p className="text-xs font-semibold text-fg-muted!">發文日期</p>
                 <div className="flex items-center gap-2">
                   <input type="date" value={filters.issuedFrom} onChange={e => dispatchFilter({ type: "set", key: "issuedFrom", value: e.target.value })}
-                    className="min-h-11 rounded-lg px-3 text-sm outline-none"
-                    style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
-                  <span className="text-xs" style={{ color: "var(--text-muted)" }}>至</span>
+                    className="min-h-11 rounded-lg px-3 text-sm outline-none bg-elevated! border! border-border! text-fg-primary!"
+                     />
+                  <span className="text-xs text-fg-muted!">至</span>
                   <input type="date" value={filters.issuedTo} onChange={e => dispatchFilter({ type: "set", key: "issuedTo", value: e.target.value })}
-                    className="min-h-11 rounded-lg px-3 text-sm outline-none"
-                    style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+                    className="min-h-11 rounded-lg px-3 text-sm outline-none bg-elevated! border! border-border! text-fg-primary!"
+                     />
                 </div>
               </div>
 
               {/* 民國年（發文） */}
               <div className="space-y-1.5">
-                <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>民國年（發文）</p>
+                <p className="text-xs font-semibold text-fg-muted!">民國年（發文）</p>
                 <input
                   inputMode="numeric"
                   value={filters.rocYear}
                   onChange={e => dispatchFilter({ type: "set", key: "rocYear", value: e.target.value.replace(/[^\d]/g, "").slice(0, 3) })}
                   placeholder="例：115"
-                  className="min-h-11 w-28 rounded-lg px-3 text-sm outline-none"
-                  style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
+                  className="min-h-11 w-28 rounded-lg px-3 text-sm outline-none bg-elevated! border! border-border! text-fg-primary!"
                 />
               </div>
 
               {/* 受文者 */}
               <div className="space-y-1.5">
-                <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>受文者</p>
+                <p className="text-xs font-semibold text-fg-muted!">受文者</p>
                 <input
                   value={filters.recipientKeyword}
                   onChange={e => dispatchFilter({ type: "set", key: "recipientKeyword", value: e.target.value })}
                   placeholder="搜尋受文者名稱"
-                  className="min-h-11 w-56 rounded-lg px-3 text-sm outline-none"
-                  style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
+                  className="min-h-11 w-56 rounded-lg px-3 text-sm outline-none bg-elevated! border! border-border! text-fg-primary!"
                 />
               </div>
 
               {/* 承辦人 */}
               <div className="space-y-1.5">
-                <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>承辦人/單位</p>
+                <p className="text-xs font-semibold text-fg-muted!">承辦人/單位</p>
                 <input
                   value={filters.handlerKeyword}
                   onChange={e => dispatchFilter({ type: "set", key: "handlerKeyword", value: e.target.value })}
                   placeholder="姓名/單位/Email"
-                  className="min-h-11 w-56 rounded-lg px-3 text-sm outline-none"
-                  style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
+                  className="min-h-11 w-56 rounded-lg px-3 text-sm outline-none bg-elevated! border! border-border! text-fg-primary!"
                 />
               </div>
 
               {/* 組織篩選 */}
               {orgs.length > 0 && (
                 <div className="space-y-1.5">
-                  <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>發文組織</p>
+                  <p className="text-xs font-semibold text-fg-muted!">發文組織</p>
                   <select
                     value={filters.orgId}
                     onChange={e => dispatchFilter({ type: "set", key: "orgId", value: e.target.value })}
-                    className="min-h-11 rounded-lg px-3 text-sm outline-none"
-                    style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+                    className="min-h-11 rounded-lg px-3 text-sm outline-none bg-elevated! border! border-border! text-fg-primary!"
+                    >
                     <option value="">全部組織</option>
                     {orgs.map(o => <option key={o.id} value={o.id}>{orgDisplayName(o, orgs)}</option>)}
                   </select>
@@ -1039,7 +1026,7 @@ export default function DocumentListClient({
 
               {/* 僅顯示我的 */}
               <div className="space-y-1.5">
-                <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>其他</p>
+                <p className="text-xs font-semibold text-fg-muted!">其他</p>
                 <button type="button" onClick={() => dispatchFilter({ type: "toggleMyOnly" })}
                   className="inline-flex min-h-11 items-center gap-1.5 rounded-full px-3 text-xs transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                   style={filters.myOnly
@@ -1061,10 +1048,10 @@ export default function DocumentListClient({
         <div className="card p-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+              <span className="text-sm font-medium text-fg-primary!">
                 已選取 {selectedArray.length} 筆
               </span>
-              <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+              <span className="text-xs text-fg-muted!">
                 待審核 {selectedPendingArray.length} 筆，已核准 {selectedApprovedArray.length} 筆
               </span>
               <button
@@ -1115,8 +1102,8 @@ export default function DocumentListClient({
                     批量轉代理
                   </button>
                   {delegateSuggestions.length > 0 && !delegateId && (
-                    <div className="absolute right-0 top-full z-30 mt-1 w-64 max-w-[calc(100vw-1rem)] overflow-hidden rounded-lg shadow-lg"
-                      style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+                    <div className="absolute right-0 top-full z-30 mt-1 w-64 max-w-[calc(100vw-1rem)] overflow-hidden rounded-lg shadow-lg bg-elevated! border! border-border!"
+                      >
                       {delegateSuggestions.map((user) => (
                         <button
                           key={user.id}
@@ -1126,10 +1113,10 @@ export default function DocumentListClient({
                             setDelegateQuery(`${user.display_name} <${user.email}>`);
                             setDelegateSuggestions([]);
                           }}>
-                          <span className="block font-medium" style={{ color: "var(--text-primary)" }}>
+                          <span className="block font-medium text-fg-primary!">
                             {user.display_name}
                           </span>
-                          <span style={{ color: "var(--text-muted)" }}>{user.email}</span>
+                          <span className="text-fg-muted!">{user.email}</span>
                         </button>
                       ))}
                     </div>
@@ -1144,8 +1131,8 @@ export default function DocumentListClient({
       {/* 統計列 */}
       {!loading && (
         <div className="flex items-center gap-3">
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-            共 <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>{sorted.length}</span> 筆公文符合查詢條件
+          <p className="text-xs text-fg-muted!">
+            共 <span style={{ fontWeight: 600 }} className="text-fg-primary!">{sorted.length}</span> 筆公文符合查詢條件
           </p>
         </div>
       )}
@@ -1157,7 +1144,7 @@ export default function DocumentListClient({
             <ListPageSkeleton rows={6} showHeader={false} showFilters={false} />
           </div>
         ) : docs.length === 0 ? (
-          <div className="px-5 py-20 text-center" style={{ color: "var(--text-muted)" }} aria-live="polite">
+          <div className="px-5 py-20 text-center text-fg-muted!"  aria-live="polite">
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth="1.5" className="mx-auto mb-3 opacity-40" aria-hidden="true">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -1165,7 +1152,7 @@ export default function DocumentListClient({
             </svg>
             {loadError ? (
               <>
-                <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                <p className="text-sm font-semibold text-fg-primary!">
                   暫時無法載入公文
                 </p>
                 <p className="mx-auto mt-2 max-w-md text-sm leading-6">{loadError}</p>
@@ -1181,7 +1168,7 @@ export default function DocumentListClient({
               </>
             ) : hasDocumentQuery ? (
               <>
-                <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                <p className="text-sm font-semibold text-fg-primary!">
                   {search ? `找不到「${search}」相關公文` : "沒有符合目前條件的公文"}
                 </p>
                 <p className="mt-2 text-sm leading-6">清除搜尋與篩選後，查看全部可見公文。</p>
@@ -1191,7 +1178,7 @@ export default function DocumentListClient({
               </>
             ) : (
               <>
-                <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                <p className="text-sm font-semibold text-fg-primary!">
                   {canViewAll ? "尚無可查看的公文" : "目前尚未公開任何公文"}
                 </p>
                 <p className="mt-2 text-sm leading-6">
@@ -1215,7 +1202,7 @@ export default function DocumentListClient({
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm" role="table" aria-label="公文列表">
                 <thead>
-                  <tr style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-hover)" }}>
+                  <tr className="border-b! border-b-border! bg-hover!">
                     {canBatch && <th className="px-5 py-3.5 text-left" scope="col">
                       <input
                         type="checkbox"
@@ -1229,10 +1216,10 @@ export default function DocumentListClient({
                     <SortTh label="字號" sk="serial_asc" sortKey={sortKey} onToggle={toggleSort} />
                     <SortTh label="主旨" sk="title_asc" sortKey={sortKey} onToggle={toggleSort} />
                     <SortTh label="速別" sk="urgency_desc" sortKey={sortKey} onToggle={toggleSort} />
-                    <th className="px-5 py-3.5 text-left text-xs font-semibold" style={{ color: "var(--text-muted)" }} scope="col">狀態</th>
+                    <th className="px-5 py-3.5 text-left text-xs font-semibold text-fg-muted!"  scope="col">狀態</th>
                     <SortTh label="發文日期" sk="created_desc" sortKey={sortKey} onToggle={toggleSort} />
                     <SortTh label="限辦日期" sk="due_asc" sortKey={sortKey} onToggle={toggleSort} />
-                    <th className="px-5 py-3.5 text-left text-xs font-semibold" style={{ color: "var(--text-muted)" }} scope="col">操作</th>
+                    <th className="px-5 py-3.5 text-left text-xs font-semibold text-fg-muted!"  scope="col">操作</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1255,21 +1242,21 @@ export default function DocumentListClient({
                         />
                       </td>}
                       <td className="px-5 py-4">
-                        <span className="text-xs font-mono" style={{ color: "var(--primary-text)" }}>
+                        <span className="text-xs font-mono text-accent-text!">
                           {doc.serial_number}
                         </span>
                       </td>
                       <td className="px-5 py-4 max-w-xs">
                         {doc.is_redacted ? (
-                          <span className="font-medium" style={{ color: "var(--text-muted)" }}>
+                          <span className="font-medium text-fg-muted!">
                             {doc.summary || doc.subject || doc.title}
                           </span>
                         ) : (
                           <Link
                             href={`/documents/${encodeURIComponent(doc.serial_number)}`}
                             prefetch={false}
-                            className="font-medium hover:underline transition-colors"
-                            style={{ color: "var(--text-primary)" }}>
+                            className="font-medium hover:underline transition-colors text-fg-primary!"
+                            >
                             {doc.summary || doc.subject || doc.title}
                           </Link>
                         )}
@@ -1280,14 +1267,14 @@ export default function DocumentListClient({
                       <td className="px-5 py-4">
                         <DocumentStatusBadge status={doc.status} />
                       </td>
-                      <td className="px-5 py-4 text-xs whitespace-nowrap" style={{ color: "var(--text-muted)" }}>
+                      <td className="px-5 py-4 text-xs whitespace-nowrap text-fg-muted!">
                         {formatTaipeiDate(doc.submitted_at ?? doc.created_at)}
                       </td>
                       <td className="px-5 py-4 text-xs whitespace-nowrap">
                         {(() => {
                           const urg = dueDateUrgency(doc.due_date, now);
                           if (!urg || urg === "ok") return (
-                            <span style={{ color: "var(--text-muted)" }}>
+                            <span className="text-fg-muted!">
                               {formatTaipeiDate(doc.due_date)}
                             </span>
                           );
@@ -1304,7 +1291,7 @@ export default function DocumentListClient({
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-2">
                           {doc.is_redacted ? (
-                            <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                            <span className="text-xs text-fg-muted!">
                               無權限
                             </span>
                           ) : (
@@ -1321,8 +1308,7 @@ export default function DocumentListClient({
                                 iconSize={12}
                                 announcement="公文連結已複製"
                                 failureHint="複製失敗，請開啟公文後從網址列複製"
-                                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded hover:opacity-80 transition-opacity"
-                                style={{ color: "var(--text-muted)" }}
+                                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded hover:opacity-80 transition-opacity text-fg-muted!"
                                 aria-label={`複製公文 ${doc.serial_number} 的連結`}
                                 title="複製連結"
                               />
@@ -1337,7 +1323,7 @@ export default function DocumentListClient({
             </div>
 
             {/* 手機卡片列表（md 以下顯示） */}
-            <ul className="md:hidden divide-y" style={{ borderColor: "var(--border)" }} aria-label="公文列表">
+            <ul className="md:hidden divide-y border-border!"  aria-label="公文列表">
               {sorted.map((doc, idx) => {
                 const urg = dueDateUrgency(doc.due_date, now);
                 const isOverdue = urg === "overdue";
@@ -1355,13 +1341,13 @@ export default function DocumentListClient({
                     />}
                     {doc.is_redacted ? (
                       <div
-                        className="flex items-start justify-between gap-3 flex-1 min-w-0"
-                        style={{ textDecoration: "none" }}>
+                        className="flex items-start justify-between gap-3 flex-1 min-w-0 no-underline!"
+                        >
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium whitespace-normal break-words" style={{ color: "var(--text-muted)" }}>
+                          <p className="text-sm font-medium whitespace-normal break-words text-fg-muted!">
                             {doc.summary || doc.subject || doc.title}
                           </p>
-                          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+                          <p className="text-xs mt-1 text-fg-muted!">
                             發文 {formatTaipeiDate(doc.submitted_at ?? doc.created_at)}
                           </p>
                         </div>
@@ -1374,16 +1360,16 @@ export default function DocumentListClient({
                     <Link
                       href={`/documents/${encodeURIComponent(doc.serial_number)}`}
                       prefetch={false}
-                      className="flex items-start justify-between gap-3 flex-1 min-w-0"
-                      style={{ textDecoration: "none" }}>
+                      className="flex items-start justify-between gap-3 flex-1 min-w-0 no-underline!"
+                      >
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium whitespace-normal break-words" style={{ color: "var(--text-primary)" }}>
+                        <p className="text-sm font-medium whitespace-normal break-words text-fg-primary!">
                           {doc.summary || doc.subject || doc.title}
                         </p>
-                        <p className="text-xs mt-0.5 font-mono" style={{ color: "var(--primary-text)" }}>
+                        <p className="text-xs mt-0.5 font-mono text-accent-text!">
                           {doc.serial_number}
                         </p>
-                        <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+                        <p className="text-xs mt-1 text-fg-muted!">
                           發文 {formatTaipeiDate(doc.submitted_at ?? doc.created_at)}
                         </p>
                         {doc.due_date && (isOverdue || isSoon) && (
@@ -1408,8 +1394,7 @@ export default function DocumentListClient({
                         iconSize={12}
                         announcement="公文連結已複製"
                         failureHint="複製失敗，請開啟公文後從網址列複製"
-                        className="inline-flex min-h-11 min-w-11 flex-shrink-0 items-center justify-center rounded hover:opacity-80"
-                        style={{ color: "var(--text-muted)" }}
+                        className="inline-flex min-h-11 min-w-11 flex-shrink-0 items-center justify-center rounded hover:opacity-80 text-fg-muted!"
                         aria-label={`複製公文 ${doc.serial_number} 的連結`}
                         title="複製連結"
                       />
@@ -1427,8 +1412,8 @@ export default function DocumentListClient({
       {!loading && (sorted.length > 0 || hasMore) && (
         <div className="flex flex-col items-center gap-3 pt-6 pb-4">
           {sorted.length > 0 && (
-            <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-              已顯示 <span style={{ color: "var(--primary-text)", fontWeight: 500 }}>{sorted.length}</span> 筆
+            <p className="text-sm text-fg-muted!">
+              已顯示 <span style={{ fontWeight: 500 }} className="text-accent-text!">{sorted.length}</span> 筆
               {hasMore && " · 向下捲動或點擊按鈕載入更多"}
             </p>
           )}
@@ -1436,8 +1421,8 @@ export default function DocumentListClient({
             <button
               onClick={loadMore}
               disabled={loadingMore}
-              className="btn btn-ghost text-sm px-6"
-              style={{ border: "1px solid var(--border)" }}>
+              className="btn btn-ghost text-sm px-6 border! border-border!"
+              >
               {loadingMore ? "載入中…" : "載入更多"}
             </button>
           )}

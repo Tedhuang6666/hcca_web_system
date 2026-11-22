@@ -322,9 +322,9 @@ function RankingInput({
   const canAdd = selected.length < maxN;
   return (
     <div className="space-y-3">
-      <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+      <p className="text-xs text-fg-muted!">
         請從下方點選並拖拉排序（最少 {minN} 項{maxN !== minN ? `、最多 ${maxN} 項` : ""}）
-        — 目前已選 <strong style={{ color: "var(--primary-text)" }}>{selected.length}</strong> 項
+        — 目前已選 <strong className="text-accent-text!">{selected.length}</strong> 項
       </p>
 
       {selected.length > 0 && (
@@ -347,7 +347,7 @@ function RankingInput({
 
       {unselected.length > 0 && (
         <div className="space-y-1.5">
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+          <p className="text-xs text-fg-muted!">
             {selected.length === 0 ? "選項" : "其他選項（點擊加入排序）"}
           </p>
           {unselected.map(opt => (
@@ -356,16 +356,10 @@ function RankingInput({
               type="button"
               onClick={() => onAdd(opt)}
               disabled={disabled || !canAdd}
-              className="w-full flex items-center gap-2 p-2.5 rounded-xl text-left transition-[color,background-color,border-color,opacity,box-shadow,transform]"
-              style={{
-                background: "var(--bg-elevated)",
-                border: "1px solid var(--border)",
-                color: "var(--text-secondary)",
-                opacity: canAdd ? 1 : 0.45,
-                cursor: canAdd ? "pointer" : "not-allowed",
-              }}
+              className="w-full flex items-center gap-2 p-2.5 rounded-xl text-left transition-[color,background-color,border-color,opacity,box-shadow,transform] bg-elevated! border! border-border! text-fg-secondary!"
+              style={{ opacity: canAdd ? 1 : 0.45, cursor: canAdd ? "pointer" : "not-allowed" }}
               aria-label={`加入「${opt}」到排序`}>
-              <span className="text-xs w-6 text-center" style={{ color: "var(--text-muted)" }}>＋</span>
+              <span className="text-xs w-6 text-center text-fg-muted!">＋</span>
               <span className="text-sm flex-1">{opt}</span>
             </button>
           ))}
@@ -373,7 +367,7 @@ function RankingInput({
       )}
 
       {!canAdd && unselected.length > 0 && (
-        <p className="text-xs" style={{ color: "var(--warning)" }}>
+        <p className="text-xs text-warning!">
           已達最多 {maxN} 項上限，如要新增請先移除一項。
         </p>
       )}
@@ -402,8 +396,7 @@ function SortableRankRow({ id, rank, label, disabled, onRemove }: {
         {...attributes}
         {...listeners}
         disabled={disabled}
-        className="cursor-grab active:cursor-grabbing touch-none p-1 rounded"
-        style={{ color: "var(--text-muted)" }}
+        className="cursor-grab active:cursor-grabbing touch-none p-1 rounded text-fg-muted!"
         aria-label="拖拉調整順序">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
           <circle cx="9" cy="6" r="1.5" /><circle cx="15" cy="6" r="1.5" />
@@ -411,16 +404,16 @@ function SortableRankRow({ id, rank, label, disabled, onRemove }: {
           <circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="18" r="1.5" />
         </svg>
       </button>
-      <span className="text-xs font-bold w-6 text-center tabular-nums"
-        style={{ color: "var(--primary-text)" }}>{rank}</span>
-      <span className="text-sm flex-1" style={{ color: "var(--text-primary)" }}>{label}</span>
+      <span className="text-xs font-bold w-6 text-center tabular-nums text-accent-text!"
+        >{rank}</span>
+      <span className="text-sm flex-1 text-fg-primary!">{label}</span>
       <button
         type="button"
         onClick={onRemove}
         disabled={disabled}
-        className="topbar-icon-btn"
+        className="topbar-icon-btn text-danger!"
         aria-label="從排序中移除"
-        style={{ color: "var(--danger)" }}>
+        >
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
           strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
           <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -478,7 +471,7 @@ function QuestionInput({
     );
   }
   if (type === "page_break") {
-    return <hr style={{ borderColor: "var(--border)" }} />;
+    return <hr className="border-border!"/>;
   }
   if (type === "image") {
     const src = uploadUrl(question.image_url || placeholder || "");
@@ -493,7 +486,7 @@ function QuestionInput({
             className="max-h-80 w-full rounded-lg object-contain" />
         )}
         {question.question_text && (
-          <figcaption className="text-sm" style={{ color: "var(--text-muted)" }}>
+          <figcaption className="text-sm text-fg-muted!">
             <SurveyMarkdown markdown={question.question_text} />
           </figcaption>
         )}
@@ -525,7 +518,7 @@ function QuestionInput({
           maxLength={question.max_length ?? undefined}
           className="input"
         />
-        {hint && <p className="text-xs" style={{ color: "var(--text-muted)" }}>{hint}</p>}
+        {hint && <p className="text-xs text-fg-muted!">{hint}</p>}
       </div>
     );
   }
@@ -542,7 +535,7 @@ function QuestionInput({
           maxLength={question.max_length ?? undefined}
           className="input resize-y"
         />
-        {hint && <p className="text-xs" style={{ color: "var(--text-muted)" }}>{hint}</p>}
+        {hint && <p className="text-xs text-fg-muted!">{hint}</p>}
       </div>
     );
   }
@@ -575,7 +568,7 @@ function QuestionInput({
                 disabled={disabled}
                 className="accent-[var(--primary)]"
               />
-              <span className="flex-1 text-sm" style={{ color: "var(--text-primary)" }}>{opt}</span>
+              <span className="flex-1 text-sm text-fg-primary!">{opt}</span>
             </label>
             {optionPreview(opt, index, (optionIndex) => onChange({ ...value, options: [options[optionIndex]] }))}
           </div>
@@ -590,17 +583,17 @@ function QuestionInput({
       onChange({ ...value, options: next });
     };
     return (
-      <div className="overflow-x-auto rounded-lg" style={{ border: "1px solid var(--border)" }}>
+      <div className="overflow-x-auto rounded-lg border! border-border!">
         <table className="survey-single-grid min-w-[32rem] w-full border-collapse text-sm">
           <thead>
             <tr>
-              <th scope="col" className="sticky left-0 z-10 min-w-32 px-3 py-2 text-left"
-                style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
+              <th scope="col" className="sticky left-0 z-10 min-w-32 px-3 py-2 text-left bg-elevated! text-fg-muted!"
+                >
                 列
               </th>
               {gridColumns.map((column, columnIndex) => (
-                <th key={columnIndex} scope="col" className="min-w-24 px-3 py-2 text-center font-medium"
-                  style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}>
+                <th key={columnIndex} scope="col" className="min-w-24 px-3 py-2 text-center font-medium bg-elevated! text-fg-secondary!"
+                  >
                   {column}
                 </th>
               ))}
@@ -609,13 +602,13 @@ function QuestionInput({
           <tbody>
             {options.map((row, rowIndex) => (
               <tr key={rowIndex}>
-                <th scope="row" className="sticky left-0 z-10 px-3 py-2 text-left font-medium"
-                  style={{ background: "var(--bg-surface)", color: "var(--text-primary)" }}>
+                <th scope="row" className="sticky left-0 z-10 px-3 py-2 text-left font-medium bg-surface! text-fg-primary!"
+                  >
                   {row}
                 </th>
                 {gridColumns.map((column, columnIndex) => (
-                  <td key={columnIndex} className="px-3 py-1 text-center"
-                    style={{ background: "var(--bg-surface)" }}>
+                  <td key={columnIndex} className="px-3 py-1 text-center bg-surface!"
+                    >
                     <label className="flex min-h-11 cursor-pointer items-center justify-center">
                       <input
                         type="radio"
@@ -641,7 +634,7 @@ function QuestionInput({
       <div className="grid gap-3 sm:grid-cols-2">
         {options.map((label, index) => (
           <label key={index} className="space-y-1.5">
-            <span className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+            <span className="block text-xs font-medium text-fg-secondary!">
               {label}
             </span>
             <textarea
@@ -687,7 +680,7 @@ function QuestionInput({
     return (
       <div className="space-y-2">
         {maxSelections != null && (
-          <p className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
+          <p className="text-sm font-medium text-fg-secondary!">
             最多可選 {maxSelections} 項（目前已選 {value.options.length} 項）
           </p>
         )}
@@ -710,10 +703,10 @@ function QuestionInput({
                   disabled={disabled || (!checked && !isExcl && limitReached)}
                   className="accent-[var(--primary)]"
                 />
-                <span className="flex-1 text-sm" style={{ color: "var(--text-primary)" }}>{opt}</span>
+                <span className="flex-1 text-sm text-fg-primary!">{opt}</span>
                 {isExcl && (
-                  <span className="text-xs px-1.5 py-0.5 rounded"
-                    style={{ background: "var(--bg-surface)", color: "var(--text-muted)" }}>互斥</span>
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-surface! text-fg-muted!"
+                    >互斥</span>
                 )}
               </label>
               {optionPreview(opt, index, (optionIndex) => toggle(options[optionIndex]))}
@@ -804,7 +797,7 @@ function QuestionInput({
             </label>
           ))}
         </div>
-        <div className="flex justify-between gap-3 text-xs" style={{ color: "var(--text-muted)" }}>
+        <div className="flex justify-between gap-3 text-xs text-fg-muted!">
           <span>{minV}{question.min_label ? ` · ${question.min_label}` : ""}</span>
           <span className="text-right">{maxV}{question.max_label ? ` · ${question.max_label}` : ""}</span>
         </div>
@@ -838,7 +831,7 @@ function ShareModal({ surveyId, title, onClose }: {
   return (
     <Modal title="分享問卷" size="sm" mobileFullscreen={false} onClose={onClose}>
       <div className="space-y-4">
-        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+        <p className="text-xs text-fg-muted!">
           掃描 QR code 或複製連結，邀請他人填答此問卷。
         </p>
         {qr && (
@@ -900,8 +893,7 @@ function OptionRespondents({
       <button
         type="button"
         onClick={() => setOpen(value => !value)}
-        className="text-xs font-medium transition-colors hover:underline"
-        style={{ color: "var(--primary-text)" }}
+        className="text-xs font-medium transition-colors hover:underline text-accent-text!"
         aria-expanded={open}
       >
         {open ? "收起填答者" : `查看 ${respondents.length} 位填答者`}
@@ -914,13 +906,12 @@ function OptionRespondents({
           {respondents.map(respondent => (
             <div
               key={respondent.user_id}
-              className="rounded-lg px-2.5 py-2"
-              style={{ background: "var(--bg-elevated)" }}
+              className="rounded-lg px-2.5 py-2 bg-elevated!"
             >
-              <p className="text-xs font-medium" style={{ color: "var(--text-primary)" }}>
+              <p className="text-xs font-medium text-fg-primary!">
                 {respondent.display_name}
               </p>
-              <p className="mt-0.5 truncate text-xs" style={{ color: "var(--text-muted)" }}>
+              <p className="mt-0.5 truncate text-xs text-fg-muted!">
                 {respondent.email}
               </p>
             </div>
@@ -1039,7 +1030,7 @@ function StatsView({
     }
   };
 
-  if (loading) return <div className="py-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>統計載入中…</div>;
+  if (loading) return <div className="py-8 text-center text-sm text-fg-muted!">統計載入中…</div>;
   if (!stats) return null;
 
   const questionsById = new Map(questions.map(question => [question.id, question]));
@@ -1083,8 +1074,8 @@ function StatsView({
               <div className="flex items-center gap-2 text-xs">
                 <span className="h-2.5 w-2.5 rounded-full" style={{ background: colors[index % colors.length] }} />
                 <OptionImageStrip images={optionImagesFor(qs.question_id, opt)} label={opt} compact />
-                <span className="min-w-0" style={{ color: "var(--text-secondary)" }}>{opt}</span>
-                <span className="tabular-nums" style={{ color: "var(--text-muted)" }}>
+                <span className="min-w-0 text-fg-secondary!">{opt}</span>
+                <span className="tabular-nums text-fg-muted!">
                   {count}（{Math.round((count / total) * 100)}%）
                 </span>
               </div>
@@ -1101,15 +1092,14 @@ function StatsView({
   return (
     <div className="space-y-4">
       <section
-        className="rounded-2xl p-4 sm:p-5"
-        style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
+        className="rounded-2xl p-4 sm:p-5 bg-elevated! border! border-border!"
         aria-label="問卷後台統計工具"
       >
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>回應分析</h2>
-            <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-              共 <strong style={{ color: "var(--text-primary)" }}>{stats.total_responses}</strong> 份回應，查看分布、填答者與原始答案。
+            <h2 className="text-lg font-semibold text-fg-primary!">回應分析</h2>
+            <p className="mt-1 text-sm text-fg-muted!">
+              共 <strong className="text-fg-primary!">{stats.total_responses}</strong> 份回應，查看分布、填答者與原始答案。
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -1125,14 +1115,14 @@ function StatsView({
                 type="button"
                 onClick={() => { void clearResponses(); }}
                 disabled={clearingResponses || deletingResponseId !== null}
-                className="btn btn-ghost text-xs"
-                style={{ color: "var(--danger)" }}>
+                className="btn btn-ghost text-xs text-danger!"
+                >
                 {clearingResponses ? "清除中…" : "清除全部回應"}
               </button>
             )}
           </div>
         </div>
-        <div className="mt-4 flex gap-1 rounded-xl p-1" style={{ background: "var(--bg-surface)" }}>
+        <div className="mt-4 flex gap-1 rounded-xl p-1 bg-surface!">
           {(["charts", "responses"] as const).map(v => (
             <button
               key={v}
@@ -1149,7 +1139,7 @@ function StatsView({
       </section>
 
       {view === "charts" && stats.total_responses === 0 && (
-        <div className="card p-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+        <div className="card p-8 text-center text-sm text-fg-muted!">
           尚無填答回應
         </div>
       )}
@@ -1167,10 +1157,10 @@ function StatsView({
 
         return (
         <div key={qs.question_id} className="card p-5 space-y-3">
-          <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+          <p className="text-sm font-semibold text-fg-primary!">
             {qs.question_text}
           </p>
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>{qs.total_responses} 份回答</p>
+          <p className="text-xs text-fg-muted!">{qs.total_responses} 份回答</p>
           {(qs.available_charts ?? []).length > 1 && (
             <div className="flex gap-1">
               {(qs.available_charts ?? []).map(chart => (
@@ -1203,15 +1193,15 @@ function StatsView({
                       <OptionImageStrip images={optionImagesFor(qs.question_id, opt)} label={opt} />
                       <div className="min-w-0 flex-1 space-y-1.5">
                         <div className="flex items-center justify-between gap-2 text-xs">
-                          <span className="min-w-0 break-words" style={{ color: "var(--text-secondary)" }}>{opt}</span>
-                          <span className="shrink-0 font-medium tabular-nums" style={{ color: "var(--text-muted)" }}>
+                          <span className="min-w-0 break-words text-fg-secondary!">{opt}</span>
+                          <span className="shrink-0 font-medium tabular-nums text-fg-muted!">
                             {count} <span style={{ opacity: 0.6 }}>({pct}%)</span>
                           </span>
                         </div>
-                        <div className="h-2.5 rounded-full overflow-hidden" style={{ background: "var(--bg-elevated)" }}>
+                        <div className="h-2.5 rounded-full overflow-hidden bg-elevated!">
                           <div
-                            className="h-full rounded-full transition-[width] duration-500 ease-out"
-                            style={{ width: `${pct}%`, background: "var(--primary)" }}
+                            className="h-full rounded-full transition-[width] duration-500 ease-out bg-accent!"
+                            style={{ width: `${pct}%` }}
                           />
                         </div>
                         <OptionRespondents respondents={qs.option_respondents?.[opt] ?? []} />
@@ -1225,10 +1215,10 @@ function StatsView({
           {/* 平均評分 */}
           {qs.average_rating != null && (
             <div className="flex items-baseline gap-2">
-              <p className="text-2xl font-bold" style={{ color: "var(--primary-text)" }}>
+              <p className="text-2xl font-bold text-accent-text!">
                 {qs.average_rating.toFixed(1)}
               </p>
-              <span className="text-sm" style={{ color: "var(--text-muted)" }}>
+              <span className="text-sm text-fg-muted!">
                 平均分（滿分 {qs.total_responses > 0 ? "N" : "—"}）
               </span>
             </div>
@@ -1237,7 +1227,7 @@ function StatsView({
           {/* 文字回答 */}
           {textAnswers.length > 0 && (
             <div>
-              <p className="text-xs mb-2" style={{ color: "var(--text-muted)" }}>
+              <p className="text-xs mb-2 text-fg-muted!">
                 {isMultiText ? `依選項整理（${textAnswerCount} 則）` : `文字回答（${textAnswerCount} 則）`}
               </p>
               <div
@@ -1251,14 +1241,14 @@ function StatsView({
                 {isMultiText && groupedTextAnswers.length > 0
                   ? groupedTextAnswers.map(group => (
                     <section key={group.label} className="space-y-1.5">
-                      <h3 className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
+                      <h3 className="text-xs font-semibold text-fg-primary!">
                         {group.label}：
                       </h3>
                       <ul className="space-y-1.5" aria-label={`${group.label}的回答`}>
                         {group.answers.map((answer, index) => (
                           <li key={`${group.label}-${index}`}
-                            className="text-xs px-3 py-2 rounded-lg whitespace-pre-wrap break-words"
-                            style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}>
+                            className="text-xs px-3 py-2 rounded-lg whitespace-pre-wrap break-words bg-elevated! text-fg-secondary!"
+                            >
                             {answer}
                           </li>
                         ))}
@@ -1269,8 +1259,8 @@ function StatsView({
                     <ul className="space-y-1.5" aria-label="文字回答列表">
                       {textAnswers.map((answer, index) => (
                         <li key={index}
-                          className="text-xs px-3 py-2 rounded-lg whitespace-pre-wrap break-words"
-                          style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}>
+                          className="text-xs px-3 py-2 rounded-lg whitespace-pre-wrap break-words bg-elevated! text-fg-secondary!"
+                          >
                           {answer}
                         </li>
                       ))}
@@ -1285,19 +1275,18 @@ function StatsView({
 
       {view === "responses" && (
         responses.length === 0 ? (
-          <div className="card p-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+          <div className="card p-8 text-center text-sm text-fg-muted!">
             尚無填答回應
           </div>
         ) : (
           <div className="space-y-4">
             <section
-              className="rounded-2xl p-4"
-              style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
+              className="rounded-2xl p-4 bg-elevated! border! border-border!"
               aria-label="個別回應篩選"
             >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                 <div className="min-w-0 flex-1">
-                  <label className="mb-1.5 block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+                  <label className="mb-1.5 block text-xs font-medium text-fg-secondary!">
                     依填答者篩選
                   </label>
                   <Combobox
@@ -1309,14 +1298,14 @@ function StatsView({
                     ariaLabel="選擇特定填答者"
                   />
                 </div>
-                <p className="shrink-0 text-xs" style={{ color: "var(--text-muted)" }}>
+                <p className="shrink-0 text-xs text-fg-muted!">
                   顯示 {filteredResponses.length} / {responses.length} 份回應
                 </p>
               </div>
             </section>
 
             {filteredResponses.length === 0 ? (
-              <div className="card p-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+              <div className="card p-8 text-center text-sm text-fg-muted!">
                 找不到符合的回應，請清除填答者篩選。
               </div>
             ) : (
@@ -1324,43 +1313,43 @@ function StatsView({
                 {pagedResponses.map(r => (
                   <div key={r.id} className="card p-4 space-y-3">
                     <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
-                      <span className="pt-0.5 text-xs font-semibold" style={{ color: "var(--primary-text)" }}>
+                      <span className="pt-0.5 text-xs font-semibold text-accent-text!">
                         #{responses.length - responses.indexOf(r)}
                       </span>
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                        <p className="text-sm font-semibold text-fg-primary!">
                           {r.respondent_name ?? (r.respondent_email ? "未命名使用者" : "匿名填答")}
                         </p>
                         {r.respondent_email && (
-                          <p className="mt-0.5 truncate text-xs" style={{ color: "var(--text-muted)" }}>
+                          <p className="mt-0.5 truncate text-xs text-fg-muted!">
                             {r.respondent_email}
                           </p>
                         )}
                       </div>
-                      <span className="ml-auto text-xs" style={{ color: "var(--text-muted)" }}>
+                      <span className="ml-auto text-xs text-fg-muted!">
                         {new Date(r.submitted_at).toLocaleString("zh-TW")}
                       </span>
                       <button
                         type="button"
                         onClick={() => { void deleteResponse(r.id); }}
                         disabled={clearingResponses || deletingResponseId !== null}
-                        className="btn btn-ghost px-2 py-1 text-xs"
-                        style={{ color: "var(--danger)" }}>
+                        className="btn btn-ghost px-2 py-1 text-xs text-danger!"
+                        >
                         {deletingResponseId === r.id ? "刪除中…" : "刪除"}
                       </button>
                     </div>
-                    <div className="space-y-2" style={{ borderTop: "1px solid var(--border)" }}>
+                    <div className="space-y-2 border-t! border-t-border!">
                       {r.answers.length === 0 ? (
-                        <p className="pt-2 text-xs" style={{ color: "var(--text-muted)" }}>（無作答內容）</p>
+                        <p className="pt-2 text-xs text-fg-muted!">（無作答內容）</p>
                       ) : (
                         r.answers.map(a => {
                           const label = questionLabels.get(a.question_id) ?? "題目";
                           const val = displayResponseAnswer(questionsById.get(a.question_id), a);
                           return (
                             <div key={a.id} className="pt-2 text-xs">
-                              <span style={{ color: "var(--text-muted)" }}>{label}</span>
-                              <p className="mt-0.5 whitespace-pre-wrap break-words"
-                                style={{ color: "var(--text-primary)" }}>
+                              <span className="text-fg-muted!">{label}</span>
+                              <p className="mt-0.5 whitespace-pre-wrap break-words text-fg-primary!"
+                                >
                                 {val}{a.other_text ? `（其他：${a.other_text}）` : ""}
                               </p>
                             </div>
@@ -1382,7 +1371,7 @@ function StatsView({
                 >
                   上一頁
                 </button>
-                <span className="text-xs tabular-nums" style={{ color: "var(--text-muted)" }}>
+                <span className="text-xs tabular-nums text-fg-muted!">
                   第 {responsePage + 1} / {responsePageCount} 頁（每頁 {responsePageSize} 份）
                 </span>
                 <button
@@ -1656,8 +1645,8 @@ export default function SurveyDetailClient({
 
   if (loading) {
     return (
-      <div className="py-20 text-center" style={{ color: "var(--text-muted)" }}>
-        <Loader2 size={28} className="mx-auto mb-3 animate-spin" style={{ color: "var(--primary-text)" }} aria-label="載入中" />
+      <div className="py-20 text-center text-fg-muted!">
+        <Loader2 size={28} className="mx-auto mb-3 animate-spin text-accent-text!"  aria-label="載入中" />
         <p className="text-sm">載入中…</p>
       </div>
     );
@@ -1666,8 +1655,8 @@ export default function SurveyDetailClient({
     const canSwitchAccount = loadError?.includes("校務帳號") || loadError?.includes("登入");
     return (
       <section className="card mx-auto max-w-xl space-y-4 p-7 text-center" role="alert" aria-live="assertive">
-        <h1 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>目前無法填寫這份問卷</h1>
-        <p className="text-sm leading-6" style={{ color: "var(--text-secondary)" }}>
+        <h1 className="text-lg font-semibold text-fg-primary!">目前無法填寫這份問卷</h1>
+        <p className="text-sm leading-6 text-fg-secondary!">
           {loadError ?? "找不到這份問卷，或你目前沒有填答資格。"}
         </p>
         <div className="flex flex-wrap justify-center gap-2">
@@ -1704,7 +1693,7 @@ export default function SurveyDetailClient({
             </svg>
           </Link>
           <div className="flex-1 min-w-0">
-            <h1 className="text-xl font-semibold truncate" style={{ color: "var(--text-primary)" }}>
+            <h1 className="text-xl font-semibold truncate text-fg-primary!">
               {survey.title}
             </h1>
           </div>
@@ -1752,11 +1741,10 @@ export default function SurveyDetailClient({
 
       {survey.description && (
         <section
-          className="rounded-xl px-5 py-4"
-          style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
+          className="rounded-xl px-5 py-4 bg-elevated! border! border-border!"
           aria-labelledby="survey-description-heading"
         >
-          <h2 id="survey-description-heading" className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+          <h2 id="survey-description-heading" className="text-sm font-semibold text-fg-primary!">
             問卷說明
           </h2>
           <SurveyMarkdown
@@ -1767,7 +1755,7 @@ export default function SurveyDetailClient({
       )}
 
       {/* 資訊列 */}
-      <div className="flex flex-wrap items-center gap-3 text-xs" style={{ color: "var(--text-muted)" }}>
+      <div className="flex flex-wrap items-center gap-3 text-xs text-fg-muted!">
         <span className="badge"
           style={{
             color: isOpen ? "var(--success)" : "var(--text-muted)",
@@ -1777,7 +1765,7 @@ export default function SurveyDetailClient({
           {survey.status === "open" ? "開放填答" : survey.status === "draft" ? "草稿" : survey.status === "closed" ? "已截止" : "封存"}
         </span>
         {survey.is_anonymous && (
-          <span className="badge" style={{ color: "var(--info)", background: "var(--info-dim)", borderColor: "var(--info)" }}>
+          <span className="badge text-info! bg-info-soft! border-info!">
             匿名問卷
           </span>
         )}
@@ -1790,13 +1778,13 @@ export default function SurveyDetailClient({
 
       {!survey.is_public && allowedDomains.length > 0 && (
         <aside
-          className="flex flex-col gap-3 rounded-xl px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-          style={{ background: "var(--info-dim)", border: "1px solid rgba(37,99,235,0.24)" }}
+          className="flex flex-col gap-3 rounded-xl px-4 py-3 sm:flex-row sm:items-center sm:justify-between bg-info-soft!"
+          style={{ border: "1px solid rgba(37,99,235,0.24)" }}
           aria-label="校務帳號填答資格"
         >
           <div className="min-w-0">
-            <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>校務帳號限定</p>
-            <p className="mt-1 text-xs leading-5" style={{ color: "var(--text-secondary)" }}>
+            <p className="text-sm font-semibold text-fg-primary!">校務帳號限定</p>
+            <p className="mt-1 text-xs leading-5 text-fg-secondary!">
               此問卷限使用 {allowedDomains.map(domain => `@${domain.replace(/^@/, "")}`).join("、")}
               的校務帳號填答。若目前帳號不符，請切換帳號後再填寫。
             </p>
@@ -1819,7 +1807,7 @@ export default function SurveyDetailClient({
               <polyline points="20 6 9 17 4 12" />
             </svg>
           </div>
-          <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>你的回應已送出</h2>
+          <h2 className="text-lg font-semibold text-fg-primary!">你的回應已送出</h2>
           {survey.is_anonymous && (
             <p className="survey-response-receipt-note text-xs">此份填答不會與你的身分連結。</p>
           )}
@@ -1839,7 +1827,7 @@ export default function SurveyDetailClient({
         </section>
       ) : !isOpen && !isReadOnly ? (
         <div className="card p-8 text-center">
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>此問卷目前不開放填答</p>
+          <p className="text-sm text-fg-muted!">此問卷目前不開放填答</p>
         </div>
       ) : (
         <form
@@ -1849,13 +1837,12 @@ export default function SurveyDetailClient({
         >
           {isReadOnly ? (
             <section
-              className="rounded-xl px-4 py-3"
-              style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
+              className="rounded-xl px-4 py-3 bg-elevated! border! border-border!"
             >
-              <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+              <p className="text-sm font-semibold text-fg-primary!">
                 此問卷已截止或封存，表單僅供檢視
               </p>
-              <p className="mt-1 text-xs leading-5" style={{ color: "var(--text-muted)" }}>
+              <p className="mt-1 text-xs leading-5 text-fg-muted!">
                 {myResponses.length > 0
                   ? "以下顯示你最近一次的填答內容，無法再修改。"
                   : "你尚未填寫過此問卷，以下為問卷題目。"}
@@ -1864,19 +1851,18 @@ export default function SurveyDetailClient({
           ) : null}
           {!isReadOnly && (!survey.is_anonymous || myResponses.length > 0) && (
             <section
-              className="space-y-3 rounded-xl px-4 py-3"
-              style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
+              className="space-y-3 rounded-xl px-4 py-3 bg-elevated! border! border-border!"
               aria-live="polite"
             >
               {survey.allow_multiple ? (
                 <>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                      <p className="text-sm font-semibold text-fg-primary!">
                         {editingResponseId ? "正在修改既有回答" : "正在填寫新的一份回答"}
                       </p>
                       {survey.is_anonymous && (
-                        <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
+                        <p className="mt-0.5 text-xs text-fg-muted!">
                           匿名回答僅能在這個瀏覽器中修改。
                         </p>
                       )}
@@ -1907,16 +1893,16 @@ export default function SurveyDetailClient({
                 </>
               ) : editingResponseId ? (
                 <div>
-                  <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                  <p className="text-sm font-semibold text-fg-primary!">
                     你已提交過這份問卷
                   </p>
-                  <p className="mt-0.5 text-xs leading-5" style={{ color: "var(--text-muted)" }}>
+                  <p className="mt-0.5 text-xs leading-5 text-fg-muted!">
                     此問卷每人僅能提交一次。目前正在修改你前次的答案。
                     {survey.is_anonymous && " 匿名回答僅能在這個瀏覽器中修改。"}
                   </p>
                 </div>
               ) : !survey.is_anonymous ? (
-                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                <p className="text-xs text-fg-muted!">
                   此問卷每人只能提交一次。
                 </p>
               ) : null}
@@ -1930,7 +1916,7 @@ export default function SurveyDetailClient({
             <div className="survey-response-meter-track" aria-hidden="true">
               <span style={{ transform: `scaleX(${responseProgress})` }} />
             </div>
-            <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+            <p className="mt-2 text-xs text-fg-muted!">
               {lastSavedAt
                 ? `已於 ${new Date(lastSavedAt).toLocaleTimeString("zh-TW", {
                   hour: "2-digit", minute: "2-digit", second: "2-digit",
@@ -1958,10 +1944,10 @@ export default function SurveyDetailClient({
             >
               <div className="flex items-start gap-2">
                 {!isDisplay && (
-                  <span className="text-xs font-bold mt-0.5 flex-shrink-0"
-                    style={{ color: "var(--primary-text)" }}>Q{numberMap.get(q.id)}</span>
+                  <span className="text-xs font-bold mt-0.5 flex-shrink-0 text-accent-text!"
+                    >Q{numberMap.get(q.id)}</span>
                 )}
-                <div className="min-w-0 flex-1" style={{ color: "var(--text-primary)" }}>
+                <div className="min-w-0 flex-1 text-fg-primary!">
                   <SurveyMarkdown
                     markdown={q.question_text}
                     className={isDisplay ? "sr-only" : "text-sm font-medium"}
@@ -1969,14 +1955,14 @@ export default function SurveyDetailClient({
                   {!isDisplay && (
                     <div className="mt-1.5 flex flex-wrap items-center gap-2">
                       {q.is_required && (
-                        <span className="inline-flex rounded px-1.5 py-0.5 text-xs font-semibold"
-                          style={{ background: "var(--danger-dim)", color: "var(--danger)" }}>
+                        <span className="inline-flex rounded px-1.5 py-0.5 text-xs font-semibold bg-danger-soft! text-danger!"
+                          >
                           必填
                         </span>
                       )}
                       {q.question_type === "multiple" && q.max_value != null && (
-                        <span className="inline-flex rounded px-1.5 py-0.5 text-xs font-semibold"
-                          style={{ background: "var(--info-dim)", color: "var(--info)" }}>
+                        <span className="inline-flex rounded px-1.5 py-0.5 text-xs font-semibold bg-info-soft! text-info!"
+                          >
                           最多選 {q.max_value} 項
                         </span>
                       )}
@@ -1994,8 +1980,8 @@ export default function SurveyDetailClient({
                   height={360}
                   unoptimized
                   sizes="(max-width: 640px) 100vw, 640px"
-                  className="max-h-72 w-full rounded-lg object-contain"
-                  style={{ border: "1px solid var(--border)" }} />
+                  className="max-h-72 w-full rounded-lg object-contain border! border-border!"
+                   />
               )}
               <QuestionInput
                 question={q}
@@ -2017,8 +2003,7 @@ export default function SurveyDetailClient({
                 <p
                   id={`question-error-${q.id}`}
                   role="alert"
-                  className="text-sm font-medium"
-                  style={{ color: "var(--danger)" }}
+                  className="text-sm font-medium text-danger!"
                 >
                   {validationError}
                 </p>
@@ -2035,7 +2020,7 @@ export default function SurveyDetailClient({
               onChange={e => setEmailCopy(e.target.checked)}
               className="accent-[var(--primary)]"
             />
-            <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
+            <span className="text-sm text-fg-secondary!">
               將回答副本寄送到我的電子郵件信箱
             </span>
           </label>}
@@ -2044,14 +2029,13 @@ export default function SurveyDetailClient({
             <button
               type="submit"
               disabled={submitting}
-              className="btn flex-1"
-              style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}
+              className="btn flex-1 bg-accent! text-accent-foreground! border-0!"
               aria-busy={submitting}>
               {submitting ? (editingResponseId ? "儲存中…" : "提交中…") : (editingResponseId ? "儲存變更" : "提交填答")}
             </button>
           </div>}
           {!isReadOnly && survey.is_anonymous && (
-            <p className="text-xs text-center" style={{ color: "var(--text-muted)" }}>
+            <p className="text-xs text-center text-fg-muted!">
               此為匿名問卷，你的身分不會公開
             </p>
           )}

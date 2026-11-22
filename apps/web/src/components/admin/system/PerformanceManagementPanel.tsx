@@ -148,7 +148,7 @@ export default function PerformanceManagementPanel() {
       <div className="mx-auto max-w-4xl">
         <div className="card flex min-h-[260px] flex-col items-center justify-center gap-3 p-8 text-center">
           <h2 className="text-lg font-semibold">無法查看數據分析</h2>
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+          <p className="text-sm text-fg-muted!">
             請洽系統管理員開啟權限。
           </p>
         </div>
@@ -163,7 +163,7 @@ export default function PerformanceManagementPanel() {
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold">績效統計儀表板</h2>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+          <p className="mt-1 text-sm text-fg-muted!">
             公開文章閱讀、公文效率與參與度概覽
           </p>
         </div>
@@ -179,11 +179,11 @@ export default function PerformanceManagementPanel() {
       <section className="card p-4">
         <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
           <label className="space-y-1.5">
-            <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>起始日期</span>
+            <span className="text-xs font-medium text-fg-muted!">起始日期</span>
             <input className="input" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
           </label>
           <label className="space-y-1.5">
-            <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>結束日期</span>
+            <span className="text-xs font-medium text-fg-muted!">結束日期</span>
             <input className="input" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           </label>
           <div className="flex items-end">
@@ -211,46 +211,46 @@ export default function PerformanceManagementPanel() {
           ["逾期率", overdueRate, `${efficiency?.overdue_count ?? 0} 件目前逾期未完成`],
         ].map(([label, value, desc]) => (
           <div key={label} className="card p-5">
-            <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>{label}</p>
-            <p className="mt-2 text-3xl font-bold leading-none" style={{ color: "var(--text-primary)" }}>
+            <p className="text-xs font-medium text-fg-muted!">{label}</p>
+            <p className="mt-2 text-3xl font-bold leading-none text-fg-primary!">
               {loading ? "..." : value}
             </p>
-            <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>{desc}</p>
+            <p className="mt-2 text-xs text-fg-muted!">{desc}</p>
           </div>
         ))}
       </section>
 
       <section className="card overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "1px solid var(--border)" }}>
+        <div className="flex items-center justify-between px-5 py-4 border-b! border-b-border!">
           <div>
             <h2 className="text-sm font-semibold">需要注意</h2>
-            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            <p className="mt-1 text-xs text-fg-muted!">
               依卡關、低參與與負載集中規則自動排序
             </p>
           </div>
-          <span className="text-xs" style={{ color: "var(--text-muted)" }}>{insights.length} 項</span>
+          <span className="text-xs text-fg-muted!">{insights.length} 項</span>
         </div>
         {insights.length === 0 ? (
-          <p className="px-5 py-8 text-sm" style={{ color: "var(--text-muted)" }}>
+          <p className="px-5 py-8 text-sm text-fg-muted!">
             目前沒有偵測到需要立即處理的異常。
           </p>
         ) : (
           <ul>
             {insights.slice(0, 6).map((item) => (
-              <li key={item.id} style={{ borderBottom: "1px solid var(--border)" }}>
+              <li key={item.id}  className="border-b! border-b-border!">
                 <Link
                   href={safeInternalHref(item.href, "/analytics")}
-                  className="block px-5 py-3 transition-colors"
-                  style={{ textDecoration: "none" }}>
+                  className="block px-5 py-3 transition-colors no-underline!"
+                  >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+                      <p className="truncate text-sm font-medium text-fg-primary!">
                         {item.title}
                       </p>
-                      <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                      <p className="mt-1 text-xs text-fg-muted!">
                         {item.description}
                       </p>
-                      <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>
+                      <p className="mt-1 text-xs text-fg-secondary!">
                         {item.recommended_action}
                       </p>
                     </div>
@@ -265,9 +265,9 @@ export default function PerformanceManagementPanel() {
 
       <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         <section className="table-container">
-          <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "1px solid var(--border)" }}>
+          <div className="flex items-center justify-between px-5 py-4 border-b! border-b-border!">
             <h2 className="text-sm font-semibold">部門處理時效</h2>
-            <span className="text-xs" style={{ color: "var(--text-muted)" }}>{ranking.length} 個部門</span>
+            <span className="text-xs text-fg-muted!">{ranking.length} 個部門</span>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full">
@@ -294,27 +294,27 @@ export default function PerformanceManagementPanel() {
         </section>
 
         <section className="card overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "1px solid var(--border)" }}>
+          <div className="flex items-center justify-between px-5 py-4 border-b! border-b-border!">
             <h2 className="text-sm font-semibold">超時待簽核</h2>
-            <span className="text-xs" style={{ color: "var(--text-muted)" }}>48 小時以上</span>
+            <span className="text-xs text-fg-muted!">48 小時以上</span>
           </div>
           {!canViewPending ? (
-            <p className="px-5 py-8 text-sm" style={{ color: "var(--text-muted)" }}>
+            <p className="px-5 py-8 text-sm text-fg-muted!">
               需要 document:admin 權限才能查看待簽核警告。
             </p>
           ) : pending.length === 0 ? (
-            <p className="px-5 py-8 text-sm" style={{ color: "var(--text-muted)" }}>
+            <p className="px-5 py-8 text-sm text-fg-muted!">
               目前沒有超時待簽核項目。
             </p>
           ) : (
-            <ul className="divide-y" style={{ borderColor: "var(--border)" }}>
+            <ul className="divide-y border-border!">
               {pending.slice(0, 6).map((item) => (
                 <li key={item.approval_id} className="px-5 py-3">
-                  <Link href={`/documents/${item.document_id}`} className="block" style={{ textDecoration: "none" }}>
-                    <p className="truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+                  <Link href={`/documents/${item.document_id}`} className="block no-underline!">
+                    <p className="truncate text-sm font-medium text-fg-primary!">
                       {item.document_title}
                     </p>
-                    <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                    <p className="mt-1 text-xs text-fg-muted!">
                       第 {item.step_order} 關，已等待 {fmtHours(item.waiting_hours)}
                     </p>
                   </Link>
@@ -327,21 +327,21 @@ export default function PerformanceManagementPanel() {
 
       <div className="grid gap-4 xl:grid-cols-2">
         <section className="card overflow-hidden">
-          <div className="px-5 py-4" style={{ borderBottom: "1px solid var(--border)" }}>
+          <div className="px-5 py-4 border-b! border-b-border!">
             <h2 className="text-sm font-semibold">公告閱讀參與</h2>
           </div>
           <ul>
             {announcements.length === 0 ? (
-              <li className="px-5 py-8 text-sm" style={{ color: "var(--text-muted)" }}>目前沒有資料</li>
+              <li className="px-5 py-8 text-sm text-fg-muted!">目前沒有資料</li>
             ) : announcements.map((item) => (
-              <li key={item.announcement_id} className="flex items-center justify-between gap-3 px-5 py-3"
-                style={{ borderBottom: "1px solid var(--border)" }}>
+              <li key={item.announcement_id} className="flex items-center justify-between gap-3 px-5 py-3 border-b! border-b-border!"
+                >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{item.title}</p>
-                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>{fmtDate(item.published_at)}</p>
+                  <p className="text-xs text-fg-muted!">{fmtDate(item.published_at)}</p>
                 </div>
-                <span className="rounded-full px-2.5 py-1 text-xs font-medium"
-                  style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
+                <span className="rounded-full px-2.5 py-1 text-xs font-medium bg-accent-soft! text-accent-text!"
+                  >
                   {item.reader_count} 次閱讀
                 </span>
               </li>
@@ -350,23 +350,23 @@ export default function PerformanceManagementPanel() {
         </section>
 
         <section className="card overflow-hidden">
-          <div className="px-5 py-4" style={{ borderBottom: "1px solid var(--border)" }}>
+          <div className="px-5 py-4 border-b! border-b-border!">
             <h2 className="text-sm font-semibold">問卷回應參與</h2>
           </div>
           <ul>
             {surveys.length === 0 ? (
-              <li className="px-5 py-8 text-sm" style={{ color: "var(--text-muted)" }}>目前沒有資料</li>
+              <li className="px-5 py-8 text-sm text-fg-muted!">目前沒有資料</li>
             ) : surveys.map((item) => (
-              <li key={item.survey_id} className="flex items-center justify-between gap-3 px-5 py-3"
-                style={{ borderBottom: "1px solid var(--border)" }}>
+              <li key={item.survey_id} className="flex items-center justify-between gap-3 px-5 py-3 border-b! border-b-border!"
+                >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{item.title}</p>
-                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  <p className="text-xs text-fg-muted!">
                     {SURVEY_STATUS_LABEL[item.status] ?? item.status} · {fmtDate(item.created_at)}
                   </p>
                 </div>
-                <span className="rounded-full px-2.5 py-1 text-xs font-medium"
-                  style={{ background: "var(--info-dim)", color: "var(--info)" }}>
+                <span className="rounded-full px-2.5 py-1 text-xs font-medium bg-info-soft! text-info!"
+                  >
                   {item.response_count} 份回應
                 </span>
               </li>
@@ -405,12 +405,12 @@ function ArticleAnalyticsSection({
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h2 id="article-analytics-heading" className="text-base font-semibold">公開文章閱讀統計</h2>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+          <p className="mt-1 text-sm text-fg-muted!">
             追蹤文章瀏覽量、匿名訪客、裝置分布與熱門內容
           </p>
         </div>
         {data && (
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+          <p className="text-xs text-fg-muted!">
             {data.date_from} – {data.date_to} · 僅統計已發布文章
           </p>
         )}
@@ -423,11 +423,11 @@ function ArticleAnalyticsSection({
           ["已發布文章", number.format(data?.published_articles ?? 0), "目前公開可閱讀的文章"],
         ].map(([label, value, description]) => (
           <div key={label} className="card p-5">
-            <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>{label}</p>
+            <p className="text-xs font-medium text-fg-muted!">{label}</p>
             <p className="mt-2 text-3xl font-bold leading-none tabular-nums">
               {loading && !data ? "..." : value}
             </p>
-            <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>{description}</p>
+            <p className="mt-2 text-xs text-fg-muted!">{description}</p>
           </div>
         ))}
       </div>
@@ -437,9 +437,9 @@ function ArticleAnalyticsSection({
           <div className="flex items-start justify-between gap-3">
             <div>
               <h3 id="article-daily-heading" className="text-sm font-semibold">每日閱讀量</h3>
-              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>最近 14 天</p>
+              <p className="mt-1 text-xs text-fg-muted!">最近 14 天</p>
             </div>
-            <span className="text-xs font-medium" style={{ color: "var(--primary-text)" }}>
+            <span className="text-xs font-medium text-accent-text!">
               {peakDay.views ? `最高 ${number.format(peakDay.views)} 次` : "尚無閱讀"}
             </span>
           </div>
@@ -448,19 +448,19 @@ function ArticleAnalyticsSection({
               Array.from({ length: 14 }, (_, index) => (
                 <div key={index} className="flex min-w-0 flex-1 flex-col items-center gap-2">
                   <div
-                    className="w-full animate-pulse rounded-sm"
-                    style={{ height: `${24 + (index % 4) * 16}px`, background: "var(--bg-hover)" }}
+                    className="w-full animate-pulse rounded-sm bg-hover!"
+                    style={{ height: `${24 + (index % 4) * 16}px` }}
                   />
-                  <span className="h-3 w-7 animate-pulse rounded" style={{ background: "var(--bg-hover)" }} />
+                  <span className="h-3 w-7 animate-pulse rounded bg-hover!"  />
                 </div>
               ))
             ) : recentDays.length === 0 ? (
-              <p className="self-center text-sm" style={{ color: "var(--text-muted)" }}>
+              <p className="self-center text-sm text-fg-muted!">
                 尚未收集到文章閱讀資料。
               </p>
             ) : recentDays.map((item) => (
               <div key={item.date} className="flex min-w-0 flex-1 flex-col items-center gap-2">
-                <span className="text-xs font-medium tabular-nums" style={{ color: "var(--text-secondary)" }}>
+                <span className="text-xs font-medium tabular-nums text-fg-secondary!">
                   {item.views}
                 </span>
                 <div
@@ -471,7 +471,7 @@ function ArticleAnalyticsSection({
                   }}
                   title={`${item.date}：${item.views} 次閱讀，${item.unique_visitors} 位訪客`}
                 />
-                <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                <span className="text-xs text-fg-muted!">
                   {item.date.slice(5)}
                 </span>
               </div>
@@ -480,33 +480,33 @@ function ArticleAnalyticsSection({
         </section>
 
         <section className="card overflow-hidden" aria-labelledby="article-device-heading">
-          <div className="px-5 py-4" style={{ borderBottom: "1px solid var(--border)" }}>
+          <div className="px-5 py-4 border-b! border-b-border!">
             <h3 id="article-device-heading" className="text-sm font-semibold">閱讀裝置分布</h3>
-            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            <p className="mt-1 text-xs text-fg-muted!">
               依瀏覽器視窗寬度判斷
             </p>
           </div>
           {data?.device_metrics.length ? (
-            <div className="divide-y" style={{ borderColor: "var(--border)" }}>
+            <div className="divide-y border-border!">
               {data.device_metrics.map((item) => (
                 <div key={item.device_class} className="px-5 py-3.5">
                   <div className="flex items-center justify-between gap-3 text-sm">
                     <span className="font-medium">{ARTICLE_DEVICE_LABEL[item.device_class]}</span>
-                    <span className="tabular-nums" style={{ color: "var(--text-secondary)" }}>
+                    <span className="tabular-nums text-fg-secondary!">
                       {number.format(item.views)} 次 · {(item.share * 100).toFixed(1)}%
                     </span>
                   </div>
-                  <div className="mt-2 h-1.5 overflow-hidden rounded-full" style={{ background: "var(--bg-hover)" }}>
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-hover!">
                     <div
-                      className="h-full rounded-full"
-                      style={{ width: `${Math.max(item.share * 100, 2)}%`, background: "var(--primary)" }}
+                      className="h-full rounded-full bg-accent!"
+                      style={{ width: `${Math.max(item.share * 100, 2)}%` }}
                     />
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="px-5 py-10 text-sm" style={{ color: "var(--text-muted)" }}>
+            <p className="px-5 py-10 text-sm text-fg-muted!">
               尚未收集到裝置分布資料。
             </p>
           )}
@@ -514,54 +514,53 @@ function ArticleAnalyticsSection({
       </div>
 
       <section className="card overflow-hidden" aria-labelledby="article-top-heading">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4" style={{ borderBottom: "1px solid var(--border)" }}>
+        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b! border-b-border!">
           <div>
             <h3 id="article-top-heading" className="text-sm font-semibold">熱門文章</h3>
-            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>依目前日期範圍的閱讀量排序</p>
+            <p className="mt-1 text-xs text-fg-muted!">依目前日期範圍的閱讀量排序</p>
           </div>
-          <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+          <span className="text-xs text-fg-muted!">
             前 {data?.top_articles.length ?? 0} 篇
           </span>
         </div>
         {loading && !data ? (
           <div className="space-y-4 px-5 py-5">
             {Array.from({ length: 3 }, (_, index) => (
-              <div key={index} className="h-12 animate-pulse rounded" style={{ background: "var(--bg-hover)" }} />
+              <div key={index} className="h-12 animate-pulse rounded bg-hover!"  />
             ))}
           </div>
         ) : data?.top_articles.length ? (
-          <div className="divide-y" style={{ borderColor: "var(--border)" }}>
+          <div className="divide-y border-border!">
             {data.top_articles.map((item) => (
               <div key={item.page_id} className="px-5 py-3.5">
                 <div className="flex items-start justify-between gap-4">
                   <Link
                     href={safeInternalHref(`/articles/${encodeURIComponent(item.slug)}`, "/analytics")}
-                    className="min-w-0 flex-1"
-                    style={{ textDecoration: "none" }}
+                    className="min-w-0 flex-1 no-underline!"
                   >
                     <p className="truncate text-sm font-medium">{item.title}</p>
-                    <p className="mt-0.5 truncate font-mono text-xs" style={{ color: "var(--text-muted)" }}>
+                    <p className="mt-0.5 truncate font-mono text-xs text-fg-muted!">
                       /articles/{item.slug}
                     </p>
                   </Link>
                   <div className="shrink-0 text-right">
                     <p className="text-sm font-semibold tabular-nums">{number.format(item.views)} 次</p>
-                    <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                    <p className="text-xs text-fg-muted!">
                       {number.format(item.unique_visitors)} 位訪客
                     </p>
                   </div>
                 </div>
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full" style={{ background: "var(--bg-hover)" }}>
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-hover!">
                   <div
-                    className="h-full rounded-full"
-                    style={{ width: `${Math.max((item.views / maxArticleViews) * 100, 3)}%`, background: "var(--primary)" }}
+                    className="h-full rounded-full bg-accent!"
+                    style={{ width: `${Math.max((item.views / maxArticleViews) * 100, 3)}%` }}
                   />
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <p className="px-5 py-10 text-sm" style={{ color: "var(--text-muted)" }}>
+          <p className="px-5 py-10 text-sm text-fg-muted!">
             尚未收集到文章閱讀資料；文章公開後，訪客開啟文章頁就會開始累積。
           </p>
         )}
@@ -590,12 +589,12 @@ function ProductAnalyticsSection({
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h2 id="product-analytics-heading" className="text-base font-semibold">平台使用統計</h2>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+          <p className="mt-1 text-sm text-fg-muted!">
             掌握帳號成長與各頁面的實際使用情形
           </p>
         </div>
         {data && (
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+          <p className="text-xs text-fg-muted!">
             {data.date_from} – {data.date_to} · 每 24 小時更新
           </p>
         )}
@@ -606,9 +605,9 @@ function ProductAnalyticsSection({
           <div className="flex items-start justify-between gap-3">
             <div>
               <h3 id="registration-chart-heading" className="text-sm font-semibold">每日帳號創建量</h3>
-              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>最近 14 天</p>
+              <p className="mt-1 text-xs text-fg-muted!">最近 14 天</p>
             </div>
-            <span className="text-xs font-medium" style={{ color: "var(--primary-text)" }}>
+            <span className="text-xs font-medium text-accent-text!">
               平均 {avgRegistrations.toFixed(1)} / 日
             </span>
           </div>
@@ -616,15 +615,15 @@ function ProductAnalyticsSection({
             {loading && !data ? (
               Array.from({ length: 14 }, (_, index) => (
                 <div key={index} className="flex min-w-0 flex-1 flex-col items-center gap-2">
-                  <div className="w-full animate-pulse rounded-sm" style={{ height: `${24 + (index % 4) * 16}px`, background: "var(--bg-hover)" }} />
-                  <span className="h-3 w-7 animate-pulse rounded" style={{ background: "var(--bg-hover)" }} />
+                  <div className="w-full animate-pulse rounded-sm bg-hover!" style={{ height: `${24 + (index % 4) * 16}px` }} />
+                  <span className="h-3 w-7 animate-pulse rounded bg-hover!"  />
                 </div>
               ))
             ) : recentDays.length === 0 ? (
-              <p className="self-center text-sm" style={{ color: "var(--text-muted)" }}>目前沒有帳號資料。</p>
+              <p className="self-center text-sm text-fg-muted!">目前沒有帳號資料。</p>
             ) : recentDays.map((item) => (
               <div key={item.date} className="flex min-w-0 flex-1 flex-col items-center gap-2">
-                <span className="text-xs font-medium tabular-nums" style={{ color: "var(--text-secondary)" }}>
+                <span className="text-xs font-medium tabular-nums text-fg-secondary!">
                   {item.count}
                 </span>
                 <div
@@ -635,7 +634,7 @@ function ProductAnalyticsSection({
                   }}
                   title={`${item.date}：${item.count} 個帳號`}
                 />
-                <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                <span className="text-xs text-fg-muted!">
                   {item.date.slice(5)}
                 </span>
               </div>
@@ -644,49 +643,49 @@ function ProductAnalyticsSection({
         </section>
 
         <section className="card overflow-hidden" aria-labelledby="page-summary-heading">
-          <div className="flex flex-wrap items-start justify-between gap-4 px-5 py-4" style={{ borderBottom: "1px solid var(--border)" }}>
+          <div className="flex flex-wrap items-start justify-between gap-4 px-5 py-4 border-b! border-b-border!">
             <div>
               <h3 id="page-summary-heading" className="text-sm font-semibold">頁面點閱率</h3>
-              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>各頁面佔全部瀏覽量的比例</p>
+              <p className="mt-1 text-xs text-fg-muted!">各頁面佔全部瀏覽量的比例</p>
             </div>
             <div className="flex gap-5 text-right">
               <div>
                 <p className="text-lg font-semibold tabular-nums">{number.format(data?.total_page_views ?? 0)}</p>
-                <p className="text-xs" style={{ color: "var(--text-muted)" }}>總瀏覽</p>
+                <p className="text-xs text-fg-muted!">總瀏覽</p>
               </div>
               <div>
                 <p className="text-lg font-semibold tabular-nums">{data?.active_pages ?? 0}</p>
-                <p className="text-xs" style={{ color: "var(--text-muted)" }}>活躍頁面</p>
+                <p className="text-xs text-fg-muted!">活躍頁面</p>
               </div>
             </div>
           </div>
           {data?.page_metrics.length ? (
-            <div className="divide-y" style={{ borderColor: "var(--border)" }}>
+            <div className="divide-y border-border!">
               {data.page_metrics.slice(0, 8).map((item) => (
                 <div key={item.path} className="px-5 py-3.5">
                   <div className="flex items-center justify-between gap-3 text-sm">
                     <div className="min-w-0">
                       <p className="truncate font-medium">{item.label}</p>
-                      <p className="mt-0.5 truncate font-mono text-xs" style={{ color: "var(--text-muted)" }}>{item.path}</p>
+                      <p className="mt-0.5 truncate font-mono text-xs text-fg-muted!">{item.path}</p>
                     </div>
                     <div className="flex shrink-0 items-baseline gap-3 text-right">
                       <span className="text-sm font-semibold tabular-nums">{number.format(item.views)}</span>
-                      <span className="w-14 text-xs tabular-nums" style={{ color: "var(--primary-text)" }}>
+                      <span className="w-14 text-xs tabular-nums text-accent-text!">
                         {(item.click_rate * 100).toFixed(1)}%
                       </span>
                     </div>
                   </div>
-                  <div className="mt-2 h-1.5 overflow-hidden rounded-full" style={{ background: "var(--bg-hover)" }}>
-                    <div className="h-full rounded-full" style={{ width: `${Math.max((item.views / maxViews) * 100, 3)}%`, background: "var(--primary)" }} />
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-hover!">
+                    <div className="h-full rounded-full bg-accent!" style={{ width: `${Math.max((item.views / maxViews) * 100, 3)}%` }} />
                   </div>
-                  <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                  <p className="mt-1 text-xs text-fg-muted!">
                     {number.format(item.unique_visitors)} 位不重複使用者
                   </p>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="px-5 py-10 text-sm" style={{ color: "var(--text-muted)" }}>
+            <p className="px-5 py-10 text-sm text-fg-muted!">
               尚未收集到頁面瀏覽資料；部署後會從使用者開始瀏覽時累積。
             </p>
           )}
@@ -699,10 +698,10 @@ function ProductAnalyticsSection({
           ["頁面總瀏覽", number.format(data?.total_page_views ?? 0), "已登入使用者的頁面瀏覽"],
           ["活躍頁面", number.format(data?.active_pages ?? 0), "期間內有瀏覽紀錄的頁面"],
         ].map(([label, value, description]) => (
-          <div key={label} className="border-t pt-3" style={{ borderColor: "var(--border-strong)" }}>
-            <p className="text-xs" style={{ color: "var(--text-muted)" }}>{label}</p>
+          <div key={label} className="border-t pt-3 border-border-strong!">
+            <p className="text-xs text-fg-muted!">{label}</p>
             <p className="mt-1 text-xl font-semibold tabular-nums">{value}</p>
-            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{description}</p>
+            <p className="mt-1 text-xs text-fg-muted!">{description}</p>
           </div>
         ))}
       </div>

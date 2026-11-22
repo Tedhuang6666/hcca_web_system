@@ -149,8 +149,8 @@ function SelectInput(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
 
 function Metric({ label, value, tone = "normal" }: { label: string; value: number | string; tone?: "normal" | "warning" }) {
   return (
-    <div className="rounded-xl px-3 py-2" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-      <p className="text-xs" style={{ color: "var(--text-muted)" }}>{label}</p>
+    <div className="rounded-xl px-3 py-2 bg-elevated! border! border-border!">
+      <p className="text-xs text-fg-muted!">{label}</p>
       <p className="text-lg font-semibold mt-0.5" style={{ color: tone === "warning" ? "var(--warning)" : "var(--text-primary)" }}>{value}</p>
     </div>
   );
@@ -254,10 +254,10 @@ function OrganizationPermissionPanel() {
 
   return (
     <div className="min-h-[calc(100dvh-7rem)] min-h-0 flex flex-col">
-      <header className="flex flex-col items-stretch gap-3 px-4 py-4 flex-shrink-0 sm:flex-row sm:items-center sm:justify-between sm:px-5" style={{ borderBottom: "1px solid var(--border)" }}>
+      <header className="flex flex-col items-stretch gap-3 px-4 py-4 flex-shrink-0 sm:flex-row sm:items-center sm:justify-between sm:px-5 border-b! border-b-border!">
         <div className="min-w-0">
-          <h1 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>組織、職位與權限</h1>
-          <p className="text-xs mt-0.5 truncate" style={{ color: "var(--text-muted)" }}>
+          <h1 className="text-lg font-semibold text-fg-primary!">組織、職位與權限</h1>
+          <p className="text-xs mt-0.5 truncate text-fg-muted!">
             {loading ? "載入中..." : `${activeOrgs.length} 個有效組織 · ${orgs.length - activeOrgs.length} 個停用 · ${activePositions.length} 個可指派職位`}
           </p>
         </div>
@@ -266,8 +266,7 @@ function OrganizationPermissionPanel() {
           <SmallButton onClick={() => setShowNewOrg(true)} tone="primary"><Icon name="plus" />新增組織</SmallButton>
           <Link
             href="/admin/permissions/positions/new"
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-            style={{ color: "var(--primary-text)", border: "1px solid var(--border-strong)", background: "var(--primary-dim)" }}
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors text-accent-text! border! border-border-strong! bg-accent-soft!"
           >
             <Icon name="plus" />建立職位
           </Link>
@@ -301,8 +300,8 @@ function OrganizationPermissionPanel() {
           </aside>
 
           <section className={`w-full min-h-0 lg:w-[410px] xl:w-[470px] flex-shrink-0 overflow-hidden flex-col ${mobileDetailOpen ? "hidden lg:flex" : "flex"}`} style={{ borderRight: "1px solid var(--border)" }}>
-            <div className="p-3 space-y-3 flex-shrink-0" style={{ borderBottom: "1px solid var(--border)" }}>
-              <div className="grid grid-cols-3 gap-1 rounded-xl p-1" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+            <div className="p-3 space-y-3 flex-shrink-0 border-b! border-b-border!">
+              <div className="grid grid-cols-3 gap-1 rounded-xl p-1 bg-elevated! border! border-border!">
                 {[
                   ["orgs", "組織架構", "org"],
                   ["members", "幹部任期", "users"],
@@ -338,8 +337,7 @@ function OrganizationPermissionPanel() {
 
           <section className={`${mobileDetailOpen ? "flex" : "hidden"} lg:flex flex-1 min-h-0 min-w-0 flex-col overflow-y-auto`}>
             <div
-              className="lg:hidden sticky top-0 z-10 flex-shrink-0 p-3"
-              style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-surface)" }}
+              className="lg:hidden sticky top-0 z-10 flex-shrink-0 p-3 border-b! border-b-border! bg-surface!"
             >
               <MobileBackToList onBack={() => setMobileDetailOpen(false)} label="返回清單" />
             </div>
@@ -366,7 +364,7 @@ function OrganizationPermissionPanel() {
       {showWizard && <OnboardingWizard users={users} positions={activePositions} orgs={activeOrgs} permCodes={permCodes} onClose={() => setShowWizard(false)} onDone={(close = true) => { if (close) setShowWizard(false); load(); }} />}
       {confirmState && (
         <Modal title={confirmState.title} onClose={() => setConfirmState(null)}>
-          <p className="text-sm leading-6" style={{ color: "var(--text-secondary)" }}>{confirmState.body}</p>
+          <p className="text-sm leading-6 text-fg-secondary!">{confirmState.body}</p>
           <div className="flex justify-end gap-2">
             <SmallButton onClick={() => setConfirmState(null)}>取消</SmallButton>
             <SmallButton onClick={runConfirm} tone="danger">確認</SmallButton>
@@ -421,7 +419,7 @@ function OrgWorkbenchSidebar({
           <span className="text-xs" style={{ transform: open ? "rotate(90deg)" : "none" }}>›</span>
           <span className="flex-1 truncate text-xs font-semibold">{org.name}</span>
           {!org.is_active && <span className="text-xs">停用</span>}
-          <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}>{orgPositions.length}</span>
+          <span className="text-xs px-1.5 py-0.5 rounded-full bg-elevated! text-fg-muted!">{orgPositions.length}</span>
         </button>
         {open && (
           <div className="ml-4 space-y-0.5">
@@ -435,7 +433,7 @@ function OrgWorkbenchSidebar({
                 <span className="w-1.5 h-1.5 rounded-full" style={{ background: selectedPositionId === position.id ? "var(--primary)" : "var(--border-strong)" }} />
                 <span className="flex-1 truncate text-xs">
                   {position.name}
-                  <span className="ml-1 text-xs" style={{ color: "var(--text-disabled)" }}>
+                  <span className="ml-1 text-xs text-fg-disabled!">
                     {POSITION_CATEGORY_LABEL[position.category]}
                   </span>
                 </span>
@@ -450,9 +448,9 @@ function OrgWorkbenchSidebar({
   };
   return (
     <div className="h-full flex flex-col">
-      <div className="px-4 py-3 flex-shrink-0" style={{ borderBottom: "1px solid var(--border)" }}>
-        <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>組織與職位</p>
-        <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>停用組織保留歷史資料，但不會進入新建與指派流程。</p>
+      <div className="px-4 py-3 flex-shrink-0 border-b! border-b-border!">
+        <p className="text-xs font-semibold uppercase tracking-widest text-fg-muted!">組織與職位</p>
+        <p className="text-xs mt-1 text-fg-muted!">停用組織保留歷史資料，但不會進入新建與指派流程。</p>
       </div>
       <nav className="flex-1 overflow-y-auto p-2 space-y-0.5">
         {childrenOf(null).map((org) => renderOrg(org))}
@@ -483,17 +481,17 @@ function WorkbenchList({
       <div className="flex-1 overflow-y-auto">
         {rows.map((u) => (
           <button key={u.id} onClick={() => onSelect({ type: "user", id: u.id })} className="w-full flex items-start gap-3 px-4 py-3 text-left cursor-pointer transition-colors" style={detail?.type === "user" && detail.id === u.id ? { background: "var(--primary-dim)" } : { borderBottom: "1px solid var(--border)" }}>
-            <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0" style={{ background: "var(--bg-elevated)", color: "var(--primary-text)" }}>{u.display_name.charAt(0)}</div>
+            <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 bg-elevated! text-accent-text!">{u.display_name.charAt(0)}</div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5 flex-wrap">
-                <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{u.display_name}</p>
-                {u.is_owner && <span className="text-xs px-1.5 py-0.5 rounded font-semibold" style={{ color: "var(--danger)", background: "var(--danger-dim)" }}>擁有者</span>}
-                {u.is_superuser && !u.is_owner && <span className="text-xs px-1.5 py-0.5 rounded" style={{ color: "var(--warning)", background: "var(--warning-dim)" }}>超管</span>}
-                {!u.is_active && <span className="text-xs px-1.5 py-0.5 rounded" style={{ color: "var(--danger)", background: "var(--danger-dim)" }}>停用</span>}
+                <p className="text-sm font-medium text-fg-primary!">{u.display_name}</p>
+                {u.is_owner && <span className="text-xs px-1.5 py-0.5 rounded font-semibold text-danger! bg-danger-soft!">擁有者</span>}
+                {u.is_superuser && !u.is_owner && <span className="text-xs px-1.5 py-0.5 rounded text-warning! bg-warning-soft!">超管</span>}
+                {!u.is_active && <span className="text-xs px-1.5 py-0.5 rounded text-danger! bg-danger-soft!">停用</span>}
               </div>
-              <p className="text-xs truncate" style={{ color: "var(--text-muted)" }}>{u.email}</p>
+              <p className="text-xs truncate text-fg-muted!">{u.email}</p>
               <div className="flex flex-wrap gap-1 mt-1">
-                {u.positions.slice(0, 3).map((p) => <span key={p.user_position_id ?? p.id} className="text-xs px-1.5 py-0.5 rounded" style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}>{POSITION_CATEGORY_LABEL[p.category]} · {p.org_name} · {p.name}</span>)}
+                {u.positions.slice(0, 3).map((p) => <span key={p.user_position_id ?? p.id} className="text-xs px-1.5 py-0.5 rounded border! border-border! text-fg-muted!">{POSITION_CATEGORY_LABEL[p.category]} · {p.org_name} · {p.name}</span>)}
               </div>
             </div>
           </button>
@@ -514,18 +512,18 @@ function WorkbenchList({
           const holderPositions = positions.filter((p) => p.permission_codes.includes(perm.code));
           const holders = users.filter((u) => u.effective_permissions.includes(perm.code));
           return (
-            <div key={perm.code} className="rounded-xl p-3 space-y-2" style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
+            <div key={perm.code} className="rounded-xl p-3 space-y-2 border! border-border! bg-elevated!">
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{perm.label}</p>
+                  <p className="text-sm font-semibold text-fg-primary!">{perm.label}</p>
                   <p className="text-xs font-mono" style={{ color: highRisk(perm.code) ? "var(--warning)" : "var(--text-muted)" }}>{perm.code}</p>
                 </div>
-                <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>{holders.length} 人</span>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-accent-soft! text-accent-text!">{holders.length} 人</span>
               </div>
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>{perm.desc}</p>
+              <p className="text-xs text-fg-muted!">{perm.desc}</p>
               <div className="flex flex-wrap gap-1">
                 {holderPositions.slice(0, 5).map((p) => (
-                  <button key={p.id} onClick={() => onSelect({ type: "position", id: p.id })} className="text-xs px-2 py-0.5 rounded-full cursor-pointer" style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>{POSITION_CATEGORY_LABEL[p.category]} · {p.org_name} · {p.name}</button>
+                  <button key={p.id} onClick={() => onSelect({ type: "position", id: p.id })} className="text-xs px-2 py-0.5 rounded-full cursor-pointer border! border-border! text-fg-secondary!">{POSITION_CATEGORY_LABEL[p.category]} · {p.org_name} · {p.name}</button>
                 ))}
               </div>
             </div>
@@ -579,13 +577,13 @@ function WorkbenchList({
   );
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="p-4" style={{ borderBottom: "1px solid var(--border)" }}>
-        <div className="rounded-xl p-3" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>組織總覽</p>
-          <p className="text-base font-semibold mt-0.5" style={{ color: "var(--text-primary)" }}>
+      <div className="p-4 border-b! border-b-border!">
+        <div className="rounded-xl p-3 bg-elevated! border! border-border!">
+          <p className="text-xs text-fg-muted!">組織總覽</p>
+          <p className="text-base font-semibold mt-0.5 text-fg-primary!">
             {orgs.filter((item) => item.is_active).length} 個有效組織
           </p>
-          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+          <p className="text-xs mt-1 text-fg-muted!">
             {orgs.filter((item) => !item.is_active).length} 個停用 · 目前選取：{org?.name ?? "未選擇"}
           </p>
         </div>
@@ -607,20 +605,20 @@ function WorkbenchList({
           >
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
-                <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{item.name}</p>
+                <p className="text-sm font-medium text-fg-primary!">{item.name}</p>
                 {item.parent_id && (
-                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  <p className="text-xs text-fg-muted!">
                     階層 {depth + 1}
                   </p>
                 )}
               </div>
               {!item.is_active && (
-                <span className="text-xs px-1.5 py-0.5 rounded" style={{ color: "var(--warning)", border: "1px solid var(--warning-border)" }}>
+                <span className="text-xs px-1.5 py-0.5 rounded text-warning! border! border-warning-border!">
                   已停用
                 </span>
               )}
             </div>
-            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+            <p className="text-xs mt-0.5 text-fg-muted!">
               {item.is_active ? "可建立與指派" : "僅保留歷史資料"} · {itemPositions.length} 個職位 · {orgMemberCount(item.id)} 位成員 · {childCount(item.id)} 個下層組織
             </p>
           </button>
@@ -662,7 +660,7 @@ function DetailPanel({
   if (selectedOrg) {
     return <OrgPanel org={selectedOrg} orgs={orgs} positions={positions} users={users} permCodes={permCodes} onRefresh={onRefresh} onSelect={onSelect} onConfirm={onConfirm} metrics={metrics} />;
   }
-  return <div className="p-6 text-sm" style={{ color: "var(--text-muted)" }}>尚無可管理資料</div>;
+  return <div className="p-6 text-sm text-fg-muted!">尚無可管理資料</div>;
 }
 
 function OrgPanel({
@@ -817,11 +815,11 @@ function OrgPanel({
     <div className="w-full p-5 space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>組織架構</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-fg-muted!">組織架構</p>
           <div className="flex flex-wrap items-center gap-2 mt-1">
-            <h2 className="text-xl font-semibold break-words" style={{ color: "var(--text-primary)" }}>{org.name}</h2>
+            <h2 className="text-xl font-semibold break-words text-fg-primary!">{org.name}</h2>
             {!org.is_active && (
-              <span className="text-xs px-2 py-0.5 rounded-full" style={{ color: "var(--warning)", border: "1px solid var(--warning-border)", background: "var(--warning-dim)" }}>
+              <span className="text-xs px-2 py-0.5 rounded-full text-warning! border! border-warning-border! bg-warning-soft!">
                 已停用
               </span>
             )}
@@ -842,15 +840,15 @@ function OrgPanel({
         <Metric label="空職位" value={metrics.orphanPositions.filter((p) => p.org_id === org.id).length} />
         <Metric label="高風險人員" value={metrics.riskyUsers.filter((u) => orgMembers.some((m) => m.id === u.id)).length} tone="warning" />
       </div>
-      <section className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-        <div className="flex items-center justify-between px-4 py-3" style={{ background: "var(--bg-elevated)", borderBottom: "1px solid var(--border)" }}>
+      <section className="rounded-xl overflow-hidden border! border-border!">
+        <div className="flex items-center justify-between px-4 py-3 bg-elevated! border-b! border-b-border!">
           <div>
-            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>職位清單</h3>
+            <h3 className="text-sm font-semibold text-fg-primary!">職位清單</h3>
           </div>
-          <span className="text-xs" style={{ color: "var(--text-muted)" }}>{orgPositions.length} 個</span>
+          <span className="text-xs text-fg-muted!">{orgPositions.length} 個</span>
         </div>
         {orgPositions.length === 0 ? (
-          <p className="px-4 py-6 text-center text-sm" style={{ color: "var(--text-muted)" }}>此組織尚無職位</p>
+          <p className="px-4 py-6 text-center text-sm text-fg-muted!">此組織尚無職位</p>
         ) : (
           <div>
             {orgPositions.map((position, index) => {
@@ -863,34 +861,34 @@ function OrgPanel({
                   className="flex min-h-11 w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/5"
                   style={index < orgPositions.length - 1 ? { borderBottom: "1px solid var(--border)" } : undefined}
                 >
-                  <span className="h-2 w-2 flex-shrink-0 rounded-full" style={{ background: "var(--primary)" }} />
+                  <span className="h-2 w-2 flex-shrink-0 rounded-full bg-accent!"  />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{position.name}</span>
-                    <span className="mt-0.5 block truncate text-xs" style={{ color: "var(--text-muted)" }}>
+                    <span className="block truncate text-sm font-medium text-fg-primary!">{position.name}</span>
+                    <span className="mt-0.5 block truncate text-xs text-fg-muted!">
                       {POSITION_CATEGORY_LABEL[position.category]} · {position.permission_codes.length} 個權限
                     </span>
                   </span>
-                  <span className="flex-shrink-0 text-xs" style={{ color: "var(--text-muted)" }}>{memberCount} 位成員</span>
-                  <span aria-hidden="true" style={{ color: "var(--text-disabled)" }}>›</span>
+                  <span className="flex-shrink-0 text-xs text-fg-muted!">{memberCount} 位成員</span>
+                  <span aria-hidden="true"  className="text-fg-disabled!">›</span>
                 </button>
               );
             })}
           </div>
         )}
       </section>
-      <section className="rounded-xl p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
+      <section className="rounded-xl p-4 space-y-3 border! border-border!">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>組織資料</h3>
+          <h3 className="text-sm font-semibold text-fg-primary!">組織資料</h3>
           <SmallButton onClick={saveDetails} tone="primary" disabled={saving !== null}>
             <Icon name="edit" />{saving === "details" ? "儲存中…" : "儲存組織資料"}
           </SmallButton>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label className="text-xs" style={{ color: "var(--text-muted)" }}>名稱<TextInput value={name} onChange={(e) => setName(e.target.value)} className="mt-1" /></label>
-          <label className="text-xs" style={{ color: "var(--text-muted)" }}>字號前綴<TextInput value={prefix} onChange={(e) => setPrefix(e.target.value)} className="mt-1" placeholder="例：嶺代" /></label>
-          <label className="text-xs sm:col-span-2" style={{ color: "var(--text-muted)" }}>描述<TextInput value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1" /></label>
-          <label className="text-xs sm:col-span-2" style={{ color: "var(--text-muted)" }}>上層組織<SelectInput value={parentId} onChange={(e) => setParentId(e.target.value)} className="mt-1"><option value="">無（頂層）</option>{orgs.filter((o) => o.is_active && o.id !== org.id && !descendantIds.has(o.id)).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</SelectInput></label>
-          <label className="text-xs sm:col-span-2" style={{ color: "var(--text-muted)" }}>
+          <label className="text-xs text-fg-muted!">名稱<TextInput value={name} onChange={(e) => setName(e.target.value)} className="mt-1" /></label>
+          <label className="text-xs text-fg-muted!">字號前綴<TextInput value={prefix} onChange={(e) => setPrefix(e.target.value)} className="mt-1" placeholder="例：嶺代" /></label>
+          <label className="text-xs sm:col-span-2 text-fg-muted!">描述<TextInput value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1" /></label>
+          <label className="text-xs sm:col-span-2 text-fg-muted!">上層組織<SelectInput value={parentId} onChange={(e) => setParentId(e.target.value)} className="mt-1"><option value="">無（頂層）</option>{orgs.filter((o) => o.is_active && o.id !== org.id && !descendantIds.has(o.id)).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</SelectInput></label>
+          <label className="text-xs sm:col-span-2 text-fg-muted!">
             部長 / 最高權限者
             <SelectInput value={leaderUserId} onChange={(e) => setLeaderUserId(e.target.value)} className="mt-1">
               <option value="">
@@ -903,11 +901,11 @@ function OrgPanel({
           </label>
         </div>
       </section>
-      <section className="rounded-xl p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
+      <section className="rounded-xl p-4 space-y-3 border! border-border!">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>組織預設權限</h3>
-            <p className="text-xs mt-1 max-w-2xl" style={{ color: "var(--text-muted)" }}>
+            <h3 className="text-sm font-semibold text-fg-primary!">組織預設權限</h3>
+            <p className="text-xs mt-1 max-w-2xl text-fg-muted!">
               套用至組織所有現任成員；職位可另加權限。
             </p>
           </div>
@@ -915,11 +913,11 @@ function OrgPanel({
             {saving === "permissions" ? "儲存中…" : "儲存預設權限"}
           </SmallButton>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
+        <div className="flex flex-wrap items-center gap-2 text-xs text-fg-muted!">
           <span>{defaultCodes.length} 項權限</span>
-          <span aria-hidden="true" style={{ color: "var(--text-disabled)" }}>·</span>
+          <span aria-hidden="true"  className="text-fg-disabled!">·</span>
           <span>{selectedGroupCount} 個模組</span>
-          {selectedHighRiskCount > 0 && <span style={{ color: "var(--warning)" }}>{selectedHighRiskCount} 項高風險</span>}
+          {selectedHighRiskCount > 0 && <span className="text-warning!">{selectedHighRiskCount} 項高風險</span>}
           <span
             className="rounded-full px-2 py-0.5"
             style={defaultPermissionDirty
@@ -931,14 +929,13 @@ function OrgPanel({
         </div>
         <PermCheckboxes selected={defaultCodes} onChange={setDefaultCodes} permCodes={permCodes} />
       </section>
-      <section className="rounded-xl p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" style={{ border: "1px solid var(--border)", background: "var(--primary-dim)" }}>
+      <section className="rounded-xl p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border! border-border! bg-accent-soft!">
         <div>
-          <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>建立這個組織的職位</h3>
+          <h3 className="text-sm font-semibold text-fg-primary!">建立這個組織的職位</h3>
         </div>
         <Link
           href={`/admin/permissions/positions/new?org_id=${org.id}`}
-          className="inline-flex min-h-11 items-center justify-center gap-1.5 px-3 rounded-lg text-xs font-semibold whitespace-nowrap"
-          style={{ color: "var(--primary-contrast, white)", background: "var(--primary)" }}
+          className="inline-flex min-h-11 items-center justify-center gap-1.5 px-3 rounded-lg text-xs font-semibold whitespace-nowrap text-accent-contrast! bg-accent!"
         >
           <Icon name="plus" />前往建立職位
         </Link>
@@ -1032,11 +1029,11 @@ function PositionPanel({
     <div className="w-full p-5 space-y-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>職位 / 幹部</p>
-          <h2 className="text-xl font-semibold mt-1" style={{ color: "var(--text-primary)" }}>{position.name}</h2>
-          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>{POSITION_CATEGORY_LABEL[position.category]} · {position.org_name} · {members.length} 位成員 · {position.permission_codes.length} 個權限</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-fg-muted!">職位 / 幹部</p>
+          <h2 className="text-xl font-semibold mt-1 text-fg-primary!">{position.name}</h2>
+          <p className="text-xs mt-1 text-fg-muted!">{POSITION_CATEGORY_LABEL[position.category]} · {position.org_name} · {members.length} 位成員 · {position.permission_codes.length} 個權限</p>
           {!position.org_is_active && (
-            <p className="text-xs mt-1" style={{ color: "var(--warning)" }}>所屬組織已停用：只保留既有任期，不可新增指派。</p>
+            <p className="text-xs mt-1 text-warning!">所屬組織已停用：只保留既有任期，不可新增指派。</p>
           )}
         </div>
         <SmallButton
@@ -1050,20 +1047,20 @@ function PositionPanel({
           <Icon name="trash" />刪除
         </SmallButton>
       </div>
-      <section className="rounded-xl p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
+      <section className="rounded-xl p-4 space-y-3 border! border-border!">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>職位資料與權限</h3>
+          <h3 className="text-sm font-semibold text-fg-primary!">職位資料與權限</h3>
           <SmallButton onClick={save} tone="primary">儲存變更</SmallButton>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label className="text-xs" style={{ color: "var(--text-muted)" }}>名稱<TextInput value={name} onChange={(e) => setName(e.target.value)} className="mt-1" /></label>
-          <label className="text-xs" style={{ color: "var(--text-muted)" }}>分類<SelectInput value={category} onChange={(e) => setCategory(e.target.value as PositionCategory)} className="mt-1">{POSITION_CATEGORY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</SelectInput></label>
-          <label className="text-xs" style={{ color: "var(--text-muted)" }}>權限係數<TextInput type="number" min={0} value={weight} onChange={(e) => setWeight(Number(e.target.value))} className="mt-1" /></label>
-          <label className="text-xs sm:col-span-2" style={{ color: "var(--text-muted)" }}>描述<TextInput value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1" /></label>
-          <label className="text-xs sm:col-span-2" style={{ color: "var(--text-muted)" }}>上級職位<SelectInput value={parentId} onChange={(e) => setParentId(e.target.value)} className="mt-1"><option value="">無上級</option>{orgPositions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</SelectInput></label>
+          <label className="text-xs text-fg-muted!">名稱<TextInput value={name} onChange={(e) => setName(e.target.value)} className="mt-1" /></label>
+          <label className="text-xs text-fg-muted!">分類<SelectInput value={category} onChange={(e) => setCategory(e.target.value as PositionCategory)} className="mt-1">{POSITION_CATEGORY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</SelectInput></label>
+          <label className="text-xs text-fg-muted!">權限係數<TextInput type="number" min={0} value={weight} onChange={(e) => setWeight(Number(e.target.value))} className="mt-1" /></label>
+          <label className="text-xs sm:col-span-2 text-fg-muted!">描述<TextInput value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1" /></label>
+          <label className="text-xs sm:col-span-2 text-fg-muted!">上級職位<SelectInput value={parentId} onChange={(e) => setParentId(e.target.value)} className="mt-1"><option value="">無上級</option>{orgPositions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</SelectInput></label>
         </div>
-        <div className="flex flex-col gap-2 rounded-lg p-3 sm:flex-row sm:items-end" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-          <label className="flex-1 text-xs" style={{ color: "var(--text-muted)" }}>
+        <div className="flex flex-col gap-2 rounded-lg p-3 sm:flex-row sm:items-end bg-elevated! border! border-border!">
+          <label className="flex-1 text-xs text-fg-muted!">
             從其他職位複製權限
             <SelectInput value={sourcePositionId} onChange={(e) => setSourcePositionId(e.target.value)} className="mt-1">
               <option value="">選擇來源職位</option>
@@ -1074,11 +1071,11 @@ function PositionPanel({
         </div>
         <PermCheckboxes selected={codes} onChange={setCodes} permCodes={permCodes} />
       </section>
-      <section className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-        <div className="px-4 py-3" style={{ background: "var(--bg-elevated)", borderBottom: "1px solid var(--border)" }}>
-          <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>成員任期</h3>
+      <section className="rounded-xl overflow-hidden border! border-border!">
+        <div className="px-4 py-3 bg-elevated! border-b! border-b-border!">
+          <h3 className="text-sm font-semibold text-fg-primary!">成員任期</h3>
         </div>
-        <div className="p-4 grid grid-cols-1 sm:grid-cols-[1fr_130px_130px_auto] gap-2 items-end" style={{ borderBottom: "1px solid var(--border)" }}>
+        <div className="p-4 grid grid-cols-1 sm:grid-cols-[1fr_130px_130px_auto] gap-2 items-end border-b! border-b-border!">
           <SelectInput value={memberUserId} onChange={(e) => setMemberUserId(e.target.value)} disabled={!position.org_is_active}><option value="">選擇新增成員</option>{candidates.map((u) => <option key={u.id} value={u.id}>{u.display_name} · {u.email}</option>)}</SelectInput>
           <TextInput type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ colorScheme: "dark" }} />
           <TextInput type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={{ colorScheme: "dark" }} />
@@ -1113,10 +1110,10 @@ function AssignmentRow({
     }
   };
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-[1fr_130px_130px_auto_auto] gap-2 items-center px-4 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
+    <div className="grid grid-cols-1 sm:grid-cols-[1fr_130px_130px_auto_auto] gap-2 items-center px-4 py-3 border-b! border-b-border!">
       <button onClick={() => onSelect({ type: "user", id: user.id })} className="text-left min-w-0 cursor-pointer">
-        <p className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>{user.display_name}</p>
-        <p className="text-xs truncate" style={{ color: "var(--text-muted)" }}>{user.email}</p>
+        <p className="text-sm font-medium truncate text-fg-primary!">{user.display_name}</p>
+        <p className="text-xs truncate text-fg-muted!">{user.email}</p>
       </button>
       <TextInput type="date" value={start} onChange={(e) => setStart(e.target.value)} style={{ colorScheme: "dark" }} />
       <TextInput type="date" value={end} onChange={(e) => setEnd(e.target.value)} style={{ colorScheme: "dark" }} />
@@ -1200,11 +1197,11 @@ function UserPanel({
     <div className="w-full p-5 space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>幹部任期</p>
-          <h2 className="text-xl font-semibold mt-1 break-words" style={{ color: "var(--text-primary)" }}>
+          <p className="text-xs font-semibold uppercase tracking-widest text-fg-muted!">幹部任期</p>
+          <h2 className="text-xl font-semibold mt-1 break-words text-fg-primary!">
             {user.display_name}
           </h2>
-          <div className="mt-2 space-y-1 text-xs" style={{ color: "var(--text-muted)" }}>
+          <div className="mt-2 space-y-1 text-xs text-fg-muted!">
             <p className="break-all">主要 Email：{user.email}</p>
             <p className="break-all">
               登入 Email：{user.linked_emails.length > 0 ? user.linked_emails.join("、") : user.email}
@@ -1239,12 +1236,12 @@ function UserPanel({
           </SmallButton>
         </div>
       </div>
-      <section className="rounded-xl p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
+      <section className="rounded-xl p-4 space-y-3 border! border-border!">
         <div>
-          <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+          <h3 className="text-sm font-semibold text-fg-primary!">
             連結其他登入 Email
           </h3>
-          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+          <p className="text-xs mt-1 text-fg-muted!">
             已連結的 Google 帳號皆可登入同一帳戶。
           </p>
         </div>
@@ -1260,13 +1257,13 @@ function UserPanel({
         </div>
       </section>
       <AccountMergeSection key={user.id} user={user} users={users} onChanged={onRefresh} />
-      <section className="rounded-xl p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
+      <section className="rounded-xl p-4 space-y-3 border! border-border!">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+            <h3 className="text-sm font-semibold text-fg-primary!">
               兩步驟驗證（2FA）
             </h3>
-            <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+            <p className="text-xs mt-1 text-fg-muted!">
               目前狀態：{user.mfa_enabled ? "已啟用 TOTP" : "未啟用"}。清除後使用者可重新設定驗證器。
             </p>
           </div>
@@ -1280,8 +1277,8 @@ function UserPanel({
           </SmallButton>
         </div>
       </section>
-      <section className="rounded-xl p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
-        <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>指派新職位</h3>
+      <section className="rounded-xl p-4 space-y-3 border! border-border!">
+        <h3 className="text-sm font-semibold text-fg-primary!">指派新職位</h3>
         <div className="grid grid-cols-1 sm:grid-cols-[1fr_130px_130px_auto] gap-2 items-end">
           <SelectInput value={positionId} onChange={(e) => setPositionId(e.target.value)}><option value="">選擇職位（套用職位權限）</option>{available.map((p) => <option key={p.id} value={p.id}>{POSITION_CATEGORY_LABEL[p.category]} · {p.org_name} · {p.name}</option>)}</SelectInput>
           <TextInput type="date" value={start} onChange={(e) => setStart(e.target.value)} style={{ colorScheme: "dark" }} />
@@ -1289,12 +1286,12 @@ function UserPanel({
           <SmallButton onClick={add} tone="primary">指派</SmallButton>
         </div>
       </section>
-      <section className="rounded-xl p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
+      <section className="rounded-xl p-4 space-y-3 border! border-border!">
         <div>
-          <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+          <h3 className="text-sm font-semibold text-fg-primary!">
             加入班級
           </h3>
-          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+          <p className="text-xs mt-1 text-fg-muted!">
             手動加入班級不會修改學號；勾選班級幹部後，該使用者可管理本班訂單與繳費狀態。
           </p>
         </div>
@@ -1307,7 +1304,7 @@ function UserPanel({
               </option>
             ))}
           </SelectInput>
-          <label className="flex items-center gap-2 text-xs px-2" style={{ color: "var(--text-muted)" }}>
+          <label className="flex items-center gap-2 text-xs px-2 text-fg-muted!">
             <input
               type="checkbox"
               checked={asCadre}
@@ -1320,20 +1317,20 @@ function UserPanel({
           </SmallButton>
         </div>
       </section>
-      <section className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-        <div className="px-4 py-3" style={{ background: "var(--bg-elevated)", borderBottom: "1px solid var(--border)" }}>
-          <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>目前任期</h3>
+      <section className="rounded-xl overflow-hidden border! border-border!">
+        <div className="px-4 py-3 bg-elevated! border-b! border-b-border!">
+          <h3 className="text-sm font-semibold text-fg-primary!">目前任期</h3>
         </div>
         {user.positions.map((p) => <UserAssignmentEditor key={p.user_position_id ?? p.id} user={user} position={p} onRefresh={onRefresh} onConfirm={onConfirm} />)}
       </section>
-      <section className="rounded-xl p-4 space-y-2" style={{ border: "1px solid var(--border)" }}>
-        <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>有效權限來源</h3>
+      <section className="rounded-xl p-4 space-y-2 border! border-border!">
+        <h3 className="text-sm font-semibold text-fg-primary!">有效權限來源</h3>
         <div className="flex flex-wrap gap-1.5">
           {user.is_superuser ? (
-            <span className="text-xs px-2 py-1 rounded" style={{ color: "var(--warning)", border: "1px solid var(--warning-border)" }}>超管：所有權限</span>
+            <span className="text-xs px-2 py-1 rounded text-warning! border! border-warning-border!">超管：所有權限</span>
           ) : user.effective_permissions.map((code) => {
             const info = permCodes.find((p) => p.code === code);
-            return <span key={code} title={code} className="text-xs px-2 py-1 rounded" style={{ color: highRisk(code) ? "var(--warning)" : "var(--primary-text)", border: "1px solid var(--border-strong)", background: highRisk(code) ? "var(--warning-dim)" : "var(--primary-dim)" }}>{info?.label ?? code}</span>;
+            return <span key={code} title={code} className="text-xs px-2 py-1 rounded border! border-border-strong!" style={{ color: highRisk(code) ? "var(--warning)" : "var(--primary-text)", background: highRisk(code) ? "var(--warning-dim)" : "var(--primary-dim)" }}>{info?.label ?? code}</span>;
           })}
         </div>
       </section>
@@ -1362,10 +1359,10 @@ function UserAssignmentEditor({
     }
   };
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-[1fr_130px_130px_auto_auto] gap-2 items-center px-4 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
+    <div className="grid grid-cols-1 sm:grid-cols-[1fr_130px_130px_auto_auto] gap-2 items-center px-4 py-3 border-b! border-b-border!">
       <div className="min-w-0">
-        <p className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>{POSITION_CATEGORY_LABEL[position.category]} · {position.org_name} · {position.name}</p>
-        <p className="text-xs" style={{ color: "var(--text-muted)" }}>{position.permission_codes.length} 個權限</p>
+        <p className="text-sm font-medium truncate text-fg-primary!">{POSITION_CATEGORY_LABEL[position.category]} · {position.org_name} · {position.name}</p>
+        <p className="text-xs text-fg-muted!">{position.permission_codes.length} 個權限</p>
       </div>
       <TextInput type="date" value={start} onChange={(e) => setStart(e.target.value)} style={{ colorScheme: "dark" }} />
       <TextInput type="date" value={end} onChange={(e) => setEnd(e.target.value)} style={{ colorScheme: "dark" }} />
@@ -1523,10 +1520,10 @@ function OnboardingWizard({
           ].map(([key, label]) => (
             <button key={key} onClick={() => setMode(key as "new" | "batch" | "existing")} className="w-full text-left px-3 py-2 rounded-lg text-sm cursor-pointer" style={mode === key ? { background: "var(--primary-dim)", color: "var(--primary-text)" } : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>{label}</button>
           ))}
-          <div className="rounded-xl p-3" style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
-            <p className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>權限預覽</p>
-            <p className="text-lg font-semibold mt-1" style={{ color: "var(--text-primary)" }}>{previewCodes.length}</p>
-            <p className="text-xs" style={{ color: "var(--text-muted)" }}>含 {previewCodes.filter(highRisk).length} 個高風險權限</p>
+          <div className="rounded-xl p-3 border! border-border! bg-elevated!">
+            <p className="text-xs font-semibold text-fg-secondary!">權限預覽</p>
+            <p className="text-lg font-semibold mt-1 text-fg-primary!">{previewCodes.length}</p>
+            <p className="text-xs text-fg-muted!">含 {previewCodes.filter(highRisk).length} 個高風險權限</p>
           </div>
         </div>
         <div className="space-y-4">
@@ -1554,21 +1551,16 @@ function OnboardingWizard({
                 }}
                 rows={8}
                 placeholder={"112040101,王小明\ng0112040102@hchs.hc.edu.tw;private@gmail.com,李小華"}
-                className="w-full text-sm px-3 py-2 rounded-lg outline-none font-mono"
-                style={{
-                  background: "var(--bg-surface)",
-                  border: "1px solid var(--border)",
-                  color: "var(--text-primary)",
-                }}
+                className="w-full text-sm px-3 py-2 rounded-lg outline-none font-mono bg-surface! border! border-border! text-fg-primary!"
               />
-              <div className="flex justify-between text-xs" style={{ color: "var(--text-muted)" }}>
+              <div className="flex justify-between text-xs text-fg-muted!">
                 <span>每列：學號或 Email[;其他 Email],姓名，也可貼上試算表兩欄</span>
                 <span>{batchUsers.length} / 200 筆</span>
               </div>
               {batchResult && batchResult.failed > 0 && (
-                <div className="max-h-32 overflow-y-auto rounded-lg p-2 text-xs space-y-1" style={{ border: "1px solid var(--warning-border)" }}>
+                <div className="max-h-32 overflow-y-auto rounded-lg p-2 text-xs space-y-1 border! border-warning-border!">
                   {batchResult.results.filter((result) => !result.success).map((result) => (
-                    <p key={result.index} style={{ color: "var(--warning)" }}>
+                    <p key={result.index}  className="text-warning!">
                       第 {result.index + 1} 列 {result.display_name}：{result.error}
                     </p>
                   ))}
@@ -1590,7 +1582,7 @@ function OnboardingWizard({
           <div className="flex flex-wrap gap-1.5">
             {previewCodes.map((code) => {
               const info = permCodes.find((p) => p.code === code);
-              return <span key={code} className="text-xs px-2 py-0.5 rounded-full" style={{ color: highRisk(code) ? "var(--warning)" : "var(--primary-text)", border: "1px solid var(--border-strong)" }}>{info?.label ?? code}</span>;
+              return <span key={code} className="text-xs px-2 py-0.5 rounded-full border! border-border-strong!" style={{ color: highRisk(code) ? "var(--warning)" : "var(--primary-text)" }}>{info?.label ?? code}</span>;
             })}
           </div>
         </div>

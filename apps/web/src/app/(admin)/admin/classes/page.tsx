@@ -65,57 +65,54 @@ function RepresentativeOverview({
   const missing = items.filter((item) => item.representatives.length === 0);
 
   return (
-    <section className="overflow-hidden rounded-md" style={{ border: "1px solid var(--border)" }}>
+    <section className="overflow-hidden rounded-md border! border-border!">
       <div className="grid md:grid-cols-[minmax(240px,0.8fr)_1.2fr]">
-        <div className="p-5 md:p-6" style={{ background: "var(--card-bg)", borderBottom: "1px solid var(--border)" }}>
-          <p className="text-xs font-semibold tracking-wide" style={{ color: "var(--text-muted)" }}>
+        <div className="p-5 md:p-6 bg-card! border-b! border-b-border!">
+          <p className="text-xs font-semibold tracking-wide text-fg-muted!">
             班級幹部 · 目前啟用班級
           </p>
           <div className="mt-4 flex items-end justify-between gap-4">
             <div>
-              <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>班代任命進度</h2>
+              <h2 className="text-lg font-semibold text-fg-primary!">班代任命進度</h2>
             </div>
             <div className="shrink-0 text-right">
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>尚未任命</p>
-              <p className="text-4xl font-semibold tabular-nums leading-none" style={{ color: "var(--danger)" }}>
+              <p className="text-xs text-fg-muted!">尚未任命</p>
+              <p className="text-4xl font-semibold tabular-nums leading-none text-danger!">
                 {loading || loadError ? "—" : missing.length}
               </p>
             </div>
           </div>
-          <div className="mt-5 h-2 overflow-hidden rounded-full" style={{ background: "var(--border)" }}>
+          <div className="mt-5 h-2 overflow-hidden rounded-full bg-border!">
             <div
-              className="h-full rounded-full transition-[width] duration-300"
-              style={{
-                width: `${items.length ? (appointedCount / items.length) * 100 : 0}%`,
-                background: "var(--primary)",
-              }}
+              className="h-full rounded-full transition-[width] duration-300 bg-accent!"
+              style={{ width: `${items.length ? (appointedCount / items.length) * 100 : 0}%` }}
             />
           </div>
-          <p className="mt-2 text-xs tabular-nums" style={{ color: "var(--text-secondary)" }}>
+          <p className="mt-2 text-xs tabular-nums text-fg-secondary!">
             {loading || loadError ? "任命資料尚未載入" : `${appointedCount} / ${items.length} 班已任命`}
           </p>
         </div>
 
         <div className="min-w-0 p-5 md:p-6">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h3 className="font-semibold" style={{ color: "var(--text-primary)" }}>待任命班級</h3>
+            <h3 className="font-semibold text-fg-primary!">待任命班級</h3>
           </div>
 
           {loading ? (
-            <p className="mt-4 text-sm" role="status" style={{ color: "var(--text-muted)" }}>正在整理班代任命狀態…</p>
+            <p className="mt-4 text-sm text-fg-muted!" role="status" >正在整理班代任命狀態…</p>
           ) : loadError ? (
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3" role="alert">
-              <p className="text-sm" style={{ color: "var(--text-secondary)" }}>無法載入班代任命狀態。</p>
+              <p className="text-sm text-fg-secondary!">無法載入班代任命狀態。</p>
               <button type="button" className="btn btn-ghost min-h-11" onClick={onRetry}>重新載入</button>
             </div>
           ) : items.length === 0 ? (
-            <p className="mt-4 text-sm" role="status" style={{ color: "var(--text-muted)" }}>
+            <p className="mt-4 text-sm text-fg-muted!" role="status" >
               目前沒有啟用中的班級；建立班級後會顯示在這裡。
             </p>
           ) : missing.length === 0 ? (
-            <div className="mt-4 flex items-center gap-2 rounded-md px-3 py-3 text-sm" role="status"
-              style={{ background: "color-mix(in srgb, var(--primary) 8%, transparent)", color: "var(--text-primary)" }}>
-              <CircleCheck size={18} aria-hidden style={{ color: "var(--primary-text)" }} />
+            <div className="mt-4 flex items-center gap-2 rounded-md px-3 py-3 text-sm bg-accent-tint! text-fg-primary!" role="status"
+              >
+              <CircleCheck size={18} aria-hidden   className="text-accent-text!"/>
               目前啟用的 {items.length} 個班級都已任命班代。
             </div>
           ) : (
@@ -126,22 +123,19 @@ function RepresentativeOverview({
                     type="button"
                     onClick={() => onSelect(item.id)}
                     aria-label={`前往 ${classTitle(item)} 設定班代`}
-                    className="group flex min-h-14 w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
-                    style={{
-                      border: "1px solid color-mix(in srgb, var(--danger) 28%, var(--border))",
-                      background: "color-mix(in srgb, var(--danger) 5%, var(--card-bg))",
-                    }}
+                    className="group flex min-h-14 w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)] border! border-danger-outline!"
+                    style={{ background: "color-mix(in srgb, var(--danger) 5%, var(--card-bg))" }}
                   >
                     <span className="flex min-w-0 items-center gap-2">
-                      <CircleAlert size={17} aria-hidden className="shrink-0" style={{ color: "var(--danger)" }} />
+                      <CircleAlert size={17} aria-hidden className="shrink-0 text-danger!"  />
                       <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+                        <span className="block truncate text-sm font-medium text-fg-primary!">
                           {classTitle(item)}
                         </span>
-                        <span className="block text-xs" style={{ color: "var(--text-muted)" }}>尚未任命班代</span>
+                        <span className="block text-xs text-fg-muted!">尚未任命班代</span>
                       </span>
                     </span>
-                    <ArrowUpRight size={16} aria-hidden className="shrink-0 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" style={{ color: "var(--text-muted)" }} />
+                    <ArrowUpRight size={16} aria-hidden className="shrink-0 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 text-fg-muted!"  />
                   </button>
                 </li>
               ))}
@@ -225,34 +219,33 @@ function UserPicker({
 
   return (
     <div className="relative">
-      <div className="flex items-center gap-2 rounded-md px-3 py-2"
-        style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
-        <Search size={15} style={{ color: "var(--text-muted)" }} />
+      <div className="flex items-center gap-2 rounded-md px-3 py-2 border! border-border! bg-card!"
+        >
+        <Search size={15}   className="text-fg-muted!"/>
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          className="w-full bg-transparent text-sm outline-none"
+          className="w-full bg-transparent text-sm outline-none text-fg-primary!"
           placeholder={placeholder}
           aria-label={placeholder}
-          style={{ color: "var(--text-primary)" }}
         />
       </div>
       {showResults && (
         <div
-          className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-md"
-          style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+          className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-md border! border-border! bg-card!"
+          >
           {loading && (
-            <div className="px-3 py-3 text-xs" role="status" style={{ color: "var(--text-muted)" }}>
+            <div className="px-3 py-3 text-xs text-fg-muted!" role="status" >
               搜尋中…
             </div>
           )}
           {searchError && (
-            <div className="px-3 py-3 text-xs" role="alert" style={{ color: "var(--danger)" }}>
+            <div className="px-3 py-3 text-xs text-danger!" role="alert" >
               {seatRoster.length ? "搜尋失敗；仍可從本班座號名冊選取。" : "搜尋失敗，請稍後再試。"}
             </div>
           )}
           {!loading && !searchError && visibleUsers.length === 0 && (
-            <div className="px-3 py-3 text-xs" role="status" style={{ color: "var(--text-muted)" }}>
+            <div className="px-3 py-3 text-xs text-fg-muted!" role="status" >
               {keyword.length < 2
                 ? seatRoster.length
                   ? "以座號搜尋，或輸入至少 2 字查找學號、Email、姓名。"
@@ -272,10 +265,10 @@ function UserPicker({
               className="min-h-12 w-full px-3 py-2 text-left transition-colors hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
               aria-label={`選擇 ${user.display_name}${user.seat_number ? `，座號 ${user.seat_number}` : ""}`}
             >
-              <span className="block text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+              <span className="block text-sm font-medium text-fg-primary!">
                 {user.display_name}
               </span>
-              <span className="block break-all text-xs" style={{ color: "var(--text-muted)" }}>
+              <span className="block break-all text-xs text-fg-muted!">
                 {[user.seat_number ? `座號 ${user.seat_number}` : "", user.student_id ? `學號 ${user.student_id}` : "", user.email]
                   .filter(Boolean)
                   .join(" · ")}
@@ -358,14 +351,14 @@ function CreateClassPanel({ onCreated }: { onCreated: () => void }) {
   };
 
   return (
-    <section className="rounded-md p-4" style={{ border: "1px solid var(--border)" }}>
+    <section className="rounded-md p-4 border! border-border!">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+          <h2 className="text-sm font-semibold text-fg-primary!">
             建立班級
           </h2>
         </div>
-        <div className="flex rounded-md p-1" style={{ border: "1px solid var(--border)" }}>
+        <div className="flex rounded-md p-1 border! border-border!">
           {(["bulk", "single"] as const).map((key) => (
             <button
               key={key}
@@ -382,36 +375,36 @@ function CreateClassPanel({ onCreated }: { onCreated: () => void }) {
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-3">
-        <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+        <label className="text-xs text-fg-muted!">
           學年度
           <input className="input mt-1 w-full" value={academicYear}
             onChange={(event) => setAcademicYear(event.target.value)} />
         </label>
-        <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+        <label className="text-xs text-fg-muted!">
           年級
           <input className="input mt-1 w-full" value={grade}
             onChange={(event) => setGrade(event.target.value)} />
         </label>
         {mode === "bulk" ? (
           <>
-            <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+            <label className="text-xs text-fg-muted!">
               起始班號
               <input className="input mt-1 w-full" value={classStart}
                 onChange={(event) => setClassStart(event.target.value)} />
             </label>
-            <label className="text-xs" style={{ color: "var(--text-muted)" }}>
+            <label className="text-xs text-fg-muted!">
               結束班號
               <input className="input mt-1 w-full" value={classEnd}
                 onChange={(event) => setClassEnd(event.target.value)} />
             </label>
-            <label className="text-xs col-span-2" style={{ color: "var(--text-muted)" }}>
+            <label className="text-xs col-span-2 text-fg-muted!">
               預設座號到
               <input className="input mt-1 w-full" value={seatEnd}
                 onChange={(event) => setSeatEnd(event.target.value)} />
             </label>
           </>
         ) : (
-          <label className="text-xs col-span-2" style={{ color: "var(--text-muted)" }}>
+          <label className="text-xs col-span-2 text-fg-muted!">
             班級代碼
             <input className="input mt-1 w-full" value={classCode}
               onChange={(event) => setClassCode(event.target.value)}
@@ -424,8 +417,8 @@ function CreateClassPanel({ onCreated }: { onCreated: () => void }) {
         type="button"
         disabled={busy}
         onClick={mode === "bulk" ? submitBulk : submitSingle}
-        className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-semibold"
-        style={{ background: "var(--primary)", color: "var(--primary-fg)" }}>
+        className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-semibold bg-accent! text-accent-foreground!"
+        >
         <Plus size={16} />
         {busy ? "處理中…" : mode === "bulk" ? "批量建立班級" : "建立班級"}
       </button>
@@ -444,11 +437,11 @@ function StatTile({
 }) {
   return (
     <div className="flex items-center justify-between gap-2 py-1">
-      <div className="flex items-center gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
+      <div className="flex items-center gap-2 text-xs text-fg-muted!">
         {icon}
         {label}
       </div>
-      <p className="text-sm font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>
+      <p className="text-sm font-semibold tabular-nums text-fg-primary!">
         {value}
       </p>
     </div>
@@ -477,7 +470,7 @@ function RoleBoard({
   };
 
   return (
-    <div className="divide-y" style={{ borderColor: "var(--border)" }}>
+    <div className="divide-y border-border!">
       {roles.map((role) => {
         const label = role.role_key === "class_representative" ? "班代（議員）" : role.label;
         const available = candidates.filter(({ user }) => !role.holders.some((holder) => holder.user_id === user.id));
@@ -485,8 +478,8 @@ function RoleBoard({
         return (
           <section key={role.role_key} className="py-5 first:pt-0">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>{label}</h2>
-              <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
+              <h2 className="text-base font-semibold text-fg-primary!">{label}</h2>
+              <span className="text-sm text-fg-secondary!">
                 {roleHolderSummary(role) || "尚未任命"}
               </span>
             </div>
@@ -512,7 +505,7 @@ function RoleBoard({
               </button>
             </div>
             <details className="mt-3">
-              <summary className="min-h-11 cursor-pointer py-2 text-sm" style={{ color: "var(--text-secondary)" }}>找不到人？搜尋其他帳號</summary>
+              <summary className="min-h-11 cursor-pointer py-2 text-sm text-fg-secondary!">找不到人？搜尋其他帳號</summary>
               {busyRole === null && <UserPicker placeholder={`搜尋帳號並任命${label}`} onPick={(user) => void assign(role.role_key, user)} />}
             </details>
           </section>
@@ -599,7 +592,7 @@ function MemberDetailDialog({
         }}>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
             <label className="min-w-0 flex-1 space-y-1 text-sm">
-              <span style={{ color: "var(--text-secondary)" }}>設定座號</span>
+              <span className="text-fg-secondary!">設定座號</span>
               <input className="input min-h-11 w-full" type="number" inputMode="numeric"
                 min={1} max={999} step={1} required value={seat}
                 disabled={busy || !member.studentId}
@@ -610,55 +603,55 @@ function MemberDetailDialog({
               {saving ? "儲存中…" : "儲存座號"}
             </button>
           </div>
-          {!member.studentId && <p className="text-sm" style={{ color: "var(--text-muted)" }}>請先在人員資料補上學號，再設定座號。</p>}
+          {!member.studentId && <p className="text-sm text-fg-muted!">請先在人員資料補上學號，再設定座號。</p>}
         </form>
-        {error && <p className="text-sm" role="alert" style={{ color: "var(--danger)" }}>{error}</p>}
-        <section className="grid gap-3 rounded-md p-4 sm:grid-cols-2" style={{ background: "var(--bg-elevated)" }}>
+        {error && <p className="text-sm text-danger!" role="alert" >{error}</p>}
+        <section className="grid gap-3 rounded-md p-4 sm:grid-cols-2 bg-elevated!">
           <div>
-            <p className="text-xs" style={{ color: "var(--text-muted)" }}>座號</p>
-            <p className="mt-1 font-medium tabular-nums" style={{ color: "var(--text-primary)" }}>
+            <p className="text-xs text-fg-muted!">座號</p>
+            <p className="mt-1 font-medium tabular-nums text-fg-primary!">
               {member.seat ? `${member.seat} 號` : "未編座號"}
             </p>
           </div>
           <div>
-            <p className="text-xs" style={{ color: "var(--text-muted)" }}>學號</p>
-            <p className="mt-1 font-medium" style={{ color: "var(--text-primary)" }}>{member.studentId || "未提供"}</p>
+            <p className="text-xs text-fg-muted!">學號</p>
+            <p className="mt-1 font-medium text-fg-primary!">{member.studentId || "未提供"}</p>
           </div>
           <div>
-            <p className="text-xs" style={{ color: "var(--text-muted)" }}>校內帳號</p>
+            <p className="text-xs text-fg-muted!">校內帳號</p>
             <p className="mt-1 font-medium" style={{ color: member.user ? "var(--success)" : "var(--text-secondary)" }}>
               {member.user ? "已連結" : "待連結"}
             </p>
           </div>
           <div>
-            <p className="text-xs" style={{ color: "var(--text-muted)" }}>Email</p>
-            <p className="mt-1 break-all font-medium" style={{ color: "var(--text-primary)" }}>{member.user?.email || member.email || "未提供"}</p>
+            <p className="text-xs text-fg-muted!">Email</p>
+            <p className="mt-1 break-all font-medium text-fg-primary!">{member.user?.email || member.email || "未提供"}</p>
           </div>
           <div className="sm:col-span-2">
-            <p className="text-xs" style={{ color: "var(--text-muted)" }}>資料來源</p>
-            <p className="mt-1 font-medium" style={{ color: "var(--text-primary)" }}>{member.source}</p>
+            <p className="text-xs text-fg-muted!">資料來源</p>
+            <p className="mt-1 font-medium text-fg-primary!">{member.source}</p>
           </div>
         </section>
 
         <section>
           <div className="mb-3">
-            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>班級職位</h3>
+            <h3 className="text-sm font-semibold text-fg-primary!">班級職位</h3>
           </div>
           {!member.user && !member.personId && (
             <label className="mb-3 block space-y-1 text-sm">
-              <span style={{ color: "var(--text-secondary)" }}>成員姓名（建立人員資料）</span>
+              <span className="text-fg-secondary!">成員姓名（建立人員資料）</span>
               <input className="input min-h-11 w-full" value={personName}
                 onChange={(event) => setPersonName(event.target.value)}
                 placeholder="輸入名冊上的姓名" />
             </label>
           )}
           {!member.user && !member.personId && !member.studentId && (
-            <p className="mb-3 text-sm" role="status" style={{ color: "var(--text-muted)" }}>
+            <p className="mb-3 text-sm text-fg-muted!" role="status" >
               這筆名冊資料尚未提供學號，請先補齊學號再登記職位。
             </p>
           )}
           {roles.length > 0 ? (
-            <div className="divide-y" style={{ borderColor: "var(--border)" }}>
+            <div className="divide-y border-border!">
               {roles.map((role) => {
                 const label = role.role_key === "class_representative" ? "班代（議員）" : role.label;
                 const alreadyAssigned = member.user
@@ -670,8 +663,8 @@ function MemberDetailDialog({
                 return (
                   <div key={role.role_key} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
-                      <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{label}</p>
-                      <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>
+                      <p className="text-sm font-medium text-fg-primary!">{label}</p>
+                      <p className="mt-1 text-xs text-fg-secondary!">
                         目前任職：{roleHolderSummary(role) || "尚未任命"}
                       </p>
                     </div>
@@ -685,23 +678,23 @@ function MemberDetailDialog({
               })}
             </div>
           ) : (
-            <p className="rounded-md p-4 text-sm" role="status" style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
+            <p className="rounded-md p-4 text-sm bg-elevated! text-fg-muted!" role="status" >
               目前沒有可任命的班級職位。
             </p>
           )}
         </section>
-        <section className="space-y-3 border-t pt-4" style={{ borderColor: "var(--border)" }}>
-          <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>轉出分班</h3>
-          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+        <section className="space-y-3 border-t pt-4 border-border!">
+          <h3 className="text-sm font-semibold text-fg-primary!">轉出分班</h3>
+          <p className="text-sm text-fg-secondary!">
             轉出後會移除本班座號名冊並結束本班幹部任命；人員主檔與歷史歸屬會保留。
           </p>
           {confirmRemove ? <div className="space-y-3">
-            <p className="text-sm" role="status" style={{ color: "var(--text-primary)" }}>確定將 {member.name} 轉出本班？</p>
+            <p className="text-sm text-fg-primary!" role="status" >確定將 {member.name} 轉出本班？</p>
             <div className="flex flex-wrap gap-2">
               <button type="button" className="btn btn-ghost min-h-11 disabled:opacity-50"
                 disabled={busy} onClick={() => setConfirmRemove(false)}>取消轉出</button>
-              <button type="button" className="btn btn-ghost min-h-11 disabled:opacity-50"
-                style={{ color: "var(--danger)" }} disabled={busy}
+              <button type="button" className="btn btn-ghost min-h-11 disabled:opacity-50 text-danger!"
+                 disabled={busy}
                 onClick={async () => {
                   if (busy) return;
                   setRemoving(true);
@@ -714,8 +707,8 @@ function MemberDetailDialog({
                   } finally { setRemoving(false); }
                 }}>{removing ? "轉出中…" : "確認轉出"}</button>
             </div>
-          </div> : <button type="button" className="btn btn-ghost min-h-11 disabled:opacity-50"
-            style={{ color: "var(--danger)" }} disabled={busy}
+          </div> : <button type="button" className="btn btn-ghost min-h-11 disabled:opacity-50 text-danger!"
+             disabled={busy}
             onClick={() => setConfirmRemove(true)}>轉出本班</button>}
         </section>
       </div>
@@ -815,22 +808,22 @@ function MembershipPanel({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>班級成員</h2>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>共 {rows.length} 位 · {unlinked} 位待連結帳號</p>
+          <h2 className="text-base font-semibold text-fg-primary!">班級成員</h2>
+          <p className="mt-1 text-sm text-fg-muted!">共 {rows.length} 位 · {unlinked} 位待連結帳號</p>
         </div>
         <button type="button" className="btn btn-ghost min-h-11" onClick={onManageRoles}>設定班代（議員）與幹部</button>
       </div>
       <details>
-        <summary className="min-h-11 cursor-pointer py-2 text-sm font-medium" style={{ color: "var(--primary-text)" }}>新增班級成員</summary>
+        <summary className="min-h-11 cursor-pointer py-2 text-sm font-medium text-accent-text!">新增班級成員</summary>
         <UserPicker placeholder="搜尋姓名、Email 或學號加入本班" onPick={onAdd} />
       </details>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <input className="input min-h-11 min-w-0 flex-1" aria-label="搜尋班級成員" placeholder="搜尋座號、姓名、學號" value={query} onChange={(event) => setQuery(event.target.value)} />
-        <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm" style={{ color: "var(--text-secondary)" }}>
+        <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm text-fg-secondary!">
           <input type="checkbox" checked={onlyUnlinked} onChange={(event) => setOnlyUnlinked(event.target.checked)} />只看待連結
         </label>
       </div>
-      <ul className="divide-y" style={{ borderColor: "var(--border)" }}>
+      <ul className="divide-y border-border!">
         {visible.map((row) => {
           return (
             <li key={row.key} className="flex items-center gap-2 py-2">
@@ -838,21 +831,21 @@ function MembershipPanel({
                 aria-label={`檢視${row.seat ? `${row.seat} 號 ` : " "}${row.name}的資料與職位`}
                 aria-haspopup="dialog"
                 onClick={() => setSelectedMember(row)}>
-                <span className="w-10 shrink-0 text-center text-sm tabular-nums" style={{ color: "var(--text-muted)" }}>{row.seat ? `${row.seat} 號` : "—"}</span>
+                <span className="w-10 shrink-0 text-center text-sm tabular-nums text-fg-muted!">{row.seat ? `${row.seat} 號` : "—"}</span>
                 <span className="min-w-0 flex-1">
-                  <span className="block break-words text-sm font-medium" style={{ color: "var(--text-primary)" }}>{row.name}</span>
-                  <span className="block break-all text-xs" style={{ color: "var(--text-muted)" }}>{row.studentId ?? "未提供學號"} · {row.source}</span>
+                  <span className="block break-words text-sm font-medium text-fg-primary!">{row.name}</span>
+                  <span className="block break-all text-xs text-fg-muted!">{row.studentId ?? "未提供學號"} · {row.source}</span>
                 </span>
                 <span className="shrink-0 text-xs" style={{ color: row.userId ? "var(--success)" : "var(--text-secondary)" }}>{row.userId ? "已連結" : "待連結"}</span>
               </button>
-              <button type="button" className="min-h-11 shrink-0 px-2 text-xs" style={{ color: "var(--danger)" }}
+              <button type="button" className="min-h-11 shrink-0 px-2 text-xs text-danger!"
                 aria-label={`將 ${row.name} 移出本班`}
                 onClick={() => setSelectedMember(row)}>移出本班</button>
             </li>
           );
         })}
       </ul>
-      {visible.length === 0 && <p className="py-8 text-center text-sm" role="status" style={{ color: "var(--text-muted)" }}>{rows.length ? "沒有符合的成員，請調整搜尋條件。" : "尚未建立班級名冊，可新增成員或匯入座號名冊。"}</p>}
+      {visible.length === 0 && <p className="py-8 text-center text-sm text-fg-muted!" role="status" >{rows.length ? "沒有符合的成員，請調整搜尋條件。" : "尚未建立班級名冊，可新增成員或匯入座號名冊。"}</p>}
       {selectedMember && <MemberDetailDialog
         member={selectedMember}
         roles={roles}
@@ -932,15 +925,15 @@ function ClassWorkspace({
       && !rosterEntries.some((entry) => entry.student_id === member.student_id)).length;
 
   if (loadError) {
-    return <section className="space-y-3 rounded-md p-6" role="alert" style={{ border: "1px solid var(--border)" }}>
-      <p style={{ color: "var(--text-primary)" }}>無法載入班級資料，請重新載入。</p>
+    return <section className="space-y-3 rounded-md p-6 border! border-border!" role="alert" >
+      <p className="text-fg-primary!">無法載入班級資料，請重新載入。</p>
       <button type="button" className="btn btn-primary min-h-11" onClick={load}>重新載入班級</button>
     </section>;
   }
 
   if (loading || !detail) {
     return (
-      <section className="rounded-md p-8 text-center text-sm" style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}>
+      <section className="rounded-md p-8 text-center text-sm border! border-border! text-fg-muted!">
         載入班級工作台…
       </section>
     );
@@ -1100,24 +1093,24 @@ function ClassWorkspace({
 
   return (
     <div className="space-y-4">
-      <section className="rounded-md p-5" style={{ border: "1px solid var(--border)" }}>
+      <section className="rounded-md p-5 border! border-border!">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <GraduationCap size={22} style={{ color: "var(--primary-text)" }} />
-              <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
+              <GraduationCap size={22}   className="text-accent-text!"/>
+              <h1 className="text-xl font-semibold text-fg-primary!">
                 {classTitle(detail)}
               </h1>
             </div>
-            <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+            <p className="mt-1 text-sm text-fg-muted!">
               {detail.grade} 年級 · {detail.is_active ? "目前使用中" : "已停用，保留歷史資料"}
             </p>
           </div>
           <button
             type="button"
             onClick={toggleActive}
-            className="inline-flex items-center justify-center rounded-md px-3 py-2 text-sm font-medium"
-            style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+            className="inline-flex items-center justify-center rounded-md px-3 py-2 text-sm font-medium border! border-border! text-fg-secondary!"
+            >
             {detail.is_active ? "停用當前班級" : "設為當前班級"}
           </button>
         </div>
@@ -1189,11 +1182,11 @@ function RosterFileImportPanel({ onImported }: { onImported: () => void }) {
   const [busy, setBusy] = useState(false);
 
   return (
-    <section className="rounded-md p-4" style={{ border: "1px solid var(--border)" }}>
+    <section className="rounded-md p-4 border! border-border!">
       <div className="flex items-start gap-3">
-        <FileUp size={18} style={{ color: "var(--primary-text)", marginTop: 2 }} />
+        <FileUp size={18} style={{ marginTop: 2 }}  className="text-accent-text!"/>
         <div>
-          <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+          <h2 className="text-sm font-semibold text-fg-primary!">
             匯入編班名單檔案
           </h2>
         </div>
@@ -1330,7 +1323,7 @@ function ClassManagementPanel() {
 
   if (!allowed) {
     return (
-      <div className="py-24 text-center" style={{ color: "var(--text-muted)" }}>
+      <div className="py-24 text-center text-fg-muted!">
         目前帳號無法管理班級，請聯繫管理員確認是否已授權。
       </div>
     );
@@ -1340,14 +1333,14 @@ function ClassManagementPanel() {
     <div className="mx-auto max-w-7xl space-y-5 p-4 md:p-5">
         <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
+            <h1 className="text-2xl font-semibold text-fg-primary!">
               班級、名冊與班代設定
             </h1>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Link href="/shop" className="btn btn-ghost min-h-11">返回商品目錄</Link>
-            <span className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm"
-              style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}>
+            <span className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm border! border-border! text-fg-muted!"
+              >
               <UsersRound size={16} />
               {loading ? "載入中" : loadError ? "班級清單未載入" : `${classes.length} 個班級`}
             </span>
@@ -1366,7 +1359,7 @@ function ClassManagementPanel() {
         </div>
 
         {loadError ? (
-          <section role="alert" className="space-y-3 rounded-md p-5" style={{ border: "1px solid var(--danger)", color: "var(--text-primary)" }}>
+          <section role="alert" className="space-y-3 rounded-md p-5 border! border-danger! text-fg-primary!">
             <p>無法載入班級清單，請重新載入後再操作。</p>
             <button type="button" className="btn btn-primary min-h-11" onClick={loadClasses}>重新載入班級清單</button>
           </section>
@@ -1392,7 +1385,7 @@ function ClassManagementPanel() {
               onBulkAction={runBulkAction}
               bulkBusy={bulkBusy}
             />
-            <details className="rounded-md p-4" style={{ border: "1px solid var(--border)" }}>
+            <details className="rounded-md p-4 border! border-border!">
               <summary className="min-h-11 cursor-pointer py-2 text-sm font-medium">匯入名單或建立班級</summary>
               <div className="mt-3 space-y-4">
                 <RosterFileImportPanel onImported={() => { loadClasses(); setWorkspaceVersion((value) => value + 1); }} />
@@ -1412,8 +1405,8 @@ function ClassManagementPanel() {
                 onClassChanged={loadClasses}
               />
             ) : (
-              <section className="rounded-md p-10 text-center text-sm"
-                style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}>
+              <section className="rounded-md p-10 text-center text-sm border! border-border! text-fg-muted!"
+                >
                 請先建立或選擇班級。
               </section>
             )}
