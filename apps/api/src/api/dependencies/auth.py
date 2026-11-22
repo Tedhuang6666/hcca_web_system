@@ -83,6 +83,19 @@ async def _user_from_access_token(token: str, db: AsyncSession) -> User | None:
     return user
 
 
+def ensure_admin_login_ip_allowed(request: Request, user: User) -> None:
+    """在建立或更新管理員登入工作階段時套用 IP 白名單。"""
+    if not user.is_superuser or not settings.ADMIN_IP_WHITELIST:
+        return
+
+    client_ip = request.client.host if request.client else ""
+    if client_ip not in settings.ADMIN_IP_WHITELIST:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="此 IP 不被授權為管理員",
+        )
+
+
 # 不拋出 401，直接回傳 None（供公開端點使用）
 async def get_optional_user(
     request: Request,

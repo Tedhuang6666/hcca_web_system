@@ -451,6 +451,10 @@ class Settings(BaseSettings):
         default="backups",
         description="本地備份輸出目錄；若搭配 STORAGE_BACKEND=s3 則同步上傳",
     )
+    PRIVACY_EXPORT_DIR: str | None = Field(
+        default=None,
+        description="個資匯出檔目錄；API 與 Celery worker 應共用私有持久化 volume",
+    )
     DB_BACKUP_RETENTION_DAYS: int = Field(default=35, ge=1)
 
     # --- 異地備份 ---

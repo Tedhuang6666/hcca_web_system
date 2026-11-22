@@ -45,7 +45,7 @@ from api.core.security import (
     decode_token,
     is_blacklisted,
 )
-from api.dependencies.auth import get_current_active_user
+from api.dependencies.auth import ensure_admin_login_ip_allowed, get_current_active_user
 from api.models.user import User
 from api.models.user_identity import UserIdentity
 from api.models.user_session import UserSession
@@ -389,6 +389,7 @@ async def _issue_auth_tokens(
     *,
     auth_method: str,
 ) -> user_session_svc.SessionTokenPair:
+    ensure_admin_login_ip_allowed(request, user)
     return await user_session_svc.issue_session_tokens(
         db,
         user_id=user.id,
@@ -770,6 +771,8 @@ async def refresh_token(
                 "expires_at": user_block.get("expires_at"),
             },
         )
+
+    ensure_admin_login_ip_allowed(request, user)
 
     try:
         tokens = await user_session_svc.rotate_session_tokens(

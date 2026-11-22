@@ -17,6 +17,7 @@ def _set_storage_root(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     backup_dir = tmp_path / "backups"
     monkeypatch.setattr(data_lifecycle.settings, "DB_BACKUP_DIR", str(backup_dir))
     monkeypatch.setattr(privacy.settings, "DB_BACKUP_DIR", str(backup_dir))
+    monkeypatch.setattr(privacy.settings, "PRIVACY_EXPORT_DIR", None)
     return backup_dir
 
 

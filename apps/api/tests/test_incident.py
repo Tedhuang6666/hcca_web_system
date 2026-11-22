@@ -224,7 +224,8 @@ def test_python_object_addresses_are_normalized_for_issue_grouping() -> None:
 async def test_export_incidents_csv_contains_event_timeline(
     db_session: AsyncSession,
 ) -> None:
-    await _create_incident(db_session)
+    incident = await _create_incident(db_session)
+    incident.summary = '=HYPERLINK("https://example.test")'
     await db_session.commit()
 
     report = await export_incidents_csv(
@@ -242,6 +243,7 @@ async def test_export_incidents_csv_contains_event_timeline(
 
     assert "incident_id,error_id,status" in report
     assert "web: window.error at /documents" in report
+    assert "'=HYPERLINK" in report and ",=HYPERLINK" not in report
     assert "stack_head" in report
     assert "390x844" in report
     rows = list(csv.DictReader(StringIO(report)))

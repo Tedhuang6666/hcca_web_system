@@ -132,7 +132,11 @@ async def _bypass_token_still_valid(scope: Scope) -> bool:
 
     這裡只查 Redis（黑名單與 session 撤銷快取），不查資料庫；Redis 失效時一律不旁路。
     """
-    from api.core.security import RedisUnavailableError, is_blacklisted, is_session_revoked
+    from api.core.security import (
+        RedisUnavailableError,
+        is_blacklisted,
+        is_session_revoked,
+    )
 
     token = _access_token(scope)
     if not token:

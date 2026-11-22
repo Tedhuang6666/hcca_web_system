@@ -236,6 +236,56 @@ async def test_login_verify_completes_challenge_and_sets_cookies(
     assert app_settings.ACCESS_TOKEN_COOKIE_NAME in response.cookies
 
 
+async def test_login_verify_rejects_superuser_outside_admin_ip_whitelist(
+    client: AsyncClient,
+    make_user: Callable[..., Any],
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from api.core.config import settings
+
+    user = await make_user(is_superuser=True, mfa_enabled=True)
+    setup = await mfa_svc.setup_mfa(db_session, user)
+    await mfa_svc.confirm_mfa(db_session, user, pyotp.TOTP(setup["secret"]).now())
+    monkeypatch.setattr(settings, "ADMIN_IP_WHITELIST", ["10.9.8.7"])
+    challenge_token = create_mfa_challenge_token(subject=str(user.id))
+    code = pyotp.TOTP(setup["secret"]).now()
+
+    response = await client.post(
+        "/auth/mfa/login/verify",
+        json={"challenge_token": challenge_token, "code": code},
+    )
+
+    assert response.status_code == 403
+    assert settings.ACCESS_TOKEN_COOKIE_NAME not in response.cookies
+    assert settings.REFRESH_TOKEN_COOKIE_NAME not in response.cookies
+
+
+async def test_passkey_login_rejects_superuser_outside_admin_ip_whitelist(
+    client: AsyncClient,
+    make_user: Callable[..., Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import api.routers.mfa as mfa_module
+    from api.core.config import settings
+
+    user = await make_user(is_superuser=True)
+    monkeypatch.setattr(settings, "ADMIN_IP_WHITELIST", ["10.9.8.7"])
+
+    async def _verified_user(*_args: Any, **_kwargs: Any) -> tuple[User, str, None]:
+        return user, "login", None
+
+    monkeypatch.setattr(mfa_module.passkey_svc, "verify_authentication", _verified_user)
+    response = await client.post(
+        "/auth/mfa/passkeys/authentication/verify",
+        json={"transaction_id": "test-transaction", "credential": {}},
+    )
+
+    assert response.status_code == 403
+    assert settings.ACCESS_TOKEN_COOKIE_NAME not in response.cookies
+    assert settings.REFRESH_TOKEN_COOKIE_NAME not in response.cookies
+
+
 async def test_login_verify_with_garbage_challenge_token_returns_401(client: AsyncClient) -> None:
     response = await client.post(
         "/auth/mfa/login/verify",

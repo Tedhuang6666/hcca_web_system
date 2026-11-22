@@ -19,6 +19,7 @@ from sqlalchemy import and_, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.config import settings
+from api.core.spreadsheet import safe_row
 from api.models.system_incident import (
     IncidentSeverity,
     IncidentStatus,
@@ -720,34 +721,33 @@ async def export_incidents_csv(
         ]
     )
     for incident in incidents:
-        writer.writerow(
-            [
-                str(incident.id),
-                incident.error_id,
-                incident.status,
-                incident.severity,
-                incident.service,
-                incident.environment,
-                incident.release_version or "",
-                incident.title,
-                incident.summary or "",
-                incident.occurrence_count,
-                incident.first_seen_at.isoformat(),
-                incident.last_seen_at.isoformat(),
-                incident.resolved_at.isoformat() if incident.resolved_at else "",
-                incident.trace_id or "",
-                incident.request_id or "",
-                incident.automatic_recovery_attempted,
-                incident.automatic_recovery_succeeded,
-                incident.recovery_action or "",
-                incident.resolution_note or "",
-                json.dumps(events_by_incident[incident.id], ensure_ascii=False),
-                "incident",
-                "",
-                "",
-                "",
-            ]
-        )
+        values = [
+            str(incident.id),
+            incident.error_id,
+            incident.status,
+            incident.severity,
+            incident.service,
+            incident.environment,
+            incident.release_version or "",
+            incident.title,
+            incident.summary or "",
+            incident.occurrence_count,
+            incident.first_seen_at.isoformat(),
+            incident.last_seen_at.isoformat(),
+            incident.resolved_at.isoformat() if incident.resolved_at else "",
+            incident.trace_id or "",
+            incident.request_id or "",
+            incident.automatic_recovery_attempted,
+            incident.automatic_recovery_succeeded,
+            incident.recovery_action or "",
+            incident.resolution_note or "",
+            json.dumps(events_by_incident[incident.id], ensure_ascii=False),
+            "incident",
+            "",
+            "",
+            "",
+        ]
+        writer.writerow(safe_row(values))
     for sample in slow_queries or []:
         template = sanitize_incident_text(str(sample.get("template") or ""), 4_000)
         occurrences = sample.get("occurrences") or 0
@@ -778,37 +778,36 @@ async def export_incidents_csv(
                 if key in sample
             },
         }
-        writer.writerow(
-            [
-                "",
-                "",
-                "observed",
-                IncidentSeverity.P2 if max_ms >= 1_000 else IncidentSeverity.P3,
-                settings.OTEL_SERVICE_NAME,
-                settings.ENVIRONMENT,
-                settings.APP_RELEASE or settings.APP_VERSION,
-                "hcca-api: slow query",
-                template,
-                occurrences,
-                "",
-                last_seen_at,
-                "",
-                "",
-                "",
-                "",
-                "",
-                "",
-                "",
-                json.dumps(
-                    [{"event_type": "slow_query_observed", "details": query_evidence}],
-                    ensure_ascii=False,
-                ),
-                "slow_query",
-                template,
-                round(max_ms, 1),
-                json.dumps(safe_paths, ensure_ascii=False),
-            ]
-        )
+        values = [
+            "",
+            "",
+            "observed",
+            IncidentSeverity.P2 if max_ms >= 1_000 else IncidentSeverity.P3,
+            settings.OTEL_SERVICE_NAME,
+            settings.ENVIRONMENT,
+            settings.APP_RELEASE or settings.APP_VERSION,
+            "hcca-api: slow query",
+            template,
+            occurrences,
+            "",
+            last_seen_at,
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            json.dumps(
+                [{"event_type": "slow_query_observed", "details": query_evidence}],
+                ensure_ascii=False,
+            ),
+            "slow_query",
+            template,
+            round(max_ms, 1),
+            json.dumps(safe_paths, ensure_ascii=False),
+        ]
+        writer.writerow(safe_row(values))
     return output.getvalue()
 
 

@@ -223,6 +223,11 @@ celery_app.conf.beat_schedule = {
         "task": "api.services.data_lifecycle_tasks.run_safe_purges",
         "schedule": crontab(hour="4", minute="0", day_of_week="1"),
     },
+    # 個資匯出檔保留 24 小時；每小時掃描私有共享目錄，避免只靠使用者再次操作觸發清理。
+    "privacy-export-purge-hourly": {
+        "task": "api.services.data_lifecycle_tasks.purge_expired_privacy_exports",
+        "schedule": 3600.0,
+    },
     # 每日 00:05 產生昨日 audit log anchor。
     "audit-anchor-daily-at-0005": {
         "task": "api.services.audit_chain_tasks.compute_daily_audit_anchor",

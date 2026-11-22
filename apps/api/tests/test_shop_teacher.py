@@ -179,6 +179,8 @@ async def test_teacher_order_snapshots_survive_profile_and_office_changes(
         data=ProductCreate(category_id=category.id, name="紀念品", price=100, stock_quantity=20),
         created_by=admin_user.id,
     )
+    product.name = "=1+1"
+    await db_session.flush()
     await shop_svc.activate_product(db_session, product)
     if flow == "registration":
         response = await actor.put(
@@ -212,6 +214,7 @@ async def test_teacher_order_snapshots_survive_profile_and_office_changes(
     csv = await shop_svc.export_orders_csv(db_session)
     assert "王老師" in csv and "國文科" in csv
     assert "新姓名" not in csv and "新處室" not in csv
+    assert "'=1+1" in csv and ",=1+1" not in csv
 
 
 async def test_office_drag_order_requires_management_permission(

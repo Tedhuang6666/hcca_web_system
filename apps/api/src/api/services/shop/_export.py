@@ -108,5 +108,5 @@ async def export_orders_csv(
     import pandas as pd
 
     rows = await _fetch_order_report_rows(session, activity_id=activity_id)
-    df = pd.DataFrame(rows) if rows else pd.DataFrame()
+    df = pd.DataFrame([safe_mapping(row) for row in rows]) if rows else pd.DataFrame()
     return df.to_csv(index=False, encoding="utf-8-sig")
