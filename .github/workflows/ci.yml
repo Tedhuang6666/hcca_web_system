@@ -483,7 +483,7 @@ jobs:
       - name: Run public, authenticated, and accessibility tests
         run: |
           set -euo pipefail
-          uv run --locked --project apps/api uvicorn api.main:app \
+          uv run --locked --directory ../api uvicorn api.main:app \
             --host 127.0.0.1 --port 8000 > "$RUNNER_TEMP/hcca-e2e-api.log" 2>&1 &
           api_pid=$!
           trap 'kill "$api_pid" 2>/dev/null || true; wait "$api_pid" 2>/dev/null || true' EXIT

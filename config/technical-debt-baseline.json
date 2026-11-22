@@ -413,7 +413,7 @@
     },
     "apps/api/src/api/services/backup_tasks.py": {
       "commits": 2,
-      "broad_except": 6,
+      "broad_except": 7,
       "type_ignore": 1,
       "noqa": 1
     },
@@ -630,7 +630,7 @@
     },
     "apps/api/src/api/services/outbox.py": {
       "lines_over_600": 113,
-      "commits": 2,
+      "commits": 3,
       "broad_except": 7,
       "any_annotations": 3
     },

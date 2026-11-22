@@ -684,7 +684,7 @@ async def _renew_outbox_leases(worker_id: str, event_ids: list[uuid.UUID]) -> No
                 await db.commit()
         except asyncio.CancelledError:
             raise
-        except Exception as exc:
+        except SQLAlchemyError as exc:
             logger.warning(
                 "Outbox lease renewal failed worker=%s error_type=%s",
                 worker_id,
