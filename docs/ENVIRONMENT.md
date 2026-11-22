@@ -4,9 +4,15 @@
 Python 版本見 `.python-version`，Node 版本見 `.nvmrc`，安裝依賴使用既有 lockfiles。
 
 `bash scripts/check.sh doctor` 只檢查工具，不啟動服務，也不能替代測試。
-API 測試需明確設定本機 PostgreSQL `*_test` 與獨立 Redis；不要將資料庫密碼貼入紀錄。
-未設測試庫時 pytest 會停止；SQLite 僅能透過明確 URL 與 `ALLOW_SQLITE_TEST_DB=true` 選用，
-其結果不能視為 PostgreSQL 或 migration 驗證。
+API 測試預設使用 `docker-compose.test.yml` 建立獨立 PostgreSQL `campus_platform_test` 與 Redis，
+只對 loopback 開放 55432／56379。執行 `bash scripts/check.sh api-test` 時，缺少任一測試 URL
+便會啟動並等待兩項服務健康；亦可用 `bash scripts/check.sh test-services up|check|status|down`
+手動管理。`down` 停止容器但保留測試資料卷。自訂 `TEST_DATABASE_URL` 必須是 loopback
+PostgreSQL `*_test`，`TEST_REDIS_URL` 必須是 loopback Redis；測試前會快速檢查連線，不會輸出 URL
+或憑證。`api-test` 會把應用資料庫、Redis、Celery broker 與 result backend 全部切到測試端點。
+CI 若已提供 `TEST_DATABASE_URL` 與 loopback `REDIS_URL`，會沿用 CI 服務及各自設定的 Redis 角色 URL。
+SQLite 僅能透過明確 URL 與 `ALLOW_SQLITE_TEST_DB=true` 選用，其結果不能視為 PostgreSQL 或
+migration 驗證。
 
 PostgreSQL 測試 schema 從 Alembic 基線建立，之後清空 migration 種子列，讓行為案例自行建立資料。
 基線與完整歷史的 schema、trigger、序號及種子資料另以 migration 回歸比較。

@@ -31,9 +31,13 @@ CI 檢查另見 [.github/workflows/ci.yml](../.github/workflows/ci.yml)。
 ## 指令語意
 
 - `check.sh api` 僅做靜態檢查，沒有 DB 測試。`check.sh web` 包含 Vitest coverage 與 production build。
-- `check.sh api-test` 要求 `TEST_DATABASE_URL` 為 loopback PostgreSQL、DB 名以 `_test` 結尾且無 query。
-  它會把應用 `DATABASE_URL` 同步為測試 DB，避免部分流程另開 session 時碰到開發資料。
-  先確認 Redis 也是測試用途；腳本不會啟動、建立或清空服務。特殊 CI 網路使用已審閱的 CI 設定。
+- `check.sh api-test` 在 `TEST_DATABASE_URL` 或 `TEST_REDIS_URL` 未設定時，自動啟動
+  `docker-compose.test.yml` 的隔離 PostgreSQL／Redis。預設測試埠為 55432／56379，只綁
+  loopback；PostgreSQL DB 名為 `campus_platform_test`。可用 `check.sh test-services up|check|status|down`
+  管理服務；`down` 保留專用 PostgreSQL 資料卷。自訂 DB URL 仍須是 loopback `*_test` 且無 query，
+  Redis URL 也須指向 loopback。本機測試會把 `DATABASE_URL` 與所有 Redis／Celery URL 同步至測試端點，
+  並在 pytest 前以 3 秒逾時檢查服務可達。兩個測試 URL 都已指定時不需要 Docker；CI 若提供
+  `TEST_DATABASE_URL` 與 loopback `REDIS_URL`，會沿用 CI 服務和各角色 Redis URL。
 - `check.sh contract` 在暫存目錄生成型別，比較後退出；不覆寫你或其他工作正在改的契約產物。
 - 腳本用 `uv --locked`，lock 與 manifest 不一致會停止，不會為了跑測試默默改 lock。
   僅在明確要更新依賴時才執行 `uv lock`；修業務程式不順手升級套件。

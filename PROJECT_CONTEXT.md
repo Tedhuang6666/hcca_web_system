@@ -86,7 +86,9 @@ bash scripts/check.sh doctor
 node .gitnexus/run.cjs status
 ```
 
-`doctor` 是環境診斷，會明示缺件，不能替代測試。完整流程見
+`doctor` 是環境診斷，會明示缺件，不能替代測試。本機執行 `bash scripts/check.sh api-test` 時，
+若缺少測試 URL 會自動啟動隔離的 PostgreSQL／Redis 測試服務；CI 沿用已配置端點。服務也可用
+`test-services up|down` 管理。完整流程見
 [AI_WORKFLOW.md](docs/AI_WORKFLOW.md)，主機已知限制見 [LOCAL_TOOLING.md](docs/ENVIRONMENT.md)。
 
 只需載入與任務相關的內容。不要掃 lockfiles、生成型別、歷史 migrations、瀏覽器 profiles、

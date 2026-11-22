@@ -14,9 +14,14 @@
 
 ```bash
 bash scripts/check.sh api
-# TEST_DATABASE_URL 已由本機環境設定；不要將 URL／密碼寫進回報。
+# 缺少測試 URL 時會啟動隔離的 PostgreSQL／Redis 測試服務。
 bash scripts/check.sh api-test apps/api/tests/test_documents_router.py
 ```
+
+API 測試服務可用 `bash scripts/check.sh test-services up|check|status|down` 管理。預設測試連線只綁
+127.0.0.1，PostgreSQL 使用獨立資料卷與 `campus_platform_test`；`api-test` 會把應用資料庫及
+Redis 各角色 URL 一律指向測試服務。自訂 `TEST_DATABASE_URL` 必須是 loopback PostgreSQL
+`*_test`，自訂 `TEST_REDIS_URL` 也必須是 loopback；兩者都設定時不需要 Docker。
 
 schema 變更的 migration、空 DB upgrade、drift check 與契約流程見
 [AI_WORKFLOW.md](../../docs/AI_WORKFLOW.md)。

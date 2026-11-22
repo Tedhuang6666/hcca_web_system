@@ -19,6 +19,7 @@ FILES = (
     "docker-compose.bluegreen.yml",
     "docker-compose.bot.yml",
     "docker-compose.infrastructure.yml",
+    "docker-compose.test.yml",
 )
 
 
