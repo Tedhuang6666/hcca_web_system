@@ -21,8 +21,8 @@ description: 維護 HCCA 的 API、前端、資料庫契約與開發工具時，
 5. 用 `bash scripts/check.sh <scope>` 執行檢查。環境不通時讀
    [ENVIRONMENT.md](../../../docs/ENVIRONMENT.md)，完成不受阻的工作並記錄限制。
 6. `detect-changes` 與 diff 審閱完成後，只提交本次相關檔案；中文 commit、無署名。
-   驗證通過並完成 commit 後，自動推送目前的 `feat/`、`fix/` 或 `chore/` 分支到 origin；
-   受保護分支、其他分支及強制推送依根 AGENTS 另行確認。
+   HCCA 任務直接在 `main` 提交；驗證通過並完成 commit 後，自動執行 `git push origin main`。
+   `develop`、其他分支及強制推送依根 AGENTS 另行確認。
 7. 回報結果、實跑證據、限制與 commit。若尚有後續步驟，用 workflow 裡的接手格式寫明。
 
 單一模型可依此完成；不要假設有更高階模型可救援或任意啟動子代理。

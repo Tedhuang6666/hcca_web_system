@@ -23,27 +23,6 @@ async def broadcast_user_event(
     await manager.broadcast_to_room(f"user:{user_id}", message)
 
 
-async def broadcast_order_updated(
-    *,
-    domain: str,
-    order_id: uuid.UUID,
-    user_id: uuid.UUID,
-    status: str,
-    is_paid: bool | None = None,
-) -> None:
-    """通知訂單本人與有管理權限的訂單工作台重新載入。"""
-    data: dict[str, object] = {
-        "domain": domain,
-        "order_id": str(order_id),
-        "status": status,
-    }
-    if is_paid is not None:
-        data["is_paid"] = is_paid
-    message = {"type": "order.updated", "data": data}
-    await manager.broadcast_to_room(f"user:{user_id}", message)
-    await manager.broadcast_to_room(f"{domain}:orders", message)
-
-
 async def broadcast_public_urgent_changed(announcement_id: uuid.UUID | None) -> None:
     """通知公開頁面重新查詢目前可見的重要公告。"""
     await manager.broadcast_to_room(

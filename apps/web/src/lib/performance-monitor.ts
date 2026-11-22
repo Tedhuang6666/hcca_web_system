@@ -598,13 +598,3 @@ export function createProfilerCallback(componentName: string): ProfilerCallback 
 export function getPerformanceMonitor(): PerformanceMonitor {
   return PerformanceMonitor.getInstance();
 }
-
-export function logPerformanceSummary(): void {
-  if (typeof window === "undefined") return;
-  const metrics = PerformanceMonitor.getInstance().getAllMetrics();
-  console.group("Performance summary");
-  console.table(metrics.component.slice().sort((a, b) => b.avgRenderTime - a.avgRenderTime).slice(0, 10));
-  console.table(metrics.componentVitals);
-  console.table(metrics.resource.slice().sort((a, b) => b.duration - a.duration).slice(0, 10));
-  console.groupEnd();
-}

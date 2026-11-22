@@ -20,90 +20,8 @@ export const ARTICLE_IS_STRUCTURAL: Record<ArticleStructureType, boolean> = {
   special_clause: false,
 };
 
-export const STRUCTURAL_INDENT: Record<ArticleStructureType, number> = {
-  volume: 0, chapter: 1, section: 2,
-  article: 0, paragraph: 1, subparagraph: 2, item: 3,
-  special_clause: 0,
-};
-
 export function normalizeArticleType(t: string): ArticleStructureType {
   return t as ArticleStructureType;
-}
-
-// ── 層級順序與巢狀規則 ────────────────────────────────────────────────────────
-
-/** 正式層級的線性順序（不含 special_clause），用於計算 rank、決定升降級。 */
-export const ARTICLE_TYPE_ORDER: ArticleStructureType[] = [
-  "volume", "chapter", "section", "article", "paragraph", "subparagraph", "item",
-];
-
-/** 取得層級在 ARTICLE_TYPE_ORDER 中的索引；不在順序中（如 special_clause）回傳 -1。 */
-export function typeRank(t: ArticleStructureType | string): number {
-  return ARTICLE_TYPE_ORDER.indexOf(normalizeArticleType(t));
-}
-
-/**
- * 父子層級規則（與後端 services/regulation.py `_PARENT_RULES` 對齊）。
- * `_root` 代表 parent_id = null。
- * 注意：chapter 下可放 section 或 article（章可以不分節，直接列條）。
- */
-export const PARENT_RULES: Record<ArticleStructureType | "_root", Set<ArticleStructureType>> = {
-  _root: new Set(["volume", "chapter", "section", "article", "special_clause"]),
-  volume: new Set(["chapter"]),
-  chapter: new Set(["section", "article"]),
-  section: new Set(["article"]),
-  article: new Set(["paragraph"]),
-  paragraph: new Set(["subparagraph"]),
-  subparagraph: new Set(["item"]),
-  item: new Set(),
-  special_clause: new Set(),
-};
-
-/**
- * 是否可將 child 巢入 parent 之下。
- * parent=null 視為根層級（不能放 paragraph / subparagraph / item — 防止「款」「目」單獨存在）。
- */
-export function canNestInside(
-  parentType: ArticleStructureType | string | null,
-  childType: ArticleStructureType | string,
-): boolean {
-  const child = normalizeArticleType(childType);
-  if (parentType === null) {
-    return PARENT_RULES._root.has(child);
-  }
-  const parent = normalizeArticleType(parentType);
-  return PARENT_RULES[parent]?.has(child) ?? false;
-}
-
-/**
- * 取得 parent 之下允許的子層級類型清單。
- * 給新增條文時的下拉選單做防呆過濾。
- */
-export function allowedChildTypes(
-  parentType: ArticleStructureType | string | null,
-): ArticleStructureType[] {
-  const set = parentType === null
-    ? PARENT_RULES._root
-    : PARENT_RULES[normalizeArticleType(parentType)] ?? new Set();
-  return Array.from(set);
-}
-
-/** 取得 parent 之下「預設的子層級」（清單第一個）。 */
-export function childTypeOf(parentType: ArticleStructureType | string): ArticleStructureType | null {
-  const types = allowedChildTypes(parentType);
-  return types[0] ?? null;
-}
-
-/** 取得 child 之上「最近的合法父層級」（用於升級操作）。 */
-export function parentTypeOf(childType: ArticleStructureType | string): ArticleStructureType | null {
-  const child = normalizeArticleType(childType);
-  for (const [parent, allowed] of Object.entries(PARENT_RULES) as Array<[ArticleStructureType | "_root", Set<ArticleStructureType>]>) {
-    if (parent === "_root") continue;
-    if (allowed.has(child)) {
-      return parent as ArticleStructureType;
-    }
-  }
-  return null;
 }
 
 // ── 視覺元資料 ────────────────────────────────────────────────────────────────
@@ -189,55 +107,6 @@ export interface DisplayLabelArticle {
   legal_number?: string | null;
   title?: string | null;
   sort_index?: number;
-}
-
-/**
- * 為條文計算顯示編號（第 X 章 / 第 X 條 / 第 X 項…）。
- * volume 重置 chapter/section/article 計數；chapter 重置 section/article；
- * 以此保持「同層級獨立計數、新章節從 1 重新開始」的習慣。
- */
-export function computeArticleDisplayLabels<T extends DisplayLabelArticle>(
-  articles: T[],
-): Record<string, string> {
-  const counters: Record<string, number> = {
-    volume: 0, chapter: 0, section: 0,
-    article: 0, paragraph: 0, subparagraph: 0, item: 0, special_clause: 0,
-  };
-  const result: Record<string, string> = {};
-
-  const ordered = articles[0]?.sort_index !== undefined
-    ? [...articles].sort((a, b) => (a.sort_index ?? 0) - (b.sort_index ?? 0))
-    : articles;
-
-  for (const a of ordered) {
-    const t = normalizeArticleType(a.article_type);
-    if (t === "volume") {
-      counters.volume += 1; counters.chapter = 0; counters.section = 0; counters.article = 0;
-    } else if (t === "chapter") {
-      counters.chapter += 1; counters.section = 0; counters.article = 0;
-    } else if (t === "section") {
-      counters.section += 1;
-    } else if (t === "article") {
-      counters.article += 1;
-    } else if (t === "paragraph") {
-      counters.paragraph += 1;
-    } else if (t === "subparagraph") {
-      counters.subparagraph += 1;
-    } else if (t === "item") {
-      counters.item += 1;
-    } else if (t === "special_clause") {
-      counters.special_clause += 1;
-    }
-
-    const label = ARTICLE_TYPE_LABEL[t] ?? t;
-    const num = a.legal_number?.trim() || String(counters[t] ?? 0);
-    const titlePart = a.title?.trim() ? ` ${a.title}` : "";
-
-    result[a.id] = ARTICLE_IS_STRUCTURAL[t]
-      ? `第 ${num} ${label}${titlePart}`.trim()
-      : `第 ${num} ${label}${titlePart}`.trim();
-  }
-  return result;
 }
 
 // ── 章節摺疊的顯示列計算 ────────────────────────────────────────────────────
@@ -351,48 +220,3 @@ export function buildArticleDisplayRows<T extends DisplayLabelArticle & { id: st
 }
 
 // ── 簡潔徽章（純層級名，給 LawArticleRow 使用） ──────────────────────────────
-
-/** 計算「第 N 章/節/條/…」這種簡潔徽章內容（不附 title）。 */
-export function computeArticleBadgeText<T extends DisplayLabelArticle>(
-  articles: T[],
-): Record<string, string> {
-  const counters: Record<string, number> = {
-    volume: 0, chapter: 0, section: 0,
-    article: 0, paragraph: 0, subparagraph: 0, item: 0, special_clause: 0,
-  };
-  const result: Record<string, string> = {};
-
-  const ordered = articles[0]?.sort_index !== undefined
-    ? [...articles].sort((a, b) => (a.sort_index ?? 0) - (b.sort_index ?? 0))
-    : articles;
-
-  for (const a of ordered) {
-    const t = normalizeArticleType(a.article_type);
-    if (t === "volume") {
-      counters.volume += 1; counters.chapter = 0; counters.section = 0; counters.article = 0;
-    } else if (t === "chapter") {
-      counters.chapter += 1; counters.section = 0; counters.article = 0;
-    } else if (t === "section") {
-      counters.section += 1;
-    } else if (t === "article") {
-      counters.article += 1;
-    } else if (t === "paragraph") {
-      counters.paragraph += 1;
-    } else if (t === "subparagraph") {
-      counters.subparagraph += 1;
-    } else if (t === "item") {
-      counters.item += 1;
-    } else if (t === "special_clause") {
-      counters.special_clause += 1;
-    }
-
-    const label = ARTICLE_TYPE_LABEL[t] ?? t;
-    if (t === "special_clause") {
-      result[a.id] = label;
-    } else {
-      const num = a.legal_number?.trim() || String(counters[t] ?? 0);
-      result[a.id] = `第 ${num} ${label}`;
-    }
-  }
-  return result;
-}

@@ -117,15 +117,6 @@ def _grade_restricted_message(grades: set[int] | list[int]) -> str:
 # ── 問卷 CRUD ─────────────────────────────────────────────────────────────────
 
 
-async def _survey_with_questions(session: AsyncSession, survey_id: uuid.UUID) -> Survey | None:
-    result = await session.execute(
-        select(Survey)
-        .options(selectinload(Survey.questions).selectinload(SurveyQuestion.answers))
-        .where(Survey.id == survey_id)
-    )
-    return result.scalar_one_or_none()
-
-
 async def get_survey(session: AsyncSession, survey_id: uuid.UUID) -> Survey | None:
     result = await session.execute(
         select(Survey).options(selectinload(Survey.questions)).where(Survey.id == survey_id)

@@ -11,8 +11,6 @@ export const CONTENT_OG_SIZE = {
   height: 630,
 } as const;
 
-export const CONTENT_OG_CONTENT_TYPE = "image/png" as const;
-
 type ContentOgImageInput = {
   title: string;
   category: string;
