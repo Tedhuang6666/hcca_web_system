@@ -132,6 +132,7 @@ enter_maintenance() {
 
 stop_target_slot() {
   "${compose[@]}" stop "web-$target" "api-$target" || true
+  "${compose[@]}" stop petition-preview-worker || true
   if [[ "${WITH_WORKERS:-0}" == "1" ]]; then
     "${compose[@]}" stop "celery-worker-$target" || true
     "${compose[@]}" stop celery-beat || true
@@ -166,9 +167,9 @@ rollback_to_previous_slot() {
 
 abort_deploy() {
   stop_target_slot
-  if [[ "$auto_rollback" == "1" && "$skip_migrate" == "1" ]]; then
+  if [[ "$auto_rollback" == "1" ]]; then
     if rollback_to_previous_slot; then
-      echo "新版部署失敗，已自動 rollback 到舊 slot。" >&2
+      echo "新版部署失敗，已恢復舊 slot；資料庫 schema 未降版，請確認相容性。" >&2
       exit 1
     fi
     echo "⚠️  自動 rollback 失敗，改切維護頁。" >&2
@@ -243,8 +244,8 @@ if [[ "$schema_at_head" == "1" ]]; then
 else
   echo "Applying migrations in maintenance mode..."
   if ! "${bootstrap_compose[@]}" run -T --rm --no-deps migrate; then
-    echo "Migration failed; keeping the maintenance page active." >&2
-    exit 1
+    echo "Migration failed; attempting to restore the previous slot." >&2
+    abort_deploy
   fi
 fi
 

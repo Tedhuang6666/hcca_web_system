@@ -96,7 +96,7 @@ USER appuser
 EXPOSE 8000
 
 # 生產：Gunicorn + UvicornWorker（多 worker 充分利用多核）
-# 開發：CMD 可被 docker-compose override 為 uvicorn --reload
+# 開發：CMD 可被 docker-compose override 為 python -m uvicorn --reload
 CMD ["python", "-m", "gunicorn.app.wsgiapp", "api.main:app", "--config", "/app/gunicorn.conf.py"]
 
 # LibreOffice and UNO stay in a dedicated image used by the no-network preview worker.
@@ -115,7 +115,7 @@ RUN apt-get update && \
 
 USER appuser
 
-CMD ["uvicorn", "api.petition_preview_worker:app", "--uds", "/run/petition-preview/worker.sock"]
+CMD ["python", "-m", "uvicorn", "api.petition_preview_worker:app", "--uds", "/run/petition-preview/worker.sock"]
 
 # Keep the default Docker target as the API runtime for direct `docker build` users.
 FROM runtime AS default-runtime

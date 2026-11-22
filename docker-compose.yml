@@ -189,7 +189,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
-    # 開發模式可 override CMD 為：uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+    # 開發模式可 override CMD 為：python -m uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 
   # LibreOffice runs in its own container with no network interface. API traffic reaches it
   # only through the shared Unix socket volume.
@@ -219,7 +219,7 @@ services:
       - -c
       - >-
         rm -f /run/petition-preview/worker.sock &&
-        exec uvicorn api.petition_preview_worker:app
+        exec python -m uvicorn api.petition_preview_worker:app
         --uds /run/petition-preview/worker.sock
         --no-access-log --limit-concurrency 4
     volumes:

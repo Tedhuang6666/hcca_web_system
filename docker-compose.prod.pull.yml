@@ -173,7 +173,7 @@ services:
       - -c
       - >-
         rm -f /run/petition-preview/worker.sock &&
-        exec uvicorn api.petition_preview_worker:app
+        exec python -m uvicorn api.petition_preview_worker:app
         --uds /run/petition-preview/worker.sock
         --no-access-log --limit-concurrency 4
     volumes:
