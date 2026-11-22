@@ -106,11 +106,11 @@ function SmallButton({
   title?: string;
   type?: "button" | "submit";
 }) {
-  const styles = {
-    neutral: { color: "var(--text-secondary)", border: "1px solid var(--border)" },
-    primary: { color: "var(--primary-text)", border: "1px solid var(--border-strong)", background: "var(--primary-dim)" },
-    danger: { color: "var(--danger)", border: "1px solid var(--danger-border)" },
-    warning: { color: "var(--warning)", border: "1px solid var(--warning-border)" },
+  const toneClasses = {
+    neutral: "text-fg-secondary! border! border-border!",
+    primary: "text-accent-text! border! border-border-strong! bg-accent-soft!",
+    danger: "text-danger! border! border-danger-border!",
+    warning: "text-warning! border! border-warning-border!",
   }[tone];
   return (
     <button
@@ -118,8 +118,7 @@ function SmallButton({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className="inline-flex min-h-10 items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors disabled:opacity-45 disabled:cursor-not-allowed"
-      style={styles}
+      className={`inline-flex min-h-11 items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors disabled:opacity-45 disabled:cursor-not-allowed ${toneClasses}`}
     >
       {children}
     </button>
@@ -131,8 +130,7 @@ function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <Input
       {...props}
-      className={`w-full text-sm px-3 py-2 rounded-lg outline-none ${props.className ?? ""}`}
-      style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-primary)", ...props.style }}
+      className={`w-full text-sm px-3 py-2 rounded-lg outline-none bg-surface! border! border-border! text-fg-primary! ${props.className ?? ""}`}
     />
   );
 }
@@ -141,8 +139,7 @@ function SelectInput(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
       {...props}
-      className={`w-full text-sm px-3 py-2 rounded-lg outline-none ${props.className ?? ""}`}
-      style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-secondary)", ...props.style }}
+      className={`w-full text-sm px-3 py-2 rounded-lg outline-none bg-surface! border! border-border! text-fg-secondary! ${props.className ?? ""}`}
     />
   );
 }
@@ -151,7 +148,7 @@ function Metric({ label, value, tone = "normal" }: { label: string; value: numbe
   return (
     <div className="rounded-xl px-3 py-2 bg-elevated! border! border-border!">
       <p className="text-xs text-fg-muted!">{label}</p>
-      <p className="text-lg font-semibold mt-0.5" style={{ color: tone === "warning" ? "var(--warning)" : "var(--text-primary)" }}>{value}</p>
+      <p className={`text-lg font-semibold mt-0.5 ${tone === "warning" ? "text-warning!" : "text-fg-primary!"}`}>{value}</p>
     </div>
   );
 }
@@ -254,19 +251,19 @@ function OrganizationPermissionPanel() {
 
   return (
     <div className="min-h-[calc(100dvh-7rem)] min-h-0 flex flex-col">
-      <header className="flex flex-col items-stretch gap-3 px-4 py-4 flex-shrink-0 sm:flex-row sm:items-center sm:justify-between sm:px-5 border-b! border-b-border!">
+      <header className="flex flex-col items-stretch gap-3 px-4 py-4 flex-shrink-0 sm:px-5 lg:flex-row lg:items-center lg:justify-between border-b! border-b-border!">
         <div className="min-w-0">
           <h1 className="text-lg font-semibold text-fg-primary!">組織、職位與權限</h1>
           <p className="text-xs mt-0.5 truncate text-fg-muted!">
             {loading ? "載入中..." : `${activeOrgs.length} 個有效組織 · ${orgs.length - activeOrgs.length} 個停用 · ${activePositions.length} 個可指派職位`}
           </p>
         </div>
-        <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:flex lg:items-center">
           <SmallButton onClick={() => setSidebarOpen(true)}><span className="sm:hidden">組織</span><span className="hidden sm:inline">選擇組織</span></SmallButton>
           <SmallButton onClick={() => setShowNewOrg(true)} tone="primary"><Icon name="plus" />新增組織</SmallButton>
           <Link
             href="/admin/permissions/positions/new"
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors text-accent-text! border! border-border-strong! bg-accent-soft!"
+            className="inline-flex min-h-11 items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors text-accent-text! border! border-border-strong! bg-accent-soft!"
           >
             <Icon name="plus" />建立職位
           </Link>
@@ -280,13 +277,12 @@ function OrganizationPermissionPanel() {
         </div>
       ) : (
         <div className="flex-1 min-h-0 flex overflow-hidden relative">
-          {sidebarOpen && <div className="fixed inset-0 z-30 sm:hidden" style={{ background: "rgba(0,0,0,0.45)" }} onClick={() => setSidebarOpen(false)} />}
+          {sidebarOpen && <div className="fixed inset-0 z-30 bg-[var(--bg-overlay)] sm:hidden" onClick={() => setSidebarOpen(false)} />}
           <aside
             className={[
-              "fixed sm:static inset-y-0 left-0 z-40 w-72 sm:w-64 flex-shrink-0 overflow-hidden transition-transform duration-200",
+              "fixed sm:static inset-y-0 left-0 z-40 w-72 sm:w-64 flex-shrink-0 overflow-hidden transition-transform duration-200 bg-surface! border-r! border-r-border!",
               sidebarOpen ? "translate-x-0" : "-translate-x-full sm:translate-x-0",
             ].join(" ")}
-            style={{ background: "var(--bg-surface)", borderRight: "1px solid var(--border)" }}
           >
             <OrgWorkbenchSidebar
               orgs={orgs}
@@ -299,7 +295,7 @@ function OrganizationPermissionPanel() {
             />
           </aside>
 
-          <section className={`w-full min-h-0 lg:w-[410px] xl:w-[470px] flex-shrink-0 overflow-hidden flex-col ${mobileDetailOpen ? "hidden lg:flex" : "flex"}`} style={{ borderRight: "1px solid var(--border)" }}>
+          <section className={`w-full min-h-0 lg:w-[360px] xl:w-[420px] 2xl:w-[470px] flex-shrink-0 overflow-hidden flex-col border-r! border-r-border! ${mobileDetailOpen ? "hidden lg:flex" : "flex"}`}>
             <div className="p-3 space-y-3 flex-shrink-0 border-b! border-b-border!">
               <div className="grid grid-cols-3 gap-1 rounded-xl p-1 bg-elevated! border! border-border!">
                 {[
@@ -310,8 +306,7 @@ function OrganizationPermissionPanel() {
                   <button
                     key={key}
                     onClick={() => setMode(key as Mode)}
-                    className="inline-flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors"
-                    style={mode === key ? { background: "var(--primary-dim)", color: "var(--primary-text)" } : { color: "var(--text-muted)" }}
+                    className={`inline-flex min-h-11 items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors ${mode === key ? "bg-accent-soft! text-accent-text!" : "text-fg-muted!"}`}
                   >
                     <Icon name={icon as "org" | "users" | "shield"} />{label}
                   </button>
@@ -396,6 +391,7 @@ function OrgWorkbenchSidebar({
     const children = childrenOf(org.id);
     const orgPositions = positions.filter((p) => p.org_id === org.id);
     const open = expanded.has(org.id);
+    const selected = selectedOrgId === org.id && !selectedPositionId;
     return (
       <div key={org.id} style={{ paddingLeft: depth * 10 }}>
         <button
@@ -408,15 +404,9 @@ function OrgWorkbenchSidebar({
               return next;
             });
           }}
-          className="w-full min-h-11 flex items-center gap-2 px-2.5 py-2 rounded-lg text-left cursor-pointer transition-colors"
-          style={{
-            ...(selectedOrgId === org.id && !selectedPositionId
-              ? { background: "var(--primary-dim)", color: "var(--primary-text)" }
-              : { color: org.is_active ? "var(--text-secondary)" : "var(--text-muted)" }),
-            opacity: org.is_active ? 1 : 0.62,
-          }}
+          className={`w-full min-h-11 flex items-center gap-2 px-2.5 py-2 rounded-lg text-left cursor-pointer transition-colors ${selected ? "bg-accent-soft! text-accent-text!" : org.is_active ? "text-fg-secondary!" : "text-fg-muted! opacity-[0.62]"}`}
         >
-          <span className="text-xs" style={{ transform: open ? "rotate(90deg)" : "none" }}>›</span>
+          <span className={`text-xs transition-transform ${open ? "rotate-90" : ""}`}>›</span>
           <span className="flex-1 truncate text-xs font-semibold">{org.name}</span>
           {!org.is_active && <span className="text-xs">停用</span>}
           <span className="text-xs px-1.5 py-0.5 rounded-full bg-elevated! text-fg-muted!">{orgPositions.length}</span>
@@ -427,10 +417,9 @@ function OrgWorkbenchSidebar({
               <button
                 key={position.id}
                 onClick={() => onSelectPosition(position.id)}
-                className="w-full min-h-11 flex items-center gap-2 px-2 py-2 rounded-lg text-left cursor-pointer transition-colors"
-                style={selectedPositionId === position.id ? { background: "var(--primary-dim)", color: "var(--primary-text)" } : { color: "var(--text-muted)" }}
+                className={`w-full min-h-11 flex items-center gap-2 px-2 py-2 rounded-lg text-left cursor-pointer transition-colors ${selectedPositionId === position.id ? "bg-accent-soft! text-accent-text!" : "text-fg-muted!"}`}
               >
-                <span className="w-1.5 h-1.5 rounded-full" style={{ background: selectedPositionId === position.id ? "var(--primary)" : "var(--border-strong)" }} />
+                <span className={`w-1.5 h-1.5 rounded-full ${selectedPositionId === position.id ? "bg-accent!" : "bg-border-strong!"}`} />
                 <span className="flex-1 truncate text-xs">
                   {position.name}
                   <span className="ml-1 text-xs text-fg-disabled!">
@@ -480,7 +469,7 @@ function WorkbenchList({
     return (
       <div className="flex-1 overflow-y-auto">
         {rows.map((u) => (
-          <button key={u.id} onClick={() => onSelect({ type: "user", id: u.id })} className="w-full flex items-start gap-3 px-4 py-3 text-left cursor-pointer transition-colors" style={detail?.type === "user" && detail.id === u.id ? { background: "var(--primary-dim)" } : { borderBottom: "1px solid var(--border)" }}>
+          <button key={u.id} onClick={() => onSelect({ type: "user", id: u.id })} className={`w-full flex items-start gap-3 px-4 py-3 text-left cursor-pointer transition-colors ${detail?.type === "user" && detail.id === u.id ? "bg-accent-soft!" : "border-b! border-b-border!"}`}>
             <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 bg-elevated! text-accent-text!">{u.display_name.charAt(0)}</div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5 flex-wrap">
@@ -516,7 +505,7 @@ function WorkbenchList({
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="text-sm font-semibold text-fg-primary!">{perm.label}</p>
-                  <p className="text-xs font-mono" style={{ color: highRisk(perm.code) ? "var(--warning)" : "var(--text-muted)" }}>{perm.code}</p>
+                  <p className={`text-xs font-mono ${highRisk(perm.code) ? "text-warning!" : "text-fg-muted!"}`}>{perm.code}</p>
                 </div>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-accent-soft! text-accent-text!">{holders.length} 人</span>
               </div>
@@ -595,11 +584,8 @@ function WorkbenchList({
           <button
             key={item.id}
             onClick={() => onSelect({ type: "org", id: item.id })}
-            className="w-full px-4 py-3 text-left cursor-pointer transition-colors"
+            className={`w-full px-4 py-3 text-left cursor-pointer transition-colors ${detail?.type === "org" && detail.id === item.id ? "bg-accent-soft!" : "border-b! border-b-border!"}`}
             style={{
-              ...(detail?.type === "org" && detail.id === item.id
-                ? { background: "var(--primary-dim)" }
-                : { borderBottom: "1px solid var(--border)" }),
               paddingLeft: `${1 + depth * 0.75}rem`,
             }}
           >
@@ -858,8 +844,7 @@ function OrgPanel({
                   key={position.id}
                   type="button"
                   onClick={() => onSelect({ type: "position", id: position.id })}
-                  className="flex min-h-11 w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/5"
-                  style={index < orgPositions.length - 1 ? { borderBottom: "1px solid var(--border)" } : undefined}
+                  className={`flex min-h-11 w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/5 ${index < orgPositions.length - 1 ? "border-b! border-b-border!" : ""}`}
                 >
                   <span className="h-2 w-2 flex-shrink-0 rounded-full bg-accent!"  />
                   <span className="min-w-0 flex-1">
@@ -918,12 +903,7 @@ function OrgPanel({
           <span aria-hidden="true"  className="text-fg-disabled!">·</span>
           <span>{selectedGroupCount} 個模組</span>
           {selectedHighRiskCount > 0 && <span className="text-warning!">{selectedHighRiskCount} 項高風險</span>}
-          <span
-            className="rounded-full px-2 py-0.5"
-            style={defaultPermissionDirty
-              ? { color: "var(--warning)", background: "var(--warning-dim)" }
-              : { color: "var(--text-muted)", background: "var(--bg-elevated)" }}
-          >
+          <span className={`rounded-full px-2 py-0.5 ${defaultPermissionDirty ? "bg-warning-soft! text-warning!" : "bg-elevated! text-fg-muted!"}`}>
             {defaultPermissionDirty ? "有未儲存變更" : "已與目前設定同步"}
           </span>
         </div>
@@ -1026,7 +1006,7 @@ function PositionPanel({
     }
   };
   return (
-    <div className="w-full p-5 space-y-5">
+    <div className="w-full p-4 space-y-5 sm:p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-fg-muted!">職位 / 幹部</p>
@@ -1077,8 +1057,8 @@ function PositionPanel({
         </div>
         <div className="p-4 grid grid-cols-1 sm:grid-cols-[1fr_130px_130px_auto] gap-2 items-end border-b! border-b-border!">
           <SelectInput value={memberUserId} onChange={(e) => setMemberUserId(e.target.value)} disabled={!position.org_is_active}><option value="">選擇新增成員</option>{candidates.map((u) => <option key={u.id} value={u.id}>{u.display_name} · {u.email}</option>)}</SelectInput>
-          <TextInput type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ colorScheme: "dark" }} />
-          <TextInput type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={{ colorScheme: "dark" }} />
+          <TextInput type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="[color-scheme:dark]" />
+          <TextInput type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="[color-scheme:dark]" />
           <SmallButton onClick={addMember} tone="primary" disabled={!position.org_is_active}>新增</SmallButton>
         </div>
         {members.map((u) => <AssignmentRow key={u.id} user={u} positionId={position.id} onRefresh={onRefresh} onSelect={onSelect} onConfirm={onConfirm} />)}
@@ -1115,8 +1095,8 @@ function AssignmentRow({
         <p className="text-sm font-medium truncate text-fg-primary!">{user.display_name}</p>
         <p className="text-xs truncate text-fg-muted!">{user.email}</p>
       </button>
-      <TextInput type="date" value={start} onChange={(e) => setStart(e.target.value)} style={{ colorScheme: "dark" }} />
-      <TextInput type="date" value={end} onChange={(e) => setEnd(e.target.value)} style={{ colorScheme: "dark" }} />
+      <TextInput type="date" value={start} onChange={(e) => setStart(e.target.value)} className="[color-scheme:dark]" />
+      <TextInput type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="[color-scheme:dark]" />
       <SmallButton onClick={save}>儲存</SmallButton>
       <SmallButton
         tone="danger"
@@ -1281,8 +1261,8 @@ function UserPanel({
         <h3 className="text-sm font-semibold text-fg-primary!">指派新職位</h3>
         <div className="grid grid-cols-1 sm:grid-cols-[1fr_130px_130px_auto] gap-2 items-end">
           <SelectInput value={positionId} onChange={(e) => setPositionId(e.target.value)}><option value="">選擇職位（套用職位權限）</option>{available.map((p) => <option key={p.id} value={p.id}>{POSITION_CATEGORY_LABEL[p.category]} · {p.org_name} · {p.name}</option>)}</SelectInput>
-          <TextInput type="date" value={start} onChange={(e) => setStart(e.target.value)} style={{ colorScheme: "dark" }} />
-          <TextInput type="date" value={end} onChange={(e) => setEnd(e.target.value)} style={{ colorScheme: "dark" }} />
+          <TextInput type="date" value={start} onChange={(e) => setStart(e.target.value)} className="[color-scheme:dark]" />
+          <TextInput type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="[color-scheme:dark]" />
           <SmallButton onClick={add} tone="primary">指派</SmallButton>
         </div>
       </section>
@@ -1330,7 +1310,7 @@ function UserPanel({
             <span className="text-xs px-2 py-1 rounded text-warning! border! border-warning-border!">超管：所有權限</span>
           ) : user.effective_permissions.map((code) => {
             const info = permCodes.find((p) => p.code === code);
-            return <span key={code} title={code} className="text-xs px-2 py-1 rounded border! border-border-strong!" style={{ color: highRisk(code) ? "var(--warning)" : "var(--primary-text)", background: highRisk(code) ? "var(--warning-dim)" : "var(--primary-dim)" }}>{info?.label ?? code}</span>;
+            return <span key={code} title={code} className={`text-xs px-2 py-1 rounded border! border-border-strong! ${highRisk(code) ? "bg-warning-soft! text-warning!" : "bg-accent-soft! text-accent-text!"}`}>{info?.label ?? code}</span>;
           })}
         </div>
       </section>
@@ -1364,8 +1344,8 @@ function UserAssignmentEditor({
         <p className="text-sm font-medium truncate text-fg-primary!">{POSITION_CATEGORY_LABEL[position.category]} · {position.org_name} · {position.name}</p>
         <p className="text-xs text-fg-muted!">{position.permission_codes.length} 個權限</p>
       </div>
-      <TextInput type="date" value={start} onChange={(e) => setStart(e.target.value)} style={{ colorScheme: "dark" }} />
-      <TextInput type="date" value={end} onChange={(e) => setEnd(e.target.value)} style={{ colorScheme: "dark" }} />
+      <TextInput type="date" value={start} onChange={(e) => setStart(e.target.value)} className="[color-scheme:dark]" />
+      <TextInput type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="[color-scheme:dark]" />
       <SmallButton onClick={save}>儲存</SmallButton>
       <SmallButton
         tone="danger"
@@ -1518,7 +1498,7 @@ function OnboardingWizard({
             ["batch", "批次建立"],
             ["existing", "選擇既有使用者"],
           ].map(([key, label]) => (
-            <button key={key} onClick={() => setMode(key as "new" | "batch" | "existing")} className="w-full text-left px-3 py-2 rounded-lg text-sm cursor-pointer" style={mode === key ? { background: "var(--primary-dim)", color: "var(--primary-text)" } : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>{label}</button>
+            <button key={key} onClick={() => setMode(key as "new" | "batch" | "existing")} className={`w-full min-h-11 text-left px-3 py-2 rounded-lg text-sm cursor-pointer ${mode === key ? "bg-accent-soft! text-accent-text!" : "text-fg-muted! border! border-border!"}`}>{label}</button>
           ))}
           <div className="rounded-xl p-3 border! border-border! bg-elevated!">
             <p className="text-xs font-semibold text-fg-secondary!">權限預覽</p>
@@ -1570,8 +1550,8 @@ function OnboardingWizard({
           )}
           <div className="grid grid-cols-1 sm:grid-cols-[1fr_150px_150px] gap-3">
             <SelectInput value={positionId} onChange={(e) => setPositionId(e.target.value)}><option value="">選擇職位（套用職位權限）</option>{uniquePositions.map((p) => <option key={p.id} value={p.id}>{POSITION_CATEGORY_LABEL[p.category]} · {p.org_name} · {p.name}</option>)}</SelectInput>
-            <TextInput type="date" value={start} onChange={(e) => setStart(e.target.value)} style={{ colorScheme: "dark" }} />
-            <TextInput type="date" value={end} onChange={(e) => setEnd(e.target.value)} style={{ colorScheme: "dark" }} />
+            <TextInput type="date" value={start} onChange={(e) => setStart(e.target.value)} className="[color-scheme:dark]" />
+            <TextInput type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="[color-scheme:dark]" />
           </div>
           {mode === "new" && (
             <div className="space-y-2">
@@ -1582,7 +1562,7 @@ function OnboardingWizard({
           <div className="flex flex-wrap gap-1.5">
             {previewCodes.map((code) => {
               const info = permCodes.find((p) => p.code === code);
-              return <span key={code} className="text-xs px-2 py-0.5 rounded-full border! border-border-strong!" style={{ color: highRisk(code) ? "var(--warning)" : "var(--primary-text)" }}>{info?.label ?? code}</span>;
+              return <span key={code} className={`text-xs px-2 py-0.5 rounded-full border! border-border-strong! ${highRisk(code) ? "text-warning!" : "text-accent-text!"}`}>{info?.label ?? code}</span>;
             })}
           </div>
         </div>
