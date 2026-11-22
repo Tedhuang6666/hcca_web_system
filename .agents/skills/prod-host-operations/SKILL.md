@@ -1,18 +1,42 @@
 ---
 name: prod-host-operations
-description: 透過 SSH 別名 hostinger-vps 直連 HCCA 正式主機，處理日誌、資料及其他使用者指定的主機操作。MCP 非必要；正式操作依 AGENTS.md 與對應 runbook 執行。
+description: 參照 scripts/deploy-smart.sh 的 SSH 設定直連 HCCA 正式主機，處理日誌、資料及其他使用者指定的主機操作。MCP 非必要；正式操作依 AGENTS.md 與對應 runbook 執行。
 ---
 
 # HCCA 正式主機操作
 
-此 skill 提供操作流程，不會授予主機或資料庫權限，也不額外限制 SSH 可執行的操作類別。直接使用既有 SSH 別名 `hostinger-vps` 連線；不需要先連接 MCP。根目錄 `AGENTS.md` 的 deny 設定適用於 MCP，不限制這條 SSH 連線。正式操作仍依 `AGENTS.md` 的當次核准規範與對應 runbook 執行。
+此 skill 提供操作流程，不會授予主機或資料庫權限，也不額外限制 SSH 可執行的操作類別。SSH 目標和認證參數沿用 `scripts/deploy-smart.sh`：`DEPLOY_HOST`、`DEPLOY_SSH_USER`（預設 `root`）、`DEPLOY_KEY_PATH`（預設 `$HOME/.ssh/hcca_deploy`）。不需要先連接 MCP；根目錄 `AGENTS.md` 的 deny 設定只適用於 MCP。正式操作仍依 `AGENTS.md` 的當次核准規範與對應 runbook 執行。
 
 ## 連線門檻
 
-- 使用 `ssh hostinger-vps` 或同一 SSH 別名執行遠端命令；沿用既有 SSH 設定與認證，不要求 MCP。若 SSH 連線失敗就回報失敗原因，不讀取或輸出私鑰、token、cookie、`.env` 或認證設定內容，也不繞過 SSH host key 驗證。
+- 依 `scripts/deploy-smart.sh` 使用 `DEPLOY_HOST`、`DEPLOY_SSH_USER`、`DEPLOY_KEY_PATH` 直連；`.env.local` 只在本機子 shell 中載入以取得必要參數，不輸出任何設定值，其他本機環境值不得傳給 SSH process。沿用腳本的 `IdentitiesOnly=yes`、`StrictHostKeyChecking=accept-new`、`ConnectTimeout=10`、`ServerAliveInterval=30`、`ServerAliveCountMax=6`。若 SSH 連線失敗就回報原因，不讀取或輸出私鑰、token、cookie 或認證內容，也不繞過 host-key 驗證。
 - 連線後用不含機密的主機／服務資訊確認目標為 HCCA 正式環境。目標不符或無法辨識時停止，不在錯誤主機執行操作。
 - 每一回合重新判斷本次授權。明確查某服務日誌或某筆資料可授權該範圍的唯讀查詢；寫入則須由本次指示清楚指定資料目標和預期變更。使用者泛稱「修一下正式資料」不足以寫入，先整理具體方案並詢問。
 - 不因載入或呼叫此 skill 而推定獲准連線、讀取或寫入正式環境。
+
+在 repository 根目錄執行以下連線範本。它只沿用部署腳本的 SSH 參數，不執行部署。一般遠端命令可加在 SSH 目標後；只有需要互動終端時才加 `-t`。
+
+```bash
+(
+  set +x
+  [[ -f .env.local ]] || { echo '找不到 .env.local'; exit 1; }
+  # shellcheck source=/dev/null
+  source .env.local
+  ssh_user="${DEPLOY_SSH_USER:-root}"
+  ssh_key="${DEPLOY_KEY_PATH:-$HOME/.ssh/hcca_deploy}"
+  ssh_host="${DEPLOY_HOST:?DEPLOY_HOST 未設定}"
+  exec env -i PATH="$PATH" HOME="$HOME" ssh \
+    -i "$ssh_key" \
+    -o IdentitiesOnly=yes \
+    -o StrictHostKeyChecking=accept-new \
+    -o ConnectTimeout=10 \
+    -o ServerAliveInterval=30 \
+    -o ServerAliveCountMax=6 \
+    "$ssh_user@$ssh_host"
+)
+```
+
+`scripts/deploy-smart.sh` 會推送並部署程式；一般查閱或主機操作不要執行該部署腳本本身，只沿用上面的 SSH 連線設定。
 
 ## 查閱日誌或資料
 
