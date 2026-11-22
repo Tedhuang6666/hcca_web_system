@@ -3,11 +3,12 @@
 import NumberInput from "@/components/ui/NumberInput";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Ban, Copy, Lock, Plus, RefreshCcw } from "lucide-react";
+import { AlertTriangle, Ban, Lock, Plus, RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
 import { usePrompt } from "@/components/ui/ConfirmDialog";
+import CopyButton from "@/components/ui/CopyButton";
 import {
   apiKeysApi,
   type ApiKeyCreatedResponse,
@@ -87,15 +88,6 @@ export default function ApiKeysPage() {
       toast.error(apiErrorMessage(e, "撤銷失敗"));
     } finally {
       setBusy(false);
-    }
-  };
-
-  const copyKey = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      toast.success("已複製到剪貼簿");
-    } catch {
-      toast.error("複製失敗，請手動選取");
     }
   };
 
@@ -202,13 +194,14 @@ export default function ApiKeysPage() {
                 <code className="break-all rounded bg-[var(--bg-surface)] px-2 py-1 font-mono text-xs">
                   {created.key_plaintext}
                 </code>
-                <button
-                  type="button"
+                <CopyButton
+                  value={created.key_plaintext}
+                  label="複製"
+                  iconSize={12}
+                  announcement="API key 已複製"
+                  failureHint="複製失敗，請手動選取 key"
                   className="btn-sm btn-primary"
-                  onClick={() => copyKey(created.key_plaintext)}>
-                  <Copy size={12} aria-hidden />
-                  複製
-                </button>
+                />
                 <button
                   type="button"
                   className="btn-sm btn-ghost"

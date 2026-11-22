@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, MouseEvent, ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
 
@@ -10,6 +9,7 @@ import {
   ARTICLE_IS_STRUCTURAL,
   normalizeArticleType,
 } from "@/lib/regulationStructure";
+import CopyButton from "@/components/ui/CopyButton";
 import { SmartLinkedText } from "@/components/ui/OfficialText";
 
 export interface LawArticleRowProps {
@@ -47,19 +47,6 @@ export interface LawArticleRowProps {
   rowProps?: React.HTMLAttributes<HTMLDivElement>;
 }
 
-const COPY_ICON_DEFAULT = (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-    strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-  </svg>
-);
-const COPY_ICON_OK = (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-    strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <polyline points="20 6 9 17 4 12" />
-  </svg>
-);
 const CLOSE_ICON = (
   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
     strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
@@ -94,12 +81,6 @@ export function LawArticleRow({
   onKeyDown,
   rowProps,
 }: LawArticleRowProps) {
-  const [copied, setCopied] = useState(false);
-  const copyTimerRef = useRef<number | null>(null);
-  useEffect(() => () => {
-    if (copyTimerRef.current) window.clearTimeout(copyTimerRef.current);
-  }, []);
-
   if (hiddenByChapter) return null;
 
   const normalizedType = normalizeArticleType(article.article_type);
@@ -136,32 +117,19 @@ export function LawArticleRow({
     ? { cursor: onSelect ? "pointer" : "default" }
     : {};
 
-  const handleCopy = (event: MouseEvent) => {
-    event.stopPropagation();
-    if (!shareUrl || !onCopyLink) return;
-    onCopyLink(shareUrl);
-    setCopied(true);
-    if (copyTimerRef.current) window.clearTimeout(copyTimerRef.current);
-    copyTimerRef.current = window.setTimeout(() => setCopied(false), 1000);
-  };
-
+  // onCopyLink 存在才提供複製；按鈕本身完成複製並就地顯示結果，右鍵複製仍交給呼叫端提示。
   const copyButton = shareUrl && onCopyLink ? (
-    <button
-      type="button"
-      onClick={handleCopy}
+    <CopyButton
+      value={shareUrl}
+      icon="link"
+      iconSize={12}
+      announcement={`${badge}連結已複製`}
+      onClick={(event) => event.stopPropagation()}
       className="law-row-copy-link no-print inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-md transition-[color,background-color,border-color,opacity,transform]"
-      style={{
-        color: copied ? "#10b981" : "var(--text-muted)",
-        border: `1px solid ${copied ? "rgba(16,185,129,0.4)" : "var(--border)"}`,
-        background: copied ? "rgba(16,185,129,0.08)" : "transparent",
-        opacity: copied ? 1 : 0.75,
-        transform: copied ? "scale(1.06)" : "scale(1)",
-      }}
-      title={copied ? "已複製" : "複製此條連結"}
+      style={{ color: "var(--text-muted)", border: "1px solid var(--border)", background: "transparent" }}
+      title="複製此條連結"
       aria-label={`複製${badge}連結`}
-    >
-      {copied ? COPY_ICON_OK : COPY_ICON_DEFAULT}
-    </button>
+    />
   ) : null;
 
   const clearHighlightButton = highlighted && onClearHighlight ? (

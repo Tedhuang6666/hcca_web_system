@@ -28,7 +28,9 @@ jobs:
         run: bash scripts/check.sh debt
 
       - name: Validate Compose entrypoints and image parity
-        run: python scripts/validate-compose.py
+        run: |
+          python -m unittest discover -s scripts/tests -p 'test_compose_validation.py'
+          python scripts/validate-compose.py
 
       - name: Install uv
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7

@@ -15,6 +15,8 @@ type PetitionDraft = {
   content: string;
 };
 
+type AttachmentUpload = { file: File; status: "uploading" | "failed" | "done" };
+
 export default function NewPetitionPage() {
   const [types, setTypes] = useState<PetitionTypeOut[]>([]);
   const [typeId, setTypeId] = useState("");
@@ -23,7 +25,7 @@ export default function NewPetitionPage() {
   const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState<PetitionCreatedOut | null>(null);
-  const [failedUploads, setFailedUploads] = useState<string[]>([]);
+  const [uploads, setUploads] = useState<AttachmentUpload[]>([]);
   const [submitError, setSubmitError] = useState("");
   const [typesError, setTypesError] = useState("");
   const [accountName, setAccountName] = useState("");
@@ -69,6 +71,16 @@ export default function NewPetitionPage() {
       !draft.title.trim() && !draft.content.trim()
     ), []),
   });
+  const uploadFile = async (caseId: string, file: File, index: number) => {
+    setUploads(current => current.map((item, i) => i === index ? { ...item, status: "uploading" } : item));
+    try {
+      await petitionsApi.uploadAttachment(caseId, file);
+      setUploads(current => current.map((item, i) => i === index ? { ...item, status: "done" } : item));
+    } catch {
+      setUploads(current => current.map((item, i) => i === index ? { ...item, status: "failed" } : item));
+    }
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (authState !== "authenticated" || submitting) return;
@@ -93,18 +105,12 @@ export default function NewPetitionPage() {
     }
     // 案件已建立：先清草稿並顯示收件結果，附件失敗不得讓使用者以為沒送出而重送。
     clearDraft();
-    const failed: string[] = [];
-    for (const file of files) {
-      try {
-        await petitionsApi.uploadAttachment(result.id, file);
-      } catch {
-        failed.push(file.name);
-      }
-    }
-    setFailedUploads(failed);
+    setUploads(files.map(file => ({ file, status: "uploading" })));
     setCreated(result);
     setSubmitting(false);
-    if (failed.length) toast.warning(`案件已送出，但有 ${failed.length} 個附件未上傳成功`);
+    for (const [index, file] of files.entries()) {
+      await uploadFile(result.id, file, index);
+    }
   };
 
   if (created) {
@@ -127,10 +133,21 @@ export default function NewPetitionPage() {
             </div>
           </div>
           <p className="text-sm" style={{ color: "var(--text-muted)" }}>{created.status_public_message}</p>
-          {failedUploads.length > 0 && (
-            <div role="alert" className="rounded-lg p-3 text-sm" style={{ background: "var(--danger-dim)", color: "var(--danger)", border: "1px solid var(--danger)" }}>
-              以下附件未上傳成功，請到案件頁重新上傳：{failedUploads.join("、")}
-            </div>
+          {uploads.length > 0 && (
+            <section aria-label="附件上傳狀態" aria-live="polite">
+              <ul className="space-y-2">
+                {uploads.map((upload, index) => (
+                  <li key={index} className="flex flex-wrap items-center gap-2 break-all text-sm">
+                    <span>{upload.file.name}</span>
+                    <span>{upload.status === "uploading" ? "上傳中" : upload.status === "done" ? "已上傳" : "上傳失敗"}</span>
+                    {upload.status === "failed" && (
+                      <button type="button" className="btn btn-ghost" onClick={() => void uploadFile(created.id, upload.file, index)}>重試上傳 {upload.file.name}</button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              {uploads.some(upload => upload.status === "uploading") && <p role="status">附件上傳中，請留在此頁。</p>}
+            </section>
           )}
           <div className="flex gap-2 flex-wrap">
             <Link className="btn btn-primary" href={`/petitions/${created.id}`}>查看案件進度</Link>

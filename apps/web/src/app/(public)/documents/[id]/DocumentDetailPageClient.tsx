@@ -19,6 +19,7 @@ import { apiUrl } from "@/lib/config";
 import { recordRecent } from "@/lib/recents";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
+import CopyButton from "@/components/ui/CopyButton";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { PetitionLinkSelector, type PetitionLinkOption } from "@/components/documents/PetitionLinkSelector";
 
@@ -582,23 +583,16 @@ export default function DocumentDetailPageClient({
           </div>
 
           {/* 複製連結 */}
-          <button
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(window.location.href);
-                toast.success("連結已複製");
-              } catch {
-                toast.error("無法複製連結，請手動複製網址列");
-              }
-            }}
+          <CopyButton
+            value={() => window.location.href}
+            icon="link"
+            iconSize={14}
+            announcement="公文連結已複製"
+            failureHint="無法複製連結，請手動複製網址列"
             className="topbar-icon-btn"
             title="複製連結"
-            aria-label="複製公文連結">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-            </svg>
-          </button>
+            aria-label="複製公文連結"
+          />
           </div>
 
           <div className="document-detail-document-actions" role="group" aria-label="公文操作">

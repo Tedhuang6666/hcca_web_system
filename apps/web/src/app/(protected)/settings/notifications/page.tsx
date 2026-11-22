@@ -17,6 +17,7 @@ import { SectionSkeleton } from "@/components/ui/Skeleton";
 import { useModuleStatus } from "@/contexts/ModuleStatusContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import Toggle from "@/components/ui/Toggle";
 
 const OPTION_GROUPS = [
   { id: "governance", label: "公文與法規" },
@@ -172,41 +173,6 @@ const SYSTEM_EMAIL_OPTIONS = [
 ] as const;
 
 type Channel = keyof ChannelPref;
-
-function Switch({
-  on,
-  disabled,
-  onClick,
-  label,
-}: {
-  on: boolean;
-  disabled: boolean;
-  onClick: () => void;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      aria-label={label}
-      disabled={disabled}
-      onClick={onClick}
-      className="relative inline-grid h-10 w-11 flex-shrink-0 place-items-center rounded-md transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-    >
-      <span
-        aria-hidden="true"
-        className="inline-flex h-5 w-9 items-center rounded-full transition-colors"
-        style={{ background: on ? "var(--primary)" : "var(--border-strong)" }}
-      >
-        <span
-          className="inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform"
-          style={{ transform: on ? "translateX(18px)" : "translateX(3px)" }}
-        />
-      </span>
-    </button>
-  );
-}
 
 export default function NotificationSettingsPage() {
   const confirm = useConfirm();
@@ -546,17 +512,17 @@ export default function NotificationSettingsPage() {
                           : "目前無法調整。"}
                       </p>
                     </div>
-                    <Switch
-                      on={enabled}
+                    <Toggle
+                      checked={enabled}
                       disabled={
                         !flag ||
                         Boolean(flag.archived_at) ||
                         systemEmailSaving !== null
                       }
-                      onClick={() => {
+                      onChange={() => {
                         if (flag) void toggleSystemEmail(flag, option.confirm);
                       }}
-                      label={`${enabled ? "關閉" : "開啟"}${option.label}`}
+                      ariaLabel={option.label}
                     />
                   </li>
                 );
@@ -695,38 +661,38 @@ export default function NotificationSettingsPage() {
                             </p>
                           </div>
                           <div className="flex w-12 justify-center">
-                            <Switch
-                              on={prefs[item.key].inapp}
+                            <Toggle
+                              checked={prefs[item.key].inapp}
                               disabled={saving}
-                              onClick={() => toggle(item.key, "inapp")}
-                              label={`${item.label}站內通知`}
+                              onChange={() => toggle(item.key, "inapp")}
+                              ariaLabel={`${item.label}站內通知`}
                             />
                           </div>
                           <div className="flex w-12 justify-center">
-                            <Switch
-                              on={prefs[item.key].email}
+                            <Toggle
+                              checked={prefs[item.key].email}
                               disabled={saving}
-                              onClick={() => toggle(item.key, "email")}
-                              label={`${item.label} Email 通知`}
+                              onChange={() => toggle(item.key, "email")}
+                              ariaLabel={`${item.label} Email 通知`}
                             />
                           </div>
                           {showLine && (
                             <div className="flex w-12 justify-center">
-                              <Switch
-                                on={prefs[item.key].line}
+                              <Toggle
+                                checked={prefs[item.key].line}
                                 disabled={saving}
-                                onClick={() => toggle(item.key, "line")}
-                                label={`${item.label} LINE 通知`}
+                                onChange={() => toggle(item.key, "line")}
+                                ariaLabel={`${item.label} LINE 通知`}
                               />
                             </div>
                           )}
                           {showDiscord && (
                             <div className="flex w-16 justify-center">
-                              <Switch
-                                on={prefs[item.key].discord}
+                              <Toggle
+                                checked={prefs[item.key].discord}
                                 disabled={saving}
-                                onClick={() => toggle(item.key, "discord")}
-                                label={`${item.label} Discord 通知`}
+                                onChange={() => toggle(item.key, "discord")}
+                                ariaLabel={`${item.label} Discord 通知`}
                               />
                             </div>
                           )}

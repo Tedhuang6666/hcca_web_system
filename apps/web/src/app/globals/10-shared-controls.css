@@ -1,0 +1,330 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   共用控制項：開關（Toggle.tsx）與複製按鈕（CopyButton.tsx）。
+   全站只有這一份尺寸與動態；頁面不要再自行畫開關或複製回饋。
+   語彙延續 09-continuity-motion.css：動作從使用者操作的位置出發，停在要去的地方。
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 開關：滑塊帶著主色滑過去 ───────────────────────────────────────────── */
+.switch {
+  --switch-width: 2.625rem;
+  --switch-height: 1.5rem;
+  --switch-inset: 3px;
+  --switch-thumb: calc(var(--switch-height) - 2 * var(--switch-inset));
+  --switch-travel: calc(var(--switch-width) - var(--switch-thumb) - 2 * var(--switch-inset));
+  --switch-stretch: 5px;
+  --switch-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  display: inline-block;
+  flex: 0 0 auto;
+  width: var(--switch-width);
+  height: var(--switch-height);
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--border-strong);
+  cursor: pointer;
+  vertical-align: middle;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 觸控熱區至少 44px 高，外觀維持細長 */
+.switch::before {
+  position: absolute;
+  inset: calc((2.75rem - var(--switch-height)) / -2) -2px;
+  content: "";
+}
+
+.switch:focus-visible {
+  outline: 2px solid var(--focus-ring, var(--primary));
+  outline-offset: 3px;
+}
+
+.switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+/* 主色墨跡：右緣跟著滑塊走，開啟時從左側被拉滿，關閉時被收回滑塊下 */
+.switch__ink {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--primary);
+  opacity: 0;
+  clip-path: inset(0 calc(100% - var(--switch-inset) - var(--switch-thumb)) 0 0 round 999px);
+  transition:
+    clip-path 300ms var(--switch-ease),
+    opacity 140ms linear 170ms;
+}
+
+.switch[aria-checked="true"] .switch__ink {
+  opacity: 1;
+  clip-path: inset(0 0 0 0 round 999px);
+  transition:
+    clip-path 300ms var(--switch-ease),
+    opacity 90ms linear;
+}
+
+.switch__thumb {
+  position: absolute;
+  top: var(--switch-inset);
+  left: var(--switch-inset);
+  display: grid;
+  width: var(--switch-thumb);
+  height: var(--switch-thumb);
+  place-items: center;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgb(20 16 8 / 0.24),
+    0 0 0 0.5px rgb(20 16 8 / 0.08);
+  transition:
+    transform 300ms var(--switch-ease),
+    width 180ms var(--switch-ease);
+}
+
+.switch[aria-checked="true"] .switch__thumb {
+  transform: translateX(var(--switch-travel));
+}
+
+/* 按住時滑塊朝要去的方向伸長，放開才滑過去 */
+.switch:active:not(:disabled) .switch__thumb {
+  width: calc(var(--switch-thumb) + var(--switch-stretch));
+}
+
+.switch[aria-checked="true"]:active:not(:disabled) .switch__thumb {
+  transform: translateX(calc(var(--switch-travel) - var(--switch-stretch)));
+}
+
+/* 滑塊固定是白色，勾號用固定深金色維持對比，不隨深色模式變淺 */
+.switch__check {
+  width: 0.625rem;
+  height: 0.625rem;
+  fill: none;
+  stroke: #7a5c12;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+
+.switch[aria-checked="true"] .switch__check {
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset 220ms var(--switch-ease) 170ms;
+}
+
+.switch-field {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.625rem;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  line-height: 1.4;
+  cursor: pointer;
+  user-select: none;
+}
+
+.switch-field[data-disabled] {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.switch-field__label {
+  min-width: 0;
+}
+
+/* ── 複製按鈕：結果出現在按下的地方 ─────────────────────────────────────── */
+.copy-button {
+  --copy-ok: var(--success);
+  --copy-fail: var(--danger);
+  --copy-roll: 110%;
+  --copy-shrink: 0.55;
+  position: relative;
+}
+
+/* 填色按鈕上用前景色，避免綠勾落在金底上 */
+.copy-button:is(.btn-primary, .btn-danger) {
+  --copy-ok: currentColor;
+  --copy-fail: currentColor;
+}
+
+.copy-button--plain {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.copy-button__icon {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+}
+
+.copy-button__icon > * {
+  grid-area: 1 / 1;
+}
+
+.copy-button__result {
+  color: var(--copy-ok);
+  opacity: 0;
+}
+
+.copy-button__result path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+
+.copy-button[data-copy-state="failed"] .copy-button__result {
+  color: var(--copy-fail);
+}
+
+/* 兩段文字疊在同一格：寬度取兩者較寬者，換字時按鈕不會變寬變窄 */
+.copy-button__labels {
+  display: inline-grid;
+  justify-items: center;
+  overflow: hidden;
+  margin-block: -0.2em;
+  padding-block: 0.2em;
+}
+
+.copy-button__label {
+  grid-area: 1 / 1;
+  white-space: nowrap;
+}
+
+.copy-button__label--result {
+  opacity: 0;
+}
+
+/* 複製後：原圖示收起，勾號沿筆畫畫出，文字往上翻成結果 */
+.copy-button:is([data-copy-state="copied"], [data-copy-state="failed"]) .copy-button__glyph {
+  animation: copy-glyph-leave 160ms cubic-bezier(0.32, 0, 0.67, 0) both;
+}
+
+.copy-button:is([data-copy-state="copied"], [data-copy-state="failed"]) .copy-button__result {
+  opacity: 1;
+}
+
+.copy-button:is([data-copy-state="copied"], [data-copy-state="failed"]) .copy-button__result path {
+  animation: copy-stroke-draw 320ms 80ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.copy-button:is([data-copy-state="copied"], [data-copy-state="failed"]) .copy-button__label:not(.copy-button__label--result) {
+  animation: copy-label-leave 180ms cubic-bezier(0.32, 0, 0.67, 0) both;
+}
+
+.copy-button:is([data-copy-state="copied"], [data-copy-state="failed"]) .copy-button__label--result {
+  animation: copy-label-arrive 280ms 60ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* 停留後繼續往上翻回原文字，結果符號淡出 */
+.copy-button[data-copy-state="idle"][data-copy-used] .copy-button__glyph {
+  animation: copy-glyph-return 260ms 60ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.copy-button[data-copy-state="idle"][data-copy-used] .copy-button__result {
+  animation: copy-result-leave 160ms cubic-bezier(0.32, 0, 0.67, 0) both;
+}
+
+.copy-button[data-copy-state="idle"][data-copy-used] .copy-button__result path {
+  stroke-dashoffset: 0;
+}
+
+.copy-button[data-copy-state="idle"][data-copy-used] .copy-button__label--result {
+  animation: copy-label-leave 180ms cubic-bezier(0.32, 0, 0.67, 0) both;
+}
+
+.copy-button[data-copy-state="idle"][data-copy-used] .copy-button__label:not(.copy-button__label--result) {
+  animation: copy-label-arrive 280ms 60ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes copy-glyph-leave {
+  to {
+    opacity: 0;
+    transform: scale(var(--copy-shrink)) rotate(-8deg);
+  }
+}
+
+@keyframes copy-glyph-return {
+  from {
+    opacity: 0;
+    transform: scale(var(--copy-shrink));
+  }
+}
+
+@keyframes copy-stroke-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes copy-result-leave {
+  from { opacity: 1; }
+
+  to {
+    opacity: 0;
+    transform: scale(var(--copy-shrink));
+  }
+}
+
+@keyframes copy-label-leave {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(calc(var(--copy-roll) * -1));
+  }
+}
+
+@keyframes copy-label-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(var(--copy-roll));
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── 減少動態：保留狀態與顏色的變化，拿掉位移、伸縮與筆畫描繪 ─────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .switch__thumb,
+  .switch[aria-checked="true"] .switch__check {
+    transition: none;
+  }
+
+  .switch .switch__ink,
+  .switch[aria-checked="true"] .switch__ink {
+    transition: opacity 120ms linear;
+  }
+
+  .switch:active:not(:disabled) .switch__thumb {
+    width: var(--switch-thumb);
+  }
+
+  .switch[aria-checked="true"]:active:not(:disabled) .switch__thumb {
+    transform: translateX(var(--switch-travel));
+  }
+
+  .copy-button {
+    --copy-roll: 0%;
+    --copy-shrink: 1;
+  }
+
+  .copy-button:is([data-copy-state="copied"], [data-copy-state="failed"]) .copy-button__result path {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}

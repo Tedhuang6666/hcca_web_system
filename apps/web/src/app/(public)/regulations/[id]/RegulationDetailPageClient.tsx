@@ -19,8 +19,10 @@ import { authFetch } from "@/lib/api/core";
 import { documentsApi } from "@/lib/api/documents";
 import { regulationHref, regulationsApi } from "@/lib/api/regulations";
 import { apiErrorMessage } from "@/lib/api-helpers";
+import { copyText } from "@/lib/clipboard";
 import { apiUrl } from "@/lib/config";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
+import CopyButton from "@/components/ui/CopyButton";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { formatRevisionDate, splitLegislativeHistory } from "@/lib/regulationHistory";
 import { regulationAppendices } from "@/lib/regulation-appendices";
@@ -174,21 +176,15 @@ export default function RegulationDetailPageClient({
     if (typeof navigator.share === "function") {
       try { await navigator.share(shareData); return; } catch {}
     }
-    navigator.clipboard.writeText(window.location.href)
+    copyText(window.location.href)
       .then(() => showSuccessToast("連結已複製到剪貼簿"))
       .catch(() => showErrorToast("複製失敗"));
   }, [reg?.title]);
 
-  // 複製連結
-  const handleCopyLink = useCallback(() => {
-    navigator.clipboard.writeText(window.location.href)
-      .then(() => showSuccessToast("連結已複製"))
-      .catch(() => showErrorToast("複製失敗"));
-  }, []);
-
+  // 條文列的複製鈕自己顯示結果；這裡只處理在條文上按右鍵複製時的提示。
   const handleCopyArticleLink = useCallback((path: string) => {
     const url = `${window.location.origin}${path}`;
-    navigator.clipboard.writeText(url)
+    copyText(url)
       .then(() => showSuccessToast("條文連結已複製"))
       .catch(() => showErrorToast("複製失敗"));
   }, []);
@@ -517,7 +513,8 @@ export default function RegulationDetailPageClient({
                   disabled={zoom >= 150} aria-label="放大" title="放大">A＋</button>
               </div>
               <button type="button" onClick={handleShare} className="btn btn-ghost">分享</button>
-              <button type="button" onClick={handleCopyLink} className="btn btn-ghost">複製連結</button>
+              <CopyButton value={() => window.location.href} label="複製連結" icon="none"
+                announcement="法規連結已複製" failureHint="複製失敗，請手動複製網址列" className="btn btn-ghost" />
               <AnimatedDownloadButton
                 request={() => authFetch(apiUrl(`${currentRegHref}/print`), { credentials: "include" })}
                 filename={`${reg.title || "法規"}.pdf`}

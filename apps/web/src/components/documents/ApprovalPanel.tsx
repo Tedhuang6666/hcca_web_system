@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { apiErrorMessage } from "@/lib/api-helpers";
 import type { ApprovalStepOut } from "@/lib/types";
 import type { UserSummary } from "@/lib/api";
 
@@ -168,6 +169,7 @@ export function ApprovalPanel({
   onSetDelegate: (stepOrder: number, delegateId: string | null) => Promise<void>;
 }) {
   const [loading, setLoading] = useState(false);
+  const [actionError, setActionError] = useState("");
   const [showReject, setShowReject] = useState(false);
   const [rejectComment, setRejectComment] = useState("");
   const [rejectMode, setRejectMode] = useState<"to_creator" | "to_previous">("to_creator");
@@ -177,13 +179,19 @@ export function ApprovalPanel({
 
   const handleApprove = async () => {
     setLoading(true);
-    try { await onApprove(approveComment); } finally { setLoading(false); }
+    setActionError("");
+    try { await onApprove(approveComment); }
+    catch (error) { setActionError(apiErrorMessage(error, "核准失敗，請稍後再試。")); }
+    finally { setLoading(false); }
   };
 
   const handleReject = async () => {
     if (!rejectComment.trim()) return;
     setLoading(true);
-    try { await onReject(rejectComment, rejectMode); setShowReject(false); } finally { setLoading(false); }
+    setActionError("");
+    try { await onReject(rejectComment, rejectMode); setShowReject(false); }
+    catch (error) { setActionError(apiErrorMessage(error, "退件失敗，請稍後再試。")); }
+    finally { setLoading(false); }
   };
 
   const toggleDelegatePicker = async (stepOrder: number) => {
@@ -362,6 +370,8 @@ export function ApprovalPanel({
         })}
       </div>
 
+      {actionError && <p role="alert" className="text-sm" style={{ color: "var(--danger)" }}>{actionError}</p>}
+
       {/* 審核操作 */}
       {canApprove && !showReject && (
         <div className="space-y-3 pt-3 border-t" style={{ borderColor: "var(--border)" }}>
@@ -391,7 +401,7 @@ export function ApprovalPanel({
               {loading ? "處理中…" : "核准"}
             </button>
             <button
-              onClick={() => setShowReject(true)}
+              onClick={() => { setActionError(""); setShowReject(true); }}
               className="approval-action-button motion-action-button motion-action-button--reject btn flex-1"
               style={{
                 background: "var(--danger-dim)",
@@ -449,7 +459,7 @@ export function ApprovalPanel({
               {loading ? "處理中…" : "確認退件"}
             </button>
             <button
-              onClick={() => setShowReject(false)}
+              onClick={() => { setActionError(""); setShowReject(false); }}
               className="btn btn-ghost">
               取消
             </button>

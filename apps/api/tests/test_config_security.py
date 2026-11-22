@@ -59,6 +59,12 @@ def test_production_rejects_debug_true() -> None:
         _make(ENVIRONMENT="production", DEBUG=True, COOKIE_SECURE=True)
 
 
+def test_production_rejects_environment_editor() -> None:
+    with pytest.raises(ValidationError, match="ENABLE_ENV_EDITOR"):
+        _make(ENVIRONMENT="production", ENABLE_ENV_EDITOR=True, COOKIE_SECURE=True)
+    assert _make(ENVIRONMENT="development", ENABLE_ENV_EDITOR=True).ENABLE_ENV_EDITOR
+
+
 def test_production_rejects_public_api_docs() -> None:
     with pytest.raises(ValidationError, match="ENABLE_API_DOCS"):
         _make(ENVIRONMENT="production", ENABLE_API_DOCS=True, COOKIE_SECURE=True)

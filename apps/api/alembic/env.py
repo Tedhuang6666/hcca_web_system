@@ -6,7 +6,6 @@ from alembic import context
 from alembic.script import ScriptDirectory
 from sqlalchemy import Connection, create_engine, inspect, pool
 
-
 # --- 載入完整 ORM registry（Autogenerate 必需）---
 import api.models  # noqa: F401
 from api.core.config import settings
@@ -14,7 +13,8 @@ from api.core.database import Base
 
 config = context.config
 
-if config.config_file_name is not None:
+# 嵌入式執行（如測試使用既有連線）沿用呼叫端 logging，避免重設應用程式與捕捉器。
+if config.config_file_name is not None and config.attributes.get("connection") is None:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata

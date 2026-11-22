@@ -210,9 +210,6 @@ export default function CouncilProposalsPage() {
         <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
           議會提案
         </h1>
-        <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-          送出的提案會先進入常務委員會審查；常委通過後，才會排入議會議程。
-        </p>
         <DraftStatus lastSavedAt={lastSavedAt} className="mt-2" />
       </div>
 
