@@ -336,7 +336,7 @@ export default function DiscordAdminPage() {
     >,
     label: string,
   ) => (
-    <label className="space-y-1 text-xs" style={{ color: "var(--text-muted)" }}>
+    <label className="space-y-1 text-xs text-fg-muted!">
       <span>{label}</span>
       <select
         className="input w-full"
@@ -369,20 +369,20 @@ export default function DiscordAdminPage() {
       <section className="card p-5">
         <h2 className="text-sm font-semibold">Bot 狀態與維運</h2>
         <div className="mt-3 grid gap-3 sm:grid-cols-4">
-          <div className="rounded border px-3 py-2" style={{ borderColor: "var(--border)" }}>
-            <p className="text-xs" style={{ color: "var(--text-muted)" }}>Bot Token</p>
+          <div className="rounded border px-3 py-2 border-border!">
+            <p className="text-xs text-fg-muted!">Bot Token</p>
             <p className="text-sm font-semibold">{health?.bot_configured ? "已設定" : "未確認"}</p>
           </div>
-          <div className="rounded border px-3 py-2" style={{ borderColor: "var(--border)" }}>
-            <p className="text-xs" style={{ color: "var(--text-muted)" }}>OAuth</p>
+          <div className="rounded border px-3 py-2 border-border!">
+            <p className="text-xs text-fg-muted!">OAuth</p>
             <p className="text-sm font-semibold">{health?.oauth_configured ? "已設定" : "未確認"}</p>
           </div>
-          <div className="rounded border px-3 py-2" style={{ borderColor: "var(--border)" }}>
-            <p className="text-xs" style={{ color: "var(--text-muted)" }}>Bot</p>
+          <div className="rounded border px-3 py-2 border-border!">
+            <p className="text-xs text-fg-muted!">Bot</p>
             <p className="truncate text-sm font-semibold">{health?.bot_username ?? "尚無資料"}</p>
           </div>
-          <div className="rounded border px-3 py-2" style={{ borderColor: "var(--border)" }}>
-            <p className="text-xs" style={{ color: "var(--text-muted)" }}>綁定帳號</p>
+          <div className="rounded border px-3 py-2 border-border!">
+            <p className="text-xs text-fg-muted!">綁定帳號</p>
             <p className="text-sm font-semibold">{health?.has_active_links ? "已有" : "尚未確認"}</p>
           </div>
         </div>
@@ -448,12 +448,12 @@ export default function DiscordAdminPage() {
       <section className="card p-5">
         <h2 className="text-sm font-semibold">伺服器與頻道</h2>
         {discordFetchError && (
-          <p className="mt-2 text-xs" style={{ color: "var(--danger)" }}>
+          <p className="mt-2 text-xs text-danger!">
             {discordFetchError}。請確認 Bot Token 與伺服器權限，資源載入後即可由選單設定。
           </p>
         )}
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <label className="space-y-1 text-xs" style={{ color: "var(--text-muted)" }}>
+          <label className="space-y-1 text-xs text-fg-muted!">
             <span>Discord 伺服器</span>
             <select
               className="input w-full"
@@ -469,7 +469,7 @@ export default function DiscordAdminPage() {
               ))}
             </select>
           </label>
-          <label className="space-y-1 text-xs" style={{ color: "var(--text-muted)" }}>
+          <label className="space-y-1 text-xs text-fg-muted!">
             <span>顯示名稱</span>
             <input
               className="input w-full"
@@ -486,7 +486,7 @@ export default function DiscordAdminPage() {
           {channelField("announcement_channel_id", "公告頻道")}
           {channelField("moderation_log_channel_id", "社群管理記錄頻道")}
           {channelField("welcome_channel_id", "歡迎頻道")}
-          <label className="flex items-center gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
+          <label className="flex items-center gap-2 text-xs text-fg-muted!">
             <input
               type="checkbox"
               checked={configDraft.petition_private_channel_enabled}
@@ -499,7 +499,7 @@ export default function DiscordAdminPage() {
             />
             啟用陳情私密討論頻道
           </label>
-          <label className="space-y-1 text-xs" style={{ color: "var(--text-muted)" }}>
+          <label className="space-y-1 text-xs text-fg-muted!">
             <span>管理員身分組</span>
             <select
               className="input w-full"
@@ -518,7 +518,7 @@ export default function DiscordAdminPage() {
               ))}
             </select>
           </label>
-          <label className="space-y-1 text-xs" style={{ color: "var(--text-muted)" }}>
+          <label className="space-y-1 text-xs text-fg-muted!">
             <span>陳情幹部身分組</span>
             <select
               className="input w-full"
@@ -539,7 +539,7 @@ export default function DiscordAdminPage() {
           </label>
         </div>
         {loadingDiscordMeta && (
-          <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+          <p className="mt-2 text-xs text-fg-muted!">
             正在從 Discord 讀取頻道與身分組...
           </p>
         )}
@@ -566,7 +566,7 @@ export default function DiscordAdminPage() {
       <section className="card hidden p-5">
         <h2 className="text-sm font-semibold">職位 / 組織身分組同步</h2>
         <div className="mt-4 grid gap-3 sm:grid-cols-5">
-          <label className="space-y-1 text-xs sm:col-span-1" style={{ color: "var(--text-muted)" }}>
+          <label className="space-y-1 text-xs sm:col-span-1 text-fg-muted!">
             <span>類型</span>
             <select
               className="input w-full"
@@ -577,7 +577,7 @@ export default function DiscordAdminPage() {
               <option value="org">組織</option>
             </select>
           </label>
-          <label className="space-y-1 text-xs sm:col-span-2" style={{ color: "var(--text-muted)" }}>
+          <label className="space-y-1 text-xs sm:col-span-2 text-fg-muted!">
             <span>{mappingDraft.mapping_kind === "position" ? "職位" : "組織"}</span>
             {mappingDraft.mapping_kind === "position" ? (
               <select
@@ -607,7 +607,7 @@ export default function DiscordAdminPage() {
               </select>
             )}
           </label>
-          <label className="space-y-1 text-xs sm:col-span-2" style={{ color: "var(--text-muted)" }}>
+          <label className="space-y-1 text-xs sm:col-span-2 text-fg-muted!">
             <span>Discord 身分組</span>
             <select
               className="input w-full"
@@ -628,9 +628,9 @@ export default function DiscordAdminPage() {
           新增映射
         </button>
 
-        <div className="mt-5 overflow-hidden rounded border" style={{ borderColor: "var(--border)" }}>
+        <div className="mt-5 overflow-hidden rounded border border-border!">
           {mappings.length === 0 ? (
-            <p className="px-4 py-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+            <p className="px-4 py-8 text-center text-sm text-fg-muted!">
               尚未建立身分組映射。
             </p>
           ) : (
@@ -638,8 +638,7 @@ export default function DiscordAdminPage() {
               {mappings.map((mapping) => (
                 <li
                   key={mapping.id}
-                  className="flex items-center justify-between gap-3 px-4 py-3"
-                  style={{ borderBottom: "1px solid var(--border)" }}
+                  className="flex items-center justify-between gap-3 px-4 py-3 border-b! border-b-border!"
                 >
                   <div className="min-w-0">
                     <p className="text-sm font-medium">
@@ -647,7 +646,7 @@ export default function DiscordAdminPage() {
                         ? positionName[mapping.position_id ?? ""] ?? mapping.position_id
                         : orgName[mapping.org_id ?? ""] ?? mapping.org_id}
                     </p>
-                    <p className="mt-1 font-mono text-xs" style={{ color: "var(--text-muted)" }}>
+                    <p className="mt-1 font-mono text-xs text-fg-muted!">
                       {roleName[mapping.role_id] ?? `role ${mapping.role_id}`} · guild {mapping.guild_id}
                       {mapping.mapping_kind === "org" && mapping.org_id ? ` · ${orgName[mapping.org_id] ?? ""}` : ""}
                       {mapping.mapping_kind === "position" && mapping.position_id ? ` · ${positionName[mapping.position_id] ?? ""}` : ""}
@@ -669,11 +668,11 @@ export default function DiscordAdminPage() {
 
       <section className="card hidden p-5">
         <h2 className="text-sm font-semibold">社群暱稱前綴</h2>
-        <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+        <p className="mt-1 text-xs text-fg-muted!">
           依職位或組織自動套用前綴，會保留成員原本自訂暱稱。優先序數字越小越優先：行政 10、司法 20、學代 30、立法 40。
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-6">
-          <label className="space-y-1 text-xs sm:col-span-1" style={{ color: "var(--text-muted)" }}>
+          <label className="space-y-1 text-xs sm:col-span-1 text-fg-muted!">
             <span>類型</span>
             <select
               className="input w-full"
@@ -691,7 +690,7 @@ export default function DiscordAdminPage() {
               <option value="org">組織</option>
             </select>
           </label>
-          <label className="space-y-1 text-xs sm:col-span-2" style={{ color: "var(--text-muted)" }}>
+          <label className="space-y-1 text-xs sm:col-span-2 text-fg-muted!">
             <span>{nicknameDraft.mapping_kind === "position" ? "職位" : "組織"}</span>
             {nicknameDraft.mapping_kind === "position" ? (
               <select
@@ -721,7 +720,7 @@ export default function DiscordAdminPage() {
               </select>
             )}
           </label>
-          <label className="space-y-1 text-xs sm:col-span-1" style={{ color: "var(--text-muted)" }}>
+          <label className="space-y-1 text-xs sm:col-span-1 text-fg-muted!">
             <span>前綴</span>
             <input
               className="input w-full"
@@ -732,7 +731,7 @@ export default function DiscordAdminPage() {
               }
             />
           </label>
-          <label className="space-y-1 text-xs sm:col-span-1" style={{ color: "var(--text-muted)" }}>
+          <label className="space-y-1 text-xs sm:col-span-1 text-fg-muted!">
             <span>優先序</span>
             <select
               className="input w-full"
@@ -765,9 +764,9 @@ export default function DiscordAdminPage() {
           </div>
         </div>
 
-        <div className="mt-5 overflow-hidden rounded border" style={{ borderColor: "var(--border)" }}>
+        <div className="mt-5 overflow-hidden rounded border border-border!">
           {nicknameRules.length === 0 ? (
-            <p className="px-4 py-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+            <p className="px-4 py-8 text-center text-sm text-fg-muted!">
               尚未建立暱稱前綴規則。
             </p>
           ) : (
@@ -775,8 +774,7 @@ export default function DiscordAdminPage() {
               {nicknameRules.map((rule) => (
                 <li
                   key={rule.id}
-                  className="flex items-center justify-between gap-3 px-4 py-3"
-                  style={{ borderBottom: "1px solid var(--border)" }}
+                  className="flex items-center justify-between gap-3 px-4 py-3 border-b! border-b-border!"
                 >
                   <div className="min-w-0">
                     <p className="text-sm font-medium">
@@ -785,7 +783,7 @@ export default function DiscordAdminPage() {
                         ? positionName[rule.position_id ?? ""] ?? rule.position_id
                         : orgName[rule.org_id ?? ""] ?? rule.org_id}
                     </p>
-                    <p className="mt-1 font-mono text-xs" style={{ color: "var(--text-muted)" }}>
+                    <p className="mt-1 font-mono text-xs text-fg-muted!">
                       priority {rule.priority} · guild {rule.guild_id}
                     </p>
                   </div>
@@ -805,11 +803,11 @@ export default function DiscordAdminPage() {
 
       <section className="card p-5">
         <h2 className="text-sm font-semibold">機關公告頻道</h2>
-        <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+        <p className="mt-1 text-xs text-fg-muted!">
           公開公文核准、公告發布後，會依機關自動送到這裡設定的 Discord 頻道。
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <label className="space-y-1 text-xs" style={{ color: "var(--text-muted)" }}>
+          <label className="space-y-1 text-xs text-fg-muted!">
             <span>機關</span>
             <select
               className="input w-full"
@@ -824,7 +822,7 @@ export default function DiscordAdminPage() {
               ))}
             </select>
           </label>
-          <label className="space-y-1 text-xs" style={{ color: "var(--text-muted)" }}>
+          <label className="space-y-1 text-xs text-fg-muted!">
             <span>Discord 公告頻道</span>
             <select
               className="input w-full"
@@ -854,9 +852,9 @@ export default function DiscordAdminPage() {
           儲存機關頻道
         </button>
 
-        <div className="mt-5 overflow-hidden rounded border" style={{ borderColor: "var(--border)" }}>
+        <div className="mt-5 overflow-hidden rounded border border-border!">
           {orgChannelMappings.length === 0 ? (
-            <p className="px-4 py-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+            <p className="px-4 py-8 text-center text-sm text-fg-muted!">
               尚未設定機關公告頻道。
             </p>
           ) : (
@@ -866,14 +864,13 @@ export default function DiscordAdminPage() {
                 return (
                   <li
                     key={mapping.id}
-                    className="flex items-center justify-between gap-3 px-4 py-3"
-                    style={{ borderBottom: "1px solid var(--border)" }}
+                    className="flex items-center justify-between gap-3 px-4 py-3 border-b! border-b-border!"
                   >
                     <div className="min-w-0">
                       <p className="text-sm font-medium">
                         {orgName[mapping.org_id] ?? mapping.org_id}
                       </p>
-                      <p className="mt-1 font-mono text-xs" style={{ color: "var(--text-muted)" }}>
+                      <p className="mt-1 font-mono text-xs text-fg-muted!">
                         {channel ? `#${channel.name}` : `channel ${mapping.channel_id}`} · guild {mapping.guild_id}
                       </p>
                     </div>
