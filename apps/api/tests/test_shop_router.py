@@ -922,7 +922,7 @@ async def test_upload_image_with_permission_succeeds(
 
     await _grant_permission(db_session, member_user, "shop:manage")
     monkeypatch.setattr(
-        "api.routers.shop.get_storage", lambda: LocalStorageBackend(base_dir=str(tmp_path))
+        "api.routers.shop._catalog.get_storage", lambda: LocalStorageBackend(base_dir=str(tmp_path))
     )
     ac = authed_client_factory(member_user)
     resp = await ac.post("/shop/images", files={"file": ("a.png", _PNG_BYTES, "image/png")})
@@ -4989,7 +4989,12 @@ async def test_launch_clears_only_product_test_orders_and_restores_stock(
         await db_session.scalar(select(Receivable.id).where(Receivable.source_id == test_id))
         is None
     )
-    assert await db_session.scalar(select(OutboxEvent.id)) is None
+    pending = list(await db_session.scalars(select(OutboxEvent)))
+    assert {event.event_type for event in pending} == {"realtime.room"}
+    assert {event.payload["order_id"] for event in pending} == {
+        formal_order["id"],
+        other_order["id"],
+    }
     assert await db_session.scalar(select(func.count()).select_from(ShopOrderPromotion)) == 0
     assert (await client.get(f"/shop/products/{product.id}")).status_code == 200
     assert (await authed_client_factory(manager).post(launch_url)).status_code == 409

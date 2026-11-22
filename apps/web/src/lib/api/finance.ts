@@ -145,8 +145,6 @@ export const financeApi = {
     patch<FinanceBudgetIncomeRecord>(`/finance/budgets/${budgetId}/income-records/${recordId}`, body),
   exportBudget: (budgetId: string) =>
     downloadDocument(`/finance/budgets/${budgetId}/export.xlsx`, "預算總表.xlsx"),
-  exportAdvanceReceipt: (budgetId: string, expenseIds: string[]) =>
-    downloadDocument(`/finance/budgets/${budgetId}/advance-receipt.docx`, "預先代墊簽收單.docx", { expense_ids: expenseIds }),
   updateBudgetIncomeItem: (budgetId: string, incomeId: string, body: { amount: number; note?: string | null }) =>
     patch<FinanceBudgetIncomeItem>(`/finance/budgets/${budgetId}/income-items/${incomeId}`, body),
   renameBudget: (budgetId: string, body: { name: string }) =>

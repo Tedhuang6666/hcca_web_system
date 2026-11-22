@@ -10,14 +10,6 @@
   --text-disabled: #89879a;
 }
 
-.scroll-progress-bar {
-  transition: none;
-}
-
-.float-btn {
-  animation: none;
-}
-
 .dashboard-task-row {
   border-left-width: 1px;
 }
@@ -33,15 +25,6 @@
     min-height: 44px;
   }
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .scroll-progress-bar,
-  .float-btn {
-    transition: none;
-    animation: none;
-  }
-}
-
 /* 觸控裝置的按鈕至少 44px 高（WCAG 2.5.5／Apple HIG），包含 .btn-sm。 */
 @media (pointer: coarse) {
   .btn,

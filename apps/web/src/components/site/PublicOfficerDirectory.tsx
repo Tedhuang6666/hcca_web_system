@@ -73,10 +73,10 @@ function OfficerCard({ officer, index = 0 }: { officer: PublicOfficerOut; index?
       } as React.CSSProperties}
     >
       <div
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border"
+        className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border"
         style={{
           background: isLeader ? "var(--primary)" : "var(--primary-dim)",
-          color: isLeader ? "var(--primary-text)" : "var(--primary)",
+          color: isLeader ? "var(--primary-fg)" : "var(--primary-text)",
           borderColor: isLeader ? "var(--primary)" : "var(--border-strong)",
         }}
       >
@@ -102,7 +102,7 @@ function OfficerCard({ officer, index = 0 }: { officer: PublicOfficerOut; index?
           </h3>
           {isLeader && (
             <span
-              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold"
+              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold"
               style={{ color: "var(--primary-text)", background: "var(--primary)" }}
             >
               <Crown size={11} aria-hidden /> 部門主管
@@ -110,7 +110,7 @@ function OfficerCard({ officer, index = 0 }: { officer: PublicOfficerOut; index?
           )}
           {officer.is_featured && (
             <span
-              className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+              className="rounded-full px-2 py-0.5 text-xs font-semibold"
               style={{ color: "var(--primary-text)", background: "var(--primary-dim)" }}
             >
               精選
@@ -223,7 +223,7 @@ export default function PublicOfficerDirectory({
                       <h3 className="text-sm font-bold">{role.positionName}</h3>
                       {isLeader && (
                         <span
-                          className="rounded-full px-2 py-0.5 text-[10px] font-bold"
+                          className="rounded-full px-2 py-0.5 text-xs font-bold"
                           style={{ color: "var(--primary-text)", background: "var(--primary)" }}
                         >
                           長級

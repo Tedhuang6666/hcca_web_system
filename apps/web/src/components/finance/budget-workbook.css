@@ -33,16 +33,16 @@
 .budget-workbook__changes li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem; padding: .6rem 0; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
 .budget-workbook__changes b { margin-inline-start: .4rem; }
 .budget-workbook__empty { padding: 1rem; color: var(--text-secondary); }
-.budget-advance-receipts { min-width: 0; }
-.budget-advance-receipts > :not(header) { margin-inline: 1rem; }
-.budget-advance-receipts__footer { padding-bottom: 1rem; }
-.budget-advance-receipts__list { display: grid; gap: .5rem; }
-.budget-advance-receipts__list label { display: flex; align-items: center; gap: .75rem; min-height: 44px; padding: .6rem 0; border-bottom: 1px solid var(--border); }
-.budget-advance-receipts__list input { flex-shrink: 0; width: 1.15rem; height: 1.15rem; accent-color: var(--primary); }
-.budget-advance-receipts__list span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.budget-advance-receipts__list small { display: block; color: var(--text-secondary); }
-.budget-advance-receipts__footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; margin-top: 1rem; }
-.budget-workbook :focus-visible, .budget-advance-receipts :focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+
+
+
+
+
+
+
+
+
+.budget-workbook :focus-visible{ outline: 2px solid var(--primary); outline-offset: 3px; }
 @media (prefers-color-scheme: dark) {
   .budget-workbook__new-row { background: #3b2b1c; color: #ffdfbf; }
 }

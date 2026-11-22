@@ -112,7 +112,6 @@ export default function ReceivablesPage() {
       <header className="receivables-header">
         <div>
           <h1>班級與校商收款</h1>
-          <p>此處的應收狀態不會變動財務總帳。</p>
         </div>
         <AnimatedDownloadButton
           className="btn btn-secondary"

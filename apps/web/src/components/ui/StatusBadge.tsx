@@ -161,7 +161,7 @@ export function OrderStatusBadge({ status }: { status: OrderStatus }) {
 const PETITION_STATUS: Record<PetitionStatus, BadgeDef> = {
   submitted: {
     label: "已收件",
-    color: "var(--primary)",
+    color: "var(--primary-text)",
     bg: "var(--primary-dim)",
     border: "var(--info-border)",
   },
@@ -214,21 +214,26 @@ export function PetitionStatusBadge({ status }: { status: PetitionStatus }) {
 }
 
 /* ── 法規分類 ─────────────────────────────────────────────────────────────── */
-const REG_CATEGORY_MAP: Record<string, { label: string; color: string }> = {
-  constitution:       { label: "憲章",       color: "#D97706" },
-  ordinance:          { label: "條例",       color: "#059669" },
-  procedure:          { label: "辦法",       color: "#2563EB" },
+const REG_CATEGORY_MAP: Record<string, { label: string; tone: "amber" | "green" | "blue" }> = {
+  constitution:       { label: "憲章",       tone: "amber" },
+  ordinance:          { label: "條例",       tone: "green" },
+  procedure:          { label: "辦法",       tone: "blue" },
 };
 
 export function RegulationCategoryBadge({ category }: { category: string }) {
-  const { label, color } = REG_CATEGORY_MAP[category] ?? { label: category, color: "#64748B" };
+  const entry = REG_CATEGORY_MAP[category];
+  const label = entry?.label ?? category;
   return (
     <span
       className="badge regulation-category-badge"
-      style={{
-        color: "var(--text-primary)",
-        background: `${color}18`,
-        borderColor: `${color}40`,
+      style={entry ? {
+        color: `var(--tag-${entry.tone}-fg)`,
+        background: `var(--tag-${entry.tone}-bg)`,
+        borderColor: `var(--tag-${entry.tone}-border)`,
+      } : {
+        color: "var(--text-secondary)",
+        background: "var(--bg-hover)",
+        borderColor: "var(--border)",
       }}>
       {label}
     </span>

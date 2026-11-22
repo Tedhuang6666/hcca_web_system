@@ -5220,23 +5220,6 @@ export interface paths {
         patch: operations["update_budget_name_finance_budgets__budget_id__patch"];
         trace?: never;
     };
-    "/finance/budgets/{budget_id}/advance-receipt.docx": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Export Advance Receipt */
-        post: operations["export_advance_receipt_finance_budgets__budget_id__advance_receipt_docx_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/finance/budgets/{budget_id}/expenses": {
         parameters: {
             query?: never;
@@ -8098,6 +8081,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/petitions/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 建立陳情案件並同時上傳附件（需登入且具名） */
+        post: operations["submit_petition_with_attachments_petitions_submit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/petitions/types": {
         parameters: {
             query?: never;
@@ -10324,6 +10324,23 @@ export interface paths {
         get: operations["download_order_quantities_shop_orders_quantities_xlsx_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shop/orders/recalculate-promotions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 手動重算指定訂單的優惠 */
+        post: operations["recalculate_order_promotions_shop_orders_recalculate_promotions_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -13643,6 +13660,20 @@ export interface components {
             /** File */
             file: string;
         };
+        /** Body_submit_petition_with_attachments_petitions_submit_post */
+        Body_submit_petition_with_attachments_petitions_submit_post: {
+            /** Attachments */
+            attachments?: string[] | null;
+            /** Content */
+            content: string;
+            /** Title */
+            title: string;
+            /**
+             * Type Id
+             * Format: uuid
+             */
+            type_id: string;
+        };
         /** Body_upload_attachment_documents__doc_id__attachments_post */
         Body_upload_attachment_documents__doc_id__attachments_post: {
             /**
@@ -13702,11 +13733,6 @@ export interface components {
         Body_upload_template_image_merchandise_submissions_admin_template_images_post: {
             /** File */
             file: string;
-        };
-        /** BudgetAdvanceReceiptCreate */
-        BudgetAdvanceReceiptCreate: {
-            /** Expense Ids */
-            expense_ids: string[];
         };
         /** BudgetAllocationCreate */
         BudgetAllocationCreate: {
@@ -16677,9 +16703,6 @@ export interface components {
             previous_comments?: string[];
             /** Recommended Actions */
             recommended_actions?: string[];
-            /** Related Items */
-            related_items?: components["schemas"]["ContextLink"][];
-            source_activity?: components["schemas"]["ContextLink"] | null;
         };
         /** DocumentApprovalDelegationCreate */
         DocumentApprovalDelegationCreate: {
@@ -22110,6 +22133,43 @@ export interface components {
             /** Variant Key */
             variant_key: string;
         };
+        /** OrderRecalculateItem */
+        OrderRecalculateItem: {
+            /** New Total */
+            new_total: number;
+            /** Old Total */
+            old_total: number;
+            /**
+             * Order Id
+             * Format: uuid
+             */
+            order_id: string;
+            /** Reason */
+            reason?: string | null;
+            /** Serial Number */
+            serial_number: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "updated" | "unchanged" | "skipped";
+        };
+        /** OrderRecalculateOut */
+        OrderRecalculateOut: {
+            /** Results */
+            results: components["schemas"]["OrderRecalculateItem"][];
+            /** Skipped */
+            skipped: number;
+            /** Unchanged */
+            unchanged: number;
+            /** Updated */
+            updated: number;
+        };
+        /** OrderRecalculateRequest */
+        OrderRecalculateRequest: {
+            /** Order Ids */
+            order_ids: string[];
+        };
         /**
          * OrderStatus
          * @enum {string}
@@ -24596,8 +24656,6 @@ export interface components {
             petition_id: string;
             /** Recommended Actions */
             recommended_actions?: string[];
-            /** Related Activities */
-            related_activities?: components["schemas"]["ContextLink"][];
             /** Related Regulations */
             related_regulations?: components["schemas"]["ContextLink"][];
             /** Similar Petitions */
@@ -28480,8 +28538,6 @@ export interface components {
         };
         /** RegulationUsageContextOut */
         RegulationUsageContextOut: {
-            /** Pending Reviews */
-            pending_reviews?: components["schemas"]["ContextLink"][];
             /**
              * Regulation Id
              * Format: uuid
@@ -44155,41 +44211,6 @@ export interface operations {
             };
         };
     };
-    export_advance_receipt_finance_budgets__budget_id__advance_receipt_docx_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                budget_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BudgetAdvanceReceiptCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     create_budget_expense_finance_budgets__budget_id__expenses_post: {
         parameters: {
             query?: never;
@@ -50362,6 +50383,39 @@ export interface operations {
             };
         };
     };
+    submit_petition_with_attachments_petitions_submit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_submit_petition_with_attachments_petitions_submit_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PetitionCreatedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_public_types_petitions_types_get: {
         parameters: {
             query?: never;
@@ -55322,6 +55376,39 @@ export interface operations {
                 };
                 content: {
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recalculate_order_promotions_shop_orders_recalculate_promotions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrderRecalculateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderRecalculateOut"];
                 };
             };
             /** @description Validation Error */

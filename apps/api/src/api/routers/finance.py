@@ -43,7 +43,6 @@ from api.routers.finance_claims import complete_expense_claim as complete_expens
 from api.routers.finance_claims import create_expense_claim as create_expense_claim
 from api.routers.finance_claims import download_evidence as download_evidence
 from api.routers.finance_claims import download_item_evidence as download_item_evidence
-from api.routers.finance_claims import export_advance_receipt as export_advance_receipt
 from api.routers.finance_claims import list_claim_items as list_claim_items
 from api.routers.finance_claims import mark_dues_payment as mark_dues_payment
 from api.routers.finance_claims import mark_school_payment as mark_school_payment

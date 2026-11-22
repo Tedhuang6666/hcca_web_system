@@ -54,8 +54,6 @@ ENTITY_LABEL: dict[str, str] = {
     "judicial_petition": "評議",
     "council_proposal": "議會提案",
     "order": "商品訂單",
-    "meal_order": "學餐訂單",
-    "meal_schedule": "學餐結單",
     "org": "組織",
     "publication": "發布",
     "exam_paper": "試卷",
@@ -67,7 +65,6 @@ ENTITY_LABEL: dict[str, str] = {
     "position": "職位",
     "school_class": "班級",
     "product": "商品",
-    "meal_vendor": "餐商",
     "partner_business": "特約商家",
     "email_message": "郵件",
     "document_template": "公文範本",
@@ -456,7 +453,7 @@ async def _exec_action(
             payload={
                 "title": _render(action.get("title"), context) or "治理自動化通知",
                 "body": _render(action.get("body"), context) or context.get("title") or "",
-                "link": context.get("href") or f"/governance/{matter.id}",
+                "link": context.get("href"),
             },
         )
 

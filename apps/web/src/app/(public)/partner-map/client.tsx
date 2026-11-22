@@ -7,10 +7,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal, preconnect } from "react-dom";
 import Link from "next/link";
 import Image from "next/image";
-import { AtSign, Clock, Copy, ExternalLink, LocateFixed, Mail, MapPin, MessageCircle, Phone, Search, Share2, Tag } from "lucide-react";
+import { AtSign, Clock, ExternalLink, LocateFixed, Mail, MapPin, MessageCircle, Phone, Search, Share2, Tag } from "lucide-react";
 import { partnerMapApi, recommendedVendorsApi, ApiError } from "@/lib/api";
 import type { PartnerBusinessDetail, PartnerBusinessDirectoryItem } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
+import { copyText } from "@/lib/clipboard";
+import CopyButton from "@/components/ui/CopyButton";
 import type { PartnerTagOut } from "@/lib/types";
 import type { RecommendedVendorOutWithHours, UnifiedMapItem } from "@/lib/partner-map-types";
 import { formatBusinessHours } from "@/lib/business-hours";
@@ -72,25 +74,6 @@ function normalizedBusinessName(value: string): string {
   return decodeBusinessSlug(value).toLocaleLowerCase();
 }
 
-async function copyText(value: string): Promise<void> {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(value);
-    return;
-  }
-  const textarea = document.createElement("textarea");
-  textarea.value = value;
-  textarea.setAttribute("readonly", "true");
-  textarea.style.position = "fixed";
-  textarea.style.opacity = "0";
-  document.body.appendChild(textarea);
-  textarea.select();
-  try {
-    if (!document.execCommand("copy")) throw new Error("copy_failed");
-  } finally {
-    textarea.remove();
-  }
-}
-
 function replacePartnerMapPath(path: string): void {
   if (typeof window === "undefined") return;
   window.history.replaceState(window.history.state, "", path);
@@ -121,13 +104,11 @@ function DetailPanel({
   business,
   loading,
   onShare,
-  onCopyLink,
   onClose,
 }: {
   business: PartnerBusinessDetail | null;
   loading: boolean;
   onShare: () => void;
-  onCopyLink: () => void;
   onClose: () => void;
 }) {
   if (!business && !loading) return null;
@@ -155,9 +136,14 @@ function DetailPanel({
             <button type="button" className="btn btn-secondary min-h-11 flex-1" onClick={onShare}>
               <Share2 size={15} aria-hidden="true" /> 分享店家
             </button>
-            <button type="button" className="btn btn-secondary min-h-11 flex-1" onClick={onCopyLink}>
-              <Copy size={15} aria-hidden="true" /> 複製連結
-            </button>
+            <CopyButton
+              value={businessUrl(business.name)}
+              label="複製連結"
+              icon="link"
+              announcement="店家連結已複製"
+              failureHint="無法複製連結，請手動複製網址列"
+              className="btn btn-secondary min-h-11 flex-1"
+            />
           </div>
           {business.cover_image_url && (
             <Image
@@ -339,13 +325,13 @@ function RecommendedDetailPanel({
       style={{ background: "var(--bg)", borderColor: "var(--border)" }}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-medium" style={{ color: "#2563EB" }}>推薦商家</p>
+          <p className="text-xs font-semibold" style={{ color: "var(--tag-blue-fg)" }}>推薦商家</p>
           <h2 className="mt-1 text-lg font-semibold" style={{ color: "var(--text-primary)" }}>{vendor.name}</h2>
         </div>
         <button className="topbar-icon-btn" onClick={onClose} aria-label="關閉推薦商家詳情">×</button>
       </div>
       <div className="mt-4 space-y-4">
-        {vendor.category && <p className="text-xs font-medium" style={{ color: "#2563EB" }}>{vendor.category}</p>}
+        {vendor.category && <p className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>{vendor.category}</p>}
         {vendor.summary && <p className="text-sm" style={{ color: "var(--text-secondary)" }}>{vendor.summary}</p>}
         {vendor.description && (
           <p className="whitespace-pre-wrap text-sm" style={{ color: "var(--text-secondary)" }}>{vendor.description}</p>
@@ -369,7 +355,7 @@ function RecommendedDetailPanel({
             {vendor.menu_url && <a className="btn btn-secondary w-fit" href={vendor.menu_url} target="_blank" rel="noreferrer">查看菜單 <ExternalLink size={15} aria-hidden="true" /></a>}
           </div>
         )}
-        {vendor.hygiene_verified && <p className="text-xs font-medium text-emerald-700">✓ 衛生檢驗資訊已確認</p>}
+        {vendor.hygiene_verified && <p className="text-xs font-semibold" style={{ color: "var(--success)" }}>衛生檢驗資訊已確認</p>}
       </div>
     </aside>
   );
@@ -577,16 +563,6 @@ export default function PartnerMapClient({
     replacePartnerMapPath("/partner-map");
   }, []);
 
-  const copySelectedLink = useCallback(async () => {
-    if (!selectedBusiness) return;
-    try {
-      await copyText(businessUrl(selectedBusiness.name));
-      showSuccessToast("店家連結已複製");
-    } catch {
-      showErrorToast("無法複製連結，請手動複製網址列");
-    }
-  }, [selectedBusiness]);
-
   const shareSelected = useCallback(async () => {
     if (!selectedBusiness) return;
     const url = businessUrl(selectedBusiness.name);
@@ -698,10 +674,10 @@ export default function PartnerMapClient({
                     <button type="button" key={business.id} onClick={() => openBusiness(business.id)} className="w-full rounded-lg border p-2 text-left transition-colors hover:border-[var(--primary)]" style={{ borderColor: "var(--border)", background: "var(--bg)" }}>
                       <div className="flex items-center justify-between gap-2">
                         <p className="truncate text-xs font-semibold" style={{ color: "var(--text-primary)" }}>{business.name}</p>
-                        <span className="shrink-0 text-[11px]" style={{ color: "var(--primary-text)" }}>查看詳情 →</span>
+                        <span className="shrink-0 text-xs" style={{ color: "var(--primary-text)" }}>查看詳情 →</span>
                       </div>
-                      <p className="mt-1 line-clamp-2 text-[11px]" style={{ color: "var(--text-muted)" }}>{business.summary || business.category || "合作聯絡窗口"}</p>
-                      {business.active_offer_count > 0 && <p className="mt-1 text-[11px]" style={{ color: "var(--primary-text)" }}>有 {business.active_offer_count} 筆優惠</p>}
+                      <p className="mt-1 line-clamp-2 text-xs" style={{ color: "var(--text-muted)" }}>{business.summary || business.category || "合作聯絡窗口"}</p>
+                      {business.active_offer_count > 0 && <p className="mt-1 text-xs" style={{ color: "var(--primary-text)" }}>有 {business.active_offer_count} 筆優惠</p>}
                     </button>
                   ))}
                 </div>
@@ -732,19 +708,19 @@ export default function PartnerMapClient({
                       )}
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{item.business_name}</p>
-                        <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>
+                        <p className="mt-0.5 flex items-center gap-1 text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
                           <span className="h-1.5 w-1.5 rounded-full" style={{ background: markerColor(item) }} aria-hidden="true" />
                           {markerLabel(item)}
                         </p>
                         {(item.business_hours_text || formatBusinessHours(item.business_hours)) && (
-                          <p className="mt-0.5 flex items-center gap-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
+                          <p className="mt-0.5 flex items-center gap-1 text-xs" style={{ color: "var(--text-muted)" }}>
                             <Clock size={11} aria-hidden="true" /> {item.business_hours_text || formatBusinessHours(item.business_hours)}
                           </p>
                         )}
                         <p className="mt-1 line-clamp-2 text-xs" style={{ color: "var(--text-muted)" }}>{item.address}</p>
                       </div>
                       {item.has_active_offer && (
-                        <span className="shrink-0 rounded-full px-2 py-1 text-[11px]" style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
+                        <span className="shrink-0 rounded-full px-2 py-1 text-xs" style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
                           {item.has_discount_offer ? "★ 折扣" : "優惠"}
                         </span>
                       )}
@@ -761,11 +737,11 @@ export default function PartnerMapClient({
           <div className="partner-map-mobile-controls absolute left-2.5 right-2.5 top-2.5 z-[500] rounded-lg border p-3 lg:hidden">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="flex items-center gap-2"><h1 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>店家地圖</h1>{myBusinesses.length > 0 && <Link href="/partner-map/my-businesses" className="text-[11px] font-medium" style={{ color: "var(--primary-text)" }}>我的店家</Link>}</div>
-                <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>特約與推薦商家</p>
+                <div className="flex items-center gap-2"><h1 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>店家地圖</h1>{myBusinesses.length > 0 && <Link href="/partner-map/my-businesses" className="text-xs font-medium" style={{ color: "var(--primary-text)" }}>我的店家</Link>}</div>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>特約與推薦商家</p>
               </div>
               <div className="flex items-center gap-2">
-                <span className="partner-map-count-pill rounded-full px-2 py-1 text-[11px]">
+                <span className="partner-map-count-pill rounded-full px-2 py-1 text-xs">
                   {filteredItems.length} 點位
                 </span>
                 <button
@@ -831,9 +807,9 @@ export default function PartnerMapClient({
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>沒有地點的特約</p>
-                    <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-muted)" }}>線上合作夥伴也在這裡</p>
+                    <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>線上合作夥伴也在這裡</p>
                   </div>
-                  <span className="rounded-full px-2 py-1 text-[11px] font-medium" style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
+                  <span className="rounded-full px-2 py-1 text-xs font-medium" style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
                     {contactBusinesses.length} 家
                   </span>
                 </div>
@@ -842,7 +818,7 @@ export default function PartnerMapClient({
                     <button type="button" key={business.id} onClick={() => openBusiness(business.id)} className="min-w-[72vw] rounded-lg border p-3 text-left" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
                       <div className="flex items-center justify-between gap-2">
                         <p className="truncate text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{business.name}</p>
-                        <span className="shrink-0 text-[11px]" style={{ color: "var(--primary-text)" }}>查看 →</span>
+                        <span className="shrink-0 text-xs" style={{ color: "var(--primary-text)" }}>查看 →</span>
                       </div>
                       <p className="mt-1 line-clamp-2 text-xs" style={{ color: "var(--text-secondary)" }}>{business.summary || business.category || "可線上聯絡"}</p>
                     </button>
@@ -883,13 +859,13 @@ export default function PartnerMapClient({
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{item.business_name}</p>
                     {(item.business_hours_text || formatBusinessHours(item.business_hours)) && (
-                      <p className="mt-0.5 flex items-center gap-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
+                      <p className="mt-0.5 flex items-center gap-1 text-xs" style={{ color: "var(--text-muted)" }}>
                         <Clock size={11} aria-hidden="true" /> {item.business_hours_text || formatBusinessHours(item.business_hours)}
                       </p>
                     )}
                     <p className="mt-1 line-clamp-2 text-xs" style={{ color: "var(--text-muted)" }}>{item.address}</p>
                   </div>
-                  <span className="flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium" style={{ background: "var(--bg-elevated)", borderColor: markerColor(item), color: "var(--text-secondary)" }}>
+                  <span className="flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-xs font-medium" style={{ background: "var(--bg-elevated)", borderColor: markerColor(item), color: "var(--text-secondary)" }}>
                     <span className="h-1.5 w-1.5 rounded-full" style={{ background: markerColor(item) }} aria-hidden="true" />
                     {markerLabel(item)}
                   </span>
@@ -913,7 +889,6 @@ export default function PartnerMapClient({
             business={selectedBusiness ? attachCategoryTag(selectedBusiness, tags) : null}
             loading={detailLoading}
             onShare={shareSelected}
-            onCopyLink={copySelectedLink}
             onClose={closeDetails}
           />
           <RecommendedDetailPanel

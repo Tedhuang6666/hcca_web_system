@@ -40,14 +40,14 @@ export default function OrgsPage() {
             </div>
           )}
           <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0"
-            style={{ background: org.is_active ? "var(--primary-dim)" : "var(--bg-surface)", color: org.is_active ? "var(--primary)" : "var(--text-muted)" }}>
+            style={{ background: org.is_active ? "var(--primary-dim)" : "var(--bg-surface)", color: org.is_active ? "var(--primary-text)" : "var(--text-muted)" }}>
             {org.name.charAt(0)}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{org.name}</p>
               {!org.is_active && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ color: "#f59e0b", border: "1px solid rgba(245,158,11,0.3)" }}>停用</span>
+                <span className="text-xs px-1.5 py-0.5 rounded" style={{ color: "#f59e0b", border: "1px solid rgba(245,158,11,0.3)" }}>停用</span>
               )}
             </div>
             {org.description && (
@@ -56,7 +56,7 @@ export default function OrgsPage() {
           </div>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             strokeWidth="2" strokeLinecap="round" className="flex-shrink-0 opacity-40 group-hover:opacity-80 transition-opacity"
-            style={{ color: "var(--primary)" }}>
+            style={{ color: "var(--primary-text)" }}>
             <polyline points="9 18 15 12 9 6" />
           </svg>
         </Link>
@@ -82,7 +82,7 @@ export default function OrgsPage() {
         <button
           onClick={() => setShowInactive(v => !v)}
           className="text-xs px-3 py-2 rounded-lg cursor-pointer"
-          style={{ border: "1px solid var(--border)", color: showInactive ? "var(--primary)" : "var(--text-secondary)", background: showInactive ? "var(--primary-dim)" : "transparent" }}
+          style={{ border: "1px solid var(--border)", color: showInactive ? "var(--primary-text)" : "var(--text-secondary)", background: showInactive ? "var(--primary-dim)" : "transparent" }}
         >
           {showInactive ? "隱藏停用組織" : "顯示停用組織"}
         </button>

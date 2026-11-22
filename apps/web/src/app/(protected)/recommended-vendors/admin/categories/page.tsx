@@ -45,7 +45,7 @@ export default function RecommendedVendorCategoriesPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-5">
       <header>
-        <p className="flex items-center gap-2 text-sm font-medium" style={{ color: "var(--primary)" }}><Tags size={16} aria-hidden="true" />統一管理選項</p>
+        <p className="flex items-center gap-2 text-sm font-medium" style={{ color: "var(--primary-text)" }}><Tags size={16} aria-hidden="true" />統一管理選項</p>
         <h1 className="mt-1 text-xl font-semibold" style={{ color: "var(--text-primary)" }}>商家分類</h1>
       </header>
       <section className="rounded-lg border p-5" style={{ borderColor: "var(--border)" }}>

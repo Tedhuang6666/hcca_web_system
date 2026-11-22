@@ -28,6 +28,10 @@ case "$mode" in
     run python3 scripts/validate-celery-topology.py
     run uv run --locked --project apps/api python -m unittest discover -s scripts/tests -p 'test_gunicorn_runtime.py'
     ;;
+  debt)
+    run python3 scripts/check-technical-debt.py
+    run python3 -m unittest discover -s scripts/tests -p 'test_technical_debt.py'
+    ;;
   api-test)
     # conftest 會 CREATE/DROP 測試 schema；不要誤用應用資料庫。
     run python3 scripts/check-agent-setup.py --test-database
@@ -58,7 +62,7 @@ case "$mode" in
     ;;
   help|-h|--help)
     printf '%s\n' \
-      '用法：bash scripts/check.sh <doctor|docs|api|api-test|web|contract|graph>' \
+      '用法：bash scripts/check.sh <doctor|docs|api|api-test|debt|web|contract|graph>' \
       'doctor：本機工具與索引診斷（不啟動服務）' \
       'docs：維護入口、文件連結、設定與腳本回歸' \
       'api：後端靜態檢查（不包含 DB 測試）' \

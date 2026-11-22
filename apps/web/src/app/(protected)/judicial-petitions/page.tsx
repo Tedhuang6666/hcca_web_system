@@ -85,9 +85,6 @@ export default function JudicialPetitionsPage() {
         <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
           評議委員會訴訟
         </h1>
-        <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-          法規範違憲審查欄位採憲法法庭聲請格式：聲請人、相對人、受挑戰法規範、憲法依據、聲請事項、事實及理由、證據。
-        </p>
       </div>
 
       {created && (

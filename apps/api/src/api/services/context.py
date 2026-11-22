@@ -8,11 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only
 
-from api.models.activity import Activity
-from api.models.activity_link import ActivityLink
 from api.models.announcement import Announcement
 from api.models.document import Document, DocumentApproval
-from api.models.governance import EntityRelation, Matter
 from api.models.petition import PetitionCase
 from api.models.regulation import Regulation
 from api.schemas.context import (
@@ -29,16 +26,6 @@ async def document_approval_context(
     document = await db.get(Document, document_id)
     if document is None:
         raise ValueError("公文不存在")
-    activity_link = None
-    if document.activity_id:
-        activity = await db.get(Activity, document.activity_id)
-        if activity:
-            activity_link = ContextLink(
-                title=activity.name,
-                href=f"/activities/{activity.id}",
-                kind="activity",
-                timestamp=activity.starts_at,
-            )
     approvals = (
         await db.execute(
             select(DocumentApproval)
@@ -49,8 +36,6 @@ async def document_approval_context(
     comments = [a.comment for a in approvals if getattr(a, "comment", None)]
     return DocumentApprovalContextOut(
         document_id=document.id,
-        source_activity=activity_link,
-        related_items=await _links_for(db, "document", document.id),
         previous_comments=comments,
         recommended_actions=[
             "確認前關意見與附件",
@@ -82,9 +67,6 @@ async def petition_resolution_context(
             .limit(5)
         )
     ).scalars()
-    activities = (
-        await db.execute(select(Activity).where(Activity.name.ilike(keyword)).limit(5))
-    ).scalars()
     return PetitionResolutionContextOut(
         petition_id=petition.id,
         related_regulations=[
@@ -94,14 +76,10 @@ async def petition_resolution_context(
             ContextLink(title=p.title, href=f"/petitions/{p.case_number}", kind="petition")
             for p in similar
         ],
-        related_activities=[
-            ContextLink(title=a.name, href=f"/activities/{a.id}", kind="activity")
-            for a in activities
-        ],
         recommended_actions=[
             "確認是否需補件",
             "判斷是否轉派其他組織",
-            "必要時建立公文草稿或排入會議議程",
+            "必要時建立公文草稿",
         ],
     )
 
@@ -140,49 +118,4 @@ async def regulation_usage_context(
             ContextLink(title=a.title, href=f"/announcements/{a.id}", kind="announcement")
             for a in anns
         ],
-        pending_reviews=[],
     )
-
-
-async def _links_for(db: AsyncSession, target_type: str, target_id: uuid.UUID) -> list[ContextLink]:
-    matter_rows = (
-        await db.execute(
-            select(EntityRelation, Matter)
-            .join(Matter, EntityRelation.matter_id == Matter.id)
-            .where(
-                EntityRelation.target_type == target_type,
-                EntityRelation.target_id == target_id,
-                Matter.is_active.is_(True),
-            )
-            .order_by(EntityRelation.updated_at.desc())
-        )
-    ).all()
-    rows = (
-        await db.execute(
-            select(ActivityLink).where(
-                ActivityLink.target_type == target_type,
-                ActivityLink.target_id == target_id,
-            )
-        )
-    ).scalars()
-    links = [
-        ContextLink(
-            title=matter.title,
-            href=f"/matters/{matter.id}",
-            kind=relation.relation,
-            timestamp=relation.created_at,
-        )
-        for relation, matter in matter_rows
-    ]
-    links.extend(
-        [
-            ContextLink(
-                title=row.title,
-                href=f"/activities/{row.activity_id}",
-                kind="activity_link",
-                timestamp=row.created_at,
-            )
-            for row in rows
-        ]
-    )
-    return links

@@ -5,8 +5,6 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from io import BytesIO
-from xml.etree import ElementTree
-from zipfile import ZipFile
 
 import pytest
 from openpyxl import Workbook, load_workbook
@@ -1510,7 +1508,7 @@ async def test_budget_drafts_can_be_edited_and_deleted_by_their_creator(
     assert after_delete["nodes"] == []
 
 
-async def test_budget_exports_group_advances_and_enforce_budget_scope(
+async def test_budget_exports_preserve_scope_and_advance_privacy(
     db_session, member_user, make_user, client, authed_client_factory
 ) -> None:
     org = await _grant_many(
@@ -1562,44 +1560,9 @@ async def test_budget_exports_group_advances_and_enforce_budget_scope(
     )
     assert normal.status_code == 201
 
-    receipt_path = f"/finance/budgets/{budget_id}/advance-receipt.docx"
-    response = await actor.post(receipt_path, json={"expense_ids": expense_ids + [expense_ids[0]]})
-    assert response.status_code == 200
-    assert response.headers["cache-control"] == "no-store"
-    with ZipFile(BytesIO(response.content)) as archive:
-        document = ElementTree.fromstring(archive.read("word/document.xml"))
-        for path in (
-            "[Content_Types].xml",
-            "_rels/.rels",
-            "word/styles.xml",
-            "word/_rels/document.xml.rels",
-        ):
-            ElementTree.fromstring(archive.read(path))
-    ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
-    rows = [
-        ["".join(cell.itertext()) for cell in row.findall("w:tc", ns)]
-        for row in document.findall(".//w:tbl/w:tr", ns)
-    ]
-    assert rows[0] == ["代墊人", "代墊項目", "代墊金額", "總金額", "簽名"]
-    assert sum(row[0] == "測試代墊人甲" for row in rows) == 1
-    assert sorted(row[3] for row in rows[1:] if row[3]) == ["200", "75"]
-    assert all(row[4] == "" for row in rows[1:])
-    assert len(rows) == 4  # Repeated selections produce one row each.
-    assert (
-        await actor.post(receipt_path, json={"expense_ids": [normal.json()["id"]]})
-    ).status_code == 422
-    assert (
-        await actor.post(receipt_path, json={"expense_ids": [str(uuid.uuid4())]})
-    ).status_code == 422
-    assert (await actor.post(receipt_path, json={"expense_ids": []})).status_code == 422
-    assert (await client.post(receipt_path, json={"expense_ids": expense_ids})).status_code == 401
-
     outsider = await make_user(email="finance-export-outsider@school.edu")
     await _grant_many(db_session, [outsider], ["finance:view", "finance:budget"])
     outsider_client = authed_client_factory(outsider)
-    assert (
-        await outsider_client.post(receipt_path, json={"expense_ids": expense_ids})
-    ).status_code == 403
     export_path = f"/finance/budgets/{budget_id}/export.xlsx"
     assert (await client.get(export_path)).status_code == 401
     assert (await outsider_client.get(export_path)).status_code == 403

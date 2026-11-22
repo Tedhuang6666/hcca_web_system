@@ -129,8 +129,7 @@ export default function DocumentSearch({ initialDocs = [] }: { initialDocs?: Doc
         </div>
       </form>
       <div className="administrative-results-heading">
-        <p role="status" aria-live="polite">{loading ? "檢索中…" : <>已載入公文 <strong>{documents.length}</strong> 筆</>}</p>
-        <span>依建檔日期由新至舊</span>
+        <p role="status" aria-live="polite">{loading ? "檢索中…" : <>已載入 <strong>{documents.length}</strong> 筆</>}</p>
       </div>
       {error && <div className="administrative-feedback" role="alert">{error}<button type="button" onClick={() => {
         if (error.includes("後續")) void loadMore(); else setRetry((value) => value + 1);

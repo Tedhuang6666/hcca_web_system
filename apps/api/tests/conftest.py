@@ -6,6 +6,26 @@ import contextlib
 import html
 import os
 import uuid
+from pathlib import Path
+
+# 必須在載入 app/settings 前選定測試庫，避免獨立 session 讀寫開發資料。
+TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", "")
+_IS_POSTGRES = TEST_DATABASE_URL.startswith("postgresql+asyncpg://")
+_ALLOW_SQLITE = os.getenv("ALLOW_SQLITE_TEST_DB", "").lower() == "true"
+if not _IS_POSTGRES and not (
+    _ALLOW_SQLITE
+    and TEST_DATABASE_URL.startswith("sqlite+aiosqlite://")
+    and os.getenv("REQUIRE_POSTGRES_TEST_DB", "").lower() != "true"
+):
+    raise RuntimeError(
+        "Tests require explicit TEST_DATABASE_URL=postgresql+asyncpg://... . "
+        "SQLite approximation requires ALLOW_SQLITE_TEST_DB=true and an explicit SQLite URL."
+    )
+os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+if _IS_POSTGRES:
+    os.environ["DATABASE_URL_SYNC"] = TEST_DATABASE_URL.replace(
+        "postgresql+asyncpg://", "postgresql+psycopg2://", 1
+    )
 
 # 測試故意觸發的例外不應送到正式 Sentry 專案，避免污染 production issue。
 os.environ["SENTRY_DSN"] = ""
@@ -147,19 +167,6 @@ async def _reset_storage_cache_per_test():
     get_storage.cache_clear()
 
 
-# 本機快速測試可使用 SQLite；CI 與整合測試必須明確提供 PostgreSQL，
-# 避免 SQLite 未強制外鍵或型別差異掩蓋正式環境問題。
-TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", "sqlite+aiosqlite:///:memory:")
-if os.getenv("REQUIRE_POSTGRES_TEST_DB", "").lower() == "true" and not TEST_DATABASE_URL.startswith(
-    "postgresql+asyncpg://"
-):
-    raise RuntimeError(
-        "REQUIRE_POSTGRES_TEST_DB=true requires TEST_DATABASE_URL=postgresql+asyncpg://"
-    )
-
-_IS_POSTGRES = "postgresql" in TEST_DATABASE_URL
-
-
 def _worker_schema_name() -> str:
     """每個 pytest process 用專屬 schema，避免互相 DROP/CREATE 撞名。
 
@@ -191,41 +198,34 @@ if _IS_POSTGRES:
 
 _schema_engine = create_async_engine(TEST_DATABASE_URL, **_SCHEMA_ENGINE_KWARGS)
 
-# 這些 DB 物件只存在於 Alembic migration（不是 ORM model 的一部分），
-# Base.metadata.create_all 建不出來。序號產生器（order/document/meal_serial_seq）
-# 曾在 shop 測試踩過這個坑，故 schema 初始化時手動補建。
-_RAW_DDL_UPGRADE = (
-    "CREATE SEQUENCE IF NOT EXISTS order_serial_seq START 1",
-    "CREATE SEQUENCE IF NOT EXISTS document_serial_seq START 1 INCREMENT 1",
-    "CREATE SEQUENCE IF NOT EXISTS meal_serial_seq START 1 INCREMENT 1",
-    """
-    CREATE OR REPLACE FUNCTION regulations_search_vector_update()
-    RETURNS trigger AS $$
-    BEGIN
-      NEW.search_vector := to_tsvector('simple',
-        coalesce(NEW.title, '') || ' ' || coalesce(NEW.preface, '')
-      );
-      RETURN NEW;
-    END;
-    $$ LANGUAGE plpgsql;
-    """,
-    # asyncpg 的 prepared statement 一次只能執行一條指令，DROP/CREATE TRIGGER 須分開送。
-    "DROP TRIGGER IF EXISTS regulations_search_vector_trigger ON regulations",
-    """
-    CREATE TRIGGER regulations_search_vector_trigger
-    BEFORE INSERT OR UPDATE ON regulations
-    FOR EACH ROW EXECUTE FUNCTION regulations_search_vector_update();
-    """,
-)
+
+def _upgrade_test_schema(connection) -> None:
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import inspect
+
+    api_root = Path(__file__).resolve().parents[1]
+    config = Config(str(api_root / "alembic.ini"))
+    config.set_main_option("script_location", str(api_root / "alembic"))
+    config.attributes["connection"] = connection
+    config.attributes["bootstrap_baseline"] = True
+    command.upgrade(config, "head")
+    # 行為測試自行建立各案例資料；保留 migration 的完整 schema，清空初始種子列。
+    # 種子資料的正確性由獨立的基線／完整歷史比較驗證。
+    quote = connection.dialect.identifier_preparer.quote
+    schema = connection.exec_driver_sql("SELECT current_schema()").scalar_one()
+    tables = [name for name in inspect(connection).get_table_names() if name != "alembic_version"]
+    names = ", ".join(f"{quote(schema)}.{quote(name)}" for name in tables)
+    connection.exec_driver_sql(f"TRUNCATE {names} RESTART IDENTITY CASCADE")
 
 
 @pytest_asyncio.fixture(scope="session", loop_scope="session", autouse=True)
 async def _build_schema_once() -> AsyncGenerator[None, None]:
     """整個測試 session（每個 xdist worker 各一份）只建一次 schema。
 
-    取代過去每個測試 create_all/DROP CASCADE 整套 300+ 張表；每個 worker 用專屬
+    每個 worker 從 migration 基線建立專屬
     schema（test_master / test_gw0...）彼此不衝突，不需要額外的每 worker 獨立 DB。
-    每個 worker 的 300+ 張表 create_all 都是一次性的重 DDL；xdist 下 16 個 worker
+    每個 worker 的建表是一次性的重 DDL；xdist 下多個 worker
     幾乎同時起跑會讓 Postgres 共用鎖表爆掉（`out of shared memory` /
     max_locks_per_transaction），故用 pg_advisory_lock 把「建表／砍表」這段序列化，
     僅此階段排隊，測試本體仍然全平行跑。
@@ -240,12 +240,8 @@ async def _build_schema_once() -> AsyncGenerator[None, None]:
                 await conn.execute(text(f'CREATE SCHEMA "{_SCHEMA_NAME}"'))
 
             async with _schema_engine.begin() as conn:
-                # 剛建好的空 schema，免除 create_all 預設的 checkfirst 反查 pg_catalog。
-                await conn.run_sync(
-                    lambda sync_conn: Base.metadata.create_all(sync_conn, checkfirst=False)
-                )
-                for statement in _RAW_DDL_UPGRADE:
-                    await conn.execute(text(statement))
+                # 使用正式 migration 基線，包含 create_all 缺少的序號、trigger 與資料庫約束。
+                await conn.run_sync(_upgrade_test_schema)
         finally:
             await lock_conn.execute(
                 text("SELECT pg_advisory_unlock(:k)"), {"k": _SCHEMA_DDL_LOCK_KEY}

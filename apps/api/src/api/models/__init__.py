@@ -5,7 +5,6 @@
 # 公告系統
 # 稽核日誌（不可變）
 from api.models.activity import Activity, ActivityConvener, ActivityStatus  # noqa: F401
-from api.models.activity_link import ActivityLink, ActivityLinkKind  # noqa: F401
 from api.models.analytics_page_view import AnalyticsPageView  # noqa: F401
 from api.models.announcement import (  # noqa: F401
     Announcement,
@@ -94,7 +93,6 @@ from api.models.exam_paper import ExamGradeTrack, ExamPaper, ExamPaperDownload  
 # Feature Flag
 from api.models.feature_flag import FeatureFlag  # noqa: F401
 from api.models.finance import (  # noqa: F401
-    BankTransaction,
     BudgetSubmissionKind,
     BudgetSubmissionStatus,
     ChartAccount,
@@ -134,21 +132,13 @@ from api.models.governance import (  # noqa: F401
     GovernanceDiscordEventRoute,
     GovernanceDiscordWorkspace,
     GovernanceEventType,
-    GovernanceWorkflowTemplate,
     Matter,
     MatterPriority,
     MatterResource,
     MatterResourceType,
-    MatterRoleAssignment,
     MatterStatus,
     MatterType,
     MatterVisibility,
-    PlanningDocument,
-    PlanningDocumentAttachment,
-    PlanningDocumentRevision,
-    PlanningDocumentRevisionAttachment,
-    PlanningDocumentStatus,
-    Program,
     TimelineEvent,
 )
 from api.models.judicial_petition import (  # noqa: F401
@@ -157,22 +147,6 @@ from api.models.judicial_petition import (  # noqa: F401
     JudicialPetitionType,
 )
 from api.models.line_account import LineAccountLink  # noqa: F401
-from api.models.meal import (  # noqa: F401
-    MealClassPickupCode,
-    MealOrder,
-    MealOrderItem,
-    MealOrderStatus,
-    MealPickupSlot,
-    MealPickupStatus,
-    MealProduct,
-    MealProductAvailability,
-    MealVendor,
-    MealVendorApplication,
-    MealVendorManager,
-    MealVendorStatus,
-    MenuItem,
-    MenuSchedule,
-)
 from api.models.merchandise_submission import (  # noqa: F401
     MerchandiseSubmission,
     MerchandiseSubmissionFile,

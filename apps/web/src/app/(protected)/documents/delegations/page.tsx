@@ -157,9 +157,6 @@ export default function DocumentDelegationsPage() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>公文簽核代理設定</h1>
-          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            代理適用於送審中及代理期間新送審的公文。
-          </p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -282,7 +279,7 @@ export default function DocumentDelegationsPage() {
                             {delegation.principal_user.name} → {delegation.delegate_user.name}
                           </span>
                           <span
-                            className="text-[11px] px-2 py-0.5 rounded-full"
+                            className="text-xs px-2 py-0.5 rounded-full"
                             style={{
                               color: delegation.is_active ? "var(--success)" : "var(--text-muted)",
                               background: delegation.is_active ? "var(--success-dim)" : "var(--bg-surface)",
@@ -295,7 +292,7 @@ export default function DocumentDelegationsPage() {
                       </div>
                       <div className="flex items-center gap-2">
                         {delegation.is_active && (
-                          <button onClick={() => startEdit(delegation)} className="text-xs px-2.5 py-1 rounded" style={{ color: "var(--primary)", background: "var(--primary-dim)" }}>
+                          <button onClick={() => startEdit(delegation)} className="text-xs px-2.5 py-1 rounded" style={{ color: "var(--primary-text)", background: "var(--primary-dim)" }}>
                             編輯
                           </button>
                         )}

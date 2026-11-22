@@ -17,8 +17,6 @@ class ContextLink(BaseModel):
 
 class DocumentApprovalContextOut(BaseModel):
     document_id: uuid.UUID
-    source_activity: ContextLink | None = None
-    related_items: list[ContextLink] = Field(default_factory=list)
     previous_comments: list[str] = Field(default_factory=list)
     recommended_actions: list[str] = Field(default_factory=list)
 
@@ -27,7 +25,6 @@ class PetitionResolutionContextOut(BaseModel):
     petition_id: uuid.UUID
     related_regulations: list[ContextLink] = Field(default_factory=list)
     similar_petitions: list[ContextLink] = Field(default_factory=list)
-    related_activities: list[ContextLink] = Field(default_factory=list)
     recommended_actions: list[str] = Field(default_factory=list)
 
 
@@ -36,4 +33,3 @@ class RegulationUsageContextOut(BaseModel):
     related_documents: list[ContextLink] = Field(default_factory=list)
     related_petitions: list[ContextLink] = Field(default_factory=list)
     related_announcements: list[ContextLink] = Field(default_factory=list)
-    pending_reviews: list[ContextLink] = Field(default_factory=list)

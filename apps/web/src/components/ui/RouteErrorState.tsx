@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Check, Copy, Home, RefreshCw, Undo2 } from "lucide-react";
-import { useState } from "react";
+import { AlertTriangle, Home, RefreshCw, Undo2 } from "lucide-react";
 
+import CopyButton from "@/components/ui/CopyButton";
 import { usePageError } from "@/hooks/usePageError";
 
 export default function RouteErrorState({
@@ -21,19 +21,8 @@ export default function RouteErrorState({
   embedded?: boolean;
 }) {
   const router = useRouter();
-  const [copied, setCopied] = useState(false);
   const { presentation, code } = usePageError(error, scope);
   const Container = embedded ? "div" : "main";
-
-  async function copyCode() {
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
-    } catch {
-      setCopied(false);
-    }
-  }
 
   function primaryAction() {
     if (presentation.recovery === "login") {
@@ -78,10 +67,15 @@ export default function RouteErrorState({
         </div>
         <div className="mt-5 flex items-center justify-between gap-3 rounded-lg px-3 py-2" style={{ background: "var(--bg-muted)" }}>
           <span className="text-xs" style={{ color: "var(--text-muted)" }}>錯誤編號：<code className="font-mono">{code}</code></span>
-          <button type="button" onClick={copyCode} className="inline-flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs font-medium" style={{ color: "var(--primary)" }}>
-            {copied ? <Check size={14} aria-hidden={true} /> : <Copy size={14} aria-hidden={true} />}
-            {copied ? "已複製" : "複製"}
-          </button>
+          <CopyButton
+            value={code}
+            label="複製"
+            iconSize={14}
+            announcement="錯誤編號已複製"
+            failureHint="瀏覽器未允許複製，請手動選取錯誤編號"
+            className="inline-flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs font-medium"
+            style={{ color: "var(--primary-text)" }}
+          />
         </div>
       </section>
     </Container>

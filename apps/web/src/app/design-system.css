@@ -272,8 +272,8 @@ button[aria-pressed="true"],
 .btn,
 .btn-sm,
 .btn-lg {
-  border-radius: 7px;
-  font-weight: 650;
+  border-radius: 8px;
+  font-weight: 600;
   letter-spacing: -0.005em;
   transition:
     background-color var(--transition),
@@ -314,7 +314,7 @@ button[aria-pressed="true"],
 .input-field,
 select,
 textarea {
-  border-radius: 7px;
+  border-radius: 8px;
 }
 
 .input:focus,
@@ -382,7 +382,7 @@ textarea:focus {
   position: relative;
   min-height: 40px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 8px;
   color: var(--sidebar-text);
   font-weight: 520;
   transition: background-color var(--transition), color var(--transition);
@@ -401,31 +401,41 @@ textarea:focus {
   background: var(--sidebar-active);
   color: var(--sidebar-text-active);
   border-color: transparent;
-  font-weight: 650;
-}
-
-.sidebar-public-entry {
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
-  min-height: 44px;
-  margin-bottom: 0.5rem;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--sidebar-border));
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--primary-dim) 72%, transparent);
-  color: var(--sidebar-text-hover);
-  font-size: 0.8125rem;
   font-weight: 600;
-  text-decoration: none;
-  transition: background var(--transition), border-color var(--transition), color var(--transition);
 }
 
-.sidebar-public-entry:hover,
-.sidebar-public-entry:focus-visible {
-  background: var(--sidebar-hover);
-  border-color: color-mix(in srgb, var(--primary) 52%, var(--sidebar-border));
-  color: var(--sidebar-text-active);
+/* 側欄頂端的搜尋入口：看起來像輸入框，點擊開啟全站功能與資料搜尋。 */
+.sidebar-search-trigger {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 40px;
+  margin-bottom: 0.75rem;
+  padding: 0 0.625rem 0 0.75rem;
+  border: 1px solid var(--sidebar-border);
+  border-radius: 8px;
+  background: var(--bg-base);
+  color: var(--sidebar-text);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: border-color var(--transition), color var(--transition);
+}
+
+.sidebar-search-trigger:hover {
+  border-color: var(--border-strong);
+  color: var(--sidebar-text-hover);
+}
+
+.sidebar-search-trigger kbd {
+  flex: 0 0 auto;
+  border: 1px solid var(--sidebar-border);
+  border-radius: 4px;
+  padding: 0.0625rem 0.3125rem;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.6875rem;
+  line-height: 1.4;
 }
 
 .sidebar-nav-item svg {
@@ -443,13 +453,13 @@ textarea:focus {
 .sidebar-section-label {
   color: var(--sidebar-section-label);
   font-size: 0.68rem;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: 0.035em;
 }
 
 .topbar-icon-btn {
   border-color: transparent;
-  border-radius: 7px;
+  border-radius: 8px;
   transition: background-color var(--transition), color var(--transition), transform 90ms ease-out;
 }
 
@@ -481,7 +491,7 @@ textarea:focus {
 }
 
 details > summary {
-  border-radius: 7px;
+  border-radius: 8px;
 }
 
 details > summary svg {
@@ -531,21 +541,6 @@ nav[aria-label="底部主選單"] .bottom-tab-bar__dock {
   box-shadow: 0 8px 24px color-mix(in srgb, #000 28%, transparent);
 }
 
-nav[aria-label="底部主選單"] .bottom-tab-bar__shape {
-  z-index: 0;
-  overflow: visible;
-}
-
-nav[aria-label="底部主選單"] .bottom-tab-bar__shape-fill {
-  fill: transparent;
-  stroke: transparent;
-}
-
-nav[aria-label="底部主選單"] .bottom-tab-bar__shape-highlight {
-  fill: none;
-  stroke: transparent;
-}
-
 nav[aria-label="底部主選單"] .bottom-tab-bar__bead {
   z-index: 1;
   top: 50% !important;
@@ -555,7 +550,7 @@ nav[aria-label="底部主選單"] .bottom-tab-bar__bead {
   background: color-mix(in srgb, var(--primary) 17%, var(--bg-elevated));
   box-shadow: none;
   transform: translate(-50%, -50%) !important;
-  transition: opacity 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: left 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 nav[aria-label="底部主選單"] .bottom-tab-bar__bead::after {
@@ -565,14 +560,14 @@ nav[aria-label="底部主選單"] .bottom-tab-bar__bead::after {
 nav[aria-label="底部主選單"] .bottom-tab-bar__item {
   z-index: 2;
   color: var(--text-primary);
-  font-weight: 550;
+  font-weight: 600;
   letter-spacing: 0;
   transition: color 200ms cubic-bezier(0.22, 1, 0.36, 1),
     transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 nav[aria-label="底部主選單"] .bottom-tab-bar__item[data-visual-active="true"] {
-  color: var(--primary);
+  color: var(--primary-text);
   font-weight: 700;
   transform: translateY(-1px);
 }
@@ -661,7 +656,7 @@ nav[aria-label="底部主選單"] .bottom-tab-bar__badge {
 .dashboard-kicker {
   color: var(--text-muted);
   font-size: 0.72rem;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: 0.01em;
 }
 
@@ -729,8 +724,8 @@ nav[aria-label="底部主選單"] .bottom-tab-bar__badge {
 }
 
 .dashboard-primary-action {
-  min-height: 36px;
-  border-radius: 7px;
+  min-height: 44px;
+  border-radius: 8px;
   background: var(--primary);
   color: var(--primary-fg);
   border-color: var(--primary);
@@ -805,12 +800,60 @@ nav[aria-label="底部主選單"] .bottom-tab-bar__badge {
   display: none;
 }
 
+.command-menu-search {
+  border-bottom: 2px solid var(--border);
+  transition: border-color var(--transition);
+}
+
+.command-menu-search:focus-within {
+  border-bottom-color: var(--border-focus);
+}
+
+.command-menu-search input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+/* 左欄依序放待辦、與我有關、公告；右欄固定常用功能，避免短清單旁留下大片空白。 */
+.dashboard-main-column {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 1rem;
+}
+
+.dashboard-focus-grid {
+  align-items: start;
+}
+
+/* 常用功能是連結清單，不是功能卡：圖示只做辨識，不加底色方塊。 */
 .dashboard-action-icon,
 .dashboard-action-card.tone-primary .dashboard-action-icon,
 .dashboard-action-card.tone-warning .dashboard-action-icon {
-  border-color: var(--info-border);
-  background: var(--info-dim);
-  color: var(--info);
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.dashboard-action-card {
+  min-height: 48px;
+}
+
+.dashboard-action-card:hover .dashboard-action-icon {
+  color: var(--primary-text);
+}
+
+.dashboard-quiet-state {
+  min-height: 0;
+  gap: 0.5rem;
+  border: 0;
+  border-radius: 0;
+  padding: 1rem 0.65rem;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.875rem;
 }
 
 .dashboard-widget {
@@ -859,7 +902,7 @@ nav[aria-label="底部主選單"] .bottom-tab-bar__badge {
   grid-template-columns: auto auto minmax(0, 1fr);
   align-items: center;
   gap: 0.55rem;
-  border-radius: 7px;
+  border-radius: 8px;
   background: var(--primary-dim);
   padding: 0.65rem 0.8rem;
   color: var(--text-secondary);
@@ -868,7 +911,7 @@ nav[aria-label="底部主選單"] .bottom-tab-bar__badge {
 
 .governance-next-step > span {
   color: var(--primary-text);
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .governance-next-step > strong {
@@ -913,7 +956,7 @@ nav[aria-label="底部主選單"] .bottom-tab-bar__badge {
   padding: 0.5rem 1rem;
   color: var(--text-muted);
   font-size: 0.68rem;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .governance-matter-row {
@@ -988,7 +1031,7 @@ nav[aria-label="底部主選單"] .bottom-tab-bar__badge {
 }
 
 .onboarding-hint {
-  border-radius: 7px !important;
+  border-radius: 8px !important;
   background: color-mix(in srgb, var(--primary-dim) 58%, var(--bg-surface)) !important;
   padding-block: 0.65rem !important;
   animation: hint-enter 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -1090,56 +1133,16 @@ nav[aria-label="底部主選單"] .bottom-tab-bar__badge {
   backdrop-filter: blur(12px);
 }
 
-.public-hero {
-  background: color-mix(in srgb, var(--primary-dim) 42%, var(--public-bg));
-}
-
-.public-hero::before,
-.public-hero::after,
 .public-feature-card::after,
 .public-cta-primary::after,
 .public-section-kicker::before {
   display: none;
 }
 
-.public-hero-copy > *,
-.public-signboard,
-.public-signboard-emblem img,
-.public-signboard-emblem span,
-.public-signboard-emblem svg,
-.public-signboard-topline {
-  animation: none;
-}
-
-.public-hero-copy h1 {
-  max-width: 16ch;
-  font-size: clamp(2.25rem, 6vw, 4.5rem);
-  font-weight: 780;
-  letter-spacing: -0.035em;
-}
-
-.public-hero-subtitle {
-  line-height: 1.75;
-}
-
 .public-eyebrow {
   background: transparent;
   color: var(--primary-text);
   padding: 0;
-}
-
-.public-signboard {
-  border-radius: 10px;
-  background: var(--public-surface);
-  box-shadow: none;
-}
-
-.public-signboard::before {
-  border-color: color-mix(in srgb, var(--brand-accent) 42%, var(--public-border));
-}
-
-.public-signboard-topline {
-  background: var(--brand-accent);
 }
 
 .public-emblem-stage {
@@ -1294,75 +1297,9 @@ nav[aria-label="底部主選單"] .bottom-tab-bar__badge {
     border-color var(--transition);
 }
 
-.public-hero-inner {
-  grid-template-columns: minmax(0, 1fr) minmax(15rem, 0.7fr);
-  gap: clamp(2rem, 7vw, 6rem);
-  padding-top: clamp(4rem, 8vw, 6.5rem);
-  padding-bottom: clamp(4rem, 8vw, 6rem);
-}
-
-.public-hero-copy h1 {
-  max-width: 13ch;
-  font-size: clamp(2.6rem, 5.8vw, 4.6rem);
-  line-height: 1.08;
-  letter-spacing: -0.035em;
-}
-
-.public-hero-subtitle {
-  max-width: 34rem;
-  line-height: 1.75;
-}
-
-.public-signboard.public-identity-panel {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  width: min(100%, 23rem);
-  justify-self: end;
-  place-items: center;
-  overflow: visible;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  padding: 0;
-}
-
-.public-signboard.public-identity-panel::before {
-  display: none;
-}
-
-.public-identity-panel .public-signboard-emblem {
-  box-sizing: border-box;
-  grid-template-columns: minmax(0, 1fr);
-  width: min(100%, 18rem);
-  max-width: 100%;
-  min-width: 0;
-  min-height: 0;
-  aspect-ratio: 1;
-  padding: 1.5rem;
-}
-
 .public-identity-panel > * {
   max-width: 100%;
   min-width: 0;
-}
-
-.public-identity-panel .public-signboard-emblem > * {
-  max-width: 100%;
-  min-width: 0;
-}
-
-.public-identity-panel .public-signboard-emblem img,
-.public-identity-panel .public-signboard-emblem svg {
-  width: 100%;
-  max-width: 15rem;
-  max-height: 15rem;
-  filter: none;
-  transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.public-identity-panel:hover .public-signboard-emblem img,
-.public-identity-panel:hover .public-signboard-emblem svg {
-  transform: scale(1.025);
 }
 
 .public-quick-grid {
@@ -1397,7 +1334,7 @@ nav[aria-label="底部主選單"] .bottom-tab-bar__badge {
 .public-feature-icon {
   width: 2.5rem;
   height: 2.5rem;
-  border-radius: 7px;
+  border-radius: 8px;
 }
 
 .public-feature-arrow {
@@ -1487,38 +1424,6 @@ nav[aria-label="底部主選單"] .bottom-tab-bar__badge {
     width: 100%;
   }
 
-  .public-hero-inner {
-    grid-template-columns: 1fr;
-    gap: 1.5rem;
-    padding-top: 3.5rem;
-    padding-bottom: 3rem;
-  }
-
-  .public-hero-copy {
-    width: min(100%, 34rem);
-    margin-inline: auto;
-    text-align: center;
-  }
-
-  .public-hero-copy h1,
-  .public-hero-subtitle {
-    margin-inline: auto;
-  }
-
-  .public-hero-actions {
-    width: min(100%, 22rem);
-    margin-inline: auto;
-  }
-
-  .public-signboard.public-identity-panel {
-    width: min(56vw, 13rem);
-    justify-self: center;
-  }
-
-  .public-identity-panel .public-signboard-emblem {
-    padding: 0.75rem;
-  }
-
   .public-quick-grid {
     grid-template-columns: 1fr;
   }
@@ -1557,16 +1462,14 @@ nav[aria-label="底部主選單"] .bottom-tab-bar__badge {
     animation: none !important;
   }
 
-  .public-identity-panel:hover .public-signboard-emblem img,
-  .public-identity-panel:hover .public-signboard-emblem svg,
   .login-brand-stage:hover > :first-child,
-  .public-feature-card:hover .public-feature-arrow,
-  .public-feature-card:focus-visible .public-feature-arrow,
-  .dashboard-text-link:hover svg,
-  .dashboard-widget-footer:hover svg,
-  .topbar-icon-btn:hover svg,
-  .sidebar-nav-item:hover > span:first-child,
-  .sidebar-nav-item[aria-current="page"] > span:first-child {
+.public-feature-card:hover .public-feature-arrow,
+.public-feature-card:focus-visible .public-feature-arrow,
+.dashboard-text-link:hover svg,
+.dashboard-widget-footer:hover svg,
+.topbar-icon-btn:hover svg,
+.sidebar-nav-item:hover > span:first-child,
+.sidebar-nav-item[aria-current="page"] > span:first-child {
     transform: none;
   }
 
@@ -1600,13 +1503,11 @@ nav[aria-label="底部主選單"] .bottom-tab-bar__badge {
 }
 
 .public-site,
-.public-hero-inner,
 .public-quick-grid,
 .public-editorial {
   min-width: 0;
 }
 
-.public-hero-inner > *,
 .public-feature-card > * {
   min-width: 0;
 }
@@ -1680,7 +1581,7 @@ nav[aria-label="底部主選單"] .bottom-tab-bar__badge {
   background: var(--primary) !important;
   color: var(--primary-fg) !important;
   box-shadow: none;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .topbar-login-action:hover,
@@ -2173,7 +2074,7 @@ nav[aria-label="底部主選單"] .bottom-tab-bar__badge {
   .dashboard-recents-label {
     display: flex;
     margin-bottom: 0.65rem;
-    font-weight: 650;
+    font-weight: 600;
   }
 
   .dashboard-recents-list {

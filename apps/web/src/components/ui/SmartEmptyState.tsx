@@ -1,6 +1,6 @@
 "use client";
 import Link from "@/components/ui/IntentLink";
-import { Inbox, Filter, Lock, Sparkles, type LucideIcon } from "lucide-react";
+import { Inbox, Filter, Lock, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { usePermissions } from "@/hooks/usePermissions";
 import styles from "./InteractionMotion.module.css";
@@ -31,7 +31,7 @@ interface SmartEmptyStateProps {
 }
 
 const DEFAULTS: Record<EmptyReason, { icon: LucideIcon; title: (s: string) => string }> = {
-  new:      { icon: Sparkles, title: (s) => `還沒有任何${s}` },
+  new:      { icon: Inbox,    title: (s) => `還沒有任何${s}` },
   filtered: { icon: Filter,   title: () => "沒有符合條件的結果" },
   denied:   { icon: Lock,     title: (s) => `您無權檢視${s}` },
   none:     { icon: Inbox,    title: (s) => `目前沒有${s}` },
@@ -72,21 +72,18 @@ export default function SmartEmptyState({
         borderRadius: "var(--radius-lg)",
       }}>
       <span className={styles.smartEmptyMark} aria-hidden="true"><Icon size={36} /></span>
-      <p className="text-sm font-medium mb-2" style={{ color: "var(--text-primary)" }}>
+      <p className="text-sm font-semibold mb-4" style={{ color: "var(--text-primary)" }}>
         {title}
       </p>
       {message ? (
-        <div className="text-xs mb-4" style={{ color: "var(--text-muted)" }}>
+        <div className="text-sm -mt-2 mb-4" style={{ color: "var(--text-muted)" }}>
           {message}
         </div>
-      ) : (
-        <p className="text-xs mb-4" style={{ color: "var(--text-muted)" }}>
-          {reason === "new" && `建立第一筆${subject}，從這裡開始`}
-          {reason === "filtered" && "試試調整或清除篩選條件"}
-          {reason === "denied" && "請聯絡管理員開啟相關權限"}
-          {reason === "none" && `等${subject}建立後會顯示在這裡`}
+      ) : reason === "denied" ? (
+        <p className="text-sm -mt-2 mb-4" style={{ color: "var(--text-muted)" }}>
+          請聯絡管理員開啟相關權限
         </p>
-      )}
+      ) : null}
 
       <div className={`${styles.smartEmptyAction} flex flex-wrap gap-2 justify-center`}>
         {reason === "new" && createHref && canCreate && (

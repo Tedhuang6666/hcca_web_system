@@ -6,7 +6,7 @@ import { ListPageSkeleton, SectionSkeleton, Skeleton } from "./Skeleton";
 
 export function LoadingState({
   title = "正在載入",
-  description = "請稍候，資料正在整理中。",
+  description,
   compact = false,
 }: {
   title?: string;
@@ -25,7 +25,7 @@ export function LoadingState({
       </span>
       <span className="loading-state-copy">
         <span className="loading-state-title">{title}</span>
-        {!compact && <span className="loading-state-description">{description}</span>}
+        {!compact && description && <span className="loading-state-description">{description}</span>}
       </span>
     </div>
   );
@@ -33,7 +33,7 @@ export function LoadingState({
 
 export function PageLoading({
   title = "頁面載入中",
-  description = "正在取得最新資料與權限狀態。",
+  description,
   rows = 5,
   showFilters = true,
 }: {
@@ -54,7 +54,7 @@ export function PageLoading({
 
 export function DetailPageLoading({
   title = "詳情載入中",
-  description = "正在準備內容、附件與操作狀態。",
+  description,
   aside,
 }: {
   title?: string;

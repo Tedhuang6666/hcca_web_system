@@ -17,7 +17,13 @@ import { useLowDataMode } from "@/hooks/useLowDataMode";
 import { useInboxCountsContext } from "@/contexts/InboxCountsContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { clearAuthCache } from "@/lib/auth-cache";
-import { getBreadcrumbs, getCompactCrumbs, getPageTitle } from "@/lib/breadcrumb";
+import {
+  APP_HOME_CRUMB,
+  PUBLIC_HOME_CRUMB,
+  getBreadcrumbs,
+  getCompactCrumbs,
+  getPageTitle,
+} from "@/lib/breadcrumb";
 import type { Crumb } from "@/lib/breadcrumb";
 import { OPEN_COMMAND_MENU_EVENT } from "./CommandMenu";
 
@@ -29,8 +35,10 @@ interface TopbarProps {
 
 function MobileBreadcrumb({ items, fallbackTitle }: { items: Crumb[]; fallbackTitle: string }) {
   const current = items[items.length - 1]?.label ?? fallbackTitle;
-  const parent = items.length > 1 ? items[items.length - 2] : undefined;
-  const showParent = parent && parent.label !== "首頁";
+  // 起點（平台首頁／首頁）不重複顯示在手機標題前。
+  const candidate = items.length > 2 ? items[items.length - 2] : undefined;
+  const parent = candidate && candidate.label !== "…" ? candidate : undefined;
+  const showParent = parent !== undefined;
 
   return (
     <nav
@@ -38,7 +46,7 @@ function MobileBreadcrumb({ items, fallbackTitle }: { items: Crumb[]; fallbackTi
       className="topbar-mobile-title-content min-w-0 overflow-hidden">
       {showParent && (
         <span className="topbar-mobile-parent max-w-[40%] truncate">
-          {parent.label}
+          {parent?.label}
         </span>
       )}
       {showParent && (
@@ -55,11 +63,12 @@ function MobileBreadcrumb({ items, fallbackTitle }: { items: Crumb[]; fallbackTi
           <polyline points="9 18 15 12 9 6" />
         </svg>
       )}
-      <h1
-        className="min-w-0 truncate whitespace-nowrap text-[15px] leading-tight"
-        style={{ color: "var(--text-primary)", fontWeight: 650 }}>
+      <span
+        aria-current="page"
+        className="min-w-0 truncate whitespace-nowrap text-[15px] font-semibold leading-tight"
+        style={{ color: "var(--text-primary)" }}>
         {current}
-      </h1>
+      </span>
     </nav>
   );
 }
@@ -90,9 +99,10 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const bellRef = useRef<HTMLDivElement>(null);
 
-  const crumbs = useMemo(() => getBreadcrumbs(pathname), [pathname]);
+  const crumbRoot = isLoggedIn ? APP_HOME_CRUMB : PUBLIC_HOME_CRUMB;
+  const crumbs = useMemo(() => getBreadcrumbs(pathname, crumbRoot), [crumbRoot, pathname]);
   const compactCrumbs = useMemo(() => getCompactCrumbs(crumbs), [crumbs]);
-  const pageTitle = useMemo(() => getPageTitle(pathname), [pathname]);
+  const pageTitle = useMemo(() => getPageTitle(pathname, crumbRoot), [crumbRoot, pathname]);
   const parentHref = crumbs.length >= 2 ? crumbs[crumbs.length - 2]?.href : undefined;
   const showBack = crumbs.length > 2;  // 至少有 首頁 / X / Y 時才顯示
 
@@ -297,7 +307,7 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
                   待辦中心
                 </p>
                 {visibleTaskCount > 0 && (
-                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+                  <span className="text-xs font-medium px-1.5 py-0.5 rounded-full"
                     style={{ background: "var(--warning)", color: "#fff" }}>
                     {visibleTaskCount > 99 ? "99+" : visibleTaskCount}
                   </span>
@@ -305,7 +315,7 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
               </div>
               <div className="max-h-44 overflow-y-auto">
                 {previewTasks.length === 0 ? (
-                  <p className="text-[11px] text-center py-4" style={{ color: "var(--text-muted)" }}>
+                  <p className="text-xs text-center py-4" style={{ color: "var(--text-muted)" }}>
                     目前沒有待辦
                   </p>
                 ) : (
@@ -332,7 +342,7 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
                             {t.title}
                           </p>
                           {t.subtitle && (
-                            <p className="text-[10px] truncate mt-0.5"
+                            <p className="text-xs truncate mt-0.5"
                               style={{ color: "var(--text-muted)" }}>
                               {t.subtitle}
                             </p>
@@ -344,9 +354,9 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
                 )}
               </div>
               <Link href="/tasks" onClick={() => setShowBell(false)}
-                className="block px-4 py-2 text-center text-[11px] font-medium"
+                className="block px-4 py-2 text-center text-xs font-medium"
                 style={{
-                  color: "var(--primary)",
+                  color: "var(--primary-text)",
                   textDecoration: "none",
                   borderBottom: "1px solid var(--border)",
                 }}>
@@ -362,7 +372,7 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
                 </p>
                 <div className="flex items-center gap-2">
                   {unreadCount > 0 && (
-                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+                    <span className="text-xs font-medium px-1.5 py-0.5 rounded-full"
                       style={{ background: "var(--danger)", color: "#fff" }}>
                       {unreadCount > 99 ? "99+" : unreadCount}
                     </span>
@@ -371,15 +381,15 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
                     type="button"
                     onClick={handleMarkAllRead}
                     disabled={unreadCount === 0}
-                    className="text-[11px] font-medium disabled:opacity-40"
-                    style={{ color: "var(--primary)" }}>
+                    className="text-xs font-medium disabled:opacity-40"
+                    style={{ color: "var(--primary-text)" }}>
                     全數已讀
                   </button>
                 </div>
               </div>
               <div className="max-h-44 overflow-y-auto">
                 {previewNtfs.length === 0 ? (
-                  <p className="text-[11px] text-center py-4" style={{ color: "var(--text-muted)" }}>
+                  <p className="text-xs text-center py-4" style={{ color: "var(--text-muted)" }}>
                     目前沒有通知
                   </p>
                 ) : (
@@ -402,7 +412,7 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
                             style={{ color: "var(--text-primary)" }}>
                             {n.title}
                           </p>
-                          <p className="text-[10px] mt-0.5"
+                          <p className="text-xs mt-0.5"
                             style={{ color: "var(--text-disabled)" }}>
                             {new Date(n.created_at).toLocaleDateString("zh-TW")}
                           </p>
@@ -414,8 +424,8 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
               </div>
               <div className="px-4 py-2" style={{ borderTop: "1px solid var(--border)" }}>
                 <Link href="/notifications" onClick={() => setShowBell(false)}
-                  className="block text-center text-[11px] font-medium"
-                  style={{ color: "var(--primary)", textDecoration: "none" }}>
+                  className="block text-center text-xs font-medium"
+                  style={{ color: "var(--primary-text)", textDecoration: "none" }}>
                   查看全部通知 →
                 </Link>
               </div>
@@ -455,10 +465,10 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
                 />
               ) : (
                 <div
-                  className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-semibold flex-shrink-0"
+                  className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0"
                   style={{
                     background: "linear-gradient(135deg, rgba(201,168,76,0.18) 0%, rgba(201,168,76,0.08) 100%)",
-                    color: "var(--primary)",
+                    color: "var(--primary-text)",
                     border: "1.5px solid rgba(201,168,76,0.35)",
                   }}
                   aria-hidden="true">
@@ -473,9 +483,9 @@ export default function Topbar({ onMenuClick, menuExpanded }: TopbarProps) {
 
               {isSuperuser && (
                 <span
-                  className="hidden sm:block text-[10px] px-1.5 py-0.5 rounded-sm font-medium leading-none"
+                  className="hidden sm:block text-xs px-1.5 py-0.5 rounded-sm font-medium leading-none"
                   style={{
-                    background: "rgba(245,158,11,0.12)",
+                    background: "var(--warning-dim)",
                     color: "var(--warning)",
                     border: "1px solid var(--warning-border)",
                   }}>

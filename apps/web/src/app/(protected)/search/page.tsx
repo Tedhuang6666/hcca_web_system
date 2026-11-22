@@ -8,11 +8,12 @@ import { searchApi, apiErrorMessage } from "@/lib/api";
 import type { SearchResultOut } from "@/lib/types";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import SmartEmptyState from "@/components/ui/SmartEmptyState";
+import TabBar from "@/components/ui/TabBar";
 
 type Kind = "all" | "document" | "regulation" | "announcement";
 
 const KIND_META: Record<Exclude<Kind, "all">, { label: string; Icon: React.ComponentType<{ size: number; "aria-hidden"?: boolean }>; color: string }> = {
-  document:     { label: "公文", Icon: FileText,  color: "var(--primary)" },
+  document:     { label: "公文", Icon: FileText,  color: "var(--primary-text)" },
   regulation:   { label: "法規", Icon: Scale,     color: "var(--warning)" },
   announcement: { label: "公告", Icon: Megaphone, color: "var(--info, var(--primary))" },
 };
@@ -78,9 +79,6 @@ function SearchInner() {
         <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
           全域搜尋
         </h1>
-        <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-          一次搜尋公文、法規與公告
-        </p>
       </div>
 
       <form
@@ -106,26 +104,19 @@ function SearchInner() {
       </form>
 
       {searched && (
-        <nav className="module-tabs-scroll max-w-full overflow-x-auto" aria-label="搜尋分類">
-          <div className="module-tabs-list" role="tablist">
-            {TABS.map(({ key, label }) => {
-              const active = tab === key;
-              const count = counts[key] ?? 0;
-              return (
-                <button
-                  key={key}
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => setTab(key)}
-                  className={`module-tab-link cursor-pointer${active ? " is-active" : ""}`}
-                >
-                  <span>{label}</span>
-                  {count > 0 && <span className="text-xs opacity-70">({count})</span>}
-                </button>
-              );
-            })}
-          </div>
-        </nav>
+        <TabBar
+          label="搜尋分類"
+          items={TABS.map(({ key, label }) => {
+            const count = counts[key] ?? 0;
+            return {
+              key,
+              label,
+              meta: count > 0 ? <span className="text-xs opacity-70">({count})</span> : undefined,
+            };
+          })}
+          value={tab}
+          onChange={setTab}
+        />
       )}
 
       <div key={tab} className="tab-panel-transition">
@@ -169,8 +160,8 @@ function SearchInner() {
                         </h3>
                         {meta && (
                           <span
-                            className="text-[10px] font-medium px-1.5 py-0.5 rounded"
-                            style={{ color, background: `${color}15`, border: `1px solid ${color}33` }}
+                            className="text-xs font-medium px-1.5 py-0.5 rounded"
+                            style={{ color, background: `color-mix(in srgb, ${color} 8%, transparent)`, border: `1px solid color-mix(in srgb, ${color} 20%, transparent)` }}
                           >
                             {meta.label}
                           </span>

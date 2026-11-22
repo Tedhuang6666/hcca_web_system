@@ -1,0 +1,1513 @@
+{
+  "version": 1,
+  "files": {
+    "apps/api/src/api/core/anomaly_detection.py": {
+      "broad_except": 2
+    },
+    "apps/api/src/api/core/app_settings.py": {
+      "broad_except": 1,
+      "any_annotations": 4
+    },
+    "apps/api/src/api/core/cache.py": {
+      "broad_except": 3,
+      "any_annotations": 2
+    },
+    "apps/api/src/api/core/celery_app.py": {
+      "broad_except": 2,
+      "type_ignore": 1,
+      "noqa": 1
+    },
+    "apps/api/src/api/core/config.py": {
+      "lines_over_600": 125
+    },
+    "apps/api/src/api/core/database.py": {
+      "commits": 1,
+      "broad_except": 1,
+      "noqa": 1
+    },
+    "apps/api/src/api/core/defense.py": {
+      "any_annotations": 12
+    },
+    "apps/api/src/api/core/error_audit.py": {
+      "lines_over_600": 12,
+      "broad_except": 5,
+      "any_annotations": 3
+    },
+    "apps/api/src/api/core/field_crypto.py": {
+      "broad_except": 1
+    },
+    "apps/api/src/api/core/idempotency.py": {
+      "any_annotations": 3
+    },
+    "apps/api/src/api/core/ip_blocklist.py": {
+      "any_annotations": 5
+    },
+    "apps/api/src/api/core/load_shed.py": {
+      "broad_except": 1
+    },
+    "apps/api/src/api/core/maintenance.py": {
+      "any_annotations": 11
+    },
+    "apps/api/src/api/core/metrics.py": {
+      "broad_except": 2,
+      "any_annotations": 2
+    },
+    "apps/api/src/api/core/module_health.py": {
+      "broad_except": 7
+    },
+    "apps/api/src/api/core/module_recovery.py": {
+      "commits": 2,
+      "broad_except": 7
+    },
+    "apps/api/src/api/core/module_registry.py": {
+      "broad_except": 2
+    },
+    "apps/api/src/api/core/oauth.py": {
+      "type_ignore": 3
+    },
+    "apps/api/src/api/core/payload_limit.py": {
+      "broad_except": 1
+    },
+    "apps/api/src/api/core/permission_codes.py": {
+      "lines_over_600": 333
+    },
+    "apps/api/src/api/core/prometheus_metrics.py": {
+      "broad_except": 2
+    },
+    "apps/api/src/api/core/query_audit.py": {
+      "noqa": 2
+    },
+    "apps/api/src/api/core/rate_limit.py": {
+      "broad_except": 1
+    },
+    "apps/api/src/api/core/recovery.py": {
+      "any_annotations": 5
+    },
+    "apps/api/src/api/core/security.py": {
+      "broad_except": 3
+    },
+    "apps/api/src/api/core/sentry.py": {
+      "broad_except": 1,
+      "any_annotations": 3
+    },
+    "apps/api/src/api/core/spreadsheet.py": {
+      "any_annotations": 6
+    },
+    "apps/api/src/api/core/structured_logging.py": {
+      "any_annotations": 2
+    },
+    "apps/api/src/api/core/trusted_proxy.py": {
+      "any_annotations": 1
+    },
+    "apps/api/src/api/core/ws_manager.py": {
+      "broad_except": 5
+    },
+    "apps/api/src/api/dependencies/api_key_auth.py": {
+      "commits": 1,
+      "broad_except": 2
+    },
+    "apps/api/src/api/email/renderer.py": {
+      "any_annotations": 5
+    },
+    "apps/api/src/api/main.py": {
+      "lines_over_600": 217,
+      "broad_except": 6
+    },
+    "apps/api/src/api/models/__init__.py": {
+      "noqa": 64
+    },
+    "apps/api/src/api/models/document.py": {
+      "lines_over_600": 272,
+      "any_annotations": 3
+    },
+    "apps/api/src/api/models/notification.py": {
+      "any_annotations": 1
+    },
+    "apps/api/src/api/models/org.py": {
+      "type_ignore": 1
+    },
+    "apps/api/src/api/models/petition.py": {
+      "any_annotations": 1
+    },
+    "apps/api/src/api/models/petition_notification.py": {
+      "any_annotations": 2
+    },
+    "apps/api/src/api/models/seating.py": {
+      "any_annotations": 3
+    },
+    "apps/api/src/api/models/shop.py": {
+      "lines_over_600": 278,
+      "any_annotations": 2
+    },
+    "apps/api/src/api/models/user.py": {
+      "noqa": 1,
+      "any_annotations": 1
+    },
+    "apps/api/src/api/models/user_google_tasks.py": {
+      "type_ignore": 2
+    },
+    "apps/api/src/api/routers/_module_health.py": {
+      "router_db_calls": 1,
+      "broad_except": 1
+    },
+    "apps/api/src/api/routers/admin.py": {
+      "lines_over_600": 1181,
+      "router_db_calls": 32,
+      "broad_except": 1,
+      "noqa": 2
+    },
+    "apps/api/src/api/routers/admin_observability.py": {
+      "router_db_calls": 2,
+      "commits": 2,
+      "broad_except": 2,
+      "noqa": 2,
+      "any_annotations": 8
+    },
+    "apps/api/src/api/routers/admin_system.py": {
+      "lines_over_600": 1345,
+      "router_db_calls": 4,
+      "commits": 5,
+      "broad_except": 4,
+      "noqa": 3,
+      "any_annotations": 3
+    },
+    "apps/api/src/api/routers/agent_observability.py": {
+      "router_db_calls": 2,
+      "broad_except": 1,
+      "noqa": 1,
+      "any_annotations": 7
+    },
+    "apps/api/src/api/routers/analytics.py": {
+      "lines_over_600": 55,
+      "router_db_calls": 14,
+      "commits": 1,
+      "noqa": 2
+    },
+    "apps/api/src/api/routers/announcements.py": {
+      "broad_except": 2
+    },
+    "apps/api/src/api/routers/api_keys.py": {
+      "commits": 2
+    },
+    "apps/api/src/api/routers/audit.py": {
+      "router_db_calls": 2
+    },
+    "apps/api/src/api/routers/auth.py": {
+      "lines_over_600": 314,
+      "router_db_calls": 8,
+      "commits": 5,
+      "broad_except": 3
+    },
+    "apps/api/src/api/routers/data_lifecycle.py": {
+      "type_ignore": 1,
+      "any_annotations": 1
+    },
+    "apps/api/src/api/routers/discord.py": {
+      "lines_over_600": 570,
+      "router_db_calls": 28,
+      "broad_except": 1
+    },
+    "apps/api/src/api/routers/discord_internal.py": {
+      "commits": 1,
+      "broad_except": 1
+    },
+    "apps/api/src/api/routers/documents.py": {
+      "lines_over_600": 237,
+      "router_db_calls": 1,
+      "broad_except": 1,
+      "type_ignore": 1,
+      "noqa": 3
+    },
+    "apps/api/src/api/routers/documents_approve.py": {
+      "lines_over_600": 272,
+      "type_ignore": 1
+    },
+    "apps/api/src/api/routers/documents_attachments.py": {
+      "router_db_calls": 4
+    },
+    "apps/api/src/api/routers/documents_helpers.py": {
+      "router_db_calls": 4
+    },
+    "apps/api/src/api/routers/email.py": {
+      "lines_over_600": 895,
+      "router_db_calls": 20,
+      "commits": 1,
+      "broad_except": 1,
+      "noqa": 1
+    },
+    "apps/api/src/api/routers/email_platform.py": {
+      "router_db_calls": 9
+    },
+    "apps/api/src/api/routers/feature_flags.py": {
+      "commits": 3,
+      "broad_except": 1
+    },
+    "apps/api/src/api/routers/finance_budget.py": {
+      "lines_over_600": 257,
+      "router_db_calls": 15,
+      "commits": 21
+    },
+    "apps/api/src/api/routers/finance_claims.py": {
+      "router_db_calls": 14,
+      "commits": 9
+    },
+    "apps/api/src/api/routers/finance_common.py": {
+      "router_db_calls": 5
+    },
+    "apps/api/src/api/routers/finance_ledger.py": {
+      "router_db_calls": 9,
+      "commits": 12,
+      "broad_except": 1
+    },
+    "apps/api/src/api/routers/finance_public.py": {
+      "router_db_calls": 13
+    },
+    "apps/api/src/api/routers/line_webhook.py": {
+      "router_db_calls": 1
+    },
+    "apps/api/src/api/routers/merchandise_submissions.py": {
+      "lines_over_600": 258,
+      "broad_except": 1,
+      "noqa": 1
+    },
+    "apps/api/src/api/routers/mfa.py": {
+      "router_db_calls": 1,
+      "any_annotations": 5
+    },
+    "apps/api/src/api/routers/notifications.py": {
+      "router_db_calls": 9,
+      "noqa": 2
+    },
+    "apps/api/src/api/routers/orgs.py": {
+      "router_db_calls": 1
+    },
+    "apps/api/src/api/routers/partner_map.py": {
+      "lines_over_600": 299,
+      "router_db_calls": 1
+    },
+    "apps/api/src/api/routers/people.py": {
+      "router_db_calls": 1,
+      "broad_except": 1
+    },
+    "apps/api/src/api/routers/petitions.py": {
+      "lines_over_600": 1372,
+      "router_db_calls": 6,
+      "broad_except": 5,
+      "noqa": 1
+    },
+    "apps/api/src/api/routers/policies.py": {
+      "commits": 7,
+      "broad_except": 1
+    },
+    "apps/api/src/api/routers/positions.py": {
+      "router_db_calls": 5
+    },
+    "apps/api/src/api/routers/public_api.py": {
+      "router_db_calls": 3
+    },
+    "apps/api/src/api/routers/raffles.py": {
+      "commits": 6,
+      "broad_except": 1
+    },
+    "apps/api/src/api/routers/regulation_sync.py": {
+      "router_db_calls": 4
+    },
+    "apps/api/src/api/routers/regulations.py": {
+      "router_db_calls": 2,
+      "noqa": 1
+    },
+    "apps/api/src/api/routers/reports.py": {
+      "broad_except": 2,
+      "any_annotations": 1
+    },
+    "apps/api/src/api/routers/saved_filters.py": {
+      "router_db_calls": 3
+    },
+    "apps/api/src/api/routers/school_class.py": {
+      "lines_over_600": 95
+    },
+    "apps/api/src/api/routers/shop_sheet.py": {
+      "router_db_calls": 7
+    },
+    "apps/api/src/api/routers/shop_teacher.py": {
+      "router_db_calls": 1
+    },
+    "apps/api/src/api/routers/short_links.py": {
+      "commits": 2
+    },
+    "apps/api/src/api/routers/site.py": {
+      "lines_over_600": 131,
+      "router_db_calls": 4,
+      "commits": 1,
+      "broad_except": 1
+    },
+    "apps/api/src/api/routers/survey.py": {
+      "lines_over_600": 162,
+      "router_db_calls": 2
+    },
+    "apps/api/src/api/routers/term_rollover.py": {
+      "commits": 2,
+      "any_annotations": 1
+    },
+    "apps/api/src/api/routers/user_google_tasks.py": {
+      "router_db_calls": 5,
+      "commits": 3,
+      "broad_except": 1,
+      "type_ignore": 1
+    },
+    "apps/api/src/api/routers/user_positions.py": {
+      "router_db_calls": 2
+    },
+    "apps/api/src/api/routers/users.py": {
+      "router_db_calls": 4,
+      "commits": 8,
+      "broad_except": 1,
+      "noqa": 2
+    },
+    "apps/api/src/api/routers/webhooks.py": {
+      "router_db_calls": 1,
+      "commits": 3
+    },
+    "apps/api/src/api/routers/ws.py": {
+      "router_db_calls": 4,
+      "broad_except": 2
+    },
+    "apps/api/src/api/schemas/discord_internal.py": {
+      "any_annotations": 5
+    },
+    "apps/api/src/api/schemas/document.py": {
+      "lines_over_600": 307
+    },
+    "apps/api/src/api/schemas/finance.py": {
+      "lines_over_600": 188
+    },
+    "apps/api/src/api/schemas/navigation_profile.py": {
+      "any_annotations": 1
+    },
+    "apps/api/src/api/schemas/shop.py": {
+      "lines_over_600": 573
+    },
+    "apps/api/src/api/schemas/survey.py": {
+      "lines_over_600": 20,
+      "type_ignore": 2,
+      "any_annotations": 10
+    },
+    "apps/api/src/api/services/account_protection.py": {
+      "service_http_exception": 1
+    },
+    "apps/api/src/api/services/announcement.py": {
+      "service_http_exception": 1,
+      "type_ignore": 1,
+      "noqa": 7
+    },
+    "apps/api/src/api/services/audit.py": {
+      "any_annotations": 2
+    },
+    "apps/api/src/api/services/audit_chain.py": {
+      "any_annotations": 3
+    },
+    "apps/api/src/api/services/audit_chain_tasks.py": {
+      "commits": 3,
+      "broad_except": 1,
+      "type_ignore": 2
+    },
+    "apps/api/src/api/services/backup_tasks.py": {
+      "commits": 2,
+      "broad_except": 6,
+      "type_ignore": 1,
+      "noqa": 1
+    },
+    "apps/api/src/api/services/dashboard.py": {
+      "lines_over_600": 239,
+      "broad_except": 5,
+      "type_ignore": 6
+    },
+    "apps/api/src/api/services/data_lifecycle.py": {
+      "broad_except": 1,
+      "type_ignore": 5,
+      "noqa": 1,
+      "any_annotations": 10
+    },
+    "apps/api/src/api/services/data_lifecycle_tasks.py": {
+      "commits": 1,
+      "broad_except": 2,
+      "type_ignore": 1
+    },
+    "apps/api/src/api/services/defense.py": {
+      "service_http_exception": 1,
+      "any_annotations": 8
+    },
+    "apps/api/src/api/services/digest_tasks.py": {
+      "commits": 1,
+      "broad_except": 1,
+      "noqa": 2
+    },
+    "apps/api/src/api/services/discord_bot.py": {
+      "lines_over_600": 356,
+      "any_annotations": 11
+    },
+    "apps/api/src/api/services/discord_command_admin.py": {
+      "any_annotations": 2
+    },
+    "apps/api/src/api/services/discord_command_common.py": {
+      "any_annotations": 4
+    },
+    "apps/api/src/api/services/discord_command_discovery.py": {
+      "any_annotations": 3
+    },
+    "apps/api/src/api/services/discord_command_documents.py": {
+      "any_annotations": 2
+    },
+    "apps/api/src/api/services/discord_command_identity.py": {
+      "any_annotations": 2
+    },
+    "apps/api/src/api/services/discord_command_notifications.py": {
+      "any_annotations": 2
+    },
+    "apps/api/src/api/services/discord_command_operations.py": {
+      "any_annotations": 2
+    },
+    "apps/api/src/api/services/discord_command_petitions.py": {
+      "any_annotations": 2
+    },
+    "apps/api/src/api/services/discord_command_work_items.py": {
+      "any_annotations": 2
+    },
+    "apps/api/src/api/services/discord_commands.py": {
+      "any_annotations": 2
+    },
+    "apps/api/src/api/services/discord_delivery.py": {
+      "any_annotations": 2
+    },
+    "apps/api/src/api/services/discord_embeds.py": {
+      "any_annotations": 14
+    },
+    "apps/api/src/api/services/discord_gateway.py": {
+      "broad_except": 1,
+      "noqa": 1,
+      "any_annotations": 7
+    },
+    "apps/api/src/api/services/discord_inventory.py": {
+      "any_annotations": 4
+    },
+    "apps/api/src/api/services/discord_notification_routes.py": {
+      "any_annotations": 2
+    },
+    "apps/api/src/api/services/discord_sync_tasks.py": {
+      "commits": 1,
+      "type_ignore": 1
+    },
+    "apps/api/src/api/services/document/_access.py": {
+      "lines_over_600": 172
+    },
+    "apps/api/src/api/services/document/_lifecycle.py": {
+      "lines_over_600": 501,
+      "noqa": 1
+    },
+    "apps/api/src/api/services/document_reminder_tasks.py": {
+      "commits": 2,
+      "broad_except": 2,
+      "type_ignore": 2
+    },
+    "apps/api/src/api/services/election.py": {
+      "commits": 6,
+      "type_ignore": 3
+    },
+    "apps/api/src/api/services/email_dispatch.py": {
+      "commits": 1,
+      "broad_except": 1,
+      "service_http_exception": 1,
+      "noqa": 1
+    },
+    "apps/api/src/api/services/email_platform.py": {
+      "lines_over_600": 8,
+      "service_http_exception": 1
+    },
+    "apps/api/src/api/services/email_tasks.py": {
+      "commits": 1,
+      "broad_except": 2,
+      "type_ignore": 1,
+      "noqa": 1
+    },
+    "apps/api/src/api/services/exam_paper.py": {
+      "broad_except": 1
+    },
+    "apps/api/src/api/services/field_crypto_tasks.py": {
+      "commits": 1,
+      "broad_except": 1,
+      "type_ignore": 1,
+      "any_annotations": 1
+    },
+    "apps/api/src/api/services/file_delivery.py": {
+      "service_http_exception": 1
+    },
+    "apps/api/src/api/services/finance_budget.py": {
+      "lines_over_600": 1330,
+      "broad_except": 1,
+      "service_http_exception": 1
+    },
+    "apps/api/src/api/services/finance_core.py": {
+      "service_http_exception": 1
+    },
+    "apps/api/src/api/services/finance_income.py": {
+      "service_http_exception": 1
+    },
+    "apps/api/src/api/services/finance_journal.py": {
+      "lines_over_600": 366,
+      "service_http_exception": 1,
+      "noqa": 2
+    },
+    "apps/api/src/api/services/gallery_drive.py": {
+      "broad_except": 1
+    },
+    "apps/api/src/api/services/gallery_tasks.py": {
+      "commits": 1,
+      "broad_except": 1,
+      "noqa": 1
+    },
+    "apps/api/src/api/services/google_tasks_service.py": {
+      "broad_except": 4
+    },
+    "apps/api/src/api/services/governance_ingest.py": {
+      "broad_except": 2,
+      "noqa": 1
+    },
+    "apps/api/src/api/services/incident.py": {
+      "lines_over_600": 233,
+      "commits": 1,
+      "broad_except": 1,
+      "any_annotations": 10
+    },
+    "apps/api/src/api/services/incident_tasks.py": {
+      "commits": 3
+    },
+    "apps/api/src/api/services/line_bot.py": {
+      "commits": 2,
+      "broad_except": 1
+    },
+    "apps/api/src/api/services/mail.py": {
+      "commits": 3,
+      "broad_except": 2,
+      "noqa": 1
+    },
+    "apps/api/src/api/services/merchandise_submission.py": {
+      "lines_over_600": 156,
+      "noqa": 1
+    },
+    "apps/api/src/api/services/merchandise_submission_ai.py": {
+      "lines_over_600": 364
+    },
+    "apps/api/src/api/services/metrics_tasks.py": {
+      "type_ignore": 2
+    },
+    "apps/api/src/api/services/navigation_profile.py": {
+      "commits": 3
+    },
+    "apps/api/src/api/services/notification_tasks.py": {
+      "commits": 2,
+      "broad_except": 2,
+      "noqa": 1
+    },
+    "apps/api/src/api/services/observability.py": {
+      "lines_over_600": 462,
+      "broad_except": 7,
+      "noqa": 7
+    },
+    "apps/api/src/api/services/observability_tasks.py": {
+      "commits": 2
+    },
+    "apps/api/src/api/services/official_print.py": {
+      "lines_over_600": 183
+    },
+    "apps/api/src/api/services/official_print_document.py": {
+      "lines_over_600": 89
+    },
+    "apps/api/src/api/services/outbox.py": {
+      "lines_over_600": 109,
+      "commits": 2,
+      "broad_except": 7,
+      "any_annotations": 3
+    },
+    "apps/api/src/api/services/outbox_tasks.py": {
+      "type_ignore": 1
+    },
+    "apps/api/src/api/services/partner_map.py": {
+      "lines_over_600": 53,
+      "noqa": 8
+    },
+    "apps/api/src/api/services/passkey.py": {
+      "broad_except": 3,
+      "any_annotations": 6
+    },
+    "apps/api/src/api/services/permission_tasks.py": {
+      "commits": 1,
+      "type_ignore": 1
+    },
+    "apps/api/src/api/services/person.py": {
+      "lines_over_600": 378
+    },
+    "apps/api/src/api/services/petition.py": {
+      "lines_over_600": 604,
+      "noqa": 1
+    },
+    "apps/api/src/api/services/privacy.py": {
+      "broad_except": 3,
+      "type_ignore": 6,
+      "any_annotations": 7
+    },
+    "apps/api/src/api/services/recommended_vendor.py": {
+      "type_ignore": 2
+    },
+    "apps/api/src/api/services/recovery_agent.py": {
+      "any_annotations": 1
+    },
+    "apps/api/src/api/services/recovery_tasks.py": {
+      "broad_except": 2
+    },
+    "apps/api/src/api/services/regulation.py": {
+      "lines_over_600": 319,
+      "any_annotations": 2
+    },
+    "apps/api/src/api/services/regulation_consistency.py": {
+      "any_annotations": 1
+    },
+    "apps/api/src/api/services/regulation_import.py": {
+      "lines_over_600": 527
+    },
+    "apps/api/src/api/services/regulation_tasks.py": {
+      "commits": 2,
+      "broad_except": 4,
+      "noqa": 2
+    },
+    "apps/api/src/api/services/reports.py": {
+      "broad_except": 3,
+      "any_annotations": 14
+    },
+    "apps/api/src/api/services/school_class.py": {
+      "lines_over_600": 1272,
+      "type_ignore": 1
+    },
+    "apps/api/src/api/services/school_directory_import.py": {
+      "type_ignore": 1
+    },
+    "apps/api/src/api/services/search.py": {
+      "broad_except": 1,
+      "noqa": 1,
+      "any_annotations": 16
+    },
+    "apps/api/src/api/services/shop/_catalog.py": {
+      "lines_over_600": 136,
+      "type_ignore": 2
+    },
+    "apps/api/src/api/services/shop/_orders.py": {
+      "lines_over_600": 1282,
+      "noqa": 15
+    },
+    "apps/api/src/api/services/shop/_promotions.py": {
+      "lines_over_600": 1035
+    },
+    "apps/api/src/api/services/shop/_receipts.py": {
+      "lines_over_600": 39
+    },
+    "apps/api/src/api/services/shop/_sheet_reader.py": {
+      "broad_except": 1
+    },
+    "apps/api/src/api/services/shop_tasks.py": {
+      "commits": 2,
+      "broad_except": 4,
+      "noqa": 3
+    },
+    "apps/api/src/api/services/site.py": {
+      "any_annotations": 2
+    },
+    "apps/api/src/api/services/storage.py": {
+      "broad_except": 2,
+      "type_ignore": 1
+    },
+    "apps/api/src/api/services/survey.py": {
+      "lines_over_600": 1005,
+      "noqa": 2
+    },
+    "apps/api/src/api/services/survey_tasks.py": {
+      "commits": 1,
+      "broad_except": 2,
+      "noqa": 1
+    },
+    "apps/api/src/api/services/task_inbox.py": {
+      "lines_over_600": 109,
+      "broad_except": 3
+    },
+    "apps/api/src/api/services/term_rollover.py": {
+      "any_annotations": 3
+    },
+    "apps/api/src/api/services/user_lifecycle.py": {
+      "any_annotations": 3
+    },
+    "apps/api/src/api/services/user_position.py": {
+      "service_http_exception": 1
+    },
+    "apps/api/src/api/services/user_registration.py": {
+      "lines_over_600": 786,
+      "any_annotations": 23
+    },
+    "apps/api/src/api/services/version.py": {
+      "any_annotations": 3
+    },
+    "apps/api/src/api/services/watchdog_tasks.py": {
+      "commits": 1,
+      "broad_except": 6,
+      "type_ignore": 1,
+      "any_annotations": 6
+    },
+    "apps/api/src/api/services/web_push.py": {
+      "broad_except": 1,
+      "any_annotations": 1
+    },
+    "apps/api/src/api/services/webhook.py": {
+      "any_annotations": 2
+    },
+    "apps/api/src/api/services/webhook_tasks.py": {
+      "commits": 3,
+      "broad_except": 1
+    },
+    "apps/api/src/api/services/work_item.py": {
+      "broad_except": 1
+    },
+    "apps/api/src/api/services/work_item_tasks.py": {
+      "commits": 1,
+      "broad_except": 1
+    },
+    "apps/api/src/api/services/workflow.py": {
+      "lines_over_600": 45
+    },
+    "apps/web/src/app/(admin)/admin/api-keys/page.tsx": {
+      "inline_styles": 5
+    },
+    "apps/web/src/app/(admin)/admin/classes/page.tsx": {
+      "lines_over_600": 1261,
+      "inline_styles": 150
+    },
+    "apps/web/src/app/(admin)/admin/data-lifecycle/page.tsx": {
+      "inline_styles": 5
+    },
+    "apps/web/src/app/(admin)/admin/discord/page.tsx": {
+      "lines_over_600": 296,
+      "inline_styles": 39
+    },
+    "apps/web/src/app/(admin)/admin/elections/[id]/count/page.tsx": {
+      "inline_styles": 19
+    },
+    "apps/web/src/app/(admin)/admin/elections/new/page.tsx": {
+      "inline_styles": 5
+    },
+    "apps/web/src/app/(admin)/admin/elections/page.tsx": {
+      "inline_styles": 1
+    },
+    "apps/web/src/app/(admin)/admin/feature-flags/page.tsx": {
+      "inline_styles": 3
+    },
+    "apps/web/src/app/(admin)/admin/navigation-profiles/page.tsx": {
+      "inline_styles": 8
+    },
+    "apps/web/src/app/(admin)/admin/page.tsx": {
+      "inline_styles": 19
+    },
+    "apps/web/src/app/(admin)/admin/people/page.tsx": {
+      "lines_over_600": 705,
+      "inline_styles": 88
+    },
+    "apps/web/src/app/(admin)/admin/permissions/page.tsx": {
+      "lines_over_600": 1006,
+      "inline_styles": 149
+    },
+    "apps/web/src/app/(admin)/admin/permissions/positions/new/page.tsx": {
+      "inline_styles": 36
+    },
+    "apps/web/src/app/(admin)/admin/policies/page.tsx": {
+      "lines_over_600": 102,
+      "inline_styles": 11
+    },
+    "apps/web/src/app/(admin)/admin/privacy/page.tsx": {
+      "inline_styles": 5
+    },
+    "apps/web/src/app/(admin)/admin/public-site/page.tsx": {
+      "lines_over_600": 1874,
+      "inline_styles": 28
+    },
+    "apps/web/src/app/(admin)/admin/reports/page.tsx": {
+      "inline_styles": 3
+    },
+    "apps/web/src/app/(admin)/admin/settings/page.tsx": {
+      "inline_styles": 3
+    },
+    "apps/web/src/app/(admin)/admin/term-rollover/page.tsx": {
+      "inline_styles": 6
+    },
+    "apps/web/src/app/(admin)/admin/trash/page.tsx": {
+      "inline_styles": 5
+    },
+    "apps/web/src/app/(admin)/admin/webhooks/page.tsx": {
+      "inline_styles": 6
+    },
+    "apps/web/src/app/(protected)/announcements/[id]/edit/page.tsx": {
+      "inline_styles": 3
+    },
+    "apps/web/src/app/(protected)/announcements/new/page.tsx": {
+      "inline_styles": 2
+    },
+    "apps/web/src/app/(protected)/audit-logs/page.tsx": {
+      "lines_over_600": 130,
+      "inline_styles": 34
+    },
+    "apps/web/src/app/(protected)/backoffice/page.tsx": {
+      "inline_styles": 5
+    },
+    "apps/web/src/app/(protected)/council-proposals/page.tsx": {
+      "inline_styles": 17
+    },
+    "apps/web/src/app/(protected)/credential/ElectronicCredentialPage.tsx": {
+      "inline_styles": 2
+    },
+    "apps/web/src/app/(protected)/dashboard/DashboardPageClient.tsx": {
+      "lines_over_600": 188,
+      "inline_styles": 28
+    },
+    "apps/web/src/app/(protected)/dashboard/DashboardWidgets.tsx": {
+      "inline_styles": 16
+    },
+    "apps/web/src/app/(protected)/document-templates/page.tsx": {
+      "inline_styles": 30
+    },
+    "apps/web/src/app/(protected)/documents/[id]/edit/page.tsx": {
+      "lines_over_600": 333,
+      "inline_styles": 61
+    },
+    "apps/web/src/app/(protected)/documents/delegations/page.tsx": {
+      "inline_styles": 26
+    },
+    "apps/web/src/app/(protected)/documents/new/page.tsx": {
+      "lines_over_600": 867,
+      "inline_styles": 70
+    },
+    "apps/web/src/app/(protected)/email/analytics/page.tsx": {
+      "inline_styles": 2
+    },
+    "apps/web/src/app/(protected)/email/lists/page.tsx": {
+      "inline_styles": 3
+    },
+    "apps/web/src/app/(protected)/email/logs/page.tsx": {
+      "lines_over_600": 117,
+      "inline_styles": 33
+    },
+    "apps/web/src/app/(protected)/email/page.tsx": {
+      "lines_over_600": 1841,
+      "inline_styles": 76
+    },
+    "apps/web/src/app/(protected)/email/templates/page.tsx": {
+      "inline_styles": 2
+    },
+    "apps/web/src/app/(protected)/exam-papers/admin/page.tsx": {
+      "inline_styles": 6
+    },
+    "apps/web/src/app/(protected)/exam-papers/page.tsx": {
+      "inline_styles": 2
+    },
+    "apps/web/src/app/(protected)/finance/receivables/page.tsx": {
+      "inline_styles": 3
+    },
+    "apps/web/src/app/(protected)/judicial-petitions/page.tsx": {
+      "inline_styles": 8
+    },
+    "apps/web/src/app/(protected)/merchandise-submissions/admin/page.tsx": {
+      "lines_over_600": 1289,
+      "inline_styles": 86
+    },
+    "apps/web/src/app/(protected)/merchandise-submissions/page-client.tsx": {
+      "lines_over_600": 534,
+      "inline_styles": 62
+    },
+    "apps/web/src/app/(protected)/notifications/page.tsx": {
+      "inline_styles": 19
+    },
+    "apps/web/src/app/(protected)/operations/page.tsx": {
+      "inline_styles": 4
+    },
+    "apps/web/src/app/(protected)/orgs/[id]/page.tsx": {
+      "inline_styles": 45
+    },
+    "apps/web/src/app/(protected)/orgs/page.tsx": {
+      "inline_styles": 11
+    },
+    "apps/web/src/app/(protected)/partner-map/BusinessHoursEditor.tsx": {
+      "inline_styles": 6
+    },
+    "apps/web/src/app/(protected)/partner-map/PartnerLeafletMap.tsx": {
+      "inline_styles": 2
+    },
+    "apps/web/src/app/(protected)/partner-map/PartnerPromoCarousel.tsx": {
+      "inline_styles": 2
+    },
+    "apps/web/src/app/(protected)/partner-map/admin/BusinessAccountPanel.tsx": {
+      "inline_styles": 15
+    },
+    "apps/web/src/app/(protected)/partner-map/admin/CredentialAuthorizationPanel.tsx": {
+      "lines_over_600": 2,
+      "inline_styles": 47
+    },
+    "apps/web/src/app/(protected)/partner-map/admin/applications/page.tsx": {
+      "inline_styles": 38
+    },
+    "apps/web/src/app/(protected)/partner-map/admin/page.tsx": {
+      "lines_over_600": 353,
+      "inline_styles": 118
+    },
+    "apps/web/src/app/(protected)/partner-map/my-businesses/page.tsx": {
+      "inline_styles": 16
+    },
+    "apps/web/src/app/(protected)/petitions/PetitionsPageClient.tsx": {
+      "inline_styles": 23
+    },
+    "apps/web/src/app/(protected)/petitions/[id]/page.tsx": {
+      "inline_styles": 21
+    },
+    "apps/web/src/app/(protected)/petitions/admin/types/page.tsx": {
+      "inline_styles": 9
+    },
+    "apps/web/src/app/(protected)/petitions/manage/page.tsx": {
+      "lines_over_600": 387,
+      "inline_styles": 51
+    },
+    "apps/web/src/app/(protected)/publications/new/page.tsx": {
+      "inline_styles": 1
+    },
+    "apps/web/src/app/(protected)/publications/page.tsx": {
+      "inline_styles": 3
+    },
+    "apps/web/src/app/(protected)/qr-code/QrCodeGenerator.tsx": {
+      "inline_styles": 1
+    },
+    "apps/web/src/app/(protected)/recommended-vendors/RecommendedVendorMap.tsx": {
+      "inline_styles": 1
+    },
+    "apps/web/src/app/(protected)/recommended-vendors/admin/categories/page.tsx": {
+      "inline_styles": 19
+    },
+    "apps/web/src/app/(protected)/recommended-vendors/admin/page.tsx": {
+      "inline_styles": 31
+    },
+    "apps/web/src/app/(protected)/recommended-vendors/page.tsx": {
+      "inline_styles": 39
+    },
+    "apps/web/src/app/(protected)/regulations/archived/page.tsx": {
+      "inline_styles": 11
+    },
+    "apps/web/src/app/(protected)/search/page.tsx": {
+      "inline_styles": 9
+    },
+    "apps/web/src/app/(protected)/serial-templates/page.tsx": {
+      "lines_over_600": 17,
+      "inline_styles": 45
+    },
+    "apps/web/src/app/(protected)/settings/data-saver/page.tsx": {
+      "inline_styles": 4
+    },
+    "apps/web/src/app/(protected)/settings/integrations/page.tsx": {
+      "inline_styles": 40
+    },
+    "apps/web/src/app/(protected)/settings/layout.tsx": {
+      "inline_styles": 2
+    },
+    "apps/web/src/app/(protected)/settings/navigation/page.tsx": {
+      "inline_styles": 13
+    },
+    "apps/web/src/app/(protected)/settings/notifications/page.tsx": {
+      "lines_over_600": 233,
+      "inline_styles": 28
+    },
+    "apps/web/src/app/(protected)/settings/privacy/page.tsx": {
+      "inline_styles": 19
+    },
+    "apps/web/src/app/(protected)/settings/security/page.tsx": {
+      "inline_styles": 36
+    },
+    "apps/web/src/app/(protected)/shop/admin/ShopPromotionPanel.tsx": {
+      "lines_over_600": 31,
+      "inline_styles": 47
+    },
+    "apps/web/src/app/(protected)/shop/admin/page.tsx": {
+      "lines_over_600": 1632,
+      "inline_styles": 128
+    },
+    "apps/web/src/app/(protected)/shop/class-orders/page.tsx": {
+      "lines_over_600": 1682,
+      "inline_styles": 181
+    },
+    "apps/web/src/app/(protected)/shop/council-orders/page.tsx": {
+      "lines_over_600": 945,
+      "inline_styles": 99
+    },
+    "apps/web/src/app/(protected)/shop/layout.tsx": {
+      "inline_styles": 3
+    },
+    "apps/web/src/app/(protected)/shop/page.tsx": {
+      "lines_over_600": 1734,
+      "inline_styles": 7
+    },
+    "apps/web/src/app/(protected)/surveys/[id]/edit/page.tsx": {
+      "lines_over_600": 585,
+      "inline_styles": 55
+    },
+    "apps/web/src/app/(protected)/surveys/new/page.tsx": {
+      "lines_over_600": 528,
+      "inline_styles": 44
+    },
+    "apps/web/src/app/(protected)/tasks/page.tsx": {
+      "inline_styles": 26
+    },
+    "apps/web/src/app/(protected)/work-items/page.tsx": {
+      "inline_styles": 22
+    },
+    "apps/web/src/app/(public)/about/page.tsx": {
+      "inline_styles": 2
+    },
+    "apps/web/src/app/(public)/announcements/[id]/AnnouncementDetailPageClient.tsx": {
+      "inline_styles": 9
+    },
+    "apps/web/src/app/(public)/announcements/client.tsx": {
+      "inline_styles": 8
+    },
+    "apps/web/src/app/(public)/documents/[id]/DocumentDetailPageClient.tsx": {
+      "lines_over_600": 678,
+      "inline_styles": 73
+    },
+    "apps/web/src/app/(public)/documents/[id]/PublicDocumentView.tsx": {
+      "inline_styles": 6
+    },
+    "apps/web/src/app/(public)/documents/client.tsx": {
+      "lines_over_600": 858,
+      "inline_styles": 83
+    },
+    "apps/web/src/app/(public)/legal/layout.tsx": {
+      "inline_styles": 3
+    },
+    "apps/web/src/app/(public)/news/[id]/page.tsx": {
+      "inline_styles": 2
+    },
+    "apps/web/src/app/(public)/partner-map/client.tsx": {
+      "lines_over_600": 330,
+      "inline_styles": 94
+    },
+    "apps/web/src/app/(public)/petitions/[id]/[verificationCode]/page.tsx": {
+      "inline_styles": 1
+    },
+    "apps/web/src/app/(public)/petitions/new/page.tsx": {
+      "inline_styles": 13
+    },
+    "apps/web/src/app/(public)/petitions/public/[id]/page.tsx": {
+      "inline_styles": 7
+    },
+    "apps/web/src/app/(public)/petitions/public/page.tsx": {
+      "inline_styles": 9
+    },
+    "apps/web/src/app/(public)/petitions/share/page.tsx": {
+      "inline_styles": 10
+    },
+    "apps/web/src/app/(public)/regulations/[id]/RegulationDetailPageClient.tsx": {
+      "lines_over_600": 257,
+      "inline_styles": 33
+    },
+    "apps/web/src/app/(public)/shop/orders/[id]/page.tsx": {
+      "inline_styles": 5
+    },
+    "apps/web/src/app/(public)/surveys/[id]/client.tsx": {
+      "lines_over_600": 1487,
+      "inline_styles": 121
+    },
+    "apps/web/src/app/(public)/surveys/client.tsx": {
+      "inline_styles": 13
+    },
+    "apps/web/src/app/auth/callback/page.tsx": {
+      "inline_styles": 2
+    },
+    "apps/web/src/app/auth/mfa/page.tsx": {
+      "inline_styles": 15
+    },
+    "apps/web/src/app/login/PasskeyLogin.tsx": {
+      "inline_styles": 4
+    },
+    "apps/web/src/app/login/page.tsx": {
+      "inline_styles": 19
+    },
+    "apps/web/src/app/not-found.tsx": {
+      "inline_styles": 3
+    },
+    "apps/web/src/app/opengraph-image.tsx": {
+      "inline_styles": 10
+    },
+    "apps/web/src/app/raffle/RaffleClient.tsx": {
+      "inline_styles": 2
+    },
+    "apps/web/src/app/unsubscribe/page.tsx": {
+      "inline_styles": 11
+    },
+    "apps/web/src/components/admin/AccountDetailPanel.tsx": {
+      "lines_over_600": 64,
+      "inline_styles": 55
+    },
+    "apps/web/src/components/admin/AccountDirectoryPanel.tsx": {
+      "inline_styles": 26
+    },
+    "apps/web/src/components/admin/AccountGovernanceSections.tsx": {
+      "inline_styles": 29
+    },
+    "apps/web/src/components/admin/AccountMergeSection.tsx": {
+      "inline_styles": 20
+    },
+    "apps/web/src/components/admin/AdminWorkbenchTabs.tsx": {
+      "inline_styles": 3
+    },
+    "apps/web/src/components/admin/ClassCorrectionRequestsPanel.tsx": {
+      "inline_styles": 14
+    },
+    "apps/web/src/components/admin/DiscordNotificationRoutePanel.tsx": {
+      "inline_styles": 13
+    },
+    "apps/web/src/components/admin/DiscordRolePolicyPanel.tsx": {
+      "inline_styles": 11
+    },
+    "apps/web/src/components/admin/PeopleManagementRedirect.tsx": {
+      "inline_styles": 1
+    },
+    "apps/web/src/components/admin/PermissionCatalog.tsx": {
+      "inline_styles": 26
+    },
+    "apps/web/src/components/admin/PersonClassRosterEditor.tsx": {
+      "inline_styles": 4
+    },
+    "apps/web/src/components/admin/UserAndFeatureActionsPanel.tsx": {
+      "inline_styles": 40
+    },
+    "apps/web/src/components/admin/system/ModuleMaintenancePanel.tsx": {
+      "inline_styles": 1
+    },
+    "apps/web/src/components/admin/system/PerformanceManagementPanel.tsx": {
+      "lines_over_600": 126,
+      "inline_styles": 91
+    },
+    "apps/web/src/components/admin/system/SystemDefensePanel.tsx": {
+      "lines_over_600": 410
+    },
+    "apps/web/src/components/admin/system/SystemDiagnosticsPanel.tsx": {
+      "inline_styles": 5
+    },
+    "apps/web/src/components/admin/system/SystemObservabilityPanel.tsx": {
+      "inline_styles": 78
+    },
+    "apps/web/src/components/admin/system/SystemOperationsWorkspace.tsx": {
+      "inline_styles": 2
+    },
+    "apps/web/src/components/admin/system/SystemRecentErrorsPanel.tsx": {
+      "inline_styles": 21
+    },
+    "apps/web/src/components/announcements/AnnouncementAudiencePicker.tsx": {
+      "inline_styles": 2
+    },
+    "apps/web/src/components/announcements/AnnouncementEditor.tsx": {
+      "inline_styles": 7
+    },
+    "apps/web/src/components/announcements/AnnouncementMarkdown.tsx": {
+      "inline_styles": 1
+    },
+    "apps/web/src/components/announcements/UrgentAnnouncementPopup.tsx": {
+      "inline_styles": 6
+    },
+    "apps/web/src/components/auth/PasskeySetupPrompt.tsx": {
+      "inline_styles": 1
+    },
+    "apps/web/src/components/brand/BrandEmblem.tsx": {
+      "inline_styles": 1
+    },
+    "apps/web/src/components/documents/ApprovalPanel.tsx": {
+      "inline_styles": 34
+    },
+    "apps/web/src/components/documents/AttachmentNameEditor.tsx": {
+      "inline_styles": 2
+    },
+    "apps/web/src/components/documents/OrganizationEmailRecipientSettings.tsx": {
+      "inline_styles": 11
+    },
+    "apps/web/src/components/documents/PetitionLinkSelector.tsx": {
+      "inline_styles": 22
+    },
+    "apps/web/src/components/documents/RecipientSearch.tsx": {
+      "inline_styles": 21
+    },
+    "apps/web/src/components/documents/VersionHistory.tsx": {
+      "inline_styles": 12
+    },
+    "apps/web/src/components/elections/LiveElectionBoard.tsx": {
+      "lines_over_600": 89,
+      "inline_styles": 10
+    },
+    "apps/web/src/components/email/RecipientPicker.tsx": {
+      "inline_styles": 1
+    },
+    "apps/web/src/components/finance/PublicBudgetExecutionTable.tsx": {
+      "inline_styles": 1
+    },
+    "apps/web/src/components/gallery/GalleryExperience.tsx": {
+      "inline_styles": 1
+    },
+    "apps/web/src/components/gallery/GalleryViewer.tsx": {
+      "inline_styles": 1
+    },
+    "apps/web/src/components/gallery/InfinitePhotoWall.tsx": {
+      "inline_styles": 2
+    },
+    "apps/web/src/components/layout/AppShell.tsx": {
+      "inline_styles": 4
+    },
+    "apps/web/src/components/layout/BottomTabBar.tsx": {
+      "inline_styles": 3
+    },
+    "apps/web/src/components/layout/CommandMenu.tsx": {
+      "inline_styles": 1
+    },
+    "apps/web/src/components/layout/CommandMenuDialog.tsx": {
+      "inline_styles": 12
+    },
+    "apps/web/src/components/layout/MobileNavConfigurator.tsx": {
+      "inline_styles": 12
+    },
+    "apps/web/src/components/layout/NavigationProgress.tsx": {
+      "inline_styles": 1
+    },
+    "apps/web/src/components/layout/Sidebar.tsx": {
+      "inline_styles": 19
+    },
+    "apps/web/src/components/layout/Topbar.tsx": {
+      "lines_over_600": 20,
+      "inline_styles": 44
+    },
+    "apps/web/src/components/legal/LegalNav.tsx": {
+      "inline_styles": 2
+    },
+    "apps/web/src/components/legal/PolicyDocumentViewer.tsx": {
+      "inline_styles": 5
+    },
+    "apps/web/src/components/performance/PerformanceDashboard.tsx": {
+      "inline_styles": 29
+    },
+    "apps/web/src/components/performance/PetitionMonthlyStatsPanel.tsx": {
+      "inline_styles": 3
+    },
+    "apps/web/src/components/petitions/PetitionAttachmentList.tsx": {
+      "inline_styles": 7
+    },
+    "apps/web/src/components/petitions/PetitionConfidentialBlocked.tsx": {
+      "inline_styles": 8
+    },
+    "apps/web/src/components/petitions/PetitionPublicConsent.tsx": {
+      "inline_styles": 3
+    },
+    "apps/web/src/components/profile/ProfilePage.tsx": {
+      "lines_over_600": 89,
+      "inline_styles": 52
+    },
+    "apps/web/src/components/profile/SessionManagement.tsx": {
+      "inline_styles": 19
+    },
+    "apps/web/src/components/regulations/LawArticleRow.tsx": {
+      "inline_styles": 20
+    },
+    "apps/web/src/components/regulations/RegulationDetailSections.tsx": {
+      "inline_styles": 44
+    },
+    "apps/web/src/components/regulations/RegulationDiffModal.tsx": {
+      "inline_styles": 16
+    },
+    "apps/web/src/components/regulations/RegulationMarkdownContent.tsx": {
+      "inline_styles": 1
+    },
+    "apps/web/src/components/regulations/RegulationSyncPanel.tsx": {
+      "inline_styles": 15
+    },
+    "apps/web/src/components/shop/ActivityOrderClosure.tsx": {
+      "inline_styles": 8
+    },
+    "apps/web/src/components/shop/AdminAssistedOrder.tsx": {
+      "inline_styles": 3
+    },
+    "apps/web/src/components/shop/ClassPaymentWorkspace.tsx": {
+      "inline_styles": 6
+    },
+    "apps/web/src/components/shop/CollectionActivityPicker.tsx": {
+      "inline_styles": 4
+    },
+    "apps/web/src/components/shop/CouncilClassOrders.tsx": {
+      "inline_styles": 4
+    },
+    "apps/web/src/components/shop/OrderPromotionSummary.tsx": {
+      "inline_styles": 1
+    },
+    "apps/web/src/components/shop/ProductPurchaseRulesEditor.tsx": {
+      "inline_styles": 8
+    },
+    "apps/web/src/components/shop/ProductSizeChartEditor.tsx": {
+      "inline_styles": 3
+    },
+    "apps/web/src/components/shop/ProductThumbnail.tsx": {
+      "inline_styles": 3
+    },
+    "apps/web/src/components/shop/ShopNoteGroupsPanel.tsx": {
+      "inline_styles": 9
+    },
+    "apps/web/src/components/shop/ShopOfficesPanel.tsx": {
+      "inline_styles": 13
+    },
+    "apps/web/src/components/shop/ShopSalesDeepAnalysis.tsx": {
+      "inline_styles": 2
+    },
+    "apps/web/src/components/shop/ShopSalesTrend.tsx": {
+      "inline_styles": 1
+    },
+    "apps/web/src/components/shop/ShopSalesVariants.tsx": {
+      "inline_styles": 1
+    },
+    "apps/web/src/components/shop/ShopSheetImportPanel.tsx": {
+      "inline_styles": 9
+    },
+    "apps/web/src/components/shop/ShopTargetPicker.tsx": {
+      "inline_styles": 14
+    },
+    "apps/web/src/components/shop/SupplementOrders.tsx": {
+      "inline_styles": 6
+    },
+    "apps/web/src/components/site/ArticleChart.tsx": {
+      "inline_styles": 7
+    },
+    "apps/web/src/components/site/ArticleMarkdown.tsx": {
+      "inline_styles": 1
+    },
+    "apps/web/src/components/site/ArticleMarkdownEditor.tsx": {
+      "inline_styles": 1
+    },
+    "apps/web/src/components/site/OfficerRosterTabs.tsx": {
+      "inline_styles": 11
+    },
+    "apps/web/src/components/site/PetitionMonthlyChart.tsx": {
+      "inline_styles": 6
+    },
+    "apps/web/src/components/site/PublicOfficerDirectory.tsx": {
+      "inline_styles": 10
+    },
+    "apps/web/src/components/surveys/OptionImageFields.tsx": {
+      "inline_styles": 9
+    },
+    "apps/web/src/components/surveys/SurveyGradeSelector.tsx": {
+      "inline_styles": 3
+    },
+    "apps/web/src/components/surveys/SurveyImageField.tsx": {
+      "inline_styles": 4
+    },
+    "apps/web/src/components/surveys/SurveyImageViewer.tsx": {
+      "inline_styles": 6
+    },
+    "apps/web/src/components/surveys/SurveyMarkdownField.tsx": {
+      "inline_styles": 4
+    },
+    "apps/web/src/components/surveys/SurveyQuestionFields.tsx": {
+      "inline_styles": 9
+    },
+    "apps/web/src/components/surveys/SurveyQuestionTypePicker.tsx": {
+      "inline_styles": 2
+    },
+    "apps/web/src/components/ui/AnimatedDownloadButton.tsx": {
+      "inline_styles": 1
+    },
+    "apps/web/src/components/ui/AnimatedFileUpload.tsx": {
+      "inline_styles": 3
+    },
+    "apps/web/src/components/ui/AnimatedNumber.tsx": {
+      "inline_styles": 1
+    },
+    "apps/web/src/components/ui/Breadcrumb.tsx": {
+      "inline_styles": 3
+    },
+    "apps/web/src/components/ui/Combobox.tsx": {
+      "inline_styles": 6
+    },
+    "apps/web/src/components/ui/ConfirmDialog.tsx": {
+      "inline_styles": 2
+    },
+    "apps/web/src/components/ui/DraftStatus.tsx": {
+      "inline_styles": 1
+    },
+    "apps/web/src/components/ui/EmptyState.tsx": {
+      "inline_styles": 3
+    },
+    "apps/web/src/components/ui/FormShell.tsx": {
+      "inline_styles": 1
+    },
+    "apps/web/src/components/ui/GongwenEditor.tsx": {
+      "inline_styles": 9
+    },
+    "apps/web/src/components/ui/GuidedForm.tsx": {
+      "inline_styles": 4
+    },
+    "apps/web/src/components/ui/MobileBackToList.tsx": {
+      "inline_styles": 1
+    },
+    "apps/web/src/components/ui/Modal.tsx": {
+      "inline_styles": 6
+    },
+    "apps/web/src/components/ui/ModuleMaintenance.tsx": {
+      "inline_styles": 1
+    },
+    "apps/web/src/components/ui/MultiCombobox.tsx": {
+      "inline_styles": 6
+    },
+    "apps/web/src/components/ui/OfficialText.tsx": {
+      "inline_styles": 6
+    },
+    "apps/web/src/components/ui/RichTextarea.tsx": {
+      "inline_styles": 7
+    },
+    "apps/web/src/components/ui/RouteErrorState.tsx": {
+      "inline_styles": 9
+    },
+    "apps/web/src/components/ui/Skeleton.tsx": {
+      "inline_styles": 1
+    },
+    "apps/web/src/components/ui/SmartEmptyState.tsx": {
+      "inline_styles": 6
+    },
+    "apps/web/src/components/ui/SmartTextarea.tsx": {
+      "inline_styles": 5
+    },
+    "apps/web/src/components/ui/StatusBadge.tsx": {
+      "inline_styles": 3
+    },
+    "apps/web/src/components/ui/Toggle.tsx": {
+      "inline_styles": 4
+    },
+    "apps/web/src/components/ui/targeting.tsx": {
+      "inline_styles": 1
+    },
+    "apps/web/src/lib/client-error-reporter.ts": {
+      "lines_over_600": 26
+    },
+    "apps/web/src/lib/content-og-image.tsx": {
+      "inline_styles": 12
+    },
+    "apps/web/src/lib/navigation.ts": {
+      "lines_over_600": 50
+    },
+    "apps/web/src/lib/performance-monitor.ts": {
+      "lines_over_600": 10
+    },
+    "apps/web/src/lib/types.ts": {
+      "lines_over_600": 977
+    }
+  }
+}

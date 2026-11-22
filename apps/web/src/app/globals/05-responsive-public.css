@@ -38,81 +38,10 @@
   :root { --sidebar-w: 280px; }
 }
 
-/* ══════════════════════════════════════════════════════════════════════════
-   公開站視覺強化 — 霧金治理風的動態語言
-   與系統內 dashboard-hero / ambient-drift 同一套設計語彙。
-   全部進場動畫使用 fill-mode: both，於 prefers-reduced-motion 下會被全域
-   media query 收斂為瞬間到位（見檔首），故可安全停在最終狀態；無限循環動畫
-   亦同步靜止。捲動揭示由 useScrollReveal hook 驅動。
-   ══════════════════════════════════════════════════════════════════════════ */
-
-/* ── Hero：極光光暈 + 細點紋理 ─────────────────────────────────────────── */
-.public-hero {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-}
-
-.public-hero::before {
-  content: "";
-  position: absolute;
-  inset: -30% -12% auto -12%;
-  z-index: -2;
-  height: 150%;
-  pointer-events: none;
-  background:
-    radial-gradient(38rem 24rem at 16% 4%, color-mix(in srgb, var(--public-accent) 26%, transparent), transparent 68%),
-    radial-gradient(34rem 26rem at 86% 26%, color-mix(in srgb, var(--info) 18%, transparent), transparent 70%),
-    radial-gradient(30rem 22rem at 60% 110%, color-mix(in srgb, var(--public-accent) 14%, transparent), transparent 72%);
-  filter: blur(6px);
-  animation: public-aurora 18s ease-in-out infinite alternate;
-}
-
-.public-hero::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  opacity: 0.5;
-  background-image: radial-gradient(color-mix(in srgb, var(--public-accent) 42%, transparent) 0.6px, transparent 0.6px);
-  background-size: 22px 22px;
-  mask-image: radial-gradient(circle at 50% 0%, black, transparent 72%);
-  -webkit-mask-image: radial-gradient(circle at 50% 0%, black, transparent 72%);
-}
-
 @keyframes public-aurora {
   0%   { transform: translate3d(-2%, -1%, 0) scale(1);    opacity: 0.9; }
   50%  { transform: translate3d(2%, 1.5%, 0) scale(1.06); opacity: 1; }
   100% { transform: translate3d(-1%, 2%, 0) scale(1.02);  opacity: 0.92; }
-}
-
-/* 深色模式：金光在近黑底用低透明度會發灰，改用較高亮度 + screen 混色發光 */
-[data-theme="dark"] .public-hero::before {
-  background:
-    radial-gradient(38rem 24rem at 16% 4%, rgba(212, 180, 94, 0.5), transparent 64%),
-    radial-gradient(34rem 26rem at 86% 26%, rgba(120, 162, 232, 0.4), transparent 68%),
-    radial-gradient(30rem 22rem at 60% 112%, rgba(212, 180, 94, 0.32), transparent 72%);
-  filter: blur(10px);
-  mix-blend-mode: screen;
-}
-[data-theme="dark"] .public-hero::after {
-  opacity: 0.72;
-  background-image: radial-gradient(rgba(212, 180, 94, 0.62) 0.7px, transparent 0.7px);
-  mix-blend-mode: screen;
-}
-
-/* ── Hero 進場：標題群組依序上升、招牌縮放浮現 ───────────────────────── */
-.public-hero-copy > * {
-  animation: public-rise 720ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-.public-hero-copy > .public-eyebrow      { animation-delay: 60ms; }
-.public-hero-copy > h1                    { animation-delay: 150ms; }
-.public-hero-copy > .public-hero-subtitle { animation-delay: 280ms; }
-.public-hero-copy > .public-hero-actions  { animation-delay: 400ms; }
-
-.public-signboard {
-  animation: public-rise-pop 820ms cubic-bezier(0.22, 1, 0.36, 1) 220ms both;
 }
 
 .public-home-pending {
@@ -138,7 +67,7 @@
   margin-top: 0.75rem;
   color: var(--public-text);
   font-size: clamp(1.8rem, 6vw, 2.6rem);
-  font-weight: 850;
+  font-weight: 700;
   line-height: 1.15;
 }
 
@@ -166,26 +95,6 @@
 @keyframes public-rise-pop {
   from { opacity: 0; transform: translateY(34px) scale(0.96); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-/* ── 招牌頂線流光 + 會徽輕浮動 ─────────────────────────────────────────── */
-.public-signboard-topline {
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in srgb, var(--public-accent) 40%, transparent),
-    var(--public-accent),
-    color-mix(in srgb, var(--public-accent) 40%, transparent),
-    transparent
-  );
-  background-size: 220% 100%;
-  animation: public-shimmer-x 3.6s linear infinite;
-}
-
-.public-signboard-emblem img,
-.public-signboard-emblem span,
-.public-signboard-emblem svg {
-  animation: public-float 6.5s ease-in-out infinite;
 }
 
 @keyframes public-shimmer-x {

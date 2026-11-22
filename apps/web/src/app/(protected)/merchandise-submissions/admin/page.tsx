@@ -205,20 +205,20 @@ function AIEvidencePanel({
             {isFinding ? <ShieldAlert size={14} /> : <ScanSearch size={14} />}
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-semibold" style={{ color: toneStyles.color }}>
+            <p className="text-xs font-semibold" style={{ color: toneStyles.color }}>
               AI / 內容鑑識
             </p>
             <p className="mt-0.5 text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
               {status.label}
             </p>
-            <p className="mt-1 text-[11px]" style={{ color: "var(--text-secondary)" }}>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>
               {evidence.length > 0 ? `${evidence.length} 項判斷線索` : "尚無判斷線索"}
               {metadata.length > 0 && ` · ${metadata.length} 筆 metadata`}
             </p>
           </div>
           <button
             type="button"
-            className="btn btn-ghost min-h-11 shrink-0 px-3 text-[11px] sm:min-h-8 sm:px-2"
+            className="btn btn-ghost min-h-11 shrink-0 px-3 text-xs sm:min-h-8 sm:px-2"
             onClick={() => setIsOpen(true)}
             aria-haspopup="dialog"
           >
@@ -258,21 +258,21 @@ function AIEvidencePanel({
               </h3>
               <dl className="mt-2 grid gap-2 sm:grid-cols-2">
                 <div className="rounded border p-2.5" style={{ borderColor: "var(--border)" }}>
-                  <dt className="text-[11px]" style={{ color: "var(--text-muted)" }}>檔名</dt>
+                  <dt className="text-xs" style={{ color: "var(--text-muted)" }}>檔名</dt>
                   <dd className="mt-1 break-all text-xs font-medium">{file.filename}</dd>
                 </div>
                 <div className="rounded border p-2.5" style={{ borderColor: "var(--border)" }}>
-                  <dt className="text-[11px]" style={{ color: "var(--text-muted)" }}>檔案格式／大小</dt>
+                  <dt className="text-xs" style={{ color: "var(--text-muted)" }}>檔案格式／大小</dt>
                   <dd className="mt-1 text-xs font-medium">
                     {file.content_type} · {file.file_size.toLocaleString()} bytes
                   </dd>
                 </div>
                 <div className="rounded border p-2.5" style={{ borderColor: "var(--border)" }}>
-                  <dt className="text-[11px]" style={{ color: "var(--text-muted)" }}>掃描時間</dt>
+                  <dt className="text-xs" style={{ color: "var(--text-muted)" }}>掃描時間</dt>
                   <dd className="mt-1 text-xs font-medium">{formatScanTime(file.ai_detection_scanned_at)}</dd>
                 </div>
                 <div className="rounded border p-2.5" style={{ borderColor: "var(--border)" }}>
-                  <dt className="text-[11px]" style={{ color: "var(--text-muted)" }}>偵測版本</dt>
+                  <dt className="text-xs" style={{ color: "var(--text-muted)" }}>偵測版本</dt>
                   <dd className="mt-1 text-xs font-medium">{file.ai_detection_version ?? "尚未記錄"}</dd>
                 </div>
               </dl>
@@ -293,7 +293,7 @@ function AIEvidencePanel({
                     >
                       <div className="flex flex-wrap items-center gap-2">
                         <span
-                          className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+                          className="rounded px-1.5 py-0.5 text-xs font-semibold"
                           style={{ color: toneStyles.color, background: toneStyles.background }}
                         >
                           {item.level} 級
@@ -304,7 +304,7 @@ function AIEvidencePanel({
                       <p className="mt-1 break-words text-xs" style={{ color: "var(--text-secondary)" }}>
                         偵測值：{item.value}
                       </p>
-                      <p className="mt-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
+                      <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
                         來源：{item.source}
                       </p>
                     </li>
@@ -338,7 +338,7 @@ function AIEvidencePanel({
                       <div key={item.source + item.key + index} className="grid gap-1 p-3 sm:grid-cols-[10rem_1fr] sm:gap-3">
                         <dt className="break-words text-xs font-semibold">{item.key}</dt>
                         <dd className="break-words whitespace-pre-wrap text-xs" style={{ color: "var(--text-secondary)" }}>
-                          <span className="mr-1 text-[10px]" style={{ color: "var(--text-muted)" }}>[{item.source}]</span>
+                          <span className="mr-1 text-xs" style={{ color: "var(--text-muted)" }}>[{item.source}]</span>
                           {item.value}
                         </dd>
                       </div>
@@ -359,7 +359,7 @@ function AIEvidencePanel({
               <section aria-labelledby="ai-integrity-title">
                 <h3 id="ai-integrity-title" className="text-sm font-semibold">檔案完整性</h3>
                 <p
-                  className="mt-2 break-all rounded-lg border p-3 font-mono text-[11px]"
+                  className="mt-2 break-all rounded-lg border p-3 font-mono text-xs"
                   style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
                 >
                   SHA-256：{file.ai_detection_sha256}

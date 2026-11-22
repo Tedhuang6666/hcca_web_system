@@ -89,6 +89,7 @@ from api.services import petition_notification as petition_notification_svc
 from api.services.discord_bot import enqueue_petition_private_channel
 from api.services.file_delivery import deliver_stored_file
 from api.services.permission import get_user_permission_codes
+from api.services.petition_submission import save_petition_submission_attachments
 from api.services.storage import get_storage
 
 router = APIRouter(prefix="/petitions", tags=["陳情系統"])
@@ -506,17 +507,14 @@ async def get_public_petition(case_id: uuid.UUID, session: DbDep) -> PetitionPub
     return _decorate_public_case(case_obj)
 
 
-@router.post(
-    "",
-    response_model=PetitionCreatedOut,
-    status_code=status.HTTP_201_CREATED,
-    summary="建立陳情案件（需登入且具名）",
-)
-async def create_petition(
+async def _create_petition_response(
     payload: PetitionCreate,
-    session: DbDep,
-    current_user: CurrentUser,
+    session: AsyncSession,
+    current_user: User,
+    *,
+    attachments: list[UploadFile] | None = None,
 ) -> PetitionCreatedOut:
+    attachments = attachments or []
     try:
         case_obj, share_token = await petition_svc.create_case(
             session, data=payload, submitter=current_user
@@ -534,6 +532,19 @@ async def create_petition(
         summary=f"建立陳情案件 {case_obj.case_number}",
     )
     petition_type = await petition_svc.get_type(session, case_obj.type_id)
+
+    if attachments:
+        try:
+            await save_petition_submission_attachments(
+                session,
+                case_obj,
+                attachments,
+                uploaded_by=current_user.id,
+            )
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
+            ) from e
 
     try:
         async with session.begin_nested():
@@ -597,6 +608,43 @@ async def create_petition(
         status_public_message=petition_svc.STATUS_MESSAGES[case_obj.status],
         next_action=petition_svc.NEXT_ACTIONS[case_obj.status],
         created_at=case_obj.created_at,
+    )
+
+
+@router.post(
+    "",
+    response_model=PetitionCreatedOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="建立陳情案件（需登入且具名）",
+)
+async def create_petition(
+    payload: PetitionCreate,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> PetitionCreatedOut:
+    return await _create_petition_response(payload, session, current_user)
+
+
+@router.post(
+    "/submit",
+    response_model=PetitionCreatedOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="建立陳情案件並同時上傳附件（需登入且具名）",
+)
+async def submit_petition_with_attachments(
+    session: DbDep,
+    current_user: CurrentUser,
+    type_id: uuid.UUID = Form(...),
+    title: str = Form(..., min_length=1, max_length=200),
+    content: str = Form(..., min_length=1, max_length=10000),
+    attachments: list[UploadFile] | None = File(default=None),
+) -> PetitionCreatedOut:
+    payload = PetitionCreate(type_id=type_id, title=title, content=content)
+    return await _create_petition_response(
+        payload,
+        session,
+        current_user,
+        attachments=attachments,
     )
 
 

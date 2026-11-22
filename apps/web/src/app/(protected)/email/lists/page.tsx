@@ -76,8 +76,7 @@ export default function EmailListsPage() {
     <div className="mx-auto max-w-5xl space-y-5">
       <header className="flex items-center justify-between">
         <div>
-          <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--primary)" }}>EMAIL</p>
-          <h1 className="mt-1 text-xl font-semibold">收件名單</h1>
+          <h1 className="text-xl font-semibold">收件名單</h1>
         </div>
         <Link href="/email" className="btn btn-primary btn-sm">返回寄信</Link>
       </header>

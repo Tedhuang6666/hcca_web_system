@@ -7,6 +7,7 @@ import { usersApi, classApi, apiErrorMessage } from "@/lib/api";
 import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 import { SectionSkeleton } from "@/components/ui/Skeleton";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import Toggle from "@/components/ui/Toggle";
 import SessionManagement from "@/components/profile/SessionManagement";
 import { usePermissions } from "@/hooks/usePermissions";
 import type {
@@ -80,12 +81,10 @@ function EditableField({
             onKeyDown={e => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") setEditing(false); }}
             autoFocus
           />
-          <button onClick={handleSave} disabled={saving} className="btn btn-primary text-xs px-3 py-1.5"
-            style={{ minHeight: "auto" }}>
-            {saving ? "…" : "儲存"}
+          <button type="button" onClick={handleSave} disabled={saving} className="btn btn-primary">
+            {saving ? "儲存中…" : "儲存"}
           </button>
-          <button onClick={() => setEditing(false)} className="btn btn-ghost text-xs px-3 py-1.5"
-            style={{ minHeight: "auto" }}>
+          <button type="button" onClick={() => setEditing(false)} className="btn btn-ghost">
             取消
           </button>
         </div>
@@ -95,9 +94,10 @@ function EditableField({
             {value || placeholder || "—"}
           </p>
           <button
+            type="button"
             onClick={() => { setDraft(value); setEditing(true); }}
-            className="text-xs opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 rounded"
-            style={{ color: "var(--primary)" }}>
+            className="btn btn-ghost"
+            aria-label={`編輯${label}`}>
             編輯
           </button>
         </div>
@@ -300,7 +300,7 @@ export default function ProfilePage() {
               className="flex-1 rounded-md px-3 py-2 text-center text-xs font-medium"
               style={{
                 background: tab.key === "account" ? "var(--primary-dim)" : "transparent",
-                color: tab.key === "account" ? "var(--primary)" : "var(--text-muted)",
+                color: tab.key === "account" ? "var(--primary-text)" : "var(--text-muted)",
               }}>
               {tab.label}
             </span>
@@ -360,7 +360,7 @@ export default function ProfilePage() {
               className="flex-1 rounded-md px-3 py-2 text-xs font-medium transition-colors"
               style={{
                 background: active ? "var(--primary-dim)" : "transparent",
-                color: active ? "var(--primary)" : "var(--text-muted)",
+                color: active ? "var(--primary-text)" : "var(--text-muted)",
               }}>
               {tab.label}
             </button>
@@ -379,7 +379,7 @@ export default function ProfilePage() {
           ) : (
             <div
               className="w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold flex-shrink-0"
-              style={{ background: "var(--primary-dim)", color: "var(--primary)" }}
+              style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}
               aria-hidden="true">
               {initials}
             </div>
@@ -393,8 +393,8 @@ export default function ProfilePage() {
               {user?.email ?? "—"}
             </p>
             {user?.is_superuser && (
-              <span className="inline-block mt-1 text-[10px] px-2 py-0.5 rounded font-medium"
-                style={{ background: "rgba(251,191,36,0.15)", color: "#fbbf24" }}>
+              <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded font-medium"
+                style={{ background: "var(--warning-dim)", color: "var(--warning)" }}>
                 管理員
               </span>
             )}
@@ -422,7 +422,7 @@ export default function ProfilePage() {
             <p className="text-sm" style={{ color: "var(--text-primary)" }}>
               {myClass
                 ? (myClass.label ?? `${myClass.academic_year} 學年度 ${myClass.class_code} 班`)
-                : "尚未歸班（由管理員依學號區間設定）"}
+                : "尚未歸班"}
             </p>
           </div>
           <div>
@@ -433,7 +433,7 @@ export default function ProfilePage() {
                   <p className="min-w-0 flex-1 break-all text-sm" style={{ color: "var(--text-primary)" }}>
                     {email}
                     {email === user?.email && (
-                      <span className="ml-2 text-[10px]" style={{ color: "var(--text-muted)" }}>
+                      <span className="ml-2 text-xs" style={{ color: "var(--text-muted)" }}>
                         主要
                       </span>
                     )}
@@ -442,7 +442,7 @@ export default function ProfilePage() {
                     <>
                       <button
                         type="button"
-                        className="btn btn-ghost shrink-0 px-2 py-1 text-[11px]"
+                        className="btn btn-ghost shrink-0 px-2 py-1 text-xs"
                         onClick={() => void setPrimaryEmail(email)}
                         disabled={emailBusy}
                       >
@@ -450,7 +450,7 @@ export default function ProfilePage() {
                       </button>
                       <button
                         type="button"
-                        className="btn btn-ghost shrink-0 px-2 py-1 text-[11px]"
+                        className="btn btn-ghost shrink-0 px-2 py-1 text-xs"
                         onClick={() => void unlinkEmail(email)}
                         disabled={emailBusy}
                       >
@@ -501,7 +501,7 @@ export default function ProfilePage() {
                 </div>
               )}
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                新 Email 驗證成功後，可使用該 Google 帳號登入同一個平台帳戶；若 Email 已屬其他帳號，驗證成功後會自動合併，資料衝突則交由管理員處理。
+                若此 Email 已屬於其他帳號，驗證後兩個帳號會合併。
               </p>
             </div>
           </div>
@@ -511,9 +511,6 @@ export default function ProfilePage() {
             <p className="text-xs font-semibold mb-2" style={{ color: "var(--text-muted)" }}>
               公文承辦人資訊顯示設定
             </p>
-            <p className="text-xs mb-3" style={{ color: "var(--text-muted)" }}>
-              建立公文時可帶入承辦人 Email。
-            </p>
             <div className="space-y-2">
               {[
                 {
@@ -522,24 +519,7 @@ export default function ProfilePage() {
                   onToggle: toggleShowEmail,
                 },
               ].map(({ label, checked, onToggle }) => (
-                <label key={label} className="flex items-center gap-3 cursor-pointer">
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={checked}
-                    aria-label={label}
-                    onClick={onToggle}
-                    className="inline-flex h-5 w-10 flex-shrink-0 items-center rounded-full p-0.5 transition-colors"
-                    style={{
-                      background: checked ? "var(--primary)" : "var(--border-strong)",
-                    }}>
-                    <span
-                      className="block h-4 w-4 rounded-full bg-white shadow-sm transition-transform"
-                      style={{ transform: checked ? "translateX(20px)" : "translateX(0)" }}
-                    />
-                  </button>
-                  <span className="text-sm" style={{ color: "var(--text-primary)" }}>{label}</span>
-                </label>
+                <Toggle key={label} checked={checked} onChange={onToggle} label={label} />
               ))}
             </div>
           </div>
@@ -573,7 +553,7 @@ export default function ProfilePage() {
             現職職位
             {activePositions.length > 0 && (
               <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full"
-                style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
+                style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
                 {activePositions.length}
               </span>
             )}
@@ -633,8 +613,8 @@ export default function ProfilePage() {
           </h2>
           {isAdmin && (
             <div className="mb-3 rounded-md px-3 py-2 text-xs"
-              style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
-              {isOwner ? "系統擁有者" : "超級管理員"}：擁有全部系統權限（不受一般職位權限碼限制）
+              style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
+              {isOwner ? "系統擁有者" : "超級管理員"}：擁有全部系統權限
             </div>
           )}
           <div className="flex flex-wrap gap-1.5">

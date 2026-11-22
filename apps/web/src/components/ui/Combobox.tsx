@@ -181,7 +181,7 @@ export default function Combobox({
                   className={`combobox-option w-full text-left px-3 py-2 transition-colors ${isActive ? "is-active" : ""} ${value === opt.value ? "is-selected" : ""}`}
                   style={{
                     background: isActive ? "var(--primary-dim)" : "transparent",
-                    color: value === opt.value ? "var(--primary)" : "var(--text-primary)",
+                    color: value === opt.value ? "var(--primary-text)" : "var(--text-primary)",
                     borderBottom: "1px solid var(--border)",
                   }}
                 >
@@ -189,7 +189,7 @@ export default function Combobox({
                     <>
                       <p className="text-sm">{opt.label}</p>
                       {opt.description && (
-                        <p className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>
+                        <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
                           {opt.description}
                         </p>
                       )}

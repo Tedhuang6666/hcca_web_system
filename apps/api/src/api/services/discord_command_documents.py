@@ -11,7 +11,7 @@ from api.models.user import User
 from api.schemas.document import RejectMode
 from api.services import document as document_svc
 from api.services.discord_bot import (
-    create_open_url,
+    plain_frontend_url,
 )
 from api.services.discord_command_common import (
     DiscordCommandError,
@@ -41,7 +41,7 @@ async def handle(
                 {
                     **_task(item),
                     "document_id": item.id.split(":")[-1],
-                    "open_url": await create_open_url(user.id, item.href),
+                    "open_url": plain_frontend_url(item.href),
                 }
                 for item in docs
             ]

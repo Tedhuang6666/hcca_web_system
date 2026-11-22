@@ -21,6 +21,7 @@ export default function PublicRouteError({
       <EmptyState
         icon={<AlertTriangle size={40} aria-hidden />}
         title="暫時無法載入這個頁面"
+        headingLevel="h1"
         description="請檢查網路後重試；若問題持續發生，請稍後再回來。"
         action={{ label: "重新載入", onClick: reset }}
       />

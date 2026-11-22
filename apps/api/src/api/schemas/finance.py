@@ -282,10 +282,6 @@ class FinanceBudgetExpenseUpdate(FinanceBudgetExpenseCreate):
     """完整更新一筆支出；未提供部門時沿用所選預算明細的提出部門。"""
 
 
-class BudgetAdvanceReceiptCreate(BaseModel):
-    expense_ids: list[uuid.UUID] = Field(min_length=1, max_length=300)
-
-
 class BudgetIncomeItemUpdate(BaseModel):
     amount: int = Field(gt=0, le=2_000_000_000)
     note: str | None = Field(default=None, max_length=2000)
@@ -790,25 +786,3 @@ class JournalOut(BaseModel):
     evidence_complete: bool = False
     effective_amount: int | None = None
     lines: list[JournalLineOut]
-
-
-class BankTransactionOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: uuid.UUID
-    fund_account_id: uuid.UUID
-    external_id: str
-    occurred_on: date
-    amount: int
-    description: str
-    journal_entry_id: uuid.UUID | None
-
-
-class FinanceDashboardOut(BaseModel):
-    assets: int
-    liabilities: int
-    equity: int
-    revenue: int
-    expense: int
-    net_income: int
-    unreconciled_count: int
-    funds: list[FundAccountOut]

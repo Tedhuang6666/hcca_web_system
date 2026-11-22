@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { BarChart3, Eye, Lock, RefreshCcw } from "lucide-react";
+import { Eye, Lock, RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
@@ -63,14 +63,7 @@ export default function ReportsPage() {
     <div className="mx-auto max-w-6xl p-4 md:p-6">
       <header className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <div className="mb-2 inline-flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)]">
-            <BarChart3 size={14} aria-hidden />
-            預寫常用報表（10）
-          </div>
           <h1 className="text-2xl font-bold text-[var(--text-primary)]">常用報表</h1>
-          <p className="mt-1 max-w-3xl text-xs text-[var(--text-muted)]">
-            選取報表執行，可下載 Excel 相容的 CSV。
-          </p>
         </div>
         <button type="button" className="btn btn-ghost" onClick={loadList}>
           <RefreshCcw size={16} aria-hidden />
@@ -126,7 +119,7 @@ export default function ReportsPage() {
                 <p className="text-sm text-[var(--text-muted)]">無資料。</p>
               ) : (
                 <div className="overflow-auto">
-                  <table className="w-full text-[11px]">
+                  <table className="w-full text-xs">
                     <thead className="text-[var(--text-secondary)]">
                       <tr className="border-b border-[var(--border)]">
                         {columns.map((c) => (

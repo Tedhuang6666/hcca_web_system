@@ -5,6 +5,7 @@ import time
 from datetime import UTC, datetime
 from uuid import uuid4
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -371,6 +372,36 @@ async def test_authenticated_performance_session_refuses_superuser(
         headers={"X-Performance-Monitor-Token": "test-performance-token"},
     )
 
+    assert response.status_code == 503
+
+
+@pytest.mark.parametrize("code", ["admin:all", "admin:users", "document:admin", "shop:manage"])
+async def test_authenticated_performance_session_refuses_management_permissions(
+    client: AsyncClient, db_session: AsyncSession, member_user, monkeypatch, code: str
+) -> None:
+    from api.core.clock import local_today
+    from api.models.org import Org, Permission, Position, UserPosition
+
+    org = Org(name=f"效能測試-{code}")
+    db_session.add(org)
+    await db_session.flush()
+    position = Position(org_id=org.id, name="管理者")
+    db_session.add(position)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            Permission(position_id=position.id, code=code),
+            UserPosition(user_id=member_user.id, position_id=position.id, start_date=local_today()),
+        ]
+    )
+    await db_session.flush()
+    monkeypatch.setattr(settings, "PERFORMANCE_MONITOR_TOKEN", "test-performance-token")
+    monkeypatch.setattr(settings, "PERFORMANCE_MONITOR_USER_ID", str(member_user.id))
+
+    response = await client.post(
+        "/internal/observability/auth-session",
+        headers={"X-Performance-Monitor-Token": "test-performance-token"},
+    )
     assert response.status_code == 503
 
 

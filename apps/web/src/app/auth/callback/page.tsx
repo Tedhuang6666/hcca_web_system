@@ -28,8 +28,16 @@ export default function AuthCallbackPage() {
 
     // Google callback 已在 API response 設定 HttpOnly cookies，但公開頁面不會
     // 經過受保護 layout，因此仍需同步本機登入快取，讓問卷等公開頁面知道目前
-    // 是登入狀態。這裡只查詢一次 /auth/me，不主動刷新 token。
-    void authApi.me()
+    // 是登入狀態。
+    //
+    // 307 redirect 的 Set-Cookie 有時比 JS 的第一次 XHR 晚到（約 400ms），
+    // 造成 /auth/me 以 q=0 回傳 401。等候一次後 token 即可用，故 retry 一次。
+    const fetchMe = () => authApi.me().catch(async (err) => {
+      await new Promise<void>((r) => setTimeout(r, 400));
+      return authApi.me().catch(() => Promise.reject(err));
+    });
+
+    void fetchMe()
       .then((user) => {
         cacheCurrentUser(user);
         window.location.replace(loginDestination(next));
@@ -47,7 +55,7 @@ export default function AuthCallbackPage() {
     <div className="min-h-screen flex items-center justify-center"
       style={{ background: "var(--primary-fg)" }}>
       <div className="text-center space-y-3">
-        <Loader2 size={40} className="mx-auto animate-spin" style={{ color: "var(--primary)" }} aria-label="載入中" />
+        <Loader2 size={40} className="mx-auto animate-spin" style={{ color: "var(--primary-text)" }} aria-label="載入中" />
         <p className="text-slate-400 text-sm">正在完成登入...</p>
       </div>
     </div>

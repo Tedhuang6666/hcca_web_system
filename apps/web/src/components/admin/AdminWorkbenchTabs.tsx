@@ -48,7 +48,7 @@ export default function AdminWorkbenchTabs() {
             aria-current={active ? "page" : undefined}
             className="relative min-h-11 shrink-0 px-3 py-3 text-sm font-medium transition-colors focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--primary)] sm:px-4"
             style={{
-              color: active ? "var(--primary)" : "var(--text-muted)",
+              color: active ? "var(--primary-text)" : "var(--text-muted)",
               textDecoration: "none",
             }}
           >

@@ -44,6 +44,12 @@ def _end_datetime(day: date) -> datetime:
     return datetime.combine(day + timedelta(days=1), time.min, tzinfo=UTC)
 
 
+def _utc_date(db: AsyncSession, column):
+    # 查詢範圍以 UTC 定義，分日也必須一致，不能依資料庫主機的 TimeZone 漂移。
+    value = func.timezone("UTC", column) if db.get_bind().dialect.name == "postgresql" else column
+    return func.date(value)
+
+
 def normalize_page_path(path: str) -> str:
     """將含 UUID 或數字 ID 的路徑折疊成可讀的頁面路徑。"""
     value = path.split("?", 1)[0].strip()
@@ -143,7 +149,7 @@ async def get_article_analytics(
         or 0
     )
 
-    day_expr = func.date(PublicSitePageView.created_at)
+    day_expr = _utc_date(db, PublicSitePageView.created_at)
     daily_rows = (
         await db.execute(
             select(
@@ -237,7 +243,7 @@ async def get_product_analytics(
     start_at = _start_datetime(start)
     end_at = _end_datetime(end)
 
-    user_date = func.date(User.created_at)
+    user_date = _utc_date(db, User.created_at)
     user_rows = (
         await db.execute(
             select(user_date.label("day"), func.count(User.id))

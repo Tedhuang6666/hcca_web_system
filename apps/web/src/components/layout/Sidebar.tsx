@@ -3,8 +3,9 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "@/components/ui/IntentLink";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { ChevronDown, Globe2 } from "lucide-react";
+import { ChevronDown, Globe2, Search } from "lucide-react";
 import BrandEmblem from "@/components/brand/BrandEmblem";
+import LocationMark, { useLocationMarkScope } from "@/components/ui/LocationMark";
 import { usePermissions } from "@/hooks/usePermissions";
 import { AUTH_CACHE_EVENT } from "@/lib/auth-cache";
 import { useModuleStatus } from "@/contexts/ModuleStatusContext";
@@ -12,6 +13,7 @@ import { BRANDING } from "@/lib/branding";
 import { navigationProfilesApi } from "@/lib/api/navigation-profiles";
 import { NAV_ID_TO_MODULE } from "@/lib/modules";
 import NavIcon from "./NavIcon";
+import { OPEN_COMMAND_MENU_EVENT } from "./CommandMenu";
 import {
   hasSavedNavPreferences,
   isNavItemVisible,
@@ -77,6 +79,8 @@ function writeCollapsed(set: Set<string>) {
   }
 }
 
+const SIDEBAR_MARK_GROUP = "app-sidebar-nav";
+
 /* ── NavLink ──────────────────────────────────────────────────────────────── */
 function NavLink({ item, pathname, down }: { item: NavItem; pathname: string; down?: boolean }) {
   const href = item.id === "about" || item.id === "publicAbout" ? "/system-info" : item.href;
@@ -89,11 +93,12 @@ function NavLink({ item, pathname, down }: { item: NavItem; pathname: string; do
       href={href}
       className="sidebar-nav-item motion-nav-link"
       aria-current={active ? "page" : undefined}>
+      {active && <LocationMark group={SIDEBAR_MARK_GROUP} className="sidebar-location-mark" />}
       <span className="flex-shrink-0"><NavIcon iconKey={item.iconKey} size={15} /></span>
       <span className="flex-1 truncate">{item.label}</span>
       {down && (
         <span
-          className="ml-1 flex-shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium"
+          className="ml-1 flex-shrink-0 rounded px-1.5 py-0.5 text-xs font-medium"
           style={{
             background: "var(--warning-dim)",
             color: "var(--warning)",
@@ -345,6 +350,7 @@ export default function Sidebar() {
   // 模組狀態首輪回應前保持 skeleton，避免先顯示已關閉入口、回應抵達後再把側欄推回去。
   // 訪客使用公開 fallback，沿用原本不等待登入後模組狀態的行為。
   const navigationReady = hydrated && (!isLoggedIn || moduleStatusReady);
+  useLocationMarkScope(SIDEBAR_MARK_GROUP, navigationReady);
 
   const initials = userName.charAt(0).toUpperCase();
 
@@ -362,7 +368,10 @@ export default function Sidebar() {
       <div
         className="flex items-center gap-3 px-5 flex-shrink-0"
         style={{ height: "60px", borderBottom: "1px solid var(--sidebar-border)" }}>
-        <Link href="/" className="flex items-center gap-3 min-w-0" aria-label="回到儀表板">
+        <Link
+          href={isLoggedIn ? "/dashboard" : "/"}
+          className="flex items-center gap-3 min-w-0"
+          aria-label={isLoggedIn ? "平台首頁" : "公開網站首頁"}>
           <BrandEmblem size={40} priority />
           <div className="min-w-0">
             <p
@@ -371,7 +380,7 @@ export default function Sidebar() {
               {BRANDING.orgShortName}
             </p>
             <p
-              className="text-[10px] leading-tight mt-0.5 tracking-widest font-medium"
+              className="text-xs leading-tight mt-0.5 tracking-widest font-medium"
               style={{ color: "var(--primary-text)" }}>
               {BRANDING.acronym}
             </p>
@@ -389,23 +398,18 @@ export default function Sidebar() {
           <SidebarNavSkeleton />
         ) : (
           <>
-            <Link
-              href="/"
-              className="sidebar-public-entry"
-              aria-label="返回公開網站">
-              <Globe2 size={15} aria-hidden={true} />
-              <span className="flex-1 truncate">返回公開頁</span>
-            </Link>
-            <div className="space-y-0.5">
+            {isLoggedIn && (
               <button
                 type="button"
-                onClick={() => window.dispatchEvent(new Event("hcca:open-command-menu"))}
-                className="sidebar-nav-item motion-nav-link w-full text-left"
-                style={{ background: "var(--sidebar-hover)", color: "var(--sidebar-text-hover)" }}
-                aria-label="開啟所有功能">
-                <span className="flex-shrink-0"><NavIcon iconKey="modules" size={15} /></span>
-                <span className="flex-1 truncate">所有功能</span>
+                onClick={() => window.dispatchEvent(new Event(OPEN_COMMAND_MENU_EVENT))}
+                className="sidebar-search-trigger"
+                aria-keyshortcuts="Control+K Meta+K">
+                <Search size={15} aria-hidden={true} />
+                <span className="flex-1 truncate text-left">搜尋功能或資料</span>
+                <kbd aria-hidden="true">Ctrl K</kbd>
               </button>
+            )}
+            <div className="space-y-0.5">
               {navSections.map((entry, i) => {
                 if (!isSection(entry)) {
                   return (
@@ -458,6 +462,12 @@ export default function Sidebar() {
                 );
               })}
             </div>
+            <div className="sidebar-section pt-4">
+              <Link href="/" className="sidebar-nav-item motion-nav-link">
+                <span className="flex-shrink-0"><Globe2 size={15} aria-hidden={true} /></span>
+                <span className="flex-1 truncate">公開網站</span>
+              </Link>
+            </div>
           </>
         )}
       </nav>
@@ -488,7 +498,7 @@ export default function Sidebar() {
                 className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0"
                 style={{
                   background: "linear-gradient(135deg, rgba(201,168,76,0.18) 0%, rgba(201,168,76,0.08) 100%)",
-                  color: "var(--primary)",
+                  color: "var(--primary-text)",
                   border: "1.5px solid rgba(201,168,76,0.35)",
                 }}
                 aria-hidden="true">
@@ -500,15 +510,15 @@ export default function Sidebar() {
                 style={{ color: "var(--sidebar-text-hover)" }}>
                 {userName}
               </p>
-              <p className="text-[11px] truncate mt-0.5" style={{ color: "var(--sidebar-text)" }}>
+              <p className="text-xs truncate mt-0.5" style={{ color: "var(--sidebar-text)" }}>
                 {userEmail || "個人設定"}
               </p>
             </div>
             {isAdmin && (
               <span
-                className="text-[10px] px-1.5 py-0.5 rounded font-medium flex-shrink-0"
+                className="text-xs px-1.5 py-0.5 rounded font-medium flex-shrink-0"
                 style={{
-                  background: "rgba(245,158,11,0.12)",
+                  background: "var(--warning-dim)",
                   color: "var(--warning)",
                   border: "1px solid var(--warning-border)",
                 }}>

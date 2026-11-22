@@ -4,7 +4,6 @@ import AppShell from "@/components/layout/AppShell";
 import AppEnhancements from "@/components/layout/AppEnhancements";
 import NavigationProgress from "@/components/layout/NavigationProgress";
 import AccessBlockGuard from "@/components/security/AccessBlockGuard";
-import ScrollProgressBar from "@/components/ui/ScrollProgressBar";
 import { getServerImportantAnnouncement, getServerSession } from "@/lib/server/session";
 import "../design-system.css";
 
@@ -28,7 +27,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <>
       <AccessBlockGuard />
       <NavigationProgress />
-      <ScrollProgressBar />
       <AppShell
         initialUser={initialUser}
         initialImportantAnnouncement={initialImportantAnnouncement}

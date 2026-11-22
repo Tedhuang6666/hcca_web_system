@@ -258,11 +258,6 @@ async def _assert_room_access(room: str, user_id: str) -> None:
                 raise PermissionError("無權加入商品訂單房間")
             return
 
-        if room == "meal:orders":
-            if "meal:manage" not in codes:
-                raise PermissionError("無權加入學餐訂單房間")
-            return
-
         # 預設拒絕：未明確授權的房間一律不得加入。
         raise PermissionError("無權加入此房間")
 

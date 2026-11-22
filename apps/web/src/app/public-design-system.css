@@ -167,49 +167,16 @@
   .public-site { --public-gutter: 1.5rem; }
 }
 
-.public-hero {
-  background: color-mix(in srgb, var(--primary-dim) 42%, var(--public-bg));
-}
-
-.public-hero::before,
-.public-hero::after,
 .public-feature-card::after,
 .public-cta-primary::after,
 .public-section-kicker::before {
   display: none;
 }
 
-.public-signboard,
-.public-signboard-emblem img,
-.public-signboard-emblem span,
-.public-signboard-emblem svg,
-.public-signboard-topline {
-  animation: none;
-}
-
-/* 首屏文字直接顯示，避免等待逐項淡入才成為 LCP 候選。 */
-.public-site .public-hero-copy > * {
-  animation: none;
-}
-
 .public-eyebrow {
   background: transparent;
   color: var(--primary-text);
   padding: 0;
-}
-
-.public-signboard {
-  border-radius: 10px;
-  background: var(--public-surface);
-  box-shadow: none;
-}
-
-.public-signboard::before {
-  border-color: color-mix(in srgb, var(--brand-accent) 42%, var(--public-border));
-}
-
-.public-signboard-topline {
-  background: var(--brand-accent);
 }
 
 .public-emblem-stage {
@@ -260,129 +227,9 @@
   text-transform: none;
 }
 
-.public-signboard.public-identity-panel {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  width: min(100%, 23rem);
-  place-items: center;
-  overflow: visible;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  padding: 0;
-}
-
-.public-signboard.public-identity-panel::before {
-  display: none;
-}
-
-.public-identity-panel .public-signboard-emblem {
-  box-sizing: border-box;
-  grid-template-columns: minmax(0, 1fr);
-  width: min(100%, 18rem);
+.public-identity-panel > * {
   max-width: 100%;
   min-width: 0;
-  min-height: 0;
-  aspect-ratio: 1;
-  padding: 1.5rem;
-}
-
-.public-identity-panel .public-signboard-emblem > picture {
-  display: grid;
-  width: min(100%, 15rem);
-  max-width: 100%;
-  place-items: center;
-}
-
-.public-identity-panel > *,
-.public-identity-panel .public-signboard-emblem > * {
-  max-width: 100%;
-  min-width: 0;
-}
-
-.public-identity-panel .public-signboard-emblem img,
-.public-identity-panel .public-signboard-emblem svg {
-  width: 100%;
-  max-width: 15rem;
-  max-height: 15rem;
-  filter: none;
-  object-fit: contain;
-  transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.public-identity-panel:hover .public-signboard-emblem img,
-.public-identity-panel:hover .public-signboard-emblem svg {
-  transform: scale(1.025);
-}
-
-@media (min-width: 768px) {
-  .public-hero-inner {
-    grid-template-columns: minmax(0, 1fr) minmax(15rem, 0.7fr);
-    gap: clamp(2rem, 7vw, 6rem);
-    padding-top: clamp(4rem, 8vw, 6.5rem);
-    padding-bottom: clamp(4rem, 8vw, 6rem);
-  }
-
-  .public-hero-copy {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  .public-hero-copy h1 {
-    max-width: 13ch;
-    font-size: clamp(2.6rem, 5.8vw, 4.6rem);
-    font-weight: 780;
-    line-height: 1.08;
-    letter-spacing: -0.035em;
-  }
-
-  .public-hero-subtitle {
-    max-width: 34rem;
-    line-height: 1.75;
-  }
-
-  .public-signboard.public-identity-panel {
-    grid-column: 2;
-    grid-row: 1 / span 2;
-    justify-self: end;
-  }
-
-  .public-identity-panel .public-signboard-emblem > picture {
-    width: min(100%, 15rem);
-  }
-
-  .public-hero-actions {
-    grid-column: 1;
-    grid-row: 2;
-  }
-}
-
-@media (max-width: 767px) {
-  .public-hero-inner {
-    gap: 0.9rem;
-    padding-top: 1.75rem;
-    padding-bottom: 1.15rem;
-  }
-
-  .public-hero-copy {
-    max-width: 40rem;
-    margin-inline: auto;
-    text-align: center;
-  }
-
-  .public-hero-copy h1 {
-    font-size: clamp(2.2rem, 11vw, 3.25rem);
-    line-height: 1.12;
-  }
-
-  .public-hero-subtitle {
-    margin-inline: auto;
-    text-wrap: balance;
-  }
-
-  .public-signboard.public-identity-panel {
-    display: none;
-  }
 }
 
 .public-quick-grid {
@@ -521,7 +368,7 @@
   padding: 0 0.75rem;
   color: var(--election-status-color);
   font-size: 0.75rem;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .election-status-live {
@@ -556,7 +403,7 @@
   gap: 0.45rem;
   color: var(--public-accent-text);
   font-size: 0.875rem;
-  font-weight: 800;
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -689,14 +536,6 @@
   overflow-wrap: anywhere;
 }
 
-.public-mobile-menu .public-nav-dropdown-icon {
-  flex: 0 0 20px;
-  width: 20px;
-  height: 20px;
-  border-radius: 0;
-  background: transparent;
-}
-
 .public-mobile-menu .public-mobile-service-link:is(:hover, :focus-visible, [aria-current="page"]) {
   background: var(--public-accent-soft);
   color: var(--public-accent-text);
@@ -720,10 +559,30 @@
   to { opacity: 1; }
 }
 
-@media (min-width: 768px) {
+@media (min-width: 960px) {
   .public-site .public-mobile-menu {
     display: none;
   }
+}
+
+.public-mobile-menu-links.is-primary {
+  padding-bottom: 0.75rem;
+}
+
+.public-mobile-menu-group {
+  border-top: 1px solid var(--public-border);
+  padding-block: 0.75rem;
+}
+
+.public-mobile-menu .public-mobile-group-label {
+  margin: 0 0 0.25rem;
+  padding: 0 0.5rem;
+  letter-spacing: 0;
+  font-size: 0.8125rem;
+}
+
+.public-mobile-menu .is-primary .public-mobile-service-link {
+  font-weight: 600;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -734,19 +593,15 @@
 }
 
 @media (max-width: 767px) {
-  .public-identity-panel:hover .public-signboard-emblem img,
-  .public-identity-panel:hover .public-signboard-emblem svg,
   .public-feature-card:hover .public-feature-arrow,
-  .public-feature-card:focus-visible .public-feature-arrow {
+.public-feature-card:focus-visible .public-feature-arrow {
     transform: none;
   }
 }
 
 .public-site,
-.public-hero-inner,
 .public-quick-grid,
 .public-editorial,
-.public-hero-inner > *,
 .public-feature-card > * {
   min-width: 0;
 }

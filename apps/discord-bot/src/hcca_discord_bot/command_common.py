@@ -17,7 +17,6 @@ from hcca_discord_bot.api_client import (
 
 _CATEGORY_LABEL = {
     "document_pending": "公文待核",
-    "meal_closing": "學餐結單提醒",
     "survey_closing": "問卷截止提醒",
     "shop_ready": "福利社可取貨",
     "tenure": "任期變動",

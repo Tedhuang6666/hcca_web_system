@@ -50,6 +50,9 @@ files = [
     "apps/api/src/api/core/structured_logging.py",
     "apps/api/src/api/services/metrics_tasks.py",
     "apps/api/src/api/services/storage.py",
+    "apps/api/src/api/services/shop/_buyer.py",
+    "apps/api/src/api/services/shop/_events.py",
+    "apps/api/src/api/services/shop/_lookups.py",
 ]
 
 [tool.coverage.run]
@@ -61,8 +64,7 @@ omit = [
 ]
 
 [tool.coverage.report]
-# Ratchet 門檻：以目前實測覆蓋率（~51.5%）為基準、保留小幅 headroom，避免默默下滑。
-# 補測試後可逐步調高。
-fail_under = 50
+# 2026-11-17 全套 PostgreSQL / migration schema 實測約 73%，保留小幅 headroom。
+fail_under = 72
 show_missing = true
 skip_covered = false

@@ -34,8 +34,7 @@ export default function EmailAnalyticsPage() {
     <div className="mx-auto max-w-6xl space-y-5">
       <header className="flex items-center justify-between">
         <div>
-          <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--primary)" }}>EMAIL</p>
-          <h1 className="mt-1 text-xl font-semibold">寄送分析</h1>
+          <h1 className="text-xl font-semibold">寄送分析</h1>
         </div>
         <Link href="/email/logs" className="btn btn-ghost btn-sm">寄信紀錄</Link>
       </header>

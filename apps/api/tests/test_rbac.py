@@ -14,7 +14,6 @@ from api.services.permission import (
     get_user_permission_codes,
     get_user_permission_codes_batch,
     get_user_permission_codes_for_org,
-    user_has_permission,
 )
 
 
@@ -173,12 +172,13 @@ async def test_future_position_grants_no_permission(db_session: AsyncSession) ->
 
 
 @pytest.mark.asyncio
-async def test_user_has_permission_helper(db_session: AsyncSession) -> None:
-    """user_has_permission 輔助函式應正確回傳布林值"""
+async def test_permission_codes_support_membership_checks(db_session: AsyncSession) -> None:
+    """現行權限集合支援正向與反向判斷。"""
     user, _ = await _seed_data(db_session, start_offset=-5)
 
-    assert await user_has_permission(db_session, user.id, "document:approve") is True
-    assert await user_has_permission(db_session, user.id, "finance:view") is False
+    codes = await get_user_permission_codes(db_session, user.id)
+    assert "document:approve" in codes
+    assert "finance:view" not in codes
 
 
 @pytest.mark.asyncio

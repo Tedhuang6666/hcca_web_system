@@ -62,10 +62,13 @@ import PublicNavIcon from "@/components/site/PublicNavIcon";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import DraftStatus from "@/components/ui/DraftStatus";
+import TabBar from "@/components/ui/TabBar";
+import Toggle from "@/components/ui/Toggle";
 import { clearStoredDraft, useDraftAutosave } from "@/hooks/useDraftAutosave";
 import { getSystemInfoMarkdown } from "@/lib/systemInfoMarkdown";
 import {
   PUBLIC_NAV_GROUP_META,
+  PUBLIC_NAV_GROUP_ORDER,
   PUBLIC_NAV_ITEMS,
   type PublicNavGroupId,
   type PublicNavOverride,
@@ -126,7 +129,7 @@ function isEmptyPageDraft(draft: typeof EMPTY_PAGE_DRAFT) {
 }
 
 /** 後台導覽列分頁的群組顯示順序。 */
-const NAV_GROUP_ORDER: PublicNavGroupId[] = ["primary", "info", "data", "participation"];
+const NAV_GROUP_ORDER: PublicNavGroupId[] = PUBLIC_NAV_GROUP_ORDER;
 
 const emptySettings: PublicSiteSettingsOut = {
   id: "",
@@ -300,28 +303,6 @@ function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
       className={`w-full rounded-lg px-3 py-2 text-sm outline-none ${props.className ?? ""}`}
       style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-primary)", ...props.style }}
     />
-  );
-}
-
-function Toggle({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (value: boolean) => void;
-}) {
-  return (
-    <label className="inline-flex min-h-11 items-center gap-2 text-sm text-[var(--text-secondary)]">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-        className="h-4 w-4"
-      />
-      {label}
-    </label>
   );
 }
 
@@ -1570,21 +1551,13 @@ export default function PublicSiteAdminPage() {
         </div>
       </div>
 
-      <nav className="public-site-admin-tabs module-tabs-scroll hidden max-w-full overflow-x-auto sm:block" aria-label="公開網站設定分頁">
-        <div className="module-tabs-list">
-          {tabs.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setTab(item.id)}
-              aria-pressed={tab === item.id}
-              className={`module-tab-link cursor-pointer${tab === item.id ? " is-active" : ""}`}>
-              {item.icon}
-              <span>{item.label}</span>
-            </button>
-          ))}
-        </div>
-      </nav>
+      <TabBar
+        className="public-site-admin-tabs hidden sm:block"
+        label="公開網站設定分頁"
+        items={tabs.map(({ id, label, icon }) => ({ key: id, label, icon }))}
+        value={tab}
+        onChange={setTab}
+      />
 
       {tab === "homepage" && (
         <section key="homepage" className="tab-panel-transition grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
@@ -1628,7 +1601,7 @@ export default function PublicSiteAdminPage() {
         <section key="system" className="tab-panel-transition space-y-4">
           <div className="card overflow-hidden border-[var(--primary)]/20 bg-[var(--primary-dim)] p-5">
             <div className="flex items-start gap-3">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--bg-surface)] text-[var(--primary)]">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--bg-surface)] text-[var(--primary-text)]">
                 <Info size={19} aria-hidden />
               </span>
               <div>
@@ -1651,7 +1624,7 @@ export default function PublicSiteAdminPage() {
         <section key="contact" className="tab-panel-transition space-y-4">
           <div className="card overflow-hidden border-[var(--primary)]/20 bg-[var(--primary-dim)] p-5">
             <div className="flex items-start gap-3">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--bg-surface)] text-[var(--primary)]">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--bg-surface)] text-[var(--primary-text)]">
                 <Mail size={19} aria-hidden />
               </span>
               <div>
@@ -1682,8 +1655,7 @@ export default function PublicSiteAdminPage() {
                   <Handshake size={19} aria-hidden />
                 </span>
                 <div>
-                  <p className="text-xs font-semibold tracking-[0.16em] text-[#e8c970]">PUBLIC PARTNERSHIP</p>
-                  <h2 className="mt-2 text-xl font-semibold">特約資訊</h2>
+                  <h2 className="text-xl font-semibold">特約資訊</h2>
                 </div>
               </div>
               <div className="shrink-0 rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-center">
@@ -1711,9 +1683,7 @@ export default function PublicSiteAdminPage() {
 
             <aside className="card space-y-4 p-5">
               <div>
-                <p className="text-xs font-semibold tracking-[0.14em] text-[var(--primary)]">LIVE STRUCTURE</p>
-                <h2 className="mt-2 font-semibold">流程預覽</h2>
-                <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">確認順序與標題層級後，再儲存公開頁。</p>
+                <h2 className="font-semibold">流程預覽</h2>
               </div>
               {specialAgreement.process.length === 0 ? (
                 <p className="rounded-lg bg-[var(--bg-elevated)] p-4 text-sm text-[var(--text-muted)]">尚未建立流程。</p>
@@ -1721,7 +1691,7 @@ export default function PublicSiteAdminPage() {
                 <ol className="space-y-3">
                   {specialAgreement.process.map((step, index) => (
                     <li key={step.id} className="flex gap-3">
-                      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[var(--primary-dim)] text-xs font-semibold text-[var(--primary)]">{String(index + 1).padStart(2, "0")}</span>
+                      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[var(--primary-dim)] text-xs font-semibold text-[var(--primary-text)]">{String(index + 1).padStart(2, "0")}</span>
                       <span className="min-w-0">
                         <strong className="block text-sm">{step.title || "未命名流程"}</strong>
                         <span className="mt-0.5 block text-xs leading-5 text-[var(--text-muted)]">{step.description || "尚未填寫說明"}</span>
@@ -1882,7 +1852,7 @@ export default function PublicSiteAdminPage() {
                 {specialAgreement.process.map((step, index) => (
                   <li key={step.id} className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--primary-dim)] text-sm font-semibold text-[var(--primary)]">{String(index + 1).padStart(2, "0")}</span>
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--primary-dim)] text-sm font-semibold text-[var(--primary-text)]">{String(index + 1).padStart(2, "0")}</span>
                       <div className="grid min-w-0 flex-1 gap-3 md:grid-cols-[minmax(12rem,0.8fr)_minmax(0,1.5fr)]">
                         <Field label="流程名稱"><TextInput value={step.title} onChange={(event) => updateSpecialProcess(step.id, "title", event.target.value)} placeholder="例如：提出合作構想" /></Field>
                         <Field label="流程說明"><TextArea rows={3} value={step.description} onChange={(event) => updateSpecialProcess(step.id, "description", event.target.value)} placeholder="說明這個步驟需要完成什麼。" /></Field>
@@ -1913,7 +1883,7 @@ export default function PublicSiteAdminPage() {
               <div>
                 <h2 className="font-semibold">公開站導覽列</h2>
                 <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--text-muted)]">
-                  主要導覽顯示於頂列，其餘收進「所有公開服務」。
+                  「主要入口」直接顯示在頁首，「公開資料」與「關於」各收成一個下拉選單。
                 </p>
               </div>
               <div className="flex shrink-0 gap-2">
@@ -1937,7 +1907,7 @@ export default function PublicSiteAdminPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="text-sm font-semibold">{meta.label}</h3>
                   {meta.hint && (
-                    <span className="rounded-full px-2 py-0.5 text-xs font-semibold" style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
+                    <span className="rounded-full px-2 py-0.5 text-xs font-semibold" style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
                       {meta.hint}
                     </span>
                   )}
@@ -1951,7 +1921,7 @@ export default function PublicSiteAdminPage() {
                         className={`flex flex-wrap items-center gap-3 rounded-lg px-3 py-2 ${item.hidden ? "opacity-55" : ""}`}
                         style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
                       >
-                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
+                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
                           <PublicNavIcon iconKey={item.iconKey} size={17} />
                         </span>
                         <div className="min-w-[10rem] flex-1">
@@ -2258,7 +2228,7 @@ export default function PublicSiteAdminPage() {
               <div>
                 <div className="flex items-center gap-2">
                   <h2 className="font-semibold">快速貼上幹部名單</h2>
-                  <span className="rounded-full px-2 py-0.5 text-xs font-semibold" style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
+                  <span className="rounded-full px-2 py-0.5 text-xs font-semibold" style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
                     批次輸入
                   </span>
                 </div>
@@ -2266,7 +2236,7 @@ export default function PublicSiteAdminPage() {
                   每行一個職位，姓名以空白、頓號或逗號分隔；名單直接公開。
                 </p>
               </div>
-              <ClipboardPaste size={20} className="text-[var(--primary)]" aria-hidden />
+              <ClipboardPaste size={20} className="text-[var(--primary-text)]" aria-hidden />
             </div>
             <div className="space-y-3 rounded-lg p-3" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
               <div className="hidden flex-wrap gap-2 sm:flex" role="tablist" aria-label="幹部名單組織頁籤">

@@ -1,7 +1,8 @@
 "use client";
 
-import { Check, Copy, ExternalLink, Link2, LoaderCircle, Pencil, QrCode, RotateCw } from "lucide-react";
+import { Check, ExternalLink, Link2, LoaderCircle, Pencil, QrCode, RotateCw } from "lucide-react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import CopyButton from "@/components/ui/CopyButton";
 import { usePermissions } from "@/hooks/usePermissions";
 import { shortLinksApi } from "@/lib/api/short-links";
 import { BRANDING } from "@/lib/branding";
@@ -121,16 +122,6 @@ export default function ShortLinksManager({
       });
     } finally {
       setUpdatingId(null);
-    }
-  };
-
-  const copyLink = async (slug: string) => {
-    setActionFeedback(null);
-    try {
-      await navigator.clipboard.writeText(shortUrl(slug));
-      setActionFeedback({ kind: "success", message: "短網址已複製。" });
-    } catch {
-      setActionFeedback({ kind: "error", message: "瀏覽器未允許複製，請選取短網址手動複製。" });
     }
   };
 
@@ -284,9 +275,15 @@ export default function ShortLinksManager({
                       <p className="short-link-target"><span>導向</span>{link.target_url}</p>
                     </div>
                     <div className="short-link-actions" aria-label={`${link.title || link.slug} 的操作`}>
-                      <button type="button" className="qr-button qr-button-secondary" onClick={() => void copyLink(link.slug)}>
-                        <Copy size={15} aria-hidden="true" />複製
-                      </button>
+                      <CopyButton
+                        className="qr-button qr-button-secondary"
+                        value={shortUrl(link.slug)}
+                        label="複製"
+                        aria-label={`複製短網址 ${shortUrl(link.slug)}`}
+                        announcement="短網址已複製"
+                        onClick={() => setActionFeedback(null)}
+                        onCopyError={() => setActionFeedback({ kind: "error", message: "瀏覽器未允許複製，請選取短網址手動複製。" })}
+                      />
                       <button
                         type="button"
                         className="qr-button qr-button-secondary"

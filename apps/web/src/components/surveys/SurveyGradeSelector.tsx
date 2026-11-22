@@ -31,7 +31,7 @@ export default function SurveyGradeSelector({
               style={{
                 background: checked ? "var(--primary-dim)" : "var(--bg-elevated)",
                 border: `1px solid ${checked ? "var(--border-strong)" : "var(--border)"}`,
-                color: checked ? "var(--primary)" : "var(--text-secondary)",
+                color: checked ? "var(--primary-text)" : "var(--text-secondary)",
               }}
             >
               <input

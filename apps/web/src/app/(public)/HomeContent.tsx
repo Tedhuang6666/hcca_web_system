@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { ArrowRight, ShoppingBag } from "lucide-react";
 
-import LiveElectionCard from "@/components/site/LiveElectionCard";
 import PublicLoadFailure from "@/components/site/PublicLoadFailure";
 import ShopImage from "@/components/shop/ShopImage";
 import { uploadUrl } from "@/lib/config";
@@ -40,11 +39,13 @@ export function HomeEntrySection({ bundle }: { bundle: PublicSiteBundleOut | nul
 
   return (
     <section className="campus-services" aria-labelledby="campus-services-title">
-      <h2 id="campus-services-title">常用服務</h2>
+      <div className="campus-section-heading">
+        <h2 id="campus-services-title">常用服務</h2>
+      </div>
       <nav aria-label="校園常用服務">
         {services.map((item) => (
           <Link key={item.key} href={item.href}>
-            {item.label}<ArrowRight size={18} aria-hidden />
+            <span>{item.label}</span><ArrowRight size={22} aria-hidden />
           </Link>
         ))}
       </nav>
@@ -100,20 +101,20 @@ export default function HomeContent({
           <Link href="/news">全部公告<ArrowRight size={16} aria-hidden /></Link>
         </div>
         <div className="campus-news-layout">
-          <div className={`campus-news-content${featuredAnnouncement && latestAnnouncements.length > 0 ? " has-news-list" : ""}`}>
-            {featuredAnnouncement && (
-              <article className="campus-news-lead">
-                <div className="campus-meta">
-                  {featuredAnnouncement.is_urgent && <span className="campus-status">重要</span>}
-                  <time dateTime={featuredAnnouncement.published_at ?? featuredAnnouncement.created_at}>
-                    {formatDate(featuredAnnouncement.published_at ?? featuredAnnouncement.created_at)}
-                  </time>
-                </div>
-                <h3><Link href={urgent?.link_url?.trim() || `/news/${featuredAnnouncement.id}`}>
-                  {featuredAnnouncement.title}<ArrowRight size={22} aria-hidden />
-                </Link></h3>
-              </article>
-            )}
+          {featuredAnnouncement && (
+            <article className="campus-news-lead">
+              <div className="campus-meta">
+                {featuredAnnouncement.is_urgent && <span className="campus-status">重要</span>}
+                <time dateTime={featuredAnnouncement.published_at ?? featuredAnnouncement.created_at}>
+                  {formatDate(featuredAnnouncement.published_at ?? featuredAnnouncement.created_at)}
+                </time>
+              </div>
+              <h3><Link href={urgent?.link_url?.trim() || `/news/${featuredAnnouncement.id}`}>
+                {featuredAnnouncement.title}
+              </Link></h3>
+            </article>
+          )}
+          <div className="campus-news-side">
             {latestAnnouncements.length > 0 ? (
               <ul className="campus-news-list">
                 {latestAnnouncements.map((item) => (
@@ -123,25 +124,25 @@ export default function HomeContent({
                         {formatDate(item.published_at ?? item.created_at)}
                       </time>
                       <span>{item.title}</span>
-                      <ArrowRight size={17} aria-hidden />
                     </Link>
                   </li>
                 ))}
               </ul>
             ) : announcementsAvailable && !featuredAnnouncement && <p className="campus-empty">目前沒有新公告</p>}
             {!announcementsAvailable && <PublicLoadFailure message="無法取得最新公告" />}
+            {openSurveys.length > 0 && (
+              <aside className="campus-participation" aria-label="校園參與">
+                {openSurveys.slice(0, 2).map((survey) => (
+                  <Link key={survey.id} href={`/surveys/${encodeURIComponent(survey.title)}`} className="campus-survey">
+                    <span className="campus-meta">
+                      {survey.closes_at ? `填答至 ${formatDate(survey.closes_at)}` : "開放填答"}
+                    </span>
+                    <strong>{survey.title}</strong>
+                  </Link>
+                ))}
+              </aside>
+            )}
           </div>
-          <aside className="campus-participation" aria-label="校園參與">
-            <LiveElectionCard />
-            {openSurveys.slice(0, 2).map((survey) => (
-              <Link key={survey.id} href={`/surveys/${encodeURIComponent(survey.title)}`} className="campus-survey">
-                <span className="campus-meta">
-                  {survey.closes_at ? `填答至 ${formatDate(survey.closes_at)}` : "開放填答"}
-                </span>
-                <strong>{survey.title}</strong><ArrowRight size={18} aria-hidden />
-              </Link>
-            ))}
-          </aside>
         </div>
       </section>
 
@@ -159,8 +160,8 @@ export default function HomeContent({
               return (
                 <article key={article.id} className={`campus-story${index === 0 ? " campus-story-lead" : ""}${coverUrl ? " has-cover" : ""}`}>
                   {coverUrl && <div className="campus-story-media">
-                    <ShopImage src={coverUrl} alt={article.cover_image_alt || ""} width={960} height={600}
-                      sizes="(max-width: 767px) 100vw, (max-width: 1200px) 55vw, 640px" loading="lazy" />
+                    <ShopImage src={coverUrl} alt={article.cover_image_alt || ""} width={960} height={640}
+                      sizes="(max-width: 767px) 100vw, (max-width: 1232px) 58vw, 720px" loading="lazy" />
                   </div>}
                   <div className="campus-story-copy">
                     <time className="campus-meta" dateTime={article.updated_at}>
@@ -188,13 +189,15 @@ export default function HomeContent({
               return (
                 <Link key={product.id} href={`/shop?product=${product.id}`} className="campus-product">
                   <span className="campus-product-image">
-                    {imageUrl ? <ShopImage src={imageUrl} alt="" width={640} height={480}
-                      sizes="(max-width: 639px) 44vw, (max-width: 1152px) 30vw, 360px" loading="lazy" />
+                    {imageUrl ? <ShopImage src={imageUrl} alt="" width={640} height={800}
+                      sizes="(max-width: 639px) 44vw, (max-width: 1023px) 30vw, 300px" loading="lazy" />
                       : <ShoppingBag size={32} aria-hidden />}
                   </span>
                   <span className="campus-meta">{product.categoryName}</span>
-                  <strong>{product.name}</strong>
-                  <span className="campus-product-price">NT$ {product.price.toLocaleString("zh-TW")}</span>
+                  <span className="campus-product-line">
+                    <strong>{product.name}</strong>
+                    <span className="campus-product-price">NT$ {product.price.toLocaleString("zh-TW")}</span>
+                  </span>
                 </Link>
               );
             })}

@@ -74,7 +74,6 @@ per_file_ignores = [
     "apps/api/src/api/services/backup_encryption.py:B404,B603",
     "apps/api/src/api/services/backup_tasks.py:B404,B603",
     "apps/api/src/api/models/document.py:B105",
-    "apps/api/src/api/services/meeting/_voting.py:B105",
     "apps/api/src/api/services/official_print.py:B105",
     "apps/api/src/api/core/oauth.py:B106",
     "apps/api/src/api/core/config.py:B104",

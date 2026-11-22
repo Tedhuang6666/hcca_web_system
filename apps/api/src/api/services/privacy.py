@@ -218,25 +218,11 @@ async def _collect_user_related_tables(
     except Exception:
         logger.debug("export petitions skipped", exc_info=True)
 
-    # 學餐 / 購票訂單
-    for model_path, fname in (
-        ("api.models.meal:MealOrder", "meal_orders.json"),
-        ("api.models.shop:Order", "shop_orders.json"),
-    ):
-        try:
-            import importlib
+    # 商品訂單是固定模型；查詢失敗應終止匯出，避免交付缺漏的個資副本。
+    from api.models.shop import Order
 
-            mod_name, cls_name = model_path.split(":")
-            mod = importlib.import_module(mod_name)
-            cls = getattr(mod, cls_name, None)
-            if cls is None or not hasattr(cls, "user_id"):
-                continue
-            rows = (
-                (await session.execute(select(cls).where(cls.user_id == user.id))).scalars().all()
-            )
-            bundle[fname] = [_serialize(r) for r in rows]
-        except Exception:
-            logger.debug("export %s skipped", model_path, exc_info=True)
+    orders = (await session.scalars(select(Order).where(Order.user_id == user.id))).all()
+    bundle["shop_orders.json"] = [_serialize(order) for order in orders]
 
     # 問卷回應
     try:

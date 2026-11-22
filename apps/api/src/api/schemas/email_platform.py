@@ -206,8 +206,3 @@ class EmailAnalyticsOut(BaseModel):
     click_rate: float
     unopened_emails: list[str]
     top_links: list[dict]
-
-
-class EmailSampleSendInput(BaseModel):
-    recipient_indexes: list[int] = Field(default_factory=list, max_length=10)
-    test_emails: list[EmailStr] = Field(default_factory=list, max_length=10)

@@ -82,7 +82,7 @@ export default function ArticleChart({ chart }: { chart: ArticleChartSpec }) {
       </header>
 
       {total <= 0 ? (
-        <p className="article-chart__empty">尚無可呈現的數據，請補上大於 0 的項目數值。</p>
+        <p className="article-chart__empty">尚無可呈現的數據</p>
       ) : chart.type === "pie" ? (
         <div className="article-chart__pie-layout">
           <svg className="article-chart__pie" viewBox="0 0 200 200" aria-hidden="true" focusable="false">

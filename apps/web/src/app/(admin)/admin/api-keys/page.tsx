@@ -3,11 +3,12 @@
 import NumberInput from "@/components/ui/NumberInput";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Ban, Copy, KeyRound, Lock, Plus, RefreshCcw } from "lucide-react";
+import { AlertTriangle, Ban, Lock, Plus, RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
 import { usePrompt } from "@/components/ui/ConfirmDialog";
+import CopyButton from "@/components/ui/CopyButton";
 import {
   apiKeysApi,
   type ApiKeyCreatedResponse,
@@ -90,15 +91,6 @@ export default function ApiKeysPage() {
     }
   };
 
-  const copyKey = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      toast.success("已複製到剪貼簿");
-    } catch {
-      toast.error("複製失敗，請手動選取");
-    }
-  };
-
   if (!isAdmin) {
     return (
       <div className="mx-auto max-w-3xl p-6">
@@ -118,10 +110,6 @@ export default function ApiKeysPage() {
     <div className="mx-auto max-w-6xl p-4 md:p-6">
       <header className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <div className="mb-2 inline-flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)]">
-            <KeyRound size={14} aria-hidden />
-            API Keys（機器對機器存取）
-          </div>
           <h1 className="text-2xl font-bold text-[var(--text-primary)]">API Keys</h1>
           <p className="mt-1 max-w-3xl text-xs text-[var(--text-muted)]">
             密鑰僅顯示一次，遺失須重建；撤銷後立即失效。
@@ -206,13 +194,14 @@ export default function ApiKeysPage() {
                 <code className="break-all rounded bg-[var(--bg-surface)] px-2 py-1 font-mono text-xs">
                   {created.key_plaintext}
                 </code>
-                <button
-                  type="button"
+                <CopyButton
+                  value={created.key_plaintext}
+                  label="複製"
+                  iconSize={12}
+                  announcement="API key 已複製"
+                  failureHint="複製失敗，請手動選取 key"
                   className="btn-sm btn-primary"
-                  onClick={() => copyKey(created.key_plaintext)}>
-                  <Copy size={12} aria-hidden />
-                  複製
-                </button>
+                />
                 <button
                   type="button"
                   className="btn-sm btn-ghost"
@@ -252,7 +241,7 @@ export default function ApiKeysPage() {
                   style={{ opacity: k.is_active ? 1 : 0.5 }}>
                   <td className="px-3 py-2">{k.name}</td>
                   <td className="px-3 py-2 font-mono">{k.key_prefix}…</td>
-                  <td className="px-3 py-2 font-mono text-[10px]">
+                  <td className="px-3 py-2 font-mono text-xs">
                     {k.scopes.length === 0 ? "—" : k.scopes.join(", ")}
                   </td>
                   <td className="px-3 py-2 text-right">{k.rate_limit_per_minute}</td>

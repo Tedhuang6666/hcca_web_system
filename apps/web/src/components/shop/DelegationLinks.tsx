@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { shopApi, apiErrorMessage } from "@/lib/api";
 import type { ShopDelegationOut } from "@/lib/types";
+import CopyButton from "@/components/ui/CopyButton";
 import DelegationInstructions from "./DelegationInstructions";
 
 export default function DelegationLinks({ categoryId, activityId, scopeName, initiallyCreating = false }: {
@@ -132,10 +133,19 @@ export default function DelegationLinks({ categoryId, activityId, scopeName, ini
               <input ref={codeInput} readOnly value={authorizationCode} className="shop-delegation-code"
                 onFocus={(event) => event.target.select()} />
             </label>
-            <button type="button" className="shop-delegation-primary" onClick={async () => {
-              try { await navigator.clipboard.writeText(authorizationCode); setMessage("驗證碼已複製，請傳給家人。"); }
-              catch { codeInput.current?.focus(); codeInput.current?.select(); setMessage("請選取驗證碼後手動複製。"); }
-            }}>複製驗證碼</button>
+            <CopyButton
+              className="shop-delegation-primary"
+              value={authorizationCode}
+              label="複製驗證碼"
+              icon="none"
+              announcement="驗證碼已複製"
+              onCopied={() => setMessage("驗證碼已複製，請傳給家人。")}
+              onCopyError={() => {
+                codeInput.current?.focus();
+                codeInput.current?.select();
+                setMessage("請選取驗證碼後手動複製。");
+              }}
+            />
           </div>
           <p className="shop-delegation-note">{codeExpiresAt
             ? `此驗證碼有效至 ${new Date(codeExpiresAt).toLocaleString("zh-TW")}。`
@@ -146,10 +156,18 @@ export default function DelegationLinks({ categoryId, activityId, scopeName, ini
           <label>分享連結（請在離開頁面前保存）
             <input ref={shareInput} readOnly value={shareUrl} onFocus={(event) => event.target.select()} />
           </label>
-          <button type="button" className="shop-delegation-primary" onClick={async () => {
-            try { await navigator.clipboard.writeText(shareUrl); setMessage("連結已複製。"); }
-            catch { shareInput.current?.focus(); shareInput.current?.select(); setMessage("請選取分享連結後手動複製。"); }
-          }}>複製連結</button>
+          <CopyButton
+            className="shop-delegation-primary"
+            value={shareUrl}
+            label="複製連結"
+            icon="none"
+            announcement="分享連結已複製"
+            onCopyError={() => {
+              shareInput.current?.focus();
+              shareInput.current?.select();
+              setMessage("請選取分享連結後手動複製。");
+            }}
+          />
         </div>
         <p className="shop-delegation-note">請先保存；關閉、重整或切換活動後須重新產生。</p>
       </div>}

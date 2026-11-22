@@ -200,7 +200,7 @@ export default function RecommendedVendorsAdminPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-5">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div><h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>推薦商家管理</h1><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>必填欄位會標示「必填」；其餘欄位均可留白。</p></div>
+        <div><h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>推薦商家管理</h1></div>
         <div className="flex gap-2"><button type="button" className="btn btn-secondary" onClick={() => void load()}><RefreshCw size={15} aria-hidden="true" />重新整理</button><button type="button" className="btn btn-primary" onClick={() => { setSelected(null); setForm(emptyForm); }}><Plus size={15} aria-hidden="true" />新增商家</button></div>
       </header>
       <div className="grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">

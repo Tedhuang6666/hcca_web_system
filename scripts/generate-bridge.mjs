@@ -91,19 +91,6 @@ if (missing.length > 0) {
 const ALIAS_MAP = {
   // Activity 模組（types.ts 省略 Out 後綴）
   Activity: "ActivityOut",
-  ActivityConvener: "ActivityConvenerOut",
-  ActivityMember: "ActivityMemberOut",
-  ActivityRole: "ActivityRoleOut",
-  DiscordActivityWorkspace: "DiscordActivityWorkspaceOut",
-  // Governance 決策（命名空間衝突，api-types 加 module 前綴）
-  DecisionCreate: "api__schemas__governance__DecisionCreate",
-  DecisionOut: "api__schemas__governance__DecisionOut",
-  DecisionUpdate: "api__schemas__governance__DecisionUpdate",
-  // Matter
-  MatterLinkRef: "MatterLinkRefOut",
-  MatterSpawnResult: "MatterSpawnOut",
-  // Public declarations
-  AmendmentComparisonRow: "AmendmentComparisonRowOut",
   // Notification
   NotificationPreferences: "NotificationPreferencesOut",
   // Defense

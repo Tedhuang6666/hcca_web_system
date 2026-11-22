@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import {
   FileText, Scale, MessageSquare, CheckSquare, ShoppingCart,
   Megaphone, Inbox, AlertCircle, Clock, ChevronRight,
-  Gauge,
 } from "lucide-react";
 import {
   documentsApi,
@@ -47,7 +46,7 @@ const MODULE_LABEL: Record<TaskModule, string> = {
 };
 
 const SEVERITY_STYLES: Record<string, { color: string; bg: string; border: string; label: string }> = {
-  info:     { color: "var(--primary)", bg: "var(--primary-dim)", border: "var(--info-border)",    label: "一般" },
+  info:     { color: "var(--primary-text)", bg: "var(--primary-dim)", border: "var(--info-border)",    label: "一般" },
   warning:  { color: "var(--warning)", bg: "var(--warning-dim)", border: "var(--warning-border)", label: "提醒" },
   critical: { color: "var(--danger)",  bg: "var(--danger-dim)",  border: "var(--danger-border)",  label: "緊急" },
 };
@@ -249,12 +248,9 @@ export default function TasksPage() {
         <div>
           <h1 className="text-xl font-semibold flex items-center gap-2"
             style={{ color: "var(--text-primary)" }}>
-            <Inbox size={20} aria-hidden={true} style={{ color: "var(--primary)" }} />
+            <Inbox size={20} aria-hidden={true} style={{ color: "var(--primary-text)" }} />
             我的待辦
           </h1>
-          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            跨模組統一收集需要您動作的事項
-          </p>
         </div>
         {data && (
           <span className="text-3xl font-bold leading-none"
@@ -292,10 +288,6 @@ export default function TasksPage() {
         style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
         aria-label="智慧篩選"
       >
-        <div className="mb-2 flex items-center gap-2 text-xs font-medium" style={{ color: "var(--text-muted)" }}>
-          <Gauge size={13} aria-hidden={true} />
-          智慧排序會依期限、流程阻塞、影響範圍與角色責任計分
-        </div>
         <div className="flex gap-1 overflow-x-auto">
           {QUICK_FILTERS.map((filter) => {
             const active = quickFilter === filter.key;
@@ -308,7 +300,7 @@ export default function TasksPage() {
                 className="flex-shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium"
                 style={{
                   background: active ? "var(--primary-dim)" : "transparent",
-                  color: active ? "var(--primary)" : "var(--text-muted)",
+                  color: active ? "var(--primary-text)" : "var(--text-muted)",
                   border: active ? "1px solid var(--info-border)" : "1px solid var(--border)",
                 }}>
                 {filter.label}
@@ -334,7 +326,7 @@ export default function TasksPage() {
               className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5"
               style={{
                 background: active ? "var(--primary-dim)" : "transparent",
-                color: active ? "var(--primary)" : "var(--text-muted)",
+                color: active ? "var(--primary-text)" : "var(--text-muted)",
                 border: active ? "1px solid var(--info-border)" : "1px solid transparent",
               }}>
               <span>{m === "all" ? "全部" : MODULE_LABEL[m as TaskModule]}</span>
@@ -372,7 +364,7 @@ function WorkspaceMetric({
   const colors = {
     danger: { color: "var(--danger)", bg: "var(--danger-dim)", border: "var(--danger-border)" },
     neutral: { color: "var(--text-primary)", bg: "var(--bg-surface)", border: "var(--border)" },
-    info: { color: "var(--primary)", bg: "var(--primary-dim)", border: "var(--info-border)" },
+    info: { color: "var(--primary-text)", bg: "var(--primary-dim)", border: "var(--info-border)" },
     success: { color: "var(--success)", bg: "var(--success-dim)", border: "var(--success-border, var(--border))" },
   }[tone];
   return (
@@ -430,7 +422,7 @@ function TaskRow({ t }: { t: TaskItem }) {
             {t.title}
           </p>
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-            <span className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+            <span className="text-xs px-1.5 py-0.5 rounded font-medium"
               style={{ color: sev.color, background: sev.bg, border: `1px solid ${sev.border}` }}>
               {MODULE_LABEL[t.module] ?? t.module}
             </span>
@@ -453,14 +445,14 @@ function TaskRow({ t }: { t: TaskItem }) {
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <span
-              className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+              className="rounded px-1.5 py-0.5 text-xs font-semibold"
               style={{ background: sev.bg, color: sev.color, border: `1px solid ${sev.border}` }}>
               優先 {t.priority_score}
             </span>
             {t.priority_reasons.slice(0, 2).map((reason) => (
               <span
                 key={reason}
-                className="rounded px-1.5 py-0.5 text-[10px]"
+                className="rounded px-1.5 py-0.5 text-xs"
                 style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
                 {reason}
               </span>

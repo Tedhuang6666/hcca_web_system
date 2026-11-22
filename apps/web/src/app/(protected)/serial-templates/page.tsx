@@ -189,16 +189,11 @@ export default function SerialTemplatesPage() {
     <div className="max-w-4xl mx-auto space-y-5">
       {/* 頁首 */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold ">字號模板管理</h1>
-          <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>
-            管理公文字號格式，例如：嶺班活字第 1150000001 號
-          </p>
-        </div>
+        <h1 className="text-xl font-semibold">字號模板管理</h1>
         <div className="flex items-center gap-2">
           <label className="flex items-center gap-1.5 text-xs cursor-pointer" style={{ color: "var(--text-muted)" }}>
             <input type="checkbox" checked={activeOnly} onChange={e => setActiveOnly(e.target.checked)}
-              className="accent-blue-600" />
+              className="accent-[var(--primary)]" />
             僅顯示有效
           </label>
           <button onClick={() => setShowCreate(p => !p)}
@@ -232,7 +227,7 @@ export default function SerialTemplatesPage() {
                 {orgs.map(o => <option key={o.id} value={o.id}>{orgDisplayName(o, orgs)}</option>)}
               </select>
               {showFErr("org_id") && (
-                <p className="text-[10px] mt-1" style={{ color: "var(--danger)" }} role="alert">請選擇組織</p>
+                <p className="text-xs mt-1" style={{ color: "var(--danger)" }} role="alert">請選擇組織</p>
               )}
             </div>
 
@@ -254,7 +249,7 @@ export default function SerialTemplatesPage() {
                     opacity: canManageOrg ? 1 : 0.6,
                     cursor: canManageOrg ? "text" : "not-allowed",
                   }} />
-                <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>
+                <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
                   {canManageOrg
                     ? "只設定這一層，系統會自動接上上層前綴"
                     : "本層前綴由組織管理員設定，系統會自動接上上層前綴"}
@@ -269,11 +264,11 @@ export default function SerialTemplatesPage() {
                     type="checkbox"
                     checked={form.inherit_parent_prefix}
                     onChange={e => setForm(p => ({ ...p, inherit_parent_prefix: e.target.checked }))}
-                    className="accent-blue-600 w-4 h-4"
+                    className="accent-[var(--primary)] w-4 h-4"
                   />
                   <span className="text-sm">沿用上級組織前綴</span>
                 </label>
-                <p className="text-[10px] mt-1 ml-6" style={{ color: "var(--text-muted)" }}>
+                <p className="text-xs mt-1 ml-6" style={{ color: "var(--text-muted)" }}>
                   {form.inherit_parent_prefix
                     ? "字號會依組織階層串接上級前綴"
                     : "僅使用本組織前綴，適用於不隸屬上級的單位"}
@@ -293,8 +288,8 @@ export default function SerialTemplatesPage() {
                 style={{ border: `1px solid ${showFErr("category_char") ? "var(--danger)" : "var(--border)"}` }}
                 aria-invalid={!!showFErr("category_char")} />
               {showFErr("category_char")
-                ? <p className="text-[10px] mt-1" style={{ color: "var(--danger)" }} role="alert">必填欄位</p>
-                : <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>細別，如「嶺代生字」中的「生」</p>
+                ? <p className="text-xs mt-1" style={{ color: "var(--danger)" }} role="alert">必填欄位</p>
+                : <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>細別，如「嶺代生字」中的「生」</p>
               }
             </div>
 
@@ -311,10 +306,10 @@ export default function SerialTemplatesPage() {
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={form.reset_on_new_year}
                   onChange={e => setForm(p => ({ ...p, reset_on_new_year: e.target.checked }))}
-                  className="accent-blue-600 w-4 h-4" />
+                  className="accent-[var(--primary)] w-4 h-4" />
                 <span className="text-sm">每年重置流水號</span>
               </label>
-              <p className="text-[10px] mt-1 ml-6" style={{ color: "var(--text-muted)" }}>
+              <p className="text-xs mt-1 ml-6" style={{ color: "var(--text-muted)" }}>
                 勾選後，新年度第一份公文從 0000001 重新計數
               </p>
             </div>
@@ -325,11 +320,11 @@ export default function SerialTemplatesPage() {
                   type="checkbox"
                   checked={form.is_default}
                   onChange={e => setForm(p => ({ ...p, is_default: e.target.checked }))}
-                  className="accent-blue-600 w-4 h-4 mt-0.5"
+                  className="accent-[var(--primary)] w-4 h-4 mt-0.5"
                 />
                 <span className="text-sm">
                   設為一般公文預設模板
-                  <span className="block text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>
+                  <span className="block text-xs mt-1" style={{ color: "var(--text-muted)" }}>
                     同組織起草公文時，會優先自動帶入這個模板
                   </span>
                 </span>
@@ -339,11 +334,11 @@ export default function SerialTemplatesPage() {
                   type="checkbox"
                   checked={form.is_default_president_publish}
                   onChange={e => setForm(p => ({ ...p, is_default_president_publish: e.target.checked }))}
-                  className="accent-blue-600 w-4 h-4 mt-0.5"
+                  className="accent-[var(--primary)] w-4 h-4 mt-0.5"
                 />
                 <span className="text-sm">
                   設為主席公布預設模板
-                  <span className="block text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>
+                  <span className="block text-xs mt-1" style={{ color: "var(--text-muted)" }}>
                     主席公布法規時，系統會優先使用這個模板
                   </span>
                 </span>
@@ -360,7 +355,7 @@ export default function SerialTemplatesPage() {
 
           {/* 預覽 */}
           <div className="rounded-lg px-4 py-3" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-            <p className="text-[10px] mb-1" style={{ color: "var(--text-muted)" }}>字號預覽</p>
+            <p className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>字號預覽</p>
             <p className="text-sm font-mono">{preview}</p>
           </div>
 
@@ -480,19 +475,19 @@ function TemplateCard({
               {t.org_prefix}{t.category_char}字第 …
             </span>
             {t.is_default && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded"
-                style={{ color: "var(--primary)", background: "var(--primary-dim)" }}>
+              <span className="text-xs px-1.5 py-0.5 rounded"
+                style={{ color: "var(--primary-text)", background: "var(--primary-dim)" }}>
                 一般預設
               </span>
             )}
             {t.is_default_president_publish && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded"
+              <span className="text-xs px-1.5 py-0.5 rounded"
                 style={{ color: "#c2410c", background: "rgba(251,146,60,0.18)" }}>
                 主席公布預設
               </span>
             )}
             {!t.is_active && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded"
+              <span className="text-xs px-1.5 py-0.5 rounded"
                 style={{ color: "#f87171", background: "rgba(248,113,113,0.1)" }}>
                 已停用
               </span>
@@ -500,7 +495,7 @@ function TemplateCard({
           </div>
 
           {t.preview && (
-            <p className="text-xs mt-0.5 font-mono" style={{ color: "var(--primary)" }}>
+            <p className="text-xs mt-0.5 font-mono" style={{ color: "var(--primary-text)" }}>
               預覽：{t.preview}
             </p>
           )}
@@ -512,7 +507,7 @@ function TemplateCard({
             {t.description && <span>{t.description}</span>}
           </div>
 
-          <p className="text-[10px] mt-1.5" style={{ color: "var(--text-muted)" }}>
+          <p className="text-xs mt-1.5" style={{ color: "var(--text-muted)" }}>
             建立於 {new Date(t.created_at).toLocaleDateString("zh-TW")}
           </p>
         </div>
@@ -522,7 +517,7 @@ function TemplateCard({
           {t.is_active && (
             <button onClick={() => setEditing(p => !p)}
               className="text-xs px-3 py-1.5 rounded-lg transition-colors"
-              style={{ color: "var(--primary)", border: "1px solid var(--border)" }}>
+              style={{ color: "var(--primary-text)", border: "1px solid var(--border)" }}>
               編輯
             </button>
           )}
@@ -572,11 +567,11 @@ function TemplateCard({
                 type="checkbox"
                 checked={editDefault}
                 onChange={e => setEditDefault(e.target.checked)}
-                className="accent-blue-600 w-4 h-4 mt-0.5"
+                className="accent-[var(--primary)] w-4 h-4 mt-0.5"
               />
               <span className="text-sm">
                 設為一般公文預設模板
-                <span className="block text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>
+                <span className="block text-xs mt-1" style={{ color: "var(--text-muted)" }}>
                   同組織只會保留一個一般預設
                 </span>
               </span>
@@ -587,11 +582,11 @@ function TemplateCard({
                 type="checkbox"
                 checked={editPresidentDefault}
                 onChange={e => setEditPresidentDefault(e.target.checked)}
-                className="accent-blue-600 w-4 h-4 mt-0.5"
+                className="accent-[var(--primary)] w-4 h-4 mt-0.5"
               />
               <span className="text-sm">
                 設為主席公布預設模板
-                <span className="block text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>
+                <span className="block text-xs mt-1" style={{ color: "var(--text-muted)" }}>
                   主席公布法規時會優先使用這個模板
                 </span>
               </span>

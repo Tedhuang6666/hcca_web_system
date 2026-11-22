@@ -109,7 +109,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
             </p>
           </div>
 
-          <footer className="relative z-10 text-[11px]" style={{ color: "var(--text-muted)" }}>
+          <footer className="relative z-10 text-xs" style={{ color: "var(--text-muted)" }}>
             <span>© {new Date().getFullYear()} {BRANDING.orgName}</span>
           </footer>
         </section>
@@ -136,7 +136,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
                 className="text-3xl font-semibold tracking-[-0.025em] sm:text-4xl"
                 style={{ color: "var(--text-primary)" }}
               >
-                登入竹嶺班聯數位整合平台
+                登入
               </h1>
             </div>
 
@@ -174,7 +174,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
               href={googleLoginHref}
               data-no-prefetch="true"
               data-full-navigation="true"
-              className="login-oauth group flex h-13 w-full cursor-pointer items-center justify-between rounded-xl px-4 text-sm font-semibold transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2"
+              className="login-oauth group flex h-13 w-full cursor-pointer items-center justify-between rounded-lg px-4 text-sm font-semibold transition-[border-color,background-color] duration-200 focus-visible:outline-2 focus-visible:outline-offset-2"
               style={{
                 background: "var(--primary)",
                 color: "var(--primary-fg)",
@@ -200,8 +200,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
 
             <div className="my-7 flex items-center gap-4">
               <div className="h-px flex-1" style={{ background: "var(--border)" }} />
-              <span className="text-[11px] tracking-[0.12em]" style={{ color: "var(--text-muted)" }}>
-                已綁定帳號才使用
+              <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                或
               </span>
               <div className="h-px flex-1" style={{ background: "var(--border)" }} />
             </div>
@@ -210,7 +210,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
               href={discordLoginHref}
               data-no-prefetch="true"
               data-full-navigation="true"
-              className="login-oauth group flex h-13 w-full cursor-pointer items-center justify-between rounded-xl px-4 text-sm font-semibold transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2"
+              className="login-oauth group flex h-13 w-full cursor-pointer items-center justify-between rounded-lg px-4 text-sm font-semibold transition-[border-color,background-color] duration-200 focus-visible:outline-2 focus-visible:outline-offset-2"
               style={{
                 background: "var(--bg-elevated)",
                 color: "var(--text-primary)",
@@ -230,9 +230,6 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
                 aria-hidden="true"
               />
             </a>
-            <p className="mt-3 text-center text-xs" style={{ color: "var(--text-muted)" }}>
-              尚未綁定帳號時，請改用 Google 登入。
-            </p>
 
             <PasskeyLogin nextPath={nextPath} />
 

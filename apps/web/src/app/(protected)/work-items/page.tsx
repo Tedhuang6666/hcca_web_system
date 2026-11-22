@@ -116,7 +116,7 @@ export default function WorkItemsPage() {
               className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium disabled:opacity-60"
               style={{
                 background: "var(--primary-dim)",
-                color: "var(--primary)",
+                color: "var(--primary-text)",
                 border: "1px solid var(--info-border)",
               }}
             >
@@ -146,8 +146,7 @@ export default function WorkItemsPage() {
           <button
             type="button"
             onClick={() => setShowCreate(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium"
-            style={{ background: "var(--primary)", color: "#fff" }}
+            className="btn btn-primary"
           >
             <Plus size={14} aria-hidden={true} />
             新增工作
@@ -171,7 +170,7 @@ export default function WorkItemsPage() {
               className="flex-shrink-0 px-4 py-1.5 rounded-lg text-sm font-medium transition-colors"
               style={{
                 background: active ? "var(--primary-dim)" : "transparent",
-                color: active ? "var(--primary)" : "var(--text-muted)",
+                color: active ? "var(--primary-text)" : "var(--text-muted)",
                 border: active ? "1px solid var(--info-border)" : "1px solid transparent",
               }}
             >
@@ -202,9 +201,6 @@ export default function WorkItemsPage() {
             style={{ color: "var(--text-disabled)", display: "inline-block", marginBottom: 10 }} />
           <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
             {filter === "open" ? "沒有進行中的工作" : "沒有工作項目"}
-          </p>
-          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-            點右上角「新增工作」建立第一筆
           </p>
         </div>
       ) : (
@@ -280,7 +276,7 @@ function WorkRow({
         <div className="flex items-center gap-2 mt-1 flex-wrap">
           {due && (
             <span
-              className="text-[11px] flex items-center gap-1"
+              className="text-xs flex items-center gap-1"
               style={{ color: isOverdue ? "var(--danger)" : "var(--text-muted)" }}
             >
               <Clock size={11} aria-hidden={true} />
@@ -289,11 +285,11 @@ function WorkRow({
           )}
           {item.google_task_id && (
             <span
-              className="text-[11px] px-1.5 py-0.5 rounded"
+              className="text-xs px-1.5 py-0.5 rounded"
               style={{
-                background: "#e8f0fe",
-                color: "#1a73e8",
-                border: "1px solid #c5d8ff",
+                background: "var(--tag-blue-bg)",
+                color: "var(--tag-blue-fg)",
+                border: "1px solid var(--tag-blue-border)",
               }}
             >
               已同步 Google Tasks
@@ -402,8 +398,7 @@ function CreateForm({
         <button
           type="submit"
           disabled={saving || !title.trim()}
-          className="rounded-lg px-4 py-1.5 text-sm font-medium disabled:opacity-60"
-          style={{ background: "var(--primary)", color: "#fff" }}
+          className="btn btn-primary"
         >
           {saving ? "建立中…" : "建立"}
         </button>

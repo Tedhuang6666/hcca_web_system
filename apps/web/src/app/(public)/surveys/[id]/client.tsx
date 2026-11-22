@@ -1,12 +1,13 @@
 "use client";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { createPortal } from "react-dom";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
+import CopyButton from "@/components/ui/CopyButton";
+import Modal from "@/components/ui/Modal";
 import {
   DndContext,
   KeyboardSensor,
@@ -323,7 +324,7 @@ function RankingInput({
     <div className="space-y-3">
       <p className="text-xs" style={{ color: "var(--text-muted)" }}>
         請從下方點選並拖拉排序（最少 {minN} 項{maxN !== minN ? `、最多 ${maxN} 項` : ""}）
-        — 目前已選 <strong style={{ color: "var(--primary)" }}>{selected.length}</strong> 項
+        — 目前已選 <strong style={{ color: "var(--primary-text)" }}>{selected.length}</strong> 項
       </p>
 
       {selected.length > 0 && (
@@ -411,7 +412,7 @@ function SortableRankRow({ id, rank, label, disabled, onRemove }: {
         </svg>
       </button>
       <span className="text-xs font-bold w-6 text-center tabular-nums"
-        style={{ color: "var(--primary)" }}>{rank}</span>
+        style={{ color: "var(--primary-text)" }}>{rank}</span>
       <span className="text-sm flex-1" style={{ color: "var(--text-primary)" }}>{label}</span>
       <button
         type="button"
@@ -572,7 +573,7 @@ function QuestionInput({
                 checked={value.options[0] === opt}
                 onChange={() => onChange({ ...value, options: [opt] })}
                 disabled={disabled}
-                className="accent-sky-400"
+                className="accent-[var(--primary)]"
               />
               <span className="flex-1 text-sm" style={{ color: "var(--text-primary)" }}>{opt}</span>
             </label>
@@ -623,7 +624,7 @@ function QuestionInput({
                         checked={value.options[rowIndex] === column}
                         onChange={() => selectColumn(rowIndex, column)}
                         disabled={disabled}
-                        className="h-4 w-4 accent-sky-400"
+                        className="h-4 w-4 accent-[var(--primary)]"
                       />
                     </label>
                   </td>
@@ -707,7 +708,7 @@ function QuestionInput({
                   checked={checked}
                   onChange={() => toggle(opt)}
                   disabled={disabled || (!checked && !isExcl && limitReached)}
-                  className="accent-sky-400"
+                  className="accent-[var(--primary)]"
                 />
                 <span className="flex-1 text-sm" style={{ color: "var(--text-primary)" }}>{opt}</span>
                 {isExcl && (
@@ -796,7 +797,7 @@ function QuestionInput({
               <span
                 className="flex min-h-11 min-w-11 items-center justify-center rounded-xl px-3 text-sm font-semibold transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--border-focus)]"
                 style={current === n
-                  ? { background: "var(--primary)", color: "white", border: "none" }
+                  ? { background: "var(--primary)", color: "var(--primary-fg)", border: "none" }
                   : { background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
                 {n}
               </span>
@@ -834,37 +835,9 @@ function ShareModal({ surveyId, title, onClose }: {
       .catch(() => setQr(""));
   }, [shareUrl]);
 
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      toast.success("已複製填答連結");
-    } catch {
-      toast.error("複製失敗，請手動複製");
-    }
-  };
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[200] flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="分享問卷">
-      <div
-        className="absolute inset-0"
-        style={{ background: "var(--bg-overlay)" }}
-        onClick={onClose}
-        aria-hidden="true"
-      />
-      <div className="card relative z-10 w-full max-w-sm space-y-4 p-6">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>分享問卷</h3>
-          <button onClick={onClose} className="topbar-icon-btn" aria-label="關閉">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </div>
+  return (
+    <Modal title="分享問卷" size="sm" mobileFullscreen={false} onClose={onClose}>
+      <div className="space-y-4">
         <p className="text-xs" style={{ color: "var(--text-muted)" }}>
           掃描 QR code 或複製連結，邀請他人填答此問卷。
         </p>
@@ -878,7 +851,14 @@ function ShareModal({ surveyId, title, onClose }: {
         <div className="flex gap-2">
           <input readOnly value={shareUrl} className="input flex-1 text-xs"
             onFocus={e => e.target.select()} aria-label="填答連結" />
-          <button onClick={copy} className="btn btn-primary flex-shrink-0 text-xs">複製連結</button>
+          <CopyButton
+            value={shareUrl}
+            label="複製連結"
+            icon="none"
+            announcement="已複製填答連結"
+            failureHint="複製失敗，請手動複製"
+            className="btn btn-primary flex-shrink-0 text-xs"
+          />
         </div>
         <AnimatedDownloadButton
           disabled={!qr}
@@ -888,8 +868,7 @@ function ShareModal({ surveyId, title, onClose }: {
           label="下載 QR code 圖片"
           onError={() => toast.error("QR code 下載失敗")} />
       </div>
-    </div>,
-    document.body,
+    </Modal>
   );
 }
 
@@ -922,7 +901,7 @@ function OptionRespondents({
         type="button"
         onClick={() => setOpen(value => !value)}
         className="text-xs font-medium transition-colors hover:underline"
-        style={{ color: "var(--primary)" }}
+        style={{ color: "var(--primary-text)" }}
         aria-expanded={open}
       >
         {open ? "收起填答者" : `查看 ${respondents.length} 位填答者`}
@@ -941,7 +920,7 @@ function OptionRespondents({
               <p className="text-xs font-medium" style={{ color: "var(--text-primary)" }}>
                 {respondent.display_name}
               </p>
-              <p className="mt-0.5 truncate text-[11px]" style={{ color: "var(--text-muted)" }}>
+              <p className="mt-0.5 truncate text-xs" style={{ color: "var(--text-muted)" }}>
                 {respondent.email}
               </p>
             </div>
@@ -1201,7 +1180,7 @@ function StatsView({
                   onClick={() => setChartTypes(prev => ({ ...prev, [qs.question_id]: chart }))}
                   className="text-xs px-2 py-1 rounded-lg"
                   style={(chartTypes[qs.question_id] ?? qs.suggested_chart) === chart
-                    ? { color: "var(--primary)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }
+                    ? { color: "var(--primary-text)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }
                     : { color: "var(--text-muted)", border: "1px solid var(--border)" }}
                 >
                   {chart === "pie" ? "圓餅圖" : chart === "bar" ? "長條圖" : "列表"}
@@ -1246,7 +1225,7 @@ function StatsView({
           {/* 平均評分 */}
           {qs.average_rating != null && (
             <div className="flex items-baseline gap-2">
-              <p className="text-2xl font-bold" style={{ color: "var(--primary)" }}>
+              <p className="text-2xl font-bold" style={{ color: "var(--primary-text)" }}>
                 {qs.average_rating.toFixed(1)}
               </p>
               <span className="text-sm" style={{ color: "var(--text-muted)" }}>
@@ -1345,7 +1324,7 @@ function StatsView({
                 {pagedResponses.map(r => (
                   <div key={r.id} className="card p-4 space-y-3">
                     <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
-                      <span className="pt-0.5 text-xs font-semibold" style={{ color: "var(--primary)" }}>
+                      <span className="pt-0.5 text-xs font-semibold" style={{ color: "var(--primary-text)" }}>
                         #{responses.length - responses.indexOf(r)}
                       </span>
                       <div className="min-w-0">
@@ -1617,12 +1596,11 @@ export default function SurveyDetailClient({
         });
       }
       clearDraft();
-      toast.success(editingResponseId ? "答案已更新" : "填答成功，感謝您的參與！");
       setSubmitted(true);
     } catch (e) {
       flushDraft();
       if (e instanceof ApiError && e.status === 409) {
-        toast.error("您已填答過此問卷");
+        toast.error("你已填答過此問卷");
       } else {
         toast.error(apiErrorMessage(e, "提交失敗"));
       }
@@ -1679,7 +1657,7 @@ export default function SurveyDetailClient({
   if (loading) {
     return (
       <div className="py-20 text-center" style={{ color: "var(--text-muted)" }}>
-        <Loader2 size={28} className="mx-auto mb-3 animate-spin" style={{ color: "var(--primary)" }} aria-label="載入中" />
+        <Loader2 size={28} className="mx-auto mb-3 animate-spin" style={{ color: "var(--primary-text)" }} aria-label="載入中" />
         <p className="text-sm">載入中…</p>
       </div>
     );
@@ -1765,7 +1743,7 @@ export default function SurveyDetailClient({
             <button
               onClick={() => setViewStats(v => !v)}
               className="btn btn-ghost text-xs"
-              style={viewStats ? { color: "var(--primary)" } : {}}>
+              style={viewStats ? { color: "var(--primary-text)" } : {}}>
               {viewStats ? "填答表單" : "查看統計"}
             </button>
           )}
@@ -1842,9 +1820,6 @@ export default function SurveyDetailClient({
             </svg>
           </div>
           <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>你的回應已送出</h2>
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-            感謝你的填答。這份回應已成功提交至本次問卷。
-          </p>
           {survey.is_anonymous && (
             <p className="survey-response-receipt-note text-xs">此份填答不會與你的身分連結。</p>
           )}
@@ -1886,12 +1861,7 @@ export default function SurveyDetailClient({
                   : "你尚未填寫過此問卷，以下為問卷題目。"}
               </p>
             </section>
-          ) : (
-            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-              標示 <span className="font-semibold" style={{ color: "var(--danger)" }}>「必填」</span>
-              的題目須完成後才能送出。
-            </p>
-          )}
+          ) : null}
           {!isReadOnly && (!survey.is_anonymous || myResponses.length > 0) && (
             <section
               className="space-y-3 rounded-xl px-4 py-3"
@@ -1905,10 +1875,11 @@ export default function SurveyDetailClient({
                       <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
                         {editingResponseId ? "正在修改既有回答" : "正在填寫新的一份回答"}
                       </p>
-                      <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
-                        這份問卷允許多次提交，你可以新增回答，也可以修改自己的既有回答。
-                        {survey.is_anonymous && " 匿名回答僅能在這個瀏覽器中修改。"}
-                      </p>
+                      {survey.is_anonymous && (
+                        <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
+                          匿名回答僅能在這個瀏覽器中修改。
+                        </p>
+                      )}
                     </div>
                     {editingResponseId && (
                       <button type="button" onClick={addResponse} className="btn btn-ghost shrink-0 text-xs">
@@ -1925,7 +1896,7 @@ export default function SurveyDetailClient({
                           onClick={() => editResponse(response)}
                           className="btn btn-ghost text-xs"
                           style={editingResponseId === response.id ? {
-                            color: "var(--primary)", borderColor: "var(--primary)",
+                            color: "var(--primary-text)", borderColor: "var(--primary)",
                           } : {}}
                         >
                           修改第 {myResponses.length - index} 份（{responseTimeLabel(response)}）
@@ -1940,7 +1911,7 @@ export default function SurveyDetailClient({
                     你已提交過這份問卷
                   </p>
                   <p className="mt-0.5 text-xs leading-5" style={{ color: "var(--text-muted)" }}>
-                    此問卷每人僅能提交一次。目前正在修改您前次的答案。
+                    此問卷每人僅能提交一次。目前正在修改你前次的答案。
                     {survey.is_anonymous && " 匿名回答僅能在這個瀏覽器中修改。"}
                   </p>
                 </div>
@@ -1959,15 +1930,12 @@ export default function SurveyDetailClient({
             <div className="survey-response-meter-track" aria-hidden="true">
               <span style={{ transform: `scaleX(${responseProgress})` }} />
             </div>
-            {answeredQuestionCount === questionCount && questionCount > 0 && (
-              <p>所有題目都已填答完成，可以送出了!</p>
-            )}
             <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
               {lastSavedAt
                 ? `已於 ${new Date(lastSavedAt).toLocaleTimeString("zh-TW", {
                   hour: "2-digit", minute: "2-digit", second: "2-digit",
                 })} 自動儲存到此裝置`
-                : "填答內容會自動儲存到裝置，不用擔心!"}
+                : "填答內容會自動儲存在此裝置"}
             </p>
           </aside>}
           <fieldset disabled={!isOpen} className="space-y-4 min-w-0">
@@ -1991,7 +1959,7 @@ export default function SurveyDetailClient({
               <div className="flex items-start gap-2">
                 {!isDisplay && (
                   <span className="text-xs font-bold mt-0.5 flex-shrink-0"
-                    style={{ color: "var(--primary)" }}>Q{numberMap.get(q.id)}</span>
+                    style={{ color: "var(--primary-text)" }}>Q{numberMap.get(q.id)}</span>
                 )}
                 <div className="min-w-0 flex-1" style={{ color: "var(--text-primary)" }}>
                   <SurveyMarkdown
@@ -2065,7 +2033,7 @@ export default function SurveyDetailClient({
               type="checkbox"
               checked={emailCopy}
               onChange={e => setEmailCopy(e.target.checked)}
-              className="accent-sky-400"
+              className="accent-[var(--primary)]"
             />
             <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
               將回答副本寄送到我的電子郵件信箱
@@ -2084,7 +2052,7 @@ export default function SurveyDetailClient({
           </div>}
           {!isReadOnly && survey.is_anonymous && (
             <p className="text-xs text-center" style={{ color: "var(--text-muted)" }}>
-              此為匿名問卷，您的身份不會公開
+              此為匿名問卷，你的身分不會公開
             </p>
           )}
         </form>

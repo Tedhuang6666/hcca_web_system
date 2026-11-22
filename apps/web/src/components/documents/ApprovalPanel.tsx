@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { apiErrorMessage } from "@/lib/api-helpers";
 import type { ApprovalStepOut } from "@/lib/types";
 import type { UserSummary } from "@/lib/api";
 
@@ -127,15 +128,15 @@ function DelegatePicker({
             style={selectedId === u.id
               ? { background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }
               : { background: "var(--bg-elevated)", border: "1px solid transparent" }}>
-            <span className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
-              style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
+            <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+              style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
               {u.display_name.charAt(0)}
             </span>
             <div className="flex-1 min-w-0">
               <p className="truncate" style={{ color: "var(--text-primary)" }}>{u.display_name}</p>
               <p className="truncate" style={{ color: "var(--text-muted)" }}>{u.email}</p>
             </div>
-            {selectedId === u.id && <span style={{ color: "var(--primary)" }}>✓</span>}
+            {selectedId === u.id && <span style={{ color: "var(--primary-text)" }}>✓</span>}
           </button>
         ))}
       </div>
@@ -144,7 +145,7 @@ function DelegatePicker({
           style={{ color: "var(--text-muted)" }}>取消</button>
         <button onClick={handleSave} disabled={saving}
           className="text-xs px-3 py-1.5 rounded font-medium disabled:opacity-50"
-          style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }}>
+          style={{ background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--border-strong)" }}>
           {saving ? "儲存中…" : "確認"}
         </button>
       </div>
@@ -168,6 +169,7 @@ export function ApprovalPanel({
   onSetDelegate: (stepOrder: number, delegateId: string | null) => Promise<void>;
 }) {
   const [loading, setLoading] = useState(false);
+  const [actionError, setActionError] = useState("");
   const [showReject, setShowReject] = useState(false);
   const [rejectComment, setRejectComment] = useState("");
   const [rejectMode, setRejectMode] = useState<"to_creator" | "to_previous">("to_creator");
@@ -177,13 +179,19 @@ export function ApprovalPanel({
 
   const handleApprove = async () => {
     setLoading(true);
-    try { await onApprove(approveComment); } finally { setLoading(false); }
+    setActionError("");
+    try { await onApprove(approveComment); }
+    catch (error) { setActionError(apiErrorMessage(error, "核准失敗，請稍後再試。")); }
+    finally { setLoading(false); }
   };
 
   const handleReject = async () => {
     if (!rejectComment.trim()) return;
     setLoading(true);
-    try { await onReject(rejectComment, rejectMode); setShowReject(false); } finally { setLoading(false); }
+    setActionError("");
+    try { await onReject(rejectComment, rejectMode); setShowReject(false); }
+    catch (error) { setActionError(apiErrorMessage(error, "退件失敗，請稍後再試。")); }
+    finally { setLoading(false); }
   };
 
   const toggleDelegatePicker = async (stepOrder: number) => {
@@ -222,7 +230,7 @@ export function ApprovalPanel({
                   aria-label={`${step.approver.name}：${STATUS_LABEL[step.status]}`}>
                   {STATUS_ICON[step.status]}
                 </div>
-                <span className="text-[11px] font-medium text-center max-w-16 truncate"
+                <span className="text-xs font-medium text-center max-w-16 truncate"
                   style={{ color: `var(${s.colorVar})` }}>
                   {step.approver.name}
                 </span>
@@ -292,13 +300,13 @@ export function ApprovalPanel({
                         {actorDisplay.primary}
                       </p>
                       {actorDisplay.secondary && (
-                        <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+                        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                           {actorDisplay.secondary}
                         </p>
                       )}
                     </div>
                     <span
-                      className="approval-status-badge badge text-[10px]"
+                      className="approval-status-badge badge text-xs"
                       style={{
                         color: `var(${s.colorVar})`,
                         background: `var(${s.bgVar})`,
@@ -308,7 +316,7 @@ export function ApprovalPanel({
                     </span>
                     {isMyTurn && (
                       <span
-                        className="badge text-[10px] font-semibold"
+                        className="badge text-xs font-semibold"
                         style={{
                           color: "var(--warning)",
                           background: "var(--warning-dim)",
@@ -328,8 +336,8 @@ export function ApprovalPanel({
                       <button
                         type="button"
                         onClick={() => void toggleDelegatePicker(step.step_order)}
-                        className="min-h-11 rounded px-3 py-2 text-[10px] transition-[color,background-color,border-color,opacity,box-shadow,transform]"
-                        style={{ color: "var(--primary)", background: "var(--primary-dim)" }}>
+                        className="min-h-11 rounded px-3 py-2 text-xs transition-[color,background-color,border-color,opacity,box-shadow,transform]"
+                        style={{ color: "var(--primary-text)", background: "var(--primary-dim)" }}>
                         {step.delegate ? "變更代理" : "指定代理"}
                       </button>
                     )}
@@ -362,6 +370,8 @@ export function ApprovalPanel({
         })}
       </div>
 
+      {actionError && <p role="alert" className="text-sm" style={{ color: "var(--danger)" }}>{actionError}</p>}
+
       {/* 審核操作 */}
       {canApprove && !showReject && (
         <div className="space-y-3 pt-3 border-t" style={{ borderColor: "var(--border)" }}>
@@ -391,7 +401,7 @@ export function ApprovalPanel({
               {loading ? "處理中…" : "核准"}
             </button>
             <button
-              onClick={() => setShowReject(true)}
+              onClick={() => { setActionError(""); setShowReject(true); }}
               className="approval-action-button motion-action-button motion-action-button--reject btn flex-1"
               style={{
                 background: "var(--danger-dim)",
@@ -449,7 +459,7 @@ export function ApprovalPanel({
               {loading ? "處理中…" : "確認退件"}
             </button>
             <button
-              onClick={() => setShowReject(false)}
+              onClick={() => { setActionError(""); setShowReject(false); }}
               className="btn btn-ghost">
               取消
             </button>

@@ -147,7 +147,7 @@ function MaintenanceContent() {
                   <span className="ml-1 text-base text-[var(--text-muted)]">s</span>
                 </div>
               </div>
-              <div className="grid h-14 w-14 place-items-center rounded-lg bg-[var(--primary-dim)] text-[var(--primary)]">
+              <div className="grid h-14 w-14 place-items-center rounded-lg bg-[var(--primary-dim)] text-[var(--primary-text)]">
                 <Icon size={24} aria-hidden />
               </div>
             </div>

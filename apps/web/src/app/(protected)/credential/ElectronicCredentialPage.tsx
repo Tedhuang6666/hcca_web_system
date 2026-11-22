@@ -32,7 +32,6 @@ function CredentialPageIntro({ denied = false }: { denied?: boolean }) {
   return (
     <header className={`credential-page__intro${denied ? " credential-page__intro--denied" : ""}`}>
       <div>
-        <p className="credential-page__kicker">PERSONAL PROOF</p>
         <h1>電子證件</h1>
         <p>
           {denied
@@ -60,7 +59,6 @@ function AccessDenied({ onRetry }: { onRetry: () => void }) {
         <div className="credential-denied__icon" aria-hidden="true">
           <CircleX size={72} strokeWidth={1.7} />
         </div>
-        <p className="credential-page__kicker credential-denied__kicker">ACCESS UNAVAILABLE</p>
         <h2 id="credential-denied-title">這個帳號目前無法顯示電子證件</h2>
         <p className="credential-denied__message">
           學生帳號需使用符合目前屆別設定的校內 Email 與學號；若你是校內師長或已獲特別授權，
@@ -143,7 +141,7 @@ function CredentialCard({ credential }: { credential: ElectronicCredentialOut })
           <BrandEmblem size={44} priority />
           <div>
             <p className="text-sm font-semibold tracking-[0.08em] text-[#fffdf7]">HCCA</p>
-            <p className="text-[11px] text-[#b9c3d2]">新竹高中班聯會數位憑證</p>
+            <p className="text-xs text-[#b9c3d2]">新竹高中班聯會數位憑證</p>
           </div>
         </div>
         <div className="credential-card__status">
@@ -154,7 +152,7 @@ function CredentialCard({ credential }: { credential: ElectronicCredentialOut })
 
       <div className="credential-card__main">
         <div className="credential-card__identity">
-          <p className="credential-card__eyebrow">ELECTRONIC CREDENTIAL</p>
+          <p className="credential-card__eyebrow">電子證件</p>
           <h1 id="credential-name">{credential.display_name}</h1>
           <p className="credential-card__kind">{credential.identity_label} · 特約兌換資格</p>
 
@@ -242,7 +240,6 @@ export default function ElectronicCredentialPage() {
 
           <section className="credential-usage" aria-labelledby="credential-usage-title">
             <div>
-              <p className="credential-page__kicker">HOW TO USE</p>
               <h2 id="credential-usage-title">到店時這樣做</h2>
             </div>
             <div className="credential-usage__steps">

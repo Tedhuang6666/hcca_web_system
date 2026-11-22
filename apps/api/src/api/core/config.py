@@ -212,7 +212,6 @@ class Settings(BaseSettings):
     RECOVERY_AGENT_URL: str = ""
     RECOVERY_AGENT_TOKEN: str = ""
     RECOVERY_MAX_RESTARTS_PER_HOUR: int = Field(default=2, ge=1, le=10)
-    RECOVERY_TASK_MAX_RETRIES: int = Field(default=3, ge=0, le=10)
 
     # --- PostHog 產品分析 ---
     POSTHOG_API_KEY: str = Field(default="")
@@ -244,7 +243,6 @@ class Settings(BaseSettings):
     MODULE_CIRCUIT_ENABLED: bool = Field(default=True)
     MODULE_CIRCUIT_5XX_THRESHOLD: int = Field(default=10, ge=1)
     MODULE_CIRCUIT_WINDOW_SECONDS: int = Field(default=60, ge=1)
-    MODULE_CIRCUIT_COOLDOWN_SECONDS: int = Field(default=120, ge=1)
 
     # --- 模組斷路器：升級門檻（依錯誤嚴重度）---
     # 1h 滾動窗口內跳閘次數達門檻 → 升級為 manual 維護（不自動恢復）
@@ -672,6 +670,8 @@ class Settings(BaseSettings):
             raise ValueError("生產環境的 SECRET_KEY、JWT 與 OAuth session 金鑰必須彼此獨立")
         if is_prod and self.DEBUG:
             raise ValueError("生產環境不可啟用 DEBUG")
+        if is_prod and self.ENABLE_ENV_EDITOR:
+            raise ValueError("生產環境不可啟用 ENABLE_ENV_EDITOR")
         if is_prod and self.ENABLE_API_DOCS:
             raise ValueError("生產環境不可公開 API 文件；請關閉 ENABLE_API_DOCS")
         if is_prod and self.AUTH_LEGACY_TOKEN_COMPAT_ENABLED:

@@ -18,10 +18,11 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Check, GripVertical, RotateCcw } from "lucide-react";
+import { GripVertical, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import MobileNavConfigurator from "@/components/layout/MobileNavConfigurator";
 import NavIcon from "@/components/layout/NavIcon";
+import Toggle from "@/components/ui/Toggle";
 import { useModuleStatus } from "@/contexts/ModuleStatusContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { navigationProfilesApi } from "@/lib/api";
@@ -232,13 +233,7 @@ export default function NavigationSettingsPage() {
     <div className="mx-auto max-w-3xl space-y-5">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--primary)" }}>
-            INTERFACE
-          </p>
-          <h1 className="mt-1 text-xl font-semibold">介面導覽設定</h1>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            調整左側側邊欄與手機底部欄位的顯示項目和排序
-          </p>
+          <h1 className="text-xl font-semibold">介面導覽設定</h1>
         </div>
         <button type="button" className="btn btn-ghost" onClick={reset}>
           <RotateCcw size={15} aria-hidden={true} />
@@ -278,7 +273,7 @@ export default function NavigationSettingsPage() {
             />
 
             <p className="mt-4 text-xs" style={{ color: "var(--text-muted)" }}>
-              手機底欄會依序顯示這四格；其他入口可從「更多」開啟。
+              其他入口可從「更多」開啟。
             </p>
           </div>
         ) : (
@@ -319,7 +314,7 @@ function TabButton({
       onClick={onClick}
       style={{
         background: active ? "var(--primary-dim)" : "transparent",
-        color: active ? "var(--primary)" : "var(--text-muted)",
+        color: active ? "var(--primary-text)" : "var(--text-muted)",
       }}
     >
       {children}
@@ -372,27 +367,12 @@ function SortableNavRow({
           {item.href}
         </p>
       </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={visible}
-        aria-label={`${visible ? "隱藏" : "顯示"}${item.label}`}
+      <Toggle
+        checked={visible}
+        onChange={onToggle}
         disabled={disabled}
-        onClick={onToggle}
-        className="inline-flex h-6 w-11 items-center rounded-full transition-colors"
-        style={{
-          background: visible ? "var(--primary)" : "var(--border-strong)",
-          opacity: disabled ? 0.55 : 1,
-          cursor: disabled ? "not-allowed" : "pointer",
-        }}
-      >
-        <span
-          className="flex h-4 w-4 items-center justify-center rounded-full bg-white transition-transform"
-          style={{ transform: visible ? "translateX(24px)" : "translateX(4px)" }}
-        >
-          {visible && <Check size={10} aria-hidden={true} style={{ color: "var(--primary)" }} />}
-        </span>
-      </button>
+        ariaLabel={`在選單顯示${item.label}`}
+      />
     </div>
   );
 }

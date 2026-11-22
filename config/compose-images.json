@@ -1,0 +1,20 @@
+{
+  "caddy": "caddy:2-alpine",
+  "edoburu/pgbouncer": "edoburu/pgbouncer:v1.25.2-p0",
+  "gcr.io/cadvisor/cadvisor": "gcr.io/cadvisor/cadvisor:v0.52.1",
+  "getmeili/meilisearch": "getmeili/meilisearch:v1.14.0",
+  "grafana/grafana": "grafana/grafana:12.1.0",
+  "grafana/loki": "grafana/loki:3.5.0",
+  "grafana/promtail": "grafana/promtail:3.5.0",
+  "grafana/tempo": "grafana/tempo:2.8.2",
+  "mher/flower": "mher/flower:2.0",
+  "oliver006/redis_exporter": "oliver006/redis_exporter:v1.75.0",
+  "otel/opentelemetry-collector-contrib": "otel/opentelemetry-collector-contrib:0.134.0",
+  "postgres": "postgres:16-alpine",
+  "prom/alertmanager": "prom/alertmanager:v0.28.1",
+  "prom/node-exporter": "prom/node-exporter:v1.9.1",
+  "prom/prometheus": "prom/prometheus:v3.5.0",
+  "prometheuscommunity/pgbouncer-exporter": "prometheuscommunity/pgbouncer-exporter:v0.12.1",
+  "prometheuscommunity/postgres-exporter": "prometheuscommunity/postgres-exporter:v0.17.1",
+  "redis": "redis:7-alpine"
+}

@@ -88,7 +88,7 @@ function PartnerIconPicker({
 }) {
   return (
     <div className="grid gap-2">
-      <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>圖示</span>
+      <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>圖示</span>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6" role="radiogroup" aria-label="圖示選擇">
         {PARTNER_ICON_OPTIONS.map(({ key, label, icon: Icon }) => {
           const selected = value === key;
@@ -104,7 +104,7 @@ function PartnerIconPicker({
               style={{
                 borderColor: selected ? "var(--primary)" : "var(--border)",
                 background: selected ? "var(--primary-dim)" : "var(--bg-surface)",
-                color: selected ? "var(--primary)" : "var(--text-secondary)",
+                color: selected ? "var(--primary-text)" : "var(--text-secondary)",
               }}>
               <Icon size={17} className="shrink-0" aria-hidden="true" />
               <span className="truncate text-xs">{label}</span>
@@ -536,7 +536,7 @@ export default function PartnerMapAdminPage() {
           className="flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-4 text-sm font-medium transition-colors"
           style={{
             borderColor: activeTab === "businesses" ? "var(--primary)" : "transparent",
-            color: activeTab === "businesses" ? "var(--primary)" : "var(--text-muted)",
+            color: activeTab === "businesses" ? "var(--primary-text)" : "var(--text-muted)",
           }}>
           <Store size={16} aria-hidden="true" />店家管理
         </button>
@@ -549,7 +549,7 @@ export default function PartnerMapAdminPage() {
           className="flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-4 text-sm font-medium transition-colors"
           style={{
             borderColor: activeTab === "tags" ? "var(--primary)" : "transparent",
-            color: activeTab === "tags" ? "var(--primary)" : "var(--text-muted)",
+            color: activeTab === "tags" ? "var(--primary-text)" : "var(--text-muted)",
           }}>
           <Tag size={16} aria-hidden="true" />標籤管理
         </button>
@@ -562,7 +562,7 @@ export default function PartnerMapAdminPage() {
           className="flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-4 text-sm font-medium transition-colors"
           style={{
             borderColor: activeTab === "credentials" ? "var(--primary)" : "transparent",
-            color: activeTab === "credentials" ? "var(--primary)" : "var(--text-muted)",
+            color: activeTab === "credentials" ? "var(--primary-text)" : "var(--text-muted)",
           }}>
           <ShieldCheck size={16} aria-hidden="true" />特殊身分
         </button>
@@ -587,7 +587,7 @@ export default function PartnerMapAdminPage() {
                   }}>
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate text-sm font-medium">{business.name}</span>
-                    <span className="rounded px-1.5 py-0.5 text-[11px]" style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
+                    <span className="rounded px-1.5 py-0.5 text-xs" style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
                     {statusLabels[business.status as PartnerBusinessStatus] ?? business.status}
                   </span>
                 </div>
@@ -622,7 +622,7 @@ export default function PartnerMapAdminPage() {
                       href={submission.google_maps_url}
                       target="_blank"
                       rel="noreferrer"
-                      style={{ color: "var(--primary)" }}>
+                      style={{ color: "var(--primary-text)" }}>
                       開啟 Google Maps ↗
                     </a>
                   )}
@@ -644,7 +644,7 @@ export default function PartnerMapAdminPage() {
           <section className="card overflow-hidden">
             <div className="flex items-start justify-between gap-4 border-b p-5" style={{ borderColor: "var(--border)" }}>
               <div>
-                <p className="text-xs font-medium" style={{ color: "var(--primary)" }}>{selected ? "編輯合作夥伴" : "建立合作夥伴"}</p>
+                <p className="text-xs font-medium" style={{ color: "var(--primary-text)" }}>{selected ? "編輯合作夥伴" : "建立合作夥伴"}</p>
                 <h2 className="mt-1 text-lg font-semibold" style={{ color: "var(--text-primary)" }}>{businessForm.name || "尚未命名的合作夥伴"}</h2>
                 <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>先完成基本資料，再補充公開聯絡方式、位置與優惠。</p>
               </div>
@@ -684,7 +684,7 @@ export default function PartnerMapAdminPage() {
                 <div className="mb-3"><h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>顯示素材與分類</h3></div>
                 <div className="grid gap-3 md:grid-cols-2"><label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>社群連結</span><input className="input" type="url" value={businessForm.social_url} onChange={(e) => setBusinessForm((f) => ({ ...f, social_url: e.target.value }))} /></label><label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>營業時間說明</span><input className="input" value={businessForm.business_hours_text} onChange={(e) => setBusinessForm((f) => ({ ...f, business_hours_text: e.target.value }))} placeholder="例如：週一至週五 09:00–18:00" /></label><label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Logo URL</span><input className="input" value={businessForm.logo_url} onChange={(e) => setBusinessForm((f) => ({ ...f, logo_url: e.target.value }))} /></label><label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>封面圖片 URL</span><input className="input" value={businessForm.cover_image_url} onChange={(e) => setBusinessForm((f) => ({ ...f, cover_image_url: e.target.value }))} /></label></div>
                 <BusinessHoursEditor value={businessForm.business_hours} onChange={(business_hours) => setBusinessForm((form) => ({ ...form, business_hours }))} />
-                <div className="mt-4 flex flex-wrap gap-2">{tags.map((tag) => { const active = businessForm.tag_ids.includes(tag.id); return <button type="button" key={tag.id} onClick={() => toggleTag(tag.id)} className="rounded-full border px-3 py-1.5 text-xs" style={{ borderColor: active ? "var(--primary)" : "var(--border)", color: active ? "var(--primary)" : "var(--text-secondary)", background: active ? "var(--primary-dim)" : "transparent" }}>{tag.name}</button>; })}</div>
+                <div className="mt-4 flex flex-wrap gap-2">{tags.map((tag) => { const active = businessForm.tag_ids.includes(tag.id); return <button type="button" key={tag.id} onClick={() => toggleTag(tag.id)} className="rounded-full border px-3 py-1.5 text-xs" style={{ borderColor: active ? "var(--primary)" : "var(--border)", color: active ? "var(--primary-text)" : "var(--text-secondary)", background: active ? "var(--primary-dim)" : "transparent" }}>{tag.name}</button>; })}</div>
                 {selected && (
                   <div className="mt-4 rounded-lg border p-3" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
                     <div className="flex items-start justify-between gap-3">
@@ -731,7 +731,7 @@ export default function PartnerMapAdminPage() {
                       貼上 Google Maps 連結可帶入資料，仍可手動修改。
                     </p>
                   </div>
-                  <MapPin size={18} style={{ color: "var(--primary)" }} aria-hidden="true" />
+                  <MapPin size={18} style={{ color: "var(--primary-text)" }} aria-hidden="true" />
                 </div>
                 <div className="mt-4 rounded-lg border p-3" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
                   <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Google Maps 連結</label>
@@ -874,7 +874,7 @@ export default function PartnerMapAdminPage() {
       </div> : activeTab === "tags" ? (
         <section id="tags-panel" role="tabpanel" aria-label="標籤管理" className="card p-5">
           <div className="mb-5 flex items-start gap-3">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ color: "var(--primary)", background: "var(--primary-dim)" }}>
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ color: "var(--primary-text)", background: "var(--primary-dim)" }}>
               <Tag size={18} aria-hidden="true" />
             </span>
             <div>
@@ -883,11 +883,11 @@ export default function PartnerMapAdminPage() {
           </div>
           <div className="grid gap-4 rounded-lg border p-4 md:grid-cols-[minmax(0,1fr)_96px_auto]" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
             <label className="grid min-w-0 gap-1">
-              <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>分類名稱</span>
+              <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>分類名稱</span>
               <input value={tagName} onChange={(event) => setTagName(event.target.value)} className="input h-9" placeholder="例如：制服、飲料、文具" />
             </label>
             <label className="grid min-w-0 gap-1">
-              <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>顏色</span>
+              <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>顏色</span>
               <input value={tagColor} onChange={(event) => setTagColor(event.target.value)} className="h-9 w-full rounded border bg-transparent p-1" style={{ borderColor: "var(--border)" }} type="color" aria-label="分類顏色" />
             </label>
             <button className="btn btn-ghost w-full self-end md:w-auto" onClick={createTag} aria-label="新增標籤">
@@ -906,7 +906,7 @@ export default function PartnerMapAdminPage() {
                 <div key={tag.id} className="rounded-lg border p-4" style={{ borderColor: "var(--border)" }}>
                   <div className="mb-3 flex items-center justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-2">
-                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md" style={{ color: draft.color, background: `${draft.color}22` }}>
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md" style={{ color: draft.color, background: `color-mix(in srgb, ${draft.color} 13%, transparent)` }}>
                         <Icon size={17} aria-hidden="true" />
                       </span>
                       <span className="truncate text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{draft.name || "未命名標籤"}</span>
@@ -917,19 +917,19 @@ export default function PartnerMapAdminPage() {
                   </div>
                   <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_96px_80px_96px]">
                     <label className="grid min-w-0 gap-1">
-                      <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>標籤名稱</span>
+                      <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>標籤名稱</span>
                       <input className="input h-9" value={draft.name} onChange={(event) => setTagDrafts((current) => ({ ...current, [tag.id]: { ...draft, name: event.target.value } }))} />
                     </label>
                     <label className="grid min-w-0 gap-1">
-                      <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>顏色</span>
+                      <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>顏色</span>
                       <input className="h-9 w-full rounded border bg-transparent p-1" style={{ borderColor: "var(--border)" }} type="color" value={draft.color} onChange={(event) => setTagDrafts((current) => ({ ...current, [tag.id]: { ...draft, color: event.target.value } }))} aria-label={`${tag.name} 顏色`} />
                     </label>
                     <label className="grid min-w-0 gap-1">
-                      <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>排序</span>
+                      <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>排序</span>
                       <NumberInput className="input h-9" type="number" value={draft.sort_order} onChange={(event) => setTagDrafts((current) => ({ ...current, [tag.id]: { ...draft, sort_order: Number(event.target.value) } }))} />
                     </label>
                     <label className="grid min-w-0 gap-1">
-                      <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>狀態</span>
+                      <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>狀態</span>
                       <button className="btn btn-ghost h-9 justify-start px-2 text-xs" onClick={() => setTagDrafts((current) => ({ ...current, [tag.id]: { ...draft, is_active: !draft.is_active } }))} aria-label="切換啟用">
                         <span className="h-2 w-2 rounded-full" style={{ background: draft.is_active ? "var(--success)" : "var(--text-muted)" }} />
                         {draft.is_active ? "啟用中" : "已停用"}

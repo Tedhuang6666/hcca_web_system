@@ -5,8 +5,9 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from api.main import app
 from api.models.analytics_page_view import AnalyticsPageView
@@ -454,11 +455,16 @@ async def test_product_analytics_returns_daily_users_and_page_metrics(
     assert documents["click_rate"] == 0.6667
 
 
+@pytest.mark.parametrize("db_timezone", ["UTC", "Asia/Taipei", "America/New_York"])
 async def test_article_analytics_returns_views_devices_and_top_articles(
-    db_session, member_user, authed_client_factory
+    db_session, member_user, authed_client_factory, db_timezone
 ) -> None:
     await _grant(db_session, member_user, "analytics:view")
-    now = datetime.now(UTC)
+    if db_session.get_bind().dialect.name == "postgresql":
+        await db_session.execute(
+            text("SELECT set_config('TimeZone', :zone, true)"), {"zone": db_timezone}
+        )
+    now = datetime(2026, 1, 1, 23, 30, tzinfo=UTC)
     lunch = PublicSitePage(
         slug="lunch-guide",
         title="竹中訂餐指南",

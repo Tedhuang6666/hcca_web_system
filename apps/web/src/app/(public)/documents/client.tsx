@@ -12,6 +12,7 @@ import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 import type { UserSummary } from "@/lib/api/core";
 import type { BatchDocumentOperationOut, DocumentListItem, DocumentStatus, SavedFilterOut } from "@/lib/types";
 import { orgDisplayName } from "@/lib/orgs";
+import CopyButton from "@/components/ui/CopyButton";
 import { DocumentStatusBadge, UrgencyBadge } from "@/components/ui/StatusBadge";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useConfirm, usePrompt } from "@/components/ui/ConfirmDialog";
@@ -57,6 +58,10 @@ function showSuccessToast(message: string) {
 
 function showErrorToast(message: string) {
   void import("sonner").then(({ toast }) => toast.error(message));
+}
+
+function documentLink(serialNumber: string): string {
+  return `${window.location.origin}/documents/${encodeURIComponent(serialNumber)}`;
 }
 
 type SortKey =
@@ -158,7 +163,7 @@ function SortTh({
       <button
         type="button"
         className="-m-2 inline-flex min-h-11 items-center gap-1 rounded px-2 text-xs font-semibold"
-        style={{ color: active ? "var(--primary)" : "var(--text-muted)" }}
+        style={{ color: active ? "var(--primary-text)" : "var(--text-muted)" }}
         aria-label={`${label}，${direction}。點擊切換排序方向`}
         title={`${label}：${direction}，點擊切換`}
         onClick={() => onToggle(sk)}>
@@ -716,9 +721,6 @@ export default function DocumentListClient({
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
             公文
           </h1>
-          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            {canBatch || can("document:draft") ? "查看、建立與處理公文。" : "查看公開的公文。"}
-          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
           {can("document:approve") && (
@@ -826,7 +828,7 @@ export default function DocumentListClient({
                   onClick={() => setActiveTab(key)}
                   className="document-tab min-h-11 min-w-0 flex-1 px-3 rounded-lg text-xs font-medium whitespace-nowrap"
                   style={active
-                    ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--primary-dim)" }
+                    ? { background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--primary-dim)" }
                     : { color: "var(--text-muted)", border: "1px solid transparent" }}>
                   {label}
                 </button>
@@ -839,7 +841,7 @@ export default function DocumentListClient({
             {canViewAll && <button onClick={() => setShowFilters(f => !f)}
               className="document-filter-toggle relative min-h-11 px-3 rounded-lg text-xs font-medium inline-flex items-center gap-1.5"
               style={showFilters || hasActiveFilters
-                ? { color: "var(--primary)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }
+                ? { color: "var(--primary-text)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }
                 : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
                 <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
@@ -862,7 +864,7 @@ export default function DocumentListClient({
             {canViewAll && <button
               onClick={saveCurrentFilter}
               className="min-h-11 text-xs px-3 rounded-lg hover:opacity-80"
-              style={{ color: "var(--primary)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }}
+              style={{ color: "var(--primary-text)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }}
               title="將目前的 Tab/搜尋/篩選保存為常用篩選"
             >
               ＋ 儲存目前查詢
@@ -893,7 +895,7 @@ export default function DocumentListClient({
                   <button type="button" onClick={() => dispatchFilter({ type: "set", key: "category", value: "" })}
                     className="min-h-11 rounded-full px-3 text-xs transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                     style={!filters.category
-                      ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
+                      ? { background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--border-strong)" }
                       : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
                     全部
                   </button>
@@ -901,7 +903,7 @@ export default function DocumentListClient({
                     <button key={c.key} type="button" onClick={() => dispatchFilter({ type: "set", key: "category", value: c.key === filters.category ? "" : c.key })}
                       className="min-h-11 rounded-full px-3 text-xs transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                       style={filters.category === c.key
-                        ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
+                        ? { background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--border-strong)" }
                         : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
                       {c.label}
                     </button>
@@ -916,7 +918,7 @@ export default function DocumentListClient({
                   <button type="button" onClick={() => dispatchFilter({ type: "set", key: "classification", value: "" })}
                     className="min-h-11 rounded-full px-3 text-xs transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                     style={!filters.classification
-                      ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
+                      ? { background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--border-strong)" }
                       : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
                     全部
                   </button>
@@ -924,7 +926,7 @@ export default function DocumentListClient({
                     <button key={c.key} type="button" onClick={() => dispatchFilter({ type: "set", key: "classification", value: c.key === filters.classification ? "" : c.key })}
                       className="min-h-11 rounded-full px-3 text-xs transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                       style={filters.classification === c.key
-                        ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
+                        ? { background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--border-strong)" }
                         : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
                       {c.label}
                     </button>
@@ -939,7 +941,7 @@ export default function DocumentListClient({
                   <button type="button" onClick={() => dispatchFilter({ type: "set", key: "visibility", value: "" })}
                     className="min-h-11 rounded-full px-3 text-xs transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                     style={!filters.visibility
-                      ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
+                      ? { background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--border-strong)" }
                       : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
                     全部
                   </button>
@@ -947,7 +949,7 @@ export default function DocumentListClient({
                     <button key={v.key} type="button" onClick={() => dispatchFilter({ type: "set", key: "visibility", value: v.key === filters.visibility ? "" : v.key })}
                       className="min-h-11 rounded-full px-3 text-xs transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                       style={filters.visibility === v.key
-                        ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
+                        ? { background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--border-strong)" }
                         : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
                       {v.label}
                     </button>
@@ -1041,7 +1043,7 @@ export default function DocumentListClient({
                 <button type="button" onClick={() => dispatchFilter({ type: "toggleMyOnly" })}
                   className="inline-flex min-h-11 items-center gap-1.5 rounded-full px-3 text-xs transition-[color,background-color,border-color,opacity,box-shadow,transform]"
                   style={filters.myOnly
-                    ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
+                    ? { background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--border-strong)" }
                     : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
                   <span className={`w-3 h-3 rounded border flex items-center justify-center flex-shrink-0 ${filters.myOnly ? "bg-primary border-primary" : "border-muted"}`}
                     style={filters.myOnly ? { background: "var(--primary)", borderColor: "var(--primary)" } : { borderColor: "var(--border-strong)" }}>
@@ -1221,7 +1223,7 @@ export default function DocumentListClient({
                         onChange={toggleAllVisible}
                         disabled={selectableDocs.length === 0}
                         aria-label="選取目前列表所有公文"
-                        className="accent-blue-600"
+                        className="accent-[var(--primary)]"
                       />
                     </th>}
                     <SortTh label="字號" sk="serial_asc" sortKey={sortKey} onToggle={toggleSort} />
@@ -1249,11 +1251,11 @@ export default function DocumentListClient({
                           onChange={() => toggleSelected(doc.id)}
                           disabled={doc.is_redacted}
                           aria-label={`選取公文 ${doc.serial_number}`}
-                          className="accent-blue-600"
+                          className="accent-[var(--primary)]"
                         />
                       </td>}
                       <td className="px-5 py-4">
-                        <span className="text-xs font-mono" style={{ color: "var(--primary)" }}>
+                        <span className="text-xs font-mono" style={{ color: "var(--primary-text)" }}>
                           {doc.serial_number}
                         </span>
                       </td>
@@ -1293,7 +1295,7 @@ export default function DocumentListClient({
                           return (
                             <span className="flex items-center gap-1.5 font-medium"
                               style={{ color: isOverdue ? "var(--danger)" : "#fb923c" }}>
-                              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isOverdue ? "bg-red-500" : "bg-orange-400 animate-pulse"}`} />
+                              <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: isOverdue ? "var(--danger)" : "var(--warning)" }} />
                               {formatTaipeiDate(doc.due_date)}
                             </span>
                           );
@@ -1313,27 +1315,17 @@ export default function DocumentListClient({
                                 className="btn btn-ghost text-xs px-3">
                                 查看
                               </Link>
-                              <button
-                                onClick={async (e) => {
-                                  e.preventDefault();
-                                  const url = `${window.location.origin}/documents/${encodeURIComponent(doc.serial_number)}`;
-                                  try {
-                                    await navigator.clipboard.writeText(url);
-                                    showSuccessToast("連結已複製");
-                                  } catch {
-                                    showErrorToast("複製失敗");
-                                  }
-                                }}
-                                className="min-h-11 min-w-11 rounded hover:opacity-80 transition-opacity"
+                              <CopyButton
+                                value={() => documentLink(doc.serial_number)}
+                                icon="link"
+                                iconSize={12}
+                                announcement="公文連結已複製"
+                                failureHint="複製失敗，請開啟公文後從網址列複製"
+                                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded hover:opacity-80 transition-opacity"
                                 style={{ color: "var(--text-muted)" }}
                                 aria-label={`複製公文 ${doc.serial_number} 的連結`}
-                                title="複製連結">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                  strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-                                </svg>
-                              </button>
+                                title="複製連結"
+                              />
                             </>
                           )}
                         </div>
@@ -1359,7 +1351,7 @@ export default function DocumentListClient({
                       onChange={() => toggleSelected(doc.id)}
                       disabled={doc.is_redacted}
                       aria-label={`選取公文 ${doc.serial_number}`}
-                      className="mt-1 flex-shrink-0 accent-blue-600"
+                      className="mt-1 flex-shrink-0 accent-[var(--primary)]"
                     />}
                     {doc.is_redacted ? (
                       <div
@@ -1388,7 +1380,7 @@ export default function DocumentListClient({
                         <p className="text-sm font-medium whitespace-normal break-words" style={{ color: "var(--text-primary)" }}>
                           {doc.summary || doc.subject || doc.title}
                         </p>
-                        <p className="text-xs mt-0.5 font-mono" style={{ color: "var(--primary)" }}>
+                        <p className="text-xs mt-0.5 font-mono" style={{ color: "var(--primary-text)" }}>
                           {doc.serial_number}
                         </p>
                         <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
@@ -1397,7 +1389,7 @@ export default function DocumentListClient({
                         {doc.due_date && (isOverdue || isSoon) && (
                           <p className="flex items-center gap-1 text-xs mt-0.5 font-medium"
                             style={{ color: isOverdue ? "var(--danger)" : "#fb923c" }}>
-                            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isOverdue ? "bg-red-500" : "bg-orange-400 animate-pulse"}`} />
+                            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: isOverdue ? "var(--danger)" : "var(--warning)" }} />
                             限辦 {formatTaipeiDate(doc.due_date)}
                             {isOverdue && " · 已逾期"}
                           </p>
@@ -1410,22 +1402,17 @@ export default function DocumentListClient({
                     </Link>
                     )}
                     {!doc.is_redacted && (
-                      <button
-                        onClick={async () => {
-                          const url = `${window.location.origin}/documents/${encodeURIComponent(doc.serial_number)}`;
-                          try { await navigator.clipboard.writeText(url); showSuccessToast("連結已複製"); }
-                          catch { showErrorToast("複製失敗"); }
-                        }}
-                        className="min-h-11 min-w-11 rounded flex-shrink-0 hover:opacity-80"
+                      <CopyButton
+                        value={() => documentLink(doc.serial_number)}
+                        icon="link"
+                        iconSize={12}
+                        announcement="公文連結已複製"
+                        failureHint="複製失敗，請開啟公文後從網址列複製"
+                        className="inline-flex min-h-11 min-w-11 flex-shrink-0 items-center justify-center rounded hover:opacity-80"
                         style={{ color: "var(--text-muted)" }}
                         aria-label={`複製公文 ${doc.serial_number} 的連結`}
-                        title="複製連結">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                          strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-                        </svg>
-                      </button>
+                        title="複製連結"
+                      />
                     )}
                     </div>
                   </li>
@@ -1441,7 +1428,7 @@ export default function DocumentListClient({
         <div className="flex flex-col items-center gap-3 pt-6 pb-4">
           {sorted.length > 0 && (
             <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-              已顯示 <span style={{ color: "var(--primary)", fontWeight: 500 }}>{sorted.length}</span> 筆
+              已顯示 <span style={{ color: "var(--primary-text)", fontWeight: 500 }}>{sorted.length}</span> 筆
               {hasMore && " · 向下捲動或點擊按鈕載入更多"}
             </p>
           )}

@@ -16,7 +16,7 @@ from api.models.base import TimestampMixin
 
 class ReceivableSource(enum.StrEnum):
     SHOP_ORDER = "shop_order"
-    MEAL_ORDER = "meal_order"
+    MEAL_ORDER = "meal_order"  # 歷史應收款來源；不再建立學餐訂單。
     ACTIVITY_FEE = "activity_fee"
     CLASS_FEE = "class_fee"
     MANUAL = "manual"

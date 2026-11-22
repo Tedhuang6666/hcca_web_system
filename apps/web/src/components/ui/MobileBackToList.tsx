@@ -21,7 +21,7 @@ export default function MobileBackToList({
       onClick={onBack}
       className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-medium ${className}`}
       style={{
-        color: "var(--primary)",
+        color: "var(--primary-text)",
         background: "var(--primary-dim)",
         border: "1px solid var(--border-strong)",
       }}

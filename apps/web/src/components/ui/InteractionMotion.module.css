@@ -3,7 +3,6 @@
 }
 
 .modalSurface,
-.drawerPanel,
 .smartEmptyState {
   position: relative;
 }
@@ -14,8 +13,7 @@
   transform: translateY(14px) scale(0.988);
 }
 
-.modalSurface::before,
-.drawerPanel::before {
+.modalSurface::before{
   position: absolute;
   z-index: 2;
   top: 0;
@@ -32,33 +30,30 @@
   animation: document-sheet-arrive var(--motion-enter) cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-.modalRoot[data-entered="true"] .modalSurface::before,
-.drawerPanel[data-entered="true"]::before {
+/* 有觸發點時，公文紙從使用者按下的位置展開（Modal.tsx 量出 --sheet-origin） */
+.modalRoot[data-entered="true"] .modalSurface[data-origin="trigger"] {
+  animation-name: document-sheet-unfold;
+  transform-origin: var(--sheet-origin);
+}
+
+.modalRoot[data-entered="true"] .modalSurface::before{
   animation: document-rule-draw 300ms 70ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .modalHeader,
 .modalContent,
-.modalFooter,
-.drawerHeader,
-.drawerContent,
-.drawerFooter {
+.modalFooter{
   position: relative;
   z-index: 1;
 }
 
 .modalRoot[data-entered="true"] .modalHeader,
 .modalRoot[data-entered="true"] .modalContent,
-.modalRoot[data-entered="true"] .modalFooter,
-.drawerPanel[data-entered="true"] .drawerHeader,
-.drawerPanel[data-entered="true"] .drawerContent,
-.drawerPanel[data-entered="true"] .drawerFooter {
+.modalRoot[data-entered="true"] .modalFooter{
   animation: document-contents-arrive 320ms 70ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-.drawerBackdrop {
-  animation: context-veil-arrive 240ms ease-out both;
-}
+
 
 .confirmContent {
   position: relative;
@@ -77,7 +72,7 @@
 }
 
 .confirmMarker[data-tone="prompt"] {
-  color: var(--primary);
+  color: var(--primary-text);
   background: color-mix(in srgb, var(--primary) 12%, var(--bg-elevated));
 }
 
@@ -151,7 +146,7 @@
 }
 
 .smartEmptyState[data-reason="new"] .smartEmptyMark {
-  color: var(--primary);
+  color: var(--primary-text);
 }
 
 .smartEmptyState[data-reason="filtered"] .smartEmptyMark {
@@ -213,6 +208,22 @@
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes document-sheet-unfold {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+
+  45% {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
   }
 }
 
@@ -288,15 +299,11 @@
 @media (prefers-reduced-motion: reduce) {
   .modalSurface,
   .modalRoot[data-entered="true"] .modalSurface,
+  .modalRoot[data-entered="true"] .modalSurface[data-origin="trigger"],
   .modalRoot[data-entered="true"] .modalSurface::before,
-  .drawerPanel[data-entered="true"]::before,
   .modalRoot[data-entered="true"] .modalHeader,
   .modalRoot[data-entered="true"] .modalContent,
   .modalRoot[data-entered="true"] .modalFooter,
-  .drawerPanel[data-entered="true"] .drawerHeader,
-  .drawerPanel[data-entered="true"] .drawerContent,
-  .drawerPanel[data-entered="true"] .drawerFooter,
-  .drawerBackdrop,
   .uploadZone:global(.is-dragging),
   .uploadRow:global(.is-success),
   .smartEmptyMark,

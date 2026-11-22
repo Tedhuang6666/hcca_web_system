@@ -99,7 +99,6 @@ celery_app.conf.update(
         Queue("default"),
         Queue("email"),
         Queue("backup"),
-        Queue("documents"),
         Queue("recovery"),
     ),
     task_routes={

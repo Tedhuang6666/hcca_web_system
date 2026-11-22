@@ -238,7 +238,7 @@ function actionTone(action: string) {
   }
   return {
     background: "var(--primary-dim)",
-    color: "var(--primary)",
+    color: "var(--primary-text)",
     border: "1px solid var(--border-strong)",
   };
 }
@@ -285,7 +285,7 @@ function MetaPreview({ meta }: { meta: Record<string, unknown> }) {
       {entries.map(([key, value]) => (
         <span
           key={key}
-          className="rounded-md px-2 py-1 text-[11px]"
+          className="rounded-md px-2 py-1 text-xs"
           style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
           {key}: {typeof value === "object" ? JSON.stringify(value) : String(value)}
         </span>
@@ -299,7 +299,7 @@ function EmptyState({ loading }: { loading: boolean }) {
     <div className="card flex min-h-[260px] flex-col items-center justify-center gap-3 p-8 text-center">
       <div
         className="flex h-12 w-12 items-center justify-center rounded-full"
-        style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
+        style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
           strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M9 11l3 3L22 4" />
@@ -445,15 +445,9 @@ export default function AuditLogsPage() {
     <div className="mx-auto max-w-7xl space-y-5">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--primary)" }}>
-            AUDIT TRAIL
-          </p>
-          <h1 className="mt-1 text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
+          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
             稽核日誌
           </h1>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            查看所有操作軌跡
-          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <AnimatedDownloadButton
@@ -591,7 +585,7 @@ export default function AuditLogsPage() {
             className="flex items-end justify-between gap-3 rounded-lg px-3 py-2 lg:min-w-56"
             style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
             <div>
-              <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>目前結果</p>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>目前結果</p>
               <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
                 {logs.length} 筆{hasMore ? "+" : ""}
               </p>
@@ -599,7 +593,7 @@ export default function AuditLogsPage() {
             {activeFilterCount > 0 && (
               <span
                 className="rounded-full px-2 py-1 text-xs font-medium"
-                style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
+                style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
                 {activeFilterCount} 個篩選
               </span>
             )}
@@ -654,7 +648,7 @@ export default function AuditLogsPage() {
                           {log.actor_email ?? "系統"}
                         </p>
                         {log.actor_id && (
-                          <p className="font-mono text-[11px]" style={{ color: "var(--text-muted)" }}>
+                          <p className="font-mono text-xs" style={{ color: "var(--text-muted)" }}>
                             {shortId(log.actor_id)}
                           </p>
                         )}
@@ -665,7 +659,7 @@ export default function AuditLogsPage() {
                         <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
                           {entityLabel(log.entity_type)}
                         </p>
-                        <p className="font-mono text-[11px]" style={{ color: "var(--text-muted)" }}>
+                        <p className="font-mono text-xs" style={{ color: "var(--text-muted)" }}>
                           {shortId(log.entity_id)}
                         </p>
                       </div>
@@ -708,7 +702,7 @@ export default function AuditLogsPage() {
         >
           <div className="space-y-4">
             <div>
-              <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--primary)" }}>
+              <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--primary-text)" }}>
                 {actionLabel(selectedLog.action)}
               </p>
               <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
@@ -726,7 +720,7 @@ export default function AuditLogsPage() {
                 ["日誌 ID", selectedLog.id],
               ].map(([label, value]) => (
                 <div key={label} className="rounded-lg p-3" style={{ background: "var(--bg-hover)" }}>
-                  <dt className="text-[11px] font-medium" style={{ color: "var(--text-muted)" }}>{label}</dt>
+                  <dt className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>{label}</dt>
                   <dd className="mt-1 break-all text-sm" style={{ color: "var(--text-primary)" }}>{value}</dd>
                 </div>
               ))}

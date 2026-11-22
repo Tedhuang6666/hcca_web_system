@@ -46,8 +46,7 @@ export default async function CmsPage({
       <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
         <article className="space-y-6">
           <header>
-            <p className="text-sm font-semibold text-[var(--primary)]">Public Page</p>
-            <h1 className="mt-2 text-3xl font-bold">{page.title}</h1>
+            <h1 className="text-3xl font-bold">{page.title}</h1>
             {page.summary && (
               <p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--text-secondary)]">
                 {page.summary}

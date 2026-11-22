@@ -27,6 +27,7 @@ import PeopleManagementRedirect from "@/components/admin/PeopleManagementRedirec
 import MobileBackToList from "@/components/ui/MobileBackToList";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import Modal from "@/components/ui/Modal";
+import TabBar from "@/components/ui/TabBar";
 import ClassCorrectionRequestsPanel from "@/components/admin/ClassCorrectionRequestsPanel";
 import type {
   ClassMemberOut,
@@ -118,7 +119,7 @@ function RepresentativeOverview({
           ) : missing.length === 0 ? (
             <div className="mt-4 flex items-center gap-2 rounded-md px-3 py-3 text-sm" role="status"
               style={{ background: "color-mix(in srgb, var(--primary) 8%, transparent)", color: "var(--text-primary)" }}>
-              <CircleCheck size={18} aria-hidden style={{ color: "var(--primary)" }} />
+              <CircleCheck size={18} aria-hidden style={{ color: "var(--primary-text)" }} />
               目前啟用的 {items.length} 個班級都已任命班代。
             </div>
           ) : (
@@ -376,7 +377,7 @@ function CreateClassPanel({ onCreated }: { onCreated: () => void }) {
               onClick={() => setMode(key)}
               className="rounded px-3 py-1.5 text-xs font-medium"
               style={mode === key
-                ? { background: "var(--primary-dim)", color: "var(--primary)" }
+                ? { background: "var(--primary-dim)", color: "var(--primary-text)" }
                 : { color: "var(--text-muted)" }}>
               {key === "bulk" ? "批量" : "單班"}
             </button>
@@ -526,7 +527,7 @@ function ClassList({
                 disabled={bulkBusy}
                 onClick={() => onBulkAction("activate")}
                 className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs disabled:opacity-50"
-                style={{ border: "1px solid var(--border)", color: "var(--primary)" }}>
+                style={{ border: "1px solid var(--border)", color: "var(--primary-text)" }}>
                 <Power size={14} /> 批量啟用
               </button>
               <button
@@ -558,7 +559,7 @@ function ClassList({
                 onClick={() => toggleSelected(item.id)}
                 className="flex w-10 flex-shrink-0 items-center justify-center"
                 aria-label={selected ? "取消選取班級" : "選取班級"}
-                style={{ color: selected ? "var(--primary)" : "var(--text-muted)" }}>
+                style={{ color: selected ? "var(--primary-text)" : "var(--text-muted)" }}>
                 {selected ? <CheckSquare size={16} /> : <Square size={16} />}
               </button>
               <button
@@ -568,7 +569,7 @@ function ClassList({
                 <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold"
-                    style={{ color: active ? "var(--primary)" : "var(--text-primary)" }}>
+                    style={{ color: active ? "var(--primary-text)" : "var(--text-primary)" }}>
                     {classTitle(item)}
                   </p>
                   <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
@@ -576,7 +577,7 @@ function ClassList({
                   </p>
                 </div>
                 <span
-                  className="rounded px-2 py-1 text-[11px]"
+                  className="rounded px-2 py-1 text-xs"
                   style={{
                     color: item.is_active ? "#047857" : "var(--text-muted)",
                     background: item.is_active ? "rgba(16,185,129,0.12)" : "transparent",
@@ -987,7 +988,7 @@ function MembershipPanel({
         <button type="button" className="btn btn-ghost min-h-11" onClick={onManageRoles}>設定班代（議員）與幹部</button>
       </div>
       <details>
-        <summary className="min-h-11 cursor-pointer py-2 text-sm font-medium" style={{ color: "var(--primary)" }}>新增班級成員</summary>
+        <summary className="min-h-11 cursor-pointer py-2 text-sm font-medium" style={{ color: "var(--primary-text)" }}>新增班級成員</summary>
         <UserPicker placeholder="搜尋姓名、Email 或學號加入本班" onPick={onAdd} />
       </details>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -1255,7 +1256,7 @@ function RosterPanel({
                     <td className="whitespace-nowrap px-4 py-2 text-right">
                       {editing ? (
                         <>
-                          <button type="button" className="mr-3 text-xs font-medium" style={{ color: "var(--primary)" }}
+                          <button type="button" className="mr-3 text-xs font-medium" style={{ color: "var(--primary-text)" }}
                             onClick={async () => {
                               const number = Number(editSeat);
                               if (!Number.isInteger(number) || number < 1 || !editStudentId.trim()) {
@@ -1270,7 +1271,7 @@ function RosterPanel({
                         </>
                       ) : (
                         <>
-                          <button type="button" className="mr-3 text-xs" style={{ color: "var(--primary)" }}
+                          <button type="button" className="mr-3 text-xs" style={{ color: "var(--primary-text)" }}
                             onClick={() => {
                               setEditingId(entry.id);
                               setEditSeat(String(entry.seat_number));
@@ -1535,7 +1536,7 @@ function ClassWorkspace({
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <GraduationCap size={22} style={{ color: "var(--primary)" }} />
+              <GraduationCap size={22} style={{ color: "var(--primary-text)" }} />
               <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
                 {classTitle(detail)}
               </h1>
@@ -1562,21 +1563,17 @@ function ClassWorkspace({
         </div>}
       </section>
 
-      <nav className="module-tabs-scroll max-w-full overflow-x-auto" aria-label="班級管理分頁">
-        <div className="module-tabs-list">
-        {tabs.map((item) => (
-          <button
-            key={item.key}
-            type="button"
-            onClick={() => setTab(item.key)}
-            aria-pressed={tab === item.key}
-            className={`module-tab-link min-h-11 cursor-pointer${tab === item.key ? " is-active" : ""}`}>
-            <span>{item.label}</span>
-            {item.count !== undefined && <span className="ml-1 text-xs">{item.count}</span>}
-          </button>
-        ))}
-        </div>
-      </nav>
+      <TabBar
+        label="班級管理分頁"
+        tabClassName="min-h-11"
+        items={tabs.map(({ key, label, count }) => ({
+          key,
+          label,
+          meta: count !== undefined ? <span className="ml-1 text-xs">{count}</span> : undefined,
+        }))}
+        value={tab}
+        onChange={setTab}
+      />
 
       {tab === "roles" && (
         <div key="roles" className="tab-panel-transition">
@@ -1626,7 +1623,7 @@ function RosterFileImportPanel({ onImported }: { onImported: () => void }) {
   return (
     <section className="rounded-md p-4" style={{ border: "1px solid var(--border)" }}>
       <div className="flex items-start gap-3">
-        <FileUp size={18} style={{ color: "var(--primary)", marginTop: 2 }} />
+        <FileUp size={18} style={{ color: "var(--primary-text)", marginTop: 2 }} />
         <div>
           <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
             匯入編班名單檔案
