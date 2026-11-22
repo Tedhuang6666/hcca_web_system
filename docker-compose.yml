@@ -14,6 +14,7 @@ x-api-common: &api-common
     - .env
   environment:
     <<: *development-env
+    PRIVACY_EXPORT_DIR: /app/privacy-exports
     DEBUG: "true"
     ENABLE_API_DOCS: "true"
     ALLOWED_ORIGINS: '["http://localhost:3000","http://127.0.0.1:3000"]'
@@ -46,6 +47,7 @@ x-api-common: &api-common
       condition: service_healthy
   volumes:
     - ./uploads:/app/uploads
+    - privacy-exports:/app/privacy-exports
 
 services:
   # ── PostgreSQL ────────────────────────────────────────────────
@@ -615,6 +617,7 @@ volumes:
   pgdata:
   redisdata:
   meilidata:
+  privacy-exports:
   celerybeat:
   prometheusdata:
   grafanadata:

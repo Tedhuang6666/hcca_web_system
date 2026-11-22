@@ -15,6 +15,7 @@ x-api-common: &api-common
     - ${PROD_ENV_FILE:-.env.production}
   environment: &api-env
     HOME: /tmp
+    PRIVACY_EXPORT_DIR: /app/privacy-exports
     APP_RELEASE: ${APP_RELEASE:-}
     BUILD_COMMIT: ${BUILD_COMMIT:-}
     DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
@@ -48,6 +49,7 @@ x-api-common: &api-common
       condition: service_healthy
   volumes:
     - uploads:/app/uploads
+    - privacy-exports:/app/privacy-exports
     - "${GOOGLE_DRIVE_SERVICE_ACCOUNT_HOST_FILE:-/dev/null}:/run/secrets/google-drive-service-account.json:ro"
 
 x-api-service: &api-service
@@ -301,6 +303,7 @@ volumes:
   rediscachedata:
   redisbrokerdata:
   uploads:
+  privacy-exports:
   celerybeat:
   caddydata:
   caddyconfig:

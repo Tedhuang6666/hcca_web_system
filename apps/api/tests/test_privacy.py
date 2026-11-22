@@ -25,6 +25,7 @@ from api.models.user import User
 def _exports_in_tmp(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     """測試匯出檔寫入暫存目錄，不在 repo 根目錄留下含個資的 zip。"""
     monkeypatch.setattr(settings, "DB_BACKUP_DIR", str(tmp_path / "backups"))
+    monkeypatch.setattr(settings, "PRIVACY_EXPORT_DIR", str(tmp_path / "private_exports"))
 
 
 def _authed(factory: Callable[[User], AsyncClient], user: User) -> AsyncClient:
