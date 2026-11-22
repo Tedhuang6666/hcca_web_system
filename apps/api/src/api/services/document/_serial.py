@@ -10,7 +10,7 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.clock import now_local
-from api.models.document import DocumentSerialTemplate, YearMode
+from api.models.document import Document, DocumentSerialTemplate, YearMode
 from api.schemas.document import SerialTemplateCreate
 
 logger = logging.getLogger(__name__)
@@ -37,13 +37,25 @@ async def generate_serial_from_template(
     else:
         locked_template.counter += 1
 
-    counter_val = locked_template.counter
-    await session.flush()
+    def _format(counter: int) -> str:
+        return (
+            f"{locked_template.org_prefix}{locked_template.category_char}"
+            f"字第 {current_year}{counter:07d} 號"
+        )
 
-    return (
-        f"{locked_template.org_prefix}{locked_template.category_char}"
-        f"字第 {current_year}{counter_val:07d} 號"
-    )
+    # 手動輸入的字號可能已占用下一個流水號；在模板鎖內跳過已存在的號碼，
+    # 避免之後送出時撞唯一約束而 500。
+    serial = _format(locked_template.counter)
+    for _ in range(1000):
+        taken = await session.scalar(
+            select(Document.id).where(Document.serial_number == serial).limit(1)
+        )
+        if taken is None:
+            break
+        locked_template.counter += 1
+        serial = _format(locked_template.counter)
+    await session.flush()
+    return serial
 
 
 async def build_org_serial_prefix(

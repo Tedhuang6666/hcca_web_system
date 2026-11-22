@@ -135,23 +135,23 @@ export default function ShortLinksManager({
   };
 
   if (!isReady) {
-    return <main className="qr-tool-page" aria-busy="true"><div className="qr-tool-loading">讀取權限中…</div></main>;
+    return <div className="qr-tool-page" aria-busy="true"><div className="qr-tool-loading">讀取權限中…</div></div>;
   }
 
   if (!canManage) {
     return (
-      <main className="qr-tool-page">
+      <div className="qr-tool-page">
         <section className="qr-access-denied" aria-labelledby="short-links-access-title">
           <span className="qr-access-icon" aria-hidden="true"><Link2 size={22} /></span>
           <h2 id="short-links-access-title">沒有經營工具權限</h2>
           <p>這個工具只開放給被指派 <code>{PERMISSION}</code> 的職位。請洽系統管理員加入對應權限組。</p>
         </section>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="qr-tool-page short-links-page">
+    <div className="qr-tool-page short-links-page">
       <div className="qr-tool-shell short-links-shell">
         <section className="short-link-form-panel" aria-labelledby="short-link-form-title">
           <div className="short-links-section-heading">
@@ -316,6 +316,6 @@ export default function ShortLinksManager({
           )}
         </section>
       </div>
-    </main>
+    </div>
   );
 }

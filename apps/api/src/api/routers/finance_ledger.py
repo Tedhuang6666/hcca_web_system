@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -155,6 +156,8 @@ async def list_periods(ledger_id: uuid.UUID, db: DbDep, _: CurrentUser) -> list[
 
 @router.delete("/test-reset", response_model=FinanceResetOut)
 async def clear_all_finance_test_data(db: DbDep, user: CurrentUser) -> FinanceResetOut:
+    if os.getenv("ENVIRONMENT", "development").lower() in {"prod", "production"}:
+        raise HTTPException(status_code=404, detail="Not Found")
     if not user.is_superuser:
         raise HTTPException(status_code=403, detail="僅系統管理員可清除全部財務資料")
 

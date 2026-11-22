@@ -803,14 +803,14 @@ export default function DocumentDetailPageClient({
           <UserPicker selectedIds={approverIds} onChange={setApproverIds} />
           <button onClick={handleSubmit} disabled={!approverIds.length}
             className="w-full py-2.5 rounded-lg text-sm font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-90 disabled:opacity-40"
-            style={{ background: "rgba(251,146,60,0.15)", color: "#fb923c", border: "1px solid rgba(251,146,60,0.3)" }}>
+            style={{ background: "var(--warning-dim)", color: "var(--warning)", border: "1px solid var(--warning-border)" }}>
             確認送審（{approverIds.length} 位審核人）
           </button>
         </div>
       )}
 
       {dispatchOpen && (
-        <div className="card p-4 space-y-4" role="dialog" aria-modal="true" aria-labelledby="dispatch-title">
+        <section className="card p-4 space-y-4" aria-labelledby="dispatch-title">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 id="dispatch-title" className="text-sm font-semibold">指定派送</h2>
@@ -897,7 +897,7 @@ export default function DocumentDetailPageClient({
               {dispatchBusy ? "派送中…" : "確認派送"}
             </button>
           </div>
-        </div>
+        </section>
       )}
 
       <div className="document-workspace-body">

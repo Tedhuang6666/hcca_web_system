@@ -72,7 +72,7 @@ export default function PublicationsPage() {
   };
 
   return (
-    <main className="mx-auto max-w-6xl space-y-6 p-6">
+    <div className="mx-auto max-w-6xl space-y-6 p-6">
       <header className="flex items-end justify-between gap-3">
         <h1 className="text-2xl font-semibold">發布中心</h1>
         <Link className="btn btn-primary" href="/publications/new">新增發布</Link>
@@ -116,6 +116,6 @@ export default function PublicationsPage() {
           ))}
         </section>
       )}
-    </main>
+    </div>
   );
 }

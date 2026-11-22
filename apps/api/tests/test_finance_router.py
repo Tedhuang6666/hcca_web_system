@@ -672,11 +672,20 @@ async def test_budget_expense_without_items_is_visible_on_public_budget(
 
 
 async def test_finance_test_reset_is_superuser_only_and_clears_finance_data(
-    db_session, member_user, authed_client_factory
+    db_session, member_user, authed_client_factory, monkeypatch
 ) -> None:
     ledger, _, _, _ = await _make_ledger(db_session)
     client = authed_client_factory(member_user)
 
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    disabled = await client.delete("/finance/test-reset")
+    assert disabled.status_code == 404
+    assert (
+        await db_session.scalar(select(FinanceLedger.id).where(FinanceLedger.id == ledger.id))
+        == ledger.id
+    )
+
+    monkeypatch.setenv("ENVIRONMENT", "test")
     forbidden = await client.delete("/finance/test-reset")
     assert forbidden.status_code == 403
     assert (

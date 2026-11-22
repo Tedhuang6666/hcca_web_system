@@ -172,7 +172,7 @@ function buildQrSvg(matrix: QrMatrix, settings: QrSettings, includeRole = false)
 
 function AccessDenied() {
   return (
-    <main className="qr-tool-page">
+    <div className="qr-tool-page">
       <section className="qr-access-denied" aria-labelledby="qr-access-title">
         <span className="qr-access-icon" aria-hidden="true"><LockKeyhole size={23} /></span>
         <h1 id="qr-access-title">沒有經營工具權限</h1>
@@ -180,7 +180,7 @@ function AccessDenied() {
           請洽系統管理員開啟權限。
         </p>
       </section>
-    </main>
+    </div>
   );
 }
 
@@ -323,7 +323,7 @@ export default function QrCodeGenerator({ initialContent }: { initialContent?: s
   };
 
   if (!hydrated) {
-    return <main className="qr-tool-page" aria-busy="true"><div className="qr-tool-loading">讀取權限中…</div></main>;
+    return <div className="qr-tool-page" aria-busy="true"><div className="qr-tool-loading">讀取權限中…</div></div>;
   }
   if (!can(PERMISSION)) return <AccessDenied />;
 
@@ -333,7 +333,7 @@ export default function QrCodeGenerator({ initialContent }: { initialContent?: s
     || (defaultLogoDataUrl !== "" && settings.logoDataUrl === defaultLogoDataUrl);
 
   return (
-    <main className="qr-tool-page">
+    <div className="qr-tool-page">
       <div className="qr-tool-shell">
         <header className="qr-tool-header">
           <div>
@@ -507,6 +507,6 @@ export default function QrCodeGenerator({ initialContent }: { initialContent?: s
 
         <div className="qr-tool-toast" aria-live="polite" aria-atomic="true">{notice && notice !== "內容已複製" ? notice : ""}</div>
       </div>
-    </main>
+    </div>
   );
 }

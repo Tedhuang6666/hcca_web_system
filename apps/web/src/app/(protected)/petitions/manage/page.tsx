@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { ApiError, orgsApi, petitionsApi } from "@/lib/api";
@@ -64,6 +64,8 @@ const ACTION_CONFIRM: Record<string, { title: string; description: string; confi
 
 export default function PetitionManagePage() {
   const confirm = useConfirm();
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const hadSelectedCaseRef = useRef(false);
   const [items, setItems] = useState<PetitionCaseListItem[]>(() => cacheGet<PetitionCaseListItem[]>(PET_LIST_KEY) ?? []);
   const [selected, setSelected] = useState<PetitionCaseOut | null>(null);
   const [stats, setStats] = useState<PetitionStatsOut | null>(() => cacheGet<PetitionStatsOut>(PET_STATS_KEY) ?? null);
@@ -101,6 +103,17 @@ export default function PetitionManagePage() {
   const [confirmingConfidential, setConfirmingConfidential] = useState(false);
   const [confidentialReason, setConfidentialReason] = useState("");
   const { can } = usePermissions();
+  const selectedCaseId = selected?.id;
+
+  useEffect(() => {
+    if (selectedCaseId) {
+      hadSelectedCaseRef.current = true;
+      document.getElementById("petition-detail-title")?.focus();
+    } else if (hadSelectedCaseRef.current) {
+      hadSelectedCaseRef.current = false;
+      searchInputRef.current?.focus();
+    }
+  }, [selectedCaseId]);
 
   const effectiveStatus = status || queueStatus(queue);
   const assignedToMe = queue === "mine";
@@ -519,27 +532,30 @@ export default function PetitionManagePage() {
         </section>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+      <div className="flex gap-2 overflow-x-auto pb-1 sm:grid sm:grid-cols-3 lg:grid-cols-6" role="group" aria-label="案件佇列">
         {queueCards.map((card) => (
           <button
             key={card.key}
             onClick={() => { setQueue(card.key); setStatus(""); }}
-            className="card card-hover p-4 text-left"
+            aria-pressed={queue === card.key && !status}
+            className="card card-hover flex min-w-32 shrink-0 items-baseline justify-between gap-3 p-3 text-left sm:min-w-0"
             style={{
               borderColor: queue === card.key ? "var(--primary)" : "var(--border)",
               background: queue === card.key ? "var(--primary-dim)" : "var(--card-bg)",
             }}>
-            <p className="text-xs" style={{ color: "var(--text-muted)" }}>{card.label}</p>
-            <p className="text-2xl font-semibold mt-1" style={{ color: "var(--text-primary)" }}>{card.value}</p>
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>{card.label}</span>
+            <span className="text-lg font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>{card.value}</span>
           </button>
         ))}
       </div>
 
-      <div className="grid min-w-0 lg:grid-cols-[0.9fr_1.25fr] gap-5">
-        <section className="card min-w-0 p-5 space-y-4">
+      <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(18rem,0.82fr)_minmax(0,1.35fr)] xl:gap-5">
+        <section className={`card min-w-0 space-y-4 p-4 sm:p-5 ${selected ? "hidden xl:block" : ""}`} aria-label="陳情案件清單">
           <div className="grid sm:grid-cols-[1fr_auto] gap-2">
             <input
               className="input w-full"
+              ref={searchInputRef}
+              aria-label="搜尋案號或標題"
               placeholder="搜尋案號或標題"
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
@@ -548,13 +564,14 @@ export default function PetitionManagePage() {
           </div>
           <select
             className="input w-full"
+            aria-label="依案件狀態篩選"
             value={status}
             onChange={(e) => { setStatus(e.target.value as PetitionStatus | ""); setQueue("all"); }}>
             <option value="">依佇列篩選</option>
             {STATUS_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
 
-          <div className="space-y-2 max-h-[72vh] overflow-auto">
+          <div className="max-h-[72vh] space-y-2 overflow-auto">
             {items.length === 0 ? (
               <p className="text-sm" style={{ color: "var(--text-muted)" }}>目前沒有符合條件的案件。</p>
             ) : items.map((item) => (
@@ -588,7 +605,7 @@ export default function PetitionManagePage() {
           </div>
         </section>
 
-        <section className="card min-w-0 p-5 space-y-5">
+        <section className={`card min-w-0 space-y-5 p-4 sm:p-5 ${!selected ? "hidden xl:block" : ""}`} aria-label="陳情案件詳情與處理">
           {!selected ? (
             <div className="text-sm" style={{ color: "var(--text-muted)" }}>
               請選擇案件
@@ -609,10 +626,20 @@ export default function PetitionManagePage() {
             </>
           ) : (
             <>
+              <button className="btn btn-ghost w-full xl:hidden" onClick={() => setSelected(null)}>
+                返回案件清單
+              </button>
               <div className="flex min-w-0 items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-sm" style={{ color: "var(--text-muted)" }}>#{selected.case_number} · {selected.type_name}</p>
-                  <h2 className="break-words text-lg font-semibold" style={{ color: "var(--text-primary)" }}>{selected.title}</h2>
+                  <h2
+                    id="petition-detail-title"
+                    tabIndex={-1}
+                    className="break-words text-lg font-semibold"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    {selected.title}
+                  </h2>
                   <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
                     {selected.current_org_name} · {selected.assigned_to_name || "尚未分派承辦人"} · 更新 {fmt(selected.updated_at)}
                   </p>
@@ -783,11 +810,17 @@ export default function PetitionManagePage() {
                     <h3 className="font-medium">分派給機關內部承辦人</h3>
                     <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>只會列出目前負責機關內有效任期的成員。</p>
                   </div>
-                  <select className="input w-full" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
-                    {users.length === 0 && <option value="">無可分派成員</option>}
-                    {users.map((u) => <option key={u.id} value={u.id}>{u.display_name} · {u.email}</option>)}
-                  </select>
-                  <textarea className="input w-full min-h-20" value={internalNote} onChange={(e) => setInternalNote(e.target.value)} placeholder="分派備註（內部可見，選填）" />
+                  <label className="block space-y-1.5">
+                    <span className="text-sm font-medium">承辦人</span>
+                    <select className="input w-full" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
+                      {users.length === 0 && <option value="">無可分派成員</option>}
+                      {users.map((u) => <option key={u.id} value={u.id}>{u.display_name} · {u.email}</option>)}
+                    </select>
+                  </label>
+                  <label className="block space-y-1.5">
+                    <span className="text-sm font-medium">分派備註（內部可見，選填）</span>
+                    <textarea className="input w-full min-h-20" value={internalNote} onChange={(e) => setInternalNote(e.target.value)} placeholder="補充分派背景或交接事項" />
+                  </label>
                   <button className="btn btn-primary" disabled={!assignee || busy} onClick={() => run("assign")}>確認分派</button>
                 </div>
               )}
@@ -798,8 +831,14 @@ export default function PetitionManagePage() {
                     <h3 className="font-medium">處理、要求補件或正式回覆</h3>
                     <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>公開內容會顯示給陳情人；內部備註只給幹部看。</p>
                   </div>
-                  <textarea className="input w-full min-h-32" value={publicText} onChange={(e) => setPublicText(e.target.value)} placeholder="公開說明、補件原因或正式回覆" />
-                  <textarea className="input w-full min-h-20" value={internalNote} onChange={(e) => setInternalNote(e.target.value)} placeholder="內部備註（選填）" />
+                  <label className="block space-y-1.5">
+                    <span className="text-sm font-medium">公開說明、補件原因或正式回覆</span>
+                    <textarea className="input w-full min-h-32" value={publicText} onChange={(e) => setPublicText(e.target.value)} placeholder="輸入會提供給陳情人的內容" />
+                  </label>
+                  <label className="block space-y-1.5">
+                    <span className="text-sm font-medium">內部備註（選填）</span>
+                    <textarea className="input w-full min-h-20" value={internalNote} onChange={(e) => setInternalNote(e.target.value)} placeholder="僅供承辦人與幹部查看" />
+                  </label>
                   <AnimatedFileUpload
                     key={fileUploadKey}
                     accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
@@ -828,11 +867,17 @@ export default function PetitionManagePage() {
                     <h3 className="font-medium">跨機關分案 / 轉派</h3>
                     <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>轉派後案件會移到目標機關工作台，原承辦人會被清空，目標機關可重新分派。</p>
                   </div>
-                  <select className="input w-full" value={targetOrg} onChange={(e) => setTargetOrg(e.target.value)}>
-                    <option value="">選擇目標機關</option>
-                    {orgs.filter((o) => o.id !== selected.current_org_id).map((o) => <option key={o.id} value={o.id}>{orgDisplayName(o, orgs)}</option>)}
-                  </select>
-                  <textarea className="input w-full min-h-28" value={publicText} onChange={(e) => setPublicText(e.target.value)} placeholder="轉派理由（會寫入公開處理事件）" />
+                  <label className="block space-y-1.5">
+                    <span className="text-sm font-medium">目標機關</span>
+                    <select className="input w-full" value={targetOrg} onChange={(e) => setTargetOrg(e.target.value)}>
+                      <option value="">選擇目標機關</option>
+                      {orgs.filter((o) => o.id !== selected.current_org_id).map((o) => <option key={o.id} value={o.id}>{orgDisplayName(o, orgs)}</option>)}
+                    </select>
+                  </label>
+                  <label className="block space-y-1.5">
+                    <span className="text-sm font-medium">轉派理由（會寫入公開處理事件）</span>
+                    <textarea className="input w-full min-h-28" value={publicText} onChange={(e) => setPublicText(e.target.value)} placeholder="說明轉派原因與後續承辦方向" />
+                  </label>
                   <button className="btn btn-primary" disabled={!targetOrg || !publicText.trim() || busy} onClick={() => run("transfer")}>確認跨機關轉派</button>
                 </div>
               )}
@@ -843,8 +888,14 @@ export default function PetitionManagePage() {
                     <h3 className="font-medium">駁回、不受理或結案</h3>
                     <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>駁回/不受理必須填公開原因；結案可填結案說明。</p>
                   </div>
-                  <textarea className="input w-full min-h-28" value={publicText} onChange={(e) => setPublicText(e.target.value)} placeholder="公開原因或結案說明" />
-                  <textarea className="input w-full min-h-20" value={internalNote} onChange={(e) => setInternalNote(e.target.value)} placeholder="內部備註（選填）" />
+                  <label className="block space-y-1.5">
+                    <span className="text-sm font-medium">公開原因或結案說明</span>
+                    <textarea className="input w-full min-h-28" value={publicText} onChange={(e) => setPublicText(e.target.value)} placeholder="駁回時必填；結案時可補充說明" />
+                  </label>
+                  <label className="block space-y-1.5">
+                    <span className="text-sm font-medium">內部備註（選填）</span>
+                    <textarea className="input w-full min-h-20" value={internalNote} onChange={(e) => setInternalNote(e.target.value)} placeholder="僅供承辦人與幹部查看" />
+                  </label>
                   <div className="flex flex-wrap gap-2">
                     <button className="btn btn-ghost" disabled={!publicText.trim() || busy} onClick={() => run("reject")}>駁回 / 不受理</button>
                     <button className="btn btn-primary" disabled={busy} onClick={() => run("close")}>結案</button>
@@ -880,8 +931,14 @@ export default function PetitionManagePage() {
                   )}
                   {(selected.public_status === "not_requested" || selected.public_status === "declined") && (
                     <>
-                      <input className="input w-full" value={publicTitle} onChange={(e) => setPublicTitle(e.target.value)} placeholder="公開標題（可移除個資）" />
-                      <textarea className="input w-full min-h-40" value={publicContent} onChange={(e) => setPublicContent(e.target.value)} placeholder="公開內容（可移除個資）" />
+                      <label className="block space-y-1.5">
+                        <span className="text-sm font-medium">公開標題（可移除個資）</span>
+                        <input className="input w-full" value={publicTitle} onChange={(e) => setPublicTitle(e.target.value)} placeholder="輸入對外顯示的標題" />
+                      </label>
+                      <label className="block space-y-1.5">
+                        <span className="text-sm font-medium">公開內容（可移除個資）</span>
+                        <textarea className="input w-full min-h-40" value={publicContent} onChange={(e) => setPublicContent(e.target.value)} placeholder="輸入陳情人同意後公開的內容" />
+                      </label>
                       <button className="btn btn-primary" disabled={busy || !publicTitle.trim() || !publicContent.trim()} onClick={() => run("request_public")}>要求陳情人確認公開</button>
                     </>
                   )}
@@ -913,7 +970,10 @@ export default function PetitionManagePage() {
                     onFiles={(files) => setFile(files[0] ?? null)}
                     onRemove={() => setFile(null)}
                   />
-                  <textarea className="input w-full min-h-24" value={internalNote} onChange={(e) => setInternalNote(e.target.value)} placeholder="新增內部備註" />
+                  <label className="block space-y-1.5">
+                    <span className="text-sm font-medium">新增內部備註</span>
+                    <textarea className="input w-full min-h-24" value={internalNote} onChange={(e) => setInternalNote(e.target.value)} placeholder="僅供承辦人與幹部查看" />
+                  </label>
                   <div className="flex flex-wrap gap-2">
                     <button className="btn btn-primary" disabled={!file || busy} onClick={() => void uploadStandaloneAttachment()}>
                       {busy ? "處理中…" : "上傳附件"}
@@ -931,8 +991,14 @@ export default function PetitionManagePage() {
                   <div key={event.id} className="text-sm pl-3 py-1" style={{ borderLeft: "2px solid var(--border)" }}>
                     {editingEventId === event.id ? (
                       <div className="space-y-2">
-                        <input className="input w-full" value={editingEventTitle} onChange={(e) => setEditingEventTitle(e.target.value)} />
-                        <textarea className="input w-full min-h-24" value={editingEventContent} onChange={(e) => setEditingEventContent(e.target.value)} />
+                        <label className="block space-y-1.5">
+                          <span className="text-sm font-medium">事件標題</span>
+                          <input className="input w-full" value={editingEventTitle} onChange={(e) => setEditingEventTitle(e.target.value)} />
+                        </label>
+                        <label className="block space-y-1.5">
+                          <span className="text-sm font-medium">事件內容</span>
+                          <textarea className="input w-full min-h-24" value={editingEventContent} onChange={(e) => setEditingEventContent(e.target.value)} />
+                        </label>
                         <div className="flex gap-2">
                           <button className="btn btn-primary" disabled={busy || (!editingEventTitle.trim() && !editingEventContent.trim())} onClick={saveEventEdit}>儲存編輯</button>
                           <button className="btn btn-ghost" disabled={busy} onClick={() => setEditingEventId(null)}>取消</button>

@@ -74,7 +74,7 @@ export default function NewPublicationPage() {
   };
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-6">
+    <div className="mx-auto max-w-4xl space-y-6 p-6">
       <header>
         <p className="text-sm" style={{ color: "var(--text-muted)" }}>發布中心</p>
         <h1 className="text-2xl font-semibold">新增多渠道發布</h1>
@@ -108,6 +108,6 @@ export default function NewPublicationPage() {
         </div>
         <button className="btn btn-primary" onClick={() => void create()}>建立發布任務</button>
       </section>
-    </main>
+    </div>
   );
 }

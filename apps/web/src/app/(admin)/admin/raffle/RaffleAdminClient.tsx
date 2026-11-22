@@ -166,15 +166,15 @@ export default function RaffleAdminClient() {
   const finiteRemaining = selected?.prizes.reduce((sum, prize) => sum + (prize.remaining_quantity ?? 0), 0) ?? 0;
 
   if (!permissionChecked) {
-    return <main className={styles.denied}><Lock size={30} /><h1>正在確認管理權限</h1><p>正在連線確認抽獎管理權限。</p></main>;
+    return <div className={styles.denied}><Lock size={30} /><h1>正在確認管理權限</h1><p>正在連線確認抽獎管理權限。</p></div>;
   }
 
   if (accessDenied) {
-    return <main className={styles.denied}><Lock size={30} /><h1>需要管理員權限</h1><p>抽獎管理僅開放給管理員。</p></main>;
+    return <div className={styles.denied}><Lock size={30} /><h1>需要管理員權限</h1><p>抽獎管理僅開放給管理員。</p></div>;
   }
 
   return (
-    <main className={styles.page}>
+    <div className={styles.page}>
       <header className={styles.pageHeader}>
         <div><div className={styles.kicker}>現場工具</div><h1>抽獎管理</h1><p>可調整獎池、單一驗證碼；多台平板可同時使用。</p></div>
         <button className={styles.ghostButton} type="button" onClick={() => void load()}><RefreshCw size={15} /> 重新整理</button>
@@ -219,7 +219,7 @@ export default function RaffleAdminClient() {
           )}
         </section>
       </div>
-    </main>
+    </div>
   );
 }
 

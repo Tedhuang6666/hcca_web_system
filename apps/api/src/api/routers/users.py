@@ -14,6 +14,7 @@ from api.core.auth_cookies import (
     delete_auth_cookies,
     refresh_token_from_cookies,
 )
+from api.core.config import settings
 from api.core.database import get_db
 from api.dependencies.auth import get_current_active_user
 from api.models.audit_log import AuditLog
@@ -157,6 +158,9 @@ async def list_users(
     cleaned = (search or "").replace("\x00", "").strip()
     if len(cleaned) < 2:
         return []
+    if not allow_sensitive_search and not _is_school_member(current_user):
+        # 預設允許任何 Google 帳號登入；校外帳號不能藉由姓名搜尋列舉全校成員。
+        return []
     escaped = cleaned.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     q = select(User).where(User.is_active == True)  # noqa: E712
     pattern = f"%{escaped}%"
@@ -174,6 +178,12 @@ async def list_users(
     result = await db.execute(q)
     users = list(result.scalars().all())
     return [_user_summary(user, include_sensitive=allow_sensitive_search) for user in users]
+
+
+def _is_school_member(user: User) -> bool:
+    normalized = user.email.strip().lower()
+    domain = normalized.rsplit("@", maxsplit=1)[-1] if "@" in normalized else ""
+    return bool(user.student_id) or domain in settings.LOGIN_ALLOWED_EMAIL_DOMAINS
 
 
 @router.get("/me", response_model=UserRead, summary="取得當前使用者資訊")
