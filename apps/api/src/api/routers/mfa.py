@@ -19,7 +19,11 @@ from api.core.security import (
     decode_token,
     is_blacklisted,
 )
-from api.dependencies.auth import get_current_active_user, get_optional_user
+from api.dependencies.auth import (
+    ensure_admin_login_ip_allowed,
+    get_current_active_user,
+    get_optional_user,
+)
 from api.models.user import User
 from api.routers.auth import _access_token_claims
 from api.services import mfa as mfa_svc
@@ -232,6 +236,7 @@ async def verify_mfa_login(
         await record_failure(lockout_key)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="2FA 驗證碼錯誤")
 
+    ensure_admin_login_ip_allowed(request, user)
     await record_success(lockout_key)
     tokens = await user_session_svc.issue_session_tokens(
         db,
@@ -387,6 +392,7 @@ async def passkey_authentication_verify(
         request.session["mfa_reauth_until"] = time.time() + 300
         return {"verified": True}
 
+    ensure_admin_login_ip_allowed(request, verified_user)
     if challenge_token:
         await add_to_blacklist(challenge_token)
         request.session.pop("mfa_challenge", None)

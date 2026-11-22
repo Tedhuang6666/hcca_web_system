@@ -162,6 +162,15 @@ export default function ElectionCountPage({ params }: { params: Promise<{ id: st
           ? [{ status: "live", label: "恢復" }, { status: "closed", label: "結束" }]
           : [];
 
+  const summaryMetrics = [
+    { label: "已計", value: summary.total_votes, unit: "票" },
+    { label: "有效", value: summary.valid_votes, unit: "票" },
+    { label: "廢票", value: summary.invalid_votes, unit: "票" },
+    { label: "應選", value: summary.seats, unit: "名" },
+    ...(summary.turnout_pct !== null ? [{ label: "投票率", value: summary.turnout_pct, unit: "%" }] : []),
+    ...(summary.vote_threshold_pct !== null ? [{ label: "門檻", value: summary.vote_threshold_pct, unit: "%" }] : []),
+  ];
+
   const tileCount = election.candidates.length + 1;
   const colClass =
     tileCount <= 2
@@ -235,8 +244,8 @@ export default function ElectionCountPage({ params }: { params: Promise<{ id: st
     );
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-3">
-      <header className="flex shrink-0 flex-wrap items-center justify-between gap-2">
+    <div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-4">
+      <header className="flex shrink-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <h1 className="truncate text-lg font-bold sm:text-xl">{election.title}</h1>
@@ -248,13 +257,18 @@ export default function ElectionCountPage({ params }: { params: Promise<{ id: st
               {electionStatusLabel[election.status]}
             </span>
           </div>
-          <p className="mt-0.5 truncate text-xs" style={{ color: "var(--text-muted)" }}>
-            已 {summary.total_votes}・有效 {summary.valid_votes}・廢 {summary.invalid_votes}・應選 {summary.seats} 名
-            {summary.turnout_pct !== null && `・投票率 ${summary.turnout_pct}%`}
-            {summary.vote_threshold_pct !== null && `・門檻 ${summary.vote_threshold_pct}%`}
-          </p>
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1" role="group" aria-label="計票摘要">
+            {summaryMetrics.map((metric) => (
+              <span key={metric.label} className="inline-flex items-baseline gap-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                {metric.label}
+                <strong className="text-sm tabular-nums" style={{ color: "var(--text-primary)" }}>
+                  {metric.value}{metric.unit}
+                </strong>
+              </span>
+            ))}
+          </div>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5 lg:shrink-0 lg:justify-end">
           {electionActions.map((item) => (
             <button
               key={item.status}
@@ -285,15 +299,17 @@ export default function ElectionCountPage({ params }: { params: Promise<{ id: st
         </div>
       </header>
 
-      <section className="shrink-0 card flex flex-wrap items-center gap-x-3 gap-y-2 p-2.5">
-        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
+      <section className="card flex shrink-0 flex-col gap-2.5 p-3 sm:flex-row sm:items-center sm:gap-3" aria-label="票匭與狀態控制">
+        <h2 className="sr-only">票匭與狀態控制</h2>
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
           {election.ballot_boxes.map((box) => {
             const active = box.id === boxId;
             return (
               <button
                 key={box.id}
                 onClick={() => setBoxId(box.id)}
-                className="flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-sm transition-colors"
+                aria-pressed={active}
+                className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-sm transition-colors"
                 style={{
                   borderColor: active ? "var(--primary)" : "var(--border)",
                   background: active ? "var(--primary-dim)" : "var(--bg-elevated)",
@@ -409,7 +425,7 @@ export default function ElectionCountPage({ params }: { params: Promise<{ id: st
                       </span>
                     </span>
                     {!event.reverses_event_id && (
-                      <button className="inline-flex items-center gap-1 text-xs underline" disabled={busy} onClick={() => void reverseEvent(event)}>
+                      <button className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1 rounded px-2 text-xs underline" disabled={busy} onClick={() => void reverseEvent(event)}>
                         <Undo2 size={12} /> 撤銷
                       </button>
                     )}

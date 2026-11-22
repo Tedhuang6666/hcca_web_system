@@ -30,6 +30,7 @@ x-api-common: &api-common
     - ${PROD_ENV_FILE:-.env.production}
   environment:
     HOME: /tmp
+    PRIVACY_EXPORT_DIR: /app/privacy-exports
     DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
     DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-20}
     # API 的 Origin 驗證與 WebSocket 都必須知道實際公開網域；未額外覆寫時
@@ -66,6 +67,7 @@ x-api-common: &api-common
   volumes:
     - uploads:/app/uploads
     - backups:/app/backups
+    - privacy-exports:/app/privacy-exports
     - "${GOOGLE_DRIVE_SERVICE_ACCOUNT_HOST_FILE:-/dev/null}:/run/secrets/google-drive-service-account.json:ro"
 
 services:
@@ -577,6 +579,7 @@ volumes:
   redisbrokerdata:
   uploads:
   backups:
+  privacy-exports:
   celerybeat:
   caddydata:
   caddyconfig:

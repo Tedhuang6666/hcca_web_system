@@ -58,11 +58,23 @@ class AnonymizeResult:
 # ── 路徑 ────────────────────────────────────────────────────────────────────
 
 
-def exports_root() -> Path:
+def _legacy_exports_root() -> Path:
     base = Path(getattr(settings, "DB_BACKUP_DIR", "uploads/backups")).parent
-    root = base / "privacy_exports"
+    return base / "privacy_exports"
+
+
+def exports_root() -> Path:
+    configured = getattr(settings, "PRIVACY_EXPORT_DIR", None)
+    root = Path(configured) if configured else _legacy_exports_root()
     root.mkdir(parents=True, exist_ok=True)
     return root
+
+
+def _export_roots() -> tuple[Path, ...]:
+    """包含共享新目錄與舊版 API 容器目錄，讓 24 小時內的匯出可完成下載。"""
+    current = exports_root()
+    legacy = _legacy_exports_root()
+    return (current,) if current == legacy else (current, legacy)
 
 
 # 匯出檔含完整個資且未加密，不可無限期留在主機上。
@@ -73,53 +85,58 @@ def purge_expired_exports(*, max_age_seconds: int = EXPORT_TTL_SECONDS) -> int:
     """刪除超過保存期限的匯出檔，回傳刪除數量。"""
     cutoff = datetime.now(UTC).timestamp() - max_age_seconds
     removed = 0
-    for export_file in exports_root().glob("export_*.zip"):
-        try:
-            if export_file.stat().st_mtime < cutoff:
-                export_file.unlink()
-                removed += 1
-        except OSError:
-            logger.warning("無法刪除過期個資匯出檔 %s", export_file.name, exc_info=True)
+    for root in _export_roots():
+        for export_file in root.glob("export_*.zip"):
+            try:
+                if export_file.stat().st_mtime < cutoff:
+                    export_file.unlink()
+                    removed += 1
+            except OSError:
+                logger.warning("無法刪除過期個資匯出檔 %s", export_file.name, exc_info=True)
     return removed
 
 
 def delete_user_exports(user_id: uuid.UUID) -> int:
     """假名化時一併刪除該使用者先前的匯出檔。"""
     removed = 0
-    for export_file in exports_root().glob(f"export_{user_id}_*.zip"):
-        try:
-            export_file.unlink()
-            removed += 1
-        except OSError:
-            logger.warning("無法刪除個資匯出檔 %s", export_file.name, exc_info=True)
+    for root in _export_roots():
+        for export_file in root.glob(f"export_{user_id}_*.zip"):
+            try:
+                export_file.unlink()
+                removed += 1
+            except OSError:
+                logger.warning("無法刪除個資匯出檔 %s", export_file.name, exc_info=True)
     return removed
 
 
 def list_exports() -> list[dict[str, Any]]:
     purge_expired_exports()
-    root = exports_root()
-    if not root.exists():
-        return []
-    out: list[dict[str, Any]] = []
-    for p in sorted(root.glob("*.zip")):
-        try:
-            stat = p.stat()
-            out.append(
-                {
-                    "filename": p.name,
-                    "size_bytes": stat.st_size,
-                    "modified_at": datetime.fromtimestamp(stat.st_mtime, UTC).isoformat(),
-                }
-            )
-        except OSError:
-            continue
+    exports_by_name: dict[str, dict[str, Any]] = {}
+    for root in _export_roots():
+        for path in sorted(root.glob("*.zip")):
+            try:
+                stat = path.stat()
+                exports_by_name.setdefault(
+                    path.name,
+                    {
+                        "filename": path.name,
+                        "size_bytes": stat.st_size,
+                        "modified_at": datetime.fromtimestamp(stat.st_mtime, UTC).isoformat(),
+                    },
+                )
+            except OSError:
+                continue
+    out = list(exports_by_name.values())
     out.sort(key=lambda x: x["modified_at"], reverse=True)
     return out
 
 
 def read_export_bytes(filename: str) -> bytes:
-    for export_file in exports_root().glob("*.zip"):
-        if export_file.name == filename and export_file.is_file():
+    if Path(filename).name != filename:
+        raise FileNotFoundError(filename)
+    for root in _export_roots():
+        export_file = root / filename
+        if export_file.is_file():
             return export_file.read_bytes()
     raise FileNotFoundError(filename)
 

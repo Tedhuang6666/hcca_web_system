@@ -25,6 +25,7 @@ from api.models.user import User
 def _exports_in_tmp(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     """測試匯出檔寫入暫存目錄，不在 repo 根目錄留下含個資的 zip。"""
     monkeypatch.setattr(settings, "DB_BACKUP_DIR", str(tmp_path / "backups"))
+    monkeypatch.setattr(settings, "PRIVACY_EXPORT_DIR", str(tmp_path / "private_exports"))
 
 
 def _authed(factory: Callable[[User], AsyncClient], user: User) -> AsyncClient:
@@ -178,6 +179,27 @@ async def test_anonymize_nonexistent_user_returns_404(
         f"/admin/privacy/users/{uuid.uuid4()}/anonymize", json={"confirm_phrase": "假名化"}
     )
     assert response.status_code == 404
+
+
+async def test_anonymize_owner_is_rejected_even_for_superuser(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    make_user: Callable[..., object],
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = await make_user(email="owner@school.edu", is_superuser=True)
+    monkeypatch.setattr(settings, "OWNER_EMAILS", ["owner@school.edu"])
+    ac = _authed(authed_client_factory, admin_user)
+
+    response = await ac.post(
+        f"/admin/privacy/users/{owner.id}/anonymize", json={"confirm_phrase": "假名化"}
+    )
+
+    assert response.status_code == 409
+    await db_session.refresh(owner)
+    assert owner.email == "owner@school.edu"
+    assert owner.is_active is True
 
 
 async def test_anonymize_without_permission_returns_403(
