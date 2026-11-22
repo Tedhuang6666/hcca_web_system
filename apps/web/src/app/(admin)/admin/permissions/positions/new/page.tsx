@@ -41,13 +41,7 @@ function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <Input
       {...props}
-      className={`w-full min-h-11 rounded-lg px-3 text-sm outline-none ${props.className ?? ""}`}
-      style={{
-        background: "var(--bg-surface)",
-        border: "1px solid var(--border)",
-        color: "var(--text-primary)",
-        ...props.style,
-      }}
+      className={`min-h-11 min-w-0 w-full rounded-lg border border-border bg-surface px-3 text-sm text-fg-primary outline-none ${props.className ?? ""}`}
     />
   );
 }
@@ -56,13 +50,7 @@ function SelectInput(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
       {...props}
-      className={`w-full min-h-11 rounded-lg px-3 text-sm outline-none ${props.className ?? ""}`}
-      style={{
-        background: "var(--bg-surface)",
-        border: "1px solid var(--border)",
-        color: "var(--text-primary)",
-        ...props.style,
-      }}
+      className={`min-h-11 min-w-0 w-full rounded-lg border border-border bg-surface px-3 text-sm text-fg-primary outline-none ${props.className ?? ""}`}
     />
   );
 }
@@ -187,64 +175,63 @@ export default function NewPositionPage() {
   };
 
   return (
-    <div className="min-h-full" style={{ background: "var(--bg-base)" }}>
+    <div className="min-h-full bg-canvas!">
       <AdminWorkbenchTabs />
       <div className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6 lg:px-8">
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <Link
               href="/admin/people?section=organization"
-              className="inline-flex min-h-11 items-center gap-1 text-xs font-medium no-underline"
-              style={{ color: "var(--text-muted)" }}
+              className="inline-flex min-h-11 items-center gap-1 text-xs font-medium text-fg-muted! no-underline"
             >
               <ArrowLeft />返回權限管理
             </Link>
             <div className="mt-4 flex items-start gap-3">
-              <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl" style={{ color: "var(--primary-text)", background: "var(--primary-dim)" }}>
+              <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-accent-soft! text-accent-text!">
                 <ShieldPlus />
               </span>
               <div>
-                <h1 className="text-xl font-semibold text-balance" style={{ color: "var(--text-primary)" }}>建立職位</h1>
+                <h1 className="text-balance text-xl font-semibold text-fg-primary!">建立職位</h1>
                 <DraftStatus lastSavedAt={lastSavedAt} className="mt-2" />
               </div>
             </div>
           </div>
           {selectedOrg && (
-            <div className="rounded-xl px-4 py-3 sm:min-w-56" style={{ border: "1px solid var(--border)", background: "var(--bg-surface)" }}>
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>目前組織預設</p>
-              <p className="mt-1 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{selectedOrg.name}</p>
-              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{defaultCodes.length} 個預設權限</p>
+            <div className="rounded-xl border border-border! bg-surface! px-4 py-3 sm:min-w-56">
+              <p className="text-xs text-fg-muted!">目前組織預設</p>
+              <p className="mt-1 text-sm font-semibold text-fg-primary!">{selectedOrg.name}</p>
+              <p className="mt-1 text-xs text-fg-muted!">{defaultCodes.length} 個預設權限</p>
             </div>
           )}
         </div>
 
         {loading ? (
-          <div className="rounded-xl p-6 text-sm" style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}>載入組織與權限設定中...</div>
+          <div className="rounded-xl border border-border! p-6 text-sm text-fg-muted!">載入組織與權限設定中...</div>
         ) : (
           <form onSubmit={submit} className="grid gap-5 lg:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)]">
             <div className="space-y-5">
-              <section className="rounded-xl p-4 sm:p-5" style={{ border: "1px solid var(--border)", background: "var(--bg-surface)" }}>
+              <section className="rounded-xl border border-border! bg-surface! p-4 sm:p-5">
                 <div className="mb-4">
-                  <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>職位基本資料</h2>
+                  <h2 className="text-sm font-semibold text-fg-primary!">職位基本資料</h2>
                 </div>
                 <div className="space-y-4">
-                  <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+                  <label className="block text-xs font-medium text-fg-secondary!">
                     所屬組織
                     <SelectInput value={orgId} onChange={(event) => setOrgId(event.target.value)} className="mt-1.5" required>
                       <option value="">選擇組織</option>
                       {orgs.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
                     </SelectInput>
                   </label>
-                  <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+                  <label className="block text-xs font-medium text-fg-secondary!">
                     職位名稱
                     <TextInput value={name} onChange={(event) => setName(event.target.value)} className="mt-1.5" placeholder="例：網站管理員" required autoFocus />
                   </label>
-                  <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+                  <label className="block text-xs font-medium text-fg-secondary!">
                     職位說明
                     <TextInput value={description} onChange={(event) => setDescription(event.target.value)} className="mt-1.5" placeholder="簡述這個職位負責的工作" />
                   </label>
                   <div>
-                    <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>職位分類</p>
+                    <p className="text-xs font-medium text-fg-secondary!">職位分類</p>
                     <div className="mt-1.5 grid gap-2 sm:grid-cols-3">
                       {CATEGORY_OPTIONS.map((option) => {
                         const active = category === option.value;
@@ -253,27 +240,27 @@ export default function NewPositionPage() {
                             key={option.value}
                             type="button"
                             onClick={() => setCategory(option.value)}
-                            className="min-h-20 rounded-lg px-3 py-2 text-left transition-colors"
-                            style={{
-                              border: `1px solid ${active ? "var(--border-strong)" : "var(--border)"}`,
-                              background: active ? "var(--primary-dim)" : "var(--bg-base)",
-                              color: active ? "var(--primary-text)" : "var(--text-secondary)",
-                            }}
+                            className={[
+                              "min-h-20 rounded-lg border px-3 py-2 text-left transition-colors",
+                              active
+                                ? "border-border-strong! bg-accent-soft! text-accent-text!"
+                                : "border-border! bg-canvas! text-fg-secondary!",
+                            ].join(" ")}
                           >
                             <span className="block text-xs font-semibold">{option.label}</span>
-                            <span className="mt-1 block text-xs leading-4" style={{ color: active ? "var(--primary-text)" : "var(--text-muted)" }}>{option.description}</span>
+                            <span className={active ? "mt-1 block text-xs leading-4 text-accent-text!" : "mt-1 block text-xs leading-4 text-fg-muted!"}>{option.description}</span>
                           </button>
                         );
                       })}
                     </div>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+                    <label className="block text-xs font-medium text-fg-secondary!">
                       權重
                       <TextInput type="number" min={0} value={weight} onChange={(event) => setWeight(Number(event.target.value) || 0)} className="mt-1.5" />
-                      <span className="mt-1 block text-xs font-normal" style={{ color: "var(--text-muted)" }}>數字越大，同組織內順位越高。</span>
+                      <span className="mt-1 block text-xs font-normal text-fg-muted!">數字越大，同組織內順位越高。</span>
                     </label>
-                    <label className="block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+                    <label className="block text-xs font-medium text-fg-secondary!">
                       上級職位
                       <SelectInput value={parentId} onChange={(event) => setParentId(event.target.value)} className="mt-1.5">
                         <option value="">無上級</option>
@@ -284,13 +271,13 @@ export default function NewPositionPage() {
                 </div>
               </section>
 
-              <section className="rounded-xl p-4 sm:p-5" style={{ border: "1px solid var(--border)", background: "var(--bg-surface)" }}>
+              <section className="rounded-xl border border-border! bg-surface! p-4 sm:p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>權限覆寫摘要</h2>
-                    <p className="mt-1 text-xs leading-5" style={{ color: "var(--text-muted)" }}>預設繼承組織權限，可逐項調整。</p>
+                    <h2 className="text-sm font-semibold text-fg-primary!">權限覆寫摘要</h2>
+                    <p className="mt-1 text-xs leading-5 text-fg-muted!">預設繼承組織權限，可逐項調整。</p>
                   </div>
-                  <button type="button" onClick={() => setCodes(defaultCodes)} className="min-h-11 flex-shrink-0 rounded-lg px-3 text-xs font-medium" style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>重設預設</button>
+                  <button type="button" onClick={() => setCodes(defaultCodes)} className="min-h-11 flex-shrink-0 rounded-lg border border-border! px-3 text-xs font-medium text-fg-secondary!">重設預設</button>
                 </div>
                 <div className="mt-4 grid grid-cols-3 gap-2">
                   <SummaryCell label="最終權限" value={codes.length} />
@@ -306,19 +293,19 @@ export default function NewPositionPage() {
               </section>
             </div>
 
-            <section className="rounded-xl p-4 sm:p-5" style={{ border: "1px solid var(--border)", background: "var(--bg-surface)" }}>
+            <section className="min-w-0 rounded-xl border border-border! bg-surface! p-4 sm:p-5">
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>職位權限</h2>
+                  <h2 className="text-sm font-semibold text-fg-primary!">職位權限</h2>
                 </div>
-                <span className="rounded-full px-2.5 py-1 text-xs font-semibold" style={{ color: "var(--primary-text)", background: "var(--primary-dim)" }}>{codes.length} 個</span>
+                <span className="rounded-full bg-accent-soft! px-2.5 py-1 text-xs font-semibold text-accent-text!">{codes.length} 個</span>
               </div>
               <PermCheckboxes selected={codes} onChange={setCodes} permCodes={permCodes} />
             </section>
 
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end lg:col-span-2">
-              <Link href="/admin/people?section=organization" className="inline-flex min-h-11 items-center justify-center rounded-lg px-4 text-sm font-medium no-underline" style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>取消</Link>
-              <button type="submit" disabled={saving || !selectedOrg} className="inline-flex min-h-11 items-center justify-center rounded-lg px-5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50" style={{ color: "var(--primary-contrast, white)", background: "var(--primary)" }}>
+              <Link href="/admin/people?section=organization" className="inline-flex min-h-11 items-center justify-center rounded-lg border border-border! px-4 text-sm font-medium text-fg-secondary! no-underline">取消</Link>
+              <button type="submit" disabled={saving || !selectedOrg} className="inline-flex min-h-11 items-center justify-center rounded-lg bg-accent! px-5 text-sm font-semibold text-accent-contrast! disabled:cursor-not-allowed disabled:opacity-50">
                 {saving ? "建立中..." : "建立職位"}
               </button>
             </div>
@@ -330,21 +317,24 @@ export default function NewPositionPage() {
 }
 
 function SummaryCell({ label, value, tone = "normal" }: { label: string; value: number; tone?: "normal" | "positive" | "warning" }) {
-  const color = tone === "positive" ? "#15803d" : tone === "warning" ? "#b45309" : "var(--text-primary)";
+  const valueToneClass = tone === "positive" ? "text-success!" : tone === "warning" ? "text-warning!" : "text-fg-primary!";
   return (
-    <div className="rounded-lg px-3 py-2" style={{ background: "var(--bg-base)", border: "1px solid var(--border)" }}>
-      <p className="text-xs" style={{ color: "var(--text-muted)" }}>{label}</p>
-      <p className="mt-0.5 text-lg font-semibold" style={{ color }}>{value}</p>
+    <div className="rounded-lg border border-border! bg-canvas! px-3 py-2">
+      <p className="text-xs text-fg-muted!">{label}</p>
+      <p className={"mt-0.5 text-lg font-semibold " + valueToneClass}>{value}</p>
     </div>
   );
 }
 
 function OverrideRow({ label, codes, labelFor, tone }: { label: string; codes: string[]; labelFor: (code: string) => string; tone: "positive" | "warning" }) {
+  const toneClasses = tone === "positive"
+    ? "bg-success-soft! text-success!"
+    : "bg-warning-soft! text-warning!";
   return (
     <div className="flex items-start gap-2">
-      <span className="w-16 flex-shrink-0 pt-1 font-medium" style={{ color: tone === "positive" ? "#15803d" : "#b45309" }}>{label}</span>
+      <span className={"w-16 flex-shrink-0 pt-1 font-medium " + (tone === "positive" ? "text-success!" : "text-warning!")}>{label}</span>
       <div className="flex flex-wrap gap-1">
-        {codes.map((code) => <span key={code} className="rounded-full px-2 py-1 text-xs" title={code} style={{ color: tone === "positive" ? "#15803d" : "#b45309", background: tone === "positive" ? "rgba(21,128,61,0.1)" : "rgba(180,83,9,0.1)" }}>{labelFor(code)}</span>)}
+        {codes.map((code) => <span key={code} className={"rounded-full px-2 py-1 text-xs " + toneClasses} title={code}>{labelFor(code)}</span>)}
       </div>
     </div>
   );

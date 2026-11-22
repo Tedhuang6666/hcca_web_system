@@ -246,9 +246,9 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
     });
 
   return (
-    <div className="space-y-2">
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(180px,1fr)_170px_170px]">
-        <div className="relative">
+    <div className="min-w-0 space-y-2">
+      <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
+        <div className="relative sm:col-span-2">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 opacity-40" width="13" height="13"
             viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
             <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -258,8 +258,7 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
             onChange={(e) => setKeyword(e.target.value)}
             placeholder="搜尋權限名稱、代碼或說明"
             aria-label="搜尋權限名稱、代碼或說明"
-            className="min-h-10 w-full rounded-lg px-3 pl-8 pr-3 text-xs outline-none"
-            style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
+            className="min-h-11 min-w-0 w-full rounded-lg border border-border! bg-surface! px-3 pl-8 pr-3 text-xs text-fg-primary! outline-none"
           />
         </div>
         <select
@@ -269,8 +268,7 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
             setGroupFilter("all");
           }}
           aria-label="依分類篩選權限"
-          className="min-h-10 w-full rounded-lg px-3 text-xs outline-none"
-          style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}
+          className="min-h-11 min-w-0 w-full rounded-lg border border-border! bg-surface! px-3 text-xs text-fg-secondary! outline-none"
         >
           <option value="all">全部分類</option>
           {allCategories.map((category) => <option key={category} value={category}>{category}</option>)}
@@ -279,15 +277,14 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
           value={groupFilter}
           onChange={(e) => setGroupFilter(e.target.value)}
           aria-label="依模組篩選權限"
-          className="min-h-10 w-full rounded-lg px-3 text-xs outline-none"
-          style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}
+          className="min-h-11 min-w-0 w-full rounded-lg border border-border! bg-surface! px-3 text-xs text-fg-secondary! outline-none"
         >
           <option value="all">全部模組</option>
           {allGroups.map((group) => <option key={group} value={group}>{group}</option>)}
         </select>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs" style={{ color: "var(--text-muted)" }}>
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs text-fg-muted!">
         <span>目前顯示 {visibleCodes.length} 項 · 已選 {selected.length} 項</span>
         <div className="flex flex-wrap gap-1.5">
           <button
@@ -296,8 +293,7 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
               ? selected.filter((code) => !visibleCodes.includes(code))
               : Array.from(new Set([...selected, ...visibleCodes])))}
             disabled={visibleCodes.length === 0}
-            className="min-h-9 rounded-lg px-2.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40"
-            style={{ color: "var(--primary-text)", border: "1px solid var(--border-strong)", background: "var(--primary-dim)" }}
+            className="min-h-11 rounded-lg border border-border-strong! bg-accent-soft! px-2.5 text-xs font-medium text-accent-text! transition-colors disabled:cursor-not-allowed disabled:opacity-40"
           >
             {allVisibleSelected ? "清除目前顯示" : "選取目前顯示"}
           </button>
@@ -305,8 +301,7 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
             type="button"
             onClick={() => setExpanded(new Set(permGroups.map((group) => group.label)))}
             disabled={visibleCodes.length === 0}
-            className="min-h-9 rounded-lg px-2.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40"
-            style={{ color: "var(--text-secondary)", border: "1px solid var(--border)" }}
+            className="min-h-11 rounded-lg border border-border! px-2.5 text-xs font-medium text-fg-secondary! transition-colors disabled:cursor-not-allowed disabled:opacity-40"
           >
             展開目前模組
           </button>
@@ -314,13 +309,13 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
       </div>
 
       {selected.length > 0 && (
-        <div className="rounded-xl px-3 py-2 space-y-1.5" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+        <div className="space-y-1.5 rounded-xl border border-border! bg-elevated! px-3 py-2">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>
+            <p className="text-xs font-semibold text-fg-secondary!">
               已選 {selected.length} 個權限
             </p>
             {highRiskSelected.length > 0 && (
-              <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ color: "#f59e0b", background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.28)" }}>
+              <span className="rounded-full border border-warning-border! bg-warning-soft! px-2 py-0.5 text-xs font-medium text-warning!">
                 {highRiskSelected.length} 個高風險
               </span>
             )}
@@ -331,12 +326,12 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
                 type="button"
                 key={item.code}
                 onClick={() => toggle(item.code)}
-                className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full cursor-pointer transition-colors"
-                style={{
-                  background: isHighRiskPermission(item.code) ? "rgba(245,158,11,0.12)" : "var(--primary-dim)",
-                  color: isHighRiskPermission(item.code) ? "#f59e0b" : "var(--primary-text)",
-                  border: `1px solid ${isHighRiskPermission(item.code) ? "rgba(245,158,11,0.28)" : "var(--border-strong)"}`,
-                }}
+                className={[
+                  "inline-flex cursor-pointer items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors",
+                  isHighRiskPermission(item.code)
+                    ? "border-warning-border! bg-warning-soft! text-warning!"
+                    : "border-border-strong! bg-accent-soft! text-accent-text!",
+                ].join(" ")}
                 title="點擊移除此權限"
               >
                 {item.label}
@@ -344,7 +339,7 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
               </button>
             ))}
             {selectedItems.length > 10 && (
-              <span className="text-xs px-2 py-0.5 rounded-full" style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}>
+              <span className="rounded-full border border-border! px-2 py-0.5 text-xs text-fg-muted!">
                 +{selectedItems.length - 10}
               </span>
             )}
@@ -352,9 +347,9 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
         </div>
       )}
 
-      <div className="space-y-4 overflow-y-auto" style={{ maxHeight: "min(60vh, 480px)" }}>
+      <div className="max-h-[min(60vh,480px)] space-y-4 overflow-y-auto">
         {permissionCategories.length === 0 ? (
-          <div className="rounded-xl px-4 py-8 text-center text-xs" style={{ color: "var(--text-muted)", border: "1px dashed var(--border)" }}>
+          <div className="rounded-xl border border-dashed border-border! px-4 py-8 text-center text-xs text-fg-muted!">
             找不到符合條件的權限。請調整關鍵字、分類或模組。
           </div>
         ) : permissionCategories.map((category) => {
@@ -365,10 +360,10 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
           return (
             <section key={category.category} className="space-y-2">
               <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 px-1">
-                <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                <h3 className="text-sm font-semibold text-fg-primary!">
                   {category.category}
                 </h3>
-                <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                <span className="text-xs text-fg-muted!">
                   {category.groups.length} 個模組 · 已選 {selectedCount}/{categoryCodes.length}
                 </span>
               </div>
@@ -381,30 +376,29 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
                   return (
                     <div
                       key={g.label}
-                      className="rounded-xl overflow-hidden"
-                      style={{ border: "1px solid var(--border)" }}
+                      className="overflow-hidden rounded-xl border border-border!"
                     >
                       <button
                         type="button"
                         onClick={() => toggleGroup(g.label)}
                         aria-expanded={isOpen}
                         aria-controls={groupContentId}
-                        className="flex items-center gap-2 w-full px-3 py-2.5 text-left transition-colors hover:opacity-80"
-                        style={{ background: isOpen ? "var(--primary-dim)" : "var(--bg-elevated)" }}
+                        className={[
+                          "flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:opacity-80",
+                          isOpen ? "bg-accent-soft!" : "bg-elevated!",
+                        ].join(" ")}
                       >
                         <span
-                          className="w-4 h-4 flex items-center justify-center flex-shrink-0"
-                          style={{ color: "var(--text-muted)" }}
+                          className="flex h-4 w-4 flex-shrink-0 items-center justify-center text-fg-muted!"
                         >
                           {PERM_ICONS[g.iconKey]}
                         </span>
-                        <span className="text-xs font-semibold flex-1" style={{ color: "var(--text-secondary)" }}>
+                        <span className="flex-1 text-xs font-semibold text-fg-secondary!">
                           {g.label}
                         </span>
                         {groupSelectedCount > 0 && (
                           <span
-                            className="text-xs px-1.5 py-0.5 rounded-full font-medium"
-                            style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}
+                            className="rounded-full bg-accent-soft! px-1.5 py-0.5 text-xs font-medium text-accent-text!"
                           >
                             {groupSelectedCount}/{groupCodes.length}
                           </span>
@@ -417,8 +411,10 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
                           stroke="currentColor"
                           strokeWidth="2.5"
                           strokeLinecap="round"
-                          className="flex-shrink-0 transition-transform"
-                          style={{ color: "var(--text-muted)", transform: isOpen ? "rotate(90deg)" : "none" }}
+                          className={[
+                            "flex-shrink-0 text-fg-muted! transition-transform",
+                            isOpen ? "rotate-90" : "",
+                          ].join(" ")}
                         >
                           <polyline points="9 18 15 12 9 6" />
                         </svg>
@@ -426,8 +422,7 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
                       {isOpen && (
                         <div
                           id={groupContentId}
-                          className="px-2 pb-2 pt-1 space-y-1"
-                          style={{ borderTop: "1px solid var(--border)" }}
+                          className="space-y-1 border-t border-border! px-2 pb-2 pt-1"
                         >
                           {g.items.map((info) => {
                             const code = info.code;
@@ -435,11 +430,10 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
                             return (
                               <label
                                 key={code}
-                                className="flex items-start gap-2.5 cursor-pointer px-3 py-2.5 rounded-xl transition-[color,background-color,border-color,opacity,box-shadow,transform]"
-                                style={{
-                                  background: on ? "var(--primary-dim)" : "transparent",
-                                  border: `1px solid ${on ? "var(--border-strong)" : "transparent"}`,
-                                }}
+                                className={[
+                                  "flex cursor-pointer items-start gap-2.5 rounded-xl border px-3 py-2.5 transition-[color,background-color,border-color,opacity,box-shadow,transform]",
+                                  on ? "border-border-strong! bg-accent-soft!" : "border-transparent!",
+                                ].join(" ")}
                               >
                                 <input
                                   type="checkbox"
@@ -449,18 +443,17 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
                                 />
                                 <div className="flex-1 min-w-0">
                                   <p
-                                    className="text-xs font-medium"
-                                    style={{ color: on ? "var(--primary-text)" : "var(--text-primary)" }}
+                                    className={on ? "text-xs font-medium text-accent-text!" : "text-xs font-medium text-fg-primary!"}
                                   >
                                     {info.label ?? code}
                                     {isHighRiskPermission(code) && (
-                                      <span className="ml-1 text-xs font-normal" style={{ color: "#f59e0b" }}>
+                                      <span className="ml-1 text-xs font-normal text-warning!">
                                         高風險
                                       </span>
                                     )}
                                   </p>
                                   {info.desc && (
-                                    <p className="text-xs mt-0.5 leading-tight" style={{ color: "var(--text-muted)" }}>
+                                    <p className="mt-0.5 text-xs leading-tight text-fg-muted!">
                                       {info.desc}
                                     </p>
                                   )}
