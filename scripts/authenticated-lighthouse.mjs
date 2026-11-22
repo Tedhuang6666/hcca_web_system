@@ -1,4 +1,4 @@
-import { mkdir, readdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -331,15 +331,8 @@ if (targets.length === 0) {
   process.exit(0);
 }
 
-const chrome = await launchChrome({
-  chromeFlags: [
-    "--headless=new",
-    "--no-sandbox",
-    "--disable-dev-shm-usage",
-    "--disable-backgrounding-occluded-windows",
-    "--disable-renderer-backgrounding",
-  ],
-});
+const chromeUserDataDir = await mkdtemp(join("/tmp", "hcca-lighthouse-"));
+let chrome;
 
 const runs = [];
 const persistenceBatchSize = 10;
@@ -362,6 +355,19 @@ async function persistRuns(batch) {
 
 let browser;
 try {
+  chrome = await launchChrome({
+    userDataDir: chromeUserDataDir,
+    chromeFlags: [
+      "--headless=new",
+      "--no-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-backgrounding-occluded-windows",
+      "--disable-renderer-backgrounding",
+      // chrome-launcher rewrites its profile path under WSL; this final flag
+      // keeps Chrome's actual profile inside the dedicated /tmp directory.
+      `--user-data-dir=${chromeUserDataDir}`,
+    ],
+  });
   browser = await chromium.connectOverCDP(`http://127.0.0.1:${chrome.port}`);
   const context = browser.contexts()[0];
   if (authenticated && authSession) {
@@ -408,9 +414,14 @@ try {
     console.warn(`Chrome CDP cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
   }
   try {
-    await chrome.kill();
+    if (chrome) await chrome.kill();
   } catch (error) {
     console.warn(`Chrome launcher cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  try {
+    await rm(chromeUserDataDir, { recursive: true, force: true });
+  } catch (error) {
+    console.warn(`Chrome profile cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 

@@ -19,7 +19,7 @@ case "$mode" in
   docs)
     run python3 scripts/check-agent-setup.py
     run python3 -m unittest discover -s scripts/tests -p 'test_agent_setup.py'
-    run bash -n scripts/check.sh scripts/update-openapi.sh scripts/refresh-code-index.sh
+    run bash -n scripts/check.sh scripts/update-openapi.sh scripts/refresh-code-index.sh scripts/cleanup-worktrees.sh
     ;;
   api)
     run uv run --locked --project apps/api ruff check apps/api/src libs/shared/src apps/api/gunicorn.conf.py scripts/tests/test_gunicorn_runtime.py
