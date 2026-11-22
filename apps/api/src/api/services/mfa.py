@@ -7,11 +7,11 @@ import hmac
 import logging
 import secrets
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import suppress
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHash, VerificationError, VerifyMismatchError
 from cryptography.fernet import Fernet, InvalidToken
+from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.config import settings
@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 _ENCRYPTED_PREFIX = "enc:v1:"
 _BACKUP_CODE_COUNT = 8
 _BACKUP_CODE_SALT_BYTES = 16
+_TOTP_REPLAY_TTL_SECONDS = 90
+_TOTP_REPLAY_TIMEOUT_SECONDS = 0.8
 _ARGON2 = PasswordHasher()
 # Argon2 與舊版 scrypt 驗證都是同步且昂貴的 CPU 工作。固定兩個 worker 避免大量
 # MFA 請求同時建立 thread，並讓 API event loop 繼續服務其他請求。
@@ -112,6 +114,31 @@ def verify_totp_code(secret: str, code: str) -> bool:
     return totp.verify(code, valid_window=1)
 
 
+async def _consume_totp_code_once(user: User, secret: str, code: str) -> bool:
+    """Accept a TOTP code once across all MFA operations; Redis errors fail closed."""
+    if not verify_totp_code(secret, code):
+        return False
+
+    replay_key = f"mfa:totp:used:{user.id}:{_normalize_code(code)}"
+    try:
+        accepted = await asyncio.wait_for(
+            redis_client.set(
+                replay_key,
+                "1",
+                ex=_TOTP_REPLAY_TTL_SECONDS,
+                nx=True,
+            ),
+            timeout=_TOTP_REPLAY_TIMEOUT_SECONDS,
+        )
+    except (RedisError, TimeoutError):
+        logger.warning(
+            "MFA replay protection unavailable",
+            extra={"user_id": str(user.id)},
+        )
+        return False
+    return bool(accepted)
+
+
 def _matches_backup_code(item: str, normalized: str) -> bool:
     if item.startswith("argon2:"):
         try:
@@ -186,7 +213,7 @@ async def confirm_mfa(db: AsyncSession, user: User, code: str) -> bool:
         return False
 
     pending_secret = decrypt_mfa_secret(user.mfa_pending_secret)
-    if not pending_secret or not verify_totp_code(pending_secret, code):
+    if not pending_secret or not await _consume_totp_code_once(user, pending_secret, code):
         logger.warning("MFA confirmation failed", extra={"user_id": str(user.id)})
         return False
 
@@ -206,11 +233,7 @@ async def verify_mfa(db: AsyncSession, user: User, code: str) -> bool:
         return False
 
     secret = decrypt_mfa_secret(user.mfa_secret)
-    if secret and verify_totp_code(secret, code):
-        replay_key = f"mfa:totp:used:{user.id}:{_normalize_code(code)}"
-        with suppress(Exception):
-            if not await redis_client.set(replay_key, "1", ex=90, nx=True):
-                return False
+    if secret and await _consume_totp_code_once(user, secret, code):
         return True
     if await _consume_backup_code(user, code):
         await db.flush()
@@ -223,7 +246,7 @@ async def regenerate_backup_codes(db: AsyncSession, user: User, code: str) -> li
     if not user.mfa_enabled or not user.mfa_secret:
         return None
     secret = decrypt_mfa_secret(user.mfa_secret)
-    if not secret or not verify_totp_code(secret, code):
+    if not secret or not await _consume_totp_code_once(user, secret, code):
         return None
     backup_codes = _generate_backup_codes()
     user.mfa_backup_code_hashes = await _hashes_payload(backup_codes)
@@ -238,7 +261,7 @@ async def disable_mfa(db: AsyncSession, user: User, code: str) -> bool:
         return False
 
     secret = decrypt_mfa_secret(user.mfa_secret)
-    if not secret or not verify_totp_code(secret, code):
+    if not secret or not await _consume_totp_code_once(user, secret, code):
         return False
 
     user.mfa_enabled = False

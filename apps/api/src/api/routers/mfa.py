@@ -13,7 +13,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.auth_cookies import set_auth_cookies as _set_auth_cookies_impl
 from api.core.database import get_db
-from api.core.login_lockout import is_locked, record_failure, record_success
+from api.core.login_lockout import (
+    LoginLockoutUnavailable,
+    is_locked,
+    record_failure,
+    record_success,
+)
 from api.core.security import (
     add_to_blacklist,
     decode_token,
@@ -143,14 +148,35 @@ async def confirm_mfa(payload: MFAConfirmIn, db: DbDep, user: CurrentUser) -> di
     return {"message": "2FA 已成功啟用"}
 
 
-async def _ensure_mfa_not_locked(user: User) -> None:
-    """停用 2FA、重產備用碼與 /verify 共用同一組失敗次數，避免被盜 session 以此暴力嘗試。"""
-    locked_seconds = await is_locked(f"mfa:{user.id}")
+async def _ensure_mfa_lockout_not_locked(lockout_key: str) -> None:
+    """Fail closed when the lockout store cannot protect a sensitive MFA operation."""
+    try:
+        locked_seconds = await is_locked(lockout_key, fail_closed=True)
+    except LoginLockoutUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="2FA 驗證服務暫時無法使用，請稍後再試",
+        ) from exc
     if locked_seconds:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=f"嘗試次數過多，請於 {locked_seconds // 60 + 1} 分鐘後再試",
         )
+
+
+async def _ensure_mfa_not_locked(user: User) -> None:
+    """停用 2FA、重產備用碼與 /verify 共用同一組失敗次數。"""
+    await _ensure_mfa_lockout_not_locked(f"mfa:{user.id}")
+
+
+async def _record_mfa_failure(lockout_key: str) -> None:
+    try:
+        await record_failure(lockout_key, fail_closed=True)
+    except LoginLockoutUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="2FA 驗證服務暫時無法使用，請稍後再試",
+        ) from exc
 
 
 @router.post("/verify", summary="驗證 2FA 碼")
@@ -159,15 +185,10 @@ async def verify_mfa(
 ) -> dict[str, bool]:
     """驗證 TOTP 碼（用於需要二次確認的敏感操作）。連續失敗會暫時鎖定。"""
     lockout_key = f"mfa:{user.id}"
-    locked_seconds = await is_locked(lockout_key)
-    if locked_seconds:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"嘗試次數過多，請於 {locked_seconds // 60 + 1} 分鐘後再試",
-        )
+    await _ensure_mfa_lockout_not_locked(lockout_key)
     valid = user.mfa_enabled and await mfa_svc.verify_mfa(db, user, payload.code)
     if not valid:
-        await record_failure(lockout_key)
+        await _record_mfa_failure(lockout_key)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="2FA 驗證碼錯誤")
     await record_success(lockout_key)
     request.session["mfa_reauth_until"] = time.time() + 300
@@ -224,16 +245,11 @@ async def verify_mfa_login(
         raise credentials_exception
 
     lockout_key = f"mfa_login:{user.id}"
-    locked_seconds = await is_locked(lockout_key)
-    if locked_seconds:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"嘗試次數過多，請於 {locked_seconds // 60 + 1} 分鐘後再試",
-        )
+    await _ensure_mfa_lockout_not_locked(lockout_key)
 
     valid = user.mfa_enabled and await mfa_svc.verify_mfa(db, user, payload.code)
     if not valid:
-        await record_failure(lockout_key)
+        await _record_mfa_failure(lockout_key)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="2FA 驗證碼錯誤")
 
     ensure_admin_login_ip_allowed(request, user)
@@ -264,7 +280,7 @@ async def regenerate_backup_codes(
     await _ensure_mfa_not_locked(user)
     backup_codes = await mfa_svc.regenerate_backup_codes(db, user, payload.code)
     if backup_codes is None:
-        await record_failure(f"mfa:{user.id}")
+        await _record_mfa_failure(f"mfa:{user.id}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="驗證碼錯誤，無法重產備用碼"
         )
@@ -278,7 +294,7 @@ async def disable_mfa(payload: MFAConfirmIn, db: DbDep, user: CurrentUser) -> di
     await _ensure_mfa_not_locked(user)
     success = await mfa_svc.disable_mfa(db, user, payload.code)
     if not success:
-        await record_failure(f"mfa:{user.id}")
+        await _record_mfa_failure(f"mfa:{user.id}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="驗證碼錯誤，停用失敗")
     await record_success(f"mfa:{user.id}")
     return {"message": "2FA 已停用"}
