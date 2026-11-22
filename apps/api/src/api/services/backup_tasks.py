@@ -96,6 +96,46 @@ def _rotate_old_backups(backup_dir: Path, retention_days: int) -> int:
     return removed
 
 
+def _finalize_backup_artifact(target: Path) -> tuple[Path, bool, str | None]:
+    """加密與校驗完成前，不允許備份檔進入上傳或成功紀錄流程。"""
+    from api.services import backup_encryption
+    from api.services.backup_encryption import BackupEncryptionError
+
+    final_path = target
+    encrypted = False
+    try:
+        if backup_encryption.is_encryption_configured():
+            if not backup_encryption.gpg_available():
+                raise BackupEncryptionError("已設定備份密碼，但 worker 找不到 gpg。")
+            final_path = backup_encryption.encrypt_file(target, cleanup_src=True)
+            encrypted = True
+            if target.exists():
+                raise BackupEncryptionError("加密後仍有明文備份檔，拒絕繼續。")
+
+        sha256_hex = (
+            backup_encryption.compute_sha256(final_path) if settings.BACKUP_VERIFY_SHA256 else None
+        )
+        return final_path, encrypted, sha256_hex
+    except Exception as error:
+        artifacts = {target, target.with_suffix(target.suffix + ".gpg"), final_path}
+        cleanup_failed: list[str] = []
+        for artifact in artifacts:
+            try:
+                artifact.unlink(missing_ok=True)
+            except OSError:
+                cleanup_failed.append(artifact.name)
+                logger.critical(
+                    "Unable to remove unsafe database backup artifact %s",
+                    artifact,
+                    exc_info=True,
+                )
+        if cleanup_failed:
+            raise BackupEncryptionError(
+                "備份加密或校驗失敗，且無法清除檔案：" + ", ".join(cleanup_failed)
+            ) from error
+        raise
+
+
 @celery_app.task(
     name="api.services.backup_tasks.backup_database",
     bind=True,
@@ -190,32 +230,21 @@ def backup_database(self) -> dict:  # type: ignore[type-arg]
         with contextlib.suppress(OSError):
             os.unlink(pgpass_path)
 
-    # 可選用 GPG 加密，並寫入 sha256 與 BackupRecord。
-    final_path = target
-    encrypted = False
-    sha256_hex: str | None = None
+    # 加密與校驗失敗時刪除本次產物並中止，避免把明文或未校驗檔當成備份。
     try:
-        from api.services import backup_encryption
-
-        if backup_encryption.is_encryption_configured():
-            if backup_encryption.gpg_available():
-                final_path = backup_encryption.encrypt_file(target, cleanup_src=True)
-                encrypted = True
-            else:
-                logger.warning(
-                    "BACKUP_GPG_PASSPHRASE set but gpg binary missing; backup left unencrypted"
-                )
-
-        if settings.BACKUP_VERIFY_SHA256:
-            sha256_hex = backup_encryption.compute_sha256(final_path)
+        final_path, encrypted, sha256_hex = _finalize_backup_artifact(target)
     except Exception:
-        logger.exception("backup encryption/hash step failed; continuing with raw file")
+        logger.exception(
+            "DB backup encryption or integrity verification failed; artifact discarded"
+        )
+        record_backup_run("database", "failed")
+        _emit_backup_alert_sync(
+            title="🚨 資料庫備份失敗（加密／完整性檢查）",
+            body="加密或完整性檢查失敗，本次備份未上傳且未記為成功。請查看受限 worker 記錄；若檔案清理失敗，需立即確認並刪除殘留明文。",
+        )
+        raise
 
     degraded_reasons: list[str] = []
-    if settings.BACKUP_GPG_PASSPHRASE and not encrypted:
-        # 備份檔仍保留（避免連唯一的還原點都沒有），但不再默默記為成功。
-        degraded_reasons.append("備份未加密（gpg 不可用或加密失敗）")
-
     s3_key = _upload_offsite(final_path, encrypted=encrypted, reasons=degraded_reasons)
 
     _write_backup_record_sync(
