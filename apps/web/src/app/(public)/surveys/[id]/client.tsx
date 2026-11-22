@@ -1,12 +1,13 @@
 "use client";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { createPortal } from "react-dom";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
+import CopyButton from "@/components/ui/CopyButton";
+import Modal from "@/components/ui/Modal";
 import {
   DndContext,
   KeyboardSensor,
@@ -834,37 +835,9 @@ function ShareModal({ surveyId, title, onClose }: {
       .catch(() => setQr(""));
   }, [shareUrl]);
 
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      toast.success("已複製填答連結");
-    } catch {
-      toast.error("複製失敗，請手動複製");
-    }
-  };
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[200] flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="分享問卷">
-      <div
-        className="absolute inset-0"
-        style={{ background: "var(--bg-overlay)" }}
-        onClick={onClose}
-        aria-hidden="true"
-      />
-      <div className="card relative z-10 w-full max-w-sm space-y-4 p-6">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>分享問卷</h3>
-          <button onClick={onClose} className="topbar-icon-btn" aria-label="關閉">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </div>
+  return (
+    <Modal title="分享問卷" size="sm" mobileFullscreen={false} onClose={onClose}>
+      <div className="space-y-4">
         <p className="text-xs" style={{ color: "var(--text-muted)" }}>
           掃描 QR code 或複製連結，邀請他人填答此問卷。
         </p>
@@ -878,7 +851,14 @@ function ShareModal({ surveyId, title, onClose }: {
         <div className="flex gap-2">
           <input readOnly value={shareUrl} className="input flex-1 text-xs"
             onFocus={e => e.target.select()} aria-label="填答連結" />
-          <button onClick={copy} className="btn btn-primary flex-shrink-0 text-xs">複製連結</button>
+          <CopyButton
+            value={shareUrl}
+            label="複製連結"
+            icon="none"
+            announcement="已複製填答連結"
+            failureHint="複製失敗，請手動複製"
+            className="btn btn-primary flex-shrink-0 text-xs"
+          />
         </div>
         <AnimatedDownloadButton
           disabled={!qr}
@@ -888,8 +868,7 @@ function ShareModal({ surveyId, title, onClose }: {
           label="下載 QR code 圖片"
           onError={() => toast.error("QR code 下載失敗")} />
       </div>
-    </div>,
-    document.body,
+    </Modal>
   );
 }
 

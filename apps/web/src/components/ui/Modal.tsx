@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { recentActionPoint, shouldReduceMotion } from "@/lib/motion";
 import styles from "./InteractionMotion.module.css";
 
 const FOCUSABLE_SELECTOR = [
@@ -53,6 +54,7 @@ export default function Modal({
   const [mounted, setMounted] = useState(false);
   const [entered, setEntered] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const surfaceRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -60,6 +62,17 @@ export default function Modal({
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // 進場前量出觸發點：公文紙從使用者按下的位置展開，而不是憑空出現在畫面中央。
+  useLayoutEffect(() => {
+    const surface = surfaceRef.current;
+    if (!mounted || !surface || shouldReduceMotion()) return;
+    const point = recentActionPoint();
+    if (!point) return;
+    const rect = surface.getBoundingClientRect();
+    surface.style.setProperty("--sheet-origin", `${Math.round(point.x - rect.left)}px ${Math.round(point.y - rect.top)}px`);
+    surface.dataset.origin = "trigger";
+  }, [mounted]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -166,6 +179,7 @@ export default function Modal({
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
+        ref={surfaceRef}
         className={`${styles.modalSurface} modal-surface ${mobileFullscreen ? "modal-surface-mobile" : ""} flex w-full ${widthClass} flex-col shadow-2xl ${mobileClass} ${mobileRadius}`}
         style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
       >

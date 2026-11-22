@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.dependencies.auth import get_current_active_user, get_optional_user
-from api.models.document import DocumentAttachment
+from api.models.document import Document, DocumentAttachment, DocumentStatus
 from api.models.user import User
 from api.routers.documents_helpers import (
     assert_access,
@@ -28,6 +28,7 @@ from api.routers.documents_helpers import (
 )
 from api.schemas.document import AttachmentLinkCreate, AttachmentOut
 from api.services import document as doc_svc
+from api.services import outbox
 from api.services.file_delivery import FileDisposition, deliver_stored_file
 from api.services.storage import StorageBackend, get_storage
 
@@ -45,6 +46,13 @@ def _attachment_download_path(doc_id: uuid.UUID, att_id: uuid.UUID) -> str:
 
 class AttachmentRenameRequest(BaseModel):
     filename: str
+
+
+async def _assert_attachment_mutable(session: AsyncSession, doc: Document) -> None:
+    # 等待正在進行的送審／發文交易並重新讀取狀態；鎖持續到此附件交易結束。
+    await session.refresh(doc, attribute_names=["status"], with_for_update=True)
+    if doc.status != DocumentStatus.DRAFT:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="只有草稿公文可修改附件")
 
 
 async def _serve_attachment(
@@ -111,6 +119,7 @@ async def upload_attachment(
     doc = await get_doc_or_404(doc_id, session)
     await assert_access(session, doc, current_user)
     await assert_can_edit(session, doc, current_user)
+    await _assert_attachment_mutable(session, doc)
 
     storage = get_storage()
     try:
@@ -148,6 +157,7 @@ async def add_link_attachment(
     doc = await get_doc_or_404(doc_id, session)
     await assert_access(session, doc, current_user)
     await assert_can_edit(session, doc, current_user)
+    await _assert_attachment_mutable(session, doc)
     display = (
         body.display_text.strip() if body.display_text and body.display_text.strip() else body.url
     )
@@ -193,12 +203,16 @@ async def delete_attachment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此附件")
     if att.uploaded_by != current_user.id and doc.created_by != current_user.id:
         await assert_can_edit(session, doc, current_user)
+    await _assert_attachment_mutable(session, doc)
 
-    # 外部連結附件沒有 storage_key（見 download/preview 端點的同款判斷），
-    # 沒有實體檔案可刪，直接刪 DB 紀錄即可；否則 storage.delete(None) 會拋 TypeError。
+    # 刪除意圖與附件紀錄同交易提交；worker 只會看到已提交的事件。
     if att.storage_key:
-        storage = get_storage()
-        await storage.delete(att.storage_key)
+        await outbox.emit(
+            session,
+            event_type="document.attachment_delete",
+            payload={"storage_key": att.storage_key},
+        )
+        outbox.request_processing_after_commit(session)
     await session.delete(att)
 
 
@@ -217,6 +231,7 @@ async def rename_attachment(
     doc = await get_doc_or_404(doc_id, session)
     await assert_access(session, doc, current_user)
     await assert_can_edit(session, doc, current_user)
+    await _assert_attachment_mutable(session, doc)
     result = await session.execute(
         select(DocumentAttachment).where(
             DocumentAttachment.id == att_id,

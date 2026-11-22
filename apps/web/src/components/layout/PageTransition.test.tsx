@@ -37,6 +37,20 @@ describe("page transition visibility", () => {
     }
   });
 
+  it("marks navigation within one section so its tabs can stay in place", () => {
+    navigation.pathname = "/documents";
+    const { rerender } = render(content());
+    expect(screen.getByRole("heading").parentElement).not.toHaveAttribute("data-continuity");
+
+    navigation.pathname = "/documents/delegations";
+    rerender(content());
+    expect(screen.getByRole("heading").parentElement).toHaveAttribute("data-continuity", "section");
+
+    navigation.pathname = "/tasks";
+    rerender(content());
+    expect(screen.getByRole("heading").parentElement).not.toHaveAttribute("data-continuity");
+  });
+
   it("keeps legal content static after navigation", () => {
     const { rerender } = render(content());
     navigation.pathname = "/legal/privacy";

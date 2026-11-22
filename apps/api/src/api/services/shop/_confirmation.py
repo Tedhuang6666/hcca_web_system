@@ -59,21 +59,22 @@ def _render_class_order_confirmations_pdf(
     markup = f"""<!doctype html><html lang="zh-TW"><head><meta charset="UTF-8">
 <style>
 {_font_faces()}
-@page {{ size: A4; margin: 15mm;
+@page {{ size: A4; margin: 12mm;
   @top-left {{ content: "列印時間：{timestamp}"; font-size: 8pt; }}
   @bottom-right {{ content: counter(page) " / " counter(pages); font-size: 8pt; }}
 }}
-body {{ font-family: "OfficialKai", serif; font-size: 12pt; color: #000; }}
-section {{ break-before: page; }} section:first-child {{ break-before: auto; }}
-h1 {{ text-align: center; font-size: 22pt; margin: 0 0 8mm; }}
-h2 {{ font-size: 16pt; margin: 0 0 3mm; }}
-table {{ width: 100%; border-collapse: collapse; table-layout: fixed; }}
+body {{ font-family: "OfficialKai", serif; font-size: 10pt; line-height: 1.3; color: #000; margin: 0; }}
+section {{ break-before: page; break-inside: avoid; }} section:first-child {{ break-before: auto; }}
+h1 {{ text-align: center; font-size: 18pt; line-height: 1.25; margin: 0 0 4mm; }}
+h2 {{ font-size: 13pt; margin: 0 0 2mm; }}
+section > p {{ margin: 0 0 3mm; }}
+table {{ width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 9.5pt; line-height: 1.2; }}
 thead {{ display: table-header-group; }}
-th, td {{ border: 1px solid #555; padding: 3mm 2mm; overflow-wrap: anywhere; }}
+th, td {{ border: 1px solid #555; padding: 1mm 1.5mm; overflow-wrap: anywhere; }}
 th {{ text-align: left; }} tr {{ break-inside: avoid; }}
 .number {{ text-align: right; }}
-.totals, .signatures {{ break-inside: avoid; margin-top: 6mm; }}
-.totals p {{ margin: 2mm 0; }} .signatures {{ line-height: 2; }}
+.totals, .signatures {{ break-inside: avoid; margin-top: 4mm; }}
+.totals p, .signatures p {{ margin: 1mm 0; }} .signatures {{ line-height: 1.7; }}
 </style></head><body>{"".join(sections)}</body></html>"""
     return render_print_pdf(markup)
 

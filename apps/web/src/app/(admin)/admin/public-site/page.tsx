@@ -62,6 +62,8 @@ import PublicNavIcon from "@/components/site/PublicNavIcon";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import DraftStatus from "@/components/ui/DraftStatus";
+import TabBar from "@/components/ui/TabBar";
+import Toggle from "@/components/ui/Toggle";
 import { clearStoredDraft, useDraftAutosave } from "@/hooks/useDraftAutosave";
 import { getSystemInfoMarkdown } from "@/lib/systemInfoMarkdown";
 import {
@@ -301,28 +303,6 @@ function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
       className={`w-full rounded-lg px-3 py-2 text-sm outline-none ${props.className ?? ""}`}
       style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-primary)", ...props.style }}
     />
-  );
-}
-
-function Toggle({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (value: boolean) => void;
-}) {
-  return (
-    <label className="inline-flex min-h-11 items-center gap-2 text-sm text-[var(--text-secondary)]">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-        className="h-4 w-4"
-      />
-      {label}
-    </label>
   );
 }
 
@@ -1571,21 +1551,13 @@ export default function PublicSiteAdminPage() {
         </div>
       </div>
 
-      <nav className="public-site-admin-tabs module-tabs-scroll hidden max-w-full overflow-x-auto sm:block" aria-label="公開網站設定分頁">
-        <div className="module-tabs-list">
-          {tabs.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setTab(item.id)}
-              aria-pressed={tab === item.id}
-              className={`module-tab-link cursor-pointer${tab === item.id ? " is-active" : ""}`}>
-              {item.icon}
-              <span>{item.label}</span>
-            </button>
-          ))}
-        </div>
-      </nav>
+      <TabBar
+        className="public-site-admin-tabs hidden sm:block"
+        label="公開網站設定分頁"
+        items={tabs.map(({ id, label, icon }) => ({ key: id, label, icon }))}
+        value={tab}
+        onChange={setTab}
+      />
 
       {tab === "homepage" && (
         <section key="homepage" className="tab-panel-transition grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">

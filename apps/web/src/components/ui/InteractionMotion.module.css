@@ -30,6 +30,12 @@
   animation: document-sheet-arrive var(--motion-enter) cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+/* 有觸發點時，公文紙從使用者按下的位置展開（Modal.tsx 量出 --sheet-origin） */
+.modalRoot[data-entered="true"] .modalSurface[data-origin="trigger"] {
+  animation-name: document-sheet-unfold;
+  transform-origin: var(--sheet-origin);
+}
+
 .modalRoot[data-entered="true"] .modalSurface::before{
   animation: document-rule-draw 300ms 70ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
@@ -205,6 +211,22 @@
   }
 }
 
+@keyframes document-sheet-unfold {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+
+  45% {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 @keyframes document-rule-draw {
   from { transform: scaleX(0); }
   to { transform: scaleX(1); }
@@ -277,6 +299,7 @@
 @media (prefers-reduced-motion: reduce) {
   .modalSurface,
   .modalRoot[data-entered="true"] .modalSurface,
+  .modalRoot[data-entered="true"] .modalSurface[data-origin="trigger"],
   .modalRoot[data-entered="true"] .modalSurface::before,
   .modalRoot[data-entered="true"] .modalHeader,
   .modalRoot[data-entered="true"] .modalContent,

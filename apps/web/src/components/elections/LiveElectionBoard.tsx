@@ -4,18 +4,17 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowLeft,
-  Check,
   CheckCircle2,
   CircleAlert,
   Crown,
-  Link2,
   PauseCircle,
   Radio,
   RefreshCw,
   Trophy,
 } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import BrandEmblem from "@/components/brand/BrandEmblem";
+import CopyButton from "@/components/ui/CopyButton";
 import { useCountUp } from "@/hooks/useCountUp";
 import { electionsApi } from "@/lib/api";
 import { uploadUrl, wsBase } from "@/lib/config";
@@ -67,7 +66,6 @@ export default function LiveElectionBoard({
 }) {
   const [summary, setSummary] = useState<ElectionLiveSummary | null>(null);
   const [connected, setConnected] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   const load = useCallback(() => {
     electionsApi.live(electionId).then(setSummary).catch(() => undefined);
@@ -214,18 +212,8 @@ export default function LiveElectionBoard({
     }));
   }, [isClosed, vertical]);
 
-  async function copyLink() {
-    if (typeof window === "undefined") return;
-    const ref = summary?.slug ?? electionId;
-    const url = `${window.location.origin}/live/elections/${encodeURIComponent(ref)}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // 略過：部分瀏覽器需 HTTPS 才能使用剪貼簿
-    }
-  }
+  const shareUrl = () =>
+    `${window.location.origin}/live/elections/${encodeURIComponent(summary?.slug ?? electionId)}`;
 
   if (!summary) {
     return (
@@ -287,14 +275,17 @@ export default function LiveElectionBoard({
             所有開票場次
           </Link>
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={copyLink}
+            <CopyButton
+              value={shareUrl}
+              label="複製分享連結"
+              copiedLabel="已複製連結"
+              icon="link"
+              iconSize={16}
+              announcement="已複製開票看板連結"
+              failureHint="複製失敗，請手動複製網址列"
               className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-white/15 px-3 text-sm font-medium text-[#cdd8e0] transition-colors hover:bg-white/8 hover:text-white"
-            >
-              {copied ? <Check size={16} className="text-emerald-300" aria-hidden /> : <Link2 size={16} aria-hidden />}
-              {copied ? "已複製連結" : "複製分享連結"}
-            </button>
+              style={{ "--copy-ok": "#6ee7b7" } as CSSProperties}
+            />
             <div className="hidden items-center gap-2 text-xs text-[#91a5b5] sm:flex">
               <BrandEmblem size={30} priority />
               <span>班聯會即時開票</span>

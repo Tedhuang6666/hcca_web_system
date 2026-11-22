@@ -102,7 +102,11 @@ async def _dispatch(db: AsyncSession, event: OutboxEvent) -> None:
     etype = event.event_type
     payload = event.payload
 
-    if etype == "realtime.room":
+    if etype == "document.attachment_delete":
+        from api.services.storage import get_storage
+
+        await get_storage().delete(payload["storage_key"])
+    elif etype == "realtime.room":
         from api.core.ws_manager import publish_room_from_worker
 
         await publish_room_from_worker(payload["room"], payload["message"])

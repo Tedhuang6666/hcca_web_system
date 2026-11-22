@@ -5,7 +5,6 @@ import NumberInput from "@/components/ui/NumberInput";
 import { useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle,
-  Copy,
   Eye,
   Lock,
   Plus,
@@ -16,6 +15,7 @@ import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import CopyButton from "@/components/ui/CopyButton";
 import Modal from "@/components/ui/Modal";
 import {
   webhooksApi,
@@ -134,15 +134,6 @@ export default function WebhooksPage() {
     }
   };
 
-  const copy = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      toast.success("已複製");
-    } catch {
-      toast.error("複製失敗");
-    }
-  };
-
   if (!isAdmin) {
     return (
       <div className="mx-auto max-w-3xl p-6">
@@ -244,13 +235,14 @@ export default function WebhooksPage() {
                 <code className="break-all rounded bg-[var(--bg-surface)] px-2 py-1 font-mono text-xs">
                   {created.signing_secret}
                 </code>
-                <button
-                  type="button"
+                <CopyButton
+                  value={created.signing_secret}
+                  label="複製"
+                  iconSize={12}
+                  announcement="Signing secret 已複製"
+                  failureHint="複製失敗，請手動選取 secret"
                   className="btn-sm btn-primary"
-                  onClick={() => copy(created.signing_secret)}>
-                  <Copy size={12} aria-hidden />
-                  複製
-                </button>
+                />
                 <button
                   type="button"
                   className="btn-sm btn-ghost"

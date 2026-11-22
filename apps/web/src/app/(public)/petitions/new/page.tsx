@@ -23,7 +23,6 @@ export default function NewPetitionPage() {
   const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState<PetitionCreatedOut | null>(null);
-  const [failedUploads, setFailedUploads] = useState<string[]>([]);
   const [submitError, setSubmitError] = useState("");
   const [typesError, setTypesError] = useState("");
   const [accountName, setAccountName] = useState("");
@@ -74,13 +73,11 @@ export default function NewPetitionPage() {
     if (authState !== "authenticated" || submitting) return;
     setSubmitting(true);
     setSubmitError("");
-    let result: PetitionCreatedOut;
     try {
-      result = await petitionsApi.create({
-        type_id: typeId,
-        title,
-        content,
-      });
+      const result = await petitionsApi.submit({ type_id: typeId, title, content }, files);
+      clearDraft();
+      setCreated(result);
+      toast.success("陳情案件已送出");
     } catch (err) {
       flushDraft();
       setSubmitting(false);
@@ -91,20 +88,7 @@ export default function NewPetitionPage() {
       setSubmitError(err instanceof ApiError ? err.message : "送件失敗，請稍後再試。");
       return;
     }
-    // 案件已建立：先清草稿並顯示收件結果，附件失敗不得讓使用者以為沒送出而重送。
-    clearDraft();
-    const failed: string[] = [];
-    for (const file of files) {
-      try {
-        await petitionsApi.uploadAttachment(result.id, file);
-      } catch {
-        failed.push(file.name);
-      }
-    }
-    setFailedUploads(failed);
-    setCreated(result);
     setSubmitting(false);
-    if (failed.length) toast.warning(`案件已送出，但有 ${failed.length} 個附件未上傳成功`);
   };
 
   if (created) {
@@ -127,11 +111,6 @@ export default function NewPetitionPage() {
             </div>
           </div>
           <p className="text-sm" style={{ color: "var(--text-muted)" }}>{created.status_public_message}</p>
-          {failedUploads.length > 0 && (
-            <div role="alert" className="rounded-lg p-3 text-sm" style={{ background: "var(--danger-dim)", color: "var(--danger)", border: "1px solid var(--danger)" }}>
-              以下附件未上傳成功，請到案件頁重新上傳：{failedUploads.join("、")}
-            </div>
-          )}
           <div className="flex gap-2 flex-wrap">
             <Link className="btn btn-primary" href={`/petitions/${created.id}`}>查看案件進度</Link>
             <Link className="btn btn-ghost" href="/petitions">回我的案件</Link>

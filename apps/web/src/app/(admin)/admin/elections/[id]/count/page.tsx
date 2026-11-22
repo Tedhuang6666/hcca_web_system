@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
-import { Check, Copy, History, Lock, Monitor, Smartphone, Undo2, X } from "lucide-react";
+import { History, Lock, Monitor, Smartphone, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import CopyButton from "@/components/ui/CopyButton";
 import { electionsApi } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
 import type {
@@ -53,7 +54,6 @@ export default function ElectionCountPage({ params }: { params: Promise<{ id: st
   const [manualFor, setManualFor] = useState<string | null>(null);
   const [logOpen, setLogOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [copied, setCopied] = useState(false);
   const confirm = useConfirm();
 
   const reload = useCallback(async () => {
@@ -133,20 +133,6 @@ export default function ElectionCountPage({ params }: { params: Promise<{ id: st
     });
     if (!ok) return;
     await run(() => electionsApi.reverseEvent(id, event.id), "已撤銷操作");
-  }
-
-  async function copyShareLink() {
-    if (!election) return;
-    const ref = election.slug ?? election.id;
-    const url = `${window.location.origin}/live/elections/${encodeURIComponent(ref)}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      toast.success("已複製公開看板連結");
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      toast.error("複製失敗，請手動複製網址");
-    }
   }
 
   if (!election || !summary) return <div className="card p-8">載入控制台中…</div>;
@@ -299,9 +285,14 @@ export default function ElectionCountPage({ params }: { params: Promise<{ id: st
           <Link className="btn btn-secondary btn-sm" target="_blank" href={`/live/elections/${shareRef}/vertical`} aria-label="IG 直式版">
             <Smartphone size={15} />
           </Link>
-          <button className="btn btn-secondary btn-sm" onClick={copyShareLink} aria-label="複製分享連結">
-            {copied ? <Check size={15} /> : <Copy size={15} />}
-          </button>
+          <CopyButton
+            className="btn btn-secondary btn-sm"
+            aria-label="複製分享連結"
+            icon="link"
+            value={() => `${window.location.origin}/live/elections/${shareRef}`}
+            announcement="已複製公開看板連結"
+            failureHint="複製失敗，請手動複製網址"
+          />
           <button className="btn btn-secondary btn-sm" onClick={() => setLogOpen(true)}>
             <History size={15} /> 紀錄
           </button>

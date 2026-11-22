@@ -1,13 +1,12 @@
 name: Build Docker Images
 
 # 只為通過 CI 的 main commit 建置正式映像；部署腳本以 :<sha> 拉取，
-# 因此 CI 失敗的 commit 不會有可部署的映像。workflow_dispatch 供維護者緊急重建目前 main。
+# 因此 CI 失敗的 commit 不會透過這個工作流程發布映像。
 on:
   workflow_run:
     workflows: ["CI — Lint, Types & Test"]
     types: [completed]
     branches: [main]
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -17,10 +16,9 @@ jobs:
   build:
     # workflow_run 會在 PR 完成時同樣觸發；只接受本 repo 對 main 的 push，且 CI 必須成功。
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.event == 'push' &&
-       github.event.workflow_run.head_repository.full_name == github.repository)
+       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
 
     strategy:
@@ -39,7 +37,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
           # 固定使用 CI 驗證過的 commit；不能在 runner 排隊期間改抓新版 main。
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:

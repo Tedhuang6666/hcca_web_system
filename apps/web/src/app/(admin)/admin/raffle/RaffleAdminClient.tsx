@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Copy, ExternalLink, Gauge, Lock, Pause, Play, Plus, RefreshCw, Save, Send, ShieldCheck, Trash2, X } from "lucide-react";
+import { ExternalLink, Gauge, Lock, Pause, Play, Plus, RefreshCw, Save, Send, ShieldCheck, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import CopyButton from "@/components/ui/CopyButton";
 
 import { ApiError, apiErrorMessage, rafflesApi } from "@/lib/api";
 import type { RaffleAdminOut, RafflePrizeInput, RaffleStatus } from "@/lib/types";
@@ -139,11 +140,6 @@ export default function RaffleAdminClient() {
     }
   };
 
-  const copy = async (text: string, message: string) => {
-    await navigator.clipboard.writeText(text);
-    toast.success(message);
-  };
-
   const reset = async () => {
     if (!selected || !(await confirm({
       title: "清除本輪所有測試資料？",
@@ -209,7 +205,7 @@ export default function RaffleAdminClient() {
 
               <div className={styles.gridTwo}>
                 <section className={styles.panel}><div className={styles.panelTitle}><div><span>自動機率獎池</span><small>依階段與剩餘數量即時計算</small></div>{!selected.reserve_released && selected.status !== "closed" && <button className={styles.outlineButton} type="button" onClick={() => void changeStatus(selected.status, true)}><Send size={14} /> 開啟尾聲獎</button>}</div><div className={styles.prizeList}>{selected.prizes.map((prize) => <div className={styles.prizeRow} key={prize.id}><span className={`${styles.tier} ${styles[`tier_${prize.tier}`]}`}>{prize.tier}</span><strong>{prize.name}</strong><span className={styles.stock}>{prize.current_probability.toFixed(1)}% · {prize.remaining_quantity === null ? "∞" : `${prize.remaining_quantity} / ${prize.total_quantity}`}</span></div>)}</div><p className={styles.panelHint}><ShieldCheck size={14} /> 高等級會自動保留部分到尾聲；庫存由後端鎖定，不會超發。</p></section>
-                <section className={styles.panel}><div className={styles.panelTitle}><div><span>參加者入口</span><small>現場平板開啟此網址</small></div><ExternalLink size={16} color="var(--text-muted)" /></div><div className={styles.shareBox}><div><small>抽獎網址</small><strong>/raffle</strong></div><button type="button" onClick={() => void copy(`${window.location.origin}/raffle`, "抽獎網址已複製")}><Copy size={14} /></button></div><p className={styles.panelHint}><Lock size={14} /> 每台平板驗證一次，可供多人輪流抽獎。</p></section>
+                <section className={styles.panel}><div className={styles.panelTitle}><div><span>參加者入口</span><small>現場平板開啟此網址</small></div><ExternalLink size={16} color="var(--text-muted)" /></div><div className={styles.shareBox}><div><small>抽獎網址</small><strong>/raffle</strong></div><CopyButton value={() => `${window.location.origin}/raffle`} className={styles.shareCopy} iconSize={14} aria-label="複製抽獎網址" announcement="抽獎網址已複製" failureHint="複製失敗，請手動輸入網址" /></div><p className={styles.panelHint}><Lock size={14} /> 每台平板驗證一次，可供多人輪流抽獎。</p></section>
               </div>
 
               <section className={styles.panel}><div className={styles.panelTitle}><div><span>調整目前獎池</span><small>{selected.draw_count > 0 ? "已開始抽獎，本輪設定已鎖定" : "修改後會立即重算各獎品目前機率"}</small></div><button className={styles.outlineButton} type="button" disabled={busy || selected.draw_count > 0} onClick={() => void savePrizes()}><Save size={14} /> 儲存獎池</button></div><PrizeEditor drafts={prizeDrafts} setDrafts={setPrizeDrafts} /><p className={styles.panelHint}>數量留白代表不限量參加獎；最高等級預設保留部分獎數，尾聲可由管理員開放。</p></section>

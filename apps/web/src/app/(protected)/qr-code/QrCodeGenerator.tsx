@@ -19,6 +19,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
+import CopyButton from "@/components/ui/CopyButton";
 
 import { usePermissions } from "@/hooks/usePermissions";
 
@@ -306,16 +307,6 @@ export default function QrCodeGenerator({ initialContent }: { initialContent?: s
     return new Blob([preview.svg], { type: "image/svg+xml;charset=utf-8" });
   };
 
-  const copyContent = async () => {
-    if (!content.trim()) return;
-    try {
-      await navigator.clipboard.writeText(content.trim());
-      setNotice("內容已複製");
-    } catch {
-      setNotice("瀏覽器未允許複製，請手動選取內容");
-    }
-  };
-
   const reset = () => {
     setContent(DEFAULT_CONTENT);
     setSettings({ ...DEFAULT_SETTINGS, logoDataUrl: defaultLogoDataUrl || DEFAULT_LOGO_PATH });
@@ -414,9 +405,17 @@ export default function QrCodeGenerator({ initialContent }: { initialContent?: s
                 placeholder="貼上網址，或輸入想分享的文字…"
                 rows={4}
               />
-              <button type="button" className="qr-copy-link" onClick={copyContent} disabled={!content.trim()}>
-                {notice === "內容已複製" ? <Check size={14} aria-hidden="true" /> : <Link2 size={14} aria-hidden="true" />} {notice === "內容已複製" ? "已複製內容" : "複製內容"}
-              </button>
+              <CopyButton
+                className="qr-copy-link"
+                value={() => content.trim()}
+                disabled={!content.trim()}
+                label="複製內容"
+                copiedLabel="已複製內容"
+                icon="link"
+                iconSize={14}
+                announcement="內容已複製"
+                onCopyError={() => setNotice("瀏覽器未允許複製，請手動選取內容")}
+              />
             </div>
 
             <div className="qr-setting-section">

@@ -8,6 +8,7 @@ import { searchApi, apiErrorMessage } from "@/lib/api";
 import type { SearchResultOut } from "@/lib/types";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import SmartEmptyState from "@/components/ui/SmartEmptyState";
+import TabBar from "@/components/ui/TabBar";
 
 type Kind = "all" | "document" | "regulation" | "announcement";
 
@@ -103,26 +104,19 @@ function SearchInner() {
       </form>
 
       {searched && (
-        <nav className="module-tabs-scroll max-w-full overflow-x-auto" aria-label="搜尋分類">
-          <div className="module-tabs-list" role="tablist">
-            {TABS.map(({ key, label }) => {
-              const active = tab === key;
-              const count = counts[key] ?? 0;
-              return (
-                <button
-                  key={key}
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => setTab(key)}
-                  className={`module-tab-link cursor-pointer${active ? " is-active" : ""}`}
-                >
-                  <span>{label}</span>
-                  {count > 0 && <span className="text-xs opacity-70">({count})</span>}
-                </button>
-              );
-            })}
-          </div>
-        </nav>
+        <TabBar
+          label="搜尋分類"
+          items={TABS.map(({ key, label }) => {
+            const count = counts[key] ?? 0;
+            return {
+              key,
+              label,
+              meta: count > 0 ? <span className="text-xs opacity-70">({count})</span> : undefined,
+            };
+          })}
+          value={tab}
+          onChange={setTab}
+        />
       )}
 
       <div key={tab} className="tab-panel-transition">

@@ -670,6 +670,8 @@ class Settings(BaseSettings):
             raise ValueError("生產環境的 SECRET_KEY、JWT 與 OAuth session 金鑰必須彼此獨立")
         if is_prod and self.DEBUG:
             raise ValueError("生產環境不可啟用 DEBUG")
+        if is_prod and self.ENABLE_ENV_EDITOR:
+            raise ValueError("生產環境不可啟用 ENABLE_ENV_EDITOR")
         if is_prod and self.ENABLE_API_DOCS:
             raise ValueError("生產環境不可公開 API 文件；請關閉 ENABLE_API_DOCS")
         if is_prod and self.AUTH_LEGACY_TOKEN_COMPAT_ENABLED:

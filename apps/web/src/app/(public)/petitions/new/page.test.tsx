@@ -13,8 +13,7 @@ const api = vi.hoisted(() => {
     ApiError,
     me: vi.fn(),
     listTypes: vi.fn(),
-    create: vi.fn(),
-    uploadAttachment: vi.fn(),
+    submit: vi.fn(),
   };
 });
 
@@ -23,14 +22,19 @@ vi.mock("@/lib/api", () => ({
   usersApi: { me: api.me },
   petitionsApi: {
     listTypes: api.listTypes,
-    create: api.create,
-    uploadAttachment: api.uploadAttachment,
+    submit: api.submit,
   },
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() } }));
 vi.mock("@/components/ui/AnimatedFileUpload", () => ({
   default: ({ onFiles }: { onFiles: (files: File[]) => void }) => (
-    <button type="button" onClick={() => onFiles([new File(["x"], "證據.pdf")])}>加入附件</button>
+    <button
+      type="button"
+      onClick={() => onFiles([
+        new File(["x"], "證據.pdf"),
+        new File(["y"], "照片.pdf"),
+      ])}
+    >加入附件</button>
   ),
 }));
 
@@ -39,7 +43,7 @@ beforeEach(() => {
   window.localStorage.clear();
   api.me.mockResolvedValue({ id: "u1", display_name: "測試同學", email: "s@example.com" });
   api.listTypes.mockResolvedValue([{ id: "type-1", name: "校園環境" }]);
-  api.create.mockResolvedValue({
+  api.submit.mockResolvedValue({
     id: "case-1",
     case_number: "P-0001",
     status_public_message: "已收件",
@@ -56,23 +60,39 @@ async function fillAndSubmit() {
 }
 
 describe("我要陳情", () => {
-  it("shows the receipt once and lists attachments that failed to upload", async () => {
-    api.uploadAttachment.mockRejectedValue(new Error("upload failed"));
-
+  it("submits the case and multiple attachments in one request", async () => {
     await fillAndSubmit();
 
     expect(await screen.findByText("P-0001")).toBeVisible();
-    expect(screen.getByRole("alert")).toHaveTextContent("證據.pdf");
-    expect(api.create).toHaveBeenCalledTimes(1);
+    expect(api.submit).toHaveBeenCalledTimes(1);
+    expect(api.submit).toHaveBeenCalledWith(
+      { type_id: "type-1", title: "走廊燈壞了", content: "三樓走廊燈不亮" },
+      expect.arrayContaining([
+        expect.objectContaining({ name: "證據.pdf" }),
+        expect.objectContaining({ name: "照片.pdf" }),
+      ]),
+    );
   });
 
-  it("keeps the form and shows an inline error when the case cannot be created", async () => {
-    api.create.mockRejectedValue(new api.ApiError(500, "伺服器暫時無法處理"));
+  it("keeps the form when submission rejects an attachment", async () => {
+    api.submit.mockRejectedValue(new api.ApiError(422, "附件格式不支援"));
+
+    await fillAndSubmit();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("附件格式不支援");
+    expect(screen.getByLabelText("標題")).toHaveValue("走廊燈壞了");
+    expect(screen.queryByText("P-0001")).not.toBeInTheDocument();
+    expect(api.submit).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the form and shows an inline error when submission fails", async () => {
+    api.submit.mockRejectedValue(new api.ApiError(500, "伺服器暫時無法處理"));
 
     await fillAndSubmit();
 
     expect(await screen.findByRole("alert")).toHaveTextContent("伺服器暫時無法處理");
     expect(screen.getByLabelText("標題")).toHaveValue("走廊燈壞了");
-    expect(api.uploadAttachment).not.toHaveBeenCalled();
+    expect(screen.queryByText("P-0001")).not.toBeInTheDocument();
+    expect(api.submit).toHaveBeenCalledTimes(1);
   });
 });
