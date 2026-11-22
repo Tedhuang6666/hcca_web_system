@@ -89,11 +89,11 @@ from api.services import petition_notification as petition_notification_svc
 from api.services.discord_bot import enqueue_petition_private_channel
 from api.services.file_delivery import deliver_stored_file
 from api.services.permission import get_user_permission_codes
+from api.services.petition_submission import save_petition_submission_attachments
 from api.services.storage import get_storage
 
 router = APIRouter(prefix="/petitions", tags=["陳情系統"])
 logger = logging.getLogger(__name__)
-MAX_PETITION_SUBMISSION_ATTACHMENTS = 10
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
@@ -515,12 +515,6 @@ async def _create_petition_response(
     attachments: list[UploadFile] | None = None,
 ) -> PetitionCreatedOut:
     attachments = attachments or []
-    if len(attachments) > MAX_PETITION_SUBMISSION_ATTACHMENTS:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"陳情附件最多 {MAX_PETITION_SUBMISSION_ATTACHMENTS} 個",
-        )
-
     try:
         case_obj, share_token = await petition_svc.create_case(
             session, data=payload, submitter=current_user
@@ -540,38 +534,17 @@ async def _create_petition_response(
     petition_type = await petition_svc.get_type(session, case_obj.type_id)
 
     if attachments:
-        storage = get_storage()
-        stored_keys: list[str] = []
         try:
-            for file in attachments:
-                stored = await storage.save(file, prefix=f"petitions/{case_obj.case_number}")
-                stored_keys.append(stored.storage_key)
-                await petition_svc.add_attachment(
-                    session,
-                    case_obj,
-                    filename=stored.filename,
-                    storage_key=stored.storage_key,
-                    content_type=stored.content_type,
-                    file_size=stored.file_size,
-                    visibility=PetitionAttachmentVisibility.PUBLIC,
-                    uploaded_by=current_user.id,
-                )
+            await save_petition_submission_attachments(
+                session,
+                case_obj,
+                attachments,
+                uploaded_by=current_user.id,
+            )
         except ValueError as e:
-            for storage_key in stored_keys:
-                try:
-                    await storage.delete(storage_key)
-                except Exception:
-                    logger.warning("陳情附件清理失敗 storage_key=%s", storage_key, exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
             ) from e
-        except Exception:
-            for storage_key in stored_keys:
-                try:
-                    await storage.delete(storage_key)
-                except Exception:
-                    logger.warning("陳情附件清理失敗 storage_key=%s", storage_key, exc_info=True)
-            raise
 
     try:
         async with session.begin_nested():
