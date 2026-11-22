@@ -10,6 +10,7 @@ import { PetitionStatusBadge } from "@/components/ui/StatusBadge";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import PetitionAttachmentList from "@/components/petitions/PetitionAttachmentList";
+import PetitionQueueCards, { queueStatus, type PetitionQueueKey } from "@/components/petitions/PetitionQueueCards";
 import { orgDisplayName } from "@/lib/orgs";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -17,7 +18,6 @@ import { PetitionPublicDiff } from "@/components/petitions/PetitionPublicConsent
 import { PetitionConfidentialBlocked } from "@/components/petitions/PetitionConfidentialBlocked";
 import { PetitionConfidentialReasonEditor } from "@/components/petitions/PetitionConfidentialReasonEditor";
 
-type QueueKey = "all" | "pending" | "mine" | "active" | "needs_info" | "done";
 type ActionKey = "assign" | "handle" | "transfer" | "reject_close" | "public" | "attachments";
 
 const STATUS_OPTIONS: { value: PetitionStatus; label: string }[] = [
@@ -43,14 +43,6 @@ function fmt(iso: string | null) {
   });
 }
 
-function queueStatus(queue: QueueKey): PetitionStatus | undefined {
-  if (queue === "pending") return "submitted";
-  if (queue === "active") return "in_progress";
-  if (queue === "needs_info") return "needs_info";
-  if (queue === "done") return "resolved";
-  return undefined;
-}
-
 const PET_LIST_KEY = "petitions/manage/list:confidential-scope-v2";
 const PET_STATS_KEY = "petitions/manage/stats";
 const PET_ORGS_KEY = "petitions/manage/orgs";
@@ -69,7 +61,7 @@ export default function PetitionManagePage() {
   const [items, setItems] = useState<PetitionCaseListItem[]>(() => cacheGet<PetitionCaseListItem[]>(PET_LIST_KEY) ?? []);
   const [selected, setSelected] = useState<PetitionCaseOut | null>(null);
   const [stats, setStats] = useState<PetitionStatsOut | null>(() => cacheGet<PetitionStatsOut>(PET_STATS_KEY) ?? null);
-  const [queue, setQueue] = useState<QueueKey>("all");
+  const [queue, setQueue] = useState<PetitionQueueKey>("all");
   const [status, setStatus] = useState<PetitionStatus | "">("");
   const [keyword, setKeyword] = useState("");
   const [users, setUsers] = useState<{ id: string; display_name: string; email: string }[]>([]);
@@ -532,22 +524,10 @@ export default function PetitionManagePage() {
         </section>
       )}
 
-      <div className="flex gap-2 overflow-x-auto pb-1 sm:grid sm:grid-cols-3 lg:grid-cols-6" role="group" aria-label="案件佇列">
-        {queueCards.map((card) => (
-          <button
-            key={card.key}
-            onClick={() => { setQueue(card.key); setStatus(""); }}
-            aria-pressed={queue === card.key && !status}
-            className="card card-hover flex min-w-32 shrink-0 items-baseline justify-between gap-3 p-3 text-left sm:min-w-0"
-            style={{
-              borderColor: queue === card.key ? "var(--primary)" : "var(--border)",
-              background: queue === card.key ? "var(--primary-dim)" : "var(--card-bg)",
-            }}>
-            <span className="text-xs" style={{ color: "var(--text-muted)" }}>{card.label}</span>
-            <span className="text-lg font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>{card.value}</span>
-          </button>
-        ))}
-      </div>
+      <PetitionQueueCards
+        cards={queueCards} queue={queue} hasStatus={Boolean(status)}
+        onSelect={(key) => { setQueue(key); setStatus(""); }}
+      />
 
       <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(18rem,0.82fr)_minmax(0,1.35fr)] xl:gap-5">
         <section className={`card min-w-0 space-y-4 p-4 sm:p-5 ${selected ? "hidden xl:block" : ""}`} aria-label="陳情案件清單">
