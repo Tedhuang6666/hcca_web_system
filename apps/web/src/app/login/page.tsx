@@ -121,7 +121,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
           <main className="relative z-10 w-full max-w-md text-center">
             <div className="mb-12 flex items-center justify-center gap-3 text-center lg:hidden">
               <BrandEmblem size={44} priority />
-              <div>
+              <div className="text-left">
                 <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
                   {BRANDING.orgShortName}
                 </p>
