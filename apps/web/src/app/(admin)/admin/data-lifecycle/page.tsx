@@ -340,39 +340,45 @@ export default function DataLifecyclePage() {
         {archives.length === 0 ? (
           <p className="text-sm text-[var(--text-muted)]">尚無歸檔檔案。</p>
         ) : (
-          <table className="w-full text-xs">
-            <thead className="text-[var(--text-secondary)]">
-              <tr className="border-b border-[var(--border)]">
-                <th className="py-2 text-left">路徑</th>
-                <th className="py-2 text-right">大小</th>
-                <th className="py-2 text-right">修改時間</th>
-                <th className="py-2 text-right">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {archives.map((a) => (
-                <tr key={a.path} className="border-b border-[var(--border)]">
-                  <td className="py-2 font-mono text-xs">{a.path}</td>
-                  <td className="py-2 text-right">{fmtSize(a.size_bytes)}</td>
-                  <td className="py-2 text-right">{new Date(a.modified_at).toLocaleString()}</td>
-                  <td className="py-2 text-right">
-                    <button
-                      type="button"
-                      onClick={() => onPreviewArchive(a.path)}
-                      className="btn-sm btn-ghost mr-1">
-                      <Eye size={12} aria-hidden />
-                      預覽
-                    </button>
-                    <AnimatedDownloadButton
-                      href={lifecycleApi.archiveDownloadUrl(a.path)}
-                      className="btn-sm btn-primary inline-flex"
-                      filename={a.path.split("/").pop() ?? "archive"}
-                      label="下載" />
-                  </td>
+          <div
+            className="max-w-full overflow-x-auto overscroll-x-contain"
+            role="region"
+            aria-label="歸檔檔案清單，可左右捲動"
+            tabIndex={0}>
+            <table className="w-full min-w-[48rem] text-xs">
+              <thead className="text-[var(--text-secondary)]">
+                <tr className="border-b border-[var(--border)]">
+                  <th className="py-2 text-left">路徑</th>
+                  <th className="py-2 text-right">大小</th>
+                  <th className="py-2 text-right">修改時間</th>
+                  <th className="py-2 text-right">操作</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {archives.map((a) => (
+                  <tr key={a.path} className="border-b border-[var(--border)]">
+                    <td className="py-2 font-mono text-xs">{a.path}</td>
+                    <td className="py-2 text-right">{fmtSize(a.size_bytes)}</td>
+                    <td className="py-2 text-right">{new Date(a.modified_at).toLocaleString()}</td>
+                    <td className="py-2 text-right">
+                      <button
+                        type="button"
+                        onClick={() => onPreviewArchive(a.path)}
+                        className="btn-sm btn-ghost mr-1">
+                        <Eye size={12} aria-hidden />
+                        預覽
+                      </button>
+                      <AnimatedDownloadButton
+                        href={lifecycleApi.archiveDownloadUrl(a.path)}
+                        className="btn-sm btn-primary inline-flex"
+                        filename={a.path.split("/").pop() ?? "archive"}
+                        label="下載" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
 

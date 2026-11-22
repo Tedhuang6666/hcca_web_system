@@ -220,60 +220,66 @@ export default function ApiKeysPage() {
         {keys.length === 0 ? (
           <p className="p-6 text-center text-sm text-[var(--text-muted)]">尚無 API key。</p>
         ) : (
-          <table className="w-full text-xs">
-            <thead className="text-[var(--text-secondary)]">
-              <tr className="border-b border-[var(--border)] bg-[var(--bg-base)]">
-                <th className="px-3 py-2 text-left">名稱</th>
-                <th className="px-3 py-2 text-left">key prefix</th>
-                <th className="px-3 py-2 text-left">scopes</th>
-                <th className="px-3 py-2 text-right">RL/分</th>
-                <th className="px-3 py-2 text-right">最後使用</th>
-                <th className="px-3 py-2 text-right">到期</th>
-                <th className="px-3 py-2 text-center">狀態</th>
-                <th className="px-3 py-2 text-right">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {keys.map((k) => (
-                <tr
-                  key={k.id}
-                  className="border-b border-[var(--border)]"
-                  style={{ opacity: k.is_active ? 1 : 0.5 }}>
-                  <td className="px-3 py-2">{k.name}</td>
-                  <td className="px-3 py-2 font-mono">{k.key_prefix}…</td>
-                  <td className="px-3 py-2 font-mono text-xs">
-                    {k.scopes.length === 0 ? "—" : k.scopes.join(", ")}
-                  </td>
-                  <td className="px-3 py-2 text-right">{k.rate_limit_per_minute}</td>
-                  <td className="px-3 py-2 text-right">
-                    {k.last_used_at ? new Date(k.last_used_at).toLocaleString() : "—"}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    {k.expires_at ? new Date(k.expires_at).toLocaleDateString() : "永久"}
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    {k.is_active ? (
-                      <span className="text-[var(--success)]">啟用</span>
-                    ) : (
-                      <span className="text-[var(--text-muted)]">已撤銷</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    {k.is_active && (
-                      <button
-                        type="button"
-                        className="btn-sm btn-danger"
-                        onClick={() => onRevoke(k)}
-                        disabled={busy}>
-                        <Ban size={12} aria-hidden />
-                        撤銷
-                      </button>
-                    )}
-                  </td>
+          <div
+            className="max-w-full overflow-x-auto overscroll-x-contain"
+            role="region"
+            aria-label="API 金鑰清單，可左右捲動查看欄位"
+            tabIndex={0}>
+            <table className="w-full min-w-[64rem] text-xs">
+              <thead className="text-[var(--text-secondary)]">
+                <tr className="border-b border-[var(--border)] bg-[var(--bg-base)]">
+                  <th className="px-3 py-2 text-left">名稱</th>
+                  <th className="px-3 py-2 text-left">key prefix</th>
+                  <th className="px-3 py-2 text-left">scopes</th>
+                  <th className="px-3 py-2 text-right">RL/分</th>
+                  <th className="px-3 py-2 text-right">最後使用</th>
+                  <th className="px-3 py-2 text-right">到期</th>
+                  <th className="px-3 py-2 text-center">狀態</th>
+                  <th className="px-3 py-2 text-right">操作</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {keys.map((k) => (
+                  <tr
+                    key={k.id}
+                    className="border-b border-[var(--border)]"
+                    style={{ opacity: k.is_active ? 1 : 0.5 }}>
+                    <td className="px-3 py-2">{k.name}</td>
+                    <td className="px-3 py-2 font-mono">{k.key_prefix}…</td>
+                    <td className="px-3 py-2 font-mono text-xs">
+                      {k.scopes.length === 0 ? "—" : k.scopes.join(", ")}
+                    </td>
+                    <td className="px-3 py-2 text-right">{k.rate_limit_per_minute}</td>
+                    <td className="px-3 py-2 text-right">
+                      {k.last_used_at ? new Date(k.last_used_at).toLocaleString() : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {k.expires_at ? new Date(k.expires_at).toLocaleDateString() : "永久"}
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      {k.is_active ? (
+                        <span className="text-[var(--success)]">啟用</span>
+                      ) : (
+                        <span className="text-[var(--text-muted)]">已撤銷</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {k.is_active && (
+                        <button
+                          type="button"
+                          className="btn-sm btn-danger"
+                          onClick={() => onRevoke(k)}
+                          disabled={busy}>
+                          <Ban size={12} aria-hidden />
+                          撤銷
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
     </div>

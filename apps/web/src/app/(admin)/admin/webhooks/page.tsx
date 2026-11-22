@@ -261,57 +261,63 @@ export default function WebhooksPage() {
         {subs.length === 0 ? (
           <p className="p-6 text-center text-sm text-[var(--text-muted)]">尚無訂閱。</p>
         ) : (
-          <table className="w-full text-xs">
-            <thead className="text-[var(--text-secondary)]">
-              <tr className="border-b border-[var(--border)] bg-[var(--bg-base)]">
-                <th className="px-3 py-2 text-left">名稱</th>
-                <th className="px-3 py-2 text-left">URL</th>
-                <th className="px-3 py-2 text-left">events</th>
-                <th className="px-3 py-2 text-right">retries</th>
-                <th className="px-3 py-2 text-center">狀態</th>
-                <th className="px-3 py-2 text-right">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {subs.map((s) => (
-                <tr
-                  key={s.id}
-                  className="border-b border-[var(--border)]"
-                  style={{ opacity: s.is_active ? 1 : 0.5 }}>
-                  <td className="px-3 py-2">{s.name}</td>
-                  <td className="px-3 py-2 break-all font-mono text-xs">{s.url}</td>
-                  <td className="px-3 py-2 font-mono text-xs">{s.events.join(", ")}</td>
-                  <td className="px-3 py-2 text-right">{s.max_retries}</td>
-                  <td className="px-3 py-2 text-center">
-                    <button
-                      type="button"
-                      className="btn-sm btn-ghost"
-                      onClick={() => onToggle(s)}
-                      disabled={busy}>
-                      {s.is_active ? "啟用中" : "已停用"}
-                    </button>
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <button
-                      type="button"
-                      className="btn-sm btn-ghost mr-1"
-                      onClick={() => showDeliveries(s)}>
-                      <Eye size={12} aria-hidden />
-                      投遞
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-sm btn-danger"
-                      onClick={() => onDelete(s)}
-                      disabled={busy}>
-                      <Trash2 size={12} aria-hidden />
-                      刪除
-                    </button>
-                  </td>
+          <div
+            className="max-w-full overflow-x-auto overscroll-x-contain"
+            role="region"
+            aria-label="Webhook 訂閱清單，可左右捲動"
+            tabIndex={0}>
+            <table className="w-full min-w-[48rem] text-xs">
+              <thead className="text-[var(--text-secondary)]">
+                <tr className="border-b border-[var(--border)] bg-[var(--bg-base)]">
+                  <th className="px-3 py-2 text-left">名稱</th>
+                  <th className="px-3 py-2 text-left">URL</th>
+                  <th className="px-3 py-2 text-left">events</th>
+                  <th className="px-3 py-2 text-right">retries</th>
+                  <th className="px-3 py-2 text-center">狀態</th>
+                  <th className="px-3 py-2 text-right">操作</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {subs.map((s) => (
+                  <tr
+                    key={s.id}
+                    className="border-b border-[var(--border)]"
+                    style={{ opacity: s.is_active ? 1 : 0.5 }}>
+                    <td className="px-3 py-2">{s.name}</td>
+                    <td className="px-3 py-2 break-all font-mono text-xs">{s.url}</td>
+                    <td className="px-3 py-2 font-mono text-xs">{s.events.join(", ")}</td>
+                    <td className="px-3 py-2 text-right">{s.max_retries}</td>
+                    <td className="px-3 py-2 text-center">
+                      <button
+                        type="button"
+                        className="btn-sm btn-ghost"
+                        onClick={() => onToggle(s)}
+                        disabled={busy}>
+                        {s.is_active ? "啟用中" : "已停用"}
+                      </button>
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <button
+                        type="button"
+                        className="btn-sm btn-ghost mr-1"
+                        onClick={() => showDeliveries(s)}>
+                        <Eye size={12} aria-hidden />
+                        投遞
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-sm btn-danger"
+                        onClick={() => onDelete(s)}
+                        disabled={busy}>
+                        <Trash2 size={12} aria-hidden />
+                        刪除
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
 
@@ -328,40 +334,46 @@ export default function WebhooksPage() {
           {deliveriesFor.items.length === 0 ? (
             <p className="text-sm text-[var(--text-muted)]">尚無投遞。</p>
           ) : (
-            <table className="w-full text-xs">
-              <thead className="text-[var(--text-secondary)]">
-                <tr className="border-b border-[var(--border)]">
-                  <th className="py-1 text-left">event</th>
-                  <th className="py-1 text-left">狀態</th>
-                  <th className="py-1 text-right">嘗試</th>
-                  <th className="py-1 text-right">HTTP</th>
-                  <th className="py-1 text-left">錯誤</th>
-                  <th className="py-1 text-right">最後嘗試</th>
-                </tr>
-              </thead>
-              <tbody>
-                {deliveriesFor.items.map((d) => (
-                  <tr key={d.id} className="border-b border-[var(--border)]">
-                    <td className="py-1 font-mono">{d.event_type}</td>
-                    <td className="py-1">
-                      <span style={{ color: STATUS_COLOR[d.status] ?? "inherit" }}>
-                        {d.status}
-                      </span>
-                    </td>
-                    <td className="py-1 text-right">{d.attempt_count}</td>
-                    <td className="py-1 text-right">{d.response_status ?? "—"}</td>
-                    <td className="py-1 max-w-[16rem] truncate" title={d.error_message ?? ""}>
-                      {d.error_message ?? "—"}
-                    </td>
-                    <td className="py-1 text-right">
-                      {d.last_attempted_at
-                        ? new Date(d.last_attempted_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })
-                        : "—"}
-                    </td>
+            <div
+              className="max-w-full overflow-x-auto overscroll-x-contain"
+              role="region"
+              aria-label="Webhook 投遞紀錄，可左右捲動"
+              tabIndex={0}>
+              <table className="w-full min-w-[52rem] text-xs">
+                <thead className="text-[var(--text-secondary)]">
+                  <tr className="border-b border-[var(--border)]">
+                    <th className="py-1 text-left">event</th>
+                    <th className="py-1 text-left">狀態</th>
+                    <th className="py-1 text-right">嘗試</th>
+                    <th className="py-1 text-right">HTTP</th>
+                    <th className="py-1 text-left">錯誤</th>
+                    <th className="py-1 text-right">最後嘗試</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {deliveriesFor.items.map((d) => (
+                    <tr key={d.id} className="border-b border-[var(--border)]">
+                      <td className="py-1 font-mono">{d.event_type}</td>
+                      <td className="py-1">
+                        <span style={{ color: STATUS_COLOR[d.status] ?? "inherit" }}>
+                          {d.status}
+                        </span>
+                      </td>
+                      <td className="py-1 text-right">{d.attempt_count}</td>
+                      <td className="py-1 text-right">{d.response_status ?? "—"}</td>
+                      <td className="py-1 max-w-[16rem] truncate" title={d.error_message ?? ""}>
+                        {d.error_message ?? "—"}
+                      </td>
+                      <td className="py-1 text-right">
+                        {d.last_attempted_at
+                          ? new Date(d.last_attempted_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })
+                          : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </Modal>
       )}

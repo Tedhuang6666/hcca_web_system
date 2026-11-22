@@ -588,44 +588,50 @@ function PrivacyRequestsTab() {
         {rows.length === 0 ? (
           <p className="p-6 text-center text-sm text-[var(--text-muted)]">無請求。</p>
         ) : (
-          <table className="w-full text-xs">
-            <thead className="text-[var(--text-secondary)]">
-              <tr className="border-b border-[var(--border)] bg-[var(--bg-base)]">
-                <th className="px-3 py-2 text-left">收件時間</th>
-                <th className="px-3 py-2 text-left">類型</th>
-                <th className="px-3 py-2 text-left">主旨</th>
-                <th className="px-3 py-2 text-left">狀態</th>
-                <th className="px-3 py-2 text-right">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id} className="border-b border-[var(--border)]">
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    {new Date(r.created_at).toLocaleString()}
-                  </td>
-                  <td className="px-3 py-2 font-mono text-xs">{r.request_type}</td>
-                  <td className="px-3 py-2">{r.subject}</td>
-                  <td
-                    className="px-3 py-2"
-                    style={{ color: STATUS_COLOR[r.status] }}>
-                    {STATUS_LABEL[r.status]}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActive(r);
-                        setRespMsg(r.response_message ?? "");
-                      }}
-                      className="btn-sm btn-ghost">
-                      處理
-                    </button>
-                  </td>
+          <div
+            className="max-w-full overflow-x-auto overscroll-x-contain"
+            role="region"
+            aria-label="個資權利請求清單，可左右捲動查看欄位"
+            tabIndex={0}>
+            <table className="w-full min-w-[48rem] text-xs">
+              <thead className="text-[var(--text-secondary)]">
+                <tr className="border-b border-[var(--border)] bg-[var(--bg-base)]">
+                  <th className="px-3 py-2 text-left">收件時間</th>
+                  <th className="px-3 py-2 text-left">類型</th>
+                  <th className="px-3 py-2 text-left">主旨</th>
+                  <th className="px-3 py-2 text-left">狀態</th>
+                  <th className="px-3 py-2 text-right">操作</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id} className="border-b border-[var(--border)]">
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {new Date(r.created_at).toLocaleString()}
+                    </td>
+                    <td className="px-3 py-2 font-mono text-xs">{r.request_type}</td>
+                    <td className="px-3 py-2">{r.subject}</td>
+                    <td
+                      className="px-3 py-2"
+                      style={{ color: STATUS_COLOR[r.status] }}>
+                      {STATUS_LABEL[r.status]}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActive(r);
+                          setRespMsg(r.response_message ?? "");
+                        }}
+                        className="btn-sm btn-ghost">
+                        處理
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
 

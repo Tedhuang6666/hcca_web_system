@@ -119,50 +119,56 @@ export default function TrashPage() {
             無符合的刪除事件。
           </p>
         ) : (
-          <table className="w-full text-xs">
-            <thead className="text-[var(--text-secondary)]">
-              <tr className="border-b border-[var(--border)] bg-[var(--bg-base)]">
-                <th className="px-3 py-2 text-left">時間</th>
-                <th className="px-3 py-2 text-left">資源</th>
-                <th className="px-3 py-2 text-left">動作</th>
-                <th className="px-3 py-2 text-left">操作者</th>
-                <th className="px-3 py-2 text-left">摘要</th>
-                <th className="px-3 py-2 text-right">詳情</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.audit_id} className="border-b border-[var(--border)]">
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    {new Date(r.created_at).toLocaleString()}
-                  </td>
-                  <td className="px-3 py-2">
-                    <code>{r.entity_type}</code>
-                    <span className="ml-1 text-xs text-[var(--text-muted)]">
-                      {r.entity_id.slice(0, 8)}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2">
-                    <code className="rounded bg-[var(--bg-base)] px-1 py-0.5 text-xs">
-                      {r.action}
-                    </code>
-                  </td>
-                  <td className="px-3 py-2 text-[var(--text-secondary)]">
-                    {r.actor_email ?? <span className="text-[var(--text-muted)]">—</span>}
-                  </td>
-                  <td className="px-3 py-2 text-[var(--text-secondary)]">{r.summary ?? "—"}</td>
-                  <td className="px-3 py-2 text-right">
-                    <button
-                      type="button"
-                      onClick={() => setSelected(r)}
-                      className="btn-sm btn-ghost">
-                      展開
-                    </button>
-                  </td>
+          <div
+            className="max-w-full overflow-x-auto overscroll-x-contain"
+            role="region"
+            aria-label="刪除紀錄清單，可左右捲動"
+            tabIndex={0}>
+            <table className="w-full min-w-[48rem] text-xs">
+              <thead className="text-[var(--text-secondary)]">
+                <tr className="border-b border-[var(--border)] bg-[var(--bg-base)]">
+                  <th className="px-3 py-2 text-left">時間</th>
+                  <th className="px-3 py-2 text-left">資源</th>
+                  <th className="px-3 py-2 text-left">動作</th>
+                  <th className="px-3 py-2 text-left">操作者</th>
+                  <th className="px-3 py-2 text-left">摘要</th>
+                  <th className="px-3 py-2 text-right">詳情</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.audit_id} className="border-b border-[var(--border)]">
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {new Date(r.created_at).toLocaleString()}
+                    </td>
+                    <td className="px-3 py-2">
+                      <code>{r.entity_type}</code>
+                      <span className="ml-1 text-xs text-[var(--text-muted)]">
+                        {r.entity_id.slice(0, 8)}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2">
+                      <code className="rounded bg-[var(--bg-base)] px-1 py-0.5 text-xs">
+                        {r.action}
+                      </code>
+                    </td>
+                    <td className="px-3 py-2 text-[var(--text-secondary)]">
+                      {r.actor_email ?? <span className="text-[var(--text-muted)]">—</span>}
+                    </td>
+                    <td className="px-3 py-2 text-[var(--text-secondary)]">{r.summary ?? "—"}</td>
+                    <td className="px-3 py-2 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setSelected(r)}
+                        className="btn-sm btn-ghost">
+                        展開
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
 

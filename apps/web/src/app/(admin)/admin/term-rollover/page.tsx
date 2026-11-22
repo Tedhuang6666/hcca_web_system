@@ -307,58 +307,70 @@ export default function TermRolloverPage() {
             <summary className="cursor-pointer text-xs text-[var(--text-secondary)]">
               將結束的任期（{dryRunResult.terminations.length}）
             </summary>
-            <table className="mt-2 w-full text-xs">
-              <thead className="text-[var(--text-secondary)]">
-                <tr className="border-b border-[var(--border)]">
-                  <th className="py-1 text-left">使用者</th>
-                  <th className="py-1 text-left">職位</th>
-                  <th className="py-1 text-left">原 end_date</th>
-                  <th className="py-1 text-left">將設為</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dryRunResult.terminations.map((t) => (
-                  <tr key={t.user_position_id} className="border-b border-[var(--border)]">
-                    <td className="py-1">{t.user_email ?? t.user_id.slice(0, 8)}</td>
-                    <td className="py-1">
-                      {t.position_name}（{t.org_name}）
-                    </td>
-                    <td className="py-1">{t.current_end_date ?? "—（無限期）"}</td>
-                    <td className="py-1">{t.new_end_date}</td>
+            <div
+              className="mt-2 max-w-full overflow-x-auto overscroll-x-contain"
+              role="region"
+              aria-label="將結束的任期預覽，可左右捲動"
+              tabIndex={0}>
+              <table className="w-full min-w-[36rem] text-xs">
+                <thead className="text-[var(--text-secondary)]">
+                  <tr className="border-b border-[var(--border)]">
+                    <th className="py-1 text-left">使用者</th>
+                    <th className="py-1 text-left">職位</th>
+                    <th className="py-1 text-left">原 end_date</th>
+                    <th className="py-1 text-left">將設為</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {dryRunResult.terminations.map((t) => (
+                    <tr key={t.user_position_id} className="border-b border-[var(--border)]">
+                      <td className="py-1">{t.user_email ?? t.user_id.slice(0, 8)}</td>
+                      <td className="py-1">
+                        {t.position_name}（{t.org_name}）
+                      </td>
+                      <td className="py-1">{t.current_end_date ?? "—（無限期）"}</td>
+                      <td className="py-1">{t.new_end_date}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </details>
 
           <details>
             <summary className="cursor-pointer text-xs text-[var(--text-secondary)]">
               將新增的任期（{dryRunResult.new_assignments.length}）
             </summary>
-            <table className="mt-2 w-full text-xs">
-              <thead className="text-[var(--text-secondary)]">
-                <tr className="border-b border-[var(--border)]">
-                  <th className="py-1 text-left">使用者</th>
-                  <th className="py-1 text-left">職位</th>
-                  <th className="py-1 text-left">起</th>
-                  <th className="py-1 text-left">迄</th>
-                  <th className="py-1 text-left">警告</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dryRunResult.new_assignments.map((a, i) => (
-                  <tr key={i} className="border-b border-[var(--border)]">
-                    <td className="py-1">{a.user_email ?? a.user_id.slice(0, 8)}</td>
-                    <td className="py-1">
-                      {a.position_name}（{a.org_name}）
-                    </td>
-                    <td className="py-1">{a.start_date}</td>
-                    <td className="py-1">{a.end_date ?? "—"}</td>
-                    <td className="py-1 text-[var(--danger)]">{a.warning ?? ""}</td>
+            <div
+              className="mt-2 max-w-full overflow-x-auto overscroll-x-contain"
+              role="region"
+              aria-label="將新增的任期預覽，可左右捲動"
+              tabIndex={0}>
+              <table className="w-full min-w-[44rem] text-xs">
+                <thead className="text-[var(--text-secondary)]">
+                  <tr className="border-b border-[var(--border)]">
+                    <th className="py-1 text-left">使用者</th>
+                    <th className="py-1 text-left">職位</th>
+                    <th className="py-1 text-left">起</th>
+                    <th className="py-1 text-left">迄</th>
+                    <th className="py-1 text-left">警告</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {dryRunResult.new_assignments.map((a, i) => (
+                    <tr key={i} className="border-b border-[var(--border)]">
+                      <td className="py-1">{a.user_email ?? a.user_id.slice(0, 8)}</td>
+                      <td className="py-1">
+                        {a.position_name}（{a.org_name}）
+                      </td>
+                      <td className="py-1">{a.start_date}</td>
+                      <td className="py-1">{a.end_date ?? "—"}</td>
+                      <td className="py-1 text-[var(--danger)]">{a.warning ?? ""}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </details>
         </section>
       )}

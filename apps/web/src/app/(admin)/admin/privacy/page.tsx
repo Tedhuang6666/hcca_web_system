@@ -208,34 +208,40 @@ export default function PrivacyPage() {
         {exports.length === 0 ? (
           <p className="p-6 text-center text-sm text-[var(--text-muted)]">尚無匯出檔。</p>
         ) : (
-          <table className="w-full text-xs">
-            <thead className="text-[var(--text-secondary)]">
-              <tr className="border-b border-[var(--border)]">
-                <th className="px-3 py-2 text-left">檔名</th>
-                <th className="px-3 py-2 text-right">大小</th>
-                <th className="px-3 py-2 text-right">生成時間</th>
-                <th className="px-3 py-2 text-right">下載</th>
-              </tr>
-            </thead>
-            <tbody>
-              {exports.map((f) => (
-                <tr key={f.filename} className="border-b border-[var(--border)]">
-                  <td className="px-3 py-2 font-mono text-xs">{f.filename}</td>
-                  <td className="px-3 py-2 text-right">{fmtSize(f.size_bytes)}</td>
-                  <td className="px-3 py-2 text-right">
-                    {new Date(f.modified_at).toLocaleString()}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <AnimatedDownloadButton
-                      href={privacyApi.exportDownloadUrl(f.filename)}
-                      className="btn-sm btn-primary inline-flex"
-                      filename={f.filename}
-                      label="下載" />
-                  </td>
+          <div
+            className="max-w-full overflow-x-auto overscroll-x-contain"
+            role="region"
+            aria-label="個資匯出檔清單，可左右捲動查看欄位"
+            tabIndex={0}>
+            <table className="w-full min-w-[44rem] text-xs">
+              <thead className="text-[var(--text-secondary)]">
+                <tr className="border-b border-[var(--border)]">
+                  <th className="px-3 py-2 text-left">檔名</th>
+                  <th className="px-3 py-2 text-right">大小</th>
+                  <th className="px-3 py-2 text-right">生成時間</th>
+                  <th className="px-3 py-2 text-right">下載</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {exports.map((f) => (
+                  <tr key={f.filename} className="border-b border-[var(--border)]">
+                    <td className="px-3 py-2 font-mono text-xs">{f.filename}</td>
+                    <td className="px-3 py-2 text-right">{fmtSize(f.size_bytes)}</td>
+                    <td className="px-3 py-2 text-right">
+                      {new Date(f.modified_at).toLocaleString()}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <AnimatedDownloadButton
+                        href={privacyApi.exportDownloadUrl(f.filename)}
+                        className="btn-sm btn-primary inline-flex"
+                        filename={f.filename}
+                        label="下載" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
 
