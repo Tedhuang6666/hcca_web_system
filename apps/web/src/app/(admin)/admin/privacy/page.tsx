@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import Combobox, { type ComboboxOption } from "@/components/ui/Combobox";
+import { useUserSearch } from "@/components/ui/targeting";
 import { usePermissions } from "@/hooks/usePermissions";
 import { usePrompt } from "@/components/ui/ConfirmDialog";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
@@ -33,11 +35,20 @@ export default function PrivacyPage() {
   const canHandlePrivacy = can("system:privacy");
   const prompt = usePrompt();
   const [userId, setUserId] = useState("");
+  const [selectedUser, setSelectedUser] = useState<ComboboxOption | null>(null);
+  const { results: userSearchResults, search: searchUsers } = useUserSearch();
   const [busy, setBusy] = useState(false);
   const [exports, setExports] = useState<PrivacyExportFile[]>([]);
   const [lastExport, setLastExport] = useState<PrivacyExportResult | null>(null);
   const [requests, setRequests] = useState<PrivacyRequestOut[]>([]);
   const [requestBusy, setRequestBusy] = useState<string | null>(null);
+  const userSearchOptions = userSearchResults.map((option) => ({
+    ...option,
+    description: [option.description, option.value].filter(Boolean).join(" · "),
+  }));
+  const userOptions = selectedUser
+    ? [selectedUser, ...userSearchOptions.filter((option) => option.value !== selectedUser.value)]
+    : userSearchOptions;
 
   const loadExports = useCallback(async () => {
     try {
@@ -157,35 +168,80 @@ export default function PrivacyPage() {
       <section
         className="mb-6 rounded-lg border bg-[var(--bg-surface)] p-4"
         style={{ borderColor: "var(--border)" }}>
-        <h2 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">當事人 UUID</h2>
-        <div className="flex flex-wrap gap-2">
-          <input
-            type="text"
-            value={userId}
-            onChange={(e) => setUserId(e.target.value)}
-            placeholder="00000000-0000-0000-0000-000000000000"
-            className="input min-w-[24rem] flex-1 font-mono text-xs"
-          />
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={busy || !userId.trim()}
-            onClick={onExport}>
-            <Download size={14} aria-hidden />
-            匯出全部資料 ZIP
-          </button>
-          <button
-            type="button"
-            className="btn btn-danger"
-            disabled={busy || !userId.trim()}
-            onClick={onAnonymize}>
-            <ShieldOff size={14} aria-hidden />
-            假名化（不可逆）
-          </button>
+        <h2 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">選擇當事人</h2>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <span className="block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+              依姓名或信箱搜尋
+            </span>
+            <Combobox
+              value={selectedUser?.value ?? ""}
+              onChange={(value) => {
+                setSelectedUser(userOptions.find((option) => option.value === value) ?? null);
+                setUserId(value);
+              }}
+              onSearch={searchUsers}
+              options={userOptions}
+              placeholder="輸入至少 2 個字搜尋使用者"
+              ariaLabel="依姓名或信箱搜尋當事人"
+              clearable
+              className="w-full max-w-xl"
+              inputStyle={{ fontSize: "16px" }}
+            />
+            {selectedUser && (
+              <p className="break-all text-xs" style={{ color: "var(--text-muted)" }}>
+                UUID：<code>{selectedUser.value}</code>
+              </p>
+            )}
+          </div>
+          <details>
+            <summary className="flex min-h-11 cursor-pointer items-center text-sm font-medium text-[var(--text-secondary)]">
+              直接輸入 UUID
+            </summary>
+            <label className="mt-2 block space-y-1.5">
+              <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                當事人 UUID
+              </span>
+              <input
+                type="text"
+                value={userId}
+                onChange={(e) => {
+                  setUserId(e.target.value);
+                  setSelectedUser(null);
+                }}
+                placeholder="00000000-0000-0000-0000-000000000000"
+                className="input w-full min-w-0 font-mono text-base"
+                aria-label="當事人 UUID"
+                aria-describedby="privacy-user-uuid-hint"
+                autoComplete="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                maxLength={36}
+              />
+              <span id="privacy-user-uuid-hint" className="block text-xs text-[var(--text-muted)]">
+                UUID 從 <code>/admin/permissions</code> 中找對應使用者的「ID」欄位複製。
+              </span>
+            </label>
+          </details>
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <button
+              type="button"
+              className="btn btn-primary min-h-11 w-full justify-center sm:w-auto"
+              disabled={busy || !userId.trim()}
+              onClick={onExport}>
+              <Download size={14} aria-hidden />
+              匯出全部資料 ZIP
+            </button>
+            <button
+              type="button"
+              className="btn btn-danger min-h-11 w-full justify-center sm:w-auto"
+              disabled={busy || !userId.trim()}
+              onClick={onAnonymize}>
+              <ShieldOff size={14} aria-hidden />
+              假名化（不可逆）
+            </button>
+          </div>
         </div>
-        <p className="mt-2 text-xs text-[var(--text-muted)]">
-          UUID 從 <code>/admin/permissions</code> 中找對應使用者的「ID」欄位複製。
-        </p>
         {lastExport && (
           <div className="mt-3 rounded-md border border-[var(--success)] bg-[var(--success-dim)] p-3 text-xs">
             <UserCheck size={14} aria-hidden className="mr-1 inline" />

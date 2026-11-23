@@ -234,7 +234,9 @@
   .campus-news-side .campus-news-list { border-top: 0; }
   .campus-news-side > .campus-participation:first-child { margin-top: 0; }
   .campus-services nav { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 1.5rem; }
-  .campus-services a { min-height: 7rem; flex-direction: column; align-items: start; border-top: var(--home-hairline); border-bottom: 0; padding-block: 1rem 0.5rem; }
+  .campus-services a { min-height: 7rem; flex-direction: row; align-items: center; border-top: var(--home-hairline); border-bottom: 0; padding-block: 1rem 0.5rem; }
+  .campus-services a > span { min-width: 0; white-space: nowrap; }
+  .campus-services a > svg { flex: 0 0 auto; }
   .campus-stories-layout { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); column-gap: clamp(2.5rem, 5vw, 4.5rem); align-items: start; }
   .campus-stories-layout:has(> :only-child) { grid-template-columns: minmax(0, 1fr); }
   .campus-story-lead { grid-row: 1 / span 3; padding-block: 0.5rem 0; }
