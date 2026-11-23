@@ -205,22 +205,11 @@ async def _access_token_claims(db: AsyncSession, user: User) -> dict:
     # Refresh 會重新簽發 JWT，權限 claims 必須從資料庫即時重算，避免舊快取讓權限
     # 在換發 token 後仍短暫消失或殘留。
     codes = await get_user_permission_codes(db, user.id, on_date=local_today())
+    # 個人資料由 /auth/me 從資料庫回傳，不重複放進 JWT。特別是通知偏好可能很大，
+    # 會讓超管 access-token Cookie 超過瀏覽器單 Cookie 大小限制而被整個丟棄。
     return {
         "is_admin": user.is_superuser or PermissionCode.ADMIN_ALL in codes,
         "permissions": sorted(codes),
-        "user": {
-            "email": user.email,
-            "display_name": user.display_name,
-            "avatar_url": user.avatar_url,
-            "student_id": user.student_id,
-            "show_email": user.show_email,
-            "is_active": user.is_active,
-            "is_verified": user.is_verified,
-            "is_superuser": user.is_superuser,
-            "notification_preferences": user.notification_preferences or {},
-            "ui_theme": user.ui_theme,
-            "ui_locale": user.ui_locale,
-        },
     }
 
 

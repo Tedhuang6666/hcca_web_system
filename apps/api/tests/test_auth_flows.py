@@ -55,6 +55,26 @@ async def test_refresh_with_valid_cookie_token_rotates_and_sets_new_cookies(
     assert response.cookies[settings.REFRESH_TOKEN_COOKIE_NAME] != old_refresh
 
 
+async def test_access_token_cookie_stays_small_when_profile_is_large(
+    db_session: AsyncSession, make_user: Callable[..., Any]
+) -> None:
+    """大型通知偏好不得被複製進 access token，避免瀏覽器丟棄登入 Cookie。"""
+    import api.routers.auth as auth_module
+
+    user = await make_user(
+        is_superuser=True,
+        notification_preferences={"large_setting": "x" * 3500},
+    )
+
+    claims = await auth_module._access_token_claims(db_session, user)
+    token = create_access_token(str(user.id), extra_claims=claims)
+
+    assert claims["is_admin"] is True
+    assert "permissions" in claims
+    assert "user" not in claims
+    assert len(f"{settings.ACCESS_TOKEN_COOKIE_NAME}={token}") < 4096
+
+
 async def test_refresh_rejects_request_body_token(client: AsyncClient, member_user: User) -> None:
     """一般使用者 refresh 僅接受 HttpOnly cookie，不能由 body 帶入。"""
     old_refresh = create_refresh_token(str(member_user.id))
