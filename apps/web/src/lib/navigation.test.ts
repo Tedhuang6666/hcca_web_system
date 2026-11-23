@@ -7,6 +7,7 @@ import {
   NAV_DEF_STUDENT,
   NAV_ITEMS,
   NAVIGATION_PROFILES,
+  filterSidebarNavEntries,
   isSection,
   isNavItemVisible,
   navItemsFromEntries,
@@ -26,13 +27,47 @@ describe("navigation visibility", () => {
     expect(managementSection?.items.map((item) => item.id)).toEqual(expect.arrayContaining([
       "publications",
       "email",
-      "shopAdmin",
-      "councilOrders",
-      "classOrders",
       "finance",
       "petitionsManage",
       "peopleAdmin",
     ]));
+    for (const id of [
+      "classOrders",
+      "councilOrders",
+      "shopAdmin",
+      "raffleAdmin",
+      "documentTemplates",
+      "policies",
+      "privacyAdmin",
+    ]) {
+      expect(allIds).not.toContain(id);
+    }
+  });
+
+  it("filters removed entries from legacy sidebar profiles", () => {
+    const hiddenIds = new Set([
+      "classOrders",
+      "councilOrders",
+      "shopAdmin",
+      "raffleAdmin",
+      "documentTemplates",
+      "policies",
+      "privacyAdmin",
+    ]);
+    const entries = filterSidebarNavEntries([
+      {
+        id: "legacy-management",
+        heading: "管理工作",
+        items: NAV_ITEMS.filter((item) => hiddenIds.has(item.id)),
+      },
+      {
+        id: "other-management",
+        heading: "其他管理",
+        items: NAV_ITEMS.filter((item) => item.id === "finance"),
+      },
+    ]);
+
+    expect(navItemsFromEntries(entries).map((item) => item.id)).toEqual(["finance"]);
   });
 
   it("keeps private services out of the logged-out fallback", () => {

@@ -18,6 +18,7 @@ import {
   hasSavedNavPreferences,
   isNavItemVisible,
   DEFAULT_NAV_PREFERENCES,
+  filterSidebarNavEntries,
   isSection,
   NAV_DEF_LOGGED_OUT,
   navProfileFromApi,
@@ -313,6 +314,7 @@ export default function Sidebar() {
 
   const navSections = useMemo(
     () => {
+      const sidebarEntries = filterSidebarNavEntries(activeNavDef);
       if (isLoggedIn && hydrated && hasCustomNav) {
         const visibleItems = new Set(
           orderedItems(desktopPrefs.desktopOrder, desktopPrefs.desktopHidden)
@@ -320,7 +322,7 @@ export default function Sidebar() {
             .map((item) => item.id),
         );
         const orderIndex = new Map(desktopPrefs.desktopOrder.map((id, index) => [id, index]));
-        return activeNavDef.map((entry) => {
+        return sidebarEntries.map((entry) => {
           if (!isSection(entry)) return visibleItems.has(entry.id) ? entry : null;
           const items = entry.items
             .filter((item) => visibleItems.has(item.id))
@@ -328,7 +330,7 @@ export default function Sidebar() {
           return items.length > 0 ? { ...entry, items } : null;
         }).filter(Boolean) as NavEntry[];
       }
-      return activeNavDef.map((entry) => {
+      return sidebarEntries.map((entry) => {
         if (!isSection(entry)) return entry;
         const items = entry.items.filter(itemVisible);
         return items.length > 0 ? { ...entry, items } : null;

@@ -292,6 +292,16 @@ const PRIVATE_PUBLIC_NAV_ITEM_IDS = new Set([
   "publicRecommendedVendors",
 ]);
 
+const SIDEBAR_HIDDEN_NAV_ITEM_IDS = new Set([
+  "classOrders",
+  "councilOrders",
+  "shopAdmin",
+  "raffleAdmin",
+  "documentTemplates",
+  "policies",
+  "privacyAdmin",
+]);
+
 /** 管理工具直接列出、依權限過濾，不再先進入營運中心或模組後台再找一次。 */
 export const NAV_DEF: NavEntry[] = [
   {
@@ -325,18 +335,13 @@ export const NAV_DEF: NavEntry[] = [
     items: byIds([
       "publications",
       "email",
-      "classOrders",
-      "councilOrders",
-      "shopAdmin",
       "finance",
       "petitionsManage",
       "merchandiseSubmissionsAdmin",
       "partnerMapAdmin",
       "recommendedVendorsAdmin",
       "electionsAdmin",
-      "raffleAdmin",
       "examPaperAdmin",
-      "documentTemplates",
       "serialTemplates",
       "qrCode",
       "publicSiteAdmin",
@@ -351,8 +356,6 @@ export const NAV_DEF: NavEntry[] = [
       "adminDashboard",
       "systemOperations",
       "systemSettings",
-      "policies",
-      "privacyAdmin",
       "audit",
     ]),
   },
@@ -496,6 +499,20 @@ export function navItemsFromEntries(entries: NavEntry[]): NavItem[] {
       return true;
     });
   });
+}
+
+export function filterSidebarNavEntries(entries: NavEntry[]): NavEntry[] {
+  const visibleEntries: NavEntry[] = [];
+  for (const entry of entries) {
+    if (!isSection(entry)) {
+      if (!SIDEBAR_HIDDEN_NAV_ITEM_IDS.has(entry.id)) visibleEntries.push(entry);
+      continue;
+    }
+
+    const items = entry.items.filter((item) => !SIDEBAR_HIDDEN_NAV_ITEM_IDS.has(item.id));
+    if (items.length > 0) visibleEntries.push({ ...entry, items });
+  }
+  return visibleEntries;
 }
 
 export function isNavItemVisible(item: NavItem, options: NavVisibilityOptions): boolean {
