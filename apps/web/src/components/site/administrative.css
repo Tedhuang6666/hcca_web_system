@@ -175,8 +175,10 @@
   .law-reading-row { grid-template-columns: minmax(0, 1fr); padding-right: 2rem; }
   .law-reading-text { margin-top: 0; }
   .regulation-management-actions { width: 100%; }
-  .regulation-reading-tools { gap: 0.25rem; }
-  .regulation-reading-tools .btn { padding-inline: 0.5rem; font-size: 0.8125rem; white-space: nowrap; }
+  .regulation-reading-toolbar { align-items: stretch; }
+  .regulation-reading-tools { display: grid; width: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; }
+  .regulation-reading-zoom { grid-column: 1 / -1; justify-content: center; }
+  .regulation-reading-tools .btn { width: 100%; min-height: 44px; padding-inline: 0.5rem; font-size: 0.8125rem; white-space: normal; }
   .law-reading-row:is([data-kind="paragraph"], [data-kind="subparagraph"], [data-kind="item"]) { grid-template-columns: 3.5em minmax(0, 1fr); column-gap: 0.375em; }
   .law-reading-row[data-kind="paragraph"] { padding-left: 0.5em; }
   .law-reading-row[data-kind="subparagraph"] { padding-left: 1em; }

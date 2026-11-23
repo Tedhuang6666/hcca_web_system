@@ -440,8 +440,7 @@ export default function RegulationDetailPageClient({
           <div className="regulation-detail-heading flex items-start gap-3">
             <div className="min-w-0 flex-1">
               <h1
-                className="w-full min-w-0 break-words text-lg font-semibold leading-snug sm:text-xl"
-                style={{ color: "var(--text-primary)", overflowWrap: "anywhere", wordBreak: "break-word" }}
+                className="w-full min-w-0 break-words text-lg font-semibold leading-snug text-[var(--text-primary)] [overflow-wrap:anywhere] [word-break:break-word] sm:text-xl"
               >
                 {initialTitle}
               </h1>
@@ -464,7 +463,7 @@ export default function RegulationDetailPageClient({
   if (!reg) {
     return (
       <div className="py-20 text-center space-y-4">
-        <p style={{ color: "var(--text-secondary)" }}>法規不存在或無法存取</p>
+        <p className="text-[var(--text-secondary)]">法規不存在或無法存取</p>
         <Link href="/regulations" className="btn btn-secondary">返回自治法規</Link>
       </div>
     );
@@ -493,7 +492,7 @@ export default function RegulationDetailPageClient({
           <span aria-hidden="true">/</span><span>法規內容</span>
         </nav>
         <header className="regulation-detail-heading">
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
+          <h1 className="break-words text-xl font-semibold text-[var(--text-primary)] [overflow-wrap:anywhere]">
             {reg.title}
           </h1>
           <div className="regulation-reading-meta">
@@ -539,19 +538,18 @@ export default function RegulationDetailPageClient({
 
         {/* ── 失效橫幅 ─────────────────────────────────────────────────────── */}
         {reg.is_repealed && (
-          <div className="rounded-lg px-4 py-3 flex items-start gap-3"
-            style={{ background: "var(--danger-dim)", border: "1px solid var(--danger-border)" }}>
+          <div className="flex items-start gap-3 rounded-lg border border-[var(--danger-border)] bg-[var(--danger-dim)] px-4 py-3">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth="2" style={{ color: "var(--danger)", flexShrink: 0, marginTop: 2 }}>
+              strokeWidth="2" className="mt-0.5 shrink-0 text-[var(--danger)]">
               <circle cx="12" cy="12" r="10" />
               <line x1="15" y1="9" x2="9" y2="15" />
               <line x1="9" y1="9" x2="15" y2="15" />
             </svg>
             <div>
-              <p className="text-sm font-semibold" style={{ color: "var(--danger)" }}>
+              <p className="text-sm font-semibold text-[var(--danger)]">
                 本法規已廢止
               </p>
-              <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>
+              <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
                 {reg.repealed_date ? `廢止日期：${new Date(reg.repealed_date).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" })}　｜　` : ""}
                 {reg.repeal_reason || "未提供廢止理由"}
               </p>
@@ -560,14 +558,13 @@ export default function RegulationDetailPageClient({
         )}
 
         {!reg.is_active && !reg.is_repealed && (
-          <div className="rounded-lg px-4 py-3 flex items-center gap-3"
-            style={{ background: "var(--danger-dim)", border: "1px solid var(--danger-border)" }}>
+          <div className="flex items-center gap-3 rounded-lg border border-[var(--danger-border)] bg-[var(--danger-dim)] px-4 py-3">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth="2" style={{ color: "var(--danger)", flexShrink: 0 }}>
+              strokeWidth="2" className="shrink-0 text-[var(--danger)]">
               <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
               <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
             </svg>
-            <p className="text-sm" style={{ color: "var(--danger)" }}>
+            <p className="text-sm text-[var(--danger)]">
               本法規已停用，僅供歷史查閱，目前不具法律效力。
             </p>
           </div>
@@ -575,24 +572,23 @@ export default function RegulationDetailPageClient({
 
         {/* ── 凍結橫幅 ─────────────────────────────────────────────────────── */}
         {reg.freeze_reason && (
-          <div className="rounded-lg px-4 py-3"
-            style={{ background: "var(--warning-dim)", border: "1px solid var(--warning-border)" }}>
+          <div className="rounded-lg border border-[var(--warning-border)] bg-[var(--warning-dim)] px-4 py-3">
             <div className="flex items-start gap-3">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                strokeWidth="2" style={{ color: "var(--warning)", flexShrink: 0, marginTop: 2 }}>
+                strokeWidth="2" className="mt-0.5 shrink-0 text-[var(--warning)]">
                 <circle cx="12" cy="12" r="10" />
                 <line x1="12" y1="8" x2="12" y2="12" />
                 <line x1="12" y1="16" x2="12.01" y2="16" />
               </svg>
               <div className="flex-1">
-                <p className="text-sm font-semibold" style={{ color: "var(--warning)" }}>
+                <p className="text-sm font-semibold text-[var(--warning)]">
                   本法規已凍結，效力暫停
                 </p>
-                <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>
+                <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
                   凍結依據：{reg.freeze_reason}
                 </p>
                 {reg.freeze_at && (
-                  <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+                  <p className="mt-0.5 text-xs text-[var(--text-muted)]">
                     凍結時間：{new Date(reg.freeze_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" }).replace(/\s+/gu, " ")}
                   </p>
                 )}
@@ -602,18 +598,14 @@ export default function RegulationDetailPageClient({
         )}
 
         {/* ── 分頁標籤 ─────────────────────────────────────────────────────── */}
-        <div className="administrative-reader-tabs no-print flex gap-1 p-1 rounded-lg overflow-x-auto"
-          style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+        <div className="administrative-reader-tabs no-print flex gap-1 overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] p-1">
           {([
             { key: "content" as Tab, label: regulationPublicState(reg) === "現行" ? "現行條文" : "條文內容" },
             { key: "history", label: "法規沿革" },
             { key: "revisions", label: "歷史版本" },
           ] as { key: Tab; label: string }[]).map(({ key, label }) => (
             <button key={key} aria-pressed={tab === key} onClick={() => handleTabChange(key)}
-              className="flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] whitespace-nowrap"
-              style={tab === key
-                ? { background: "var(--primary-dim)", border: "1px solid var(--border-strong)", color: "var(--primary-text)" }
-                : { color: "var(--text-muted)" }}>
+              className={`min-h-11 flex-1 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] ${tab === key ? "border border-[var(--border-strong)] bg-[var(--primary-dim)] text-[var(--primary-text)]" : "text-[var(--text-muted)]"}`}>
               {label}
             </button>
           ))}
@@ -625,8 +617,7 @@ export default function RegulationDetailPageClient({
         {tab === "content" && (
           <div className="administrative-law-reader print-content">
             {reg.preface && (
-              <div className="mb-6 pb-5 border-b text-sm leading-7"
-                style={{ color: "var(--text-muted)", borderColor: "var(--border)" }}>
+              <div className="mb-6 border-b border-[var(--border)] pb-5 text-sm leading-7 text-[var(--text-muted)]">
                 {reg.preface}
               </div>
             )}
@@ -639,8 +630,8 @@ export default function RegulationDetailPageClient({
             ) : (
               <div className="space-y-3">
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-                  <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>條文內容</h2>
-                  <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  <h2 className="text-sm font-semibold text-[var(--text-primary)]">條文內容</h2>
+                  <span className="text-xs text-[var(--text-muted)]">
                     共 {reg.article_count ?? countLawArticles(allArticles)} 條
                   </span>
                 </div>
@@ -652,29 +643,16 @@ export default function RegulationDetailPageClient({
                         Object.fromEntries(chapterArticles.map((article) => [article.id, nextValue])),
                       );
                     }}
-                    className="text-xs px-3 py-1.5 rounded-lg transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-80 inline-flex items-center gap-1.5"
-                    style={{
-                      color: allChaptersCollapsed ? "var(--primary-text)" : "var(--text-muted)",
-                      border: "1px solid var(--border)",
-                      background: allChaptersCollapsed ? "var(--primary-dim)" : "transparent",
-                    }}>
+                    className={`inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-80 ${allChaptersCollapsed ? "bg-[var(--primary-dim)] text-[var(--primary-text)]" : "bg-transparent text-[var(--text-muted)]"}`}>
                     {allChaptersCollapsed ? "展開各章條文" : "收合各章條文"}
                   </button>
                   <button onClick={() => setTocVisible(v => !v)}
-                    className="text-xs px-3 py-1.5 rounded-lg transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-80 inline-flex items-center gap-1.5"
-                    style={{
-                      color: tocVisible ? "var(--primary-text)" : "var(--text-muted)",
-                      border: "1px solid var(--border)",
-                      background: tocVisible ? "var(--primary-dim)" : "transparent",
-                    }}>
+                    className={`inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-80 ${tocVisible ? "bg-[var(--primary-dim)] text-[var(--primary-text)]" : "bg-transparent text-[var(--text-muted)]"}`}>
                     {tocVisible ? "隱藏目錄" : "顯示目錄"}
                   </button>
                   {deletedCount > 0 && (
                     <button onClick={() => setShowDeleted(v => !v)}
-                      className="text-xs px-3 py-1.5 rounded-lg transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-80 inline-flex items-center gap-1.5"
-                      style={showDeleted
-                        ? { color: "var(--danger)", background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.3)" }
-                        : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
+                      className={`inline-flex min-h-11 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-80 ${showDeleted ? "border-[rgba(220,38,38,0.3)] bg-[rgba(220,38,38,0.08)] text-[var(--danger)]" : "border-[var(--border)] text-[var(--text-muted)]"}`}>
                       {showDeleted ? "隱藏已刪除" : `顯示已刪除 (${deletedCount})`}
                     </button>
                   )}
@@ -682,9 +660,8 @@ export default function RegulationDetailPageClient({
 
                 <div className="administrative-law-layout">
                   {tocVisible && (
-                    <aside className="administrative-law-toc no-print"
-                      style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
-                      <p className="administrative-toc-desktop-title text-xs font-semibold mb-2" style={{ color: "var(--text-muted)" }}>章節目錄</p>
+                    <aside className="administrative-law-toc no-print rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]">
+                      <p className="administrative-toc-desktop-title mb-2 text-xs font-semibold text-[var(--text-muted)]">章節目錄</p>
                       <button type="button" className="administrative-toc-mobile-toggle" aria-expanded={mobileTocExpanded}
                         aria-controls="law-toc-links" onClick={() => setMobileTocExpanded((value) => !value)}>條文目錄　{mobileTocExpanded ? "收合" : "展開"}</button>
                       <div id="law-toc-links" className="space-y-1" data-expanded={mobileTocExpanded}>
@@ -699,14 +676,7 @@ export default function RegulationDetailPageClient({
                                 target.scrollIntoView({ behavior: "smooth", block: "start" });
                               });
                             }}
-                            className="w-full text-left text-xs px-2 py-1 rounded hover:opacity-80"
-                            style={{
-                              paddingLeft: `${0.5 + item.indent * 0.75}rem`,
-                              color: activeAnchorId === item.anchor ? "var(--primary-text)" : "var(--text-secondary)",
-                              background: activeAnchorId === item.anchor ? "var(--primary-dim)" : "transparent",
-                              border: activeAnchorId === item.anchor ? "1px solid var(--border-strong)" : "1px solid transparent",
-                              fontWeight: item.indent === 0 ? 600 : 400,
-                            }}
+                            className={`flex min-h-11 w-full items-center rounded px-2 py-1 text-left text-xs hover:opacity-80 ${item.indent === 0 ? "pl-2 font-semibold" : item.indent === 1 ? "pl-5" : "pl-8"} ${activeAnchorId === item.anchor ? "border border-[var(--border-strong)] bg-[var(--primary-dim)] text-[var(--primary-text)]" : "border border-transparent text-[var(--text-secondary)]"}`}
                           >
                             {item.label}
                           </button>
@@ -719,7 +689,7 @@ export default function RegulationDetailPageClient({
                     style={zoomStyle}
                   >
                     {activeArticles.length === 0
-                      ? <p className="p-6 text-center" style={{ color: "var(--text-muted)" }}>尚無條文記錄</p>
+                      ? <p className="p-6 text-center text-[var(--text-muted)]">尚無條文記錄</p>
                       : articleDisplayRows.map(({ article, displayLabel, hiddenByChapter }) => (
                           <ArticleRow
                             key={article.id}
@@ -767,7 +737,7 @@ export default function RegulationDetailPageClient({
           <div className="space-y-3">
             {publishedDoc && <Link className="administrative-source-link" href={`/documents/${publishedDoc.id}`}>公布公文：{publishedDoc.serial_number}</Link>}
             {sortedRevisions.length === 0
-              ? <div className="card p-6 text-center" style={{ color: "var(--text-muted)" }}>尚無修訂歷程</div>
+              ? <div className="card p-6 text-center text-[var(--text-muted)]">尚無修訂歷程</div>
               : [...sortedRevisions].reverse().map((rev, i) => {
                   const sortedIdx = sortedRevisions.length - 1 - i;
                   const prevRev = sortedIdx > 0 ? sortedRevisions[sortedIdx - 1] : null;
@@ -809,8 +779,8 @@ export default function RegulationDetailPageClient({
               ["狀態", regulationPublicState(reg)],
             ] as [string, string][]).map(([k, v]) => (
               <div key={k}>
-                <dt style={{ color: "var(--text-muted)" }}>{k}</dt>
-                <dd className="mt-0.5" style={{ color: "var(--text-primary)" }}>{v}</dd>
+                <dt className="text-[var(--text-muted)]">{k}</dt>
+                <dd className="mt-0.5 text-[var(--text-primary)]">{v}</dd>
               </div>
             ))}
           </dl>
@@ -821,12 +791,7 @@ export default function RegulationDetailPageClient({
         <button
           type="button"
           onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-          className="no-print fixed bottom-5 right-5 z-40 inline-flex h-11 w-11 items-center justify-center rounded-full shadow-lg transition-opacity hover:opacity-85"
-          style={{
-            background: "var(--bg-surface)",
-            color: "var(--primary-text)",
-            border: "1px solid var(--border-strong)",
-          }}
+          className="no-print fixed bottom-5 right-5 z-40 inline-flex h-11 w-11 items-center justify-center rounded-full border border-[var(--border-strong)] bg-[var(--bg-surface)] text-[var(--primary-text)] shadow-lg transition-opacity hover:opacity-85"
           title="回到最上方"
           aria-label="回到最上方"
         >
