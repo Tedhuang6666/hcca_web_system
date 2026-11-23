@@ -154,41 +154,40 @@ export default function DocumentDelegationsPage() {
         { label: "代理設定" },
       ]} />
 
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>公文簽核代理設定</h1>
+          <h1 className="text-xl font-semibold text-fg-primary!">公文簽核代理設定</h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
           <button
             onClick={() => setShowInactive((prev) => !prev)}
-            className="text-xs px-3 py-1.5 rounded-lg"
-            style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}
+            className="btn btn-secondary min-h-11 text-xs"
           >
             {showInactive ? "隱藏已停用" : "顯示已停用"}
           </button>
-          <Link href="/documents" className="btn btn-ghost">返回公文</Link>
+          <Link href="/documents" className="btn btn-ghost min-h-11">返回公文</Link>
         </div>
       </div>
 
       <div className="grid lg:grid-cols-[360px,1fr] gap-5">
-        <section className="card p-4 space-y-4">
+        <section className="card min-w-0 p-4 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+            <h2 className="text-sm font-semibold text-fg-primary!">
               {editingId ? "修改代理授權" : "新增代理授權"}
             </h2>
             {editingId && (
-              <button onClick={resetForm} className="text-xs" style={{ color: "var(--text-muted)" }}>
+              <button onClick={resetForm} className="btn btn-ghost min-h-11 text-xs text-fg-muted!">
                 取消編輯
               </button>
             )}
           </div>
 
           <div>
-            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>所屬組織</label>
+            <label className="mb-1.5 block text-xs font-medium text-fg-secondary!">所屬組織</label>
             <select
               value={form.org_id}
               onChange={(e) => setForm((prev) => ({ ...prev, org_id: e.target.value }))}
-              className="input"
+              className="input min-h-11 w-full min-w-0"
             >
               <option value="">請選擇組織</option>
               {myOrgOptions.map((org) => (
@@ -198,11 +197,11 @@ export default function DocumentDelegationsPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>代理人</label>
+            <label className="mb-1.5 block text-xs font-medium text-fg-secondary!">代理人</label>
             <select
               value={form.delegate_user_id}
               onChange={(e) => setForm((prev) => ({ ...prev, delegate_user_id: e.target.value }))}
-              className="input"
+              className="input min-h-11 w-full min-w-0"
             >
               <option value="">請選擇代理人</option>
               {delegateCandidates.map((user) => (
@@ -215,53 +214,53 @@ export default function DocumentDelegationsPage() {
 
           <div className="grid sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>開始時間</label>
+              <label className="mb-1.5 block text-xs font-medium text-fg-secondary!">開始時間</label>
               <input
                 type="datetime-local"
                 value={form.start_at}
                 onChange={(e) => setForm((prev) => ({ ...prev, start_at: e.target.value }))}
-                className="input"
+                className="input min-h-11 w-full min-w-0"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>結束時間</label>
+              <label className="mb-1.5 block text-xs font-medium text-fg-secondary!">結束時間</label>
               <input
                 type="datetime-local"
                 value={form.end_at}
                 onChange={(e) => setForm((prev) => ({ ...prev, end_at: e.target.value }))}
-                className="input"
+                className="input min-h-11 w-full min-w-0"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>請假 / 代行原因</label>
+            <label className="mb-1.5 block text-xs font-medium text-fg-secondary!">請假 / 代行原因</label>
             <textarea
               rows={4}
               value={form.reason}
               onChange={(e) => setForm((prev) => ({ ...prev, reason: e.target.value }))}
-              className="input resize-none"
+              className="input min-h-28 w-full min-w-0 resize-y"
               placeholder="例如：期中考週請假，由副主席代行公文簽核。"
             />
           </div>
 
-          <button onClick={handleSubmit} disabled={saving} className="btn btn-primary w-full">
+          <button onClick={handleSubmit} disabled={saving} className="btn btn-primary min-h-11 w-full">
             {saving ? "儲存中…" : editingId ? "更新代理授權" : "建立代理授權"}
           </button>
         </section>
 
-        <section className="card p-4">
+        <section className="card min-w-0 p-4">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>既有代理授權</h2>
-            <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+            <h2 className="text-sm font-semibold text-fg-primary!">既有代理授權</h2>
+            <span className="text-xs text-fg-muted!">
               共 {delegations.length} 筆
             </span>
           </div>
 
           {loading ? (
-            <p className="text-sm text-center py-10" style={{ color: "var(--text-muted)" }}>載入中...</p>
+            <p className="py-10 text-center text-sm text-fg-muted!">載入中...</p>
           ) : delegations.length === 0 ? (
-            <p className="text-sm text-center py-10" style={{ color: "var(--text-muted)" }}>目前尚無代理授權</p>
+            <p className="py-10 text-center text-sm text-fg-muted!">目前尚無代理授權</p>
           ) : (
             <div className="space-y-3">
               {delegations.map((delegation) => {
@@ -269,35 +268,32 @@ export default function DocumentDelegationsPage() {
                 return (
                   <article
                     key={delegation.id}
-                    className="rounded-xl p-4"
-                    style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}
+                    className="min-w-0 rounded-xl border border-border! bg-elevated! p-4"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div>
+                      <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                          <span className="break-words text-sm font-semibold text-fg-primary!">
                             {delegation.principal_user.name} → {delegation.delegate_user.name}
                           </span>
                           <span
-                            className="text-xs px-2 py-0.5 rounded-full"
-                            style={{
-                              color: delegation.is_active ? "var(--success)" : "var(--text-muted)",
-                              background: delegation.is_active ? "var(--success-dim)" : "var(--bg-surface)",
-                            }}
+                            className={`rounded-full px-2 py-0.5 text-xs ${delegation.is_active
+                              ? "bg-success-soft! text-success!"
+                              : "bg-surface! text-fg-muted!"}`}
                           >
                             {delegation.is_active ? "生效中" : "已停用"}
                           </span>
                         </div>
-                        <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>{orgName}</p>
+                        <p className="mt-1 text-xs text-fg-muted!">{orgName}</p>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex shrink-0 items-center gap-2">
                         {delegation.is_active && (
-                          <button onClick={() => startEdit(delegation)} className="text-xs px-2.5 py-1 rounded" style={{ color: "var(--primary-text)", background: "var(--primary-dim)" }}>
+                          <button onClick={() => startEdit(delegation)} className="btn btn-secondary min-h-11 px-3 text-xs text-accent-text!">
                             編輯
                           </button>
                         )}
                         {delegation.is_active && (
-                          <button onClick={() => deactivate(delegation.id)} className="text-xs px-2.5 py-1 rounded" style={{ color: "var(--danger)", background: "rgba(220,38,38,0.1)" }}>
+                          <button onClick={() => deactivate(delegation.id)} className="btn btn-ghost min-h-11 px-3 text-xs text-danger!">
                             停用
                           </button>
                         )}
@@ -306,24 +302,24 @@ export default function DocumentDelegationsPage() {
 
                     <dl className="grid sm:grid-cols-2 gap-3 mt-3 text-xs">
                       <div>
-                        <dt style={{ color: "var(--text-muted)" }}>代理期間</dt>
-                        <dd className="mt-1" style={{ color: "var(--text-secondary)" }}>
+                        <dt className="text-fg-muted!">代理期間</dt>
+                        <dd className="mt-1 text-fg-secondary!">
                           {new Date(delegation.start_at).toLocaleString("zh-TW")}
                           {" "}至{" "}
                           {delegation.end_at ? new Date(delegation.end_at).toLocaleString("zh-TW") : "未設定結束"}
                         </dd>
                       </div>
                       <div>
-                        <dt style={{ color: "var(--text-muted)" }}>建立時間</dt>
-                        <dd className="mt-1" style={{ color: "var(--text-secondary)" }}>
+                        <dt className="text-fg-muted!">建立時間</dt>
+                        <dd className="mt-1 text-fg-secondary!">
                           {new Date(delegation.created_at).toLocaleString("zh-TW")}
                         </dd>
                       </div>
                     </dl>
 
                     <div className="mt-3">
-                      <p className="text-xs" style={{ color: "var(--text-muted)" }}>原因</p>
-                      <p className="text-sm mt-1 whitespace-pre-wrap" style={{ color: "var(--text-secondary)" }}>
+                      <p className="text-xs text-fg-muted!">原因</p>
+                      <p className="mt-1 whitespace-pre-wrap text-sm text-fg-secondary!">
                         {delegation.reason || "未填寫"}
                       </p>
                     </div>
