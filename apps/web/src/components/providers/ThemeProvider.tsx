@@ -144,7 +144,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const setTheme = useCallback((t: Theme, origin?: ThemeTransitionOrigin) => {
     const startViewTransition = (document as DocumentWithViewTransition).startViewTransition;
     const shouldReduceMotion = shouldReduceThemeMotion(a11y.motion);
-    const canRevealFromOrigin = hasReliableThemeTransitionOrigin();
+    // Root snapshots can cover sticky mobile chrome during the reveal.
+    const canRevealFromOrigin = hasReliableThemeTransitionOrigin()
+      && !window.matchMedia("(pointer: coarse)").matches;
 
     if (!origin || !startViewTransition || shouldReduceMotion || !canRevealFromOrigin) {
       setThemeState(t);
