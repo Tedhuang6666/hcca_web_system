@@ -36,25 +36,25 @@ export function EntityModal({
     <Modal title={`${editing ? "編輯" : "新增"}${label}`} onClose={onClose} size="md">
       <div className="space-y-3">
         <Field label="名稱">
-          <input value={name} onChange={(e) => setName(e.target.value)} className="input w-full"
+          <input value={name} onChange={(e) => setName(e.target.value)} className="input min-h-11 w-full min-w-0"
             placeholder={kind === "category" ? "例如：校慶紀念商品" : "例如：紀念上衣"} />
         </Field>
         <Field label="描述（選填）">
-          <input value={description} onChange={(e) => setDescription(e.target.value)} className="input w-full" />
+          <input value={description} onChange={(e) => setDescription(e.target.value)} className="input min-h-11 w-full min-w-0" />
         </Field>
         <Field label="圖片">
           <ImageField value={imageUrl} onChange={setImageUrl} />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="顯示順序（數字小的在前）">
-            <input value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="input w-full" inputMode="numeric" />
+            <input value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="input min-h-11 w-full min-w-0" inputMode="numeric" />
           </Field>
-          <label className="flex items-end gap-2 pb-2 text-xs" style={{ color: "var(--text-secondary)" }}>
+          <label className="flex min-h-11 items-center gap-2 text-xs text-fg-secondary!">
             <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
             顯示在商品目錄
           </label>
         </div>
-        <div className="flex gap-3 pt-1">
+        <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:gap-3">
           <button
             disabled={busy}
             onClick={async () => {
@@ -84,11 +84,10 @@ export function EntityModal({
                 setBusy(false);
               }
             }}
-            className="btn flex-1"
-            style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
+            className="btn btn-primary min-h-11 w-full flex-1 sm:w-auto">
             {busy ? "儲存中…" : "儲存"}
           </button>
-          <button onClick={onClose} className="btn btn-ghost px-5">取消</button>
+          <button onClick={onClose} className="btn btn-ghost min-h-11 w-full px-5 sm:w-auto">取消</button>
         </div>
       </div>
     </Modal>
@@ -106,15 +105,15 @@ export function NewSeriesModal({
     <Modal title="新增系列" onClose={onClose} size="md">
       <div className="space-y-3">
         <Field label="名稱">
-          <input value={name} onChange={(e) => setName(e.target.value)} className="input w-full" placeholder="如：衣服系列" />
+          <input value={name} onChange={(e) => setName(e.target.value)} className="input min-h-11 w-full min-w-0" placeholder="如：衣服系列" />
         </Field>
         <Field label="描述（選填）">
-          <input value={description} onChange={(e) => setDescription(e.target.value)} className="input w-full" />
+          <input value={description} onChange={(e) => setDescription(e.target.value)} className="input min-h-11 w-full min-w-0" />
         </Field>
         <Field label="圖片">
           <ImageField value={imageUrl} onChange={setImageUrl} />
         </Field>
-        <div className="flex gap-3 pt-1">
+        <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:gap-3">
           <button disabled={busy} onClick={async () => {
             if (!name.trim()) { toast.error("請輸入名稱"); return; }
             setBusy(true);
@@ -130,11 +129,10 @@ export function NewSeriesModal({
             } catch (e) {
               toast.error(apiErrorMessage(e, "建立失敗"));
             } finally { setBusy(false); }
-          }} className="btn flex-1"
-            style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
+          }} className="btn btn-primary min-h-11 w-full flex-1 sm:w-auto">
             {busy ? "建立中…" : "建立"}
           </button>
-          <button onClick={onClose} className="btn btn-ghost px-5">取消</button>
+          <button onClick={onClose} className="btn btn-ghost min-h-11 w-full px-5 sm:w-auto">取消</button>
         </div>
       </div>
     </Modal>
@@ -219,7 +217,7 @@ export function ProductFormModal({
     else fieldRefs.current[field]?.focus();
   };
   const fieldError = (field: ProductField) => formError?.field === field ? (
-    <p id={`shop-product-${field}-error`} role="alert" className="mt-1 text-sm" style={{ color: "var(--danger)" }}>{formError.message}</p>
+    <p id={`shop-product-${field}-error`} role="alert" className="mt-1 text-sm text-danger!">{formError.message}</p>
   ) : null;
 
   const uploadProductImages = async (files: File[]) => {
@@ -349,7 +347,7 @@ export function ProductFormModal({
     <Modal title={`${editing ? "編輯" : "新增"}商品`} onClose={() => { if (!busy && mediaUploadsInProgress === 0) onClose(); }} size="xl"
       footer={(
         <>
-          {formError?.field === null && <p role="alert" className="w-full text-sm" style={{ color: "var(--danger)" }}>{formError.message}</p>}
+          {formError?.field === null && <p role="alert" className="w-full text-sm text-danger!">{formError.message}</p>}
           <div className="shop-product-actions">
             {pendingProduct ? (
               <>
@@ -372,19 +370,19 @@ export function ProductFormModal({
       {pendingProduct ? (
         <div className="space-y-3" role="status">
           <h3 className="text-lg font-semibold">{pendingProduct.name}・草稿已儲存</h3>
-          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>商品與規格已保留，重試上架不會重複建立商品。</p>
+          <p className="text-sm text-fg-secondary!">商品與規格已保留，重試上架不會重複建立商品。</p>
         </div>
       ) : <div className="shop-product-form space-y-5">
         {!editing && !seriesId && categories.length > 1 ? (
           <Field label="活動">
-            <select className="input w-full" value={selectedCategoryId} onChange={(event) => setSelectedCategoryId(event.target.value)}>
+            <select className="input min-h-11 w-full min-w-0" value={selectedCategoryId} onChange={(event) => setSelectedCategoryId(event.target.value)}>
               {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
             </select>
           </Field>
-        ) : <p className="text-sm" style={{ color: "var(--text-secondary)" }}>活動：{categories.find((category) => category.id === selectedCategoryId)?.name}{seriesId ? "／目前系列" : ""}</p>}
+        ) : <p className="text-sm text-fg-secondary!">活動：{categories.find((category) => category.id === selectedCategoryId)?.name}{seriesId ? "／目前系列" : ""}</p>}
         <div>
           <Field label="商品名稱">
-            <input maxLength={200} placeholder="例如：校慶紀念衫" value={name} onChange={(e) => setName(e.target.value)} className="input w-full"
+            <input maxLength={200} placeholder="例如：校慶紀念衫" value={name} onChange={(e) => setName(e.target.value)} className="input min-h-11 w-full min-w-0"
               ref={(node) => { fieldRefs.current.name = node; }}
               aria-invalid={formError?.field === "name" || undefined}
               aria-describedby={formError?.field === "name" ? "shop-product-name-error" : undefined} />
@@ -394,17 +392,17 @@ export function ProductFormModal({
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <Field label="原價（新台幣元，選填）">
-              <input type="number" min={0} step={1} value={originalPrice} onChange={(e) => setOriginalPrice(e.target.value)} className="input w-full" inputMode="numeric"
+              <input type="number" min={0} step={1} value={originalPrice} onChange={(e) => setOriginalPrice(e.target.value)} className="input min-h-11 w-full min-w-0" inputMode="numeric"
                 ref={(node) => { fieldRefs.current.originalPrice = node; }}
                 aria-invalid={formError?.field === "originalPrice" || undefined}
                 aria-describedby={formError?.field === "originalPrice" ? "shop-product-originalPrice-error" : "shop-product-original-price-help"} />
             </Field>
             {fieldError("originalPrice")}
-            <p id="shop-product-original-price-help" className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>低於原價時顯示劃線價；套組與其他優惠以售價繼續計算。</p>
+            <p id="shop-product-original-price-help" className="mt-1 text-xs text-fg-secondary!">低於原價時顯示劃線價；套組與其他優惠以售價繼續計算。</p>
           </div>
           <div>
             <Field label="售價（新台幣元）">
-              <input type="number" min={0} step={1} value={price} onChange={(e) => setPrice(e.target.value)} className="input w-full" inputMode="numeric"
+              <input type="number" min={0} step={1} value={price} onChange={(e) => setPrice(e.target.value)} className="input min-h-11 w-full min-w-0" inputMode="numeric"
                 ref={(node) => { fieldRefs.current.price = node; }}
                 aria-invalid={formError?.field === "price" || undefined}
                 aria-describedby={formError?.field === "price" ? "shop-product-price-error" : undefined} />
@@ -414,7 +412,7 @@ export function ProductFormModal({
           <div>
             <Field label="可訂購數量（件）">
               <input type="number" min={0} step={1} value={stock} onChange={(e) => setStock(e.target.value)} disabled={unlimited}
-                className="input w-full" inputMode="numeric"
+                className="input min-h-11 w-full min-w-0" inputMode="numeric"
                 ref={(node) => { fieldRefs.current.stock = node; }}
                 aria-invalid={formError?.field === "stock" || undefined}
                 aria-describedby={formError?.field === "stock" ? "shop-product-stock-error" : undefined} />
@@ -425,31 +423,31 @@ export function ProductFormModal({
         <div>
           <Field label="內部單位成本（新台幣元，選填）">
             <input type="number" min={0} max={2147483647} step={1} inputMode="numeric" value={unitCost}
-              disabled={costState !== "ready"} onChange={(event) => setUnitCost(event.target.value)} className="input w-full"
+              disabled={costState !== "ready"} onChange={(event) => setUnitCost(event.target.value)} className="input min-h-11 w-full min-w-0"
               ref={(node) => { fieldRefs.current.unitCost = node; }}
               aria-invalid={formError?.field === "unitCost" || undefined}
               aria-describedby={`shop-product-cost-hint${formError?.field === "unitCost" ? " shop-product-unitCost-error" : ""}`} />
           </Field>
           {fieldError("unitCost")}
-          <p id="shop-product-cost-hint" className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>
+          <p id="shop-product-cost-hint" className="mt-1 text-xs text-fg-secondary!">
             購買者看不到；各規格共用此成本，修改後會重算歷史毛利。
           </p>
           {costState === "loading" && <p role="status">正在讀取商品成本…</p>}
-          {costState === "error" && <p role="alert" className="text-sm" style={{ color: "var(--danger)" }}>
+          {costState === "error" && <p role="alert" className="text-sm text-danger!">
             成本讀取失敗，請重新讀取後再儲存。
             <button type="button" className="btn btn-secondary min-h-11" onClick={() => {
               setCostState("loading"); setCostAttempt((value) => value + 1);
             }}>重新讀取成本</button>
           </p>}
         </div>
-        <label className="flex min-h-11 items-center gap-3 text-sm" style={{ color: "var(--text-secondary)" }}>
+        <label className="flex min-h-11 items-center gap-3 text-sm text-fg-secondary!">
           <input type="checkbox" checked={unlimited} onChange={(e) => setUnlimited(e.target.checked)} />
           不限制總訂購數量
         </label>
         <section className="space-y-3">
           <div>
-            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>商品照片</h3>
-            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            <h3 className="text-sm font-semibold text-fg-primary!">商品照片</h3>
+            <p className="mt-1 text-xs text-fg-muted!">
               首張為主圖，最多 20 張。
             </p>
           </div>
@@ -466,7 +464,7 @@ export function ProductFormModal({
                 event.currentTarget.value = "";
                 void uploadProductImages(files);
               }} />
-            <div className="flex min-w-0 items-center gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
+            <div className="flex min-w-0 items-center gap-2 text-xs text-fg-muted!">
               <Thumb url={imageUrl} size={40} />
               <span>{imageUrl ? "目前商品主圖" : "尚未選擇主圖"}</span>
               {imageUrl && (
@@ -477,15 +475,14 @@ export function ProductFormModal({
             </div>
           </div>
           {media.map((item, index) => (
-            <div key={item.id} className="flex min-w-0 items-start gap-3 rounded-lg p-2"
-              style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+            <div key={item.id} className="flex min-w-0 items-start gap-3 rounded-lg border border-border! bg-surface! p-2">
               <Thumb url={item.image_url} size={56} />
               <div className="min-w-0 flex-1 space-y-2">
                 <Field label={`第 ${index + 1} 張照片標註（選填）`}>
                   <input value={item.label} maxLength={100} placeholder="例如：正面、背面、徽章"
                     onChange={(event) => setMedia((current) => current.map((entry) =>
                       entry.id === item.id ? { ...entry, label: event.target.value } : entry))}
-                    className="input w-full" />
+                    className="input min-h-11 w-full min-w-0" />
                 </Field>
                 <Field label="照片用途">
                   <select value={item.kind}
@@ -493,7 +490,7 @@ export function ProductFormModal({
                       entry.id === item.id
                         ? { ...entry, kind: event.target.value as "product" | "model" }
                         : entry))}
-                    className="input w-full">
+                    className="input min-h-11 w-full min-w-0">
                     <option value="product">商品照片</option>
                     <option value="model">模特兒宣傳照</option>
                   </select>
@@ -516,33 +513,33 @@ export function ProductFormModal({
                 className="btn btn-ghost min-h-11 px-3 text-xs">移除</button>
             </div>
           ))}
-          {media.length === 0 && <p className="text-xs" style={{ color: "var(--text-muted)" }}>尚未新增商品照片。</p>}
+          {media.length === 0 && <p className="text-xs text-fg-muted!">尚未新增商品照片。</p>}
         </section>
         {!editing && (
           <div ref={variantRef} tabIndex={-1} aria-label="商品規格" aria-describedby={formError?.field === "variants" ? "shop-product-variants-error" : undefined} className="space-y-3">
             <div>
               <h3 className="text-sm font-semibold">尺寸、顏色等規格（選填）</h3>
-              <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>有不同款式才需要新增；訂購時每組規格都須選一項。</p>
+              <p className="mt-1 text-xs text-fg-secondary!">有不同款式才需要新增；訂購時每組規格都須選一項。</p>
             </div>
             {variantDrafts.map((draft, index) => (
-              <div key={draft.id} className="space-y-3 border-b pb-4" style={{ borderColor: "var(--border)" }}>
+              <div key={draft.id} className="space-y-3 border-b border-border! pb-4">
                 <div className="flex items-end gap-2">
                   <div className="min-w-0 flex-1">
                     <Field label={`規格 ${index + 1} 名稱`}>
-                      <input maxLength={100} className="input w-full" value={draft.name} placeholder="例如：尺寸"
+                      <input maxLength={100} className="input min-h-11 w-full min-w-0" value={draft.name} placeholder="例如：尺寸"
                         onChange={(event) => setVariantDrafts((current) => current.map((row) => row.id === draft.id ? { ...row, name: event.target.value } : row))} />
                     </Field>
                   </div>
                   <button type="button" className="btn btn-ghost min-h-11" aria-label={`移除規格 ${index + 1}`} onClick={() => setVariantDrafts((current) => current.filter((row) => row.id !== draft.id))}>移除</button>
                 </div>
                 <Field label={`規格 ${index + 1} 選項（逗號或換行分隔）`}>
-                  <textarea rows={2} className="input w-full resize-y" value={draft.text} placeholder={draft.name === "顏色" ? "黑, 白, 藍" : "S, M, L, XL:50"}
+                  <textarea rows={2} className="input min-h-11 w-full min-w-0 resize-y" value={draft.text} placeholder={draft.name === "顏色" ? "黑, 白, 藍" : "S, M, L, XL:50"}
                     onChange={(event) => setVariantDrafts((current) => current.map((row) => row.id === draft.id ? { ...row, text: event.target.value } : row))} />
                 </Field>
-                <p className="text-xs" style={{ color: "var(--text-secondary)" }}>加價可寫 XL:50，表示 XL 加 50 元；未填加價就是原價。</p>
+                <p className="text-xs text-fg-secondary!">加價可寫 XL:50，表示 XL 加 50 元；未填加價就是原價。</p>
                 {uniqueSmartOptions(parseSmartOptionsText(draft.text)).map((option) => (
                   <Field key={option.value} label={`${draft.name || `規格 ${index + 1}`}・${option.value} 圖片`}>
-                    <select className="input w-full" value={draft.images[option.value] ?? ""}
+                    <select className="input min-h-11 w-full min-w-0" value={draft.images[option.value] ?? ""}
                       onChange={(event) => setVariantDrafts((current) => current.map((row) => row.id === draft.id
                         ? { ...row, images: { ...row.images, [option.value]: event.target.value } } : row))}>
                       <option value="">不指定圖片</option>
@@ -552,7 +549,7 @@ export function ProductFormModal({
                     </select>
                   </Field>
                 ))}
-                {draft.text.trim() && <p className="text-xs" style={{ color: "var(--text-secondary)" }}>從上方商品照片指定對應圖片，點選選項時會自動顯示。</p>}
+                {draft.text.trim() && <p className="text-xs text-fg-secondary!">從上方商品照片指定對應圖片，點選選項時會自動顯示。</p>}
               </div>
             ))}
             <div className="flex flex-wrap gap-2">
@@ -566,13 +563,13 @@ export function ProductFormModal({
           categoryId={selectedCategoryId} productId={initial?.id ?? null}
           activityId={categories.find((category) => category.id === selectedCategoryId)?.activity_id ?? null} disabled={busy} />
           : rulesState === "loading" ? <p role="status" className="text-sm">正在讀取購買資格…</p>
-            : <p role="alert" className="text-sm" style={{ color: "var(--danger)" }}>
+            : <p role="alert" className="text-sm text-danger!">
               購買資格讀取失敗，為保留原有名單，請重新讀取後再儲存。
               <button type="button" className="btn btn-secondary min-h-11" onClick={() => {
                 setRulesState("loading"); setRulesAttempt((current) => current + 1);
               }}>重新讀取購買資格</button>
             </p>}
-        <details open={extraOpen} onToggle={(event) => setExtraOpen(event.currentTarget.open)} className="border-t" style={{ borderColor: "var(--border)" }}>
+        <details open={extraOpen} onToggle={(event) => setExtraOpen(event.currentTarget.open)} className="border-t border-border!">
           <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">更多設定（描述、限購、截止時間、劃位）</summary>
           <div className="space-y-4 pt-2">
             <Field label="商品描述（選填）">
@@ -592,28 +589,28 @@ export function ProductFormModal({
                   aria-invalid={formError?.field === "limit" || undefined}
                   aria-describedby={formError?.field === "limit" ? "shop-product-limit-error" : undefined}
                   onChange={(e) => setMaxQuantityPerUser(e.target.value)}
-                  className="input w-full"
+                  className="input min-h-11 w-full min-w-0"
                   placeholder="例如：1"
                 />
               </Field>
               {fieldError("limit")}
-              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              <p className="mt-1 text-xs text-fg-muted!">
                 同一帳號累計計算；取消或退款的訂單不計入。
               </p>
             </div>
             <Field label="單品截止時間（台北時間，選填）">
               <input type="datetime-local" value={saleEnd} onChange={(e) => setSaleEnd(e.target.value)}
-                className="input w-full" />
-              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                className="input min-h-11 w-full min-w-0" />
+              <p className="mt-1 text-xs text-fg-muted!">
                 留空沿用班聯統一截止時間；單品可提前截止，設定較晚時間仍受統一期限限制。
               </p>
-              {initial?.effective_sale_end && <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>
+              {initial?.effective_sale_end && <p className="mt-1 text-xs text-fg-secondary!">
                 目前有效截止：{new Date(initial.effective_sale_end).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}
               </p>}
             </Field>
           </div>
         </details>
-        {editing && <p className="text-xs" style={{ color: "var(--text-secondary)" }}>尺寸、顏色等既有規格可在商品詳情設定。</p>}
+        {editing && <p className="text-xs text-fg-secondary!">尺寸、顏色等既有規格可在商品詳情設定。</p>}
       </div>}
     </Modal>
   );
