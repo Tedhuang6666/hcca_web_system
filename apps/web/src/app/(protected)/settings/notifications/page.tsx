@@ -420,16 +420,13 @@ export default function NotificationSettingsPage() {
       </header>
 
       <section className="card overflow-hidden">
-        <div
-          className="px-5 py-4"
-          style={{ borderBottom: "1px solid var(--border)" }}
-        >
+        <div className="border-b border-border! px-4 py-4 sm:px-5">
           <h2 className="text-sm font-semibold">Email 摘要</h2>
-          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+          <p className="mt-1 text-xs text-fg-muted!">
             未讀通知合併為一封 Email；即時推播照常。
           </p>
         </div>
-        <div className="flex flex-wrap gap-2 px-5 py-4">
+        <div className="flex flex-wrap gap-2 px-4 py-4 sm:px-5">
           {(
             [
               { key: "off", label: "關閉" },
@@ -444,20 +441,9 @@ export default function NotificationSettingsPage() {
                 type="button"
                 onClick={() => updateDigest(key)}
                 disabled={digestSaving || loading}
-                className="px-3 py-1.5 rounded-full text-xs font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] cursor-pointer hover:opacity-80 disabled:opacity-50"
-                style={
-                  active
-                    ? {
-                        background: "var(--primary-dim)",
-                        color: "var(--primary-text)",
-                        border: "1px solid var(--border-strong)",
-                      }
-                    : {
-                        color: "var(--text-muted)",
-                        border: "1px solid var(--border)",
-                        background: "var(--bg-surface)",
-                      }
-                }
+                className={`min-h-11 cursor-pointer rounded-full border px-3 py-2 text-xs font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform] hover:opacity-80 disabled:opacity-50 ${active
+                  ? "border-[var(--border-strong)] bg-[var(--primary-dim)] text-[var(--primary-text)]"
+                  : "border-border! bg-surface! text-fg-muted!"}`}
               >
                 {label}
               </button>
@@ -468,12 +454,9 @@ export default function NotificationSettingsPage() {
 
       {canManageSystemEmail && (
         <section className="card overflow-hidden">
-          <div
-            className="px-5 py-4"
-            style={{ borderBottom: "1px solid var(--border)" }}
-          >
+          <div className="border-b border-border! px-4 py-4 sm:px-5">
             <h2 className="text-sm font-semibold">系統寄信</h2>
-            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            <p className="mt-1 text-xs text-fg-muted!">
               全站設定，會影響所有使用者。
             </p>
           </div>
@@ -493,20 +476,13 @@ export default function NotificationSettingsPage() {
                 return (
                   <li
                     key={option.key}
-                    className="flex items-center gap-3 px-5 py-4"
-                    style={{ borderBottom: "1px solid var(--border)" }}
+                    className="flex flex-col items-stretch gap-3 border-b border-border! px-4 py-4 sm:flex-row sm:items-center sm:px-5"
                   >
                     <div className="min-w-0 flex-1">
-                      <p
-                        className="text-sm font-medium"
-                        style={{ color: "var(--text-primary)" }}
-                      >
+                      <p className="text-sm font-medium text-fg-primary!">
                         {option.label}
                       </p>
-                      <p
-                        className="mt-1 text-xs"
-                        style={{ color: "var(--text-muted)" }}
-                      >
+                      <p className="mt-1 text-xs text-fg-muted!">
                         {flag
                           ? option.desc
                           : "目前無法調整。"}
@@ -533,13 +509,10 @@ export default function NotificationSettingsPage() {
       )}
 
       <section className="card overflow-hidden">
-        <div
-          className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
-          style={{ borderBottom: "1px solid var(--border)" }}
-        >
+        <div className="flex flex-col gap-3 border-b border-border! px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
           <div>
             <h2 className="text-sm font-semibold">訂閱項目</h2>
-            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            <p className="mt-1 text-xs text-fg-muted!">
               {loading
                 ? "載入中"
                 : [
@@ -554,24 +527,21 @@ export default function NotificationSettingsPage() {
             </p>
             {((!lineClosed && !lineLinked) ||
               (!discordClosed && !discordLinked)) && (
-              <p
-                className="mt-1 text-xs"
-                style={{ color: "var(--text-muted)" }}
-              >
+              <p className="mt-1 text-xs text-fg-muted!">
                 綁定 LINE 或 Discord 後可選擇通知項目。
               </p>
             )}
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <button
-              className="btn btn-secondary btn-sm"
+              className="btn btn-secondary btn-sm min-h-11 w-full sm:w-auto"
               onClick={() => setAll(true)}
               disabled={!prefs || saving}
             >
               全部開啟
             </button>
             <button
-              className="btn btn-ghost btn-sm"
+              className="btn btn-ghost btn-sm min-h-11 w-full sm:w-auto"
               onClick={() => setAll(false)}
               disabled={!prefs || saving}
             >
@@ -585,44 +555,26 @@ export default function NotificationSettingsPage() {
             <SectionSkeleton lines={5} />
           </div>
         ) : !prefs ? (
-          <div
-            className="px-5 py-12 text-center text-sm"
-            style={{ color: "var(--text-muted)" }}
-          >
+          <div className="px-4 py-12 text-center text-sm text-fg-muted! sm:px-5">
             無法載入通知偏好。
           </div>
         ) : (
           <>
-            <div
-              className="flex items-center gap-3 px-5 py-2"
-              style={{ borderBottom: "1px solid var(--border)" }}
-            >
+            <div className="hidden items-center gap-3 border-b border-border! px-5 py-2 sm:flex">
               <div className="flex-1" />
-              <div
-                className="w-12 text-center text-xs font-semibold"
-                style={{ color: "var(--text-muted)" }}
-              >
+              <div className="w-12 text-center text-xs font-semibold text-fg-muted!">
                 站內
               </div>
-              <div
-                className="w-12 text-center text-xs font-semibold"
-                style={{ color: "var(--text-muted)" }}
-              >
+              <div className="w-12 text-center text-xs font-semibold text-fg-muted!">
                 Email
               </div>
               {showLine && (
-                <div
-                  className="w-12 text-center text-xs font-semibold"
-                  style={{ color: "var(--text-muted)" }}
-                >
+                <div className="w-12 text-center text-xs font-semibold text-fg-muted!">
                   LINE
                 </div>
               )}
               {showDiscord && (
-                <div
-                  className="w-16 text-center text-xs font-semibold"
-                  style={{ color: "var(--text-muted)" }}
-                >
+                <div className="w-16 text-center text-xs font-semibold text-fg-muted!">
                   Discord
                 </div>
               )}
@@ -631,13 +583,7 @@ export default function NotificationSettingsPage() {
               {optionGroups.map((group) => (
                 <li key={group.id}>
                   <section aria-labelledby={`notification-group-${group.id}`}>
-                    <div
-                      className="px-5 py-3"
-                      style={{
-                        background: "var(--bg-hover)",
-                        borderBottom: "1px solid var(--border)",
-                      }}
-                    >
+                    <div className="border-b border-border! bg-[var(--bg-hover)] px-4 py-3 sm:px-5">
                       <h3
                         id={`notification-group-${group.id}`}
                         className="text-sm font-semibold"
@@ -649,53 +595,55 @@ export default function NotificationSettingsPage() {
                       {group.options.map((item) => (
                         <li
                           key={item.key}
-                          className="flex items-center gap-3 px-5 py-3"
-                          style={{ borderBottom: "1px solid var(--border)" }}
+                          className="flex flex-col gap-2 border-b border-border! px-4 py-3 sm:flex-row sm:items-center sm:gap-3 sm:px-5"
                         >
-                          <div className="min-w-0 flex-1">
-                            <p
-                              className="text-sm font-medium"
-                              style={{ color: "var(--text-primary)" }}
-                            >
+                          <div className="min-w-0 sm:flex-1">
+                            <p className="text-sm font-medium text-fg-primary!">
                               {item.label}
                             </p>
                           </div>
-                          <div className="flex w-12 justify-center">
-                            <Toggle
-                              checked={prefs[item.key].inapp}
-                              disabled={saving}
-                              onChange={() => toggle(item.key, "inapp")}
-                              ariaLabel={`${item.label}站內通知`}
-                            />
-                          </div>
-                          <div className="flex w-12 justify-center">
-                            <Toggle
-                              checked={prefs[item.key].email}
-                              disabled={saving}
-                              onChange={() => toggle(item.key, "email")}
-                              ariaLabel={`${item.label} Email 通知`}
-                            />
-                          </div>
-                          {showLine && (
-                            <div className="flex w-12 justify-center">
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 sm:contents">
+                            <div className="flex min-h-11 min-w-0 items-center justify-between gap-2 sm:w-12 sm:flex-none sm:justify-center">
+                              <span className="text-xs text-fg-muted! sm:hidden">站內</span>
                               <Toggle
-                                checked={prefs[item.key].line}
+                                checked={prefs[item.key].inapp}
                                 disabled={saving}
-                                onChange={() => toggle(item.key, "line")}
-                                ariaLabel={`${item.label} LINE 通知`}
+                                onChange={() => toggle(item.key, "inapp")}
+                                ariaLabel={`${item.label}站內通知`}
                               />
                             </div>
-                          )}
-                          {showDiscord && (
-                            <div className="flex w-16 justify-center">
+                            <div className="flex min-h-11 min-w-0 items-center justify-between gap-2 sm:w-12 sm:flex-none sm:justify-center">
+                              <span className="text-xs text-fg-muted! sm:hidden">Email</span>
                               <Toggle
-                                checked={prefs[item.key].discord}
+                                checked={prefs[item.key].email}
                                 disabled={saving}
-                                onChange={() => toggle(item.key, "discord")}
-                                ariaLabel={`${item.label} Discord 通知`}
+                                onChange={() => toggle(item.key, "email")}
+                                ariaLabel={`${item.label} Email 通知`}
                               />
                             </div>
-                          )}
+                            {showLine && (
+                              <div className="flex min-h-11 min-w-0 items-center justify-between gap-2 sm:w-12 sm:flex-none sm:justify-center">
+                                <span className="text-xs text-fg-muted! sm:hidden">LINE</span>
+                                <Toggle
+                                  checked={prefs[item.key].line}
+                                  disabled={saving}
+                                  onChange={() => toggle(item.key, "line")}
+                                  ariaLabel={`${item.label} LINE 通知`}
+                                />
+                              </div>
+                            )}
+                            {showDiscord && (
+                              <div className="flex min-h-11 min-w-0 items-center justify-between gap-2 sm:w-16 sm:flex-none sm:justify-center">
+                                <span className="text-xs text-fg-muted! sm:hidden">Discord</span>
+                                <Toggle
+                                  checked={prefs[item.key].discord}
+                                  disabled={saving}
+                                  onChange={() => toggle(item.key, "discord")}
+                                  ariaLabel={`${item.label} Discord 通知`}
+                                />
+                              </div>
+                            )}
+                          </div>
                         </li>
                       ))}
                     </ul>
@@ -707,58 +655,43 @@ export default function NotificationSettingsPage() {
         )}
       </section>
 
-      <section className="card p-5 space-y-3">
+      <section className="card space-y-3 p-4 sm:p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-semibold">瀏覽器推播</h2>
               {pushPermission === "granted" && (
                 <span
-                  className="text-xs px-1.5 py-0.5 rounded font-medium"
-                  style={{
-                    background:
-                      "color-mix(in srgb, var(--success) 12%, transparent)",
-                    color: "var(--success)",
-                  }}
+                  className="rounded bg-success-soft! px-1.5 py-0.5 text-xs font-medium text-success!"
                 >
                   已允許
                 </span>
               )}
               {pushPermission === "denied" && (
                 <span
-                  className="text-xs px-1.5 py-0.5 rounded font-medium"
-                  style={{
-                    background:
-                      "color-mix(in srgb, var(--danger) 12%, transparent)",
-                    color: "var(--danger)",
-                  }}
+                  className="rounded bg-danger-soft! px-1.5 py-0.5 text-xs font-medium text-danger!"
                 >
                   已封鎖
                 </span>
               )}
               {pushPermission === "default" && (
                 <span
-                  className="text-xs px-1.5 py-0.5 rounded font-medium"
-                  style={{
-                    background:
-                      "color-mix(in srgb, var(--warning) 12%, transparent)",
-                    color: "var(--warning)",
-                  }}
+                  className="rounded bg-warning-soft! px-1.5 py-0.5 text-xs font-medium text-warning!"
                 >
                   未設定
                 </span>
               )}
             </div>
-            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            <p className="mt-1 text-xs text-fg-muted!">
               用於待審、公文狀態、公告與會議提醒。
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
             <button
               className={
                 pushSubscribed
-                  ? "btn btn-ghost btn-sm"
-                  : "btn btn-primary btn-sm"
+                  ? "btn btn-ghost btn-sm min-h-11 w-full sm:w-auto"
+                  : "btn btn-primary btn-sm min-h-11 w-full sm:w-auto"
               }
               disabled={pushBusy || pushPermission === "denied"}
               onClick={enablePush}
@@ -766,7 +699,7 @@ export default function NotificationSettingsPage() {
               {pushSubscribed ? "重新訂閱" : "啟用推播"}
             </button>
             <button
-              className="btn btn-secondary btn-sm"
+              className="btn btn-secondary btn-sm min-h-11 w-full sm:w-auto"
               disabled={pushBusy || !pushSubscribed}
               onClick={testPush}
             >
@@ -776,18 +709,12 @@ export default function NotificationSettingsPage() {
         </div>
         {pushPermission === "denied" && (
           <div
-            className="rounded-lg px-4 py-3 text-xs space-y-1"
-            style={{
-              background: "color-mix(in srgb, var(--danger) 8%, transparent)",
-              border:
-                "1px solid color-mix(in srgb, var(--danger) 25%, transparent)",
-              color: "var(--danger)",
-            }}
+            className="space-y-1 rounded-lg border border-danger-border! bg-danger-soft! px-4 py-3 text-xs text-danger!"
           >
             <p className="font-medium">
               通知權限已被瀏覽器封鎖，無法彈出授權視窗。
             </p>
-            <p style={{ color: "var(--text-muted)" }}>
+            <p className="text-fg-muted!">
               請點擊瀏覽器網址列左側的「鎖頭」或「資訊」圖示 → 通知 →
               改為「允許」，然後重新整理頁面再點「啟用推播」。
             </p>
