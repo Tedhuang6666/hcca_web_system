@@ -188,11 +188,7 @@ function actionTone(action: string) {
     || action.includes("deactivate")
     || action.includes("unassign")
   ) {
-    return {
-      background: "rgba(239,68,68,0.12)",
-      color: "var(--danger)",
-      border: "1px solid var(--danger-border)",
-    };
+    return "[background:rgba(239,68,68,0.12)] text-[var(--danger)] border border-[var(--danger-border)]";
   }
   if (
     action.includes("approve")
@@ -203,11 +199,7 @@ function actionTone(action: string) {
     || action.includes("activate")
     || action.includes("set_default")
   ) {
-    return {
-      background: "rgba(34,197,94,0.12)",
-      color: "var(--success)",
-      border: "1px solid var(--success-border)",
-    };
+    return "[background:rgba(34,197,94,0.12)] text-[var(--success)] border border-[var(--success-border)]";
   }
   if (
     action.includes("update")
@@ -217,11 +209,7 @@ function actionTone(action: string) {
     || action.includes("renumber")
     || action.includes("term_update")
   ) {
-    return {
-      background: "rgba(59,130,246,0.12)",
-      color: "#3b82f6",
-      border: "1px solid rgba(59,130,246,0.28)",
-    };
+    return "[background:rgba(59,130,246,0.12)] text-[#3b82f6] border border-[rgba(59,130,246,0.28)]";
   }
   if (
     action.includes("assign")
@@ -230,17 +218,9 @@ function actionTone(action: string) {
     || action.includes("freeze")
     || action.includes("urgent")
   ) {
-    return {
-      background: "rgba(245,158,11,0.12)",
-      color: "var(--warning)",
-      border: "1px solid var(--warning-border)",
-    };
+    return "[background:rgba(245,158,11,0.12)] text-[var(--warning)] border border-[var(--warning-border)]";
   }
-  return {
-    background: "var(--primary-dim)",
-    color: "var(--primary-text)",
-    border: "1px solid var(--border-strong)",
-  };
+  return "bg-[var(--primary-dim)] text-[var(--primary-text)] border border-[var(--border-strong)]";
 }
 
 function formatDateTime(value: string) {
@@ -278,15 +258,14 @@ function shortId(value: string) {
 function MetaPreview({ meta }: { meta: Record<string, unknown> }) {
   const entries = Object.entries(meta).slice(0, 3);
   if (entries.length === 0) {
-    return <span style={{ color: "var(--text-muted)" }}>無附加資料</span>;
+    return <span className="text-[var(--text-muted)]">無附加資料</span>;
   }
   return (
     <div className="flex flex-wrap gap-1.5">
       {entries.map(([key, value]) => (
         <span
           key={key}
-          className="rounded-md px-2 py-1 text-xs"
-          style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
+          className="rounded-md bg-[var(--bg-hover)] px-2 py-1 text-xs text-[var(--text-secondary)]">
           {key}: {typeof value === "object" ? JSON.stringify(value) : String(value)}
         </span>
       ))}
@@ -298,8 +277,7 @@ function EmptyState({ loading }: { loading: boolean }) {
   return (
     <div className="card flex min-h-[260px] flex-col items-center justify-center gap-3 p-8 text-center">
       <div
-        className="flex h-12 w-12 items-center justify-center rounded-full"
-        style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
+        className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--primary-dim)] text-[var(--primary-text)]">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
           strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M9 11l3 3L22 4" />
@@ -307,10 +285,10 @@ function EmptyState({ loading }: { loading: boolean }) {
         </svg>
       </div>
       <div>
-        <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+        <h2 className="text-base font-semibold text-[var(--text-primary)]">
           {loading ? "正在載入稽核日誌" : "沒有符合條件的紀錄"}
         </h2>
-        <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+        <p className="mt-1 text-sm text-[var(--text-muted)]">
           {loading ? "請稍候" : "調整操作類型、使用者或日期範圍後再試一次"}
         </p>
       </div>
@@ -445,13 +423,13 @@ export default function AuditLogsPage() {
     <div className="mx-auto max-w-7xl space-y-5">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
+          <h1 className="text-xl font-semibold text-[var(--text-primary)]">
             稽核日誌
           </h1>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
           <AnimatedDownloadButton
-            className="btn btn-ghost"
+            className="btn btn-ghost min-h-11 w-full sm:w-auto"
             disabled={loading}
             request={() => authFetch(auditLogsApi.exportCsvUrl({
               action: action || undefined,
@@ -466,7 +444,7 @@ export default function AuditLogsPage() {
             label="匯出 CSV"
             onComplete={() => toast.success("CSV 已匯出")}
             onError={(error) => toast.error(error instanceof Error && error.message ? `匯出失敗：${error.message}` : "匯出失敗")} />
-          <button className="btn btn-secondary" onClick={() => loadLogs(0, false)} disabled={loading}>
+          <button className="btn btn-secondary min-h-11 w-full sm:w-auto" onClick={() => loadLogs(0, false)} disabled={loading}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
@@ -479,10 +457,10 @@ export default function AuditLogsPage() {
         </div>
       </header>
 
-      <section className="card p-4">
-        <div className="grid gap-3 lg:grid-cols-[1fr_1fr_1fr_1fr_auto]">
+      <section className="card p-3 sm:p-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_1fr_auto]">
           <label className="space-y-1.5">
-            <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>系統</span>
+            <span className="text-xs font-medium text-[var(--text-muted)]">系統</span>
             <select
               className="input"
               value={system}
@@ -499,7 +477,7 @@ export default function AuditLogsPage() {
           </label>
 
           <label className="space-y-1.5">
-            <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>操作類型</span>
+            <span className="text-xs font-medium text-[var(--text-muted)]">操作類型</span>
             <select className="input" value={action} onChange={(e) => setAction(e.target.value)}>
               <option value="">全部操作</option>
               {actionOptions.map((item) => (
@@ -509,25 +487,25 @@ export default function AuditLogsPage() {
           </label>
 
           <label className="space-y-1.5">
-            <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>起始日期</span>
+            <span className="text-xs font-medium text-[var(--text-muted)]">起始日期</span>
             <input className="input" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
           </label>
 
           <label className="space-y-1.5">
-            <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>結束日期</span>
+            <span className="text-xs font-medium text-[var(--text-muted)]">結束日期</span>
             <input className="input" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           </label>
 
           <div className="flex items-end">
-            <button className="btn btn-ghost w-full" onClick={resetFilters} disabled={activeFilterCount === 0}>
+            <button className="btn btn-ghost min-h-11 w-full" onClick={resetFilters} disabled={activeFilterCount === 0}>
               清除篩選
             </button>
           </div>
         </div>
 
-        <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,0.7fr)_minmax(0,1fr)_auto]">
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,0.7fr)_minmax(0,1fr)_auto]">
           <label className="space-y-1.5">
-            <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>資源種類</span>
+            <span className="text-xs font-medium text-[var(--text-muted)]">資源種類</span>
             <select
               className="input"
               value={entityType}
@@ -542,7 +520,7 @@ export default function AuditLogsPage() {
 
           <div className="relative">
             <label className="space-y-1.5">
-              <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>使用者</span>
+              <span className="text-xs font-medium text-[var(--text-muted)]">使用者</span>
               <input
                 className="input"
                 type="search"
@@ -556,25 +534,24 @@ export default function AuditLogsPage() {
             </label>
             {(actorOptions.length > 0 || searchingUsers) && !actor && (
               <div
-                className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-lg shadow-lg"
+                className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] shadow-lg"
                 role="listbox"
-                style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+              >
                 {searchingUsers ? (
-                  <p className="px-3 py-2 text-xs" style={{ color: "var(--text-muted)" }}>搜尋中</p>
+                  <p className="px-3 py-2 text-xs text-[var(--text-muted)]">搜尋中</p>
                 ) : actorOptions.map((user) => (
                   <button
                     key={user.id}
-                    className="block w-full px-3 py-2 text-left text-sm transition-colors hover:opacity-80"
+                    className="flex min-h-11 w-full flex-col items-start justify-center gap-0.5 border-b border-[var(--border)] px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--bg-hover)]"
                     role="option"
                     aria-selected={false}
-                    style={{ color: "var(--text-primary)", borderBottom: "1px solid var(--border)" }}
                     onClick={() => {
                       setActor(user);
                       setActorKeyword(`${user.display_name} · ${user.email}`);
                       setActorOptions([]);
                     }}>
-                    <span className="font-medium">{user.display_name}</span>
-                    <span className="ml-2 text-xs" style={{ color: "var(--text-muted)" }}>{user.email}</span>
+                    <span className="max-w-full truncate font-medium text-[var(--text-primary)]">{user.display_name}</span>
+                    <span className="max-w-full break-all text-xs text-[var(--text-muted)]">{user.email}</span>
                   </button>
                 ))}
               </div>
@@ -582,18 +559,16 @@ export default function AuditLogsPage() {
           </div>
 
           <div
-            className="flex items-end justify-between gap-3 rounded-lg px-3 py-2 lg:min-w-56"
-            style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
+            className="flex min-w-0 items-center justify-between gap-3 rounded-lg bg-[var(--bg-hover)] px-3 py-2 text-[var(--text-secondary)] sm:col-span-2 lg:col-auto lg:min-w-56">
             <div>
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>目前結果</p>
-              <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+              <p className="text-xs text-[var(--text-muted)]">目前結果</p>
+              <p className="text-sm font-semibold text-[var(--text-primary)]">
                 {logs.length} 筆{hasMore ? "+" : ""}
               </p>
             </div>
             {activeFilterCount > 0 && (
               <span
-                className="rounded-full px-2 py-1 text-xs font-medium"
-                style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
+                className="rounded-full bg-[var(--primary-dim)] px-2 py-1 text-xs font-medium text-[var(--primary-text)]">
                 {activeFilterCount} 個篩選
               </span>
             )}
@@ -607,8 +582,12 @@ export default function AuditLogsPage() {
         <EmptyState loading={false} />
       ) : (
         <section className="table-container">
-          <div className="overflow-x-auto">
-            <table className="min-w-full">
+          <div
+            className="overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--border-focus)]"
+            role="region"
+            aria-label="稽核日誌列表，可左右滑動查看完整欄位"
+            tabIndex={0}>
+            <table className="min-w-[56rem]">
               <thead className="table-header">
                 <tr>
                   <th>時間</th>
@@ -636,19 +615,17 @@ export default function AuditLogsPage() {
                       </button>
                     </td>
                     <td>
-                      <span
-                        className="inline-flex rounded-full px-2.5 py-1 text-xs font-medium"
-                        style={actionTone(log.action)}>
+                      <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${actionTone(log.action)}`}>
                         {actionLabel(log.action)}
                       </span>
                     </td>
                     <td>
                       <div className="min-w-40">
-                        <p className="truncate text-sm" style={{ color: "var(--text-primary)" }}>
+                        <p className="truncate text-sm text-[var(--text-primary)]">
                           {log.actor_email ?? "系統"}
                         </p>
                         {log.actor_id && (
-                          <p className="font-mono text-xs" style={{ color: "var(--text-muted)" }}>
+                          <p className="font-mono text-xs text-[var(--text-muted)]">
                             {shortId(log.actor_id)}
                           </p>
                         )}
@@ -656,23 +633,23 @@ export default function AuditLogsPage() {
                     </td>
                     <td>
                       <div className="min-w-32">
-                        <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+                        <p className="text-sm font-medium text-[var(--text-primary)]">
                           {entityLabel(log.entity_type)}
                         </p>
-                        <p className="font-mono text-xs" style={{ color: "var(--text-muted)" }}>
+                        <p className="font-mono text-xs text-[var(--text-muted)]">
                           {shortId(log.entity_id)}
                         </p>
                       </div>
                     </td>
                     <td className="min-w-72">
-                      <p className="line-clamp-2 text-sm" style={{ color: "var(--text-secondary)" }}>
+                      <p className="line-clamp-2 text-sm text-[var(--text-secondary)]">
                         {log.summary || `${entityLabel(log.entity_type)} ${actionLabel(log.action)}`}
                       </p>
                       <div className="mt-1">
                         <MetaPreview meta={log.meta} />
                       </div>
                     </td>
-                    <td className="whitespace-nowrap font-mono text-xs" style={{ color: "var(--text-muted)" }}>
+                    <td className="whitespace-nowrap font-mono text-xs text-[var(--text-muted)]">
                       {log.ip_address ?? "-"}
                     </td>
                   </tr>
@@ -686,7 +663,7 @@ export default function AuditLogsPage() {
       {hasMore && (
         <div className="flex justify-center">
           <button
-            className="btn btn-ghost"
+            className="btn btn-ghost min-h-11"
             onClick={() => loadLogs(offset + PAGE_SIZE, true)}
             disabled={loadingMore}>
             {loadingMore ? "載入中" : "載入更多"}
@@ -702,10 +679,10 @@ export default function AuditLogsPage() {
         >
           <div className="space-y-4">
             <div>
-              <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--primary-text)" }}>
+              <p className="text-xs font-semibold tracking-widest text-[var(--primary-text)]">
                 {actionLabel(selectedLog.action)}
               </p>
-              <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+              <p className="mt-1 text-sm text-[var(--text-muted)]">
                 {formatFullDateTime(selectedLog.created_at)}
               </p>
             </div>
@@ -719,18 +696,16 @@ export default function AuditLogsPage() {
                 ["IP 位址", selectedLog.ip_address ?? "-"],
                 ["日誌 ID", selectedLog.id],
               ].map(([label, value]) => (
-                <div key={label} className="rounded-lg p-3" style={{ background: "var(--bg-hover)" }}>
-                  <dt className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>{label}</dt>
-                  <dd className="mt-1 break-all text-sm" style={{ color: "var(--text-primary)" }}>{value}</dd>
+                <div key={label} className="rounded-lg bg-[var(--bg-hover)] p-3">
+                  <dt className="text-xs font-medium text-[var(--text-muted)]">{label}</dt>
+                  <dd className="mt-1 break-all text-sm text-[var(--text-primary)]">{value}</dd>
                 </div>
               ))}
             </dl>
 
             <div>
-              <p className="mb-2 text-xs font-medium" style={{ color: "var(--text-muted)" }}>附加資料</p>
-              <pre
-                className="max-h-72 overflow-auto rounded-lg p-3 text-xs leading-relaxed"
-                style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
+              <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">附加資料</p>
+              <pre className="max-h-72 overflow-auto rounded-lg bg-[var(--bg-hover)] p-3 text-xs leading-relaxed text-[var(--text-secondary)]">
                 {JSON.stringify(selectedLog.meta, null, 2)}
               </pre>
             </div>
