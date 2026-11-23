@@ -66,8 +66,6 @@ export type RecipientDraft = {
 export function RecipientSearch({
   onAdd,
   onAddMany,
-  inputStyle,
-  selectStyle,
   isMeetingNotice,
   isInspectionNotice,
   isRecord,
@@ -76,8 +74,6 @@ export function RecipientSearch({
 }: {
   onAdd: (r: RecipientDraft) => void;
   onAddMany: (recipients: RecipientDraft[]) => void;
-  inputStyle: React.CSSProperties;
-  selectStyle: React.CSSProperties;
   isMeetingNotice: boolean;
   isInspectionNotice?: boolean;
   isRecord: boolean;
@@ -278,7 +274,7 @@ export function RecipientSearch({
       <select
         value={type}
         onChange={(e) => setType(e.target.value as RecipientType)}
-        style={{ ...selectStyle, width: "7rem", flexShrink: 0 }}
+        className="input w-28 shrink-0 cursor-pointer"
         aria-label="收件人類型"
       >
         {isNotice ? (
@@ -302,7 +298,7 @@ export function RecipientSearch({
           </>
         )}
       </select>
-      <div className="relative flex-1" style={{ minWidth: "8rem" }}>
+      <div className="relative min-w-32 flex-1">
         <input
           placeholder="輸入單位 / 姓名 / 學號搜尋，或點此選組織"
           value={query}
@@ -317,7 +313,7 @@ export function RecipientSearch({
           }}
           onFocus={() => setShowDropdown(true)}
           onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
-          style={{ ...inputStyle, width: "100%" }}
+          className="input"
           aria-label="收件人姓名或單位"
           aria-autocomplete="list"
         />
@@ -446,7 +442,7 @@ export function RecipientSearch({
           if (e.key === "Enter") add();
         }}
         type="email"
-        style={{ ...inputStyle, flex: "1", minWidth: "8rem" }}
+        className="input min-w-32 flex-1"
         aria-label="收件人 Email"
       />
       <button onClick={add} type="button" className="btn btn-ghost flex-shrink-0">

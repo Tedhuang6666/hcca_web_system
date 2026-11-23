@@ -816,19 +816,6 @@ export default function NewDocumentPage() {
     setActiveStep((step) => Math.min(step + 1, DOCUMENT_STEPS.length - 1));
   };
 
-  const inputStyle = {
-    background: "var(--bg-surface)",
-    border: "1px solid var(--border)",
-    color: "var(--text-primary)",
-    borderRadius: "8px",
-    padding: "0.5rem 0.75rem",
-    fontSize: "0.875rem",
-    width: "100%",
-    outline: "none",
-  } as React.CSSProperties;
-
-  const selectStyle = { ...inputStyle, cursor: "pointer" } as React.CSSProperties;
-
   const addRecipients = (newRecipients: RecipientDraft[]) => {
     setRecipients((current) => {
       const emailKeys = new Set(
@@ -893,9 +880,7 @@ export default function NewDocumentPage() {
                   value={selectedOrgId}
                   onChange={(e) => { setSelectedOrgId(e.target.value); markTouched("org"); }}
                   onBlur={() => markTouched("org")}
-                  style={showErr("org")
-                    ? { ...selectStyle, border: "1px solid var(--danger)" }
-                    : selectStyle}>
+                  className={showErr("org") ? "input cursor-pointer border-danger!" : "input cursor-pointer"}>
                   <option value="">選擇組織…</option>
                   {orgs.map(o => <option key={o.id} value={o.id}>{orgDisplayName(o, orgs)}</option>)}
                 </select>
@@ -906,7 +891,7 @@ export default function NewDocumentPage() {
               <div>
                 <Label required>公文類別</Label>
                 <select value={category} onChange={(e) => setCategory(e.target.value as DocumentCategory)}
-                  style={selectStyle}>
+                  className="input cursor-pointer">
                   {CATEGORY_OPTIONS.map(o => (
                     <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
@@ -920,9 +905,7 @@ export default function NewDocumentPage() {
                 value={title || autoTitle}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="輸入公文標題…"
-                style={showErr("title")
-                  ? { ...inputStyle, border: "1px solid var(--danger)" }
-                  : inputStyle}
+                className={showErr("title") ? "input border-danger!" : "input"}
               />
               {showErr("title") && (
                 <p className="mt-1 text-xs text-danger!">{fieldError.title}</p>
@@ -945,7 +928,7 @@ export default function NewDocumentPage() {
               ].map(({ label, value, setter, options }) => (
                 <div key={label}>
                   <Label>{label}</Label>
-                  <select value={value} onChange={(e) => setter(e.target.value)} style={selectStyle}>
+                  <select value={value} onChange={(e) => setter(e.target.value)} className="input cursor-pointer">
                     {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
                 </div>
@@ -958,7 +941,7 @@ export default function NewDocumentPage() {
                   <select
                     value={declassificationCondition}
                     onChange={(e) => setDeclassificationCondition(e.target.value as typeof declassificationCondition)}
-                    style={showErr("declassification") ? { ...selectStyle, border: "1px solid var(--danger)" } : selectStyle}
+                    className={showErr("declassification") ? "input cursor-pointer border-danger!" : "input cursor-pointer"}
                   >
                     <option value="none">請選擇</option>
                     <option value="auto_at_date">至指定日期解密</option>
@@ -977,7 +960,7 @@ export default function NewDocumentPage() {
                       type="date"
                       value={confidentialityExpiresAt}
                       onChange={(e) => setConfidentialityExpiresAt(e.target.value)}
-                      style={showErr("declassification") ? { ...inputStyle, border: "1px solid var(--danger)" } : inputStyle}
+                      className={showErr("declassification") ? "input border-danger!" : "input"}
                     />
                   </div>
                 )}
@@ -991,8 +974,8 @@ export default function NewDocumentPage() {
                  />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div><Label>機關郵遞區號</Label><input value={issuerPostalCode} onChange={(e) => setIssuerPostalCode(e.target.value)} style={inputStyle} /></div>
-              <div className="sm:col-span-2"><Label>機關地址</Label><input value={issuerAddress} onChange={(e) => setIssuerAddress(e.target.value)} style={inputStyle} /></div>
+              <div><Label>機關郵遞區號</Label><input value={issuerPostalCode} onChange={(e) => setIssuerPostalCode(e.target.value)} className="input" /></div>
+              <div className="sm:col-span-2"><Label>機關地址</Label><input value={issuerAddress} onChange={(e) => setIssuerAddress(e.target.value)} className="input" /></div>
             </div>
           </FormSection>
 
@@ -1006,9 +989,7 @@ export default function NewDocumentPage() {
                     <input value={meetingPurpose} onChange={e => setMeetingPurpose(e.target.value)}
                       onBlur={() => markTouched("meetingPurpose")}
                       placeholder={isInspectionNotice ? "例：校舍安全會勘" : "例：班級聯合自治會第1屆學生代表團第3次會議"}
-                      style={showErr("meetingPurpose")
-                        ? { ...inputStyle, border: "1px solid var(--danger)" }
-                        : inputStyle} />
+                      className={showErr("meetingPurpose") ? "input border-danger!" : "input"} />
                     {showErr("meetingPurpose") && (
                       <p className="text-xs mt-1 text-danger!">{fieldError.meetingPurpose}</p>
                     )}
@@ -1019,7 +1000,7 @@ export default function NewDocumentPage() {
                   <input type="datetime-local" value={meetingTime}
                     onChange={e => setMeetingTime(e.target.value)}
                     onBlur={() => markTouched("meetingTime")}
-                    style={showErr("meetingTime") ? { ...inputStyle, border: "1px solid var(--danger)" } : inputStyle} />
+                    className={showErr("meetingTime") ? "input border-danger!" : "input"} />
                   {showErr("meetingTime") && (
                     <p className="text-xs mt-1 text-danger!">{fieldError.meetingTime}</p>
                   )}
@@ -1029,7 +1010,7 @@ export default function NewDocumentPage() {
                   <input value={meetingLocation} onChange={e => setMeetingLocation(e.target.value)}
                     onBlur={() => markTouched("meetingLocation")}
                     placeholder="例：班聯會辦公室"
-                    style={showErr("meetingLocation") ? { ...inputStyle, border: "1px solid var(--danger)" } : inputStyle} />
+                    className={showErr("meetingLocation") ? "input border-danger!" : "input"} />
                   {showErr("meetingLocation") && (
                     <p className="text-xs mt-1 text-danger!">{fieldError.meetingLocation}</p>
                   )}
@@ -1039,7 +1020,7 @@ export default function NewDocumentPage() {
                   <input value={meetingChairperson} onChange={e => setMeetingChairperson(e.target.value)}
                     onBlur={() => markTouched("recordChairperson")}
                     placeholder="例：黃主席丞廷"
-                    style={showErr("recordChairperson") ? { ...inputStyle, border: "1px solid var(--danger)" } : inputStyle} />
+                    className={showErr("recordChairperson") ? "input border-danger!" : "input"} />
                   {showErr("recordChairperson") && (
                     <p className="text-xs mt-1 text-danger!">{fieldError.recordChairperson}</p>
                   )}
@@ -1063,22 +1044,9 @@ export default function NewDocumentPage() {
                   rows={2}
                   wrap="soft"
                   placeholder={copy.subjectPlaceholder}
-                  style={showErr("subject")
-                    ? {
-                        ...inputStyle,
-                        border: "1px solid var(--danger)",
-                        resize: "vertical",
-                        overflowWrap: "anywhere",
-                        wordBreak: "break-word",
-                        overflowX: "hidden",
-                      }
-                    : {
-                        ...inputStyle,
-                        resize: "vertical",
-                        overflowWrap: "anywhere",
-                        wordBreak: "break-word",
-                        overflowX: "hidden",
-                      }}
+                  className={showErr("subject")
+                    ? "input resize-y wrap-anywhere overflow-x-hidden border-danger!"
+                    : "input resize-y wrap-anywhere overflow-x-hidden"}
                 />
                 {showErr("subject") && (
                   <p className="text-xs mt-1 text-danger!">{fieldError.subject}</p>
@@ -1174,8 +1142,9 @@ export default function NewDocumentPage() {
                               }
                             : recipient
                         )))}
-                        className="min-h-11 rounded px-2 text-xs border! border-border!"
-                        style={{ color: r.delivery_method === "email" ? "var(--primary-text)" : "var(--text-muted)", background: r.delivery_method === "email" ? "var(--primary-dim)" : "var(--bg-surface)" }}
+                        className={r.delivery_method === "email"
+                          ? "min-h-11 rounded bg-[var(--primary-dim)] px-2 text-xs text-[var(--primary-text)] border! border-border!"
+                          : "min-h-11 rounded bg-[var(--bg-surface)] px-2 text-xs text-[var(--text-muted)] border! border-border!"}
                         aria-pressed={r.delivery_method === "email"}
                       >
                         {r.delivery_method === "email" ? "Email 通知中" : "通知 Email"}
@@ -1196,8 +1165,6 @@ export default function NewDocumentPage() {
             <RecipientSearch
               onAdd={(recipient) => addRecipients([recipient])}
               onAddMany={addRecipients}
-              inputStyle={inputStyle}
-              selectStyle={selectStyle}
               isMeetingNotice={isMeetingNotice}
               isInspectionNotice={isInspectionNotice}
               isRecord={isRecord}
@@ -1257,16 +1224,16 @@ export default function NewDocumentPage() {
                 ))}
               </ul>
             )}
-            <div className="flex flex-wrap gap-2">
+            <div className="grid gap-2 sm:grid-cols-[minmax(12rem,2fr)_minmax(8rem,1fr)_auto]">
               <input placeholder="連結網址 https://…" value={newLink.url}
                 onChange={e => setNewLink(p => ({ ...p, url: e.target.value }))}
                 onKeyDown={e => { if (e.key === "Enter") addPendingLink(); }}
-                style={{ ...inputStyle, flex: "2", minWidth: "12rem" }} />
+                className="input min-w-48" />
               <input placeholder="顯示名稱（選填）" value={newLink.display_text}
                 onChange={e => setNewLink(p => ({ ...p, display_text: e.target.value }))}
                 onKeyDown={e => { if (e.key === "Enter") addPendingLink(); }}
-                style={{ ...inputStyle, flex: "1", minWidth: "8rem" }} />
-              <button onClick={addPendingLink} className="btn btn-ghost flex-shrink-0">
+                className="input min-w-32" />
+              <button onClick={addPendingLink} className="btn btn-ghost w-full flex-shrink-0 justify-center sm:w-auto">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                   strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
                   <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
@@ -1322,9 +1289,7 @@ export default function NewDocumentPage() {
                     value={selectedTemplateId}
                     onChange={(e) => { setSelectedTemplateId(e.target.value); markTouched("serialTemplate"); }}
                     onBlur={() => markTouched("serialTemplate")}
-                    style={showErr("serialTemplate")
-                      ? { ...selectStyle, border: "1px solid var(--danger)" }
-                      : selectStyle}
+                    className={showErr("serialTemplate") ? "input cursor-pointer border-danger!" : "input cursor-pointer"}
                   >
                     <option value="">選擇字號前綴…</option>
                     {templates.map((t) => (
@@ -1353,7 +1318,7 @@ export default function NewDocumentPage() {
           <FormSection title="可見度">
             <select value={visibilityLevel}
               onChange={e => setVisibilityLevel(e.target.value as DocumentVisibility)}
-              style={selectStyle}>
+              className="input cursor-pointer">
               <option value="subject_only">密件（建立者、上層機關與收件者）</option>
               <option value="org_only">機關可見（全機關）</option>
               <option value="public">登入（登入後可見）</option>
@@ -1414,7 +1379,7 @@ export default function NewDocumentPage() {
                   {label}
                 </span>
                 <input value={value} onChange={(e) => setter(e.target.value)} placeholder={ph}
-                  style={{ ...inputStyle, fontSize: "0.75rem" }} />
+                  className="input min-w-0 flex-1 text-xs" />
               </div>
             ))}
             {/* Email + 顯示切換 */}
@@ -1424,7 +1389,7 @@ export default function NewDocumentPage() {
               </span>
                 <input value={handlerEmail} onChange={(e) => setHandlerEmail(e.target.value)}
                 placeholder="電子郵件" type="email"
-                style={{ ...inputStyle, flex: 1, fontSize: "0.75rem" }} />
+                className="input min-w-0 flex-1 text-xs" />
               <div className="flex-shrink-0" title="顯示於公文上">
                 <Toggle checked={showEmail} onChange={setShowEmail} label="顯示" ariaLabel="顯示 Email" />
               </div>
@@ -1434,7 +1399,7 @@ export default function NewDocumentPage() {
                 電話
               </span>
               <input value={handlerPhone} onChange={(e) => setHandlerPhone(e.target.value)}
-                placeholder="聯絡電話" style={{ ...inputStyle, fontSize: "0.75rem" }} />
+                placeholder="聯絡電話" className="input min-w-0 flex-1 text-xs" />
             </div>
           </FormSection>
 
@@ -1442,15 +1407,15 @@ export default function NewDocumentPage() {
           <div className="card p-4">
             <Label>限辦日期</Label>
             <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
-              style={inputStyle} />
+              className="input" />
           </div>
           <FormSection title="檔案管理欄位">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div><Label>檔號</Label><input value={fileNumber} onChange={(e) => setFileNumber(e.target.value)} placeholder="檔號" style={inputStyle} /></div>
-              <div><Label>分類號</Label><input value={classificationNumber} onChange={(e) => setClassificationNumber(e.target.value)} placeholder="分類號" style={inputStyle} /></div>
-              <div><Label>保存年限</Label><input value={retentionPeriod} onChange={(e) => setRetentionPeriod(e.target.value)} placeholder="例如：5年" style={inputStyle} /></div>
-              <div><Label>收文日期</Label><input type="date" value={sourceDocumentDate} onChange={(e) => setSourceDocumentDate(e.target.value)} style={inputStyle} /></div>
-              <div><Label>收文文號</Label><input value={sourceDocumentNumber} onChange={(e) => setSourceDocumentNumber(e.target.value)} style={inputStyle} /></div>
+              <div><Label>檔號</Label><input value={fileNumber} onChange={(e) => setFileNumber(e.target.value)} placeholder="檔號" className="input" /></div>
+              <div><Label>分類號</Label><input value={classificationNumber} onChange={(e) => setClassificationNumber(e.target.value)} placeholder="分類號" className="input" /></div>
+              <div><Label>保存年限</Label><input value={retentionPeriod} onChange={(e) => setRetentionPeriod(e.target.value)} placeholder="例如：5年" className="input" /></div>
+              <div><Label>收文日期</Label><input type="date" value={sourceDocumentDate} onChange={(e) => setSourceDocumentDate(e.target.value)} className="input" /></div>
+              <div><Label>收文文號</Label><input value={sourceDocumentNumber} onChange={(e) => setSourceDocumentNumber(e.target.value)} className="input" /></div>
             </div>
           </FormSection>
         </GuidedFormStep>
