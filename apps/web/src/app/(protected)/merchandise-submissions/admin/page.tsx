@@ -163,8 +163,7 @@ export default function MerchandiseSubmissionsAdminPage() {
     return (
       <div className="p-6">
         <div
-          className="h-36 animate-pulse rounded-xl"
-          style={{ background: "var(--bg-elevated)" }}
+          className="h-36 animate-pulse rounded-xl bg-[var(--bg-elevated)]"
         />
       </div>
     );
@@ -172,21 +171,19 @@ export default function MerchandiseSubmissionsAdminPage() {
     return (
       <div className="p-6">
         <h1 className="text-xl font-bold">無法存取投稿管理</h1>
-        <p className="mt-2 text-sm" style={{ color: "var(--text-muted)" }}>
+        <p className="mt-2 text-sm text-[var(--text-muted)]">
           需要校商投稿查看、管理或審核權限。
         </p>
       </div>
     );
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:py-8">
+    <div className="mx-auto w-full min-w-0 max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:py-8">
       <header
-        className="flex flex-wrap items-end justify-between gap-4 border-b pb-6"
-        style={{ borderColor: "var(--border)" }}
+        className="flex flex-wrap items-end justify-between gap-4 border-b border-[var(--border)] pb-6"
       >
         <div>
           <p
-            className="text-sm font-semibold"
-            style={{ color: "var(--primary-text)" }}
+            className="text-sm font-semibold text-[var(--primary-text)]"
           >
             商品系統整合
           </p>
@@ -194,8 +191,7 @@ export default function MerchandiseSubmissionsAdminPage() {
             校商投稿管理
           </h1>
           <p
-            className="mt-2 text-sm"
-            style={{ color: "var(--text-secondary)" }}
+            className="mt-2 text-sm text-[var(--text-secondary)]"
           >
             設定投稿排程、品項圖稿規格與學生投稿審核。
           </p>
@@ -209,8 +205,7 @@ export default function MerchandiseSubmissionsAdminPage() {
         </Link>
       </header>
       <nav
-        className="flex overflow-x-auto border-b"
-        style={{ borderColor: "var(--border)" }}
+        className="flex max-w-full gap-1 overflow-x-auto border-b border-[var(--border)]"
         aria-label="校商投稿管理頁籤"
       >
         {[
@@ -223,12 +218,11 @@ export default function MerchandiseSubmissionsAdminPage() {
             type="button"
             key={value}
             onClick={() => setTab(value as AdminTab)}
-            className="min-h-11 shrink-0 border-b-2 px-4 text-sm font-semibold"
-            style={{
-              borderColor: tab === value ? "var(--primary)" : "transparent",
-              color:
-                tab === value ? "var(--primary-text)" : "var(--text-secondary)",
-            }}
+            className={
+              tab === value
+                ? "min-h-11 shrink-0 border-b-2 border-[var(--primary)] px-3 text-sm font-semibold text-[var(--primary-text)] sm:px-4"
+                : "min-h-11 shrink-0 border-b-2 border-transparent px-3 text-sm font-semibold text-[var(--text-secondary)] sm:px-4"
+            }
           >
             {label}
           </button>
@@ -236,19 +230,15 @@ export default function MerchandiseSubmissionsAdminPage() {
       </nav>
       {canManageSubmissions && tab === "settings" && settings && (
         <section
-          className="rounded-xl border p-5 sm:p-6"
-          style={{
-            background: "var(--bg-surface)",
-            borderColor: "var(--border)",
-          }}
+          className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 sm:p-6"
         >
           <div>
             <h2 className="font-semibold">全站投稿與公告設定</h2>
-            <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
               設定時間後會在開始時間自動開放；品項可再個別覆寫。
             </p>
           </div>
-          <div className="mt-5 grid gap-4 sm:grid-cols-3">
+          <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <label className="flex min-h-11 items-center gap-2 text-sm font-medium">
               <input
                 type="checkbox"
@@ -316,7 +306,6 @@ export default function MerchandiseSubmissionsAdminPage() {
               />
               僅限校務信箱投稿
             </label>
-            <div />
             <label>
               <FieldCaption>公告標題</FieldCaption>
               <input
@@ -331,7 +320,7 @@ export default function MerchandiseSubmissionsAdminPage() {
                 placeholder="例如：校商投稿已開放"
               />
             </label>
-            <label className="flex min-h-11 items-end gap-2 text-sm sm:col-span-2">
+            <label className="flex min-h-11 items-start gap-2 text-sm sm:col-span-2">
               <input
                 type="checkbox"
                 checked={settings.show_announcement_popup}
@@ -344,7 +333,7 @@ export default function MerchandiseSubmissionsAdminPage() {
               />
               每次進入系統時彈出公告，點擊可前往校商投稿
             </label>
-            <label className="sm:col-span-3">
+            <label className="sm:col-span-2 xl:col-span-3">
               <FieldCaption>公告訊息（Markdown）</FieldCaption>
               <textarea
                 value={settings.announcement ?? ""}
@@ -358,7 +347,7 @@ export default function MerchandiseSubmissionsAdminPage() {
                 placeholder="儲存後會自動發布到公告模組，支援 Markdown。"
               />
             </label>
-            <label className="sm:col-span-3">
+            <label className="sm:col-span-2 xl:col-span-3">
               <FieldCaption>投稿前言與說明（Markdown）</FieldCaption>
               <textarea
                 value={settings.submission_intro ?? ""}
@@ -371,13 +360,13 @@ export default function MerchandiseSubmissionsAdminPage() {
                 className="input min-h-40 w-full py-2"
                 placeholder="例如：請說明設計理念、用色元素、尺寸限制與交稿注意事項。支援 Markdown。"
               />
-              <span className="mt-1 block text-xs" style={{ color: "var(--text-muted)" }}>
+              <span className="mt-1 block text-xs text-[var(--text-muted)]">
                 儲存後會顯示在所有投稿品項上方。
               </span>
             </label>
-            <div className="rounded-lg border p-4 sm:col-span-3" style={{ borderColor: "var(--border)" }}>
+            <div className="rounded-lg border border-[var(--border)] p-4 sm:col-span-2 xl:col-span-3">
               <h3 className="font-semibold">投稿通知</h3>
-              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">
                 收到新投稿時通知負責人。品項可在「投稿品項」中個別覆寫這項設定。
               </p>
               <label className="mt-3 flex min-h-10 items-center gap-2 text-sm">
@@ -401,14 +390,11 @@ export default function MerchandiseSubmissionsAdminPage() {
               </div>
             </div>
           </div>
-          <div
-            className="mt-6 border-t pt-5"
-            style={{ borderColor: "var(--border)" }}
-          >
+          <div className="mt-6 border-t border-[var(--border)] pt-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h3 className="font-semibold">全域投稿欄位</h3>
-                <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                <p className="mt-1 text-xs text-[var(--text-muted)]">
                   例如姓名、座號；所有品項都會顯示。若單一品項需要調整，再到品項設定覆寫。
                 </p>
               </div>
@@ -433,10 +419,9 @@ export default function MerchandiseSubmissionsAdminPage() {
               {settings.global_fields.map((field, index) => (
                 <article
                   key={`${field.key}-${index}`}
-                  className="rounded-lg border p-4"
-                  style={{ borderColor: "var(--border)" }}
+                  className="rounded-lg border border-[var(--border)] p-4"
                 >
-                  <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_11rem_9rem_auto]">
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_11rem_9rem_auto]">
                     <label>
                       <FieldCaption>欄位名稱</FieldCaption>
                       <input
@@ -574,12 +559,7 @@ export default function MerchandiseSubmissionsAdminPage() {
               type="button"
               disabled={savingSettings}
               onClick={() => void saveSettings()}
-              className="btn min-h-11"
-              style={{
-                background: "var(--primary)",
-                color: "var(--primary-fg)",
-                border: "none",
-              }}
+              className="btn min-h-11 border-0 bg-[var(--primary)] text-[var(--primary-fg)]"
             >
               {savingSettings ? (
                 <LoaderCircle className="animate-spin" size={16} />
@@ -594,11 +574,7 @@ export default function MerchandiseSubmissionsAdminPage() {
       {canManageSubmissions && tab === "items" && (
         <div className="grid items-start gap-6 xl:grid-cols-[19rem_minmax(0,1fr)]">
           <aside
-            className="rounded-xl border p-3"
-            style={{
-              background: "var(--bg-surface)",
-              borderColor: "var(--border)",
-            }}
+            className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-3"
           >
             <div className="flex items-center justify-between gap-2 px-2 pb-3">
               <h2 className="font-semibold">投稿品項</h2>
@@ -617,23 +593,19 @@ export default function MerchandiseSubmissionsAdminPage() {
                   type="button"
                   key={item.id}
                   onClick={() => setDraft({ ...item })}
-                  className="w-full rounded-lg px-3 py-3 text-left text-sm"
-                  style={{
-                    background:
-                      current?.id === item.id
-                        ? "var(--primary-dim)"
-                        : "transparent",
-                    color: "var(--text-primary)",
-                  }}
+                  className={
+                    current?.id === item.id
+                      ? "w-full rounded-lg bg-[var(--primary-dim)] px-3 py-3 text-left text-sm text-[var(--text-primary)]"
+                      : "w-full rounded-lg bg-transparent px-3 py-3 text-left text-sm text-[var(--text-primary)]"
+                  }
                 >
                   <span className="block font-medium">{item.name}</span>
                   <span
-                    className="mt-1 block text-xs"
-                    style={{
-                      color: item.is_active
-                        ? "var(--success)"
-                        : "var(--text-muted)",
-                    }}
+                    className={
+                      item.is_active
+                        ? "mt-1 block text-xs text-[var(--success)]"
+                        : "mt-1 block text-xs text-[var(--text-muted)]"
+                    }
                   >
                     {item.is_active ? "啟用中" : "已停用"}
                   </span>
@@ -641,8 +613,7 @@ export default function MerchandiseSubmissionsAdminPage() {
               ))}
               {items.length === 0 && (
                 <p
-                  className="px-2 py-6 text-sm"
-                  style={{ color: "var(--text-muted)" }}
+                  className="px-2 py-6 text-sm text-[var(--text-muted)]"
                 >
                   尚無投稿品項。
                 </p>
@@ -661,22 +632,17 @@ export default function MerchandiseSubmissionsAdminPage() {
       )}
       {tab === "review" && (
         <section
-          className="rounded-xl border p-5 sm:p-6"
-          style={{
-            background: "var(--bg-surface)",
-            borderColor: "var(--border)",
-          }}
+          className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 sm:p-6"
         >
           <div>
             <h2 className="font-semibold">投稿審核</h2>
           </div>
           {canReviewSubmissions && (
             <div
-              className="mt-5 rounded-lg border p-4"
-              style={{ background: "var(--primary-dim)", borderColor: "var(--border)" }}
+              className="mt-5 rounded-lg border border-[var(--border)] bg-[var(--primary-dim)] p-4"
             >
               <p className="font-semibold">建立全校票選問卷</p>
-              <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
+              <p className="mt-1 text-sm text-[var(--text-secondary)]">
                 將審核完成的品項建立為票選問卷，每品項一題。發布前請核對題目與圖稿。
               </p>
               <div className="mt-3 flex flex-wrap items-end gap-3">
@@ -696,8 +662,7 @@ export default function MerchandiseSubmissionsAdminPage() {
                 <button
                   type="button"
                   onClick={() => void prepareVotingSurvey()}
-                  className="btn min-h-11"
-                  style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}
+                  className="btn min-h-11 border-0 bg-[var(--primary)] text-[var(--primary-fg)]"
                 >
                   建立問卷草稿
                 </button>
@@ -710,11 +675,7 @@ export default function MerchandiseSubmissionsAdminPage() {
             </div>
           )}
           <div
-            className="mt-5 grid gap-3 rounded-lg border p-4 md:grid-cols-[minmax(12rem,1fr)_minmax(15rem,1.4fr)_minmax(10rem,0.8fr)_auto]"
-            style={{
-              background: "var(--bg-elevated)",
-              borderColor: "var(--border)",
-            }}
+            className="mt-5 grid gap-3 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-4 sm:grid-cols-2 lg:grid-cols-[minmax(12rem,1fr)_minmax(15rem,1.4fr)_minmax(10rem,0.8fr)_auto]"
           >
             <label>
               <FieldCaption>投稿品項</FieldCaption>
@@ -780,8 +741,7 @@ export default function MerchandiseSubmissionsAdminPage() {
             </div>
           </div>
           <p
-            className="mt-4 text-sm"
-            style={{ color: "var(--text-secondary)" }}
+            className="mt-4 text-sm text-[var(--text-secondary)]"
           >
             顯示 {filteredSubmissions.length} / {submissions.length} 筆投稿
           </p>
@@ -801,8 +761,7 @@ export default function MerchandiseSubmissionsAdminPage() {
               ))
             ) : (
               <p
-                className="py-8 text-center text-sm"
-                style={{ color: "var(--text-muted)" }}
+                className="py-8 text-center text-sm text-[var(--text-muted)]"
               >
                 {submissions.length
                   ? "沒有符合目前篩選條件的投稿。"
