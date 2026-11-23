@@ -125,45 +125,51 @@ export default function StatsView() {
   return (
     <div className="space-y-4">
       <div className="card p-4 space-y-4">
-        <div className="flex flex-wrap items-end gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="活動">
-            <select className="input min-h-11 w-full" value={categoryId} onChange={(event) => { setCategoryId(event.target.value); setProductId(""); }}>
+            <select className="input min-h-11 w-full min-w-0" value={categoryId} onChange={(event) => { setCategoryId(event.target.value); setProductId(""); }}>
               <option value="">全部活動</option>
               {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
             </select>
           </Field>
           <Field label="統計方式">
-            <select className="input min-h-11 w-full" value={groupBy} onChange={(event) => setGroupBy(event.target.value as "class" | "grade" | "user")}>
+            <select className="input min-h-11 w-full min-w-0" value={groupBy} onChange={(event) => setGroupBy(event.target.value as "class" | "grade" | "user")}>
               {groupOptions.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
             </select>
           </Field>
-          <button type="button" className="btn btn-ghost min-h-11" aria-expanded={advancedOpen} aria-controls="shop-stats-filters" onClick={() => setAdvancedOpen((value) => !value)}>
-            {advancedOpen ? "收起篩選" : "更多篩選"}
-          </button>
-          {hasAdvancedFilters && <MiniBtn onClick={resetFilters}>清除篩選</MiniBtn>}
-          <button type="button" className="btn btn-ghost min-h-11" disabled={loading} onClick={() => setRetryKey((value) => value + 1)}>重新整理</button>
+          <div className="grid grid-cols-2 gap-2 sm:col-span-2 sm:flex sm:flex-wrap sm:items-center">
+            <button type="button" className="btn btn-ghost min-h-11 w-full sm:w-auto" aria-expanded={advancedOpen} aria-controls="shop-stats-filters" onClick={() => setAdvancedOpen((value) => !value)}>
+              {advancedOpen ? "收起篩選" : "更多篩選"}
+            </button>
+            <button type="button" className="btn btn-ghost min-h-11 w-full sm:w-auto" disabled={loading} onClick={() => setRetryKey((value) => value + 1)}>重新整理</button>
+            {hasAdvancedFilters && (
+              <div className="col-span-2 sm:col-span-1">
+                <MiniBtn onClick={resetFilters}>清除篩選</MiniBtn>
+              </div>
+            )}
+          </div>
         </div>
-        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>統計範圍：{scopeLabels.join(" · ")}</p>
-        {optionsError && <div role="alert" className="text-sm" style={{ color: "var(--danger)" }}>
+        <p className="text-sm text-fg-secondary!">統計範圍：{scopeLabels.join(" · ")}</p>
+        {optionsError && <div role="alert" className="flex flex-col items-start gap-2 text-sm text-danger! sm:flex-row sm:items-center">
           篩選選項載入失敗。<button type="button" className="btn btn-ghost min-h-11" onClick={() => setRetryKey((value) => value + 1)}>重新載入選項</button>
         </div>}
         {advancedOpen && (
-          <div id="shop-stats-filters" className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div id="shop-stats-filters" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Field label="商品">
-              <select value={productId} onChange={(e) => setProductId(e.target.value)} className="input w-full">
+              <select value={productId} onChange={(e) => setProductId(e.target.value)} className="input min-h-11 w-full min-w-0">
                 <option value="">全部商品</option>
                 {products.filter((product) => !categoryId || (product.category_id
                   ?? series.find((item) => item.id === product.series_id)?.category_id) === categoryId).map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
               </select>
             </Field>
             <Field label="年級">
-              <select value={grade} onChange={(e) => { setGrade(e.target.value); setClassId(""); }} className="input w-full">
+              <select value={grade} onChange={(e) => { setGrade(e.target.value); setClassId(""); }} className="input min-h-11 w-full min-w-0">
                 <option value="">全部年級</option>
                 {gradeOptions.map((value) => <option key={value} value={value}>{value} 年級</option>)}
               </select>
             </Field>
             <Field label="班級">
-              <select value={classId} onChange={(e) => setClassId(e.target.value)} className="input w-full">
+              <select value={classId} onChange={(e) => setClassId(e.target.value)} className="input min-h-11 w-full min-w-0">
                 <option value="">全部班級</option>
                 {filteredClasses.map((schoolClass) => (
                   <option key={schoolClass.id} value={schoolClass.id}>
@@ -173,7 +179,7 @@ export default function StatsView() {
               </select>
             </Field>
             <Field label="訂購人">
-              <select value={userId} onChange={(e) => setUserId(e.target.value)} className="input w-full">
+              <select value={userId} onChange={(e) => setUserId(e.target.value)} className="input min-h-11 w-full min-w-0">
                 <option value="">全部訂購人</option>
                 {userOptions.map((user) => (
                   <option key={user.id} value={user.id}>{user.label}</option>
@@ -181,14 +187,14 @@ export default function StatsView() {
               </select>
             </Field>
             <Field label="班聯收款狀態">
-              <select value={paid} onChange={(e) => setPaid(e.target.value)} className="input w-full">
+              <select value={paid} onChange={(e) => setPaid(e.target.value)} className="input min-h-11 w-full min-w-0">
                 <option value="">全部</option>
                 <option value="true">班聯已確認</option>
                 <option value="false">班聯未確認</option>
               </select>
             </Field>
             <Field label="訂單狀態">
-              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="input w-full">
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="input min-h-11 w-full min-w-0">
                 <option value="">排除取消與退款</option>
                 <option value="pending">待確認</option>
                 <option value="confirmed">已確認</option>
@@ -196,24 +202,24 @@ export default function StatsView() {
                 <option value="refunded">已退款</option>
               </select>
             </Field>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-3 sm:col-span-2 sm:grid-cols-2">
               <Field label="訂購起日">
-                <input type="date" max={dateTo || undefined} value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="input w-full" />
+                <input type="date" max={dateTo || undefined} value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="input min-h-11 w-full min-w-0" />
               </Field>
               <Field label="訂購迄日">
-                <input type="date" min={dateFrom || undefined} value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="input w-full" />
+                <input type="date" min={dateFrom || undefined} value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="input min-h-11 w-full min-w-0" />
               </Field>
             </div>
           </div>
         )}
       </div>
       {loading && (
-        <div role="status" className="card p-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+        <div role="status" className="card p-8 text-center text-sm text-fg-muted!">
           載入統計中…
         </div>
       )}
       {error && (
-        <div role="alert" className="card p-4 text-sm" style={{ color: "var(--danger, #e11d48)" }}>
+        <div role="alert" className="card p-4 text-sm text-danger!">
           <p>{error}</p>
           <MiniBtn onClick={() => setRetryKey((value) => value + 1)}>重新載入統計</MiniBtn>
         </div>
@@ -227,8 +233,8 @@ export default function StatsView() {
               { label: "班聯尚未確認收款", value: data.unpaid_amount },
             ].map(({ label, value }) => (
               <div key={label} className="card p-4 text-center">
-                <p className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>{label}</p>
-                <p className="text-lg font-bold" style={{ color: "var(--primary-text)" }}>
+                <p className="text-xs mb-1 text-fg-muted!">{label}</p>
+                <p className="text-lg font-bold text-accent-text!">
                   NT${value.toLocaleString()}
                 </p>
               </div>
@@ -236,31 +242,31 @@ export default function StatsView() {
           </div>
           <div className="grid gap-3 sm:hidden">
             {data.rows.length === 0 ? (
-              <div className="card p-6 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+              <div className="card p-6 text-center text-sm text-fg-muted!">
                 <p>目前範圍沒有訂單；可清除篩選或改選其他活動。</p>
                 {hasAdvancedFilters && <button type="button" className="btn btn-ghost mt-3 min-h-11" onClick={resetFilters}>查看全部統計</button>}
               </div>
             ) : data.rows.map((r) => (
               <div key={r.key} className="card p-4 space-y-3">
                 <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold" style={{ color: "var(--text-primary)" }}>{r.label}</p>
-                    <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+                  <div className="min-w-0">
+                    <p className="break-words font-semibold text-fg-primary!">{r.label}</p>
+                    <p className="text-xs mt-1 text-fg-muted!">
                       {r.order_count} 筆訂單 · {r.item_count} 件
                     </p>
                   </div>
-                  <p className="font-bold" style={{ color: "var(--primary-text)" }}>
+                  <p className="shrink-0 text-right font-bold tabular-nums text-accent-text!">
                     NT${r.total_amount.toLocaleString()}
                   </p>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="rounded-lg p-2" style={{ background: "var(--bg-elevated)" }}>
-                    <p style={{ color: "var(--text-muted)" }}>班聯已確認</p>
-                    <p className="font-semibold mt-0.5" style={{ color: "var(--success)" }}>NT${r.paid_amount.toLocaleString()}</p>
+                  <div className="rounded-lg p-2 bg-elevated!">
+                    <p className="text-fg-muted!">班聯已確認</p>
+                    <p className="font-semibold mt-0.5 text-success!">NT${r.paid_amount.toLocaleString()}</p>
                   </div>
-                  <div className="rounded-lg p-2" style={{ background: "var(--bg-elevated)" }}>
-                    <p style={{ color: "var(--text-muted)" }}>班聯未確認</p>
-                    <p className="font-semibold mt-0.5" style={{ color: "var(--text-primary)" }}>NT${r.unpaid_amount.toLocaleString()}</p>
+                  <div className="rounded-lg p-2 bg-elevated!">
+                    <p className="text-fg-muted!">班聯未確認</p>
+                    <p className="font-semibold mt-0.5 text-fg-primary!">NT${r.unpaid_amount.toLocaleString()}</p>
                   </div>
                 </div>
               </div>
@@ -269,33 +275,31 @@ export default function StatsView() {
           <div className="card overflow-x-auto hidden sm:block">
             <table className="w-full min-w-[680px] text-sm tabular-nums">
               <thead>
-                <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                <tr className="border-b border-border!">
                   {[groupBy === "class" ? "班級" : groupBy === "grade" ? "年級" : "訂購人", "訂單數", "商品件數", "訂購金額", "班聯已確認", "班聯未確認"].map((h) => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold"
-                      style={{ color: "var(--text-muted)" }} scope="col">{h}</th>
+                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-fg-muted!" scope="col">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {data.rows.length === 0 ? (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center text-sm"
-                    style={{ color: "var(--text-muted)" }}>
+                  <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-fg-muted!">
                     <p>目前範圍沒有訂單；可清除篩選或改選其他活動。</p>
                     {hasAdvancedFilters && <button type="button" className="btn btn-ghost mt-3 min-h-11" onClick={resetFilters}>查看全部統計</button>}
                   </td></tr>
                 ) : (
                   data.rows.map((r) => (
-                    <tr key={r.key} style={{ borderBottom: "1px solid var(--border)" }}>
-                      <td className="px-4 py-3" style={{ color: "var(--text-primary)" }}>{r.label}</td>
-                      <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>{r.order_count}</td>
-                      <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>{r.item_count}</td>
-                      <td className="px-4 py-3" style={{ color: "var(--text-primary)" }}>
+                    <tr key={r.key} className="border-b border-border!">
+                      <td className="px-4 py-3 text-fg-primary!">{r.label}</td>
+                      <td className="px-4 py-3 text-fg-secondary!">{r.order_count}</td>
+                      <td className="px-4 py-3 text-fg-secondary!">{r.item_count}</td>
+                      <td className="px-4 py-3 text-fg-primary!">
                         NT${r.total_amount.toLocaleString()}
                       </td>
-                      <td className="px-4 py-3" style={{ color: "var(--success)" }}>
+                      <td className="px-4 py-3 text-success!">
                         NT${r.paid_amount.toLocaleString()}
                       </td>
-                      <td className="px-4 py-3" style={{ color: "var(--text-muted)" }}>
+                      <td className="px-4 py-3 text-fg-muted!">
                         NT${r.unpaid_amount.toLocaleString()}
                       </td>
                     </tr>
