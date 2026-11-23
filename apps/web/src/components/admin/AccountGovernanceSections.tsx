@@ -28,10 +28,10 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-xl p-4 sm:p-5" style={{ border: "1px solid var(--border)" }}>
+    <section className="min-w-0 rounded-xl border border-[var(--border)] p-4 sm:p-5">
       <div className="mb-4">
-        <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{title}</h3>
-        {description && <p className="mt-1 text-xs leading-5" style={{ color: "var(--text-muted)" }}>{description}</p>}
+        <h3 className="text-sm font-semibold text-[var(--text-primary)]">{title}</h3>
+        {description && <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">{description}</p>}
       </div>
       {children}
     </section>
@@ -49,18 +49,17 @@ function ActionButton({
   disabled?: boolean;
   tone?: "neutral" | "primary" | "danger";
 }) {
-  const style = tone === "primary"
-    ? { background: "var(--primary)", color: "var(--primary-fg)", border: "1px solid var(--primary)" }
+  const toneClass = tone === "primary"
+    ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-fg)]"
     : tone === "danger"
-      ? { color: "var(--danger)", border: "1px solid color-mix(in srgb, var(--danger) 35%, var(--border))" }
-      : { color: "var(--text-secondary)", border: "1px solid var(--border)" };
+      ? "border-[var(--danger-border)] text-[var(--danger)]"
+      : "border-[var(--border)] text-[var(--text-secondary)]";
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 text-sm font-medium transition-colors hover:bg-[var(--bg-hover)] disabled:cursor-not-allowed disabled:opacity-45"
-      style={style}
+      className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border px-3 text-sm font-medium transition-colors hover:bg-[var(--bg-hover)] disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto ${toneClass}`}
     >
       {children}
     </button>
@@ -79,15 +78,14 @@ function DateInput({
   min?: string;
 }) {
   return (
-    <label className="block min-w-0 text-xs" style={{ color: "var(--text-muted)" }}>
+    <label className="block min-w-0 text-xs text-[var(--text-muted)]">
       {label}
       <input
         type="date"
         value={value}
         min={min}
         onChange={(event) => onChange(event.target.value)}
-        className="input mt-1 min-h-11 w-full"
-        style={{ colorScheme: "dark" }}
+        className="input scheme-dark mt-1 min-h-11 w-full"
       />
     </label>
   );
@@ -162,7 +160,7 @@ export function AccountLifecycleSection({
   if (!canManageLifecycle) {
     return (
       <Section title="帳號停權與學籍">
-        <p className="text-sm" style={{ color: "var(--text-muted)" }}>需要學籍異動權限才能查看或變更帳號狀態。</p>
+        <p className="text-sm text-[var(--text-muted)]">需要學籍異動權限才能查看或變更帳號狀態。</p>
       </Section>
     );
   }
@@ -172,7 +170,7 @@ export function AccountLifecycleSection({
       title="帳號停權與學籍"
       description="凍結、校友歸檔或解凍此帳號。操作會結束有效任期並保留稽核紀錄；解凍不會重建已結束的任期。"
     >
-      <label className="block text-xs" style={{ color: "var(--text-muted)" }}>
+      <label className="block text-xs text-[var(--text-muted)]">
         原因（會寫入 audit log）
         <input
           value={reason}
@@ -183,47 +181,47 @@ export function AccountLifecycleSection({
       </label>
 
       {loading ? (
-        <p className="mt-3 text-sm" role="status" style={{ color: "var(--text-muted)" }}>載入帳號狀態…</p>
+        <p className="mt-3 text-sm text-[var(--text-muted)]" role="status">載入帳號狀態…</p>
       ) : loadError ? (
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg p-3" role="alert" style={{ background: "var(--danger-dim)" }}>
-          <p className="text-sm" style={{ color: "var(--danger)" }}>無法載入帳號學籍狀態。</p>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[var(--danger-dim)] p-3" role="alert">
+          <p className="text-sm text-[var(--danger)]">無法載入帳號學籍狀態。</p>
           <ActionButton onClick={() => void loadStatus()} disabled={busy}><RefreshCcw size={15} />重新讀取</ActionButton>
         </div>
       ) : status ? (
         <>
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2.5" style={{ background: "var(--bg-elevated)" }}>
+          <div className="mt-3 flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-lg bg-[var(--bg-elevated)] px-3 py-2.5">
             <div className="min-w-0">
-              <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{status.display_name}</p>
-              <p className="break-all text-xs" style={{ color: "var(--text-muted)" }}>{status.email}</p>
+              <p className="text-sm font-medium text-[var(--text-primary)]">{status.display_name}</p>
+              <p className="break-all text-xs text-[var(--text-muted)]">{status.email}</p>
             </div>
             <span
-              className="rounded-full px-2.5 py-1 text-xs font-medium"
-              style={{
-                color: status.is_active ? "var(--success)" : "var(--warning)",
-                background: status.is_active ? "var(--success-dim)" : "var(--warning-dim)",
-              }}
+              className={`max-w-full break-words rounded-full px-2.5 py-1 text-xs font-medium ${
+                status.is_active
+                  ? "bg-[var(--success-dim)] text-[var(--success)]"
+                  : "bg-[var(--warning-dim)] text-[var(--warning)]"
+              }`}
             >
               {status.is_active ? "啟用中" : "已凍結"} · {status.active_positions.length} 個有效任期
             </span>
           </div>
 
           {status.active_positions.length > 0 ? (
-            <details className="mt-3 rounded-lg px-3 py-2" style={{ border: "1px solid var(--border)" }}>
-              <summary className="min-h-8 cursor-pointer py-1 text-xs" style={{ color: "var(--text-secondary)" }}>查看有效任期日期</summary>
+            <details className="mt-3 rounded-lg border border-[var(--border)] px-3 py-2">
+              <summary className="min-h-8 cursor-pointer py-1 text-xs text-[var(--text-secondary)]">查看有效任期日期</summary>
               <div className="mt-2 space-y-2">
                 {status.active_positions.map((position) => (
-                  <div key={position.user_position_id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
+                  <div key={position.user_position_id} className="grid grid-cols-1 gap-1 text-xs text-[var(--text-muted)] sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-2">
                     <span className="truncate">{user.positions.find((item) => item.id === position.position_id)?.name ?? `職位 ${position.position_id.slice(0, 8)}`}</span>
-                    <span>{position.start_date} 至 {position.end_date ?? "無限期"}</span>
+                    <span className="break-words sm:text-right">{position.start_date} 至 {position.end_date ?? "無限期"}</span>
                   </div>
                 ))}
               </div>
             </details>
           ) : (
-            <p className="mt-3 text-xs" style={{ color: "var(--text-muted)" }}>目前沒有有效任期。</p>
+            <p className="mt-3 text-xs text-[var(--text-muted)]">目前沒有有效任期。</p>
           )}
 
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
             <ActionButton onClick={() => void runAction("freeze")} disabled={busy || !status.is_active}>
               <ShieldOff size={15} />凍結
             </ActionButton>
@@ -240,7 +238,7 @@ export function AccountLifecycleSection({
         </>
       ) : null}
 
-      <div className="mt-3 flex items-start gap-2 rounded-lg px-3 py-2.5 text-xs" style={{ background: "var(--warning-dim)", color: "var(--warning)" }}>
+      <div className="mt-3 flex min-w-0 items-start gap-2 rounded-lg bg-[var(--warning-dim)] px-3 py-2.5 text-xs text-[var(--warning)]">
         <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden />
         <p>解凍只恢復帳號啟用狀態，不會重建已結束任期；需要時請在下方任期管理重新指派。</p>
       </div>
@@ -270,19 +268,19 @@ function PositionTenureRow({
   }, [position]);
 
   return (
-    <article className="rounded-lg p-3 sm:p-4" style={{ border: "1px solid var(--border)" }}>
+    <article className="min-w-0 rounded-lg border border-[var(--border)] p-3 sm:p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <h4 className="break-words text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+          <h4 className="break-words text-sm font-medium text-[var(--text-primary)]">
             {position.position_org_name} · {position.position_name}
           </h4>
-          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">
             {startDate <= today() && (!endDate || endDate >= today()) ? "有效任期" : endDate && endDate < today() ? "已結束" : "尚未開始"}
           </p>
         </div>
         <ActionButton onClick={() => void onRemove()} disabled={busy} tone="danger">移除任期</ActionButton>
       </div>
-      <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+      <div className="mt-3 grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
         <DateInput value={startDate} onChange={setStartDate} label="開始日期" />
         <DateInput value={endDate} onChange={setEndDate} label="結束日期（空白代表無限期）" min={startDate} />
         <ActionButton onClick={() => void onSave(startDate, endDate)} disabled={busy || !startDate || Boolean(endDate && endDate < startDate)} tone="primary">
@@ -411,8 +409,8 @@ export function AccountTenureSection({
 
   return (
     <Section title="幹部任期">
-      <div className="grid gap-3 rounded-lg p-3 sm:grid-cols-[minmax(0,1fr)_1fr_1fr_auto] sm:items-end" style={{ background: "var(--bg-elevated)" }}>
-        <label className="block min-w-0 text-xs" style={{ color: "var(--text-muted)" }}>
+      <div className="grid min-w-0 gap-3 rounded-lg bg-[var(--bg-elevated)] p-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
+        <label className="block min-w-0 text-xs text-[var(--text-muted)]">
           新增職位
           <select
             value={selectedPositionId}
@@ -432,14 +430,14 @@ export function AccountTenureSection({
       </div>
 
       {loading ? (
-        <p className="mt-3 text-sm" role="status" style={{ color: "var(--text-muted)" }}>載入任期中…</p>
+        <p className="mt-3 text-sm text-[var(--text-muted)]" role="status">載入任期中…</p>
       ) : loadError ? (
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg p-3" role="alert" style={{ background: "var(--danger-dim)" }}>
-          <p className="text-sm" style={{ color: "var(--danger)" }}>無法載入職位與任期。</p>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[var(--danger-dim)] p-3" role="alert">
+          <p className="text-sm text-[var(--danger)]">無法載入職位與任期。</p>
           <ActionButton onClick={() => void load()}><RefreshCcw size={15} />重新載入</ActionButton>
         </div>
       ) : assignments.length === 0 ? (
-        <p className="mt-3 rounded-lg p-4 text-sm" style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}>此帳號尚無幹部任期。</p>
+        <p className="mt-3 rounded-lg bg-[var(--bg-elevated)] p-4 text-sm text-[var(--text-muted)]">此帳號尚無幹部任期。</p>
       ) : (
         <div className="mt-3 space-y-2">
           {assignments.map((position) => (
