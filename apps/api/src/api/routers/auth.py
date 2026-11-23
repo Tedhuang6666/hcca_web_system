@@ -528,6 +528,11 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
 
     tokens = await _issue_auth_tokens(db, user, request, auth_method="google_oauth")
 
+    # get_db() commits from its request-scope cleanup after FastAPI sends the response.
+    # The browser follows this redirect immediately and calls /auth/me, so persist the
+    # new UserSession before sending the cookies that point to it.
+    await db.commit()
+
     callback_qs = urlencode({"next": login_next})
     response = RedirectResponse(url=f"{frontend_origin}/auth/callback?{callback_qs}")
     _set_auth_cookies(response, tokens.access_token, tokens.refresh_token)

@@ -10,6 +10,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -17,7 +18,7 @@ import pytest
 from authlib.integrations.base_client import MismatchingStateError
 from fastapi import HTTPException
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
 
@@ -496,6 +497,64 @@ async def test_google_callback_retries_over_https_origin(
 
     assert response.status_code in (302, 307)
     assert response.headers["location"].startswith("https://hcca.tw/auth/google/login?")
+
+
+async def test_google_callback_commits_session_before_setting_cookies(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    make_user: Callable[..., Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import api.routers.auth as auth_module
+
+    user = await make_user(email="callback-owner@school.edu", is_superuser=True)
+    commit_count = 0
+    original_commit = db_session.commit
+
+    async def tracked_commit() -> None:
+        nonlocal commit_count
+        commit_count += 1
+        await original_commit()
+
+    async def issue_tokens(db, current_user, request, *, auth_method):
+        assert current_user.id == user.id
+        assert auth_method == "google_oauth"
+        await db.execute(text("SELECT 1"))
+        return SimpleNamespace(access_token="access", refresh_token="refresh")
+
+    original_set_cookies = auth_module._set_auth_cookies
+
+    def set_cookies_after_commit(response, access_token: str, refresh_token: str) -> None:
+        assert commit_count == 1, "session transaction must commit before its cookies are sent"
+        original_set_cookies(response, access_token, refresh_token)
+
+    monkeypatch.setattr(db_session, "commit", tracked_commit)
+    monkeypatch.setattr(
+        auth_module.google,
+        "authorize_access_token",
+        AsyncMock(
+            return_value={
+                "userinfo": {
+                    "sub": "callback-owner-sub",
+                    "email": user.email,
+                    "email_verified": True,
+                    "name": user.display_name,
+                }
+            }
+        ),
+    )
+    monkeypatch.setattr(auth_module, "_upsert_google_user", AsyncMock(return_value=user))
+    monkeypatch.setattr(auth_module, "_issue_auth_tokens", issue_tokens)
+    monkeypatch.setattr(auth_module.passkey_svc, "requires_mfa", AsyncMock(return_value=False))
+    monkeypatch.setattr(auth_module, "_frontend_origin_for", lambda request: "https://hcca.tw")
+    monkeypatch.setattr(auth_module, "_set_auth_cookies", set_cookies_after_commit)
+    monkeypatch.setattr(auth_module, "get_posthog_client", lambda: None)
+
+    response = await client.get("/auth/google/callback?code=c&state=s", follow_redirects=False)
+
+    assert response.status_code in (302, 307)
+    assert settings.ACCESS_TOKEN_COOKIE_NAME in response.cookies
+    assert settings.REFRESH_TOKEN_COOKIE_NAME in response.cookies
 
 
 async def test_google_callback_rejects_unverified_email(
