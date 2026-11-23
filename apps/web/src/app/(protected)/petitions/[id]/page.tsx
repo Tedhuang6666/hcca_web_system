@@ -55,34 +55,34 @@ export default function PetitionDetailPage() {
     }
   };
 
-  if (loading) return <div className="max-w-4xl mx-auto card p-5">載入中...</div>;
+  if (loading) return <div className="mx-auto w-full max-w-4xl card p-5">載入中...</div>;
   if (!item) {
     return (
-      <div className="max-w-2xl mx-auto card p-5 space-y-3">
-        <p style={{ color: "var(--text-muted)" }}>無法直接查看此案件。</p>
-        <Link className="btn btn-primary" href="/petitions">回我的案件</Link>
+      <div className="mx-auto w-full max-w-2xl card p-5 space-y-3">
+        <p className="text-fg-muted!">無法直接查看此案件。</p>
+        <Link className="btn btn-primary min-h-11 w-fit" href="/petitions">回我的案件</Link>
       </div>
     );
   }
   if (item.confidential_blocked) {
     return (
-      <div className="max-w-2xl mx-auto">
+      <div className="mx-auto w-full max-w-2xl">
         <PetitionConfidentialBlocked item={item} />
       </div>
     );
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-5">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>案號 {item.case_number}</p>
-          <h1 className="text-xl font-semibold mt-1" style={{ color: "var(--text-primary)" }}>{item.title}</h1>
-          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>{item.current_org_name} · {item.type_name}</p>
+    <div className="mx-auto w-full max-w-5xl min-w-0 space-y-5">
+      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <div className="min-w-0">
+          <p className="break-words text-sm text-fg-muted!">案號 {item.case_number}</p>
+          <h1 className="mt-1 break-words text-xl font-semibold text-fg-primary!">{item.title}</h1>
+          <p className="mt-1 break-words text-sm text-fg-muted!">{item.current_org_name} · {item.type_name}</p>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
           {item.is_confidential && (
-            <span className="rounded-full px-2.5 py-1 text-xs font-medium" style={{ background: "var(--warning-dim)", color: "var(--warning)" }}>
+            <span className="rounded-full bg-warning-soft! px-2.5 py-1 text-xs font-medium text-warning!">
               密件處理
             </span>
           )}
@@ -91,53 +91,53 @@ export default function PetitionDetailPage() {
       </div>
 
       {item.is_confidential && (
-        <div className="rounded-lg p-4 space-y-1" style={{ background: "var(--warning-dim)", border: "1px solid var(--warning-border)" }}>
-          <p className="font-medium" style={{ color: "var(--warning)" }}>本案已密件處理</p>
-          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>密件原因：{item.confidential_reason || "未提供密件原因。"}</p>
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>完整內容僅案件擁有者與目前承辦人可查看，案件無法公開。</p>
+        <div className="space-y-1 rounded-lg border border-warning-border! bg-warning-soft! p-4">
+          <p className="font-medium text-warning!">本案已密件處理</p>
+          <p className="break-words text-sm text-fg-secondary!">密件原因：{item.confidential_reason || "未提供密件原因。"}</p>
+          <p className="text-xs text-fg-muted!">完整內容僅案件擁有者與目前承辦人可查看，案件無法公開。</p>
         </div>
       )}
 
-      <section className="card p-5 space-y-4">
-        <div className="grid sm:grid-cols-4 gap-3">
-          <div><p className="text-xs text-muted">目前階段</p><p className="font-medium">{item.status_label}</p></div>
-          <div><p className="text-xs text-muted">負責機關</p><p className="font-medium">{item.current_org_name}</p></div>
-          <div><p className="text-xs text-muted">承辦人</p><p className="font-medium">{item.assigned_to_name || "尚未分案"}</p></div>
-          <div><p className="text-xs text-muted">最後更新</p><p className="font-medium">{fmt(item.updated_at)}</p></div>
+      <section className="min-w-0 card p-5 space-y-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="min-w-0"><p className="text-xs text-fg-muted!">目前階段</p><p className="break-words font-medium">{item.status_label}</p></div>
+          <div className="min-w-0"><p className="text-xs text-fg-muted!">負責機關</p><p className="break-words font-medium">{item.current_org_name}</p></div>
+          <div className="min-w-0"><p className="text-xs text-fg-muted!">承辦人</p><p className="break-words font-medium">{item.assigned_to_name || "尚未分案"}</p></div>
+          <div className="min-w-0"><p className="text-xs text-fg-muted!">最後更新</p><p className="break-words font-medium">{fmt(item.updated_at)}</p></div>
         </div>
-        <p className="rounded-lg p-3 text-sm" style={{ background: "var(--bg-hover)", color: "var(--text-muted)" }}>
+        <p className="break-words rounded-lg bg-hover! p-3 text-sm text-fg-muted!">
           {item.status_public_message} 下一步：{item.next_action}
         </p>
       </section>
 
-      <div className="grid lg:grid-cols-[1.2fr_0.8fr] gap-5">
-        <section className="card p-5 space-y-4">
+      <div className="grid min-w-0 grid-cols-1 gap-5 lg:grid-cols-[1.2fr_0.8fr]">
+        <section className="min-w-0 card p-5 space-y-4">
           <h2 className="font-semibold">陳情內容</h2>
-          <p className="whitespace-pre-wrap text-sm leading-7" style={{ color: "var(--text-primary)" }}>{item.content}</p>
+          <p className="break-words whitespace-pre-wrap text-sm leading-7 text-fg-primary!">{item.content}</p>
           {item.public_reply && (
-            <div className="rounded-lg p-4" style={{ background: "var(--success-dim)", border: "1px solid var(--success-border)" }}>
-              <p className="font-medium mb-2" style={{ color: "var(--success)" }}>承辦回覆</p>
-              <p className="whitespace-pre-wrap text-sm">{item.public_reply}</p>
+            <div className="rounded-lg border border-success-border! bg-success-soft! p-4">
+              <p className="mb-2 font-medium text-success!">承辦回覆</p>
+              <p className="break-words whitespace-pre-wrap text-sm">{item.public_reply}</p>
             </div>
           )}
           {item.rejection_reason && (
-            <div className="rounded-lg p-4" style={{ background: "var(--danger-dim)", border: "1px solid var(--danger-border)" }}>
-              <p className="font-medium mb-2" style={{ color: "var(--danger)" }}>不受理原因</p>
-              <p className="whitespace-pre-wrap text-sm">{item.rejection_reason}</p>
+            <div className="rounded-lg border border-danger-border! bg-danger-soft! p-4">
+              <p className="mb-2 font-medium text-danger!">不受理原因</p>
+              <p className="break-words whitespace-pre-wrap text-sm">{item.rejection_reason}</p>
             </div>
           )}
         </section>
 
-        <aside className="space-y-5">
-          <section className="card p-5 space-y-3">
+        <aside className="min-w-0 space-y-5">
+          <section className="min-w-0 card p-5 space-y-3">
             <h2 className="font-semibold">附件（{item.attachments.length}）</h2>
             <PetitionAttachmentList caseId={item.id} attachments={item.attachments} />
           </section>
 
           {item.can_supplement && (
-            <section className="card p-5 space-y-3">
+            <section className="min-w-0 card p-5 space-y-3">
               <h2 className="font-semibold">補充資料</h2>
-              {item.supplement_request && <p className="text-sm" style={{ color: "var(--danger)" }}>{item.supplement_request}</p>}
+              {item.supplement_request && <p className="break-words text-sm text-danger!">{item.supplement_request}</p>}
               <textarea className="input w-full min-h-28" value={supplement} onChange={(e) => setSupplement(e.target.value)} placeholder="請補充承辦機關要求的資料" />
               <AnimatedFileUpload
                 accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
@@ -146,7 +146,7 @@ export default function PetitionDetailPage() {
                 onFiles={(files) => setFile(files[0] ?? null)}
                 onRemove={() => setFile(null)}
               />
-              <button className="btn btn-primary w-full" disabled={!supplement.trim()} onClick={submitSupplement}>送出補件</button>
+              <button className="btn btn-primary min-h-11 w-full" disabled={!supplement.trim()} onClick={submitSupplement}>送出補件</button>
             </section>
           )}
         </aside>
@@ -156,23 +156,22 @@ export default function PetitionDetailPage() {
 
       {item.can_respond_public && <PetitionPublicConsent item={item} onUpdated={setItem} />}
 
-      <section className="card p-5 space-y-4">
+      <section className="min-w-0 card p-5 space-y-4">
         <h2 className="font-semibold">處理時間軸</h2>
         <div className="space-y-3">
           {item.events.map((event) => (
-            <div key={event.id} className="pl-4 py-1" style={{ borderLeft: "2px solid var(--border)" }}>
-              <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{event.title}</p>
-              {event.content && <p className="text-sm whitespace-pre-wrap mt-1" style={{ color: "var(--text-muted)" }}>{event.content}</p>}
+            <div key={event.id} className="border-l border-border! py-1 pl-4">
+              <p className="break-words text-sm font-medium text-fg-primary!">{event.title}</p>
+              {event.content && <p className="mt-1 break-words whitespace-pre-wrap text-sm text-fg-muted!">{event.content}</p>}
               {event.related_document_id && (
                 <Link
                   href={`/documents/${event.related_document_id}`}
-                  className="mt-2 inline-flex text-xs font-medium hover:underline"
-                  style={{ color: "var(--primary-text)" }}
+                  className="mt-1 inline-flex min-h-11 items-center text-xs font-medium text-accent-text! hover:underline"
                 >
                   查看關聯公文
                 </Link>
               )}
-              <p className="text-xs mt-1" style={{ color: "var(--text-disabled)" }}>{fmt(event.created_at)}</p>
+              <p className="mt-1 break-words text-xs text-fg-disabled!">{fmt(event.created_at)}</p>
             </div>
           ))}
         </div>
