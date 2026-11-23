@@ -58,10 +58,10 @@ from api.services.shop._class_settlement import (
 )
 from api.services.shop._confirmation import export_class_order_confirmations_pdf
 from api.services.shop._export import export_orders_csv, export_orders_excel
+from api.services.shop._order_distribution import order_distribution
 from api.services.shop._order_queries import (
     class_order_summary,
     class_payment_report,
-    order_distribution,
     order_quantities,
     order_summary,
 )

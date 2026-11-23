@@ -924,6 +924,14 @@ export default function CouncilOrdersPage() {
       </p>}
       {tab === "summary" && canConfirmClassPayment && <ClassPaymentWorkspace
         catalog={catalog} activities={activities} optionsLoading={optionsLoading} optionsError={optionsError}
+        filters={{
+          grade: grade || undefined,
+          class_id: classId || undefined,
+          product_id: productId || undefined,
+          status: statusFilter || undefined,
+          is_paid: isPaid || undefined,
+          ...dateParams,
+        }}
         selectedScopeKey={paymentScope?.key ?? null} onScopeChange={(scope) => {
           requestVersion.current += 1;
           setPaymentScope(scope); setSummary(null); setLoading(true);

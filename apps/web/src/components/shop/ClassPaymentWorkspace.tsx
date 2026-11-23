@@ -12,15 +12,18 @@ import { isOrderingClosed } from "@/lib/shop-order-scope";
 type Scope = { key: string; label: string; activityId: string | null; categoryId?: string; topics: string[]; closed: boolean };
 type Entry = { scope: Scope; row: OrderSummaryRow };
 type Confirmation = { entries: Entry[]; paid: boolean; classLabel: string };
+type CollectionFilters = Pick<Parameters<typeof shopApi.orderSummary>[0],
+  "grade" | "class_id" | "product_id" | "status" | "is_paid" | "date_from" | "date_to">;
 
 export default function ClassPaymentWorkspace({ catalog, activities, optionsLoading, optionsError, refreshKey, disabled,
-  onChanged, onBusyChange, onViewClass, selectedScopeKey, onScopeChange,
+  onChanged, onBusyChange, onViewClass, selectedScopeKey, onScopeChange, filters = {},
 }: {
   catalog: CatalogCategoryOut[]; activities: ActivityOut[]; optionsLoading: boolean; optionsError: boolean;
   refreshKey: number; disabled: boolean; onChanged: () => void; onBusyChange: (busy: string | null) => void;
   onViewClass?: (classId: string, label: string, scope: { key: string; label: string }) => void;
   selectedScopeKey?: string | null;
   onScopeChange?: (scope: { key: string; label: string }) => void;
+  filters?: CollectionFilters;
 }) {
   const scopes = useMemo(() => {
     const groups = new Map<string, Scope>();
@@ -45,6 +48,11 @@ export default function ClassPaymentWorkspace({ catalog, activities, optionsLoad
   const selectedKey = selectedScopeKey === undefined ? localSelectedKey : selectedScopeKey;
   const selectedScopes = useMemo(() => scopes.filter((scope) => scope.key === selectedKey), [scopes, selectedKey]);
   const selectionKey = selectedScopes.map((scope) => scope.key).join(",");
+  const { grade, class_id: classId, product_id: productId, status, is_paid: isPaid,
+    date_from: dateFrom, date_to: dateTo } = filters;
+  const requestKey = `${selectionKey}:${JSON.stringify([
+    grade, classId, productId, status, isPaid, dateFrom, dateTo,
+  ])}`;
   const [search, setSearch] = useState("");
   const [result, setResult] = useState<{ key: string; entries: Entry[] } | null>(null);
   const [error, setError] = useState("");
@@ -62,24 +70,47 @@ export default function ClassPaymentWorkspace({ catalog, activities, optionsLoad
     let active = true;
     setResult(null);
     setError("");
+    const activeFilters: CollectionFilters = {
+      grade,
+      class_id: classId,
+      product_id: productId,
+      status,
+      is_paid: isPaid,
+      date_from: dateFrom,
+      date_to: dateTo,
+    };
+    const hasActiveFilters = Object.values(activeFilters).some(Boolean);
     Promise.all(selectedScopes.map(async (scope) => {
-      const summary = await shopApi.orderSummary({ group_by: "class", ...(scope.categoryId
-        ? { category_id: scope.categoryId } : { activity_id: scope.activityId! }) });
-      return summary.rows.map((row) => ({ scope, row }));
+      const scopeFilters = scope.categoryId
+        ? { category_id: scope.categoryId }
+        : { activity_id: scope.activityId! };
+      const [summary, matchingSummary] = await Promise.all([
+        shopApi.orderSummary({ group_by: "class", ...scopeFilters }),
+        hasActiveFilters
+          ? shopApi.orderSummary({ group_by: "class", ...scopeFilters, ...activeFilters })
+          : Promise.resolve(null),
+      ]);
+      const matchingClassIds = matchingSummary
+        ? new Set(matchingSummary.rows.map((row) => row.key))
+        : null;
+      return summary.rows
+        .filter((row) => matchingClassIds === null || matchingClassIds.has(row.key))
+        .map((row) => ({ scope, row }));
     }))
-      .then((entries) => { if (active) setResult({ key: selectionKey, entries: entries.flat() }); })
+      .then((entries) => { if (active) setResult({ key: requestKey, entries: entries.flat() }); })
       .catch((cause) => { if (active) setError(apiErrorMessage(cause, "無法載入本次活動的班級金額，請重試。")); });
     return () => { active = false; };
-  }, [selectionKey, selectedScopes, retry, refreshKey, optionsLoading, optionsError]);
+  }, [requestKey, selectedScopes, retry, refreshKey, optionsLoading, optionsError,
+    grade, classId, productId, status, isPaid, dateFrom, dateTo]);
 
   const classes = new Map<string, { label: string; entries: Entry[] }>();
-  if (result?.key === selectionKey) for (const entry of result.entries) {
+  if (result?.key === requestKey) for (const entry of result.entries) {
     if (entry.row.key === "none" || !entry.row.label.includes(search.trim())) continue;
     const item = classes.get(entry.row.key) ?? { label: entry.row.label, entries: [] };
     item.entries.push(entry);
     classes.set(entry.row.key, item);
   }
-  const loading = Boolean(selectedScopes.length && result?.key !== selectionKey && !error);
+  const loading = Boolean(selectedScopes.length && result?.key !== requestKey && !error);
   const openConfirmation = (entries: Entry[], paid: boolean) => {
     if (disabled || savingRef.current) return;
     const targets = entries.filter(({ row }) => (paid ? row.unpaid_amount : row.paid_amount) > 0);
