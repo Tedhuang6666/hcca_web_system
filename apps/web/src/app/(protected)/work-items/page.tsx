@@ -99,26 +99,17 @@ export default function WorkItemsPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-5">
-      <header className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
-            我的工作
-          </h1>
-        </div>
+    <div className="mx-auto min-w-0 max-w-3xl space-y-5">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-xl font-semibold text-fg-primary!">我的工作</h1>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
           {gtStatus?.is_connected ? (
             <button
               type="button"
               onClick={handleSync}
               disabled={syncing}
-              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium disabled:opacity-60"
-              style={{
-                background: "var(--primary-dim)",
-                color: "var(--primary-text)",
-                border: "1px solid var(--info-border)",
-              }}
+              className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--info-border)] bg-accent-soft! px-3 py-1.5 text-sm font-medium text-accent-text! disabled:opacity-60 sm:w-auto"
             >
               {syncing ? (
                 <Loader2 size={14} className="animate-spin" aria-hidden={true} />
@@ -130,13 +121,7 @@ export default function WorkItemsPage() {
           ) : gtStatus !== null ? (
             <Link
               href="/settings/integrations"
-              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium"
-              style={{
-                background: "var(--bg-hover)",
-                color: "var(--text-muted)",
-                border: "1px solid var(--border)",
-                textDecoration: "none",
-              }}
+              className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-border! bg-hover! px-3 py-1.5 text-sm font-medium text-fg-muted! no-underline sm:w-auto"
             >
               <ExternalLink size={13} aria-hidden={true} />
               連結 Google Tasks
@@ -146,7 +131,7 @@ export default function WorkItemsPage() {
           <button
             type="button"
             onClick={() => setShowCreate(true)}
-            className="btn btn-primary"
+            className="btn btn-primary min-h-11 w-full sm:w-auto"
           >
             <Plus size={14} aria-hidden={true} />
             新增工作
@@ -155,8 +140,7 @@ export default function WorkItemsPage() {
       </header>
 
       {/* 篩選 */}
-      <div className="flex gap-0.5 p-1 rounded-xl overflow-x-auto"
-        style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+      <div className="grid grid-cols-2 gap-1 rounded-xl border border-border! bg-surface! p-1">
         {(["open", "all"] as Filter[]).map((f) => {
           const label = f === "open" ? "進行中" : "全部";
           const active = filter === f;
@@ -167,12 +151,10 @@ export default function WorkItemsPage() {
               onClick={() => {
                 setFilter(f);
               }}
-              className="flex-shrink-0 px-4 py-1.5 rounded-lg text-sm font-medium transition-colors"
-              style={{
-                background: active ? "var(--primary-dim)" : "transparent",
-                color: active ? "var(--primary-text)" : "var(--text-muted)",
-                border: active ? "1px solid var(--info-border)" : "1px solid transparent",
-              }}
+              className={`min-h-11 rounded-lg border px-4 py-1.5 text-sm font-medium transition-colors ${active
+                ? "border-[var(--info-border)] bg-accent-soft! text-accent-text!"
+                : "border-transparent bg-transparent text-fg-muted!"
+              }`}
             >
               {label}
             </button>
@@ -192,14 +174,13 @@ export default function WorkItemsPage() {
 
       {loading ? (
         <div className="py-12 flex justify-center">
-          <Loader2 size={24} className="animate-spin" style={{ color: "var(--text-disabled)" }} />
+          <Loader2 size={24} className="animate-spin text-[var(--text-disabled)]" />
         </div>
       ) : displayed.length === 0 ? (
-        <div className="text-center py-14"
-          style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)" }}>
+        <div className="rounded-[var(--radius-lg)] border border-border! bg-surface! py-14 text-center">
           <CheckCircle2 size={32} aria-hidden={true}
-            style={{ color: "var(--text-disabled)", display: "inline-block", marginBottom: 10 }} />
-          <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+            className="mb-2.5 inline-block text-[var(--text-disabled)]" />
+          <p className="text-sm font-medium text-fg-primary!">
             {filter === "open" ? "沒有進行中的工作" : "沒有工作項目"}
           </p>
         </div>
@@ -234,20 +215,14 @@ function WorkRow({
 
   return (
     <li
-      className="flex items-start gap-3 p-4 rounded-lg"
-      style={{
-        background: "var(--bg-surface)",
-        border: "1px solid var(--border)",
-        opacity: done ? 0.65 : 1,
-      }}
+      className={`flex min-w-0 items-start gap-3 rounded-lg border border-border! bg-surface! p-3 sm:p-4 ${done ? "opacity-[0.65]" : "opacity-100"}`}
     >
       <button
         type="button"
         onClick={onComplete}
         disabled={done || completing}
         aria-label={done ? "已完成" : "標記完成"}
-        className="-m-2 flex min-h-11 min-w-11 flex-shrink-0 items-center justify-center rounded disabled:cursor-not-allowed"
-        style={{ color: done ? "var(--success)" : "var(--text-disabled)" }}
+        className={`-m-2 flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded disabled:cursor-not-allowed ${done ? "text-success!" : "text-[var(--text-disabled)]"}`}
       >
         {completing ? (
           <Loader2 size={18} className="animate-spin" aria-hidden={true} />
@@ -260,24 +235,19 @@ function WorkRow({
 
       <div className="flex-1 min-w-0">
         <p
-          className="text-sm font-medium"
-          style={{
-            color: "var(--text-primary)",
-            textDecoration: done ? "line-through" : "none",
-          }}
+          className={`break-words text-sm font-medium text-fg-primary! ${done ? "line-through" : ""}`}
         >
           {item.title}
         </p>
         {item.description && (
-          <p className="text-xs mt-0.5 line-clamp-2" style={{ color: "var(--text-muted)" }}>
+          <p className="mt-0.5 line-clamp-2 break-words text-xs text-fg-muted!">
             {item.description}
           </p>
         )}
         <div className="flex items-center gap-2 mt-1 flex-wrap">
           {due && (
             <span
-              className="text-xs flex items-center gap-1"
-              style={{ color: isOverdue ? "var(--danger)" : "var(--text-muted)" }}
+              className={`flex items-center gap-1 text-xs ${isOverdue ? "text-danger!" : "text-fg-muted!"}`}
             >
               <Clock size={11} aria-hidden={true} />
               {due}
@@ -285,12 +255,7 @@ function WorkRow({
           )}
           {item.google_task_id && (
             <span
-              className="text-xs px-1.5 py-0.5 rounded"
-              style={{
-                background: "var(--tag-blue-bg)",
-                color: "var(--tag-blue-fg)",
-                border: "1px solid var(--tag-blue-border)",
-              }}
+              className="rounded border border-[var(--tag-blue-border)] bg-[var(--tag-blue-bg)] px-1.5 py-0.5 text-xs text-[var(--tag-blue-fg)]"
             >
               已同步 Google Tasks
             </span>
@@ -335,10 +300,9 @@ function CreateForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-xl p-4 space-y-3"
-      style={{ background: "var(--bg-surface)", border: "1px solid var(--info-border)" }}
+      className="space-y-3 rounded-xl border border-[var(--info-border)] bg-surface! p-4"
     >
-      <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+      <p className="text-sm font-semibold text-fg-primary!">
         新增工作項目
       </p>
       <div className="space-y-2">
@@ -349,12 +313,7 @@ function CreateForm({
           onChange={(e) => setTitle(e.target.value)}
           maxLength={200}
           required
-          className="w-full rounded-lg px-3 py-2 text-sm outline-none"
-          style={{
-            background: "var(--bg-input, var(--bg-muted))",
-            border: "1px solid var(--border)",
-            color: "var(--text-primary)",
-          }}
+          className="min-h-11 w-full rounded-lg border! border-border! bg-[var(--bg-input,var(--bg-muted))] px-3 py-2 text-sm text-fg-primary! outline-none"
         />
         <textarea
           placeholder="說明（選填）"
@@ -362,43 +321,32 @@ function CreateForm({
           onChange={(e) => setDescription(e.target.value)}
           maxLength={5000}
           rows={2}
-          className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-none"
-          style={{
-            background: "var(--bg-input, var(--bg-muted))",
-            border: "1px solid var(--border)",
-            color: "var(--text-primary)",
-          }}
+          className="min-h-24 w-full resize-y rounded-lg border! border-border! bg-[var(--bg-input,var(--bg-muted))] px-3 py-2 text-sm text-fg-primary! outline-none"
         />
         <div>
-          <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>
+          <label className="mb-1 block text-xs text-fg-muted!">
             期限（選填）
           </label>
           <input
             type="datetime-local"
             value={dueAt}
             onChange={(e) => setDueAt(e.target.value)}
-            className="rounded-lg px-3 py-2 text-sm outline-none"
-            style={{
-              background: "var(--bg-input, var(--bg-muted))",
-              border: "1px solid var(--border)",
-              color: "var(--text-primary)",
-            }}
+            className="min-h-11 w-full rounded-lg border! border-border! bg-[var(--bg-input,var(--bg-muted))] px-3 py-2 text-sm text-fg-primary! outline-none"
           />
         </div>
       </div>
-      <div className="flex gap-2 justify-end">
+      <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-lg px-4 py-1.5 text-sm"
-          style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}
+          className="min-h-11 w-full rounded-lg border border-border! px-4 py-1.5 text-sm text-fg-muted! sm:w-auto"
         >
           取消
         </button>
         <button
           type="submit"
           disabled={saving || !title.trim()}
-          className="btn btn-primary"
+          className="btn btn-primary min-h-11 w-full sm:w-auto"
         >
           {saving ? "建立中…" : "建立"}
         </button>
