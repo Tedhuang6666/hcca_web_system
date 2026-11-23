@@ -1116,6 +1116,17 @@ class OrderQuantityRow(BaseModel):
     qty_paid: int
 
 
+class OrderDistributionRow(BaseModel):
+    product_id: uuid.UUID
+    product_name: str
+    series_name: str
+    class_id: uuid.UUID | None
+    class_label: str
+    grade: int | None = None
+    variant_key: str
+    qty_total: int
+
+
 __all__ = [
     "CartItemCreate",
     "CartItemOut",
@@ -1170,4 +1181,5 @@ __all__ = [
     "CloseStatusItem",
     "CloseStatusOut",
     "OrderQuantityRow",
+    "OrderDistributionRow",
 ]

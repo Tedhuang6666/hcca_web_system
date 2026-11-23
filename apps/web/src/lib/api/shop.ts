@@ -11,7 +11,7 @@ import type {
   ShopProfitOut,
   ProductProcurementUpdate,
   ClassOrderCreate, ShopDelegatedOrderOut, ShopDelegationCodeOut, ShopDelegationContextOut, ShopDelegationCreate, ShopDelegationOut,
-  ActivityOut, CatalogCategoryOut, ClassPaymentOut, ClassPaymentReportItemOut, CloseStatusOut, OrderListItem, OrderOut, OrderQuantityRow, OrderSummaryOut, ProductCategoryOut, ProductOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut, ShopClassRepresentativeRecipientOut, ShopClassSummaryOut, ShopOrderCloseOut, ShopOrdersClearOut, ShopPromotionCreate, ShopPromotionOut, ShopPromotionPreviewOut, ShopPromotionPublicOut, ShopPromotionUpdate,
+  ActivityOut, CatalogCategoryOut, ClassPaymentOut, ClassPaymentReportItemOut, CloseStatusOut, OrderDistributionRow, OrderListItem, OrderOut, OrderQuantityRow, OrderSummaryOut, ProductCategoryOut, ProductOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut, ShopClassRepresentativeRecipientOut, ShopClassSummaryOut, ShopOrderCloseOut, ShopOrdersClearOut, ShopPromotionCreate, ShopPromotionOut, ShopPromotionPreviewOut, ShopPromotionPublicOut, ShopPromotionUpdate,
 } from "../types";
 import { authFetch, BASE, get, post, put, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
 import type { OrderRecalculateOut } from "../api-bridge";
@@ -345,6 +345,14 @@ export const shopApi = {
     });
     const qs = query.toString();
     return get<OrderQuantityRow[]>(`/shop/orders/quantities${qs ? `?${qs}` : ""}`);
+  },
+  orderDistribution: (params?: Pick<OrderQuantityFilters, "activity_id" | "grade" | "class_id" | "category_id" | "product_id">) => {
+    const query = new URLSearchParams();
+    Object.entries(params ?? {}).forEach(([key, value]) => {
+      if (value) query.set(key, value);
+    });
+    const qs = query.toString();
+    return get<OrderDistributionRow[]>(`/shop/orders/distribution${qs ? `?${qs}` : ""}`);
   },
   downloadOrderQuantities: async (params?: OrderQuantityFilters) => {
     const query = new URLSearchParams();

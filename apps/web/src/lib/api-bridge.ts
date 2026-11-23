@@ -437,6 +437,7 @@ export type NotificationPreferencesIn = components['schemas']['NotificationPrefe
 export type NotificationPreferencesOut = components['schemas']['NotificationPreferencesOut']
 export type OptionConfig = components['schemas']['OptionConfig']
 export type OrderCancelRequest = components['schemas']['OrderCancelRequest']
+export type OrderDistributionRow = components['schemas']['OrderDistributionRow']
 export type OrderItemCreate = components['schemas']['OrderItemCreate']
 export type OrderItemOut = components['schemas']['OrderItemOut']
 export type OrderItemQuantityUpdate = components['schemas']['OrderItemQuantityUpdate']

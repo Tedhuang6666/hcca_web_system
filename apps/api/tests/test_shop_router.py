@@ -4377,6 +4377,80 @@ async def test_order_quantities_with_permission_returns_rows(
     assert rows[0]["qty_total"] == 2
 
 
+async def test_order_distribution_requires_permission_and_groups_by_class_and_variant(
+    db_session, client, member_user, authed_client_factory
+) -> None:
+    path = "/shop/orders/distribution"
+    assert (await client.get(path)).status_code == 401
+    manager = authed_client_factory(member_user)
+    assert (await manager.get(path)).status_code == 403
+
+    await _grant_permission(db_session, member_user, "shop:manage_orders")
+    product = await _make_active_product(db_session, member_user, price=10)
+    class_a = await _make_class(db_session)
+    class_b = await _make_class(db_session)
+    buyer = await _bare_user(db_session)
+
+    order_a = await _seed_order(db_session, buyer, class_id=class_a.id)
+    order_b = await _seed_order(db_session, buyer, class_id=class_b.id)
+    cancelled_order = await _seed_order(db_session, buyer, class_id=class_a.id)
+    cancelled_order.status = OrderStatus.CANCELLED
+    db_session.add_all(
+        [
+            OrderItem(
+                order_id=order_a.id,
+                product_id=product.id,
+                quantity=2,
+                unit_price=10,
+                selected_options=[{"group_name": "尺寸", "value": "M"}],
+            ),
+            OrderItem(
+                order_id=order_a.id,
+                product_id=product.id,
+                quantity=1,
+                unit_price=10,
+                selected_options=[{"group_name": "尺寸", "value": "L"}],
+            ),
+            OrderItem(
+                order_id=order_b.id,
+                product_id=product.id,
+                quantity=3,
+                unit_price=10,
+                selected_options=[{"group_name": "尺寸", "value": "M"}],
+            ),
+            OrderItem(
+                order_id=cancelled_order.id,
+                product_id=product.id,
+                quantity=9,
+                unit_price=10,
+                selected_options=[{"group_name": "尺寸", "value": "M"}],
+            ),
+        ]
+    )
+    await db_session.flush()
+
+    response = await manager.get(path, params={"product_id": str(product.id)})
+    assert response.status_code == 200, response.text
+    rows = response.json()
+    quantities = {(row["class_id"], row["variant_key"]): row["qty_total"] for row in rows}
+    assert quantities == {
+        (str(class_a.id), "尺寸:M"): 2,
+        (str(class_a.id), "尺寸:L"): 1,
+        (str(class_b.id), "尺寸:M"): 3,
+    }
+    assert next(row for row in rows if row["class_id"] == str(class_a.id))["class_label"] == (
+        class_svc.class_display_label(class_a)
+    )
+
+    filtered = await manager.get(
+        path, params={"product_id": str(product.id), "class_id": str(class_b.id)}
+    )
+    assert filtered.status_code == 200
+    assert {(row["class_id"], row["qty_total"]) for row in filtered.json()} == {
+        (str(class_b.id), 3)
+    }
+
+
 # ── 報表匯出 ──────────────────────────────────────────────────────────────────
 
 

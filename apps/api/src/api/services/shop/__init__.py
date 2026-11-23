@@ -61,6 +61,7 @@ from api.services.shop._export import export_orders_csv, export_orders_excel
 from api.services.shop._order_queries import (
     class_order_summary,
     class_payment_report,
+    order_distribution,
     order_quantities,
     order_summary,
 )
@@ -207,6 +208,7 @@ __all__ = [
     "get_class_member_registrations",
     "_serialize_close",
     "order_quantities",
+    "order_distribution",
     # export
     "export_orders_excel",
     "export_orders_csv",

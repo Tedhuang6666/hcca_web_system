@@ -10313,6 +10313,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop/orders/distribution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 商品分貨數量（按班級與規格） */
+        get: operations["order_distribution_shop_orders_distribution_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shop/orders/quantities": {
         parameters: {
             query?: never;
@@ -21854,6 +21871,28 @@ export interface components {
              * @description 取消原因
              */
             reason?: string | null;
+        };
+        /** OrderDistributionRow */
+        OrderDistributionRow: {
+            /** Class Id */
+            class_id: string | null;
+            /** Class Label */
+            class_label: string;
+            /** Grade */
+            grade?: number | null;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Product Name */
+            product_name: string;
+            /** Qty Total */
+            qty_total: number;
+            /** Series Name */
+            series_name: string;
+            /** Variant Key */
+            variant_key: string;
         };
         /** OrderItemCreate */
         OrderItemCreate: {
@@ -55355,6 +55394,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ShopDelegatedOrderOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    order_distribution_shop_orders_distribution_get: {
+        parameters: {
+            query?: {
+                activity_id?: string | null;
+                grade?: number | null;
+                class_id?: string | null;
+                category_id?: string | null;
+                product_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDistributionRow"][];
                 };
             };
             /** @description Validation Error */

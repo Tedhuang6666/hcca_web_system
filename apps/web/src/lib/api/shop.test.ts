@@ -3,6 +3,20 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { shopApi } from "./shop";
 
 describe("shop quantity API", () => {
+  it("loads class and variant distribution with product and class filters", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("[]", {
+      headers: { "Content-Type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await shopApi.orderDistribution({ product_id: "hoodie", class_id: "class-1" });
+
+    const url = new URL(String(fetchMock.mock.calls[0][0]), "http://localhost");
+    expect(url.pathname).toMatch(/\/shop\/orders\/distribution$/);
+    expect(url.searchParams.get("product_id")).toBe("hoodie");
+    expect(url.searchParams.get("class_id")).toBe("class-1");
+  });
+
   it("總數確認單傳遞所選班級或全部班級，並保留後端錯誤", async () => {
     const fetchMock = vi.fn().mockImplementation(async () => new Response("pdf"));
     vi.stubGlobal("fetch", fetchMock);

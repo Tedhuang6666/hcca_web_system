@@ -16,6 +16,7 @@ from api.models.shop import (
 from api.routers.shop._common import _ADMIN_VIEW_CODES, CurrentUser, DbDep, ManagerUser
 from api.schemas.shop import (
     ClassPaymentReportItemOut,
+    OrderDistributionRow,
     OrderQuantityRow,
     OrderSummaryOut,
 )
@@ -205,6 +206,40 @@ async def order_quantities(
         status=status_filter,
         date_from=date_from,
         date_to=date_to,
+    )
+
+
+@router.get(
+    "/orders/distribution",
+    response_model=list[OrderDistributionRow],
+    summary="商品分貨數量（按班級與規格）",
+    dependencies=[
+        Depends(
+            require_any(
+                PermissionCode.SHOP_MANAGE,
+                PermissionCode.SHOP_MANAGE_ORDERS,
+                PermissionCode.SHOP_VIEW_ALL,
+                PermissionCode.ADMIN_ALL,
+            )
+        )
+    ],
+)
+async def order_distribution(
+    session: DbDep,
+    _: CurrentUser,
+    activity_id: uuid.UUID | None = Query(None),
+    grade: int | None = Query(None, ge=0),
+    class_id: uuid.UUID | None = Query(None),
+    category_id: uuid.UUID | None = Query(None),
+    product_id: uuid.UUID | None = Query(None),
+) -> list[OrderDistributionRow]:
+    return await shop_svc.order_distribution(
+        session,
+        activity_id=activity_id,
+        grade=grade,
+        class_id=class_id,
+        category_id=category_id,
+        product_id=product_id,
     )
 
 

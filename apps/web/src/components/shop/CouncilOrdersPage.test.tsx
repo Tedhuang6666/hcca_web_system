@@ -5,7 +5,7 @@ import CouncilOrdersPage from "@/app/(protected)/shop/council-orders/page";
 const api = vi.hoisted(() => ({
   downloadOrderQuantities: vi.fn(),
   downloadClassOrderConfirmations: vi.fn(),
-  catalog: vi.fn(), listActivities: vi.fn(), recipientOptions: vi.fn(), orderSummary: vi.fn(), orderQuantities: vi.fn(),
+  catalog: vi.fn(), listActivities: vi.fn(), listProducts: vi.fn(), recipientOptions: vi.fn(), orderSummary: vi.fn(), orderQuantities: vi.fn(), orderDistribution: vi.fn(),
   classPaymentReport: vi.fn(), classRepresentativeReminderTargets: vi.fn(), createMessage: vi.fn(),
   listSupplementOrders: vi.fn(),
   listOrderRecipients: vi.fn(),
@@ -43,6 +43,8 @@ beforeEach(() => {
   api.createMessage.mockResolvedValue({ id: "reminder-draft-id" });
   api.listSupplementOrders.mockResolvedValue([]);
   api.orderQuantities.mockResolvedValue([]);
+  api.orderDistribution.mockResolvedValue([]);
+  api.listProducts.mockResolvedValue([]);
   api.listOrders.mockResolvedValue([]);
   api.getCloseStatus.mockResolvedValue({ statuses: { shirts: { is_closed: false }, bags: { is_closed: false }, cards: { is_closed: false } } });
   api.closeCategory.mockResolvedValue({});
@@ -96,6 +98,13 @@ it("依商品總量目前篩選下載統計詳情，下載失敗可重試", asyn
   await waitFor(() => expect(api.downloadOrderQuantities).toHaveBeenCalledTimes(2));
 });
 
+it("班聯工作區可開啟分貨統計頁籤", async () => {
+  await openPage();
+  switchTask("分貨統計");
+  expect(await screen.findByText("目前沒有符合篩選的訂購數量。" )).toBeVisible();
+  expect(api.orderDistribution).toHaveBeenCalledWith({});
+});
+
 it("只有商品管理者能看到包含成本的 Excel 下載", async () => {
   access.isAdmin = false;
   access.permissions = new Set(["shop:view_all"]);
@@ -129,6 +138,54 @@ it("班級部分收款後立即更新補收款區，補齊後重新載入班級�
   await screen.findByRole("navigation", { name: "班聯統籌工作" });
   switchTask("班級繳款");
   expect(await within(screen.getByRole("region", { name: "登記班級收款" })).findByText("已收齊")).toBeVisible();
+});
+
+it("上方篩選會縮小班級收款名單，金額仍依整個活動核對", async () => {
+  api.recipientOptions.mockResolvedValue([
+    { id: "class-one", grade: 1, class_code: "101", label: "一年一班" },
+    { id: "class-two", grade: 2, class_code: "201", label: "二年一班" },
+  ]);
+  const row = (key: string, label: string, amount: number) => ({
+    key, label, order_count: 1, item_count: 1, total_amount: amount, paid_amount: 0, unpaid_amount: amount,
+  });
+  api.orderSummary.mockImplementation(async (params) => {
+    if (params.group_by !== "class" || params.activity_id !== "festival") return summary();
+    if (params.class_id) {
+      return { group_by: "class", total_amount: 100, paid_amount: 0, unpaid_amount: 100,
+        rows: [row("class-two", "二年一班", 100)] };
+    }
+    return { group_by: "class", total_amount: 500, paid_amount: 0, unpaid_amount: 500,
+      rows: [row("class-one", "一年一班", 200), row("class-two", "二年一班", 300)] };
+  });
+
+  await openPage();
+  const workspace = screen.getByRole("region", { name: "登記班級收款" });
+  fireEvent.click(within(workspace).getByRole("radio", { name: "校慶" }));
+  await within(workspace).findByRole("button", { name: "查看一年一班訂購明細" });
+  fireEvent.change(screen.getByRole("combobox", { name: "統計方式" }), { target: { value: "user" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "年級" }), { target: { value: "2" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "班級" }), { target: { value: "class-two" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "商品" }), { target: { value: "shirt" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "班聯收款狀態" }), { target: { value: "false" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "訂單狀態" }), { target: { value: "pending" } });
+  fireEvent.change(screen.getByLabelText("訂購起日"), { target: { value: "2026-01-10" } });
+  fireEvent.change(screen.getByLabelText("訂購迄日"), { target: { value: "2026-01-20" } });
+
+  await waitFor(() => expect(api.orderSummary).toHaveBeenCalledWith(expect.objectContaining({
+    group_by: "class",
+    activity_id: "festival",
+    grade: "2",
+    class_id: "class-two",
+    product_id: "shirt",
+    is_paid: "false",
+    status: "pending",
+    date_from: new Date("2026-01-10T00:00:00+08:00").toISOString(),
+    date_to: new Date("2026-01-20T23:59:59+08:00").toISOString(),
+  })));
+  expect(await within(workspace).findByRole("button", { name: "查看二年一班訂購明細" })).toBeVisible();
+  expect(within(workspace).queryByRole("button", { name: "查看一年一班訂購明細" })).not.toBeInTheDocument();
+  const collectionButton = await within(workspace).findByRole("button", { name: "核對二年一班收款" });
+  expect(collectionButton).toHaveTextContent("核對校慶收款 NT$300");
 });
 
 function switchTask(name: string) {
