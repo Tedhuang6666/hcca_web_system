@@ -16,11 +16,11 @@ export default function BusinessHoursEditor({
   onChange: (value: BusinessHours) => void;
 }) {
   return (
-    <fieldset className="grid gap-2 md:col-span-2">
-      <legend className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
-        每週營業時間 <span className="font-normal" style={{ color: "var(--text-muted)" }}>選填</span>
+    <fieldset className="grid gap-2 sm:col-span-2">
+      <legend className="text-xs font-medium text-fg-secondary!">
+        每週營業時間 <span className="font-normal text-fg-muted!">選填</span>
       </legend>
-      <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+      <p className="text-xs text-fg-muted!">
         未設定的日期不會影響顯示；設定後，營業外地圖圖標會自動變灰。
       </p>
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -28,8 +28,8 @@ export default function BusinessHoursEditor({
           const enabled = Boolean(value[key]?.length);
           const interval = valueFor(value, key);
           return (
-            <div key={key} className="grid gap-2 rounded-md border p-2" style={{ borderColor: "var(--border)" }}>
-              <label className="flex items-center gap-2 text-xs font-medium" style={{ color: "var(--text-primary)" }}>
+            <div key={key} className="grid gap-2 rounded-md border p-2 border-border!">
+              <label className="flex min-h-11 items-center gap-2 text-xs font-medium text-fg-primary!">
                 <input
                   type="checkbox"
                   checked={enabled}
@@ -45,14 +45,14 @@ export default function BusinessHoursEditor({
               {enabled ? (
                 <div className="grid grid-cols-2 gap-1">
                   <input
-                    className="input h-8 px-2 text-xs"
+                    className="input min-h-11 min-w-0 px-2 text-xs"
                     type="time"
                     aria-label={`${label} 開始時間`}
                     value={interval.open}
                     onChange={(event) => onChange({ ...value, [key]: [{ ...interval, open: event.target.value }] })}
                   />
                   <input
-                    className="input h-8 px-2 text-xs"
+                    className="input min-h-11 min-w-0 px-2 text-xs"
                     type="time"
                     aria-label={`${label} 結束時間`}
                     value={interval.close}
@@ -60,7 +60,7 @@ export default function BusinessHoursEditor({
                   />
                 </div>
               ) : (
-                <span className="text-xs" style={{ color: "var(--text-muted)" }}>公休</span>
+                <span className="text-xs text-fg-muted!">公休</span>
               )}
             </div>
           );
