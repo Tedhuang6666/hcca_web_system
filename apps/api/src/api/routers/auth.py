@@ -413,7 +413,9 @@ async def google_login(request: Request) -> RedirectResponse:
 
 
 @router.get("/google/callback", name="google_callback", summary="Google OAuth2 Callback")
-async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) -> RedirectResponse:
+async def google_callback(
+    request: Request, db: AsyncSession = Depends(get_db, scope="function")
+) -> RedirectResponse:
     """
     處理 Google 授權回呼：
     1. 換取 ID Token
@@ -527,11 +529,6 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
         return RedirectResponse(url=f"{frontend_origin}/auth/mfa?{challenge_qs}")
 
     tokens = await _issue_auth_tokens(db, user, request, auth_method="google_oauth")
-
-    # get_db() commits from its request-scope cleanup after FastAPI sends the response.
-    # The browser follows this redirect immediately and calls /auth/me, so persist the
-    # new UserSession before sending the cookies that point to it.
-    await db.commit()
 
     callback_qs = urlencode({"next": login_next})
     response = RedirectResponse(url=f"{frontend_origin}/auth/callback?{callback_qs}")

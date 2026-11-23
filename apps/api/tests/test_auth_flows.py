@@ -499,7 +499,7 @@ async def test_google_callback_retries_over_https_origin(
     assert response.headers["location"].startswith("https://hcca.tw/auth/google/login?")
 
 
-async def test_google_callback_commits_session_before_setting_cookies(
+async def test_google_callback_commits_session_before_response_is_sent(
     client: AsyncClient,
     db_session: AsyncSession,
     make_user: Callable[..., Any],
@@ -522,12 +522,6 @@ async def test_google_callback_commits_session_before_setting_cookies(
         await db.execute(text("SELECT 1"))
         return SimpleNamespace(access_token="access", refresh_token="refresh")
 
-    original_set_cookies = auth_module._set_auth_cookies
-
-    def set_cookies_after_commit(response, access_token: str, refresh_token: str) -> None:
-        assert commit_count == 1, "session transaction must commit before its cookies are sent"
-        original_set_cookies(response, access_token, refresh_token)
-
     monkeypatch.setattr(db_session, "commit", tracked_commit)
     monkeypatch.setattr(
         auth_module.google,
@@ -547,14 +541,36 @@ async def test_google_callback_commits_session_before_setting_cookies(
     monkeypatch.setattr(auth_module, "_issue_auth_tokens", issue_tokens)
     monkeypatch.setattr(auth_module.passkey_svc, "requires_mfa", AsyncMock(return_value=False))
     monkeypatch.setattr(auth_module, "_frontend_origin_for", lambda request: "https://hcca.tw")
-    monkeypatch.setattr(auth_module, "_set_auth_cookies", set_cookies_after_commit)
     monkeypatch.setattr(auth_module, "get_posthog_client", lambda: None)
 
-    response = await client.get("/auth/google/callback?code=c&state=s", follow_redirects=False)
+    from httpx import ASGITransport, AsyncClient
+
+    from api.main import app as api_app
+
+    async def assert_commit_before_response(scope, receive, send) -> None:
+        async def check_response_start(message) -> None:
+            if (
+                scope.get("path") == "/auth/google/callback"
+                and message.get("type") == "http.response.start"
+            ):
+                assert commit_count == 1, "session transaction must commit before response headers"
+            await send(message)
+
+        await api_app(scope, receive, check_response_start)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=assert_commit_before_response),
+        base_url="http://test",
+        cookies=client.cookies,
+    ) as callback_client:
+        response = await callback_client.get(
+            "/auth/google/callback?code=c&state=s", follow_redirects=False
+        )
 
     assert response.status_code in (302, 307)
     assert settings.ACCESS_TOKEN_COOKIE_NAME in response.cookies
     assert settings.REFRESH_TOKEN_COOKIE_NAME in response.cookies
+    assert commit_count == 1
 
 
 async def test_google_callback_rejects_unverified_email(
