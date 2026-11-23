@@ -13,7 +13,7 @@ export function SurveyGridRowsEditor({
 }) {
   return (
     <fieldset className="space-y-2">
-      <legend className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+      <legend className="text-xs font-medium text-fg-secondary!">
         列項目
       </legend>
       <div className="space-y-2">
@@ -30,9 +30,8 @@ export function SurveyGridRowsEditor({
               type="button"
               onClick={() => onChange(rows.filter((_, i) => i !== index))}
               disabled={rows.length <= 2}
-              className="topbar-icon-btn shrink-0"
+              className="topbar-icon-btn min-h-11 min-w-11 shrink-0 disabled:cursor-not-allowed disabled:opacity-40"
               aria-label={`移除第 ${index + 1} 列`}
-              style={{ opacity: rows.length <= 2 ? 0.4 : 1 }}
             >
               <X size={16} aria-hidden="true" />
             </button>
@@ -48,7 +47,7 @@ export function SurveyGridRowsEditor({
         <Plus size={14} aria-hidden="true" />
         新增列
       </button>
-      <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+      <p className="text-xs text-fg-muted!">
         每一列會有一組欄位單選，至少設定 2 列。
       </p>
     </fieldset>
@@ -64,7 +63,7 @@ export function SurveyGridColumnsEditor({
 }) {
   return (
     <fieldset className="space-y-2">
-      <legend className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+      <legend className="text-xs font-medium text-fg-secondary!">
         欄位選項
       </legend>
       <div className="grid gap-2 sm:grid-cols-2">
@@ -81,9 +80,8 @@ export function SurveyGridColumnsEditor({
               type="button"
               onClick={() => onChange(columns.filter((_, i) => i !== index))}
               disabled={columns.length <= 2}
-              className="topbar-icon-btn shrink-0"
+              className="topbar-icon-btn min-h-11 min-w-11 shrink-0 disabled:cursor-not-allowed disabled:opacity-40"
               aria-label={`移除第 ${index + 1} 欄`}
-              style={{ opacity: columns.length <= 2 ? 0.4 : 1 }}
             >
               <X size={16} aria-hidden="true" />
             </button>
@@ -99,7 +97,7 @@ export function SurveyGridColumnsEditor({
         <Plus size={14} aria-hidden="true" />
         新增欄
       </button>
-      <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+      <p className="text-xs text-fg-muted!">
         每一列可選一個欄位，至少設定 2 列與 2 欄。
       </p>
     </fieldset>
@@ -115,7 +113,7 @@ export function SurveyMultiFieldEditor({
 }) {
   return (
     <fieldset className="space-y-2">
-      <legend className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+      <legend className="text-xs font-medium text-fg-secondary!">
         輸入欄位名稱
       </legend>
       <div className="space-y-2">
@@ -133,9 +131,8 @@ export function SurveyMultiFieldEditor({
               type="button"
               onClick={() => onChange(labels.filter((_, i) => i !== index))}
               disabled={labels.length <= 2}
-              className="topbar-icon-btn shrink-0"
+              className="topbar-icon-btn min-h-11 min-w-11 shrink-0 disabled:cursor-not-allowed disabled:opacity-40"
               aria-label={`移除第 ${index + 1} 個欄位`}
-              style={{ opacity: labels.length <= 2 ? 0.4 : 1 }}
             >
               <X size={16} aria-hidden="true" />
             </button>
@@ -151,7 +148,7 @@ export function SurveyMultiFieldEditor({
         <Plus size={14} aria-hidden="true" />
         新增欄位
       </button>
-      <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+      <p className="text-xs text-fg-muted!">
         填答者會在每個欄位分別輸入長文字。至少 2 欄，最多 20 欄。
       </p>
     </fieldset>

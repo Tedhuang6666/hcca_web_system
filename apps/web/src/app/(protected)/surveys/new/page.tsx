@@ -137,10 +137,11 @@ function ConditionEditor({
             <div className="flex gap-1">
               {(["and", "or"] as const).map(c => (
                 <button key={c} type="button" onClick={() => update(i, { connector: c })}
-                  className="text-xs px-2 py-0.5 rounded"
-                  style={r.connector === c
-                    ? { background: "var(--primary)", color: "var(--primary-fg)" }
-                    : { background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
+                  className={`min-h-11 rounded-md border border-transparent px-3 text-xs font-medium transition-colors ${
+                    r.connector === c
+                      ? "bg-accent! text-accent-contrast!"
+                      : "bg-elevated! text-fg-muted!"
+                  }`}>
                   {c === "and" ? "且" : "或"}
                 </button>
               ))}
@@ -151,9 +152,9 @@ function ConditionEditor({
             <option value="">選擇來源題目…</option>
             {others.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
           </select>
-          <div className="flex flex-wrap gap-1.5 items-center">
+          <div className="grid gap-2 sm:grid-cols-[minmax(7rem,1fr)_minmax(8rem,2fr)_auto] sm:items-center">
             <select value={r.operator} onChange={e => update(i, { operator: e.target.value })}
-              className="input text-sm" style={{ flex: "1 1 6rem" }}>
+              className="input text-sm">
               <option value="equals">完全等於</option>
               <option value="contains">包含</option>
             </select>
@@ -163,23 +164,23 @@ function ConditionEditor({
                 ? src.options : [];
               return choices.length > 0 ? (
                 <select value={r.value} onChange={e => update(i, { value: e.target.value })}
-                  className="input text-sm" style={{ flex: "2 1 8rem" }}>
+                  className="input text-sm">
                   <option value="">選擇答案…</option>
                   {choices.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                 </select>
               ) : (
                 <input value={r.value} onChange={e => update(i, { value: e.target.value })}
-                  placeholder="答案文字" className="input text-sm" style={{ flex: "2 1 8rem" }} />
+                  placeholder="答案文字" className="input text-sm" />
               );
             })()}
             <div className="flex gap-1 ml-auto">
               <button type="button" onClick={() => move(i, -1)} disabled={i === 0}
-                className="topbar-icon-btn" aria-label="上移" style={{ opacity: i === 0 ? 0.3 : 1 }}>
+                className="topbar-icon-btn min-h-11 min-w-11 disabled:cursor-not-allowed disabled:opacity-40" aria-label="上移">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                   strokeWidth="3" strokeLinecap="round" aria-hidden="true"><polyline points="18 15 12 9 6 15" /></svg>
               </button>
               <button type="button" onClick={() => move(i, 1)} disabled={i === rules.length - 1}
-                className="topbar-icon-btn" aria-label="下移" style={{ opacity: i === rules.length - 1 ? 0.3 : 1 }}>
+                className="topbar-icon-btn min-h-11 min-w-11 disabled:cursor-not-allowed disabled:opacity-40" aria-label="下移">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                   strokeWidth="3" strokeLinecap="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
               </button>
@@ -589,7 +590,7 @@ export default function NewSurveyPage() {
   const textLabel = isImage ? "圖片說明（選填）" : isDisplay ? "區塊內容 / 標題 *" : "題目文字 *";
 
   return (
-    <div className="max-w-3xl mx-auto space-y-5">
+    <div className="mx-auto max-w-4xl space-y-5 sm:space-y-6">
       {/* 頁首 */}
       <div className="flex items-center gap-3">
         <Link href="/surveys" className="topbar-icon-btn" aria-label="返回問卷列表">
@@ -599,11 +600,12 @@ export default function NewSurveyPage() {
           </svg>
         </Link>
         <div>
-          <h1 className="text-xl font-semibold text-fg-primary!" >新增問卷</h1>
+          <h1 className="text-2xl font-semibold text-fg-primary! sm:text-3xl">新增問卷</h1>
         </div>
       </div>
 
       <GuidedForm
+        footerClassName="max-md:bottom-[calc(76px+env(safe-area-inset-bottom))]"
         steps={SURVEY_STEPS}
         activeStep={activeStep}
         onStepChange={setActiveStep}
@@ -624,7 +626,7 @@ export default function NewSurveyPage() {
 
           <GuidedFormStep step={0} activeStep={activeStep}>
           {/* 基本資訊 */}
-          <div className="card p-5 space-y-4">
+          <div className="card p-4 space-y-4 sm:p-6">
             <h3 className="text-xs font-semibold uppercase tracking-widest text-fg-muted!" >基本資訊</h3>
             <div>
               <Label>問卷標題 *</Label>
@@ -640,13 +642,13 @@ export default function NewSurveyPage() {
                 placeholder="問卷目的或填答說明…"
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="flex items-center gap-2 cursor-pointer">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
+              <label className="flex min-h-11 items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={isAnonymous} onChange={e => setIsAnonymous(e.target.checked)}
                   className="accent-[var(--primary)]" />
                 <span className="text-sm text-fg-secondary!" >匿名填答</span>
               </label>
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className="flex min-h-11 items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={allowMultiple} onChange={e => setAllowMultiple(e.target.checked)}
                   className="accent-[var(--primary)]" />
                 <span className="text-sm text-fg-secondary!" >允許重複填答</span>
@@ -655,7 +657,7 @@ export default function NewSurveyPage() {
             <div>
               <Label>截止時間（選填）</Label>
               <input type="datetime-local" value={closesAt} onChange={e => setClosesAt(e.target.value)}
-                className="input" style={{ colorScheme: "dark" }} />
+                className="input [color-scheme:dark]" />
             </div>
             <div>
               <Label>所屬組織 *</Label>
@@ -682,7 +684,7 @@ export default function NewSurveyPage() {
                   className="input"
                 />
               </div>
-              <label className="flex items-center gap-2 cursor-pointer text-sm text-fg-secondary!" >
+              <label className="flex min-h-11 items-center gap-2 cursor-pointer text-sm text-fg-secondary!">
                 <input
                   type="checkbox"
                   checked={showAnnouncementPopup}
@@ -707,7 +709,7 @@ export default function NewSurveyPage() {
 
           <GuidedFormStep step={1} activeStep={activeStep}>
           {/* 填答對象 */}
-          <div className="card p-5 space-y-3">
+          <div className="card p-4 space-y-3 sm:p-6">
             <h3 className="text-xs font-semibold uppercase tracking-widest text-fg-muted!" >
               填答對象
             </h3>
@@ -762,10 +764,11 @@ export default function NewSurveyPage() {
                           <button key={org.id} type="button"
                             onClick={() => setAllowedOrgIds(prev =>
                               on ? prev.filter(x => x !== org.id) : [...prev, org.id])}
-                            className="text-xs px-2.5 py-1 rounded-full"
-                            style={on
-                              ? { background: "var(--primary-dim)", color: "var(--primary-text)", border: "1px solid var(--border-strong)" }
-                              : { background: "var(--bg-elevated)", color: "var(--text-muted)", border: "1px solid var(--border)" }}>
+                            className={`inline-flex min-h-11 items-center rounded-full border px-3 py-2 text-xs transition-colors ${
+                              on
+                                ? "bg-accent-soft! text-accent-text! border-border-strong!"
+                                : "bg-elevated! text-fg-muted! border-border!"
+                            }`}>
                             {org.name}
                           </button>
                         );
@@ -790,7 +793,9 @@ export default function NewSurveyPage() {
               <ul>
                 {questions.map((q, idx) => (
                   <li key={q.id}
-                    className="px-5 py-3.5 space-y-2"
+                    className={`space-y-2 px-3 py-3.5 sm:px-5 ${
+                      idx < questions.length - 1 ? "border-b! border-b-border!" : ""
+                    } ${editingQuestionId === q.id ? "bg-accent-soft!" : ""}`}
                     draggable
                     onDragStart={() => setDraggedQuestionId(q.id)}
                     onDragOver={(event) => event.preventDefault()}
@@ -798,23 +803,19 @@ export default function NewSurveyPage() {
                       if (draggedQuestionId) reorderQuestion(draggedQuestionId, q.id);
                       setDraggedQuestionId(null);
                     }}
-                    onDragEnd={() => setDraggedQuestionId(null)}
-                    style={{
-                      ...(idx < questions.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}),
-                      ...(editingQuestionId === q.id ? { background: "var(--primary-dim)" } : {}),
-                    }}>
-                    <div className="flex items-start gap-3">
-                      <span className="cursor-grab mt-0.5 flex-shrink-0 text-fg-muted!"  title="拖曳調整順序">
+                    onDragEnd={() => setDraggedQuestionId(null)}>
+                    <div className="grid grid-cols-[auto_auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1 sm:grid-cols-[auto_auto_minmax(0,1fr)_auto] sm:items-center sm:gap-x-3">
+                      <span className="row-span-2 mt-1 flex-shrink-0 cursor-grab text-fg-muted!" title="拖曳調整順序">
                         <GripVertical size={16} aria-hidden="true" />
                       </span>
-                      <span className="text-xs font-bold mt-0.5 w-5 flex-shrink-0 text-accent-text!" >
+                      <span className="row-span-2 mt-1 w-5 flex-shrink-0 text-xs font-bold text-accent-text!">
                         Q{idx + 1}
                       </span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm truncate text-fg-primary!" >
+                      <div className="min-w-0">
+                        <p className="line-clamp-2 text-sm text-fg-primary!">
                           {q.question_text || (q.question_type === "image" ? "（圖片區塊）" : "（未命名）")}
                         </p>
-                        <p className="text-xs mt-0.5 text-fg-muted!" >
+                        <p className="mt-0.5 break-words text-xs text-fg-muted!">
                           {QUESTION_TYPES.find(t => t.value === q.question_type)?.label}
                           {q.is_required && " · 必填"}
                           {q.options.length > 0 && ` · ${q.options.length} 個選項`}
@@ -824,23 +825,23 @@ export default function NewSurveyPage() {
                           {q.rules.length > 0 && ` · ${q.rules.length} 條顯示條件`}
                         </p>
                       </div>
-                      <div className="flex gap-1 flex-shrink-0">
+                      <div className="col-span-3 ml-auto flex flex-wrap justify-end gap-1 sm:col-span-1 sm:row-span-2 sm:col-start-4 sm:row-start-1 sm:flex-nowrap">
                         <button type="button" onClick={() => editQuestion(q)}
                           className="btn btn-ghost min-h-11 px-2 text-xs" aria-label={`編輯第 ${idx + 1} 題`}>
                           編輯
                         </button>
                         <button type="button" onClick={() => moveQuestion(idx, -1)} disabled={idx === 0}
-                          className="topbar-icon-btn" aria-label="上移題目" style={{ opacity: idx === 0 ? 0.3 : 1 }}>
+                          className="topbar-icon-btn min-h-11 min-w-11 disabled:cursor-not-allowed disabled:opacity-40" aria-label="上移題目">
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><polyline points="18 15 12 9 6 15" /></svg>
                         </button>
                         <button type="button" onClick={() => moveQuestion(idx, 1)} disabled={idx === questions.length - 1}
-                          className="topbar-icon-btn" aria-label="下移題目" style={{ opacity: idx === questions.length - 1 ? 0.3 : 1 }}>
+                          className="topbar-icon-btn min-h-11 min-w-11 disabled:cursor-not-allowed disabled:opacity-40" aria-label="下移題目">
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
                         </button>
                         <button type="button" onClick={() => removeQuestion(q.id)}
-                          className="topbar-icon-btn hover:text-red-400 text-fg-muted!"
+                          className="topbar-icon-btn min-h-11 min-w-11 hover:text-red-400 text-fg-muted!"
                            aria-label="刪除題目">
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
@@ -851,7 +852,7 @@ export default function NewSurveyPage() {
                     </div>
                     {questions.length > 1 && (
                       <details className="pl-1 sm:pl-8">
-                        <summary className="text-xs cursor-pointer text-fg-muted!" >
+                        <summary className="flex min-h-11 items-center text-xs cursor-pointer text-fg-muted!">
                           顯示條件{q.rules.length > 0 ? `（已設 ${q.rules.length} 條）` : "（選填）"}
                         </summary>
                         <div className="pt-2">
@@ -879,7 +880,7 @@ export default function NewSurveyPage() {
           )}
 
           {/* 新增題目 */}
-          <div className="card p-5 space-y-3">
+          <div className="card p-4 space-y-3 sm:p-6">
             <h3 className="text-sm font-semibold text-fg-primary!" >
               {editingQuestionId ? "編輯題目" : "新增題目"}
             </h3>
@@ -961,7 +962,7 @@ export default function NewSurveyPage() {
             {/* 評分範圍與端點敘述 */}
             {(isRating || isLinearScale) && (
               <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <Label>{isLinearScale ? "起始刻度" : "起始分數"}</Label>
                     <NumberInput type="number" min={0} max={100} value={newQ.min_value}
@@ -981,7 +982,7 @@ export default function NewSurveyPage() {
                       className="input" />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <Label>{isLinearScale ? "起始刻度說明（選填）" : "最低分敘述（選填）"}</Label>
                     <input value={newQ.min_label ?? ""}
@@ -1058,7 +1059,7 @@ export default function NewSurveyPage() {
                 <p className="text-xs font-medium text-fg-secondary!" >
                   自訂驗證規則（選填）
                 </p>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <Label>最少字數</Label>
                     <input type="number" min={0} value={newQ.min_length ?? ""}
