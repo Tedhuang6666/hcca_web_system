@@ -45,10 +45,34 @@ const MODULE_LABEL: Record<TaskModule, string> = {
   work_item: "工作",
 };
 
-const SEVERITY_STYLES: Record<string, { color: string; bg: string; border: string; label: string }> = {
-  info:     { color: "var(--primary-text)", bg: "var(--primary-dim)", border: "var(--info-border)",    label: "一般" },
-  warning:  { color: "var(--warning)", bg: "var(--warning-dim)", border: "var(--warning-border)", label: "提醒" },
-  critical: { color: "var(--danger)",  bg: "var(--danger-dim)",  border: "var(--danger-border)",  label: "緊急" },
+const SEVERITY_STYLES: Record<string, {
+  text: string;
+  background: string;
+  border: string;
+  accent: string;
+  label: string;
+}> = {
+  info: {
+    text: "text-[var(--primary-text)]",
+    background: "bg-[var(--primary-dim)]",
+    border: "border-[var(--info-border)]",
+    accent: "border-l-[var(--primary-text)]!",
+    label: "一般",
+  },
+  warning: {
+    text: "text-[var(--warning)]",
+    background: "bg-[var(--warning-dim)]",
+    border: "border-[var(--warning-border)]",
+    accent: "border-l-[var(--warning)]!",
+    label: "提醒",
+  },
+  critical: {
+    text: "text-danger!",
+    background: "bg-[var(--danger-dim)]",
+    border: "border-[var(--danger-border)]",
+    accent: "border-l-[var(--danger)]!",
+    label: "緊急",
+  },
 };
 
 type QuickFilter = "all" | "critical" | "today" | "overdue" | "high";
@@ -246,15 +270,13 @@ export default function TasksPage() {
     <div className="max-w-4xl mx-auto space-y-5">
       <header className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold flex items-center gap-2"
-            style={{ color: "var(--text-primary)" }}>
-            <Inbox size={20} aria-hidden={true} style={{ color: "var(--primary-text)" }} />
+          <h1 className="flex items-center gap-2 text-xl font-semibold text-fg-primary!">
+            <Inbox size={20} aria-hidden={true} className="text-[var(--primary-text)]" />
             我的待辦
           </h1>
         </div>
         {data && (
-          <span className="text-3xl font-bold leading-none"
-            style={{ color: "var(--text-primary)" }}>
+          <span className="text-3xl font-bold leading-none text-fg-primary!">
             {data.total}
           </span>
         )}
@@ -278,17 +300,16 @@ export default function TasksPage() {
         )}
       </section>
 
-      <section className="grid gap-2 sm:grid-cols-3" aria-label="常用治理入口">
+      <section className="grid gap-2 sm:grid-cols-2" aria-label="常用治理入口">
         {canSeeDocumentDrafts && <QuickAction href="/documents/new" label="建立公文" detail="套範本、選字號、保存草稿" />}
         {can("regulation:create") && <QuickAction href="/regulations/new" label="起草法規" detail="建立條文、送審與會議連動" />}
       </section>
 
       <section
-        className="rounded-lg p-3"
-        style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+        className="rounded-lg border border-border! bg-surface! p-3"
         aria-label="智慧篩選"
       >
-        <div className="flex gap-1 overflow-x-auto">
+        <div className="flex flex-wrap gap-1">
           {QUICK_FILTERS.map((filter) => {
             const active = quickFilter === filter.key;
             return (
@@ -297,12 +318,9 @@ export default function TasksPage() {
                 type="button"
                 onClick={() => setQuickFilter(filter.key)}
                 aria-pressed={active}
-                className="flex-shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium"
-                style={{
-                  background: active ? "var(--primary-dim)" : "transparent",
-                  color: active ? "var(--primary-text)" : "var(--text-muted)",
-                  border: active ? "1px solid var(--info-border)" : "1px solid var(--border)",
-                }}>
+                className={active
+                  ? "min-h-11 flex-shrink-0 rounded-lg border border-[var(--info-border)] bg-[var(--primary-dim)] px-3 py-1.5 text-xs font-medium text-[var(--primary-text)]"
+                  : "min-h-11 flex-shrink-0 rounded-lg border border-[var(--border)] bg-transparent px-3 py-1.5 text-xs font-medium text-fg-muted!"}>
                 {filter.label}
               </button>
             );
@@ -311,8 +329,7 @@ export default function TasksPage() {
       </section>
 
       {/* Tabs */}
-      <div className="flex gap-0.5 p-1 rounded-xl overflow-x-auto"
-        style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+      <div className="flex gap-0.5 overflow-x-auto rounded-xl border border-border! bg-surface! p-1"
         role="tablist" aria-label="待辦類別">
         {moduleTabs.map((m) => {
           const count = m === "all" ? (data?.total ?? 0) : (data?.by_module[m] ?? 0);
@@ -323,12 +340,9 @@ export default function TasksPage() {
               role="tab"
               aria-selected={active}
               onClick={() => setTab(m)}
-              className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5"
-              style={{
-                background: active ? "var(--primary-dim)" : "transparent",
-                color: active ? "var(--primary-text)" : "var(--text-muted)",
-                border: active ? "1px solid var(--info-border)" : "1px solid transparent",
-              }}>
+              className={active
+                ? "flex min-h-11 flex-shrink-0 items-center gap-1.5 rounded-lg border border-[var(--info-border)] bg-[var(--primary-dim)] px-3 py-1.5 text-xs font-medium text-[var(--primary-text)] transition-colors"
+                : "flex min-h-11 flex-shrink-0 items-center gap-1.5 rounded-lg border border-transparent bg-transparent px-3 py-1.5 text-xs font-medium text-fg-muted! transition-colors"}>
               <span>{m === "all" ? "全部" : MODULE_LABEL[m as TaskModule]}</span>
               <span className="opacity-70">({count})</span>
             </button>
@@ -362,19 +376,27 @@ function WorkspaceMetric({
   tone: "danger" | "neutral" | "info" | "success";
 }) {
   const colors = {
-    danger: { color: "var(--danger)", bg: "var(--danger-dim)", border: "var(--danger-border)" },
-    neutral: { color: "var(--text-primary)", bg: "var(--bg-surface)", border: "var(--border)" },
-    info: { color: "var(--primary-text)", bg: "var(--primary-dim)", border: "var(--info-border)" },
-    success: { color: "var(--success)", bg: "var(--success-dim)", border: "var(--success-border, var(--border))" },
+    danger: {
+      card: "bg-[var(--danger-dim)] border-[var(--danger-border)]",
+      value: "text-danger!",
+    },
+    neutral: { card: "bg-surface! border-border!", value: "text-fg-primary!" },
+    info: {
+      card: "bg-[var(--primary-dim)] border-[var(--info-border)]",
+      value: "text-[var(--primary-text)]",
+    },
+    success: {
+      card: "bg-[var(--success-dim)] border-[var(--success-border,var(--border))]",
+      value: "text-[var(--success)]",
+    },
   }[tone];
   return (
     <Link
       href={href}
-      className="rounded-lg px-4 py-3 transition-opacity hover:opacity-85"
-      style={{ background: colors.bg, border: `1px solid ${colors.border}`, textDecoration: "none" }}
+      className={`rounded-lg border px-4 py-3 no-underline transition-opacity hover:opacity-85 ${colors.card}`}
     >
-      <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>{label}</p>
-      <p className="mt-1 text-2xl font-semibold leading-none" style={{ color: colors.color }}>{value}</p>
+      <p className="text-xs font-medium text-fg-muted!">{label}</p>
+      <p className={`mt-1 text-2xl font-semibold leading-none ${colors.value}`}>{value}</p>
     </Link>
   );
 }
@@ -383,11 +405,10 @@ function QuickAction({ href, label, detail }: { href: string; label: string; det
   return (
     <Link
       href={href}
-      className="rounded-lg p-3 transition-colors"
-      style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", textDecoration: "none" }}
+      className="rounded-lg border border-border! bg-[var(--bg-surface)] p-3 no-underline transition-colors hover:bg-[var(--bg-hover)]"
     >
-      <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{label}</p>
-      <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>{detail}</p>
+      <p className="text-sm font-medium text-fg-primary!">{label}</p>
+      <p className="mt-0.5 text-xs text-fg-muted!">{detail}</p>
     </Link>
   );
 }
@@ -401,39 +422,27 @@ function TaskRow({ t }: { t: TaskItem }) {
     <li>
       <Link
         href={t.href}
-        className="flex items-center gap-3 p-4 rounded-lg transition-colors"
-        style={{
-          background: "var(--bg-surface)",
-          border: "1px solid var(--border)",
-          textDecoration: "none",
-          borderLeftWidth: "3px",
-          borderLeftColor: sev.color,
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
-        onMouseLeave={(e) => (e.currentTarget.style.background = "var(--bg-surface)")}>
+        className={`flex items-center gap-3 rounded-lg border border-[var(--border)] border-l-[3px] bg-[var(--bg-surface)] p-4 no-underline transition-colors hover:bg-[var(--bg-hover)] ${sev.accent}`}>
         <div
-          className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
-          style={{ background: sev.bg, color: sev.color, border: `1px solid ${sev.border}` }}
+          className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border ${sev.background} ${sev.text} ${sev.border}`}
           aria-hidden="true">
           <Icon size={15} aria-hidden={true} />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>
+          <p className="truncate text-sm font-medium text-fg-primary!">
             {t.title}
           </p>
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-            <span className="text-xs px-1.5 py-0.5 rounded font-medium"
-              style={{ color: sev.color, background: sev.bg, border: `1px solid ${sev.border}` }}>
+            <span className={`rounded border px-1.5 py-0.5 text-xs font-medium ${sev.text} ${sev.background} ${sev.border}`}>
               {MODULE_LABEL[t.module] ?? t.module}
             </span>
             {t.subtitle && (
-              <span className="text-xs truncate" style={{ color: "var(--text-muted)" }}>
+              <span className="truncate text-xs text-fg-muted!">
                 {t.subtitle}
               </span>
             )}
             {due && (
-              <span className="text-xs flex items-center gap-1 ml-auto"
-                style={{ color: t.severity === "critical" ? sev.color : "var(--text-muted)" }}>
+              <span className={`ml-auto flex items-center gap-1 text-xs ${t.severity === "critical" ? sev.text : "text-fg-muted!"}`}>
                 {t.severity === "critical" ? (
                   <AlertCircle size={11} aria-hidden={true} />
                 ) : (
@@ -445,26 +454,24 @@ function TaskRow({ t }: { t: TaskItem }) {
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <span
-              className="rounded px-1.5 py-0.5 text-xs font-semibold"
-              style={{ background: sev.bg, color: sev.color, border: `1px solid ${sev.border}` }}>
+              className={`rounded border px-1.5 py-0.5 text-xs font-semibold ${sev.background} ${sev.text} ${sev.border}`}>
               優先 {t.priority_score}
             </span>
             {t.priority_reasons.slice(0, 2).map((reason) => (
               <span
                 key={reason}
-                className="rounded px-1.5 py-0.5 text-xs"
-                style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
+                className="rounded bg-[var(--bg-hover)] px-1.5 py-0.5 text-xs text-fg-secondary!">
                 {reason}
               </span>
             ))}
           </div>
           {t.recommended_action && (
-            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            <p className="mt-1 text-xs text-fg-muted!">
               {t.recommended_action}
             </p>
           )}
         </div>
-        <ChevronRight size={16} aria-hidden={true} style={{ color: "var(--text-disabled)" }} />
+        <ChevronRight size={16} aria-hidden={true} className="text-fg-disabled!" />
       </Link>
     </li>
   );
@@ -472,15 +479,10 @@ function TaskRow({ t }: { t: TaskItem }) {
 
 function EmptyState() {
   return (
-    <div className="text-center py-16 px-4"
-      style={{
-        background: "var(--bg-surface)",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius-lg)",
-      }}>
+    <div className="rounded-[var(--radius-lg)] border border-border! bg-surface! px-4 py-16 text-center">
       <Inbox size={36} aria-hidden={true}
-        style={{ color: "var(--text-disabled)", display: "inline-block", marginBottom: 10 }} />
-      <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+        className="mb-2.5 inline-block text-fg-disabled!" />
+      <p className="text-sm font-medium text-fg-primary!">
         目前沒有待辦事項
       </p>
     </div>
