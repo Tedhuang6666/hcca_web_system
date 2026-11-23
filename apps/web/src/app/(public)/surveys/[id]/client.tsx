@@ -356,8 +356,7 @@ function RankingInput({
               type="button"
               onClick={() => onAdd(opt)}
               disabled={disabled || !canAdd}
-              className="w-full flex items-center gap-2 p-2.5 rounded-xl text-left transition-[color,background-color,border-color,opacity,box-shadow,transform] bg-elevated! border! border-border! text-fg-secondary!"
-              style={{ opacity: canAdd ? 1 : 0.45, cursor: canAdd ? "pointer" : "not-allowed" }}
+              className={`flex w-full items-center gap-2 rounded-xl border! border-border! bg-elevated! p-2.5 text-left text-fg-secondary! transition-[color,background-color,border-color,opacity,box-shadow,transform] ${canAdd ? "cursor-pointer" : "cursor-not-allowed opacity-[.45]"}`}
               aria-label={`加入「${opt}」到排序`}>
               <span className="text-xs w-6 text-center text-fg-muted!">＋</span>
               <span className="text-sm flex-1">{opt}</span>
@@ -386,11 +385,9 @@ function SortableRankRow({ id, rank, label, disabled, onRemove }: {
       style={{
         transform: CSS.Transform.toString(transform),
         transition,
-        background: "var(--primary-dim)",
-        border: "1px solid var(--border-strong)",
         opacity: isDragging ? 0.6 : 1,
       }}
-      className="flex items-center gap-2 p-2.5 rounded-xl">
+      className="flex items-center gap-2 rounded-xl border! border-border-strong! bg-[var(--primary-dim)]! p-2.5">
       <button
         type="button"
         {...attributes}
@@ -546,8 +543,7 @@ function QuestionInput({
         value={value.text}
         onChange={e => onChange({ ...value, text: e.target.value })}
         readOnly={disabled}
-        className="input"
-        style={{ colorScheme: "dark" }}
+        className="input [color-scheme:dark]"
       />
     );
   }
@@ -555,10 +551,9 @@ function QuestionInput({
     return (
       <div className="space-y-2">
         {options.map((opt, index) => (
-          <div key={opt} className="rounded-xl p-2.5" style={{
-            background: value.options[0] === opt ? "var(--primary-dim)" : "var(--bg-elevated)",
-            border: `1px solid ${value.options[0] === opt ? "var(--border-strong)" : "var(--border)"}`,
-          }}>
+          <div key={opt} className={`rounded-xl border! p-2.5 ${value.options[0] === opt
+            ? "border-border-strong! bg-[var(--primary-dim)]!"
+            : "border-border! bg-elevated!"}`}>
             <label className="flex min-h-11 cursor-pointer items-center gap-3">
               <input
                 type="radio"
@@ -691,10 +686,9 @@ function QuestionInput({
           const limitReached = maxSelections != null && value.options.length >= maxSelections;
           return (
             <div key={opt}>
-              <div className="rounded-xl p-2.5" style={{
-                background: checked ? "var(--primary-dim)" : "var(--bg-elevated)",
-                border: `1px solid ${checked ? "var(--border-strong)" : "var(--border)"}`,
-              }}>
+              <div className={checked
+                ? "rounded-xl border! border-border-strong! bg-[var(--primary-dim)]! p-2.5"
+                : "rounded-xl border! border-border! bg-elevated! p-2.5"}>
               <label className="flex min-h-11 cursor-pointer items-center gap-3">
                 <input
                   type="checkbox"
@@ -718,8 +712,7 @@ function QuestionInput({
                   readOnly={disabled}
                   placeholder="請輸入..."
                   maxLength={2000}
-                  className="input mt-1.5 ml-7"
-                  style={{ width: "calc(100% - 1.75rem)" }}
+                  className="input mt-1.5 ml-7 w-[calc(100%_-_1.75rem)]"
                 />
               )}
             </div>
@@ -788,10 +781,9 @@ function QuestionInput({
                 aria-label={`${n}`}
               />
               <span
-                className="flex min-h-11 min-w-11 items-center justify-center rounded-xl px-3 text-sm font-semibold transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--border-focus)]"
-                style={current === n
-                  ? { background: "var(--primary)", color: "var(--primary-fg)", border: "none" }
-                  : { background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
+                className={current === n
+                  ? "flex min-h-11 min-w-11 items-center justify-center rounded-xl border-0! bg-[var(--primary)]! px-3 text-sm font-semibold text-[var(--primary-fg)]! transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--border-focus)]"
+                  : "flex min-h-11 min-w-11 items-center justify-center rounded-xl border! border-border! bg-elevated! px-3 text-sm font-semibold text-fg-secondary! transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--border-focus)]"}>
                 {n}
               </span>
             </label>
@@ -836,13 +828,12 @@ function ShareModal({ surveyId, title, onClose }: {
         </p>
         {qr && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={qr} alt="問卷 QR code" className="mx-auto rounded-lg"
+          <img src={qr} alt="問卷 QR code" className="mx-auto h-[200px] w-[200px] rounded-lg"
             width={200}
-            height={200}
-            style={{ width: 200, height: 200 }} />
+            height={200} />
         )}
-        <div className="flex gap-2">
-          <input readOnly value={shareUrl} className="input flex-1 text-xs"
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input readOnly value={shareUrl} className="input min-h-11 min-w-0 flex-1 text-xs"
             onFocus={e => e.target.select()} aria-label="填答連結" />
           <CopyButton
             value={shareUrl}
@@ -850,7 +841,7 @@ function ShareModal({ surveyId, title, onClose }: {
             icon="none"
             announcement="已複製填答連結"
             failureHint="複製失敗，請手動複製"
-            className="btn btn-primary flex-shrink-0 text-xs"
+            className="btn btn-primary min-h-11 flex-shrink-0 justify-center text-xs"
           />
         </div>
         <AnimatedDownloadButton
@@ -1115,7 +1106,7 @@ function StatsView({
                 type="button"
                 onClick={() => { void clearResponses(); }}
                 disabled={clearingResponses || deletingResponseId !== null}
-                className="btn btn-ghost text-xs text-danger!"
+                className="btn btn-ghost min-h-11 text-xs text-danger!"
                 >
                 {clearingResponses ? "清除中…" : "清除全部回應"}
               </button>
@@ -1128,10 +1119,10 @@ function StatsView({
               key={v}
               type="button"
               onClick={() => setView(v)}
-              className="min-h-11 flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-[color,background-color,border-color,opacity,box-shadow,transform]"
-              style={view === v
-                ? { background: "var(--primary)", color: "var(--primary-fg)" }
-                : { color: "var(--text-muted)" }}>
+              className={view === v
+                ? "min-h-11 flex-1 rounded-lg bg-[var(--primary)]! px-3 py-2 text-sm font-medium text-[var(--primary-fg)]! transition-[color,background-color,border-color,opacity,box-shadow,transform]"
+                : "min-h-11 flex-1 rounded-lg px-3 py-2 text-sm font-medium text-fg-muted! transition-[color,background-color,border-color,opacity,box-shadow,transform]"}
+            >
               {v === "charts" ? "圖表統計" : `個別回應（${responses.length}）`}
             </button>
           ))}
@@ -1156,22 +1147,21 @@ function StatsView({
           : textAnswers.length;
 
         return (
-        <div key={qs.question_id} className="card p-5 space-y-3">
+        <div key={qs.question_id} className="card min-w-0 space-y-3 p-4 sm:p-5">
           <p className="text-sm font-semibold text-fg-primary!">
             {qs.question_text}
           </p>
           <p className="text-xs text-fg-muted!">{qs.total_responses} 份回答</p>
           {(qs.available_charts ?? []).length > 1 && (
-            <div className="flex gap-1">
+            <div className="flex flex-wrap gap-1">
               {(qs.available_charts ?? []).map(chart => (
                 <button
                   key={chart}
                   type="button"
                   onClick={() => setChartTypes(prev => ({ ...prev, [qs.question_id]: chart }))}
-                  className="text-xs px-2 py-1 rounded-lg"
-                  style={(chartTypes[qs.question_id] ?? qs.suggested_chart) === chart
-                    ? { color: "var(--primary-text)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }
-                    : { color: "var(--text-muted)", border: "1px solid var(--border)" }}
+                  className={(chartTypes[qs.question_id] ?? qs.suggested_chart) === chart
+                    ? "min-h-11 rounded-lg border! border-border-strong! bg-[var(--primary-dim)]! px-3 py-2 text-xs text-primary-text!"
+                    : "min-h-11 rounded-lg border! border-border! px-3 py-2 text-xs text-fg-muted!"}
                 >
                   {chart === "pie" ? "圓餅圖" : chart === "bar" ? "長條圖" : "列表"}
                 </button>
@@ -1195,7 +1185,7 @@ function StatsView({
                         <div className="flex items-center justify-between gap-2 text-xs">
                           <span className="min-w-0 break-words text-fg-secondary!">{opt}</span>
                           <span className="shrink-0 font-medium tabular-nums text-fg-muted!">
-                            {count} <span style={{ opacity: 0.6 }}>({pct}%)</span>
+                            {count} <span className="opacity-60">({pct}%)</span>
                           </span>
                         </div>
                         <div className="h-2.5 rounded-full overflow-hidden bg-elevated!">
@@ -1231,8 +1221,7 @@ function StatsView({
                 {isMultiText ? `依選項整理（${textAnswerCount} 則）` : `文字回答（${textAnswerCount} 則）`}
               </p>
               <div
-                className="space-y-1.5 overflow-y-auto pr-1"
-                style={{ maxHeight: "12rem" }}
+                className="max-h-48 space-y-1.5 overflow-y-auto pr-1"
                 role="region"
                 tabIndex={0}
                 aria-label={isMultiText
@@ -1682,27 +1671,27 @@ export default function SurveyDetailClient({
   const responseProgress = questionCount > 0 ? answeredQuestionCount / questionCount : 0;
 
   return (
-    <div className="max-w-3xl mx-auto space-y-5">
+    <div className="mx-auto w-full min-w-0 max-w-3xl space-y-5">
       {/* 頁首 */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
         <div className="flex items-center gap-3 min-w-0 flex-1">
-          <Link href="/surveys" className="topbar-icon-btn flex-shrink-0" aria-label="返回問卷列表">
+          <Link href="/surveys" className="topbar-icon-btn min-h-11 min-w-11 flex-shrink-0" aria-label="返回問卷列表">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth="2" strokeLinecap="round" aria-hidden="true">
               <polyline points="15 18 9 12 15 6" />
             </svg>
           </Link>
           <div className="flex-1 min-w-0">
-            <h1 className="text-xl font-semibold truncate text-fg-primary!">
+            <h1 className="break-words text-xl font-semibold text-fg-primary! [overflow-wrap:anywhere]">
               {survey.title}
             </h1>
           </div>
         </div>
         {/* 操作列 */}
-        <div className="flex gap-2 flex-wrap sm:flex-shrink-0">
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:flex-shrink-0">
           <button
             onClick={() => setShareOpen(true)}
-            className="btn btn-ghost text-xs"
+            className="btn btn-ghost min-h-11 w-full justify-center text-xs sm:w-auto"
             aria-label="分享問卷">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -1715,7 +1704,7 @@ export default function SurveyDetailClient({
           {isAdmin && (survey.status === "draft" || survey.status === "open") && (
             <Link
               href={`/surveys/${encodeURIComponent(survey.title)}/edit`}
-              className="btn btn-ghost text-xs">
+              className="btn btn-ghost min-h-11 w-full justify-center text-xs sm:w-auto">
               編輯題目
             </Link>
           )}
@@ -1723,16 +1712,21 @@ export default function SurveyDetailClient({
             <button
               onClick={toggleStatus}
               disabled={opening || closing}
-              className="btn btn-ghost text-xs"
-              style={survey.status === "open" ? { color: "var(--danger)" } : survey.status === "closed" ? { color: "var(--success)" } : {}}>
+              className={survey.status === "open"
+                ? "btn btn-ghost min-h-11 w-full justify-center text-xs text-danger! sm:w-auto"
+                : survey.status === "closed"
+                  ? "btn btn-ghost min-h-11 w-full justify-center text-xs text-success! sm:w-auto"
+                  : "btn btn-ghost min-h-11 w-full justify-center text-xs sm:w-auto"}
+            >
               {opening ? "開放中…" : closing ? "關閉中…" : survey.status === "closed" ? "重新開放" : survey.status === "draft" ? "開放填答" : "關閉問卷"}
             </button>
           )}
           {isAdmin && (
             <button
               onClick={() => setViewStats(v => !v)}
-              className="btn btn-ghost text-xs"
-              style={viewStats ? { color: "var(--primary-text)" } : {}}>
+              className={viewStats
+                ? "btn btn-ghost min-h-11 w-full justify-center text-primary-text! text-xs sm:w-auto"
+                : "btn btn-ghost min-h-11 w-full justify-center text-xs sm:w-auto"}>
               {viewStats ? "填答表單" : "查看統計"}
             </button>
           )}
@@ -1741,7 +1735,7 @@ export default function SurveyDetailClient({
 
       {survey.description && (
         <section
-          className="rounded-xl px-5 py-4 bg-elevated! border! border-border!"
+          className="rounded-xl border! border-border! bg-elevated! px-4 py-4 sm:px-5"
           aria-labelledby="survey-description-heading"
         >
           <h2 id="survey-description-heading" className="text-sm font-semibold text-fg-primary!">
@@ -1756,12 +1750,9 @@ export default function SurveyDetailClient({
 
       {/* 資訊列 */}
       <div className="flex flex-wrap items-center gap-3 text-xs text-fg-muted!">
-        <span className="badge"
-          style={{
-            color: isOpen ? "var(--success)" : "var(--text-muted)",
-            background: isOpen ? "var(--success-dim)" : "var(--bg-elevated)",
-            borderColor: isOpen ? "var(--success)" : "var(--border)",
-          }}>
+        <span className={isOpen
+          ? "badge border-success! bg-success-dim! text-success!"
+          : "badge border-border! bg-elevated! text-fg-muted!"}>
           {survey.status === "open" ? "開放填答" : survey.status === "draft" ? "草稿" : survey.status === "closed" ? "已截止" : "封存"}
         </span>
         {survey.is_anonymous && (
@@ -1778,8 +1769,7 @@ export default function SurveyDetailClient({
 
       {!survey.is_public && allowedDomains.length > 0 && (
         <aside
-          className="flex flex-col gap-3 rounded-xl px-4 py-3 sm:flex-row sm:items-center sm:justify-between bg-info-soft!"
-          style={{ border: "1px solid rgba(37,99,235,0.24)" }}
+          className="flex flex-col gap-3 rounded-xl border! border-info! bg-info-soft! px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
           aria-label="校務帳號填答資格"
         >
           <div className="min-w-0">
@@ -1791,7 +1781,7 @@ export default function SurveyDetailClient({
           </div>
           <SwitchAccountButton
             surveyId={id}
-            className="btn btn-ghost shrink-0 self-start text-xs sm:self-auto"
+            className="btn btn-ghost min-h-11 shrink-0 self-start text-xs sm:self-auto"
           />
         </aside>
       )}
@@ -1800,7 +1790,7 @@ export default function SurveyDetailClient({
       {isAdmin && viewStats ? (
         <StatsView surveyId={id} questions={survey.questions} />
       ) : submitted ? (
-        <section className="survey-response-receipt card p-8 text-center space-y-3" aria-live="polite">
+        <section className="survey-response-receipt card space-y-3 p-5 text-center sm:p-8" aria-live="polite">
           <div className="survey-response-receipt-seal" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1832,8 +1822,9 @@ export default function SurveyDetailClient({
       ) : (
         <form
           onSubmit={e => { e.preventDefault(); if (isOpen) void submit(); }}
-          className="survey-response-form space-y-4"
-          style={isReadOnly ? { opacity: 0.58, filter: "grayscale(0.12)" } : undefined}
+          className={isReadOnly
+            ? "survey-response-form min-w-0 space-y-4 opacity-[.58] [filter:grayscale(0.12)]"
+            : "survey-response-form min-w-0 space-y-4"}
         >
           {isReadOnly ? (
             <section
@@ -1868,7 +1859,7 @@ export default function SurveyDetailClient({
                       )}
                     </div>
                     {editingResponseId && (
-                      <button type="button" onClick={addResponse} className="btn btn-ghost shrink-0 text-xs">
+                      <button type="button" onClick={addResponse} className="btn btn-ghost min-h-11 shrink-0 text-xs">
                         新增回覆
                       </button>
                     )}
@@ -1880,10 +1871,9 @@ export default function SurveyDetailClient({
                           key={response.id}
                           type="button"
                           onClick={() => editResponse(response)}
-                          className="btn btn-ghost text-xs"
-                          style={editingResponseId === response.id ? {
-                            color: "var(--primary-text)", borderColor: "var(--primary)",
-                          } : {}}
+                          className={editingResponseId === response.id
+                            ? "btn btn-ghost min-h-11 border-[var(--primary)]! text-primary-text! text-xs"
+                            : "btn btn-ghost min-h-11 text-xs"}
                         >
                           修改第 {myResponses.length - index} 份（{responseTimeLabel(response)}）
                         </button>
@@ -1924,7 +1914,7 @@ export default function SurveyDetailClient({
                 : "填答內容會自動儲存在此裝置"}
             </p>
           </aside>}
-          <fieldset disabled={!isOpen} className="space-y-4 min-w-0">
+          <fieldset disabled={!isOpen} className="min-w-0 space-y-4">
           {survey.questions.map((q) => {
             if (displayedHiddenIds.has(q.id)) return null;
             const isDisplay = DISPLAY_TYPES.has(q.question_type);
@@ -1934,13 +1924,13 @@ export default function SurveyDetailClient({
             <div
               key={q.id}
               ref={element => { questionElements.current[q.id] = element; }}
-              className={isDisplay ? "py-2 space-y-3" : "survey-question-card card p-5 space-y-3"}
+              className={isDisplay
+                ? "min-w-0 space-y-3 py-2 [overflow-wrap:anywhere]"
+                : ["survey-question-card card min-w-0 space-y-3 p-4 [overflow-wrap:anywhere] sm:p-5",
+                    validationError ? "border-danger!" : ""].filter(Boolean).join(" ")}
               data-answered={!isDisplay && isAnswered ? "true" : undefined}
               aria-invalid={validationError ? true : undefined}
               aria-describedby={validationError ? `question-error-${q.id}` : undefined}
-              style={validationError ? {
-                borderColor: "var(--danger)",
-              } : undefined}
             >
               <div className="flex items-start gap-2">
                 {!isDisplay && (
@@ -2013,7 +2003,7 @@ export default function SurveyDetailClient({
           })}
           </fieldset>
 
-          {!isReadOnly && <label className="flex items-center gap-2 cursor-pointer pt-1">
+          {!isReadOnly && <label className="flex min-h-11 cursor-pointer items-center gap-2 pt-1">
             <input
               type="checkbox"
               checked={emailCopy}
@@ -2025,11 +2015,11 @@ export default function SurveyDetailClient({
             </span>
           </label>}
 
-          {!isReadOnly && <div className="flex gap-3 pt-2">
+          {!isReadOnly && <div className="flex flex-col gap-3 pt-2 sm:flex-row">
             <button
               type="submit"
               disabled={submitting}
-              className="btn flex-1 bg-accent! text-accent-foreground! border-0!"
+              className="btn min-h-11 flex-1 border-0! bg-accent! text-accent-foreground!"
               aria-busy={submitting}>
               {submitting ? (editingResponseId ? "儲存中…" : "提交中…") : (editingResponseId ? "儲存變更" : "提交填答")}
             </button>
