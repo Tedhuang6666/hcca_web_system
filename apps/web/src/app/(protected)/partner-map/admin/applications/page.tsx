@@ -162,86 +162,86 @@ export default function PartnerApplicationsAdminPage() {
   };
 
   if (loading) {
-    return <div className="mx-auto max-w-6xl px-5 py-10 text-sm" style={{ color: "var(--text-muted)" }}>載入特約商家申請管理…</div>;
+    return <div className="mx-auto max-w-6xl px-5 py-10 text-sm text-fg-muted!">載入特約商家申請管理…</div>;
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5 px-5 py-6 lg:px-8">
+    <div className="mx-auto max-w-6xl space-y-5 px-4 py-5 sm:px-5 sm:py-6 lg:px-8">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--primary-text)" }}>
+          <div className="flex items-center gap-2 text-sm font-semibold text-accent-text!">
             <ClipboardCheck size={18} aria-hidden />
             特約商家申請
           </div>
-          <h1 className="mt-2 text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>表單設定與審核</h1>
+          <h1 className="mt-2 text-2xl font-semibold text-fg-primary!">表單設定與審核</h1>
         </div>
-        <span className="rounded-full px-3 py-1.5 text-xs font-semibold" style={{ background: settings?.is_open ? "var(--success-dim)" : "var(--surface-hover)", color: settings?.is_open ? "var(--success)" : "var(--text-muted)" }}>
+        <span className={settings?.is_open ? "rounded-full px-3 py-1.5 text-xs font-semibold bg-success-soft! text-success!" : "rounded-full px-3 py-1.5 text-xs font-semibold bg-hover! text-fg-muted!"}>
           {settings?.is_open ? "公開表單受理中" : "公開表單已關閉"}
         </span>
       </header>
 
       {settings ? (
-        <section className="card p-5">
+        <section className="card p-4 sm:p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>公開表單設定</h2>
+              <h2 className="text-base font-semibold text-fg-primary!">公開表單設定</h2>
             </div>
-            <label className="flex min-h-11 items-center gap-2 text-sm" style={{ color: "var(--text-secondary)" }}>
+            <label className="flex min-h-11 items-center gap-2 text-sm text-fg-secondary!">
               <input type="checkbox" checked={settings.is_open} onChange={(event) => setSettings((current) => current ? { ...current, is_open: event.target.checked } : current)} />
               開放商家申請
             </label>
           </div>
           <div className="mt-5 grid gap-4">
-            <label className="space-y-1 text-sm"><span style={{ color: "var(--text-secondary)" }}>表單標題</span><input className="input w-full" value={settings.title} onChange={(event) => setSettings((current) => current ? { ...current, title: event.target.value } : current)} /></label>
-            <label className="space-y-1 text-sm"><span style={{ color: "var(--text-secondary)" }}>開頭說明</span><textarea className="input min-h-24 w-full" value={settings.intro} onChange={(event) => setSettings((current) => current ? { ...current, intro: event.target.value } : current)} /></label>
-            <label className="space-y-1 text-sm"><span style={{ color: "var(--text-secondary)" }}>個資/聯絡說明（選填）</span><textarea className="input min-h-20 w-full" placeholder="例如：資料僅用於特約合作聯繫與審核。" value={settings.privacy_notice ?? ""} onChange={(event) => setSettings((current) => current ? { ...current, privacy_notice: event.target.value || null } : current)} /></label>
+            <label className="space-y-1 text-sm"><span className="text-fg-secondary!">表單標題</span><input className="input w-full" value={settings.title} onChange={(event) => setSettings((current) => current ? { ...current, title: event.target.value } : current)} /></label>
+            <label className="space-y-1 text-sm"><span className="text-fg-secondary!">開頭說明</span><textarea className="input min-h-24 w-full" value={settings.intro} onChange={(event) => setSettings((current) => current ? { ...current, intro: event.target.value } : current)} /></label>
+            <label className="space-y-1 text-sm"><span className="text-fg-secondary!">個資/聯絡說明（選填）</span><textarea className="input min-h-20 w-full" placeholder="例如：資料僅用於特約合作聯繫與審核。" value={settings.privacy_notice ?? ""} onChange={(event) => setSettings((current) => current ? { ...current, privacy_notice: event.target.value || null } : current)} /></label>
           </div>
 
-          <div className="mt-7 flex items-center justify-between gap-3">
-            <div><h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>申請欄位</h3><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>欄位代碼只接受小寫英數與底線，送出後可停用但不會刪除歷史資料。</p></div>
-            <button className="btn btn-secondary shrink-0" onClick={() => setFields((current) => [...current, { ...EMPTY_FIELD, key: `field_${current.length + 1}`, sort_order: (current.length + 1) * 10 }])}><Plus size={15} aria-hidden />新增欄位</button>
+          <div className="mt-7 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div><h3 className="text-sm font-semibold text-fg-primary!">申請欄位</h3><p className="mt-1 text-xs text-fg-muted!">欄位代碼只接受小寫英數與底線，送出後可停用但不會刪除歷史資料。</p></div>
+            <button className="btn btn-secondary min-h-11 shrink-0" onClick={() => setFields((current) => [...current, { ...EMPTY_FIELD, key: `field_${current.length + 1}`, sort_order: (current.length + 1) * 10 }])}><Plus size={15} aria-hidden />新增欄位</button>
           </div>
           <div className="mt-4 space-y-3">
             {fields.map((field, index) => (
-              <div key={`${field.key}-${index}`} className="rounded-lg border p-4" style={{ borderColor: "var(--border)", opacity: field.is_active ? 1 : 0.6 }}>
-                <div className="flex items-center gap-2"><GripVertical size={15} style={{ color: "var(--text-muted)" }} aria-hidden /><span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>欄位 {index + 1}</span><label className="ml-auto flex items-center gap-2 text-xs" style={{ color: "var(--text-secondary)" }}><input type="checkbox" checked={field.is_active} onChange={(event) => updateField(index, { is_active: event.target.checked })} />啟用</label></div>
-                <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_100px]">
-                  <label className="space-y-1 text-xs"><span style={{ color: "var(--text-secondary)" }}>欄位名稱</span><input className="input w-full" value={field.label} onChange={(event) => updateField(index, { label: event.target.value })} /></label>
-                  <label className="space-y-1 text-xs"><span style={{ color: "var(--text-secondary)" }}>欄位代碼</span><input className="input w-full font-mono" value={field.key} onChange={(event) => updateField(index, { key: event.target.value })} /></label>
-                  <label className="space-y-1 text-xs"><span style={{ color: "var(--text-secondary)" }}>型別</span><select className="input w-full" value={field.field_type} onChange={(event) => updateField(index, { field_type: event.target.value as PartnerApplicationFieldType })}>{Object.entries(FIELD_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-                  <label className="space-y-1 text-xs"><span style={{ color: "var(--text-secondary)" }}>排序</span><NumberInput className="input w-full" type="number" min={0} value={field.sort_order} onChange={(event) => updateField(index, { sort_order: Number(event.target.value) })} /></label>
+              <div key={`${field.key}-${index}`} className={field.is_active ? "rounded-lg border p-4 border-border!" : "rounded-lg border p-4 border-border! opacity-60!"}>
+                <div className="flex items-center gap-2"><GripVertical size={15} className="text-fg-muted!" aria-hidden /><span className="text-xs font-semibold text-fg-muted!">欄位 {index + 1}</span><label className="ml-auto flex items-center gap-2 text-xs text-fg-secondary!"><input type="checkbox" checked={field.is_active} onChange={(event) => updateField(index, { is_active: event.target.checked })} />啟用</label></div>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_100px]">
+                  <label className="space-y-1 text-xs"><span className="text-fg-secondary!">欄位名稱</span><input className="input w-full" value={field.label} onChange={(event) => updateField(index, { label: event.target.value })} /></label>
+                  <label className="space-y-1 text-xs"><span className="text-fg-secondary!">欄位代碼</span><input className="input w-full font-mono" value={field.key} onChange={(event) => updateField(index, { key: event.target.value })} /></label>
+                  <label className="space-y-1 text-xs"><span className="text-fg-secondary!">型別</span><select className="input w-full" value={field.field_type} onChange={(event) => updateField(index, { field_type: event.target.value as PartnerApplicationFieldType })}>{Object.entries(FIELD_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+                  <label className="space-y-1 text-xs"><span className="text-fg-secondary!">排序</span><NumberInput className="input w-full" type="number" min={0} value={field.sort_order} onChange={(event) => updateField(index, { sort_order: Number(event.target.value) })} /></label>
                 </div>
                 <div className="mt-3 grid gap-3 md:grid-cols-2">
-                  <label className="space-y-1 text-xs"><span style={{ color: "var(--text-secondary)" }}>提示文字</span><input className="input w-full" placeholder="選填" value={field.placeholder ?? ""} onChange={(event) => updateField(index, { placeholder: event.target.value || null })} /></label>
-                  <label className="space-y-1 text-xs"><span style={{ color: "var(--text-secondary)" }}>填寫說明</span><input className="input w-full" placeholder="選填" value={field.help_text ?? ""} onChange={(event) => updateField(index, { help_text: event.target.value || null })} /></label>
+                  <label className="space-y-1 text-xs"><span className="text-fg-secondary!">提示文字</span><input className="input w-full" placeholder="選填" value={field.placeholder ?? ""} onChange={(event) => updateField(index, { placeholder: event.target.value || null })} /></label>
+                  <label className="space-y-1 text-xs"><span className="text-fg-secondary!">填寫說明</span><input className="input w-full" placeholder="選填" value={field.help_text ?? ""} onChange={(event) => updateField(index, { help_text: event.target.value || null })} /></label>
                 </div>
-                {field.field_type === "select" ? <label className="mt-3 block space-y-1 text-xs"><span style={{ color: "var(--text-secondary)" }}>下拉選項（用逗號分隔）</span><input className="input w-full" value={field.options?.join(", ") ?? ""} onChange={(event) => updateField(index, { options: event.target.value.split(",").map((option) => option.trim()).filter(Boolean) })} /></label> : null}
-                <label className="mt-3 inline-flex min-h-11 items-center gap-2 text-xs" style={{ color: "var(--text-secondary)" }}><input type="checkbox" checked={field.required} onChange={(event) => updateField(index, { required: event.target.checked })} />必填欄位</label>
+                {field.field_type === "select" ? <label className="mt-3 block space-y-1 text-xs"><span className="text-fg-secondary!">下拉選項（用逗號分隔）</span><input className="input w-full" value={field.options?.join(", ") ?? ""} onChange={(event) => updateField(index, { options: event.target.value.split(",").map((option) => option.trim()).filter(Boolean) })} /></label> : null}
+                <label className="mt-3 inline-flex min-h-11 items-center gap-2 text-xs text-fg-secondary!"><input type="checkbox" checked={field.required} onChange={(event) => updateField(index, { required: event.target.checked })} />必填欄位</label>
               </div>
             ))}
           </div>
-          <button className="btn btn-primary mt-5" disabled={savingSettings} onClick={() => void saveSettings()}><Save size={15} aria-hidden />{savingSettings ? "儲存中…" : "儲存表單設定"}</button>
+          <button className="btn btn-primary mt-5 min-h-11 w-full sm:w-auto" disabled={savingSettings} onClick={() => void saveSettings()}><Save size={15} aria-hidden />{savingSettings ? "儲存中…" : "儲存表單設定"}</button>
         </section>
       ) : null}
 
-      <section className="card p-5">
+      <section className="card p-4 sm:p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div><h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>申請審核</h2><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>審核狀態與備註會保留在申請紀錄中。</p></div>
-          <label className="space-y-1 text-xs" style={{ color: "var(--text-secondary)" }}><span>篩選狀態</span><select className="input min-w-40" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as PartnerBusinessApplicationStatus | "")}><option value="">全部申請</option>{Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+          <div><h2 className="text-base font-semibold text-fg-primary!">申請審核</h2><p className="mt-1 text-sm text-fg-muted!">審核狀態與備註會保留在申請紀錄中。</p></div>
+          <label className="space-y-1 text-xs text-fg-secondary!"><span>篩選狀態</span><select className="input w-full sm:w-auto sm:min-w-40" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as PartnerBusinessApplicationStatus | "")}><option value="">全部申請</option>{Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         </div>
         <div className="mt-5 space-y-3">
-          {applications.length === 0 ? <p className="rounded-lg border border-dashed px-4 py-10 text-center text-sm" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>目前沒有符合條件的申請。</p> : applications.map((application) => {
+          {applications.length === 0 ? <p className="rounded-lg border border-dashed px-4 py-10 text-center text-sm border-border! text-fg-muted!">目前沒有符合條件的申請。</p> : applications.map((application) => {
             const draft = reviewDrafts[application.id] ?? { status: application.status, note: application.review_note ?? "" };
             return (
-              <article key={application.id} className="rounded-lg border p-4" style={{ borderColor: "var(--border)" }}>
+              <article key={application.id} className="rounded-lg border p-4 border-border!">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                  <div><h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{applicationTitle(application)}</h3><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{applicationContact(application)} · {new Date(application.created_at).toLocaleString("zh-TW")}</p></div>
-                  <span className="rounded-full px-2.5 py-1 text-xs font-semibold" style={{ background: "var(--surface-hover)", color: "var(--text-secondary)" }}>{STATUS_LABELS[application.status]}</span>
+                  <div><h3 className="text-sm font-semibold text-fg-primary!">{applicationTitle(application)}</h3><p className="mt-1 text-xs text-fg-muted!">{applicationContact(application)} · {new Date(application.created_at).toLocaleString("zh-TW")}</p></div>
+                  <span className="rounded-full px-2.5 py-1 text-xs font-semibold bg-hover! text-fg-secondary!">{STATUS_LABELS[application.status]}</span>
                 </div>
-                <details className="mt-4 rounded border p-3" style={{ borderColor: "var(--border)" }}><summary className="cursor-pointer text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>檢視申請內容</summary><dl className="mt-3 grid gap-3 sm:grid-cols-2">{Object.entries(application.field_values).map(([key, value]) => <div key={key}><dt className="text-xs" style={{ color: "var(--text-muted)" }}>{fields.find((field) => field.key === key)?.label ?? key}</dt><dd className="mt-1 whitespace-pre-wrap text-sm" style={{ color: "var(--text-primary)" }}>{value || "（未填寫）"}</dd></div>)}</dl></details>
+                <details className="mt-4 rounded border p-3 border-border!"><summary className="cursor-pointer text-xs font-semibold text-fg-secondary!">檢視申請內容</summary><dl className="mt-3 grid gap-3 sm:grid-cols-2">{Object.entries(application.field_values).map(([key, value]) => <div key={key}><dt className="text-xs text-fg-muted!">{fields.find((field) => field.key === key)?.label ?? key}</dt><dd className="mt-1 whitespace-pre-wrap text-sm text-fg-primary!">{value || "（未填寫）"}</dd></div>)}</dl></details>
                 <div className="mt-4 grid gap-3 md:grid-cols-[180px_minmax(0,1fr)_auto] md:items-end">
-                  <label className="space-y-1 text-xs" style={{ color: "var(--text-secondary)" }}><span>審核狀態</span><select className="input w-full" value={draft.status} onChange={(event) => setReviewDrafts((current) => ({ ...current, [application.id]: { ...draft, status: event.target.value as PartnerBusinessApplicationStatus } }))}>{Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-                  <label className="space-y-1 text-xs" style={{ color: "var(--text-secondary)" }}><span>審核備註</span><input className="input w-full" placeholder="例如：請補充合作優惠內容" value={draft.note} onChange={(event) => setReviewDrafts((current) => ({ ...current, [application.id]: { ...draft, note: event.target.value } }))} /></label>
+                  <label className="space-y-1 text-xs text-fg-secondary!"><span>審核狀態</span><select className="input w-full" value={draft.status} onChange={(event) => setReviewDrafts((current) => ({ ...current, [application.id]: { ...draft, status: event.target.value as PartnerBusinessApplicationStatus } }))}>{Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+                  <label className="space-y-1 text-xs text-fg-secondary!"><span>審核備註</span><input className="input w-full" placeholder="例如：請補充合作優惠內容" value={draft.note} onChange={(event) => setReviewDrafts((current) => ({ ...current, [application.id]: { ...draft, note: event.target.value } }))} /></label>
                   <button className="btn btn-primary min-h-11" disabled={savingReviewId === application.id} onClick={() => void saveReview(application)}>{savingReviewId === application.id ? "儲存中…" : "儲存審核"}</button>
                 </div>
               </article>
@@ -250,7 +250,7 @@ export default function PartnerApplicationsAdminPage() {
         </div>
       </section>
 
-      <p className="text-xs leading-5" style={{ color: "var(--text-muted)" }}>Discord 通知請設定「特約商家申請送出」事件。</p>
+      <p className="text-xs leading-5 text-fg-muted!">Discord 通知請設定「特約商家申請送出」事件。</p>
     </div>
   );
 }
