@@ -547,8 +547,6 @@ export default function EditDocumentPage() {
   if (loading) return <div className="flex items-center justify-center h-64 ">載入中...</div>;
   if (!doc) return null;
 
-  const selectStyle = { background: "var(--bg-elevated)", border: "1px solid var(--border)" };
-  const inputStyle = { border: "1px solid var(--border)" };
   const selectedTemplate = templates.find(t => t.id === selectedTemplateId) ?? null;
   const isDecree = category === "decree";
   const isMeetingNotice = category === "meeting_notice";
@@ -558,25 +556,25 @@ export default function EditDocumentPage() {
   const contentLabels = CONTENT_LABELS[category];
 
   return (
-    <div className="app-page-width space-y-5">
-      <div className="flex items-center gap-3">
+    <div className="app-page-width min-w-0 space-y-5">
+      <div className="flex items-start gap-3 sm:items-center">
         <Link href={`/documents/${documentId}`}
           aria-label="返回公文"
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-[var(--bg-hover)] border! border-border!"
           >
           <ArrowLeft size={18} aria-hidden />
         </Link>
-        <div>
+        <div className="min-w-0 flex-1">
           <h1 className="text-xl font-semibold">編輯公文</h1>
-          <p className="text-sm font-mono text-accent-text!">
+          <p className="break-words text-sm font-mono text-accent-text!">
             {doc.serial_number || "（草稿，尚未發文）"}
           </p>
           {lastSavedAt && (
-            <p className="text-xs mt-1 text-fg-muted!">
+            <p className="mt-1 break-words text-xs text-fg-muted!">
               本機草稿已自動保存：{new Date(lastSavedAt).toLocaleTimeString("zh-TW")}
             </p>
           )}
-          <p className="text-xs mt-1" style={{ color: onlineAutosave.status === "error" ? "var(--danger)" : "var(--text-muted)" }}>
+          <p className={`mt-1 break-words text-xs ${onlineAutosave.status === "error" ? "text-danger!" : "text-fg-muted!"}`}>
             {onlineAutosave.status === "saving"
               ? "正在線上儲存..."
               : onlineAutosave.lastSavedAt
@@ -590,7 +588,7 @@ export default function EditDocumentPage() {
 
       <fieldset className="min-w-0 border-0 p-0">
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-        <div className="lg:col-span-2 space-y-4">
+        <div className="min-w-0 space-y-4 lg:col-span-2">
           {/* 基本資訊 */}
           <div className="card p-4 space-y-3">
             <h3 className="text-xs font-semibold text-fg-muted!">基本資訊</h3>
@@ -598,22 +596,22 @@ export default function EditDocumentPage() {
               <label className="text-xs mb-1 block text-fg-muted!">公文字號</label>
               <input value={serialNumber} onChange={e => setSerialNumber(e.target.value)}
                 placeholder="輸入公文字號..." maxLength={30}
-                className="w-full bg-transparent text-sm outline-none border-b pb-1" />
+                className="min-h-11 w-full bg-transparent text-sm outline-none border-b border-border! pb-1" />
             </div>
             <div>
               <label className="text-xs mb-1 block text-fg-muted!">公文標題 *</label>
               <input value={title} onChange={e => setTitle(e.target.value)} placeholder="輸入公文標題..."
-                className="w-full bg-transparent text-sm outline-none border-b pb-1 border-border!"
+                className="min-h-11 w-full bg-transparent text-sm outline-none border-b border-border! pb-1"
                  />
             </div>
             <div>
               <label className="text-xs mb-1 block text-fg-muted!">列表摘要（可選）</label>
               <input value={summary} onChange={e => setSummary(e.target.value)} maxLength={500}
                 placeholder="主旨為空或過於相同時，提供列表辨識用摘要..."
-                className="w-full bg-transparent text-sm outline-none border-b pb-1 border-border!"
+                className="min-h-11 w-full bg-transparent text-sm outline-none border-b border-border! pb-1"
                  />
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {[
                 { label: "速別", value: urgency, setter: setUrgency as (v: string) => void,
                   options: [["normal","普通件"],["priority","速件"],["express","最速件"]] },
@@ -625,7 +623,7 @@ export default function EditDocumentPage() {
                 <div key={label}>
                   <label className="text-xs mb-1 block text-fg-muted!">{label}</label>
                   <select value={value} onChange={e => setter(e.target.value)}
-                    className="w-full  text-xs outline-none rounded px-2 py-1.5" style={selectStyle}>
+                    className="min-h-11 w-full rounded border! border-border! bg-elevated! px-2 py-1.5 text-xs outline-none">
                     {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
                 </div>
@@ -636,7 +634,7 @@ export default function EditDocumentPage() {
                 <div>
                   <label className="text-xs mb-1 block text-fg-muted!">解密條件 *</label>
                   <select value={declassificationCondition} onChange={e => setDeclassificationCondition(e.target.value as typeof declassificationCondition)}
-                    className="w-full text-xs outline-none rounded px-2 py-1.5" style={selectStyle}>
+                    className="min-h-11 w-full rounded border! border-border! bg-elevated! px-2 py-1.5 text-xs outline-none">
                     <option value="none">請選擇</option>
                     <option value="auto_at_date">至指定日期解密</option>
                     <option value="manual_approval">經核准後解密</option>
@@ -645,13 +643,13 @@ export default function EditDocumentPage() {
                 {declassificationCondition === "auto_at_date" && <div>
                   <label className="text-xs mb-1 block text-fg-muted!">保密期限訖日 *</label>
                   <input type="date" value={confidentialityExpiresAt} onChange={e => setConfidentialityExpiresAt(e.target.value)}
-                    className="w-full text-xs outline-none rounded px-2 py-1.5" style={inputStyle} />
+                    className="min-h-11 w-full rounded border! border-border! px-2 py-1.5 text-xs outline-none" />
                 </div>}
               </div>
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <input value={issuerPostalCode} onChange={e => setIssuerPostalCode(e.target.value)} placeholder="機關郵遞區號" className="w-full text-xs px-2 py-1.5 rounded outline-none" style={inputStyle} />
-              <input value={issuerAddress} onChange={e => setIssuerAddress(e.target.value)} placeholder="機關地址" className="w-full text-xs px-2 py-1.5 rounded outline-none" style={inputStyle} />
+              <input value={issuerPostalCode} onChange={e => setIssuerPostalCode(e.target.value)} placeholder="機關郵遞區號" className="min-h-11 w-full rounded border! border-border! px-2 py-1.5 text-xs outline-none" />
+              <input value={issuerAddress} onChange={e => setIssuerAddress(e.target.value)} placeholder="機關地址" className="min-h-11 w-full rounded border! border-border! px-2 py-1.5 text-xs outline-none" />
             </div>
           </div>
 
@@ -663,17 +661,17 @@ export default function EditDocumentPage() {
                 {isNotice && (
                   <input value={meetingPurpose} onChange={e => setMeetingPurpose(e.target.value)}
                   placeholder={isInspectionNotice ? "會勘事由" : "開會事由"}
-                  className="w-full bg-transparent text-sm p-2 rounded outline-none" style={inputStyle} />
+                  className="min-h-11 w-full rounded border! border-border! bg-transparent p-2 text-sm outline-none" />
               )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <input type="datetime-local" value={meetingTime} onChange={e => setMeetingTime(e.target.value)}
-                  className="w-full bg-transparent text-sm p-2 rounded outline-none" style={inputStyle} />
+                  className="min-h-11 w-full rounded border! border-border! bg-transparent p-2 text-sm outline-none" />
                 <input value={meetingLocation} onChange={e => setMeetingLocation(e.target.value)}
                   placeholder={isRecord ? "地點" : isInspectionNotice ? "會勘地點" : "開會地點"}
-                  className="w-full bg-transparent text-sm p-2 rounded outline-none" style={inputStyle} />
+                  className="min-h-11 w-full rounded border! border-border! bg-transparent p-2 text-sm outline-none" />
                 <input value={meetingChairperson} onChange={e => setMeetingChairperson(e.target.value)}
                   placeholder={isRecord ? "主席" : "主持人"}
-                  className="w-full bg-transparent text-sm p-2 rounded outline-none sm:col-span-2" style={inputStyle} />
+                  className="min-h-11 w-full rounded border! border-border! bg-transparent p-2 text-sm outline-none sm:col-span-2" />
               </div>
             </div>
           )}
@@ -689,12 +687,7 @@ export default function EditDocumentPage() {
                 <SmartTextarea value={subject} onChange={setSubject} rows={2}
                   placeholder="一句話概述目的，結尾用「請 鑒核」等語。"
                   wrap="soft"
-                  style={{
-                    ...inputStyle,
-                    overflowWrap: "anywhere",
-                    wordBreak: "break-word",
-                    overflowX: "hidden",
-                  }} />
+                  className="min-h-11 overflow-x-hidden border! border-border! break-words [overflow-wrap:anywhere]" />
               </div>
             )}
             {category === "announcement" && (
@@ -728,13 +721,13 @@ export default function EditDocumentPage() {
               {isDecree ? "特殊指定對象（選填）" : "受文者"}
             </h3>
             {recipients.map(r => (
-              <div key={r.id} className="flex items-center gap-2 text-xs px-3 py-2 rounded bg-elevated! border! border-border!"
+              <div key={r.id} className="flex flex-wrap items-center gap-2 rounded border! border-border! bg-elevated! px-3 py-2 text-xs"
                 >
                 <span className="px-1.5 py-0.5 rounded text-accent-text! bg-accent-soft!">
                   {{ main: "受文者", primary: "正本", copy: "副本", attendee: "出席者", observer: "列席者" }[r.recipient_type]}
                 </span>
-                <span className=" flex-1">{r.name}</span>
-                {r.email && <span className="truncate max-w-40 text-fg-muted!">{r.email}</span>}
+                <span className="min-w-0 flex-1 break-words">{r.name}</span>
+                {r.email && <span className="max-w-full truncate text-fg-muted! sm:max-w-40">{r.email}</span>}
                 {r.email && (
                   <button
                     type="button"
@@ -743,21 +736,20 @@ export default function EditDocumentPage() {
                         ? { ...x, delivery_method: x.delivery_method === "email" ? "none" : "email" }
                         : x
                     )))}
-                    className="min-h-11 rounded px-2 text-xs border! border-border!"
-                    style={{ color: r.delivery_method === "email" ? "var(--primary-text)" : "var(--text-muted)", background: r.delivery_method === "email" ? "var(--primary-dim)" : "var(--bg-surface)" }}
+                    className={`min-h-11 rounded border! border-border! px-2 text-xs ${r.delivery_method === "email" ? "bg-accent-soft! text-accent-text!" : "bg-surface! text-fg-muted!"}`}
                     aria-pressed={r.delivery_method === "email"}
                   >
                     {r.delivery_method === "email" ? "Email 通知中" : "通知 Email"}
                   </button>
                 )}
                 <button type="button" onClick={() => setRecipients(prev => prev.filter(x => x.id !== r.id))}
-                  className=" hover:text-red-400"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center rounded hover:text-red-400"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
               </div>
             ))}
-            <div className="flex gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-2">
               <select value={newRecipient.recipient_type}
                 onChange={e => setNewRecipient(p => ({ ...p, recipient_type: e.target.value as RecipientType }))}
-                className="text-xs px-2 py-1.5 rounded outline-none" style={{ ...selectStyle, color: "var(--primary-text)" }}>
+                className="min-h-11 w-full rounded border! border-border! bg-elevated! px-2 py-1.5 text-xs text-accent-text! outline-none">
                 <option value="main">受文者</option>
                 <option value="primary">正本</option>
                 <option value="copy">副本</option>
@@ -768,11 +760,11 @@ export default function EditDocumentPage() {
               </select>
               <input placeholder="單位/姓名" value={newRecipient.name}
                 onChange={e => setNewRecipient(p => ({ ...p, name: e.target.value }))}
-                className="flex-1 bg-transparent  text-xs px-2 py-1.5 rounded outline-none" style={inputStyle} />
+                className="min-h-11 min-w-0 w-full rounded border! border-border! bg-transparent px-2 py-1.5 text-xs outline-none" />
               <input placeholder="Email（選填）" value={newRecipient.email}
                 onChange={e => setNewRecipient(p => ({ ...p, email: e.target.value }))}
-                className="flex-1 bg-transparent  text-xs px-2 py-1.5 rounded outline-none" style={inputStyle} />
-              <button onClick={addRecipient} className="text-xs px-3 py-1.5 rounded bg-accent-soft! text-accent-text! border! border-border-strong!"
+                className="min-h-11 min-w-0 w-full rounded border! border-border! bg-transparent px-2 py-1.5 text-xs outline-none" />
+              <button onClick={addRecipient} className="min-h-11 rounded border! border-border-strong! bg-accent-soft! px-3 py-1.5 text-xs text-accent-text!"
                 >
                 ＋ 新增
               </button>
@@ -835,7 +827,7 @@ export default function EditDocumentPage() {
         </div>
 
         {/* 右側面板 */}
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           {/* 字號模板 */}
           <div className="card p-4 space-y-3">
             <h3 className="text-xs font-semibold text-fg-muted!">字號設定</h3>
@@ -881,7 +873,7 @@ export default function EditDocumentPage() {
               <div key={label} className="flex items-center gap-2">
                 <span className="text-xs w-10 flex-shrink-0 text-fg-muted!">{label}</span>
                 <input value={value} onChange={e => setter(e.target.value)} placeholder={ph}
-                  className="flex-1 bg-transparent  text-xs px-2 py-1 rounded outline-none" style={inputStyle} />
+                  className="min-h-11 min-w-0 flex-1 rounded border! border-border! bg-transparent px-2 py-1 text-xs outline-none" />
               </div>
             ))}
           </div>
@@ -890,15 +882,15 @@ export default function EditDocumentPage() {
           <div className="card p-4">
             <label className="text-xs mb-2 block text-fg-muted!">限辦日期</label>
             <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
-              className="w-full bg-transparent  text-xs px-2 py-1.5 rounded outline-none" style={inputStyle} />
+              className="min-h-11 w-full rounded border! border-border! bg-transparent px-2 py-1.5 text-xs outline-none" />
           </div>
           <div className="card p-4 space-y-3">
             <h3 className="text-xs font-semibold text-fg-muted!">檔案管理欄位</h3>
-            <input value={fileNumber} onChange={e => setFileNumber(e.target.value)} placeholder="檔號" className="w-full text-xs px-2 py-1.5 rounded outline-none" style={inputStyle} />
-            <input value={classificationNumber} onChange={e => setClassificationNumber(e.target.value)} placeholder="分類號" className="w-full text-xs px-2 py-1.5 rounded outline-none" style={inputStyle} />
-            <input value={retentionPeriod} onChange={e => setRetentionPeriod(e.target.value)} placeholder="保存年限，例如：5年" className="w-full text-xs px-2 py-1.5 rounded outline-none" style={inputStyle} />
-            <input type="date" value={sourceDocumentDate} onChange={e => setSourceDocumentDate(e.target.value)} className="w-full text-xs px-2 py-1.5 rounded outline-none" style={inputStyle} />
-            <input value={sourceDocumentNumber} onChange={e => setSourceDocumentNumber(e.target.value)} placeholder="收文文號" className="w-full text-xs px-2 py-1.5 rounded outline-none" style={inputStyle} />
+            <input value={fileNumber} onChange={e => setFileNumber(e.target.value)} placeholder="檔號" className="min-h-11 w-full rounded border! border-border! px-2 py-1.5 text-xs outline-none" />
+            <input value={classificationNumber} onChange={e => setClassificationNumber(e.target.value)} placeholder="分類號" className="min-h-11 w-full rounded border! border-border! px-2 py-1.5 text-xs outline-none" />
+            <input value={retentionPeriod} onChange={e => setRetentionPeriod(e.target.value)} placeholder="保存年限，例如：5年" className="min-h-11 w-full rounded border! border-border! px-2 py-1.5 text-xs outline-none" />
+            <input type="date" value={sourceDocumentDate} onChange={e => setSourceDocumentDate(e.target.value)} className="min-h-11 w-full rounded border! border-border! px-2 py-1.5 text-xs outline-none" />
+            <input value={sourceDocumentNumber} onChange={e => setSourceDocumentNumber(e.target.value)} placeholder="收文文號" className="min-h-11 w-full rounded border! border-border! px-2 py-1.5 text-xs outline-none" />
           </div>
 
           {/* 修訂備注 + 儲存 */}
@@ -908,7 +900,7 @@ export default function EditDocumentPage() {
               <label className="text-xs mb-1 block text-fg-muted!">修訂備注（選填）</label>
               <input value={changeNote} onChange={e => setChangeNote(e.target.value)}
                 placeholder="說明本次修改原因..."
-                className="w-full bg-transparent  text-xs px-2 py-1.5 rounded outline-none" style={inputStyle} />
+                className="min-h-11 w-full rounded border! border-border! bg-transparent px-2 py-1.5 text-xs outline-none" />
             </div>
             <button type="button" onClick={save} disabled={saving} className="btn btn-primary hidden w-full md:inline-flex">
               {saving ? "儲存中…" : "儲存變更"}
@@ -917,9 +909,9 @@ export default function EditDocumentPage() {
         </div>
       </div>
       <div
-        className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-20 flex justify-end rounded-lg border p-3 md:hidden bg-surface! border-border-strong!"
+        className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-20 flex rounded-lg border p-3 md:hidden bg-surface! border-border-strong!"
         >
-        <button type="button" onClick={save} disabled={saving} className="btn btn-primary">
+        <button type="button" onClick={save} disabled={saving} className="btn btn-primary min-h-11 w-full sm:w-auto">
           {saving ? "儲存中…" : "儲存變更"}
         </button>
       </div>
