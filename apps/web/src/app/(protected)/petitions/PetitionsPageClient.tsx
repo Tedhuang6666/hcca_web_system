@@ -89,10 +89,10 @@ export default function PetitionsPageClient({
   }, [authState, can]);
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="mx-auto min-w-0 max-w-6xl space-y-6">
       <div className="workspace-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>陳情中心</h1>
+          <h1 className="text-xl font-semibold text-fg-primary!">陳情中心</h1>
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
           <Link href="/petitions/new" className="btn btn-primary min-h-11 w-full gap-2 px-4 sm:w-auto">
@@ -115,24 +115,24 @@ export default function PetitionsPageClient({
             ["已回覆", stats.resolved],
             ["本月結案", stats.closed_this_month],
           ].map(([label, value]) => (
-            <Link key={label} href="/petitions/manage" className="card card-hover p-4" style={{ textDecoration: "none" }}>
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>{label}</p>
-              <p className="text-2xl font-semibold mt-1" style={{ color: "var(--text-primary)" }}>{value}</p>
+            <Link key={label} href="/petitions/manage" className="card card-hover p-4 no-underline">
+              <p className="text-xs text-fg-muted!">{label}</p>
+              <p className="mt-1 text-2xl font-semibold text-fg-primary!">{value}</p>
             </Link>
           ))}
         </div>
       )}
 
       {authState === "checking" ? (
-        <section className="card p-5 text-sm" style={{ color: "var(--text-muted)" }} role="status" aria-live="polite">
+        <section className="card p-5 text-sm text-fg-muted!" role="status" aria-live="polite">
           正在確認登入狀態…
         </section>
       ) : authState === "unauthenticated" ? (
         <section className="card p-5 space-y-3" aria-labelledby="petition-login-heading">
-          <h2 id="petition-login-heading" className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+          <h2 id="petition-login-heading" className="text-base font-semibold text-fg-primary!">
             登入後查看本人案件
           </h2>
-          <Link href="/login?next=%2Fpetitions" className="btn btn-primary w-fit">
+          <Link href="/login?next=%2Fpetitions" className="btn btn-primary min-h-11 w-fit">
             登入
           </Link>
         </section>
@@ -140,33 +140,33 @@ export default function PetitionsPageClient({
         <section className="card p-5 space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>我的案件</h2>
-              <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>查看並追蹤本人送出的陳情</p>
+              <h2 className="text-base font-semibold text-fg-primary!">我的案件</h2>
+              <p className="mt-1 text-sm text-fg-muted!">查看並追蹤本人送出的陳情</p>
             </div>
           </div>
           {myCasesError ? (
-            <p className="text-sm" style={{ color: "var(--danger)" }} role="alert">{myCasesError}</p>
+            <p className="text-sm text-danger!" role="alert">{myCasesError}</p>
           ) : myCasesLoading ? (
-            <p className="text-sm" style={{ color: "var(--text-muted)" }} role="status" aria-live="polite">案件載入中…</p>
+            <p className="text-sm text-fg-muted!" role="status" aria-live="polite">案件載入中…</p>
           ) : myCases.length === 0 ? (
-            <p className="text-sm" style={{ color: "var(--text-muted)" }}>尚無案件。</p>
+            <p className="text-sm text-fg-muted!">尚無案件。</p>
           ) : (
             <div className="space-y-2">
               {myCases.map((item) => (
-                <Link key={item.id} href={`/petitions/${item.id}`} className="block rounded-lg p-3" style={{ border: "1px solid var(--border)", textDecoration: "none" }}>
-                  <div className="flex items-start justify-between gap-3">
+                <Link key={item.id} href={`/petitions/${item.id}`} className="block min-w-0 rounded-lg border border-border! p-3 no-underline">
+                  <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <p className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>{item.title}</p>
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <p className="min-w-0 break-words text-sm font-medium text-fg-primary!">{item.title}</p>
                         {item.is_confidential && (
-                          <span className="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium" style={{ background: "var(--warning-dim)", color: "var(--warning)" }}>
+                          <span className="shrink-0 rounded-full bg-warning-soft! px-2 py-0.5 text-xs font-medium text-warning!">
                             密件處理
                           </span>
                         )}
                       </div>
-                      <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>#{item.case_number} · {fmt(item.updated_at)} · {item.next_action}</p>
+                      <p className="mt-1 break-words text-xs text-fg-muted!">#{item.case_number} · {fmt(item.updated_at)} · {item.next_action}</p>
                     </div>
-                    <PetitionStatusBadge status={item.status} />
+                    <div className="shrink-0 sm:pt-0.5"><PetitionStatusBadge status={item.status} /></div>
                   </div>
                 </Link>
               ))}
@@ -178,37 +178,36 @@ export default function PetitionsPageClient({
       <section className="space-y-3">
         <div className="flex items-end justify-between gap-3">
           <div>
-            <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>公開陳情</h2>
+            <h2 className="text-base font-semibold text-fg-primary!">公開陳情</h2>
           </div>
-          <Link href="/petitions/public" className="btn btn-ghost shrink-0">查看全部</Link>
+          <Link href="/petitions/public" className="btn btn-ghost min-h-11 shrink-0">查看全部</Link>
         </div>
         {publicCasesLoading ? (
-          <div className="card p-5 text-sm" style={{ color: "var(--text-muted)" }} role="status" aria-live="polite">
+          <div className="card p-5 text-sm text-fg-muted!" role="status" aria-live="polite">
             公開陳情載入中…
           </div>
         ) : publicCases.length === 0 ? (
-          <div className="card p-5 text-sm" style={{ color: "var(--text-muted)" }}>
+          <div className="card p-5 text-sm text-fg-muted!">
             目前尚無已公開陳情。
           </div>
         ) : (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {publicCases.map((item) => (
               <Link
                 key={item.id}
                 href={`/petitions/public/${item.id}`}
-                className="card card-hover p-4 space-y-2"
-                style={{ textDecoration: "none" }}
+                className="card card-hover min-w-0 space-y-2 p-4 no-underline"
               >
-                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                <p className="break-words text-xs text-fg-muted!">
                   #{item.case_number} · {item.current_org_name} · {item.type_name}
                 </p>
-                <h3 className="font-medium line-clamp-2" style={{ color: "var(--text-primary)" }}>
+                <h3 className="line-clamp-2 break-words font-medium text-fg-primary!">
                   {item.title}
                 </h3>
-                <p className="text-sm line-clamp-3" style={{ color: "var(--text-muted)" }}>
+                <p className="line-clamp-3 break-words text-sm text-fg-muted!">
                   {item.reply || "已結案，暫無公開回覆。"}
                 </p>
-                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                <p className="break-words text-xs text-fg-muted!">
                   公開於 {fmt(item.published_at)}
                 </p>
               </Link>
