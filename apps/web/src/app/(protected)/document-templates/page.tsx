@@ -263,51 +263,41 @@ export default function DocumentTemplatesPage() {
     }
   };
 
-  const inputStyle = {
-    background: "var(--bg-surface)",
-    border: "1px solid var(--border)",
-    color: "var(--text-primary)",
-    borderRadius: "8px",
-    padding: "0.5rem 0.75rem",
-    fontSize: "0.875rem",
-    width: "100%",
-    outline: "none",
-  } as React.CSSProperties;
+  const inputClassName = "input min-h-11 text-base sm:text-sm";
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5">
+    <div className="mx-auto min-w-0 max-w-6xl space-y-5">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold">公文範本庫</h1>
         </div>
-        <Link href="/documents/new" className="btn btn-primary">
+        <Link href="/documents/new" className="btn btn-primary min-h-11 w-full sm:w-auto">
           新增公文
         </Link>
       </header>
 
-      <section className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className="space-y-4">
+      <section className="grid min-w-0 grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="min-w-0 space-y-4">
           <section className="card p-4">
             <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h2 className="text-sm font-semibold">快速套用預設範本</h2>
-                <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                <p className="mt-1 text-xs text-[var(--text-muted)]">
                   套用後可修改並另存。
                 </p>
               </div>
-              <span className="text-xs" style={{ color: "var(--text-muted)" }}>共 {DOCUMENT_TEMPLATE_PRESETS.length} 組</span>
+              <span className="text-xs text-[var(--text-muted)]">共 {DOCUMENT_TEMPLATE_PRESETS.length} 組</span>
             </div>
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
               {DOCUMENT_TEMPLATE_PRESETS.map((preset) => (
                 <button
                   key={preset.id}
                   type="button"
-                  className="rounded-lg border px-3 py-2 text-left transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary-dim)]"
-                  style={{ borderColor: "var(--border)", background: "var(--bg-surface)" }}
+                  className="min-h-11 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-left transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary-dim)]"
                   onClick={() => applyPreset(preset)}
                 >
                   <span className="block text-xs font-semibold">{preset.name}</span>
-                  <span className="mt-1 block text-xs leading-relaxed" style={{ color: "var(--text-muted)" }}>
+                  <span className="mt-1 block text-xs leading-relaxed text-[var(--text-muted)]">
                     {preset.description}
                   </span>
                 </button>
@@ -316,20 +306,20 @@ export default function DocumentTemplatesPage() {
           </section>
 
           <div className="card p-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto]">
-              <select value={orgFilter} onChange={(e) => setOrgFilter(e.target.value)} style={inputStyle}>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+              <select className={inputClassName} value={orgFilter} onChange={(e) => setOrgFilter(e.target.value)}>
                 <option value="">全部可用組織</option>
                 {orgs.map((org) => (
                   <option key={org.id} value={org.id}>{org.name}</option>
                 ))}
               </select>
               <input
+                className={inputClassName}
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
                 placeholder="搜尋範本名稱、說明、主旨"
-                style={inputStyle}
               />
-              <label className="flex items-center gap-2 text-sm" style={{ color: "var(--text-muted)" }}>
+              <label className="flex min-h-11 items-center gap-2 text-sm text-[var(--text-muted)]">
                 <input
                   type="checkbox"
                   checked={activeOnly}
@@ -356,31 +346,31 @@ export default function DocumentTemplatesPage() {
                         <span className="badge text-xs">
                           {CATEGORY_OPTIONS.find((cat) => cat.value === item.category)?.label ?? item.category}
                         </span>
-                        <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                        <span className="text-xs text-[var(--text-muted)]">
                           v{item.version}
                         </span>
                         {!item.is_active && (
-                          <span className="text-xs" style={{ color: "var(--danger)" }}>已停用</span>
+                          <span className="text-xs text-[var(--danger)]">已停用</span>
                         )}
                       </div>
-                      <p className="mt-1 line-clamp-2 text-sm" style={{ color: "var(--text-secondary)" }}>
+                      <p className="mt-1 line-clamp-2 break-words text-sm text-[var(--text-secondary)]">
                         {item.subject || item.meeting_purpose || item.doc_description || "未填內容"}
                       </p>
                       {item.description && (
-                        <p className="mt-1 line-clamp-2 text-xs" style={{ color: "var(--text-muted)" }}>
+                        <p className="mt-1 line-clamp-2 break-words text-xs text-[var(--text-muted)]">
                           {item.description}
                         </p>
                       )}
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <Link href={`/documents/new?template_id=${item.id}`} className="btn btn-primary">
+                      <Link href={`/documents/new?template_id=${item.id}`} className="btn btn-primary min-h-11">
                         使用
                       </Link>
-                      <button className="btn btn-ghost" onClick={() => editTemplate(item)}>
+                      <button className="btn btn-ghost min-h-11" onClick={() => editTemplate(item)}>
                         編輯
                       </button>
                       {item.is_active && (
-                        <button className="btn btn-danger" onClick={() => deactivate(item)}>
+                        <button className="btn btn-danger min-h-11" onClick={() => deactivate(item)}>
                           停用
                         </button>
                       )}
@@ -392,14 +382,14 @@ export default function DocumentTemplatesPage() {
           )}
         </div>
 
-        <aside className="card h-fit p-4">
+        <aside className="card min-w-0 h-fit p-4">
           <h2 className="text-sm font-semibold">{editingId ? "編輯範本" : "新增範本"}</h2>
           <DraftStatus lastSavedAt={lastSavedAt} className="mt-1" />
           <div className="mt-4 space-y-3">
             <select
               value={form.org_id}
               onChange={(e) => setForm((prev) => ({ ...prev, org_id: e.target.value }))}
-              style={inputStyle}
+              className={inputClassName}
               disabled={!!editingId}
             >
               <option value="">選擇組織</option>
@@ -411,14 +401,14 @@ export default function DocumentTemplatesPage() {
               value={form.name}
               onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
               placeholder="範本名稱"
-              style={inputStyle}
+              className={inputClassName}
             />
             <textarea
               value={form.description ?? ""}
               onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
               placeholder="範本說明"
               rows={2}
-              style={{ ...inputStyle, resize: "vertical" }}
+              className={`${inputClassName} resize-y`}
             />
             <select
               value={form.category}
@@ -430,17 +420,17 @@ export default function DocumentTemplatesPage() {
                   action_required: category === "consultation" ? null : prev.action_required,
                 }));
               }}
-              style={inputStyle}
+              className={inputClassName}
             >
               {CATEGORY_OPTIONS.map((item) => (
                 <option key={item.value} value={item.value}>{item.label}</option>
               ))}
             </select>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <select
                 value={form.urgency}
                 onChange={(e) => setForm((prev) => ({ ...prev, urgency: e.target.value as DocumentUrgency }))}
-                style={inputStyle}
+                className={inputClassName}
               >
                 <option value="normal">普通件</option>
                 <option value="priority">速件</option>
@@ -454,7 +444,7 @@ export default function DocumentTemplatesPage() {
                   declassification_condition: e.target.value === "normal" ? "none" : prev.declassification_condition,
                   confidentiality_expires_at: e.target.value === "normal" ? null : prev.confidentiality_expires_at,
                 }))}
-                style={inputStyle}
+                className={inputClassName}
               >
                 <option value="normal">普通</option>
                 <option value="confidential">密</option>
@@ -467,7 +457,7 @@ export default function DocumentTemplatesPage() {
               <select
                 value={form.declassification_condition}
                 onChange={(e) => setForm((prev) => ({ ...prev, declassification_condition: e.target.value as "none" | "auto_at_date" | "manual_approval" }))}
-                style={inputStyle}
+                className={inputClassName}
               >
                 <option value="none">請選擇解密條件</option>
                 <option value="auto_at_date">至指定日期解密</option>
@@ -476,12 +466,12 @@ export default function DocumentTemplatesPage() {
             )}
             {form.category === "announcement" && (
               <textarea value={form.basis ?? ""} onChange={(e) => setForm((prev) => ({ ...prev, basis: e.target.value }))}
-                placeholder="依據" rows={3} style={{ ...inputStyle, resize: "vertical" }} />
+                placeholder="依據" rows={3} className={`${inputClassName} resize-y`} />
             )}
             {form.classification !== "normal" && form.declassification_condition === "auto_at_date" && (
               <input type="date" value={form.confidentiality_expires_at ? form.confidentiality_expires_at.slice(0, 10) : ""}
                 onChange={(e) => setForm((prev) => ({ ...prev, confidentiality_expires_at: e.target.value || null }))}
-                style={inputStyle} />
+                className={inputClassName} />
             )}
             {form.category === "meeting_notice" ? (
               <>
@@ -490,13 +480,13 @@ export default function DocumentTemplatesPage() {
                   onChange={(e) => setForm((prev) => ({ ...prev, meeting_purpose: e.target.value }))}
                   placeholder="開會事由"
                   rows={2}
-                  style={{ ...inputStyle, resize: "vertical" }}
+                  className={`${inputClassName} resize-y`}
                 />
                 <input
                   value={form.meeting_location ?? ""}
                   onChange={(e) => setForm((prev) => ({ ...prev, meeting_location: e.target.value }))}
                   placeholder="開會地點"
-                  style={inputStyle}
+                  className={inputClassName}
                 />
               </>
             ) : form.category === "decree" || form.category === "record" ? null : (
@@ -505,7 +495,7 @@ export default function DocumentTemplatesPage() {
                 onChange={(e) => setForm((prev) => ({ ...prev, subject: e.target.value }))}
                 placeholder={form.category === "consultation" ? "咨文第一段：依據、提名事項與咨請內容" : "主旨"}
                 rows={2}
-                style={{ ...inputStyle, resize: "vertical" }}
+                className={`${inputClassName} resize-y`}
               />
             )}
             <textarea
@@ -527,7 +517,7 @@ export default function DocumentTemplatesPage() {
                             : "說明"
               }
               rows={5}
-              style={{ ...inputStyle, resize: "vertical" }}
+              className={`${inputClassName} resize-y`}
             />
             {form.category !== "meeting_notice" && form.category !== "inspection_notice" && form.category !== "decree" && form.category !== "consultation" && (
               <textarea
@@ -541,25 +531,25 @@ export default function DocumentTemplatesPage() {
                         : "辦法"
                   }
                 rows={3}
-                style={{ ...inputStyle, resize: "vertical" }}
+                className={`${inputClassName} resize-y`}
               />
             )}
             <input
               value={form.handler_unit ?? ""}
               onChange={(e) => setForm((prev) => ({ ...prev, handler_unit: e.target.value }))}
               placeholder="預設承辦單位"
-              style={inputStyle}
+              className={inputClassName}
             />
             <input value={form.file_number ?? ""}
               onChange={(e) => setForm((prev) => ({ ...prev, file_number: e.target.value }))}
-              placeholder="預設檔號" style={inputStyle} />
+              placeholder="預設檔號" className={inputClassName} />
             <input value={form.classification_number ?? ""}
               onChange={(e) => setForm((prev) => ({ ...prev, classification_number: e.target.value }))}
-              placeholder="預設分類號" style={inputStyle} />
+              placeholder="預設分類號" className={inputClassName} />
             <select
               value={form.visibility_level}
               onChange={(e) => setForm((prev) => ({ ...prev, visibility_level: e.target.value as DocumentVisibility }))}
-              style={inputStyle}
+              className={inputClassName}
             >
               <option value="subject_only">密件（建立者、上層機關與收件者）</option>
               <option value="org_only">機關可見（全機關）</option>
@@ -567,15 +557,15 @@ export default function DocumentTemplatesPage() {
               <option value="publicly_open">公開（未登入可見）</option>
             </select>
             {selectedOrg && (
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+              <p className="text-xs text-[var(--text-muted)]">
                 所屬組織：{selectedOrg.name}
               </p>
             )}
-            <div className="flex gap-2">
-              <button className="btn btn-primary flex-1" disabled={saving} onClick={save}>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <button className="btn btn-primary min-h-11 w-full flex-1 sm:w-auto" disabled={saving} onClick={save}>
                 {saving ? "儲存中" : editingId ? "更新範本" : "建立範本"}
               </button>
-              <button className="btn btn-ghost" disabled={saving} onClick={resetForm}>
+              <button className="btn btn-ghost min-h-11 w-full sm:w-auto" disabled={saving} onClick={resetForm}>
                 清空
               </button>
             </div>
