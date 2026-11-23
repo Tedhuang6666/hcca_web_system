@@ -191,22 +191,21 @@ export function AccountDirectoryPanel({
 
   return (
     <div className="grid min-h-0 min-w-0 grid-cols-1 gap-4 xl:flex-1 xl:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)]">
-      <section className={`${mobileDetailOpen ? "hidden xl:flex" : "flex"} min-h-0 min-w-0 flex-col overflow-hidden rounded-xl`} style={{ border: "1px solid var(--border)", background: "var(--bg-surface)" }}>
-        <div className="space-y-3 p-3" style={{ borderBottom: "1px solid var(--border)" }}>
-          <div className="flex items-center gap-2 rounded-md px-3 py-2" style={{ border: "1px solid var(--border)" }}>
-            <Search size={15} className="shrink-0" style={{ color: "var(--text-muted)" }} />
+      <section className={`${mobileDetailOpen ? "hidden xl:flex" : "flex"} min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-border! bg-surface!`}>
+        <div className="space-y-3 border-b border-border! p-3">
+          <div className="flex items-center gap-2 rounded-md border border-border! px-3 py-2">
+            <Search size={15} className="shrink-0 text-fg-muted!" />
             <input
               ref={searchRef}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              className="min-h-7 min-w-0 w-full bg-transparent text-sm outline-none"
+              className="min-h-11 min-w-0 w-full bg-transparent text-sm text-fg-primary! outline-none"
               placeholder="搜尋姓名、學號、Email、班級或座號"
               aria-label="搜尋平台帳號"
-              style={{ color: "var(--text-primary)" }}
             />
           </div>
           <div className="flex flex-col gap-2">
-            <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+            <p className="text-xs text-fg-muted!">
               {loading && !normalizedQuery
                 ? "載入帳號中…"
                 : shouldSearchRemote && !searchResolved
@@ -217,9 +216,8 @@ export function AccountDirectoryPanel({
               <select
                 value={classFilter}
                 onChange={(event) => setClassFilter(event.target.value)}
-                className="min-h-11 min-w-0 rounded-lg px-2.5 text-xs"
+                className="min-h-11 min-w-0 rounded-lg border border-border! bg-surface! px-2.5 text-xs text-fg-secondary!"
                 aria-label="依班級篩選帳號"
-                style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}
               >
                 <option value="">全部班級</option>
                 {classes.map((item) => (
@@ -229,13 +227,10 @@ export function AccountDirectoryPanel({
               <button
                 type="button"
                 onClick={() => setActiveOnly((value) => !value)}
-                className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-medium"
+                className={`inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-border! px-2.5 text-xs font-medium ${activeOnly
+                  ? "bg-[var(--primary-dim)] text-[var(--primary-text)]"
+                  : "bg-transparent text-fg-muted!"}`}
                 aria-pressed={activeOnly}
-                style={{
-                  color: activeOnly ? "var(--primary-text)" : "var(--text-muted)",
-                  background: activeOnly ? "var(--primary-dim)" : "transparent",
-                  border: "1px solid var(--border)",
-                }}
               >
                 <SlidersHorizontal size={14} />
                 {activeOnly ? "只看啟用" : "全部帳號"}
@@ -246,19 +241,19 @@ export function AccountDirectoryPanel({
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           {loading && !shouldSearchRemote ? (
             <div className="space-y-2 p-4">
-              <div className="h-16 animate-pulse rounded-lg" style={{ background: "var(--bg-elevated)" }} />
-              <div className="h-16 animate-pulse rounded-lg" style={{ background: "var(--bg-elevated)" }} />
+              <div className="h-16 animate-pulse rounded-lg bg-[var(--bg-elevated)]" />
+              <div className="h-16 animate-pulse rounded-lg bg-[var(--bg-elevated)]" />
             </div>
           ) : shouldSearchRemote && !searchResolved ? (
-            <div className="p-8 text-center text-sm" role="status" style={{ color: "var(--text-muted)" }}>
+            <div className="p-8 text-center text-sm text-fg-muted!" role="status">
               正在搜尋帳號…
             </div>
           ) : searchErrorKey === searchKey ? (
-            <div className="p-8 text-center text-sm" role="alert" style={{ color: "var(--danger)" }}>
+            <div className="p-8 text-center text-sm text-danger!" role="alert">
               搜尋帳號失敗，請調整關鍵字或重新整理後再試。
             </div>
           ) : filteredUsers.length === 0 ? (
-            <div className="p-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+            <div className="p-8 text-center text-sm text-fg-muted!">
               找不到符合條件的帳號。
             </div>
           ) : filteredUsers.map((user) => (
@@ -272,39 +267,39 @@ export function AccountDirectoryPanel({
                   if (window.innerWidth < 1280) detailRef.current?.focus();
                 });
               }}
-              className="flex min-h-[88px] w-full items-center gap-3 border-t px-4 py-3 text-left transition-colors hover:bg-[var(--bg-hover)]"
+              className={`flex min-h-[88px] w-full items-center gap-3 border-t border-border! px-4 py-3 text-left transition-colors hover:bg-[var(--bg-hover)] ${selectedId === user.id
+                ? "bg-[var(--primary-dim)]"
+                : "bg-transparent"}`}
               aria-current={selectedId === user.id ? "true" : undefined}
-              style={{
-                borderColor: "var(--border)",
-                background: selectedId === user.id ? "var(--primary-dim)" : "transparent",
-              }}
             >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold" style={{ background: user.is_active ? "var(--primary-dim)" : "var(--bg-elevated)", color: user.is_active ? "var(--primary-text)" : "var(--text-muted)" }}>
+              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${user.is_active
+                ? "bg-[var(--primary-dim)] text-[var(--primary-text)]"
+                : "bg-[var(--bg-elevated)] text-fg-muted!"}`}>
                 {user.display_name.slice(0, 1) || <UserRound size={16} />}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{user.display_name}</span>
-                  {user.is_superuser && <span className="rounded px-1.5 py-0.5 text-xs" style={{ background: "var(--warning-dim)", color: "var(--warning)" }}>超管</span>}
-                  {!user.is_active && <span className="rounded px-1.5 py-0.5 text-xs" style={{ background: "var(--danger-dim)", color: "var(--danger)" }}>停用</span>}
+                  <span className="truncate text-sm font-medium text-fg-primary!">{user.display_name}</span>
+                  {user.is_superuser && <span className="rounded bg-[var(--warning-dim)] px-1.5 py-0.5 text-xs text-[var(--warning)]">超管</span>}
+                  {!user.is_active && <span className="rounded bg-[var(--danger-dim)] px-1.5 py-0.5 text-xs text-danger!">停用</span>}
                 </div>
-                <p className="mt-1 truncate text-xs" style={{ color: "var(--text-muted)" }}>
+                <p className="mt-1 truncate text-xs text-fg-muted!">
                   {user.student_id ?? "無學號"} · {user.email}
                 </p>
-                <p className="mt-1 truncate text-xs" style={{ color: "var(--text-secondary)" }}>
+                <p className="mt-1 truncate text-xs text-fg-secondary!">
                   {userClassSummary(user)}
                 </p>
-                <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                <p className="mt-1 text-xs text-fg-muted!">
                   {user.mfa_enabled ? "已啟用 2FA" : "未啟用 2FA"} · {user.positions.length} 個職位
                 </p>
               </div>
-              <ChevronRight size={16} className="shrink-0" style={{ color: "var(--text-muted)" }} />
+              <ChevronRight size={16} className="shrink-0 text-fg-muted!" />
             </button>
           ))}
         </div>
       </section>
 
-      <section ref={detailRef} tabIndex={-1} className={`${mobileDetailOpen ? "flex" : "hidden xl:flex"} min-w-0 flex-col rounded-xl outline-none xl:min-h-0 xl:overflow-hidden`} style={{ border: "1px solid var(--border)", background: "var(--bg-surface)" }}>
+      <section ref={detailRef} tabIndex={-1} className={`${mobileDetailOpen ? "flex" : "hidden xl:flex"} min-w-0 flex-col rounded-xl border border-border! bg-surface! outline-none xl:min-h-0 xl:overflow-hidden`}>
         <div className="p-3 xl:hidden">
           <MobileBackToList label="返回帳號清單" className="min-h-11" onBack={() => {
             setMobileDetailOpen(false);
@@ -312,9 +307,9 @@ export function AccountDirectoryPanel({
           }} />
         </div>
         {detailLoading ? (
-          <div className="p-6 text-sm" role="status" style={{ color: "var(--text-muted)" }}>載入帳號詳情…</div>
+          <div className="p-6 text-sm text-fg-muted!" role="status">載入帳號詳情…</div>
         ) : detailError ? (
-          <div className="p-6 text-sm" role="alert" style={{ color: "var(--danger)" }}>無法載入帳號詳情，請重新整理後再試。</div>
+          <div className="p-6 text-sm text-danger!" role="alert">無法載入帳號詳情，請重新整理後再試。</div>
         ) : selectedUser ? (
           <div className="xl:min-h-0 xl:flex-1 xl:overflow-y-auto">
             <AccountDetailPanel
@@ -327,7 +322,7 @@ export function AccountDirectoryPanel({
             />
           </div>
         ) : (
-          <div className="flex min-h-[35dvh] items-center justify-center p-8 text-center text-sm xl:min-h-0 xl:flex-1" style={{ color: "var(--text-muted)" }}>
+          <div className="flex min-h-[35dvh] items-center justify-center p-8 text-center text-sm text-fg-muted! xl:min-h-0 xl:flex-1">
             {loading ? "正在載入帳號清單…" : "沒有符合條件的帳號。"}
           </div>
         )}
