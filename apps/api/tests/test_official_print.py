@@ -164,6 +164,22 @@ def test_render_petition_print_html_uses_intake_detail_layout() -> None:
     assert heading_runs and all("OfficialKai" in font for _text, font in heading_runs)
 
 
+def test_petition_print_compacts_excessive_blank_lines() -> None:
+    case_obj = SimpleNamespace(
+        case_number="1150037",
+        title="測試陳情",
+        content="\n\n\n第一段\r\n\r\n\r\n第二段\n\n\n",
+        current_org=SimpleNamespace(name="竹嶺班聯"),
+        type=SimpleNamespace(name="校務建議"),
+        assigned_to=None,
+        updated_at=None,
+    )
+
+    html = render_petition_print_html(case_obj)
+
+    assert '<div class="petition-content">第一段<br><br>第二段</div>' in html
+
+
 @pytest.mark.asyncio
 async def test_petition_print_embeds_images_and_appends_labeled_documents(
     monkeypatch: pytest.MonkeyPatch,

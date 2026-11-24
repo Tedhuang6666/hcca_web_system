@@ -68,6 +68,12 @@ def _br(value: str | None) -> str:
     return _esc(value).replace("\n", "<br>")
 
 
+def _petition_content_html(value: str | None) -> str:
+    normalized = re.sub(r"\r\n?|\n", "\n", value or "").strip()
+    compact = re.sub(r"\n{3,}", "\n\n", normalized)
+    return _br(compact)
+
+
 def _cn_number(num: int) -> str:
     if num <= 0:
         return str(num)
@@ -557,6 +563,7 @@ def render_petition_print_html(
     type_name = getattr(getattr(case_obj, "type", None), "name", None) or "未分類"
     generated_at = print_datetime(dt.datetime.now(TAIPEI))
     attachments_html = _petition_attachment_html(attachment_names, image_attachments)
+    petition_content = _petition_content_html(case_obj.content)
 
     return f"""<!DOCTYPE html>
 <html lang="zh-TW">
@@ -741,7 +748,7 @@ def render_petition_print_html(
     <p class="case-line">案件分類：{_esc(type_name)}</p>
     <p class="case-line">案件標題：{_esc(case_obj.title)}</p>
     <p class="content-label">陳情內文：</p>
-    <div class="petition-content">{_br(case_obj.content)}</div>
+    <div class="petition-content">{petition_content}</div>
     <p class="last-updated">最後更新：{_esc(print_updated_at(case_obj.updated_at))}</p>
     <p class="handler-line">陳情承辦人：{_esc(assigned_name)}</p>
     <p class="handler-line">聯絡信箱：<a href="mailto:{_esc(contact_email)}">{_esc(contact_email)}</a></p>
