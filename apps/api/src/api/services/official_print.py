@@ -70,7 +70,7 @@ def _br(value: str | None) -> str:
 
 def _petition_content_html(value: str | None) -> str:
     normalized = re.sub(r"\r\n?|\n", "\n", value or "").strip()
-    compact = re.sub(r"\n{3,}", "\n\n", normalized)
+    compact = re.sub(r"\n{2,}", "\n", normalized)
     return _br(compact)
 
 
