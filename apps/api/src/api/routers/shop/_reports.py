@@ -17,6 +17,7 @@ from api.routers.shop._common import _ADMIN_VIEW_CODES, CurrentUser, DbDep, Mana
 from api.schemas.shop import (
     ClassPaymentReportItemOut,
     OrderDistributionRow,
+    OrderPurchaseDetailRow,
     OrderQuantityRow,
     OrderSummaryOut,
 )
@@ -24,6 +25,7 @@ from api.schemas.shop_analytics import ShopSalesAnalyticsOut, ShopSalesReportCre
 from api.services import shop as shop_svc
 from api.services.shop._analytics import sales_analytics
 from api.services.shop._analytics_report import create_sales_report
+from api.services.shop._purchase_report import purchase_details_report
 from api.services.shop._quantity_export import export_quantity_excel
 
 router = APIRouter()
@@ -145,6 +147,51 @@ async def order_summary(
 
 
 @router.get(
+    "/orders/purchase-details",
+    response_model=list[OrderPurchaseDetailRow],
+    summary="訂單明細統計（按班級、訂購人、商品規格）",
+    dependencies=[
+        Depends(
+            require_any(
+                PermissionCode.SHOP_MANAGE,
+                PermissionCode.SHOP_MANAGE_ORDERS,
+                PermissionCode.SHOP_VIEW_ALL,
+                PermissionCode.FINANCE_VIEW,
+                PermissionCode.ADMIN_ALL,
+            )
+        )
+    ],
+)
+async def order_purchase_details(
+    session: DbDep,
+    _: CurrentUser,
+    activity_id: uuid.UUID | None = Query(None),
+    category_id: uuid.UUID | None = Query(None),
+    product_id: uuid.UUID | None = Query(None),
+    grade: int | None = Query(None, ge=0),
+    class_id: uuid.UUID | None = Query(None),
+    user_id: uuid.UUID | None = Query(None),
+    status_filter: OrderStatus | None = Query(None, alias="status"),
+    is_paid: bool | None = Query(None),
+    date_from: datetime | None = Query(None),
+    date_to: datetime | None = Query(None),
+) -> list[OrderPurchaseDetailRow]:
+    return await purchase_details_report(
+        session,
+        activity_id=activity_id,
+        category_id=category_id,
+        product_id=product_id,
+        grade=grade,
+        class_id=class_id,
+        user_id=user_id,
+        status=status_filter,
+        is_paid=is_paid,
+        date_from=date_from,
+        date_to=date_to,
+    )
+
+
+@router.get(
     "/orders/class-payments",
     response_model=list[ClassPaymentReportItemOut],
     summary="班聯目前確認收款的班級明細",
@@ -190,6 +237,7 @@ async def order_quantities(
     class_id: uuid.UUID | None = Query(None),
     category_id: uuid.UUID | None = Query(None),
     product_id: uuid.UUID | None = Query(None),
+    user_id: uuid.UUID | None = Query(None),
     is_paid: bool | None = Query(None),
     status_filter: OrderStatus | None = Query(None, alias="status"),
     date_from: datetime | None = Query(None),
@@ -202,6 +250,7 @@ async def order_quantities(
         class_id=class_id,
         category_id=category_id,
         product_id=product_id,
+        user_id=user_id,
         is_paid=is_paid,
         status=status_filter,
         date_from=date_from,

@@ -11,7 +11,7 @@ import type {
   ShopProfitOut,
   ProductProcurementUpdate,
   ClassOrderCreate, ShopDelegatedOrderOut, ShopDelegationCodeOut, ShopDelegationContextOut, ShopDelegationCreate, ShopDelegationOut,
-  ActivityOut, CatalogCategoryOut, ClassPaymentOut, ClassPaymentReportItemOut, CloseStatusOut, OrderDistributionRow, OrderListItem, OrderOut, OrderQuantityRow, OrderSummaryOut, ProductCategoryOut, ProductOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut, ShopClassRepresentativeRecipientOut, ShopClassSummaryOut, ShopOrderCloseOut, ShopOrdersClearOut, ShopPromotionCreate, ShopPromotionOut, ShopPromotionPreviewOut, ShopPromotionPublicOut, ShopPromotionUpdate,
+  ActivityOut, CatalogCategoryOut, ClassPaymentOut, ClassPaymentReportItemOut, CloseStatusOut, OrderDistributionRow, OrderListItem, OrderOut, OrderPurchaseDetailRow, OrderQuantityRow, OrderSummaryOut, ProductCategoryOut, ProductOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut, ShopClassRepresentativeRecipientOut, ShopClassSummaryOut, ShopOrderCloseOut, ShopOrdersClearOut, ShopPromotionCreate, ShopPromotionOut, ShopPromotionPreviewOut, ShopPromotionPublicOut, ShopPromotionUpdate,
 } from "../types";
 import { authFetch, BASE, get, post, put, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
 import type { OrderRecalculateOut } from "../api-bridge";
@@ -196,6 +196,14 @@ export const shopApi = {
     });
     return get<OrderSummaryOut>(`/shop/orders/summary?${p.toString()}`);
   },
+  purchaseDetails: (params?: OrderQuantityFilters & { user_id?: string }) => {
+    const query = new URLSearchParams();
+    Object.entries(params ?? {}).forEach(([key, value]) => {
+      if (value) query.set(key, value);
+    });
+    const qs = query.toString();
+    return get<OrderPurchaseDetailRow[]>(`/shop/orders/purchase-details${qs ? `?${qs}` : ""}`);
+  },
   getOrder: (id: string) => get<OrderOut>(`/shop/orders/${id}`),
   clearAllOrders: () => del<ShopOrdersClearOut>("/shop/orders"),
   createClassOrder: (body: ClassOrderCreate) => post<OrderOut[]>("/shop/orders/class", body),
@@ -338,7 +346,7 @@ export const shopApi = {
   },
 
   // 班聯數量彙總
-  orderQuantities: (params?: OrderQuantityFilters) => {
+  orderQuantities: (params?: OrderQuantityFilters & { user_id?: string }) => {
     const query = new URLSearchParams();
     Object.entries(params ?? {}).forEach(([key, value]) => {
       if (value) query.set(key, value);

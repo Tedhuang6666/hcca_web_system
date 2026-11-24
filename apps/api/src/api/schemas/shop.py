@@ -1016,6 +1016,20 @@ class OrderSummaryOut(BaseModel):
     unpaid_amount: int = 0
 
 
+class OrderPurchaseDetailRow(BaseModel):
+    class_id: uuid.UUID | None
+    class_label: str
+    grade: int | None = None
+    class_code: str = ""
+    user_id: uuid.UUID | None
+    buyer_label: str
+    product_id: uuid.UUID
+    product_name: str
+    variant_key: str
+    quantity: int
+    order_count: int
+
+
 class ShopOrdersClearOut(BaseModel):
     deleted_order_count: int
 

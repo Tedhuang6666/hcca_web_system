@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { classApi, shopApi, apiErrorMessage } from "@/lib/api";
 import { Field, MiniBtn } from "@/components/shop/admin/ShopAdminFormFields";
+import ShopPrintReports, { type ShopPurchaseReportFilters } from "@/components/shop/admin/ShopPrintReports";
 import { listProductChoices } from "@/lib/shop-admin-data";
 import type {
   SchoolClassListItem,
@@ -121,6 +122,17 @@ export default function StatsView() {
     statusFilter ? { pending: "待確認訂單", confirmed: "已確認訂單", cancelled: "已取消訂單", refunded: "已退款訂單" }[statusFilter] : "排除取消與退款",
     (dateFrom || dateTo) && `${dateFrom || "不限起日"} 至 ${dateTo || "不限迄日"}`,
   ].filter(Boolean);
+  const printFilters = useMemo<ShopPurchaseReportFilters>(() => ({
+    category_id: categoryId || undefined,
+    product_id: productId || undefined,
+    grade: grade || undefined,
+    class_id: classId || undefined,
+    user_id: userId.trim() || undefined,
+    status: statusFilter || undefined,
+    is_paid: paid || undefined,
+    date_from: dateFrom ? new Date(`${dateFrom}T00:00:00+08:00`).toISOString() : undefined,
+    date_to: dateTo ? new Date(`${dateTo}T23:59:59+08:00`).toISOString() : undefined,
+  }), [categoryId, classId, dateFrom, dateTo, grade, paid, productId, statusFilter, userId]);
 
   return (
     <div className="space-y-4">
@@ -213,6 +225,14 @@ export default function StatsView() {
           </div>
         )}
       </div>
+      <ShopPrintReports
+        filters={printFilters}
+        scope={scopeLabels.join(" · ")}
+        refreshKey={retryKey}
+        shareClassSummary={groupBy === "class"}
+        classSummary={groupBy === "class" ? data : undefined}
+        classSummaryLoading={groupBy === "class" && loading}
+      />
       {loading && (
         <div role="status" className="card p-8 text-center text-sm text-fg-muted!">
           載入統計中…

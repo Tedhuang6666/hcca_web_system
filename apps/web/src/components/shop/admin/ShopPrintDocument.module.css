@@ -1,0 +1,215 @@
+.screenOnly {
+  color: var(--text-primary);
+}
+
+.printRoot {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--bg-surface);
+  padding: 1.25rem;
+  color: var(--text-primary);
+}
+
+.printOnly {
+  display: none;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+  border-bottom: 2px solid var(--primary, #a2873e);
+  padding-bottom: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.header h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.header p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.tableWrap {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.table th,
+.table td {
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.625rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.table thead th,
+.table tfoot th,
+.table tfoot td,
+.subtotal th,
+.subtotal td {
+  background: var(--bg-elevated);
+  font-weight: 700;
+}
+
+.table td:nth-last-child(-n + 3),
+.table th:nth-last-child(-n + 3) {
+  text-align: right;
+}
+
+.empty {
+  margin: 0;
+  padding: 1rem 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.section {
+  margin-top: 1.25rem;
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.sectionHeading h3,
+.sectionHeading p {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.grandTotal {
+  margin: 1rem 0 0;
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.distributionTable th,
+.distributionTable td {
+  text-align: left !important;
+}
+
+.distributionTable td:last-child {
+  text-align: right !important;
+}
+
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 12mm;
+  }
+
+  body:has(.printRoot) {
+    background: #fff !important;
+  }
+
+  body:has(.printRoot) * {
+    visibility: hidden !important;
+  }
+
+  .printRoot,
+  .printRoot * {
+    visibility: visible !important;
+  }
+
+  .printRoot {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: #fff !important;
+    padding: 0 !important;
+    color: #111 !important;
+    box-shadow: none !important;
+  }
+
+  .screenOnly {
+    display: none !important;
+  }
+
+  .printOnly {
+    display: block !important;
+  }
+
+  .header {
+    border-color: #555 !important;
+    margin-bottom: 8mm;
+  }
+
+  .header h2,
+  .header p,
+  .empty,
+  .sectionHeading h3,
+  .sectionHeading p,
+  .grandTotal {
+    color: #111 !important;
+  }
+
+  .tableWrap {
+    overflow: visible !important;
+  }
+
+  .table {
+    width: 100% !important;
+    min-width: 0 !important;
+    color: #111 !important;
+    font-size: 9pt;
+  }
+
+  .table th,
+  .table td {
+    border-color: #777 !important;
+    background: #fff !important;
+    color: #111 !important;
+    padding: 4pt 5pt;
+  }
+
+  .table thead {
+    display: table-header-group;
+  }
+
+  .table tfoot {
+    display: table-row-group;
+  }
+
+  .table tr {
+    break-inside: avoid;
+  }
+
+  .table tfoot th,
+  .table tfoot td,
+  .subtotal th,
+  .subtotal td {
+    font-weight: 700;
+  }
+}

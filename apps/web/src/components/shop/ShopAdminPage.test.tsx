@@ -5,6 +5,7 @@ import ShopAdminPage from "@/app/(protected)/shop/admin/page";
 const api = vi.hoisted(() => ({
   listCategories: vi.fn(), listProducts: vi.fn(), listActivities: vi.fn(),
   list: vi.fn(), recipientOptions: vi.fn(), orderSummary: vi.fn(),
+  purchaseDetails: vi.fn(), orderQuantities: vi.fn(),
   listSeries: vi.fn(), createProduct: vi.fn(), getProduct: vi.fn(),
   testProduct: vi.fn(), activateProduct: vi.fn(), updateProduct: vi.fn(), uploadImage: vi.fn(),
   getProductPurchaseRules: vi.fn(), purchasePermissions: vi.fn(), purchaseGroupOptions: vi.fn(),
@@ -30,6 +31,8 @@ beforeEach(() => {
   api.recipientOptions.mockResolvedValue([]);
   api.listActivities.mockResolvedValue([{ id: "festival", name: "校慶" }, { id: "winter", name: "冬季活動" }]);
   api.orderSummary.mockResolvedValue(summary("初始班級"));
+  api.purchaseDetails.mockResolvedValue([]);
+  api.orderQuantities.mockResolvedValue([]);
   api.listSeries.mockResolvedValue([]);
   api.getProductCost.mockResolvedValue({ unit_cost: 60 });
   api.getProductPurchaseRules.mockResolvedValue({ allowed_grades: [], required_permissions: [], allowed_identifiers: [], blocked_identifiers: [], exclusive_group: null, designated_only: false });

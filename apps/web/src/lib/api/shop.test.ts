@@ -17,6 +17,21 @@ describe("shop quantity API", () => {
     expect(url.searchParams.get("class_id")).toBe("class-1");
   });
 
+  it("loads personal purchase details with the selected report filters", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("[]", {
+      headers: { "Content-Type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await shopApi.purchaseDetails({ category_id: "shirts", class_id: "class-1", user_id: "user-1" });
+
+    const url = new URL(String(fetchMock.mock.calls[0][0]), "http://localhost");
+    expect(url.pathname).toMatch(/\/shop\/orders\/purchase-details$/);
+    expect(url.searchParams.get("category_id")).toBe("shirts");
+    expect(url.searchParams.get("class_id")).toBe("class-1");
+    expect(url.searchParams.get("user_id")).toBe("user-1");
+  });
+
   it("總數確認單傳遞所選班級或全部班級，並保留後端錯誤", async () => {
     const fetchMock = vi.fn().mockImplementation(async () => new Response("pdf"));
     vi.stubGlobal("fetch", fetchMock);

@@ -488,6 +488,7 @@ async def load_quantity_orders(
     class_id: uuid.UUID | None = None,
     category_id: uuid.UUID | None = None,
     product_id: uuid.UUID | None = None,
+    user_id: uuid.UUID | None = None,
     is_paid: bool | None = None,
     status: OrderStatus | None = None,
     date_from: datetime | None = None,
@@ -520,6 +521,8 @@ async def load_quantity_orders(
         q = q.where(Order.activity_id == activity_id)
     if class_id:
         q = q.where(Order.class_id == class_id)
+    if user_id is not None:
+        q = q.where(Order.user_id == user_id)
     if is_paid is not None:
         q = q.where(Order.is_paid.is_(is_paid))
     if date_from:
@@ -541,6 +544,7 @@ async def order_quantities(
     class_id: uuid.UUID | None = None,
     category_id: uuid.UUID | None = None,
     product_id: uuid.UUID | None = None,
+    user_id: uuid.UUID | None = None,
     is_paid: bool | None = None,
     status: OrderStatus | None = None,
     date_from: datetime | None = None,
@@ -554,6 +558,7 @@ async def order_quantities(
         class_id=class_id,
         category_id=category_id,
         product_id=product_id,
+        user_id=user_id,
         is_paid=is_paid,
         status=status,
         date_from=date_from,

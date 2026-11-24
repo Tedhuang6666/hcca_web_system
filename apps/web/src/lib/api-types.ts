@@ -10330,6 +10330,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop/orders/purchase-details": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 訂單明細統計（按班級、訂購人、商品規格） */
+        get: operations["order_purchase_details_shop_orders_purchase_details_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shop/orders/quantities": {
         parameters: {
             query?: never;
@@ -22170,6 +22187,37 @@ export interface components {
              * Format: uuid
              */
             promotion_id: string;
+        };
+        /** OrderPurchaseDetailRow */
+        OrderPurchaseDetailRow: {
+            /** Buyer Label */
+            buyer_label: string;
+            /**
+             * Class Code
+             * @default
+             */
+            class_code: string;
+            /** Class Id */
+            class_id: string | null;
+            /** Class Label */
+            class_label: string;
+            /** Grade */
+            grade?: number | null;
+            /** Order Count */
+            order_count: number;
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
+            /** Product Name */
+            product_name: string;
+            /** Quantity */
+            quantity: number;
+            /** User Id */
+            user_id: string | null;
+            /** Variant Key */
+            variant_key: string;
         };
         /** OrderQuantityRow */
         OrderQuantityRow: {
@@ -55442,6 +55490,46 @@ export interface operations {
             };
         };
     };
+    order_purchase_details_shop_orders_purchase_details_get: {
+        parameters: {
+            query?: {
+                activity_id?: string | null;
+                category_id?: string | null;
+                product_id?: string | null;
+                grade?: number | null;
+                class_id?: string | null;
+                user_id?: string | null;
+                status?: components["schemas"]["OrderStatus"] | null;
+                is_paid?: boolean | null;
+                date_from?: string | null;
+                date_to?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderPurchaseDetailRow"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     order_quantities_shop_orders_quantities_get: {
         parameters: {
             query?: {
@@ -55450,6 +55538,7 @@ export interface operations {
                 class_id?: string | null;
                 category_id?: string | null;
                 product_id?: string | null;
+                user_id?: string | null;
                 is_paid?: boolean | null;
                 status?: components["schemas"]["OrderStatus"] | null;
                 date_from?: string | null;

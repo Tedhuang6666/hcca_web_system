@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Printer } from "lucide-react";
 import { classApi, shopApi, apiErrorMessage } from "@/lib/api";
 import { Field, MiniBtn } from "@/components/shop/admin/ShopAdminFormFields";
 import { listProductChoices } from "@/lib/shop-admin-data";
 import type { OrderDistributionRow, ProductOut, SchoolClassListItem } from "@/lib/types";
+import printStyles from "./admin/ShopPrintDocument.module.css";
 
 type Props = { refreshKey: number };
 
@@ -184,6 +186,15 @@ export default function ShopDistributionView({ refreshKey }: Props) {
           重新整理
         </button>
         {hasFilters && <MiniBtn onClick={resetFilters}>清除篩選</MiniBtn>}
+        <button
+          type="button"
+          className="btn btn-ghost min-h-11"
+          disabled={loading || Boolean(error) || rows.length === 0}
+          onClick={() => window.print()}
+        >
+          <Printer size={16} aria-hidden="true" />
+          列印分貨統計
+        </button>
         {!loading && !error && rows.length > 0 && (
           <p className="ml-auto min-h-11 self-center text-sm tabular-nums text-fg-secondary!">
             {totalQuantity.toLocaleString("zh-TW")} 件
@@ -291,6 +302,47 @@ export default function ShopDistributionView({ refreshKey }: Props) {
           </section>
         );
       })}
+      {!loading && !error && productGroups.length > 0 && (
+        <div aria-hidden="true" className={`${printStyles.printRoot} ${printStyles.printOnly}`}>
+          <header className={printStyles.header}>
+            <h2>商品分貨統計</h2>
+            <p>篩選範圍：{[
+              products.find((product) => product.id === productId)?.name || "全部商品",
+              classes.find((schoolClass) => schoolClass.id === classId)?.label || "全部班級",
+            ].join(" · ")}</p>
+          </header>
+          {productGroups.map(({ id: productGroupId, rows: productRows }) => {
+            const productTotal = productRows.reduce((total, row) => total + row.qty_total, 0);
+            return (
+              <section key={productGroupId} className={printStyles.section}>
+                <div className={printStyles.sectionHeading}>
+                  <h3>{productRows[0].product_name}</h3>
+                  <p>{productTotal.toLocaleString("zh-TW")} 件</p>
+                </div>
+                <table className={`${printStyles.table} ${printStyles.distributionTable}`}>
+                  <thead>
+                    <tr>
+                      <th scope="col">班級</th>
+                      <th scope="col">尺寸／規格</th>
+                      <th scope="col">數量</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {productRows.map((row, index) => (
+                      <tr key={`${row.class_id ?? "unassigned"}:${row.variant_key}:${index}`}>
+                        <td>{row.class_label}</td>
+                        <td>{row.variant_key}</td>
+                        <td>{row.qty_total.toLocaleString("zh-TW")}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </section>
+            );
+          })}
+          <p className={printStyles.grandTotal}>全部商品合計：{totalQuantity.toLocaleString("zh-TW")} 件</p>
+        </div>
+      )}
     </section>
   );
 }

@@ -442,6 +442,7 @@ export type {
   ShopSheetRowOut,
   ShopSheetSyncOut,
   OrderPaymentUpdate,
+  OrderPurchaseDetailRow,
   OrderQuantityRow,
   OrderDistributionRow,
   OrderStatus,

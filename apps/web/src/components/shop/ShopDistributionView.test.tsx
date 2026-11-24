@@ -79,6 +79,16 @@ describe("ShopDistributionView", () => {
     }));
   });
 
+  it("列印目前的班級與規格分貨數量", async () => {
+    const print = vi.spyOn(window, "print").mockImplementation(() => undefined);
+    render(<ShopDistributionView refreshKey={0} />);
+
+    expect(await screen.findByRole("columnheader", { name: "尺寸:M" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "列印分貨統計" }));
+
+    expect(print).toHaveBeenCalledOnce();
+  });
+
   it("顯示空資料，載入失敗後可以重試", async () => {
     api.orderDistribution.mockRejectedValueOnce(new Error("offline"))
       .mockResolvedValueOnce([]);
