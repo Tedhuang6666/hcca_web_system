@@ -148,7 +148,7 @@ def _class_sheet(pages: list[ClassSheetPage], scope: str) -> str:
         ]
         sections.append(
             "<section class='class-sheet'>"
-            f"<h1>（{_escape(scope)}） 班級訂購明細</h1>"
+            f"<h1>{_escape(scope)}班級訂購明細</h1>"
             f"<p class='class-info'><span class='class-code'>"
             f"{_escape(page.class_code or page.class_label)}</span>"
             f"{_escape(_class_heading(page))}</p>"
@@ -207,7 +207,7 @@ def _class_totals(pages: list[ClassTotalsPage], scope: str) -> str:
                 row_class = "product-last" if index == len(product_lines) - 1 else "variant-row"
                 rows.append(f"<tr class='{row_class}'>{''.join(cells)}</tr>")
 
-        title = f"{_class_heading(page)} （{scope}）班級明細"
+        title = f"{_class_heading(page)} {scope}班級明細"
         sections.append(
             "<section class='class-total-sheet'>"
             f"<h1>{_escape(title)}</h1>"
