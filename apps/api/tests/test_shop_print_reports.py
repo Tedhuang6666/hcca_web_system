@@ -126,6 +126,6 @@ def test_class_totals_title_keeps_class_and_topic_without_filter_metadata() -> N
     pdf = render_order_report_pdf("class-totals", [page], "聖誕傳情")
     text = "\n".join(page.extract_text() or "" for page in PdfReader(BytesIO(pdf)).pages)
 
-    assert "115 學年度 1 年 1 班 （聖誕傳情）班級明細" in text
+    assert "115 學年度 1 年 1 班 聖誕傳情班級明細" in text
     assert "全部收款狀態" not in text
     assert re.search(r"列印時間：\d{4}/\d{2}/\d{2} \d{2}:\d{2}", text)
