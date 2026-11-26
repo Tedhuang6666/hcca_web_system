@@ -30,6 +30,7 @@ async def quantity_data(db_session, admin_user, authed_client_factory):
     shirt = Product(
         name="上衣",
         price=300,
+        sort_order=1,
         unit_cost=100,
         procurement_stock=12,
         category_id=category.id,
@@ -40,6 +41,7 @@ async def quantity_data(db_session, admin_user, authed_client_factory):
     bag = Product(
         name="背包",
         price=600,
+        sort_order=2,
         unit_cost=400,
         procurement_stock=7,
         category_id=category.id,
@@ -50,6 +52,7 @@ async def quantity_data(db_session, admin_user, authed_client_factory):
     unused = Product(
         name="=未售商品",
         price=1,
+        sort_order=0,
         unit_cost=None,
         category_id=category.id,
         created_by=admin_user.id,
