@@ -208,7 +208,11 @@ async def _variant_option_sort_orders(
     if not option_ids:
         return {}
     rows = await session.execute(
-        select(ProductVariantOption.id, ProductVariantGroup.sort_order, ProductVariantOption.sort_order)
+        select(
+            ProductVariantOption.id,
+            ProductVariantGroup.sort_order,
+            ProductVariantOption.sort_order,
+        )
         .join(ProductVariantGroup, ProductVariantGroup.id == ProductVariantOption.group_id)
         .where(ProductVariantOption.id.in_(option_ids))
     )
