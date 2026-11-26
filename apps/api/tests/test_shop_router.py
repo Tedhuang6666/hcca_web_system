@@ -19,6 +19,7 @@ from api.models.org import Org, Permission, Position, UserPosition
 from api.models.outbox import OutboxEvent
 from api.models.person import Person, PersonAffiliationKind
 from api.models.receivable import Receivable, ReceivableSource
+from api.models.school_class import ClassRosterEntry
 from api.models.shop import (
     Order,
     OrderItem,
@@ -1284,6 +1285,7 @@ async def test_shop_activity_options_only_include_accessible_active_activities(
     assert (await client.get("/shop/activities")).status_code == 401
     member_client = authed_client_factory(member_user)
     assert (await member_client.get("/shop/activities")).json() == []
+    assert (await member_client.get("/shop/activities?include_inactive=true")).status_code == 403
 
     db_session.add(
         ActivityConvener(
@@ -1303,6 +1305,13 @@ async def test_shop_activity_options_only_include_accessible_active_activities(
     assert {row["id"] for row in manager_activities.json()} == {
         str(first.id),
         str(second.id),
+    }
+    all_activities = await member_client.get("/shop/activities?include_inactive=true")
+    assert all_activities.status_code == 200
+    assert {row["id"] for row in all_activities.json()} == {
+        str(first.id),
+        str(second.id),
+        str(archived.id),
     }
 
 
@@ -4365,7 +4374,15 @@ async def test_order_purchase_details_requires_permission_and_groups_items(
     product = await _make_active_product(db_session, member_user, price=10)
     class_a = await _make_class(db_session)
     class_b = await _make_class(db_session)
-    buyer = await _bare_user(db_session)
+    buyer = await _bare_user(db_session, student_id="11599001")
+    db_session.add_all(
+        [
+            ClassRosterEntry(
+                class_id=class_a.id, seat_number=3, student_id=buyer.student_id, user_id=buyer.id
+            ),
+            ClassRosterEntry(class_id=class_b.id, seat_number=8, student_id=buyer.student_id),
+        ]
+    )
 
     order_a = await _seed_order(db_session, buyer, class_id=class_a.id)
     repeat_order = await _seed_order(db_session, buyer, class_id=class_a.id)
@@ -4417,8 +4434,7 @@ async def test_order_purchase_details_requires_permission_and_groups_items(
     assert response.status_code == 200, response.text
     rows = response.json()
     quantities = {
-        (row["class_id"], row["variant_key"]): (row["quantity"], row["order_count"])
-        for row in rows
+        (row["class_id"], row["variant_key"]): (row["quantity"], row["order_count"]) for row in rows
     }
     assert quantities == {
         (str(class_a.id), "尺寸：M"): (3, 2),
@@ -4426,15 +4442,17 @@ async def test_order_purchase_details_requires_permission_and_groups_items(
         (str(class_b.id), "尺寸：M"): (3, 1),
     }
     assert all(row["user_id"] == str(buyer.id) for row in rows)
+    assert {row["class_id"]: row["seat_number"] for row in rows} == {
+        str(class_a.id): 3,
+        str(class_b.id): 8,
+    }
     assert next(row for row in rows if row["class_id"] == str(class_a.id))["class_label"] == (
         class_svc.class_display_label(class_a)
     )
 
     filtered = await manager.get(path, params={"class_id": str(class_b.id)})
     assert filtered.status_code == 200
-    assert {(row["class_id"], row["quantity"]) for row in filtered.json()} == {
-        (str(class_b.id), 3)
-    }
+    assert {(row["class_id"], row["quantity"]) for row in filtered.json()} == {(str(class_b.id), 3)}
 
 
 async def test_order_quantities_requires_permission(member_user, authed_client_factory) -> None:

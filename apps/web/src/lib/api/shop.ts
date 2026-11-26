@@ -291,7 +291,7 @@ export const shopApi = {
   },
 
   // 分類管理（shop:manage）
-  listActivities: () => get<ActivityOut[]>("/shop/activities"),
+  listActivities: (includeInactive = false) => get<ActivityOut[]>(`/shop/activities${includeInactive ? "?include_inactive=true" : ""}`),
   listCategories: (params?: Record<string, string>) => {
     const qs = params ? "?" + new URLSearchParams(params).toString() : "";
     return get<ProductCategoryOut[]>(`/shop/categories${qs}`);

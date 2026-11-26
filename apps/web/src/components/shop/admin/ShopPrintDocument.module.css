@@ -119,10 +119,53 @@
   text-align: right !important;
 }
 
+.classSheet + .classSheet {
+  margin-top: 2rem;
+}
+
+.classSheet h3 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.classSheetTable th,
+.classSheetTable td {
+  text-align: left !important;
+}
+
+.classSheetTable th:first-child,
+.classSheetTable td:first-child {
+  width: 12%;
+}
+
+.classSheetTable th:nth-child(2),
+.classSheetTable td:nth-child(2) {
+  width: 22%;
+}
+
 @media print {
   @page {
     size: A4 landscape;
     margin: 12mm;
+  }
+
+  @page classOrders {
+    size: A4 portrait;
+    margin: 15mm;
+  }
+
+  .classSheets {
+    page: classOrders;
+  }
+
+  .classSheets > .header {
+    display: none;
+  }
+
+  .classSheet + .classSheet {
+    break-before: page;
+    margin-top: 0;
   }
 
   body:has(.printRoot) {
@@ -133,8 +176,8 @@
     visibility: hidden !important;
   }
 
-  .printRoot,
-  .printRoot * {
+  body:has(.printRoot) .printRoot,
+  body:has(.printRoot) .printRoot * {
     visibility: visible !important;
   }
 

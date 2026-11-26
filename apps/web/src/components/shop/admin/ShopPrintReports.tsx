@@ -11,6 +11,7 @@ import type {
 } from "@/lib/types";
 
 import styles from "./ShopPrintDocument.module.css";
+import { classOrderPages, createClassOrderDocument } from "./class-order-document";
 
 export type ShopPurchaseReportFilters = {
   activity_id?: string;
@@ -25,23 +26,41 @@ export type ShopPurchaseReportFilters = {
   date_to?: string;
 };
 
-type ReportType = "classes" | "people" | "council";
+type ReportType = "classes" | "people" | "council" | "class-sheet";
 
 type ReportData =
   | { type: "classes"; result: OrderSummaryOut }
   | { type: "people"; result: OrderPurchaseDetailRow[] }
+  | { type: "class-sheet"; result: OrderPurchaseDetailRow[] }
   | { type: "council"; result: OrderQuantityRow[] };
 
 const REPORTS: { id: ReportType; label: string }[] = [
   { id: "classes", label: "各班總數統計" },
   { id: "people", label: "各班個人購買明細" },
+  { id: "class-sheet", label: "班級訂購明細" },
   { id: "council", label: "班聯商品尺寸總表" },
 ];
 
 const number = (value: number) => value.toLocaleString("zh-TW");
 const money = (value: number) => `NT$${number(value)}`;
 
-function ReportTable({ data }: { data: ReportData }) {
+function ReportTable({ data, scope }: { data: ReportData; scope: string }) {
+  if (data.type === "class-sheet") {
+    const pages = classOrderPages(data.result);
+    if (!pages.length) return <p className={styles.empty}>目前沒有符合篩選的訂購明細。</p>;
+    return <div>{pages.map((page) => (
+      <section className={styles.classSheet} key={page.key}>
+        <h3>{scope} 數量明細 - {page.label}</h3>
+        <table className={`${styles.table} ${styles.classSheetTable}`}>
+          <thead><tr><th scope="col">座號</th><th scope="col">姓名</th><th scope="col">訂購數量</th></tr></thead>
+          <tbody>{page.buyers.map((buyer) => <tr key={buyer.key}>
+            <td>{buyer.seat ?? ""}</td><th scope="row">{buyer.name}</th>
+            <td>{buyer.items.map((item, index) => <div key={`${item}:${index}`}>{item}</div>)}</td>
+          </tr>)}</tbody>
+        </table>
+      </section>
+    ))}</div>;
+  }
   if (data.type === "classes") {
     const itemTotal = data.result.rows.reduce((total, row) => total + row.item_count, 0);
     const orderTotal = data.result.rows.reduce((total, row) => total + row.order_count, 0);
@@ -240,9 +259,9 @@ export default function ShopPrintReports({
         .then((result) => { if (active) setReportData({ type: "classes", result }); })
         .catch(fail)
         .finally(finish);
-    } else if (reportType === "people") {
+    } else if (reportType === "people" || reportType === "class-sheet") {
       void shopApi.purchaseDetails(filters)
-        .then((result) => { if (active) setReportData({ type: "people", result }); })
+        .then((result) => { if (active) setReportData({ type: reportType, result }); })
         .catch(fail)
         .finally(finish);
     } else {
@@ -279,6 +298,17 @@ export default function ShopPrintReports({
             <Printer size={16} aria-hidden="true" />
             列印報表
           </button>
+          {reportData?.type === "class-sheet" && reportData.result.length > 0 && (
+            <button type="button" className="btn btn-ghost min-h-11 w-full sm:w-auto" onClick={() => {
+              const bytes = createClassOrderDocument(classOrderPages(reportData.result), scope);
+              const url = URL.createObjectURL(new Blob([new Uint8Array(bytes).buffer], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }));
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = "班級訂購明細.docx";
+              link.click();
+              window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+            }}>下載 Word</button>
+          )}
         </div>
         <p className="text-sm text-fg-secondary!">報表範圍：{scope}</p>
       </div>
@@ -293,12 +323,12 @@ export default function ShopPrintReports({
         </div>
       )}
       {!loading && reportData && (
-        <section className={styles.printRoot} aria-label={reportLabel}>
+        <section className={`${styles.printRoot} ${reportData.type === "class-sheet" ? styles.classSheets : ""}`} aria-label={reportLabel}>
           <header className={styles.header}>
             <h2>{reportLabel}</h2>
             <p>報表範圍：{scope}</p>
           </header>
-          <ReportTable data={reportData} />
+          <ReportTable data={reportData} scope={scope} />
         </section>
       )}
     </section>

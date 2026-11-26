@@ -22214,6 +22214,8 @@ export interface components {
             product_name: string;
             /** Quantity */
             quantity: number;
+            /** Seat Number */
+            seat_number?: number | null;
             /** User Id */
             user_id: string | null;
             /** Variant Key */
@@ -54011,7 +54013,9 @@ export interface operations {
     };
     list_shop_activities_shop_activities_get: {
         parameters: {
-            query?: never;
+            query?: {
+                include_inactive?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -54025,6 +54029,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

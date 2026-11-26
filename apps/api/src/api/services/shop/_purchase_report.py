@@ -5,6 +5,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.models.school_class import ClassRosterEntry
 from api.models.shop import Order, OrderItem, OrderStatus, Product, ProductSeries
 from api.schemas.shop import OrderPurchaseDetailRow
 from api.services import school_class as class_svc
@@ -68,12 +69,31 @@ async def purchase_details_report(
         statement = statement.where(Order.created_at <= date_to)
 
     orders = (await session.execute(statement)).scalars().unique().all()
+    class_ids = {order.class_id for order in orders if order.class_id is not None}
+    roster = (
+        (
+            await session.execute(
+                select(ClassRosterEntry).where(ClassRosterEntry.class_id.in_(class_ids))
+            )
+        )
+        .scalars()
+        .all()
+        if class_ids
+        else []
+    )
+    seats_by_user = {
+        (entry.class_id, entry.user_id): entry.seat_number for entry in roster if entry.user_id
+    }
+    seats_by_student = {(entry.class_id, entry.student_id): entry.seat_number for entry in roster}
     grouped: dict[tuple[uuid.UUID | None, str, uuid.UUID, str], dict] = {}
     for order in orders:
         school_class = order.school_class
         class_label = class_svc.class_display_label(school_class) or "未分班"
         buyer_label = order.buyer_name or (order.user.display_name if order.user else "組織訂購人")
         buyer_key = str(order.user_id) if order.user_id else f"external:{order.id}"
+        seat_number = seats_by_user.get((order.class_id, order.user_id))
+        if seat_number is None and order.user and order.user.student_id:
+            seat_number = seats_by_student.get((order.class_id, order.user.student_id))
 
         for item in order.items:
             product = item.product
@@ -106,6 +126,7 @@ async def purchase_details_report(
                     "class_label": class_label,
                     "grade": school_class.grade if school_class else None,
                     "class_code": school_class.class_code if school_class else "",
+                    "seat_number": seat_number,
                     "user_id": order.user_id,
                     "buyer_label": buyer_label,
                     "product_id": item.product_id,

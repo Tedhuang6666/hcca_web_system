@@ -1021,6 +1021,7 @@ class OrderPurchaseDetailRow(BaseModel):
     class_label: str
     grade: int | None = None
     class_code: str = ""
+    seat_number: int | None = None
     user_id: uuid.UUID | None
     buyer_label: str
     product_id: uuid.UUID

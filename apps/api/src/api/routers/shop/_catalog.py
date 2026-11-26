@@ -73,10 +73,15 @@ async def list_categories(
 
 
 @router.get("/activities", response_model=list[ActivityOut], summary="列出可供商品分類使用的活動")
-async def list_shop_activities(session: DbDep, current_user: CurrentUser) -> list[ActivityOut]:
+async def list_shop_activities(
+    session: DbDep, current_user: CurrentUser, include_inactive: bool = Query(False)
+) -> list[ActivityOut]:
     permission_codes = await get_user_permission_codes(session, current_user.id)
-    if any(str(code) in permission_codes for code in _ADMIN_VIEW_CODES):
-        activities = await activity_svc.list_activities(session, active_only=True)
+    can_view_all = any(str(code) in permission_codes for code in _ADMIN_VIEW_CODES)
+    if include_inactive and not can_view_all:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="沒有權限檢視封存活動")
+    if can_view_all:
+        activities = await activity_svc.list_activities(session, active_only=not include_inactive)
     else:
         activities = await activity_svc.list_user_convener_activities(
             session, current_user.id, active_only=True

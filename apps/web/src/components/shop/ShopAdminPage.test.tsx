@@ -205,44 +205,43 @@ describe("商品管理與統計", () => {
   it("keeps the newest activity result when earlier requests finish last", async () => {
     await openStats();
     let resolveOld!: (value: ReturnType<typeof summary>) => void;
-    api.orderSummary.mockImplementation((params: { category_id?: string }) => params.category_id === "shirts"
+    api.orderSummary.mockImplementation((params: { activity_id?: string }) => params.activity_id === "festival"
       ? new Promise((resolve) => { resolveOld = resolve; })
       : Promise.resolve(summary("冬季班級")));
-    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "shirts" } });
-    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "cards" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "festival" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "winter" } });
     await screen.findAllByText("冬季班級");
     await act(async () => resolveOld(summary("過期班級")));
     expect(screen.queryByText("過期班級")).not.toBeInTheDocument();
     expect(screen.getByText(/統計範圍：冬季活動/)).toBeVisible();
   });
 
-  it("活動選單列出每個活動，並用活動 ID 篩選直屬與系列商品", async () => {
+  it("以活動篩選報表及商品主題", async () => {
     api.listProducts.mockResolvedValue([
       { id: "shirt", name: "紀念衫", category_id: "shirts" },
       { id: "bag", name: "紀念袋", category_id: null, series_id: "bag-series" },
+      { id: "card", name: "卡片", category_id: "cards" },
     ]);
     api.listSeries.mockResolvedValue([{ id: "bag-series", category_id: "bags" }]);
     await openStats();
     const select = screen.getByRole("combobox", { name: "活動" });
-    expect(select).toContainElement(screen.getByRole("option", { name: "袋子" }));
-    expect(select).toContainElement(screen.getByRole("option", { name: "一般活動" }));
-    expect(api.listActivities).not.toHaveBeenCalled();
-    fireEvent.change(select, { target: { value: "shirts" } });
-    await waitFor(() => expect(api.orderSummary).toHaveBeenLastCalledWith(expect.objectContaining({ category_id: "shirts" })));
-    expect(api.orderSummary.mock.lastCall?.[0]).not.toHaveProperty("activity_id");
+    expect(select).toContainElement(screen.getByRole("option", { name: "冬季活動" }));
+    fireEvent.change(select, { target: { value: "festival" } });
+    await waitFor(() => expect(api.orderSummary).toHaveBeenLastCalledWith(expect.objectContaining({ activity_id: "festival" })));
     fireEvent.click(screen.getByRole("button", { name: "更多篩選" }));
     expect(screen.getByRole("option", { name: "紀念衫" })).toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: "紀念袋" })).not.toBeInTheDocument();
-    fireEvent.change(select, { target: { value: "bags" } });
-    await waitFor(() => expect(api.orderSummary).toHaveBeenLastCalledWith(expect.objectContaining({ category_id: "bags" })));
     expect(screen.getByRole("option", { name: "紀念袋" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "卡片" })).not.toBeInTheDocument();
+    fireEvent.change(select, { target: { value: "winter" } });
+    await waitFor(() => expect(api.orderSummary).toHaveBeenLastCalledWith(expect.objectContaining({ activity_id: "winter" })));
+    expect(screen.getByRole("option", { name: "卡片" })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "紀念衫" })).not.toBeInTheDocument();
   });
 
   it("retries failed statistics and clears the activity together with other filters", async () => {
     await openStats();
     api.orderSummary.mockRejectedValueOnce(new Error("offline"));
-    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "shirts" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "festival" } });
     expect(await screen.findByRole("alert")).toHaveTextContent("統計載入失敗");
     fireEvent.click(screen.getByRole("button", { name: "重新載入統計" }));
     await screen.findAllByText("初始班級");

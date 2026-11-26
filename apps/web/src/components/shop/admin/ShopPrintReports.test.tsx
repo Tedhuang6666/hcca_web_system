@@ -81,6 +81,11 @@ describe("ShopPrintReports", () => {
     expect(await screen.findByText("林同學")).toBeVisible();
     expect(api.purchaseDetails).toHaveBeenCalledWith(filters);
 
+    fireEvent.change(reportType, { target: { value: "class-sheet" } });
+    expect(await screen.findByRole("heading", { name: /商品活動.*高一一班/ })).toBeVisible();
+    expect(screen.getByText("班服帽踢（尺寸：M） × 2")).toBeVisible();
+    expect(screen.getByRole("button", { name: "下載 Word" })).toBeEnabled();
+
     fireEvent.change(reportType, { target: { value: "council" } });
     expect(await screen.findByRole("heading", { name: "班聯商品尺寸總表" })).toBeVisible();
     expect(await screen.findByText("班服帽踢")).toBeVisible();
