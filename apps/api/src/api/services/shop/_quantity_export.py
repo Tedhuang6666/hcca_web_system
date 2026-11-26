@@ -18,7 +18,6 @@ from api.models.shop import (
     Order,
     OrderStatus,
     Product,
-    ProductSeries,
     ProductStatus,
     ProductVariantGroup,
 )
@@ -188,7 +187,6 @@ def render_quantity_excel(products: list[Product], orders: list[Order]) -> bytes
 async def export_quantity_excel(
     session: AsyncSession,
     *,
-    activity_id: uuid.UUID | None = None,
     grade: int | None = None,
     class_id: uuid.UUID | None = None,
     category_id: uuid.UUID | None = None,
@@ -200,7 +198,6 @@ async def export_quantity_excel(
 ) -> bytes:
     orders = await load_quantity_orders(
         session,
-        activity_id=activity_id,
         grade=grade,
         class_id=class_id,
         category_id=category_id,
@@ -242,12 +239,5 @@ async def export_quantity_excel(
         query = query.where(Product.id == product_id)
     if category_id is not None:
         query = query.where(_product_category_filter(category_id))
-    if activity_id is not None:
-        query = query.where(
-            or_(
-                Product.category.has(activity_id=activity_id),
-                Product.series.has(ProductSeries.category.has(activity_id=activity_id)),
-            )
-        )
     products = list((await session.scalars(query.order_by(*product_catalog_ordering()))).unique())
     return await asyncio.to_thread(render_quantity_excel, products, orders)

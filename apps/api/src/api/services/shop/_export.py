@@ -16,7 +16,7 @@ from api.services.shop._ordering import product_catalog_ordering
 
 async def _fetch_order_report_rows(
     session: AsyncSession,
-    activity_id: uuid.UUID | None = None,
+    category_id: uuid.UUID | None = None,
 ) -> list[dict]:
     q = (
         select(
@@ -37,13 +37,11 @@ async def _fetch_order_report_rows(
         .where(Order.test_product_id.is_(None))
         .order_by(Order.created_at.desc(), *product_catalog_ordering())
     )
-    if activity_id:
+    if category_id:
         q = q.where(
             or_(
-                Product.category.has(ProductCategory.activity_id == activity_id),
-                Product.series.has(
-                    ProductSeries.category.has(ProductCategory.activity_id == activity_id)
-                ),
+                Product.category.has(ProductCategory.id == category_id),
+                Product.series.has(ProductSeries.category.has(ProductCategory.id == category_id)),
             )
         )
 
@@ -69,11 +67,11 @@ async def _fetch_order_report_rows(
 
 async def export_orders_excel(
     session: AsyncSession,
-    activity_id: uuid.UUID | None = None,
+    category_id: uuid.UUID | None = None,
 ) -> bytes:
     import pandas as pd
 
-    rows = await _fetch_order_report_rows(session, activity_id=activity_id)
+    rows = await _fetch_order_report_rows(session, category_id=category_id)
     columns = [
         "訂單字號",
         "訂購人",
@@ -104,10 +102,10 @@ async def export_orders_excel(
 
 async def export_orders_csv(
     session: AsyncSession,
-    activity_id: uuid.UUID | None = None,
+    category_id: uuid.UUID | None = None,
 ) -> str:
     import pandas as pd
 
-    rows = await _fetch_order_report_rows(session, activity_id=activity_id)
+    rows = await _fetch_order_report_rows(session, category_id=category_id)
     df = pd.DataFrame([safe_mapping(row) for row in rows]) if rows else pd.DataFrame()
     return df.to_csv(index=False, encoding="utf-8-sig")

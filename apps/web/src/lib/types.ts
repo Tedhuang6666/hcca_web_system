@@ -45,7 +45,6 @@ export type {
   ShopSalesInsight,
   ShopSalesReportCreate,
   AccessBlockStatus,
-  ActivityOut,
   AddSinglePosition,
   AdminDashboardStats,
   AnalyticsInsightsOut,
@@ -747,8 +746,6 @@ export type {
   ShopClassSummaryOut,
   ShopDiscountType,
   ShopOrderCloseCreate,
-  ShopActivityDeadlineUpdate,
-  ShopActivityOrderClosureUpdate,
   ShopOrderCloseOut,
   ShopOrdersClearOut,
   ShopPromotionCreate,
@@ -1165,7 +1162,6 @@ export interface PersonDirectoryStats {
 /** 全文搜尋結果：RegulationListItem 加上命中的條文 */
 
 
-// ── 活動系統 ──────────────────────────────────────────────────────────────────
 
 
 // ── 跨模組工作流 ──────────────────────────────────────────────────────────────

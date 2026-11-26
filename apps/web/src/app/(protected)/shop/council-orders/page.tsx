@@ -9,7 +9,7 @@ import ShopProfitAnalysis from "@/components/shop/ShopProfitAnalysis";
 import AdminAssistedOrder from "@/components/shop/AdminAssistedOrder";
 import SupplementOrders from "@/components/shop/SupplementOrders";
 import SeparateOrderButton from "@/components/shop/SeparateOrderButton";
-import ActivityOrderClosure from "@/components/shop/ActivityOrderClosure";
+import CategoryOrderClosure from "@/components/shop/CategoryOrderClosure";
 import ClassPaymentWorkspace from "@/components/shop/ClassPaymentWorkspace";
 import CouncilClassOrders from "@/components/shop/CouncilClassOrders";
 import { OrderStatusBadge } from "@/components/ui/StatusBadge";
@@ -31,7 +31,6 @@ import Modal from "@/components/ui/Modal";
 import NumberInput from "@/components/ui/NumberInput";
 import { buildPaymentReminderDraft, type PaymentReminderKind } from "./paymentReminderDraft";
 import type {
-  ActivityOut,
   CatalogCategoryOut,
   ClassPaymentReportItemOut,
   CloseStatusItem,
@@ -114,7 +113,6 @@ export default function CouncilOrdersPage() {
   const [grade, setGrade] = useState("");
   const [classId, setClassId] = useState("");
   const [categoryId, setCategoryId] = useState("");
-  const [paymentScope, setPaymentScope] = useState<{ key: string; label: string } | null>(null);
   const [receiptCategoryId, setReceiptCategoryId] = useState("");
   const [productId, setProductId] = useState("");
   const [isPaid, setIsPaid] = useState("");
@@ -131,10 +129,8 @@ export default function CouncilOrdersPage() {
 
   // 資料
   const [catalog, setCatalog] = useState<CatalogCategoryOut[]>([]);
-  const [activities, setActivities] = useState<ActivityOut[]>([]);
   const [classes, setClasses] = useState<SchoolClassListItem[]>([]);
   const [summary, setSummary] = useState<OrderSummaryOut | null>(null);
-  const [summaryScopeKey, setSummaryScopeKey] = useState<string | null>(null);
   const [classPayments, setClassPayments] = useState<ClassPaymentReportItemOut[]>([]);
   const [classPaymentsLoading, setClassPaymentsLoading] = useState(true);
   const [classPaymentsError, setClassPaymentsError] = useState("");
@@ -177,12 +173,10 @@ export default function CouncilOrdersPage() {
     Promise.all([
       shopApi.catalog(undefined, true),
       classApi.recipientOptions(),
-      shopApi.listActivities(),
-    ]).then(([nextCatalog, nextClasses, nextActivities]) => {
+    ]).then(([nextCatalog, nextClasses]) => {
       if (cancelled) return;
       setCatalog(nextCatalog);
       setClasses(nextClasses);
-      setActivities(nextActivities);
     }).catch(() => { if (!cancelled) setOptionsError(true); })
       .finally(() => { if (!cancelled) setOptionsLoading(false); });
     return () => { cancelled = true; };
@@ -209,38 +203,14 @@ export default function CouncilOrdersPage() {
     }
   }, []);
 
-  const activityGroups = useMemo(() => {
-    type ActivityGroup = {
-      key: string;
-      activityId: string | null;
-      label: string;
-      categories: CatalogCategoryOut[];
-    };
-    const groups = new Map<string, ActivityGroup>();
-    for (const activity of activities) {
-      groups.set(activity.id, {
-        key: activity.id,
-        activityId: activity.id,
-        label: activity.name,
-        categories: [],
-      });
-    }
-    for (const category of catalog) {
-      const key = category.activity_id ?? "__general__";
-      const group = groups.get(key) ?? {
-        key,
-        activityId: category.activity_id ?? null,
-        label: category.activity_id ? "" : "一般商品",
-        categories: [],
-      };
-      group.categories.push(category);
-      group.label = category.activity_id
-        ? [...new Set([...group.label.split("、").filter(Boolean), category.activity_name ?? category.name])].join("、")
-        : group.label;
-      groups.set(key, group);
-    }
-    return [...groups.values()];
-  }, [activities, catalog]);
+  const categoryGroups = useMemo(() => {
+    return catalog.map((category) => ({
+      key: category.id,
+      categoryId: category.id,
+      label: category.name,
+      categories: [category],
+    }));
+  }, [catalog]);
 
   const collectionDateRangeInvalid = Boolean(
     collectionDateFrom && collectionDateTo && collectionDateFrom > collectionDateTo,
@@ -279,10 +249,6 @@ export default function CouncilOrdersPage() {
   const collectionClassCount = new Set(visibleClassPayments.map((payment) => payment.class_id)).size;
   const loadSummary = useCallback(async (options?: LoadSummaryOptions) => {
     const version = ++requestVersion.current;
-    if (tab === "summary" && canConfirmClassPayment && !paymentScope) {
-      setSummary(null); setLoading(false); setLoadError("");
-      return;
-    }
     setLoading(true);
     setLoadError("");
     try {
@@ -292,21 +258,16 @@ export default function CouncilOrdersPage() {
       if (isPaid) params.is_paid = isPaid;
       if (productId) params.product_id = productId;
       if (categoryId) params.category_id = categoryId;
-      if (tab === "summary" && canConfirmClassPayment && paymentScope) {
-        if (paymentScope.key.startsWith("category:")) params.category_id = paymentScope.key.slice(9);
-        else { delete params.category_id; params.activity_id = paymentScope.key; }
-      }
       if (statusFilter) params.status = statusFilter;
       const data = await shopApi.orderSummary(params);
       if (version !== requestVersion.current) return;
       setSummary(data);
-      setSummaryScopeKey(tab === "summary" ? paymentScope?.key ?? null : null);
 
       // 結單狀態只依班級與分類變化；短時間快取，避免切換分頁或篩選時重複查詢。
       if (groupBy === "class" && data.rows.length && catalog.length) {
         const catIds = catalog.map((c) => c.id);
         const catalogKey = catalog
-          .map((category) => `${category.id}:${category.activity_id ?? ""}`)
+          .map((category) => category.id)
           .sort()
           .join("|");
         const { byClass, classIdsToRefresh } = planClassStatusRefresh(
@@ -346,7 +307,7 @@ export default function CouncilOrdersPage() {
     } finally {
       if (version === requestVersion.current) setLoading(false);
     }
-  }, [groupBy, grade, classId, isPaid, productId, categoryId, statusFilter, catalog, dateParams, tab, canConfirmClassPayment, paymentScope]);
+  }, [groupBy, grade, classId, isPaid, productId, categoryId, statusFilter, catalog, dateParams]);
 
   const loadQuantities = useCallback(async () => {
     const version = ++requestVersion.current;
@@ -431,10 +392,6 @@ export default function CouncilOrdersPage() {
         if (classId) params.class_id = classId;
         if (productId) params.product_id = productId;
         if (categoryId) params.category_id = categoryId;
-        if (tab === "summary" && paymentScope) {
-          if (paymentScope.key.startsWith("category:")) params.category_id = paymentScope.key.slice(9);
-          else { delete params.category_id; params.activity_id = paymentScope.key; }
-        }
         if (statusFilter === "pending" || statusFilter === "confirmed") params.status = statusFilter;
         if (search.trim()) params.search = search.trim();
         if (dateParams.date_from) params.date_from = dateParams.date_from;
@@ -471,7 +428,7 @@ export default function CouncilOrdersPage() {
             orderCount: 0,
             orderDetails: [],
           };
-          const itemLabel = order.activity_name ?? order.category_name ?? "商品訂單";
+          const itemLabel = order.category_name ?? "商品訂單";
           recipient.amount += order.total_price;
           recipient.orderCount += 1;
           recipient.orderDetails.push(
@@ -498,10 +455,6 @@ export default function CouncilOrdersPage() {
         if (classId) params.class_id = classId;
         if (productId) params.product_id = productId;
         if (categoryId) params.category_id = categoryId;
-        if (tab === "summary" && paymentScope) {
-          if (paymentScope.key.startsWith("category:")) params.category_id = paymentScope.key.slice(9);
-          else { delete params.category_id; params.activity_id = paymentScope.key; }
-        }
         if (statusFilter === "pending" || statusFilter === "confirmed") params.status = statusFilter;
 
         const [summaryResult, representativeTargets]: [
@@ -684,9 +637,9 @@ export default function CouncilOrdersPage() {
   const analyticsCategory = selectedCategory ?? catalog[0];
   const analyticsProductId = allProducts.some((product) => product.id === productId
     && product.catId === analyticsCategory?.id) ? productId : "";
-  const visibleActivityGroups = activityGroups.filter((group) => !categoryId
+  const visibleCategoryGroups = categoryGroups.filter((group) => !categoryId
     || group.categories.some((category) => category.id === categoryId));
-  const actionActivityGroups = !categoryId ? [] : visibleActivityGroups.map((group) => ({
+  const actionCategoryGroups = !categoryId ? [] : visibleCategoryGroups.map((group) => ({
     ...group, label: selectedCategory?.name ?? group.label,
     categories: group.categories.filter((category) => category.id === categoryId),
   }));
@@ -694,7 +647,7 @@ export default function CouncilOrdersPage() {
   const receiptRows = summary?.rows.filter((row) => row.key !== "none") ?? [];
   const allReceiptRowsSelected = receiptRows.length > 0
     && receiptRows.every((row) => selectedReceiptClasses.has(row.key));
-  const visibleCategoryIds = new Set(visibleActivityGroups.flatMap((group) => group.categories.map((category) => category.id)));
+  const visibleCategoryIds = new Set(visibleCategoryGroups.flatMap((group) => group.categories.map((category) => category.id)));
   const hasFilters = Boolean(grade || classId || categoryId || productId || isPaid || classCollectedFilter || statusFilter || dateFrom || dateTo || (tab === "orders" && search));
   const resetFilters = () => {
     setGrade(""); setClassId(""); setCategoryId(""); setProductId("");
@@ -703,8 +656,8 @@ export default function CouncilOrdersPage() {
     setSelectedReceiptClasses(new Set());
   };
   const scopeLabels = [
-    (tab === "summary" && canConfirmClassPayment ? paymentScope?.label ?? "請先選擇活動"
-      : tab === "analytics" ? analyticsCategory?.name : selectedCategory?.name) ?? "全部活動",
+    (tab === "summary" && canConfirmClassPayment ? "全部商品"
+      : tab === "analytics" ? analyticsCategory?.name : selectedCategory?.name) ?? "全部商品分類",
     grade && `${grade} 年級`,
     classes.find((item) => item.id === classId)?.label,
     allProducts.find((item) => item.id === (tab === "analytics" ? analyticsProductId : productId))?.name,
@@ -751,7 +704,7 @@ export default function CouncilOrdersPage() {
 
       <div id="council-work-panel" role="group" aria-labelledby={`council-task-${tab}`} className="min-w-0 space-y-5">
       {canConfirmClassPayment && <div hidden={tab !== "closure"}>
-        <ActivityOrderClosure categories={catalog} disabled={mutationBusy || optionsLoading}
+        <CategoryOrderClosure categories={catalog} disabled={mutationBusy || optionsLoading}
           onSaved={() => { closeStatusCache.current = null; setOptionsRetry((value) => value + 1); }} />
       </div>}
       {canConfirmClassPayment && <div hidden={tab !== "assisted"}>
@@ -771,15 +724,15 @@ export default function CouncilOrdersPage() {
         <legend className="sr-only">篩選訂單</legend>
         <div className="flex flex-wrap items-end gap-3">
           {!(tab === "summary" && canConfirmClassPayment) && <label className="grid gap-1 text-sm">
-            <span className="text-fg-muted!">{tab === "analytics" ? "分析活動" : "活動"}</span>
+            <span className="text-fg-muted!">{tab === "analytics" ? "分析商品分類" : "商品分類"}</span>
             <select className="input" value={tab === "analytics" ? analyticsCategory?.id ?? "" : categoryId} onChange={(e) => {
               setCategoryId(e.target.value);
               setProductId("");
               setReceiptCategoryId(e.target.value);
               setSelectedReceiptClasses(new Set());
             }}>
-              {tab !== "analytics" && <option value="">全部活動</option>}
-              {tab === "analytics" && !catalog.length && <option value="">尚無可分析的活動</option>}
+              {tab !== "analytics" && <option value="">全部分類</option>}
+              {tab === "analytics" && !catalog.length && <option value="">尚無可分析的分類</option>}
               {catalog.map((category) => (
                 <option key={category.id} value={category.id}>{category.name}</option>
               ))}
@@ -827,7 +780,7 @@ export default function CouncilOrdersPage() {
           </label>}
           {hasFilters && <button type="button" className="btn btn-ghost" onClick={resetFilters}>清除篩選</button>}
         </div>
-        {optionsError && <div role="alert" className="text-sm text-danger!">活動與班級選項載入失敗。<button type="button" className="btn btn-ghost" onClick={() => setOptionsRetry((value) => value + 1)}>重新載入選項</button></div>}
+        {optionsError && <div role="alert" className="text-sm text-danger!">商品分類與班級選項載入失敗。<button type="button" className="btn btn-ghost" onClick={() => setOptionsRetry((value) => value + 1)}>重新載入選項</button></div>}
       {/* 篩選列 */}
       <details>
         <summary className="min-h-11 cursor-pointer font-medium">更多篩選：班級、商品、收款與日期</summary>
@@ -860,9 +813,8 @@ export default function CouncilOrdersPage() {
               <span className="text-fg-muted!">商品</span>
               <select className="input" value={productId} onChange={(e) => setProductId(e.target.value)}>
                 <option value="">全部商品</option>
-                {allProducts.filter((p) => visibleCategoryIds.has(p.catId) && (!categoryId || p.catId === categoryId)
-                  && (tab !== "summary" || !canConfirmClassPayment || catalog.some((category) => category.id === p.catId
-                    && (category.activity_id ?? `category:${category.id}`) === paymentScope?.key))).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {allProducts.filter((p) => visibleCategoryIds.has(p.catId) && (!categoryId || p.catId === categoryId))
+                  .map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
           </label>}
           <label className="grid gap-1 text-sm">
@@ -920,10 +872,9 @@ export default function CouncilOrdersPage() {
         ...(dateTo ? { date_to: dateTo } : {}),
       }} />}
       {tab === "analytics" && !analyticsCategory && <p role="status" className="p-4 text-fg-secondary!">
-        {optionsLoading ? "正在載入分析活動…" : optionsError ? "請先重新載入活動，再查看銷售分析。" : "尚無可分析的活動。"}
+        {optionsLoading ? "正在載入分析商品分類…" : optionsError ? "請先重新載入分類，再查看銷售分析。" : "尚無可分析的商品分類。"}
       </p>}
       {tab === "summary" && canConfirmClassPayment && <ClassPaymentWorkspace
-        catalog={catalog} activities={activities} optionsLoading={optionsLoading} optionsError={optionsError}
         filters={{
           grade: grade || undefined,
           class_id: classId || undefined,
@@ -932,14 +883,9 @@ export default function CouncilOrdersPage() {
           is_paid: isPaid || undefined,
           ...dateParams,
         }}
-        selectedScopeKey={paymentScope?.key ?? null} onScopeChange={(scope) => {
-          requestVersion.current += 1;
-          setPaymentScope(scope); setSummary(null); setLoading(true);
-          setCategoryId(""); setProductId(""); setSelectedReceiptClasses(new Set());
-        }}
         refreshKey={supplementRefresh} disabled={mutationBusy} onBusyChange={setPaymentBusy}
         onChanged={() => { setSupplementRefresh((value) => value + 1); void loadSummary({ refreshCloseStatus: true }); void loadClassPayments(); }}
-        onViewClass={(id, label, scope) => setClassDetail({ id, label, source: "collection", scope })}
+        onViewClass={(id, label) => setClassDetail({ id, label, source: "collection" })}
       />}
       {classDetail && <CouncilClassOrders key={classDetail.id} target={classDetail} catalog={catalog} classes={classes}
         canOrder={canConfirmClassPayment} optionsLoading={optionsLoading} optionsError={optionsError}
@@ -1004,10 +950,10 @@ export default function CouncilOrdersPage() {
                     onChange={(event) => setCollectionDateTo(event.target.value)} />
                 </label>
                 <label className="grid min-w-48 gap-1 text-sm">
-                  <span className="text-fg-muted!">收款活動</span>
+                  <span className="text-fg-muted!">收款商品分類</span>
                   <select className="input min-h-11" value={collectionCategoryId}
                     onChange={(event) => setCollectionCategoryId(event.target.value)}>
-                    <option value="">全部活動</option>
+                    <option value="">全部分類</option>
                     {collectionTopics.map((topic) => (
                       <option key={topic.key} value={topic.key}>{topic.label}</option>
                     ))}
@@ -1079,7 +1025,7 @@ export default function CouncilOrdersPage() {
                       <table className="shop-mobile-table w-full min-w-[680px] text-sm" aria-label="收款明細">
                         <thead>
                           <tr className="border-b! border-b-border!">
-                            {["收款時間", "班級", "年級", "收款活動", "訂單數", "收款金額"].map((label) => (
+                            {["收款時間", "班級", "年級", "商品分類", "訂單數", "收款金額"].map((label) => (
                               <th key={label} scope="col" className="px-3 py-3 text-left text-xs font-semibold text-fg-muted!"
                                 >{label}</th>
                             ))}
@@ -1100,7 +1046,7 @@ export default function CouncilOrdersPage() {
                               <td data-label="年級" className="px-3 py-3 text-fg-secondary!">
                                 {payment.grade} 年級
                               </td>
-                              <td data-label="收款活動" className="px-3 py-3 text-fg-secondary!">
+                              <td data-label="商品分類" className="px-3 py-3 text-fg-secondary!">
                                 {payment.category_label ?? "未分類商品"}
                               </td>
                               <td data-label="訂單數" className="px-3 py-3 tabular-nums text-fg-secondary!">
@@ -1122,7 +1068,7 @@ export default function CouncilOrdersPage() {
       {hasOrderFilters && tab !== "analytics" && loadError && <p role="alert" className="p-4 text-danger!">{loadError}</p>}
       <div hidden={hasOrderFilters && tab !== "analytics" && Boolean(loadError)}>
       {/* Tab 1：班級彙總 */}
-      {showsSummary && (tab !== "summary" || !canConfirmClassPayment || (paymentScope && summaryScopeKey === paymentScope.key)) && (
+      {showsSummary && (
         <section>
           {tab === "summary" && summary && !loading && (
             <div className="mb-3 grid gap-3 sm:grid-cols-3">
@@ -1170,7 +1116,7 @@ export default function CouncilOrdersPage() {
                   收據範圍
                   <select
                     className="input min-h-11"
-                    aria-label="收據活動"
+                    aria-label="收據商品分類"
                     value={receiptCategoryId}
                     onChange={(event) => {
                       setReceiptCategoryId(event.target.value);
@@ -1179,7 +1125,7 @@ export default function CouncilOrdersPage() {
                       setSelectedReceiptClasses(new Set());
                     }}
                   >
-                    <option value="">請選擇活動</option>
+                    <option value="">請選擇商品分類</option>
                     {catalog.map((category) => (
                       <option key={category.id} value={category.id}>{category.name}</option>
                     ))}
@@ -1249,7 +1195,7 @@ export default function CouncilOrdersPage() {
             {loading ? (
               <div role="status" className="py-16 text-center text-sm text-fg-muted!">載入中...</div>
             ) : !summary?.rows.length ? (
-              <div role="status" className="py-16 text-center text-sm text-fg-muted!">目前範圍沒有資料，可清除篩選或改選其他活動。</div>
+              <div role="status" className="py-16 text-center text-sm text-fg-muted!">目前範圍沒有資料，可清除篩選或改選其他商品分類。</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="shop-mobile-table w-full min-w-[720px] text-sm" aria-label="班級訂購與收款彙總">
@@ -1271,7 +1217,7 @@ export default function CouncilOrdersPage() {
                           })}
                         />
                       </th>}
-                      {[groupBy === "class" ? "班級" : groupBy === "grade" ? "年級" : "學生", "訂單數", "訂購金額", "班聯已確認", "班聯未確認", ...(groupBy === "class" ? actionActivityGroups.map((group) => group.label + "訂購狀態") : [])].map((h, i) => (
+                      {[groupBy === "class" ? "班級" : groupBy === "grade" ? "年級" : "學生", "訂單數", "訂購金額", "班聯已確認", "班聯未確認", ...(groupBy === "class" ? actionCategoryGroups.map((group) => group.label + "訂購狀態") : [])].map((h, i) => (
                         <th key={i} className="px-4 py-3 text-left text-xs font-semibold text-fg-muted!">{h}</th>
                       ))}
                     </tr>
@@ -1297,7 +1243,7 @@ export default function CouncilOrdersPage() {
                           {groupBy === "class" && row.key !== "none" ? <button type="button"
                             className="min-h-11 text-left underline underline-offset-4" disabled={mutationBusy}
                             data-class-orders-id={row.key} data-class-orders-source="summary"
-                            aria-label={`查看${row.label}訂購明細`} onClick={() => setClassDetail({ id: row.key, label: row.label, source: "summary", scope: tab === "summary" ? paymentScope ?? undefined : undefined })}>
+                            aria-label={`查看${row.label}訂購明細`} onClick={() => setClassDetail({ id: row.key, label: row.label, source: "summary" })}>
                             {row.label}
                           </button> : row.label}
                         </td>
@@ -1305,7 +1251,7 @@ export default function CouncilOrdersPage() {
                         <td data-label="應繳" className="px-4 py-3 text-xs">{money(row.total_amount)}</td>
                         <td data-label="班聯已確認" className="px-4 py-3 text-xs text-success!">{money(row.paid_amount)}</td>
                         <td data-label="班聯未確認" className="px-4 py-3 text-xs text-danger!">{money(row.unpaid_amount)}</td>
-                        {groupBy === "class" && actionActivityGroups.map((group) => {
+                        {groupBy === "class" && actionCategoryGroups.map((group) => {
                           const statuses = group.categories.map((category) => closeStatus[row.key]?.[category.id]);
                           const closedCount = statuses.filter((item) => item?.is_closed).length;
                           return (
@@ -1354,7 +1300,7 @@ export default function CouncilOrdersPage() {
             {loading ? (
               <div role="status" className="py-16 text-center text-sm text-fg-muted!">載入中...</div>
             ) : !quantities.length ? (
-              <div role="status" className="py-16 text-center text-sm text-fg-muted!">目前範圍沒有資料，可清除篩選或改選其他活動。</div>
+              <div role="status" className="py-16 text-center text-sm text-fg-muted!">目前範圍沒有資料，可清除篩選或改選其他商品分類。</div>
             ) : (
               <ProductQuantitySummary rows={quantities} />
             )}

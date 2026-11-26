@@ -3,8 +3,6 @@
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from api.core.clock import local_today
-from api.models.activity import Activity, ActivityConvener
 from api.models.shop import ProductStatus
 from api.schemas.shop import ProductCategoryCreate
 from api.services import shop as shop_svc
@@ -105,28 +103,3 @@ async def test_cost_can_be_updated_in_every_status_without_changing_status_or_st
     assert result.json()["status"] == product_status.value
     assert result.json()["stock_quantity"] == stock
     assert (await admin.get(f"/shop/products/{product.id}/cost")).json() == {"unit_cost": 75}
-
-
-async def test_activity_manager_cannot_read_or_change_another_activity_cost(
-    cost_product, db_session, make_user, authed_client_factory
-):
-    admin, product = cost_product
-    category = await shop_svc.get_category(db_session, product.category_id)
-    own, other = Activity(name="自身活動"), Activity(name="其他活動")
-    manager = await make_user()
-    db_session.add_all([own, other])
-    await db_session.flush()
-    category.activity_id = own.id
-    db_session.add(
-        ActivityConvener(activity_id=own.id, user_id=manager.id, start_date=local_today())
-    )
-    await db_session.flush()
-    scoped = authed_client_factory(manager)
-    path = f"/shop/products/{product.id}"
-    assert (await scoped.get(f"{path}/cost")).json() == {"unit_cost": 60}
-    assert (await scoped.patch(path, json={"unit_cost": 50})).status_code == 200
-    category.activity_id = other.id
-    await db_session.flush()
-    assert (await scoped.get(f"{path}/cost")).status_code == 403
-    assert (await scoped.patch(path, json={"unit_cost": 1})).status_code == 403
-    assert (await admin.get(f"{path}/cost")).json() == {"unit_cost": 50}

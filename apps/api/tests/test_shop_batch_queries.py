@@ -6,7 +6,6 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import event
 
-from api.models.activity import Activity
 from api.models.school_class import SchoolClass
 from api.models.shop import (
     Order,
@@ -27,7 +26,7 @@ from api.services.shop import _orders, _promotion_orders, _supplements
 async def test_refresh_gift_promotions_batches_eligibility_queries(
     db_session, order_batch, order_count, record_property
 ):
-    _, _, _, _, orders, _ = order_batch
+    _, _, _, _, orders = order_batch
     promotion = await db_session.get(ShopPromotion, orders[0].applied_promotions[0].promotion_id)
     promotion.used_count = order_count
     await shop_svc.update_promotion(
@@ -40,7 +39,7 @@ async def test_refresh_gift_promotions_batches_eligibility_queries(
             discount_value=100,
         ),
     )
-    loaded = await _promotion_orders.lock_promotion_orders(db_session, activity_ids=None)
+    loaded = await _promotion_orders.lock_promotion_orders(db_session)
     statements = []
 
     def count_select(conn, cursor, statement, parameters, context, executemany):
@@ -77,15 +76,8 @@ async def order_batch(db_session, make_user, order_count):
     db_session.add_all([*classes, promotion])
     await db_session.flush()
     orders = []
-    activity_ids = set()
     for index in range(order_count):
-        activity = Activity(name=f"活動{index}")
-        db_session.add(activity)
-        await db_session.flush()
-        activity_ids.add(activity.id)
-        category = ProductCategory(
-            name=f"主題{index}", activity_id=activity.id, created_by=actor.id
-        )
+        category = ProductCategory(name=f"主題{index}", created_by=actor.id)
         db_session.add(category)
         await db_session.flush()
         series = ProductSeries(name=f"系列{index}", category_id=category.id)
@@ -106,7 +98,6 @@ async def order_batch(db_session, make_user, order_count):
             user_id=buyer.id,
             class_id=classes[0].id,
             assisted_by_id=actor.id,
-            activity_id=activity.id if index != order_count - 1 else None,
             category_id=category.id if index != order_count - 1 else None,
             subtotal_price=100,
             total_price=90,
@@ -118,7 +109,7 @@ async def order_batch(db_session, make_user, order_count):
         db_session.add(order)
         orders.append(order)
     await db_session.flush()
-    return buyer, actor, outsider, classes, orders, activity_ids
+    return buyer, actor, outsider, classes, orders
 
 
 @pytest.mark.parametrize("order_count", [1, 24])
@@ -126,7 +117,7 @@ async def order_batch(db_session, make_user, order_count):
 async def test_order_lists_have_bounded_queries(
     db_session, order_batch, order_count, listing, record_property
 ):
-    buyer, actor, _, classes, seeded, activity_ids = order_batch
+    buyer, actor, _, classes, seeded = order_batch
     buyer_id, actor_id, class_id = buyer.id, actor.id, classes[0].id
     if listing == "supplements":
         for order in seeded:
@@ -156,9 +147,7 @@ async def test_order_lists_have_bounded_queries(
                 db_session, actor_id=actor_id, class_ids={class_id}, limit=100, offset=0
             )
         else:
-            orders = await _promotion_orders.lock_promotion_orders(
-                db_session, activity_ids=activity_ids
-            )
+            orders = await _promotion_orders.lock_promotion_orders(db_session)
         payloads = [shop_svc.serialize_order(order) for order in orders]
         assert all(order.user.display_name for order in orders)
     finally:
@@ -168,10 +157,10 @@ async def test_order_lists_have_bounded_queries(
     record_property("query_count", len(statements))
     # 含優惠預設預載入的四種目標資料；完整關聯的批次數不應逐筆增加。
     assert len(statements) <= 16, f"{listing}: {order_count} orders used {len(statements)} queries"
-    for payload in payloads:
-        assert payload.category_id is None
-        assert payload.category_name is None
-        assert payload.activity_id in activity_ids
+    for payload, order in zip(payloads, orders, strict=True):
+        product = order.items[0].product
+        category = product.category or (product.series.category if product.series else None)
+        assert payload.category_id == (category.id if category else None)
         assert payload.items[0].product_name.startswith("商品")
         assert payload.applied_promotions[0].name == "批次優惠"
     assert any("FOR UPDATE" in statement for statement in statements) == (
@@ -183,7 +172,7 @@ async def test_order_lists_have_bounded_queries(
 async def test_registration_batches_preserve_user_class_and_testing_filters(
     db_session, order_batch
 ):
-    buyer, _, outsider, classes, orders, _ = order_batch
+    buyer, _, outsider, classes, orders = order_batch
     orders[0].status = OrderStatus.CANCELLED
     orders[1].status = OrderStatus.REFUNDED
     orders[2].test_product_id = orders[2].items[0].product_id
@@ -208,7 +197,7 @@ async def test_registration_batches_preserve_user_class_and_testing_filters(
 async def test_supplement_batches_preserve_actor_class_scope_and_pagination(
     db_session, order_batch
 ):
-    _, actor, outsider, classes, orders, _ = order_batch
+    _, actor, outsider, classes, orders = order_batch
     for index, order in enumerate(orders):
         order.class_id = None
         order.supplement_class_id = classes[index % 2].id
@@ -232,19 +221,16 @@ async def test_supplement_batches_preserve_actor_class_scope_and_pagination(
 
 
 @pytest.mark.parametrize("order_count", [24])
-async def test_promotion_batches_preserve_payment_status_and_legacy_activity_filters(
+async def test_promotion_batches_preserve_payment_status_and_category_scopes(
     db_session, order_batch
 ):
-    _, _, _, _, orders, activity_ids = order_batch
+    _, _, _, _, orders = order_batch
     orders[0].status = OrderStatus.CANCELLED
     orders[1].status = OrderStatus.REFUNDED
     orders[2].is_paid = True
     orders[3].is_class_collected = True
     orders[4].test_product_id = orders[4].items[0].product_id
-    excluded_activity_id = orders[5].activity_id
     await db_session.flush()
 
-    selected = await _promotion_orders.lock_promotion_orders(
-        db_session, activity_ids=activity_ids - {excluded_activity_id}
-    )
-    assert [order.id for order in selected] == [order.id for order in orders[6:]]
+    selected = await _promotion_orders.lock_promotion_orders(db_session)
+    assert [order.id for order in selected] == [order.id for order in orders[5:]]

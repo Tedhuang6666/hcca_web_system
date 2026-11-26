@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import enum
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
@@ -31,7 +31,6 @@ from api.models.school_class import ClassConsolidationMixin
 from api.models.types import JSONDict
 
 if TYPE_CHECKING:
-    from api.models.activity import Activity
     from api.models.school_class import SchoolClass
     from api.models.user import User
 
@@ -39,18 +38,8 @@ if TYPE_CHECKING:
 # ── 狀態枚舉 ──────────────────────────────────────────────────────────────────
 
 
-def effective_product_deadline(
-    sale_end: datetime | None, activity_end: datetime | None
-) -> datetime | None:
-    deadlines = [value for value in (sale_end, activity_end) if value is not None]
-    return (
-        min(
-            deadlines,
-            key=lambda value: value.replace(tzinfo=UTC) if value.tzinfo is None else value,
-        )
-        if deadlines
-        else None
-    )
+def effective_product_deadline(sale_end: datetime | None) -> datetime | None:
+    return sale_end
 
 
 class ProductStatus(enum.StrEnum):
@@ -84,12 +73,6 @@ class ProductCategory(Base, TimestampMixin):
     __tablename__ = "product_categories"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    activity_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("activities.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -101,7 +84,6 @@ class ProductCategory(Base, TimestampMixin):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True
     )
 
-    activity: Mapped[Activity | None] = relationship("Activity")
     series: Mapped[list[ProductSeries]] = relationship(
         "ProductSeries", back_populates="category", cascade="all, delete-orphan"
     )
@@ -281,12 +263,8 @@ class Product(Base, TimestampMixin):
 
     @property
     def effective_sale_end(self) -> datetime | None:
-        """單品可提前截止，不能晚於班聯統一期限。"""
-        category = self.category
-        if category is None and self.series is not None:
-            category = self.series.category
-        activity_end = category.activity.order_closes_at if category and category.activity else None
-        return effective_product_deadline(self.sale_end, activity_end)
+        """商品可依單品截止時間停止訂購。"""
+        return effective_product_deadline(self.sale_end)
 
 
 class ProductMedia(Base):
@@ -459,13 +437,7 @@ class Order(Base, TimestampMixin, ClassConsolidationMixin):
         nullable=True,
         index=True,
     )
-    activity_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("activities.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-    # 未綁活動的分類仍各自成單；保留快照供清空／取消後歸類。
+    # 保留商品分類快照，供清空／取消後歸類。
     category_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("product_categories.id", ondelete="SET NULL"),
@@ -510,7 +482,7 @@ class Order(Base, TimestampMixin, ClassConsolidationMixin):
     received_amount: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )
-    # 班級尾款保留班級歸屬，補收款介面按班級與活動合併顯示。
+    # 班級尾款保留班級歸屬。
     is_class_balance: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )
@@ -531,7 +503,6 @@ class Order(Base, TimestampMixin, ClassConsolidationMixin):
     buyer_office: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     user: Mapped[User | None] = relationship("User", foreign_keys=[user_id])
-    activity: Mapped[Activity | None] = relationship("Activity")
     category: Mapped[ProductCategory | None] = relationship("ProductCategory")
     assisted_by: Mapped[User | None] = relationship("User", foreign_keys=[assisted_by_id])
     school_class: Mapped[SchoolClass | None] = relationship(
@@ -569,9 +540,6 @@ class ShopDelegationLink(Base, TimestampMixin):
     )
     category_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("product_categories.id", ondelete="RESTRICT")
-    )
-    activity_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("activities.id", ondelete="RESTRICT"), nullable=True
     )
     name: Mapped[str] = mapped_column(String(80))
     token_hash: Mapped[str] = mapped_column(String(64), unique=True)
@@ -770,14 +738,8 @@ class ShopPromotion(Base, TimestampMixin):
     __tablename__ = "shop_promotions"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    activity_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("activities.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
-    # null 保留舊活動範圍；空列表代表不限主題，非空列表限定商品主題。
+    # null 僅作為舊資料相容值；空列表代表不限商品分類，非空列表限定商品分類。
     target_category_ids: Mapped[list[str] | None] = mapped_column(
         JSON(none_as_null=True).with_variant(JSONB(none_as_null=True), "postgresql"),
         nullable=True,
@@ -815,7 +777,6 @@ class ShopPromotion(Base, TimestampMixin):
     )
 
     target_user: Mapped[User | None] = relationship("User", foreign_keys=[target_user_id])
-    activity: Mapped[Activity | None] = relationship("Activity")
     target_users: Mapped[list[User]] = relationship(
         "User", secondary=shop_promotion_users, lazy="selectin"
     )

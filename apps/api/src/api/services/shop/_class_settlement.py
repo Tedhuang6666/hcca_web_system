@@ -204,13 +204,7 @@ async def set_class_member_product(
                             item.product is not None and _product_order_scope(item.product) == scope
                             for item in candidate.items
                         )
-                        and (
-                            candidate.items
-                            or (
-                                candidate.activity_id == scope[0]
-                                and candidate.category_id == scope[1]
-                            )
-                        )
+                        and (candidate.items or candidate.category_id == scope)
                     ),
                     None,
                 )
@@ -218,8 +212,7 @@ async def set_class_member_product(
                     order = Order(
                         serial_number=await generate_order_serial(session),
                         user_id=user.id,
-                        activity_id=scope[0],
-                        category_id=scope[1],
+                        category_id=scope,
                         class_id=class_id,
                         status=OrderStatus.PENDING,
                         payment_method="school_collection"
@@ -275,8 +268,6 @@ async def set_class_paid(
     *,
     is_paid: bool,
     actor_id: uuid.UUID,
-    activity_id: uuid.UUID | None,
-    category_id: uuid.UUID | None = None,
     received_amount: int | None = None,
     expected_unpaid_amount: int | None = None,
 ) -> list[Order]:
@@ -284,12 +275,6 @@ async def set_class_paid(
         raise ValueError("撤銷收款時不可提供實收金額")
     if received_amount is not None and expected_unpaid_amount is None:
         raise ValueError("請重新核對班級待收金額")
-    if category_id is not None:
-        category = await session.get(ProductCategory, category_id)
-        if category is None:
-            raise ValueError("找不到此活動")
-        if activity_id is not None or category.activity_id is not None:
-            raise ValueError("此活動保留共用收款設定，請依完整範圍收款")
     await session.execute(
         select(SchoolClass.id).where(SchoolClass.id == class_id).with_for_update()
     )
@@ -297,25 +282,15 @@ async def set_class_paid(
         select(ShopClassPayment)
         .where(
             ShopClassPayment.class_id == class_id,
-            ShopClassPayment.activity_id == activity_id,
         )
         .execution_options(populate_existing=True)
     )
-    activity_filter = (
-        Order.activity_id.is_(None) if activity_id is None else Order.activity_id == activity_id
-    )
-    scope_filters = [activity_filter]
-    if category_id is not None:
-        from api.services.shop._receipts import _receipt_order_scope
-
-        scope_filters.append(_receipt_order_scope(None, category_id))
     orders = list(
         (
             await session.execute(
                 select(Order)
                 .where(
                     Order.class_id == class_id,
-                    *scope_filters,
                     Order.assistance_scope != "council_gift",
                     Order.test_product_id.is_(None),
                     Order.status.notin_([OrderStatus.CANCELLED, OrderStatus.REFUNDED]),
@@ -337,9 +312,9 @@ async def set_class_paid(
     if received_amount is not None and not 0 < received_amount <= unpaid:
         raise ValueError("本次實收金額必須大於零，且不可超過待收金額")
     if payment is None:
-        payment = ShopClassPayment(class_id=class_id, activity_id=activity_id)
+        payment = ShopClassPayment(class_id=class_id)
         session.add(payment)
-    if category_id is None and payment.is_paid != is_paid:
+    if payment.is_paid != is_paid:
         payment.is_paid = is_paid
         payment.confirmed_at = datetime.now(UTC) if is_paid else None
         payment.confirmed_by_id = actor_id if is_paid else None
@@ -383,29 +358,6 @@ async def set_class_paid(
                 order.supplement_class_id = None
             if order.is_paid or order.received_amount:
                 await set_order_paid(session, order, is_paid=False, actor_id=actor_id)
-    if category_id is not None:
-        await session.flush()
-        # 一般商品共用舊收款紀錄；是否鎖定各活動仍由實際已繳訂單判斷。
-        # 撤銷一個活動不能清掉其他活動的收款確認。
-        has_paid_orders = await session.scalar(
-            select(Order.id)
-            .where(
-                Order.class_id == class_id,
-                Order.activity_id.is_(None),
-                Order.test_product_id.is_(None),
-                (Order.is_paid.is_(True) | (Order.received_amount > 0)),
-                Order.status.notin_([OrderStatus.CANCELLED, OrderStatus.REFUNDED]),
-            )
-            .limit(1)
-        )
-        payment.is_paid = has_paid_orders is not None
-        if is_paid and (newly_paid_orders or received_amount):
-            payment.confirmed_at = datetime.now(UTC)
-            payment.confirmed_by_id = actor_id
-        elif not payment.is_paid:
-            payment.confirmed_at = None
-            payment.confirmed_by_id = None
-        await session.flush()
     await session.flush()
     if newly_paid_orders and not partial:
         from api.services.shop._class_payment_notifications import (
@@ -415,7 +367,6 @@ async def set_class_paid(
         await queue_class_payment_confirmation(
             session,
             class_id=class_id,
-            activity_id=activity_id,
             order_ids=[order.id for order in orders],
         )
     return orders
@@ -437,7 +388,7 @@ async def close_category_for_class(
     if category is None:
         raise ValueError("找不到此商品分類")
     if class_id is None and closes_at is not None:
-        raise ValueError("班聯統一截止時間請在活動設定調整")
+        raise ValueError("全域截止時間請使用商品分類設定")
     if class_id is not None and await session.get(SchoolClass, class_id) is None:
         raise ValueError("找不到此班級")
     now = datetime.now(UTC)

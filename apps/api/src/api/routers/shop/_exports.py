@@ -22,17 +22,17 @@ router = APIRouter()
 async def export_orders_excel(
     session: DbDep,
     current_user: CurrentUser,
-    activity_id: uuid.UUID | None = Query(None, description="過濾活動"),
+    category_id: uuid.UUID | None = Query(None, description="商品分類"),
 ) -> Response:
-    if activity_id:
-        await _require_shop_manager(session, current_user, activity_id)
+    if category_id:
+        await _require_shop_manager(session, current_user)
     elif not current_user.is_superuser:
         codes = await get_user_permission_codes(session, current_user.id)
         if not {str(PermissionCode.FINANCE_VIEW), str(PermissionCode.ADMIN_ALL)} & set(codes):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="需要權限：finance:view"
             )
-    xlsx_bytes = await shop_svc.export_orders_excel(session, activity_id=activity_id)
+    xlsx_bytes = await shop_svc.export_orders_excel(session, category_id=category_id)
     filename = f"orders_{local_today()}.xlsx"
     return Response(
         content=xlsx_bytes,
@@ -49,17 +49,17 @@ async def export_orders_excel(
 async def export_orders_csv(
     session: DbDep,
     current_user: CurrentUser,
-    activity_id: uuid.UUID | None = Query(None, description="過濾活動"),
+    category_id: uuid.UUID | None = Query(None, description="商品分類"),
 ) -> Response:
-    if activity_id:
-        await _require_shop_manager(session, current_user, activity_id)
+    if category_id:
+        await _require_shop_manager(session, current_user)
     elif not current_user.is_superuser:
         codes = await get_user_permission_codes(session, current_user.id)
         if not {str(PermissionCode.FINANCE_VIEW), str(PermissionCode.ADMIN_ALL)} & set(codes):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="需要權限：finance:view"
             )
-    csv_str = await shop_svc.export_orders_csv(session, activity_id=activity_id)
+    csv_str = await shop_svc.export_orders_csv(session, category_id=category_id)
     filename = f"orders_{local_today()}.csv"
     return Response(
         content=csv_str.encode("utf-8-sig"),

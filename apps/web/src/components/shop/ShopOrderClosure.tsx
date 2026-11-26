@@ -11,12 +11,11 @@ export function formatShopTimestamp(value: string | null | undefined) {
 
 export function resolveOrderClosureState(
   status: CloseStatusItem | undefined,
-  activityClosedAt: string | null,
-  activityClosesAt: string | null,
+  categoryClosedAt: string | null,
   now = Date.now(),
 ) {
-  const deadline = status?.closes_at ?? activityClosesAt;
-  const closedAt = activityClosedAt ?? (status?.is_global ? status.closed_at : null);
+  const deadline = status?.closes_at ?? null;
+  const closedAt = categoryClosedAt ?? (status?.is_global ? status.closed_at : null);
   const deadlinePassed = Boolean(deadline && new Date(deadline).getTime() <= now);
   const closedAtMatchesDeadline = Boolean(
     deadline && closedAt
@@ -24,7 +23,7 @@ export function resolveOrderClosureState(
   );
   const deadlineClosure = deadlinePassed && (!closedAt || closedAtMatchesDeadline);
   const councilClosed = Boolean(
-    (activityClosedAt || status?.is_global) && !deadlineClosure,
+    (categoryClosedAt || status?.is_global) && !deadlineClosure,
   );
   const classPaid = Boolean(status?.is_closed && !status.is_global);
   return {
@@ -39,14 +38,12 @@ export function resolveOrderClosureState(
 
 export function OrderClosureNotice({
   status,
-  activityClosedAt,
-  activityClosesAt,
+  categoryClosedAt,
 }: {
   status: CloseStatusItem | undefined;
-  activityClosedAt: string | null;
-  activityClosesAt: string | null;
+  categoryClosedAt: string | null;
 }) {
-  const closure = resolveOrderClosureState(status, activityClosedAt, activityClosesAt);
+  const closure = resolveOrderClosureState(status, categoryClosedAt);
   if (!closure.isClosed) return null;
 
   const collectionTime = formatShopTimestamp(status?.class_collected_at);
@@ -58,15 +55,15 @@ export function OrderClosureNotice({
     ? "班聯已結單"
     : closure.classPaid
       ? "班聯已確認本班收款"
-      : "活動已到統一結單時間";
+    : "商品分類已到結單時間";
   const description = closure.councilClosed
-    ? "活動商品已從公開目錄隱藏；此連結僅供查看商品與結單紀錄。"
+    ? "此分類商品已從公開目錄隱藏；此連結僅供查看商品與結單紀錄。"
     : closure.classPaid
-      ? "本班此活動的商品登記已暫停，其他班級與本班其他活動仍可訂購。"
-      : "活動商品已停止登記。";
+      ? "本班此分類的商品登記已暫停，其他班級仍可訂購。"
+      : "此分類商品已停止登記。";
 
   return (
-    <section className="shop-product-closed-note" aria-label="活動結單與收款狀態" role="status">
+    <section className="shop-product-closed-note" aria-label="商品分類結單與收款狀態" role="status">
       <div className="shop-product-closed-heading">
         <CircleAlert size={18} aria-hidden="true" />
         <div>
@@ -84,7 +81,7 @@ export function OrderClosureNotice({
           <dd>{confirmationTime ?? (status ? "尚未確認收款" : "目前無法確認班級紀錄")}</dd>
         </div>
         {closureTime && <div>
-          <dt>活動結單時間</dt>
+          <dt>結單時間</dt>
           <dd>{closureTime}</dd>
         </div>}
       </dl>

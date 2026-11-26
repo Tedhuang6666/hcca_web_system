@@ -83,10 +83,9 @@ from api.services.shop._order_writes import (
 )
 from api.services.shop._orders import (
     PurchaseLimitError,
-    _assert_activity_open,
     _options_delta,
     _options_signature,
-    _order_activity_id,
+    _order_category_id,
     _resolve_selected_options,
     get_order,
     list_orders,
@@ -185,8 +184,7 @@ __all__ = [
     "clear_all_orders",
     "_cart_item_availability",
     "serialize_cart",
-    "_assert_activity_open",
-    "_order_activity_id",
+    "_order_category_id",
     "_create_order_from_items",
     "_order_items_to_cart_items",
     "create_direct_order",

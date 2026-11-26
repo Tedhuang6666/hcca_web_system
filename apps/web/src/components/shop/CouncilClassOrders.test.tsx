@@ -17,7 +17,7 @@ const order = (changes: Partial<OrderListItem> = {}): OrderListItem => ({
   id: "order-1", serial_number: "ORD-001", user_id: "user-1", user_name: "測試同學甲", class_id: "class-1",
   assistance_scope: "self", discount_amount: 0, payment_method: "cash_on_pickup", subtotal_price: 200,
   status: "pending", total_price: 200, is_paid: false, is_class_collected: false, created_at: "2026-11-02T00:00:00Z",
-  activity_name: "校慶", items: [{ gift_quantity: 0, gift_discount_amount: 0, id: "item-1", product_id: "shirt", product_name: "紀念衫", quantity: 2,
+  category_name: "紀念品", items: [{ gift_quantity: 0, gift_discount_amount: 0, id: "item-1", product_id: "shirt", product_name: "紀念衫", quantity: 2,
     unit_price: 100, subtotal: 200, selected_options: [{ group_id: "size", group_name: "尺寸", option_id: "large", value: "L", price_delta: 0 }] }],
   ...changes,
 });
@@ -39,10 +39,10 @@ beforeEach(() => {
   api.createAdminAssistedOrder.mockResolvedValue([{ total_price: 100 }]);
 });
 
-it("從收款活動進入明細時，訂單、補收與合計僅包含該活動", async () => {
+it("從商品分類收款進入明細時，訂單、補收與合計僅包含該分類", async () => {
   api.listOrders.mockResolvedValue([
-    order({ category_id: "cat", activity_name: null, category_name: "紀念品" }),
-    order({ id: "other", category_id: "other", total_price: 900, activity_name: "另一活動" }),
+    order({ category_id: "cat", category_name: "紀念品" }),
+    order({ id: "other", category_id: "other", total_price: 900, category_name: "另一分類" }),
   ]);
   api.listSupplementOrders.mockResolvedValue([
     order({ id: "other-supplement", category_id: "other", class_id: null, supplement_class_id: "class-1", total_price: 900 }),
@@ -51,8 +51,8 @@ it("從收款活動進入明細時，訂單、補收與合計僅包含該活動"
     catalog={catalog} classes={[]} canOrder optionsLoading={false} optionsError={false}
     onRetryOptions={vi.fn()} onCreated={onCreated} onClose={onClose} />);
   expect(await screen.findByText("1 人已訂購 · 共 2 件 · 合計 NT$200")).toBeVisible();
-  expect(screen.queryByText(/另一活動/)).not.toBeInTheDocument();
-  expect(api.listOrders).toHaveBeenCalledWith(expect.objectContaining({ category_id: "cat", general_only: "true" }));
+  expect(screen.queryByText(/另一分類/)).not.toBeInTheDocument();
+  expect(api.listOrders).toHaveBeenCalledWith(expect.objectContaining({ category_id: "cat" }));
 });
 
 it("列出全班與未訂購者，合併品項數量、排除取消並標示本班補收", async () => {
@@ -63,7 +63,7 @@ it("列出全班與未訂購者，合併品項數量、排除取消並標示本�
   ]);
   render(view());
   const student = await screen.findByRole("listitem", { name: "測試同學甲的訂購明細" });
-  expect(within(student).getByText("校慶 · 紀念衫（尺寸：L） × 4")).toBeVisible();
+  expect(within(student).getByText("紀念品 · 紀念衫（尺寸：L） × 4")).toBeVisible();
   expect(within(student).getByText("獨立補收")).toBeVisible();
   expect(within(student).getByText("共 6 件 · 合計 NT$600 · 待繳 NT$400")).toBeVisible();
   expect(within(screen.getByRole("listitem", { name: "名冊同學乙的訂購明細" })).getByText("尚未訂購")).toBeVisible();

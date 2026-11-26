@@ -32,15 +32,12 @@ def _status_for_amounts(amount: int, paid: int, refunded: int) -> ReceivableStat
 async def list_receivables(
     db: AsyncSession,
     *,
-    activity_id: uuid.UUID | None = None,
     class_id: uuid.UUID | None = None,
     user_id: uuid.UUID | None = None,
     status: str | None = None,
     limit: int = 200,
 ) -> list[Receivable]:
     stmt = select(Receivable).order_by(Receivable.updated_at.desc()).limit(limit)
-    if activity_id:
-        stmt = stmt.where(Receivable.activity_id == activity_id)
     if class_id:
         stmt = stmt.where(Receivable.class_id == class_id)
     if user_id:
@@ -53,7 +50,6 @@ async def list_receivables(
 async def summary(
     db: AsyncSession,
     *,
-    activity_id: uuid.UUID | None = None,
     class_id: uuid.UUID | None = None,
 ) -> dict:
     stmt = select(
@@ -63,9 +59,6 @@ async def summary(
         func.coalesce(func.sum(Receivable.refunded_amount), 0),
     )
     status_stmt = select(Receivable.status, func.count(Receivable.id)).group_by(Receivable.status)
-    if activity_id:
-        stmt = stmt.where(Receivable.activity_id == activity_id)
-        status_stmt = status_stmt.where(Receivable.activity_id == activity_id)
     if class_id:
         stmt = stmt.where(Receivable.class_id == class_id)
         status_stmt = status_stmt.where(Receivable.class_id == class_id)

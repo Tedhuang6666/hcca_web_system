@@ -159,7 +159,7 @@ export default function AdminAssistedOrder({ catalog, classes, optionsError, opt
                 setProductId(event.target.value); setProduct(null); setOptions({}); setProductError(""); setQuantity(1);
               }}>
                 <option value="">請選擇商品</option>
-                {choices.map((p) => <option key={p.id} value={p.id}>{catalog.find((c) => c.id === p.categoryId)?.activity_name ?? "一般商品"} · {p.category} · {p.name}</option>)}
+                {choices.map((p) => <option key={p.id} value={p.id}>{catalog.find((c) => c.id === p.categoryId)?.name ?? "一般商品"} · {p.category} · {p.name}</option>)}
               </select>
             </label>
             <label className="grid gap-1 text-sm">數量

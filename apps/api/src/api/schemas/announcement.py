@@ -61,7 +61,6 @@ class AnnouncementCreate(BaseModel):
     link_label: str | None = Field(None, max_length=60, description="連結按鈕文字")
     show_on_every_visit: bool = Field(False, description="每次進入系統都顯示重要公告")
     org_id: uuid.UUID | None = Field(None, description="所屬組織（None=全站公告）")
-    activity_id: uuid.UUID | None = Field(None, description="所屬活動（選填）")
     audience_type: AnnouncementAudience = Field(
         AnnouncementAudience.ALL, description="公告對象（決定可見範圍）"
     )
@@ -85,7 +84,6 @@ class AnnouncementUpdate(BaseModel):
     link_label: str | None = Field(None, max_length=60)
     show_on_every_visit: bool | None = None
     is_published: bool | None = None
-    activity_id: uuid.UUID | None = None
     audience_type: AnnouncementAudience | None = None
     audience_org_ids: list[uuid.UUID] | None = None
     audience_user_ids: list[uuid.UUID] | None = None
@@ -108,7 +106,6 @@ class AnnouncementOut(BaseModel):
     is_published: bool
     published_at: datetime | None
     org_id: uuid.UUID | None
-    activity_id: uuid.UUID | None = None
     author_id: uuid.UUID
     author_name: str = ""
     created_at: datetime
@@ -129,7 +126,6 @@ class AnnouncementListItem(BaseModel):
     is_published: bool
     published_at: datetime | None
     org_id: uuid.UUID | None
-    activity_id: uuid.UUID | None = None
     author_id: uuid.UUID
     author_name: str = ""
     created_at: datetime

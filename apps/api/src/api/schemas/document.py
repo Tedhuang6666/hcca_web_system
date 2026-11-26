@@ -554,7 +554,6 @@ class DocumentOut(BaseModel):
     is_public: bool = False
     # 關聯
     org_id: uuid.UUID
-    activity_id: uuid.UUID | None = None
     petition_case_id: uuid.UUID | None = None
     petition_case: DocumentPetitionOut | None = None
     created_by: uuid.UUID
@@ -588,7 +587,6 @@ class DocumentListItem(BaseModel):
     summary: str | None = None
     status: DocumentStatus
     org_id: uuid.UUID
-    activity_id: uuid.UUID | None = None
     created_by: uuid.UUID
     issued_at: datetime | None = None
     due_date: datetime | None
@@ -628,7 +626,6 @@ class DocumentCreate(BaseModel):
     issuer_postal_code: str | None = Field(None, max_length=20, description="機關郵遞區號")
     issuer_address: str | None = Field(None, max_length=300, description="機關地址")
     org_id: uuid.UUID = Field(..., description="所屬組織 ID")
-    activity_id: uuid.UUID | None = Field(None, description="所屬活動 ID")
     petition_case_id: uuid.UUID | None = Field(
         None,
         description="關聯陳情案件 ID；正式列印與寄送時會將陳情原文附於文後",
@@ -787,7 +784,6 @@ class DocumentUpdate(BaseModel):
     due_date: datetime | None = None
     visibility_level: DocumentVisibility | None = None
     is_public: bool | None = None
-    activity_id: uuid.UUID | None = None
     page_info: str | None = Field(None, max_length=50)
     change_note: str | None = Field(None, max_length=500, description="修改備註（將記入版本歷程）")
     autosave: bool = Field(False, description="線上自動儲存；不建立版本快照")

@@ -11,7 +11,6 @@ from api.services.shop._ordering import product_catalog_positions
 async def order_distribution(
     session: AsyncSession,
     *,
-    activity_id: uuid.UUID | None = None,
     grade: int | None = None,
     class_id: uuid.UUID | None = None,
     category_id: uuid.UUID | None = None,
@@ -20,7 +19,6 @@ async def order_distribution(
     """回傳各班級的商品規格數量，供分貨核對使用。"""
     orders = await load_quantity_orders(
         session,
-        activity_id=activity_id,
         grade=grade,
         class_id=class_id,
         category_id=category_id,

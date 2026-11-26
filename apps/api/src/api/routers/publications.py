@@ -37,13 +37,10 @@ CurrentUser = Annotated[User, Depends(get_current_active_user)]
 async def list_publications(
     db: DbDep,
     _: CurrentUser,
-    activity_id: uuid.UUID | None = None,
     status_filter: str | None = Query(None, alias="status"),
     limit: int = Query(100, ge=1, le=200),
 ) -> list[PublicationCampaignOut]:
-    rows = await publication_svc.list_campaigns(
-        db, activity_id=activity_id, status=status_filter, limit=limit
-    )
+    rows = await publication_svc.list_campaigns(db, status=status_filter, limit=limit)
     return [PublicationCampaignOut.model_validate(row) for row in rows]
 
 

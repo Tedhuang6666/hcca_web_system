@@ -15,7 +15,6 @@ from api.schemas.shop import (
     ShopClassRepresentativeRecipientOut,
     ShopDelegatedOrderOut,
 )
-from api.services import activity as activity_svc
 from api.services import school_class as class_svc
 from api.services import shop as shop_svc
 from api.services.permission import get_user_permission_codes
@@ -29,7 +28,6 @@ router = APIRouter()
 async def list_orders(
     session: DbDep,
     current_user: CurrentUser,
-    activity_id: uuid.UUID | None = Query(None),
     status_filter: OrderStatus | None = Query(None, alias="status"),
     my_only: bool = Query(True, description="僅顯示我的訂單"),
     grade: int | None = Query(None, description="按年級篩選（需 SHOP_VIEW_ALL 權限）"),
@@ -48,12 +46,7 @@ async def list_orders(
         codes = await get_user_permission_codes(session, current_user.id)
         is_admin = bool(_ADMIN_VIEW_CODES & set(codes))
     if not my_only and not is_admin:
-        can_view_activity = bool(
-            activity_id
-            and await activity_svc.can_manage_activity_resource(session, current_user, activity_id)
-        )
-        if not can_view_activity:
-            my_only = True
+        my_only = True
 
     # grade/class_id 篩選只對管理員有效
     filter_grade = grade if is_admin else None
@@ -62,7 +55,6 @@ async def list_orders(
     orders = await shop_svc.list_orders(
         session,
         user_id=current_user.id if my_only else None,
-        activity_id=activity_id,
         status=status_filter,
         class_ids=filter_class_ids,
         grade=filter_grade,

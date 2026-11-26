@@ -25,7 +25,6 @@ export function ProductCard({
   offersLocked,
   onSelectBundle,
   bundleHint,
-  categoryDeadline,
   featured = false,
 }: {
   product: CatalogProductOut;
@@ -41,7 +40,6 @@ export function ProductCard({
   offersLocked: boolean;
   onSelectBundle: (promotion: ShopPromotionPublicOut) => void;
   bundleHint: string | null;
-  categoryDeadline: string | null;
   featured?: boolean;
 }) {
   const testing = product.status === "testing";
@@ -107,7 +105,7 @@ export function ProductCard({
           )}
         </div>
         {cardPrice.note && <p className="shop-public-product-deadline">{cardPrice.note}</p>}
-        {deadline && (!categoryDeadline || new Date(deadline).getTime() !== new Date(categoryDeadline).getTime()) && (
+        {deadline && (
           <p className="shop-public-product-deadline">
             截止 {new Date(deadline).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}
           </p>

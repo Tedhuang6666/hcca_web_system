@@ -8,7 +8,6 @@ import pytest
 from pypdf import PdfReader
 from sqlalchemy import func, select
 
-from api.models.activity import Activity, ActivityStatus
 from api.models.school_class import SchoolClass
 from api.models.shop import Order, OrderItem, OrderStatus, Product, ProductCategory, ProductSeries
 from api.models.shop_class_payment import ShopClassPayment
@@ -16,12 +15,11 @@ from api.models.shop_order_receipt_print import ShopOrderReceiptPrint
 from api.services.shop import _receipts
 
 
-@pytest.mark.parametrize("topics", [False, True], indirect=True)
 @pytest.mark.parametrize("selected", [False, True])
 async def test_class_confirmation_totals_specs_and_scope_without_recording_receipts(
     db_session, admin_user, authed_client_factory, topics, selected
 ):
-    school_class, activity, categories, products = topics
+    school_class, categories, products = topics
     other_class = SchoolClass(
         academic_year=115, class_code="102", label="一年二班", created_by=admin_user.id
     )
@@ -30,25 +28,19 @@ async def test_class_confirmation_totals_specs_and_scope_without_recording_recei
     orders = []
     for size, quantity, paid in [("L", 2, False), ("XL", 4, True)]:
         order = await _order(
-            db_session, admin_user, school_class, activity, [products[0]], total=quantity * 100
+            db_session, admin_user, school_class, [products[0]], total=quantity * 100
         )
         order.items[0].quantity = quantity
         order.items[0].selected_options = [{"group_name": "尺寸", "value": size}]
         order.is_paid = paid
         orders.append(order)
-    await _order(db_session, admin_user, other_class, activity, [products[0]], total=101)
-    await _order(db_session, admin_user, school_class, activity, [products[1]], total=202)
-    await _order(
-        db_session, admin_user, school_class, activity, [products[0]], total=101, supplement=True
-    )
+    await _order(db_session, admin_user, other_class, [products[0]], total=101)
+    await _order(db_session, admin_user, school_class, [products[1]], total=202)
+    await _order(db_session, admin_user, school_class, [products[0]], total=101, supplement=True)
     for state in [OrderStatus.CANCELLED, OrderStatus.REFUNDED]:
-        excluded = await _order(
-            db_session, admin_user, school_class, activity, [products[0]], total=101
-        )
+        excluded = await _order(db_session, admin_user, school_class, [products[0]], total=101)
         excluded.status = state
-    test_order = await _order(
-        db_session, admin_user, school_class, activity, [products[0]], total=101
-    )
+    test_order = await _order(db_session, admin_user, school_class, [products[0]], total=101)
     test_order.test_product_id = products[0].id
     await db_session.flush()
     payload = {"category_id": str(categories[0].id)}
@@ -94,7 +86,6 @@ async def test_class_confirmations_require_permission_and_report_invalid_scopes(
         await manager.post(
             path,
             json={
-                "activity_id": str(uuid.uuid4()),
                 "category_id": str(uuid.uuid4()),
             },
         )
@@ -102,12 +93,7 @@ async def test_class_confirmations_require_permission_and_report_invalid_scopes(
 
 
 @pytest.fixture
-async def topics(db_session, admin_user, request):
-    activity = None
-    if request.param:
-        activity = Activity(name="共同上層活動", status=ActivityStatus.ACTIVE)
-        db_session.add(activity)
-        await db_session.flush()
+async def topics(db_session, admin_user):
     school_class = SchoolClass(
         academic_year=115, class_code="101", label="一年一班", created_by=admin_user.id
     )
@@ -116,7 +102,6 @@ async def topics(db_session, admin_user, request):
         ProductCategory(
             id=uuid.UUID(f"aaaaaaaa-0000-0000-0000-{index + 1:012d}"),
             name=f"主題{index + 1}",
-            activity_id=activity.id if activity else None,
             created_by=admin_user.id,
         )
         for index in range(3)
@@ -138,16 +123,15 @@ async def topics(db_session, admin_user, request):
     ]
     db_session.add_all(products)
     await db_session.flush()
-    return school_class, activity, categories, products
+    return school_class, categories, products
 
 
-async def _order(db, buyer, school_class, activity, products, *, total, supplement=False):
+async def _order(db, buyer, school_class, products, *, total, supplement=False):
     order = Order(
         serial_number=f"ORD-TEST-{uuid.uuid4().hex[:8]}",
         user_id=buyer.id,
         class_id=school_class.id if school_class and not supplement else None,
         supplement_class_id=school_class.id if supplement else None,
-        activity_id=activity.id if activity else None,
         status=OrderStatus.PENDING,
         total_price=total,
         items=[
@@ -197,29 +181,26 @@ def _assert_separate_topics(content, amounts):
     assert seen == set(amounts)
 
 
-@pytest.mark.parametrize("topics", [False, True], indirect=True)
 @pytest.mark.parametrize("mode", ["single", "selected", "all_unpaid", "changed"])
-async def test_class_receipts_separate_topics_even_when_the_activity_matches(
+async def test_class_receipts_separate_topics_across_categories(
     db_session, admin_user, authed_client_factory, topics, mode
 ):
-    school_class, activity, categories, products = topics
+    school_class, categories, products = topics
     orders = []
     for index, product in enumerate(products):
         # 同主題的兩筆訂單仍合併為該班該主題的一份收據。
         for amount in (40, 60) if index == 0 else ((index + 1) * 100,):
-            order = await _order(
-                db_session, admin_user, school_class, activity, [product], total=amount
-            )
+            order = await _order(db_session, admin_user, school_class, [product], total=amount)
             # 同時覆蓋有主題快照與僅能從品項推導主題的歷史訂單。
             order.category_id = categories[index].id if index == 1 else None
             orders.append(order)
     await db_session.flush()
     client = authed_client_factory(admin_user)
-    scope = {"activity_id": str(activity.id) if activity else None}
+    scope = {}
     if mode == "single":
         response = await client.get(
             f"/shop/orders/classes/{school_class.id}/receipt.pdf",
-            params={"activity_id": str(activity.id)} if activity else {},
+            params={},
         )
     elif mode == "changed":
         response = await client.post("/shop/orders/receipts/changed.pdf", json=scope)
@@ -236,16 +217,15 @@ async def test_class_receipts_separate_topics_even_when_the_activity_matches(
         assert await db_session.get(ShopOrderReceiptPrint, order.id) is not None
 
 
-@pytest.mark.parametrize("topics", [False, True], indirect=True)
 @pytest.mark.parametrize("payment_state", [None, False, True])
 @pytest.mark.parametrize("category_only", [False, True])
 async def test_unpaid_receipts_follow_orders_instead_of_class_payment_history(
     db_session, admin_user, authed_client_factory, topics, payment_state, category_only
 ):
-    school_class, activity, categories, products = topics
-    unpaid = await _order(db_session, admin_user, school_class, activity, [products[0]], total=101)
+    school_class, categories, products = topics
+    unpaid = await _order(db_session, admin_user, school_class, [products[0]], total=101)
     unpaid.is_class_collected = True  # 班代收款備忘不等於班聯確認收款。
-    paid = await _order(db_session, admin_user, school_class, activity, [products[1]], total=202)
+    paid = await _order(db_session, admin_user, school_class, [products[1]], total=202)
     paid.is_paid = True
     paid_class = SchoolClass(
         academic_year=115, class_code="102", label="一年二班", created_by=admin_user.id
@@ -253,23 +233,18 @@ async def test_unpaid_receipts_follow_orders_instead_of_class_payment_history(
     db_session.add(paid_class)
     await db_session.flush()
     paid_without_confirmation = await _order(
-        db_session, admin_user, paid_class, activity, [products[0]], total=101
+        db_session, admin_user, paid_class, [products[0]], total=101
     )
     paid_without_confirmation.is_paid = True
     payment = None
     if payment_state is not None:
         payment = ShopClassPayment(
             class_id=school_class.id,
-            activity_id=activity.id if activity else None,
             is_paid=payment_state,
         )
         db_session.add(payment)
     await db_session.flush()
-    scope = (
-        {"category_id": str(categories[0].id)}
-        if category_only
-        else {"activity_id": str(activity.id) if activity else None}
-    )
+    scope = {"category_id": str(categories[0].id)} if category_only else {}
     client = authed_client_factory(admin_user)
     path = "/shop/orders/classes/receipts.pdf"
     response = await client.post(path, json={**scope, "unpaid_only": True})
@@ -295,20 +270,18 @@ async def test_unpaid_receipts_follow_orders_instead_of_class_payment_history(
     await db_session.flush()
     empty = await client.post(path, json={**scope, "unpaid_only": True})
     assert empty.status_code == 400
-    assert empty.json()["detail"] == "此活動沒有尚未確認收款的訂單"
+    assert empty.json()["detail"] == "目前範圍沒有尚未確認收款的訂單"
 
 
-@pytest.mark.parametrize("topics", [False, True], indirect=True)
 @pytest.mark.parametrize("mode", ["class", "personal", "supplement"])
 async def test_legacy_order_spanning_topics_splits_items_and_preserves_the_paid_total(
     db_session, admin_user, authed_client_factory, topics, mode
 ):
-    school_class, activity, _, products = topics
+    school_class, _, products = topics
     order = await _order(
         db_session,
         admin_user,
         school_class if mode != "personal" else None,
-        activity,
         products,
         total=605,  # 原始品項合計 606，分攤 1 元折抵後不得少算或重複計入。
         supplement=mode == "supplement",
@@ -320,7 +293,6 @@ async def test_legacy_order_spanning_topics_splits_items_and_preserves_the_paid_
         response = await client.post(
             "/shop/orders/classes/receipts.pdf",
             json={
-                "activity_id": str(activity.id) if activity else None,
                 "unpaid_only": mode == "personal",
             },
         )
@@ -337,13 +309,12 @@ async def test_legacy_order_spanning_topics_splits_items_and_preserves_the_paid_
     )
 
 
-@pytest.mark.parametrize("topics", [False], indirect=True)
 async def test_changed_receipts_still_separate_topics_and_do_not_repeat_unchanged_orders(
     db_session, admin_user, authed_client_factory, topics, monkeypatch
 ):
-    school_class, activity, _, products = topics
+    school_class, _, products = topics
     orders = [
-        await _order(db_session, admin_user, school_class, activity, [product], total=100 * index)
+        await _order(db_session, admin_user, school_class, [product], total=100 * index)
         for index, product in enumerate(products, 1)
     ]
     printed_at = datetime.now(UTC) + timedelta(seconds=1)

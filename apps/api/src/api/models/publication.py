@@ -34,19 +34,13 @@ class PublicationCampaign(Base, TimestampMixin):
     """一次核心內容、多渠道配送的發布任務。"""
 
     __tablename__ = "publication_campaigns"
-    __table_args__ = (
-        Index("ix_publication_campaigns_activity_status", "activity_id", "status"),
-        Index("ix_publication_campaigns_source", "source_type", "source_id"),
-    )
+    __table_args__ = (Index("ix_publication_campaigns_source", "source_type", "source_id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     title: Mapped[str] = mapped_column(String(240), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
     source_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     source_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
-    activity_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("activities.id", ondelete="SET NULL"), nullable=True
-    )
     org_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("orgs.id", ondelete="SET NULL"), nullable=True
     )
@@ -62,7 +56,6 @@ class PublicationCampaign(Base, TimestampMixin):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
 
-    activity = relationship("Activity")
     org = relationship("Org")
     created_by = relationship("User")
     deliveries = relationship(

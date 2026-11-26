@@ -17,7 +17,7 @@ vi.mock("@/hooks/useWS", () => ({ useWS: vi.fn() }));
 
 const order: OrderListItem = {
   id: "first", serial_number: "ORDER-001", user_id: "student", class_id: "class",
-  activity_id: "festival", activity_name: "校慶", assistance_scope: "self",
+  category_id: "festival", category_name: "校慶商品", assistance_scope: "self",
   status: "pending", is_class_collected: true, is_paid: false,
   created_at: "2026-10-10T00:00:00Z", payment_method: "cash_on_pickup",
   total_price: 200, subtotal_price: 200, discount_amount: 0,
@@ -42,20 +42,20 @@ describe("我的預購", () => {
       items: [{ ...order.items![0], quantity: 3, subtotal: 300, gift_quantity: 1, gift_discount_amount: 100 }],
     }]);
     render(<OrdersPage />);
-    const items = await screen.findByRole("list", { name: "校慶品項" });
+    const items = await screen.findByRole("list", { name: "校慶商品品項" });
     expect(within(items).getAllByRole("listitem")).toHaveLength(2);
     expect(within(items).getByText("× 2")).toBeVisible();
     expect(within(items).getByText("× 1")).toBeVisible();
     expect(within(items).getByText("贈品 · NT$0")).toBeVisible();
   });
-  it("優惠套用後在活動合計顯示刪除線原價與實付價", async () => {
+  it("優惠套用後在商品分類合計顯示刪除線原價與實付價", async () => {
     api.listOrders.mockResolvedValue([{ ...order, subtotal_price: 200, discount_amount: 50, total_price: 150 }]);
     render(<OrdersPage />);
-    const activity = await screen.findByRole("region", { name: "校慶預購" });
-    expect(activity.querySelector("del")).toHaveTextContent("NT$200");
-    expect(within(activity).getByLabelText("原價 NT$200，優惠價 NT$150")).toBeVisible();
+    const category = await screen.findByRole("region", { name: "校慶商品預購" });
+    expect(category.querySelector("del")).toHaveTextContent("NT$200");
+    expect(within(category).getByLabelText("原價 NT$200，優惠價 NT$150")).toBeVisible();
   });
-  it("shows activity items and supplemental payment without order numbers or counts", async () => {
+  it("shows category items and supplemental payment without order numbers or counts", async () => {
     api.catalog.mockResolvedValue([{
       products: [{ id: "bag", image_url: "/uploads/bag.png" }],
       series: [],
@@ -68,10 +68,10 @@ describe("我的預購", () => {
     expect(await screen.findByRole("heading", { name: "預購品項" })).toBeVisible();
     expect(screen.queryByRole("region", { name: "下一步" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /待繳 NT\$/ })).not.toBeInTheDocument();
-    const activity = await screen.findByRole("region", { name: "校慶預購" });
-    expect(within(activity).getByText("合計 NT$300")).toBeVisible();
-    expect(within(activity).getByText("已繳 NT$200 · 待補繳 NT$100")).toBeVisible();
-    const items = within(activity).getByRole("list", { name: "校慶品項" });
+    const category = await screen.findByRole("region", { name: "校慶商品預購" });
+    expect(within(category).getByText("合計 NT$300")).toBeVisible();
+    expect(within(category).getByText("已繳 NT$200 · 待補繳 NT$100")).toBeVisible();
+    const items = within(category).getByRole("list", { name: "校慶商品品項" });
     expect(within(items).getAllByRole("listitem")).toHaveLength(1);
     expect(within(items).getByText("× 3")).toBeVisible();
     expect(await screen.findByAltText("")).toHaveAttribute(
@@ -80,8 +80,8 @@ describe("我的預購", () => {
     expect(screen.queryByText("ORDER-001")).not.toBeInTheDocument();
     expect(screen.queryByText(/筆訂單/)).not.toBeInTheDocument();
     expect(screen.queryByText("登記資訊")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "查看校慶預購詳情" }))
-      .toHaveAttribute("href", "/shop/orders/first?view=activity");
+    expect(screen.getByRole("link", { name: "查看校慶商品預購詳情" }))
+      .toHaveAttribute("href", "/shop/orders/first?view=category");
     expect(api.listOrders).toHaveBeenCalledWith({ limit: "500", offset: "0", my_only: "true" });
   });
 
@@ -108,7 +108,7 @@ describe("我的預購", () => {
     render(<OrdersPage />);
     expect(await screen.findByText("目前沒有預購品項，先到商品頁挑選商品。")).toBeVisible();
     expect(screen.getByRole("link", { name: "去選購商品" })).toHaveAttribute("href", "/shop");
-    expect(screen.queryByRole("region", { name: "校慶預購" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "校慶商品預購" })).not.toBeInTheDocument();
   });
 
   it("does not show class correction or load class correction data on the order page", async () => {
@@ -130,12 +130,12 @@ describe("我的預購", () => {
     }]);
     render(<OrdersPage />);
 
-    const activity = await screen.findByRole("region", { name: "校慶預購" });
-    expect(await within(activity).findByText("明細中只能修改你代訂的品項，其他來源僅供查看。"))
+    const category = await screen.findByRole("region", { name: "校慶商品預購" });
+    expect(await within(category).findByText("明細中只能修改你代訂的品項，其他來源僅供查看。"))
       .toBeVisible();
-    expect(within(activity).getByText("× 2")).toBeVisible();
-    expect(screen.getByRole("link", { name: "查看校慶預購詳情" }))
-      .toHaveAttribute("href", "/shop/orders/student-order?view=activity");
+    expect(within(category).getByText("× 2")).toBeVisible();
+    expect(screen.getByRole("link", { name: "查看校慶商品預購詳情" }))
+      .toHaveAttribute("href", "/shop/orders/student-order?view=category");
     expect(api.listDelegatedOrders).toHaveBeenCalledWith({ limit: "500", offset: "0" });
   });
 
@@ -146,7 +146,7 @@ describe("我的預購", () => {
     fireEvent.click(screen.getByRole("button", { name: "重新載入" }));
     expect(await screen.findByText("品項資訊請查看訂單詳情。")).toBeVisible();
     expect(screen.queryByText("登記資訊")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "查看校慶預購詳情" }))
-      .toHaveAttribute("href", "/shop/orders/first?view=activity");
+    expect(screen.getByRole("link", { name: "查看校慶商品預購詳情" }))
+      .toHaveAttribute("href", "/shop/orders/first?view=category");
   });
 });

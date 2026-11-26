@@ -17,7 +17,6 @@ from api.routers.shop._common import (
     _get_series_or_404,
     _get_variant_group_or_404,
     _get_variant_option_or_404,
-    _product_activity,
     _require_shop_manager,
 )
 from api.schemas.shop import (
@@ -53,15 +52,15 @@ async def create_product(
     if category_id is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="請選擇所屬活動",
+            detail="請選擇商品分類",
         )
     category = await _get_category_or_404(category_id, session)
     if series and series.category_id != category.id:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="所選系列不屬於此活動",
+            detail="所選系列不屬於此商品分類",
         )
-    await _require_shop_manager(session, current_user, category.activity_id)
+    await _require_shop_manager(session, current_user)
     try:
         product = await shop_svc.create_product(session, data=payload, created_by=current_user.id)
     except ValueError as e:
@@ -84,11 +83,11 @@ async def reorder_products(
     payload: ProductReorder, session: DbDep, current_user: CurrentUser
 ) -> list[Product]:
     if payload.parent_type == "category":
-        category = await _get_category_or_404(payload.parent_id, session)
+        await _get_category_or_404(payload.parent_id, session)
     else:
         series = await _get_series_or_404(payload.parent_id, session)
-        category = await _get_category_or_404(series.category_id, session)
-    await _require_shop_manager(session, current_user, category.activity_id)
+        await _get_category_or_404(series.category_id, session)
+    await _require_shop_manager(session, current_user)
     try:
         return await shop_svc.reorder_products(
             session,
@@ -107,7 +106,7 @@ async def update_product(
     current_user: CurrentUser,
 ) -> Product:
     product = await _get_product_or_404(product_id, session, current_user)
-    await _require_shop_manager(session, current_user, _product_activity(product))
+    await _require_shop_manager(session, current_user)
     target_category_id = payload.category_id
     if payload.series_id:
         target_series = await _get_series_or_404(payload.series_id, session)
@@ -117,8 +116,8 @@ async def update_product(
     if target_category_id is None and product.series is not None:
         target_category_id = product.series.category_id
     if target_category_id is not None:
-        target_category = await _get_category_or_404(target_category_id, session)
-        await _require_shop_manager(session, current_user, target_category.activity_id)
+        await _get_category_or_404(target_category_id, session)
+        await _require_shop_manager(session, current_user)
     try:
         product = await shop_svc.update_product(session, product, data=payload)
     except ValueError as e:
@@ -141,7 +140,7 @@ async def test_product(product_id: uuid.UUID, session: DbDep, current_user: Curr
     if not await can_test_products(session, current_user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="需要權限：shop:test")
     product = await _get_product_or_404(product_id, session, current_user)
-    await _require_shop_manager(session, current_user, _product_activity(product))
+    await _require_shop_manager(session, current_user)
     try:
         product = await start_product_testing(session, product)
     except ValueError as e:
@@ -163,7 +162,7 @@ async def activate_product(
     product_id: uuid.UUID, session: DbDep, current_user: CurrentUser
 ) -> Product:
     product = await _get_product_or_404(product_id, session, current_user)
-    await _require_shop_manager(session, current_user, _product_activity(product))
+    await _require_shop_manager(session, current_user)
     try:
         product = await shop_svc.activate_product(session, product)
     except ValueError as e:
@@ -185,7 +184,7 @@ async def deactivate_product(
     product_id: uuid.UUID, session: DbDep, current_user: CurrentUser
 ) -> Product:
     product = await _get_product_or_404(product_id, session, current_user)
-    await _require_shop_manager(session, current_user, _product_activity(product))
+    await _require_shop_manager(session, current_user)
     try:
         product = await shop_svc.deactivate_product(session, product)
     except ValueError as e:
@@ -210,7 +209,7 @@ async def deactivate_product(
 async def delete_product(product_id: uuid.UUID, session: DbDep, current_user: CurrentUser) -> None:
     product = await _get_product_or_404(product_id, session, current_user)
     product_name = product.name
-    await _require_shop_manager(session, current_user, _product_activity(product))
+    await _require_shop_manager(session, current_user)
     try:
         await shop_svc.delete_product(session, product)
     except ValueError as e:
@@ -240,7 +239,7 @@ async def add_variant_group(
     current_user: CurrentUser,
 ) -> ProductVariantGroup:
     product = await _get_product_or_404(product_id, session, current_user)
-    await _require_shop_manager(session, current_user, _product_activity(product))
+    await _require_shop_manager(session, current_user)
     return await shop_svc.add_variant_group(session, product, data=payload)
 
 
@@ -256,8 +255,8 @@ async def update_variant_group(
     current_user: CurrentUser,
 ) -> ProductVariantGroup:
     group = await _get_variant_group_or_404(group_id, session)
-    product = await _get_product_or_404(group.product_id, session, current_user)
-    await _require_shop_manager(session, current_user, _product_activity(product))
+    await _get_product_or_404(group.product_id, session, current_user)
+    await _require_shop_manager(session, current_user)
     return await shop_svc.update_variant_group(session, group, data=payload)
 
 
@@ -270,8 +269,8 @@ async def delete_variant_group(
     group_id: uuid.UUID, session: DbDep, current_user: CurrentUser
 ) -> None:
     group = await _get_variant_group_or_404(group_id, session)
-    product = await _get_product_or_404(group.product_id, session, current_user)
-    await _require_shop_manager(session, current_user, _product_activity(product))
+    await _get_product_or_404(group.product_id, session, current_user)
+    await _require_shop_manager(session, current_user)
     await shop_svc.delete_variant_group(session, group)
 
 
@@ -288,8 +287,8 @@ async def add_variant_option(
     current_user: CurrentUser,
 ) -> ProductVariantOption:
     group = await _get_variant_group_or_404(group_id, session)
-    product = await _get_product_or_404(group.product_id, session, current_user)
-    await _require_shop_manager(session, current_user, _product_activity(product))
+    await _get_product_or_404(group.product_id, session, current_user)
+    await _require_shop_manager(session, current_user)
     return await shop_svc.add_variant_option(session, group, data=payload)
 
 
@@ -306,8 +305,8 @@ async def update_variant_option(
 ) -> ProductVariantOption:
     option = await _get_variant_option_or_404(option_id, session)
     group = await _get_variant_group_or_404(option.group_id, session)
-    product = await _get_product_or_404(group.product_id, session, current_user)
-    await _require_shop_manager(session, current_user, _product_activity(product))
+    await _get_product_or_404(group.product_id, session, current_user)
+    await _require_shop_manager(session, current_user)
     try:
         return await shop_svc.update_variant_option(session, option, data=payload)
     except ValueError as exc:
@@ -324,6 +323,6 @@ async def delete_variant_option(
 ) -> None:
     option = await _get_variant_option_or_404(option_id, session)
     group = await _get_variant_group_or_404(option.group_id, session)
-    product = await _get_product_or_404(group.product_id, session, current_user)
-    await _require_shop_manager(session, current_user, _product_activity(product))
+    await _get_product_or_404(group.product_id, session, current_user)
+    await _require_shop_manager(session, current_user)
     await shop_svc.delete_variant_option(session, option)

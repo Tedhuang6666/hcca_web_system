@@ -108,7 +108,6 @@ class ShopSalesReportCreate(BaseModel):
     format: Literal["pdf", "xlsx"] = "pdf"
     date_from: date | None = Field(None, ge=date(2000, 1, 1), le=date(2100, 12, 31))
     date_to: date | None = Field(None, ge=date(2000, 1, 1), le=date(2100, 12, 31))
-    activity_id: UUID | None = None
     category_id: UUID | None = None
     product_id: UUID | None = None
     grade: int | None = Field(None, ge=0)

@@ -34,8 +34,7 @@ export function ProductModal({
   getProduct,
   saveVariant,
   closeStatus,
-  activityClosedAt,
-  activityClosesAt,
+  categoryClosedAt,
   isLoggedIn,
   authLoading,
   classStatusLoading,
@@ -51,7 +50,6 @@ export function ProductModal({
   adjustingClassMember,
   lockedVariantQuantities,
   promotions,
-  activityId,
   categoryId,
   bundleStep,
   bundleAddOn,
@@ -60,8 +58,7 @@ export function ProductModal({
   getProduct: (id: string) => Promise<ProductOut>;
   saveVariant: ReturnType<typeof useShopRegistration>["saveVariant"];
   closeStatus: CloseStatusItem | undefined;
-  activityClosedAt: string | null;
-  activityClosesAt: string | null;
+  categoryClosedAt: string | null;
   isLoggedIn: boolean;
   authLoading: boolean;
   classStatusLoading: boolean;
@@ -77,7 +74,6 @@ export function ProductModal({
   adjustingClassMember: boolean;
   lockedVariantQuantities: Map<string, number>;
   promotions: ShopPromotionPublicOut[];
-  activityId: string | null;
   categoryId: string | null;
   bundleStep?: { name: string; position: number; total: number; nextLabel: string; onContinue: () => void };
   bundleAddOn?: (disabled: boolean) => React.ReactNode;
@@ -232,8 +228,8 @@ export function ProductModal({
     const option = group.options.find((row) => row.id === picked[group.id]);
     return sum + (option ? referenceDelta(option) : 0);
   }, 0);
-  const offerPrice = product ? productOfferPrice(product, promotions, activityId, registration, delta, 1, categoryId) : unitPrice;
-  const offerTotal = product ? productOfferPrice(product, promotions, activityId, registration, delta, qty, categoryId) : unitPrice * qty;
+  const offerPrice = product ? productOfferPrice(product, promotions, registration, delta, 1, categoryId) : unitPrice;
+  const offerTotal = product ? productOfferPrice(product, promotions, registration, delta, qty, categoryId) : unitPrice * qty;
   const allPicked = variantGroups.every((g) => picked[g.id]);
   const registeredItems = registration?.items.filter((item) => item.product_id === product?.id) ?? [];
   const selectVariantOption = (groupId: string, optionId: string) => {
@@ -297,7 +293,7 @@ export function ProductModal({
   const deadline = product ? productDeadline(product) : null;
   const testing = product?.status === "testing";
   const productCloseStatus = testing && !closeStatus?.is_global ? undefined : closeStatus;
-  const closure = resolveOrderClosureState(productCloseStatus, activityClosedAt, activityClosesAt);
+  const closure = resolveOrderClosureState(productCloseStatus, categoryClosedAt);
   const deadlinePassed = !testing && (closure.deadlinePassed
     || Boolean(deadline && new Date(deadline).getTime() <= Date.now()));
   const councilClosed = closure.councilClosed;
@@ -551,8 +547,7 @@ export function ProductModal({
               <div className="shop-product-dialog-scroll">
                 <OrderClosureNotice
                   status={productCloseStatus}
-                  activityClosedAt={activityClosedAt}
-                  activityClosesAt={activityClosesAt}
+                  categoryClosedAt={categoryClosedAt}
                 />
                 {bundleStep && <div className="shop-product-bundle-progress" role="status">
                   <strong>{bundleStep.name}</strong>
@@ -653,7 +648,7 @@ export function ProductModal({
                   </p>
                 ) : classStatusLoading && !testing ? (
                   <p className="shop-product-purchase-hint" role="status">
-                    正在確認活動結單狀態…
+                    正在確認商品分類結單狀態…
                   </p>
                 ) : authorizationRequired ? (
                   <p className="shop-product-purchase-hint" role="status">

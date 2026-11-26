@@ -139,7 +139,7 @@ export default function ShopSalesAnalytics({
   filters,
   refresh = 0,
   live = false,
-  scope = "全部活動、全部商品",
+  scope = "全部商品分類、全部商品",
 }: {
   filters: Record<string, string>;
   refresh?: number;
@@ -214,7 +214,6 @@ export default function ShopSalesAnalytics({
         format: reportFormat,
         date_from: data.current.date_from,
         date_to: data.current.date_to,
-        activity_id: filters.activity_id || null,
         category_id: filters.category_id || null,
         product_id: filters.product_id || null,
         class_id: filters.class_id || null,
@@ -332,7 +331,7 @@ export default function ShopSalesAnalytics({
           </p>
           {!current.metrics.order_count && (
             <p className="sales-empty">
-              此範圍沒有有效訂單。可調整活動、品項或日期。
+              此範圍沒有有效訂單。可調整商品分類、品項或日期。
             </p>
           )}
           <dl className="sales-metrics">

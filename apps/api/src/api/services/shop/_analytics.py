@@ -84,7 +84,6 @@ async def sales_analytics(
     date_to: date | None = None,
     compare: bool = False,
     compare_from: date | None = None,
-    activity_id: uuid.UUID | None = None,
     category_id: uuid.UUID | None = None,
     product_id: uuid.UUID | None = None,
     grade: int | None = None,
@@ -102,7 +101,6 @@ async def sales_analytics(
             session,
             date_from=period_start,
             date_to=period_end,
-            activity_id=activity_id,
             category_id=category_id,
             product_id=product_id,
             grade=grade,
@@ -136,7 +134,6 @@ async def load_sales_orders(
     *,
     date_from: date,
     date_to: date,
-    activity_id: uuid.UUID | None = None,
     category_id: uuid.UUID | None = None,
     product_id: uuid.UUID | None = None,
     grade: int | None = None,
@@ -164,8 +161,6 @@ async def load_sales_orders(
             .selectinload(Product.variant_groups)
             .selectinload(ProductVariantGroup.options)
         )
-    if activity_id is not None:
-        query = query.where(Order.activity_id == activity_id)
     if grade is not None:
         query = query.where(Order.school_class.has(grade=grade))
     if class_id is not None:

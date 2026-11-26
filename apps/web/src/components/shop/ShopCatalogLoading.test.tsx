@@ -19,7 +19,7 @@ const product = {
   id: "formal", name: "總覽商品", price: 100, image_url: null, status: "active",
   is_unlimited: true, stock_quantity: 0, has_variants: false, has_option_surcharge: false, sale_start: null, sale_end: null,
 };
-const catalog = [{ id: "goods", name: "校慶商品", activity_id: "festival",
+const catalog = [{ id: "goods", name: "校慶商品",
   sort_order: 0, products: [product], series: [] }];
 
 beforeEach(() => {
@@ -43,7 +43,7 @@ it("shows overview products before the class lookup finishes and blocks purchasi
 
   fireEvent.click(await screen.findByRole("link", { name: "查看商品：總覽商品" }));
   expect(await screen.findByRole("button", { name: "登記購買 · NT$100" })).toBeDisabled();
-  expect(screen.getByText("正在確認活動結單狀態…")).toBeVisible();
+  expect(screen.getByText("正在確認商品分類結單狀態…")).toBeVisible();
 
   await act(async () => { finishClass({ id: "class-a", label: "一年一班" }); });
   await waitFor(() => expect(screen.getByRole("button", { name: "登記購買 · NT$100" })).toBeEnabled());

@@ -6,7 +6,6 @@ from datetime import date, datetime
 import pytest
 
 from api.core.clock import TAIPEI
-from api.models.activity import Activity
 from api.models.school_class import SchoolClass
 from api.models.shop import (
     Order,
@@ -23,12 +22,10 @@ from api.services.shop._analytics import sales_analytics
 async def test_profit_uses_current_cost_discounted_revenue_and_filtered_items(
     db_session, sales_data
 ):
-    activity, _, shirt, bag, _, _ = sales_data
+    _, shirt, bag, _, _ = sales_data
     shirt.unit_cost, bag.unit_cost = 40, 70
     await db_session.flush()
-    filters = dict(
-        date_from=date(2026, 10, 22), date_to=date(2026, 10, 23), activity_id=activity.id
-    )
+    filters = dict(date_from=date(2026, 10, 22), date_to=date(2026, 10, 23))
     result = await sales_analytics(db_session, **filters, compare=True)
     assert result.current.metrics.total_cost == 260  # 衫 3 件、袋 2 件（含零元訂單）
     assert result.current.metrics.profit_amount == 90
@@ -54,12 +51,10 @@ async def test_profit_uses_current_cost_discounted_revenue_and_filtered_items(
 
 
 async def test_missing_cost_is_unknown_and_zero_cost_and_empty_are_valid(db_session, sales_data):
-    activity, _, shirt, bag, _, _ = sales_data
+    _, shirt, bag, _, _ = sales_data
     shirt.unit_cost = 0
     await db_session.flush()
-    filters = dict(
-        date_from=date(2026, 10, 22), date_to=date(2026, 10, 23), activity_id=activity.id
-    )
+    filters = dict(date_from=date(2026, 10, 22), date_to=date(2026, 10, 23))
     result = await sales_analytics(db_session, **filters)
     assert result.current.metrics.total_cost is None
     assert result.current.metrics.profit_amount is None
@@ -85,12 +80,10 @@ async def test_profit_report_preserves_numeric_and_unknown_costs(db_session, sal
 
     from api.services.shop._analytics_report import render_sales_excel
 
-    activity, _, shirt, bag, _, _ = sales_data
+    _, shirt, bag, _, _ = sales_data
     shirt.unit_cost, bag.unit_cost = 40, 70
     await db_session.flush()
-    filters = dict(
-        date_from=date(2026, 10, 22), date_to=date(2026, 10, 23), activity_id=activity.id
-    )
+    filters = dict(date_from=date(2026, 10, 22), date_to=date(2026, 10, 23))
     for expected in (90, "未設定"):
         data = await sales_analytics(db_session, **filters)
         workbook = load_workbook(BytesIO(render_sales_excel(data, "成本測試")))
@@ -107,11 +100,7 @@ async def test_profit_report_preserves_numeric_and_unknown_costs(db_session, sal
 async def sales_data(db_session, make_user):
     buyer = await make_user()
     other = await make_user()
-    activity = Activity(name="校慶")
-    other_activity = Activity(name="其他活動")
-    db_session.add_all([activity, other_activity])
-    await db_session.flush()
-    category = ProductCategory(name="服飾", activity_id=activity.id, created_by=buyer.id)
+    category = ProductCategory(name="服飾", created_by=buyer.id)
     other_category = ProductCategory(name="其他", created_by=buyer.id)
     db_session.add_all([category, other_category])
     await db_session.flush()
@@ -132,7 +121,6 @@ async def sales_data(db_session, make_user):
         paid=False,
         status=OrderStatus.PENDING,
         test=False,
-        event=activity,
         sc=school_class,
         total=None,
         assistance_scope="self",
@@ -143,7 +131,6 @@ async def sales_data(db_session, make_user):
         result = Order(
             serial_number=f"ANALYTICS-{uuid.uuid4().hex[:12]}",
             user_id=owner.id,
-            activity_id=event.id,
             class_id=sc.id if sc else None,
             test_product_id=shirt.id if test else None,
             created_at=datetime.fromisoformat(at).replace(tzinfo=TAIPEI),
@@ -178,17 +165,15 @@ async def sales_data(db_session, make_user):
     await order("2026-10-22T12:00:00", [(shirt, 9, 100)], status=OrderStatus.CANCELLED)
     await order("2026-10-22T12:00:00", [(shirt, 9, 100)], status=OrderStatus.REFUNDED)
     await order("2026-10-22T12:00:00", [(shirt, 9, 100)], test=True)
-    await order("2026-10-22T12:00:00", [(shirt, 9, 100)], event=other_activity)
-    return activity, category, shirt, bag, school_class, order
+    return category, shirt, bag, school_class, order
 
 
 async def test_sales_analytics_snapshot_distributions_and_taipei_boundaries(db_session, sales_data):
-    activity, _, shirt, _, _, _ = sales_data
+    _, shirt, _, _, _ = sales_data
     result = await sales_analytics(
         db_session,
         date_from=date(2026, 10, 22),
         date_to=date(2026, 10, 23),
-        activity_id=activity.id,
         compare=True,
     )
     current = result.current
@@ -217,11 +202,10 @@ async def test_sales_analytics_snapshot_distributions_and_taipei_boundaries(db_s
 async def test_purchase_method_analysis_separates_self_family_and_class_rep_orders(
     db_session, sales_data
 ):
-    activity, category, shirt, bag, _, order = sales_data
+    category, shirt, bag, _, order = sales_data
     link = ShopDelegationLink(
         user_id=shirt.created_by,
         category_id=category.id,
-        activity_id=activity.id,
         name="家人",
         token_hash=uuid.uuid4().hex * 2,
     )
@@ -243,7 +227,6 @@ async def test_purchase_method_analysis_separates_self_family_and_class_rep_orde
         db_session,
         date_from=date(2026, 10, 22),
         date_to=date(2026, 10, 23),
-        activity_id=activity.id,
     )
     sources = {row.key: row for row in result.current.sources}
 
@@ -267,8 +250,8 @@ async def test_purchase_method_analysis_separates_self_family_and_class_rep_orde
 
 
 async def test_sales_product_and_category_filters_only_count_matching_items(db_session, sales_data):
-    activity, category, shirt, bag, school_class, _ = sales_data
-    common = dict(date_from=date(2026, 10, 22), date_to=date(2026, 10, 23), activity_id=activity.id)
+    category, shirt, bag, school_class, _ = sales_data
+    common = dict(date_from=date(2026, 10, 22), date_to=date(2026, 10, 23))
     shirt_result = await sales_analytics(db_session, **common, product_id=shirt.id)
     bag_result = await sales_analytics(db_session, **common, product_id=bag.id)
     assert shirt_result.current.metrics.total_amount == 267
@@ -297,7 +280,7 @@ async def test_sales_product_and_category_filters_only_count_matching_items(db_s
 
 
 async def test_sales_comparison_empty_days_and_no_order_limit(db_session, sales_data):
-    activity, _, shirt, _, _, order = sales_data
+    _, shirt, _, _, order = sales_data
     for _ in range(501):
         await order("2025-10-22T11:00:00", [(shirt, 1, 1)])
     result = await sales_analytics(
@@ -306,7 +289,6 @@ async def test_sales_comparison_empty_days_and_no_order_limit(db_session, sales_
         date_to=date(2026, 10, 24),
         compare_from=date(2025, 10, 22),
         compare=True,
-        activity_id=activity.id,
     )
     assert result.previous.metrics.order_count == 501
     assert [row.order_count for row in result.previous.daily] == [501, 0, 0]
@@ -371,12 +353,11 @@ async def test_sales_endpoint_accepts_existing_global_view_permissions(
 
 
 async def test_sales_deep_analysis_cross_cells_statuses_and_buyer_depth(db_session, sales_data):
-    activity, _, shirt, bag, school_class, _ = sales_data
+    _, shirt, bag, school_class, _ = sales_data
     result = await sales_analytics(
         db_session,
         date_from=date(2026, 10, 22),
         date_to=date(2026, 10, 23),
-        activity_id=activity.id,
     )
     current = result.current
     assert current.metrics.median_order_amount == 175
@@ -416,14 +397,13 @@ async def test_sales_report_download_contains_scoped_values_and_details(
     from openpyxl import load_workbook
     from pypdf import PdfReader
 
-    activity, _, shirt, _, _, _ = sales_data
+    _, shirt, _, _, _ = sales_data
     response = await authed_client_factory(admin_user).post(
         "/shop/orders/analytics/report",
         json={
             "format": report_format,
             "date_from": "2026-10-22",
             "date_to": "2026-10-23",
-            "activity_id": str(activity.id),
             "product_id": str(shirt.id),
             "compare": True,
         },
@@ -493,7 +473,7 @@ async def test_sales_excel_report_handles_empty_and_formula_like_names(db_sessio
     from api.schemas.shop_analytics import ShopSalesReportCreate
     from api.services.shop._analytics_report import create_sales_report
 
-    activity, _, shirt, _, _, _ = sales_data
+    _, shirt, _, _, _ = sales_data
     shirt.name = '=HYPERLINK("https://example.test")'
     await db_session.flush()
     content, _, _ = await create_sales_report(
@@ -502,7 +482,6 @@ async def test_sales_excel_report_handles_empty_and_formula_like_names(db_sessio
             format="xlsx",
             date_from=date(2026, 10, 22),
             date_to=date(2026, 10, 23),
-            activity_id=activity.id,
             product_id=shirt.id,
             compare=False,
         ),

@@ -1849,7 +1849,7 @@ export interface paths {
         };
         /**
          * 列出所有公告（含草稿）
-         * @description 管理員用：列出所有公告（含草稿），活動總召可查自己活動公告。
+         * @description 管理員用：列出所有公告（含草稿）。
          */
         get: operations["list_all_announcements_announcements_admin_all_get"];
         put?: never;
@@ -9690,57 +9690,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/shop/activities": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 列出可供商品分類使用的活動 */
-        get: operations["list_shop_activities_shop_activities_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/shop/activities/{activity_id}/order-closure": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** 結單或重新開放活動訂購；保留訂單與收款 */
-        patch: operations["update_shop_activity_order_closure_shop_activities__activity_id__order_closure_patch"];
-        trace?: never;
-    };
-    "/shop/activities/{activity_id}/order-deadline": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** 設定整個活動的商品結單時間 */
-        patch: operations["update_shop_activity_deadline_shop_activities__activity_id__order_deadline_patch"];
-        trace?: never;
-    };
     "/shop/catalog": {
         parameters: {
             query?: never;
@@ -10115,7 +10064,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 活動與品項銷售分析（台北時間、最多 366 天） */
+        /** 商品分類與品項銷售分析（台北時間、最多 366 天） */
         get: operations["order_sales_analytics_shop_orders_analytics_get"];
         put?: never;
         post?: never;
@@ -10938,7 +10887,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 取得各活動目前商品登記 */
+        /** 取得各分類目前商品登記 */
         get: operations["list_current_registrations_shop_registrations_get"];
         put?: never;
         post?: never;
@@ -12710,46 +12659,6 @@ export interface components {
              */
             reason: string;
         };
-        /** ActivityOut */
-        ActivityOut: {
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Description */
-            description: string | null;
-            /** Ends At */
-            ends_at: string | null;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Is Active */
-            is_active: boolean;
-            /** Name */
-            name: string;
-            /** Order Closed At */
-            order_closed_at?: string | null;
-            /** Order Closes At */
-            order_closes_at?: string | null;
-            /** Org Id */
-            org_id: string | null;
-            /** Starts At */
-            starts_at: string | null;
-            status: components["schemas"]["ActivityStatus"];
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-        };
-        /**
-         * ActivityStatus
-         * @enum {string}
-         */
-        ActivityStatus: "draft" | "active" | "ended" | "archived";
         /** AddSinglePosition */
         AddSinglePosition: {
             /** End Date */
@@ -12824,11 +12733,6 @@ export interface components {
         /** AnnouncementCreate */
         AnnouncementCreate: {
             /**
-             * Activity Id
-             * @description 所屬活動（選填）
-             */
-            activity_id?: string | null;
-            /**
              * Audience Org Ids
              * @description 對象=特定組織時的目標組織 ID
              */
@@ -12887,8 +12791,6 @@ export interface components {
         };
         /** AnnouncementListItem */
         AnnouncementListItem: {
-            /** Activity Id */
-            activity_id?: string | null;
             /** @default all */
             audience_type: components["schemas"]["AnnouncementAudience"];
             /**
@@ -12955,8 +12857,6 @@ export interface components {
         };
         /** AnnouncementOut */
         AnnouncementOut: {
-            /** Activity Id */
-            activity_id?: string | null;
             /**
              * Audience Members
              * @default []
@@ -13052,8 +12952,6 @@ export interface components {
         };
         /** AnnouncementUpdate */
         AnnouncementUpdate: {
-            /** Activity Id */
-            activity_id?: string | null;
             /** Audience Org Ids */
             audience_org_ids?: string[] | null;
             audience_type?: components["schemas"]["AnnouncementAudience"] | null;
@@ -14513,12 +14411,6 @@ export interface components {
         };
         /** CatalogCategoryOut */
         CatalogCategoryOut: {
-            /** Activity Id */
-            activity_id?: string | null;
-            /** Activity Name */
-            activity_name?: string | null;
-            /** Activity Status */
-            activity_status?: string | null;
             /**
              * Id
              * Format: uuid
@@ -14530,8 +14422,6 @@ export interface components {
             name: string;
             /** Order Closed At */
             order_closed_at?: string | null;
-            /** Order Closes At */
-            order_closes_at?: string | null;
             /**
              * Products
              * @default []
@@ -14640,11 +14530,6 @@ export interface components {
         };
         /** ChangedOrderReceiptCreate */
         ChangedOrderReceiptCreate: {
-            /**
-             * Activity Id
-             * @description 收據活動；保留相容舊呼叫，null 時依主題或一般商品處理
-             */
-            activity_id?: string | null;
             /**
              * Category Id
              * @description 收據商品主題
@@ -14955,8 +14840,6 @@ export interface components {
         };
         /** ClassOrderConfirmationCreate */
         ClassOrderConfirmationCreate: {
-            /** Activity Id */
-            activity_id?: string | null;
             /** Category Id */
             category_id?: string | null;
             /** Class Ids */
@@ -14987,10 +14870,6 @@ export interface components {
         };
         /** ClassPaymentOut */
         ClassPaymentOut: {
-            /** Activity Id */
-            activity_id?: string | null;
-            /** Category Id */
-            category_id?: string | null;
             /**
              * Class Id
              * Format: uuid
@@ -15003,10 +14882,6 @@ export interface components {
         };
         /** ClassPaymentReportItemOut */
         ClassPaymentReportItemOut: {
-            /** Activity Id */
-            activity_id?: string | null;
-            /** Activity Label */
-            activity_label: string;
             /** Amount */
             amount: number;
             /** Category Id */
@@ -15046,16 +14921,6 @@ export interface components {
         /** ClassPaymentUpdate */
         ClassPaymentUpdate: {
             /**
-             * Activity Id
-             * @description 本次更新的活動；null 代表一般商品
-             */
-            activity_id: string | null;
-            /**
-             * Category Id
-             * @description 未綁活動時，只更新此商品主題的收款
-             */
-            category_id?: string | null;
-            /**
              * Expected Unpaid Amount
              * @description 核對時的待收金額，避免重送或覆蓋其他收款
              */
@@ -15073,11 +14938,6 @@ export interface components {
         };
         /** ClassReceiptBatchCreate */
         ClassReceiptBatchCreate: {
-            /**
-             * Activity Id
-             * @description 收據活動；保留相容舊呼叫，null 時依主題或一般商品處理
-             */
-            activity_id?: string | null;
             /**
              * Category Id
              * @description 收據商品主題
@@ -16956,11 +16816,6 @@ export interface components {
              */
             action_required?: string | null;
             /**
-             * Activity Id
-             * @description 所屬活動 ID
-             */
-            activity_id?: string | null;
-            /**
              * Basis
              * @description 依據（選填）
              */
@@ -17194,8 +17049,6 @@ export interface components {
          * @description 列表頁的輕量版公文資訊（不含全文與版本）
          */
         DocumentListItem: {
-            /** Activity Id */
-            activity_id?: string | null;
             /** Archive At */
             archive_at?: string | null;
             category: components["schemas"]["DocumentCategory"];
@@ -17263,8 +17116,6 @@ export interface components {
         DocumentOut: {
             /** Action Required */
             action_required: string | null;
-            /** Activity Id */
-            activity_id?: string | null;
             /**
              * Approvals
              * @default []
@@ -17647,8 +17498,6 @@ export interface components {
         DocumentUpdate: {
             /** Action Required */
             action_required?: string | null;
-            /** Activity Id */
-            activity_id?: string | null;
             /**
              * Autosave
              * @description 線上自動儲存；不建立版本快照
@@ -22044,10 +21893,6 @@ export interface components {
         };
         /** OrderListItem */
         OrderListItem: {
-            /** Activity Id */
-            activity_id?: string | null;
-            /** Activity Name */
-            activity_name?: string | null;
             /**
              * Assistance Scope
              * @default self
@@ -22132,10 +21977,6 @@ export interface components {
         };
         /** OrderOut */
         OrderOut: {
-            /** Activity Id */
-            activity_id?: string | null;
-            /** Activity Name */
-            activity_name?: string | null;
             /** Applied Promotions */
             applied_promotions?: components["schemas"]["OrderPromotionOut"][];
             /**
@@ -25367,11 +25208,6 @@ export interface components {
         };
         /** ProductCategoryCreate */
         ProductCategoryCreate: {
-            /**
-             * Activity Id
-             * @description 所屬活動 ID
-             */
-            activity_id?: string | null;
             /** Description */
             description?: string | null;
             /** Image Url */
@@ -25386,8 +25222,6 @@ export interface components {
         };
         /** ProductCategoryOut */
         ProductCategoryOut: {
-            /** Activity Id */
-            activity_id?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -25426,8 +25260,6 @@ export interface components {
         };
         /** ProductCategoryUpdate */
         ProductCategoryUpdate: {
-            /** Activity Id */
-            activity_id?: string | null;
             /** Description */
             description?: string | null;
             /** Image Url */
@@ -25485,7 +25317,7 @@ export interface components {
             purchase_rules?: components["schemas"]["ProductPurchaseRules"];
             /**
              * Sale End
-             * @description 單品截止時間；留空沿用活動結單時間
+             * @description 單品截止時間；留空沿用商品分類結單時間
              */
             sale_end?: string | null;
             /**
@@ -27067,8 +26899,6 @@ export interface components {
         };
         /** PublicationCampaignCreate */
         PublicationCampaignCreate: {
-            /** Activity Id */
-            activity_id?: string | null;
             /** Audience Filter */
             audience_filter?: {
                 [key: string]: unknown;
@@ -27095,8 +26925,6 @@ export interface components {
         };
         /** PublicationCampaignOut */
         PublicationCampaignOut: {
-            /** Activity Id */
-            activity_id: string | null;
             /** Audience Filter */
             audience_filter: {
                 [key: string]: unknown;
@@ -27140,8 +26968,6 @@ export interface components {
         };
         /** PublicationCampaignUpdate */
         PublicationCampaignUpdate: {
-            /** Activity Id */
-            activity_id?: string | null;
             /** Audience Filter */
             audience_filter?: {
                 [key: string]: unknown;
@@ -27459,8 +27285,6 @@ export interface components {
         RecallRequest: Record<string, never>;
         /** ReceivableCreate */
         ReceivableCreate: {
-            /** Activity Id */
-            activity_id?: string | null;
             /** Amount */
             amount: number;
             /** Class Id */
@@ -27482,8 +27306,6 @@ export interface components {
         };
         /** ReceivableOut */
         ReceivableOut: {
-            /** Activity Id */
-            activity_id: string | null;
             /** Amount */
             amount: number;
             /** Class Id */
@@ -27546,7 +27368,7 @@ export interface components {
          * ReceivableSource
          * @enum {string}
          */
-        ReceivableSource: "shop_order" | "meal_order" | "activity_fee" | "class_fee" | "manual";
+        ReceivableSource: "shop_order" | "meal_order" | "class_fee" | "manual";
         /**
          * ReceivableStatus
          * @enum {string}
@@ -27586,8 +27408,6 @@ export interface components {
         };
         /** ReceivableUpdate */
         ReceivableUpdate: {
-            /** Activity Id */
-            activity_id?: string | null;
             /** Amount */
             amount?: number | null;
             /** Class Id */
@@ -29487,22 +29307,6 @@ export interface components {
             /** Enabled */
             enabled: boolean;
         };
-        /** ShopActivityDeadlineUpdate */
-        ShopActivityDeadlineUpdate: {
-            /**
-             * Order Closes At
-             * @description 活動商品停止訂購時間；null 表示取消活動統一期限
-             */
-            order_closes_at: string | null;
-        };
-        /** ShopActivityOrderClosureUpdate */
-        ShopActivityOrderClosureUpdate: {
-            /**
-             * Is Closed
-             * @description 結單鎖定活動訂購；false 重新開放，仍受原期限限制
-             */
-            is_closed: boolean;
-        };
         /** ShopClassProductSummaryRow */
         ShopClassProductSummaryRow: {
             /**
@@ -29672,8 +29476,6 @@ export interface components {
         };
         /** ShopDelegationOut */
         ShopDelegationOut: {
-            /** Activity Id */
-            activity_id?: string | null;
             /** Authorization Code */
             authorization_code?: string | null;
             /** Authorization Code Expires At */
@@ -29980,11 +29782,6 @@ export interface components {
         /** ShopPromotionCreate */
         ShopPromotionCreate: {
             /**
-             * Activity Id
-             * @description 適用活動；未指定時僅適用一般商品
-             */
-            activity_id?: string | null;
-            /**
              * Code
              * @description 優惠碼；留空時符合條件即自動套用
              */
@@ -30033,7 +29830,7 @@ export interface components {
             starts_at?: string | null;
             /**
              * Target Category Ids
-             * @description 適用商品主題，可複選；空列表不限主題，滿額與件數按各主題分開計算；null 保留舊活動範圍
+             * @description 適用商品主題；空列表或 null 代表不限主題
              */
             target_category_ids?: string[] | null;
             /**
@@ -30054,8 +29851,6 @@ export interface components {
         };
         /** ShopPromotionOut */
         ShopPromotionOut: {
-            /** Activity Id */
-            activity_id?: string | null;
             /** Code */
             code?: string | null;
             /**
@@ -30146,7 +29941,7 @@ export interface components {
              * Reason Code
              * @enum {string}
              */
-            reason_code: "applied" | "minimum_not_met" | "invalid_code" | "not_started" | "expired" | "inactive" | "usage_limit" | "account_not_eligible" | "items_not_matched" | "quantity_not_met" | "activity_not_matched" | "no_promotion";
+            reason_code: "applied" | "minimum_not_met" | "invalid_code" | "not_started" | "expired" | "inactive" | "usage_limit" | "account_not_eligible" | "items_not_matched" | "quantity_not_met" | "no_promotion";
             /**
              * Shortfall
              * @default 0
@@ -30162,13 +29957,8 @@ export interface components {
         /** ShopPromotionPreviewRequest */
         ShopPromotionPreviewRequest: {
             /**
-             * Activity Id
-             * @description 優惠所屬活動
-             */
-            activity_id?: string | null;
-            /**
              * Category Id
-             * @description 未綁活動時的商品分類
+             * @description 商品分類
              */
             category_id?: string | null;
             /**
@@ -30214,8 +30004,6 @@ export interface components {
         };
         /** ShopPromotionPublicOut */
         ShopPromotionPublicOut: {
-            /** Activity Id */
-            activity_id?: string | null;
             /** Code */
             code?: string | null;
             /** Description */
@@ -30259,11 +30047,6 @@ export interface components {
         };
         /** ShopPromotionUpdate */
         ShopPromotionUpdate: {
-            /**
-             * Activity Id
-             * @description 適用活動；未指定時僅適用一般商品
-             */
-            activity_id?: string | null;
             /** Code */
             code?: string | null;
             /** Description */
@@ -30299,7 +30082,7 @@ export interface components {
             starts_at?: string | null;
             /**
              * Target Category Ids
-             * @description 適用商品主題；空列表不限主題，null 保留舊活動範圍；未提供時不變更
+             * @description 適用商品主題；空列表或 null 代表不限主題；未提供時不變更
              */
             target_category_ids?: string[] | null;
             /** Target Email */
@@ -30615,8 +30398,6 @@ export interface components {
         };
         /** ShopSalesReportCreate */
         ShopSalesReportCreate: {
-            /** Activity Id */
-            activity_id?: string | null;
             /** Category Id */
             category_id?: string | null;
             /** Class Id */
@@ -30925,8 +30706,6 @@ export interface components {
         };
         /** ShopTargetLookupRequest */
         ShopTargetLookupRequest: {
-            /** Activity Id */
-            activity_id?: string | null;
             /** Identifiers */
             identifiers?: string[];
             /**
@@ -31122,8 +30901,6 @@ export interface components {
         };
         /** SurveyCreate */
         SurveyCreate: {
-            /** Activity Id */
-            activity_id?: string | null;
             /**
              * Allow Multiple
              * @default false
@@ -31190,8 +30967,6 @@ export interface components {
         };
         /** SurveyListItem */
         SurveyListItem: {
-            /** Activity Id */
-            activity_id?: string | null;
             /** Closes At */
             closes_at: string | null;
             /**
@@ -31229,8 +31004,6 @@ export interface components {
         };
         /** SurveyOut */
         SurveyOut: {
-            /** Activity Id */
-            activity_id?: string | null;
             /** Allow Multiple */
             allow_multiple: boolean;
             /** Allowed Domains */
@@ -31591,8 +31364,6 @@ export interface components {
         };
         /** SurveyUpdate */
         SurveyUpdate: {
-            /** Activity Id */
-            activity_id?: string | null;
             /** Allowed Domains */
             allowed_domains?: string[] | null;
             /** Allowed Grades */
@@ -32638,8 +32409,6 @@ export interface components {
         };
         /** WorkflowInstanceOut */
         WorkflowInstanceOut: {
-            /** Activity Id */
-            activity_id: string | null;
             /** Completed At */
             completed_at: string | null;
             /**
@@ -36469,8 +36238,6 @@ export interface operations {
             query?: {
                 /** @description 篩選特定組織的公告（None=全站） */
                 org_id?: string | null;
-                /** @description 篩選特定活動 */
-                activity_id?: string | null;
                 skip?: number;
                 limit?: number;
             };
@@ -36557,7 +36324,6 @@ export interface operations {
         parameters: {
             query?: {
                 org_id?: string | null;
-                activity_id?: string | null;
                 skip?: number;
                 limit?: number;
             };
@@ -40453,8 +40219,6 @@ export interface operations {
             query?: {
                 /** @description 過濾組織（不填則依使用者所在組織） */
                 org_id?: string | null;
-                /** @description 過濾活動 */
-                activity_id?: string | null;
                 /** @description 過濾狀態 */
                 status?: components["schemas"]["DocumentStatus"] | null;
                 /** @description 過濾公文類別 */
@@ -52045,7 +51809,6 @@ export interface operations {
     list_publications_publications_get: {
         parameters: {
             query?: {
-                activity_id?: string | null;
                 status?: string | null;
                 limit?: number;
             };
@@ -52557,7 +52320,6 @@ export interface operations {
     list_receivables_receivables_get: {
         parameters: {
             query?: {
-                activity_id?: string | null;
                 class_id?: string | null;
                 user_id?: string | null;
                 status?: string | null;
@@ -52625,7 +52387,6 @@ export interface operations {
     export_receivables_csv_receivables_export_csv_get: {
         parameters: {
             query?: {
-                activity_id?: string | null;
                 class_id?: string | null;
             };
             header?: never;
@@ -52657,7 +52418,6 @@ export interface operations {
     receivable_summary_receivables_summary_get: {
         parameters: {
             query?: {
-                activity_id?: string | null;
                 class_id?: string | null;
             };
             header?: never;
@@ -54102,112 +53862,11 @@ export interface operations {
             };
         };
     };
-    list_shop_activities_shop_activities_get: {
-        parameters: {
-            query?: {
-                include_inactive?: boolean;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ActivityOut"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_shop_activity_order_closure_shop_activities__activity_id__order_closure_patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                activity_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ShopActivityOrderClosureUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ActivityOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_shop_activity_deadline_shop_activities__activity_id__order_deadline_patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                activity_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ShopActivityDeadlineUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ActivityOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_catalog_shop_catalog_get: {
         parameters: {
             query?: {
-                activity_id?: string | null;
-                /** @description 包含已結單活動，供登入後查詢與收款 */
+                category_id?: string | null;
+                /** @description 包含已結單分類，供登入後查詢與收款 */
                 include_closed?: boolean;
                 /** @description 班代代購的學生或名冊 ID */
                 class_member_id?: string | null;
@@ -54243,7 +53902,6 @@ export interface operations {
     list_categories_shop_categories_get: {
         parameters: {
             query?: {
-                activity_id?: string | null;
                 include_inactive?: boolean;
             };
             header?: never;
@@ -55045,7 +54703,6 @@ export interface operations {
     list_orders_shop_orders_get: {
         parameters: {
             query?: {
-                activity_id?: string | null;
                 status?: components["schemas"]["OrderStatus"] | null;
                 /** @description 僅顯示我的訂單 */
                 my_only?: boolean;
@@ -55115,7 +54772,6 @@ export interface operations {
                 date_to?: string | null;
                 compare?: boolean;
                 compare_from?: string | null;
-                activity_id?: string | null;
                 category_id?: string | null;
                 product_id?: string | null;
                 grade?: number | null;
@@ -55223,11 +54879,9 @@ export interface operations {
                 is_class_collected?: boolean | null;
                 /** @description 僅顯示班級幹部協助建立的訂單 */
                 assisted_only?: boolean;
-                /** @description 篩選活動 */
-                activity_id?: string | null;
-                /** @description 篩選未綁活動的商品分類 */
+                /** @description 篩選商品分類 */
                 category_id?: string | null;
-                /** @description 僅顯示未綁活動的訂單 */
+                /** @description 僅顯示未歸類訂單 */
                 general_only?: boolean;
                 /** @description 篩選商品 */
                 product_id?: string | null;
@@ -55389,11 +55043,9 @@ export interface operations {
                 is_class_collected?: boolean | null;
                 /** @description 僅顯示班級幹部協助建立的訂單 */
                 assisted_only?: boolean;
-                /** @description 篩選活動 */
-                activity_id?: string | null;
-                /** @description 篩選未綁活動的商品分類 */
+                /** @description 篩選商品分類 */
                 category_id?: string | null;
-                /** @description 僅顯示未綁活動的訂單 */
+                /** @description 僅顯示未歸類訂單 */
                 general_only?: boolean;
                 /** @description 篩選商品 */
                 product_id?: string | null;
@@ -55528,8 +55180,8 @@ export interface operations {
     download_class_receipt_shop_orders_classes__class_id__receipt_pdf_get: {
         parameters: {
             query?: {
-                /** @description 活動；未提供時僅匯出一般商品 */
-                activity_id?: string | null;
+                /** @description 商品分類 */
+                category_id?: string | null;
             };
             header?: never;
             path: {
@@ -55595,7 +55247,6 @@ export interface operations {
     order_distribution_shop_orders_distribution_get: {
         parameters: {
             query?: {
-                activity_id?: string | null;
                 grade?: number | null;
                 class_id?: string | null;
                 category_id?: string | null;
@@ -55632,7 +55283,6 @@ export interface operations {
             query: {
                 report_type: "classes" | "people" | "class-sheet" | "class-totals" | "council";
                 scope?: string;
-                activity_id?: string | null;
                 category_id?: string | null;
                 product_id?: string | null;
                 grade?: number | null;
@@ -55672,7 +55322,6 @@ export interface operations {
     order_purchase_details_shop_orders_purchase_details_get: {
         parameters: {
             query?: {
-                activity_id?: string | null;
                 category_id?: string | null;
                 product_id?: string | null;
                 grade?: number | null;
@@ -55712,7 +55361,6 @@ export interface operations {
     order_quantities_shop_orders_quantities_get: {
         parameters: {
             query?: {
-                activity_id?: string | null;
                 grade?: number | null;
                 class_id?: string | null;
                 category_id?: string | null;
@@ -55752,7 +55400,6 @@ export interface operations {
     download_order_quantities_shop_orders_quantities_xlsx_get: {
         parameters: {
             query?: {
-                activity_id?: string | null;
                 grade?: number | null;
                 class_id?: string | null;
                 category_id?: string | null;
@@ -55909,7 +55556,6 @@ export interface operations {
         parameters: {
             query?: {
                 group_by?: string;
-                activity_id?: string | null;
                 product_id?: string | null;
                 category_id?: string | null;
                 grade?: number | null;
@@ -56281,7 +55927,6 @@ export interface operations {
     list_products_shop_products_get: {
         parameters: {
             query?: {
-                activity_id?: string | null;
                 category_id?: string | null;
                 series_id?: string | null;
                 status?: components["schemas"]["ProductStatus"] | null;
@@ -56936,9 +56581,7 @@ export interface operations {
     };
     list_purchase_permissions_shop_purchase_permissions_get: {
         parameters: {
-            query?: {
-                activity_id?: string | null;
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
@@ -56952,15 +56595,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProductPurchasePermissionOut"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -57109,8 +56743,8 @@ export interface operations {
     export_orders_csv_shop_reports_orders_csv_get: {
         parameters: {
             query?: {
-                /** @description 過濾活動 */
-                activity_id?: string | null;
+                /** @description 商品分類 */
+                category_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -57139,8 +56773,8 @@ export interface operations {
     export_orders_excel_shop_reports_orders_xlsx_get: {
         parameters: {
             query?: {
-                /** @description 過濾活動 */
-                activity_id?: string | null;
+                /** @description 商品分類 */
+                category_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -58850,7 +58484,6 @@ export interface operations {
         parameters: {
             query?: {
                 org_id?: string | null;
-                activity_id?: string | null;
                 status?: components["schemas"]["SurveyStatus"] | null;
                 limit?: number;
                 offset?: number;
@@ -60601,7 +60234,6 @@ export interface operations {
             query?: {
                 workflow_type?: string | null;
                 status?: string | null;
-                activity_id?: string | null;
                 limit?: number;
                 offset?: number;
             };

@@ -129,12 +129,12 @@ export function useShopRegistration(options: RegistrationOptions) {
     const scope = orderScopeParams(scopeKey);
     const preview = await (snapshot.delegationToken
       ? shopApi.previewDelegationPromotion(snapshot.delegationToken, code)
-      : shopApi.previewCurrentPromotion(code, scope.activity_id ?? null, scope.category_id));
+      : shopApi.previewCurrentPromotion(code, scope.category_id));
     assertCurrent();
     if (!preview.eligible) { note(preview.reason ?? ineligibleMessage); return; }
     const updated = await (snapshot.delegationToken
       ? shopApi.applyDelegationPromotion(snapshot.delegationToken, code)
-      : shopApi.applyCurrentPromotion(code, scope.activity_id ?? null, scope.category_id));
+      : shopApi.applyCurrentPromotion(code, scope.category_id));
     assertCurrent();
     commit((orders) => [
       ...orders.filter((order) => order.id !== updated.id), updated,
@@ -195,7 +195,8 @@ export function useShopRegistration(options: RegistrationOptions) {
           const previous = snapshot.registrations.find((existing) =>
             !existing.test_product_id && orderScopeKey(existing) === snapshot.scopeKey) ?? null;
           if (order) snapshot.onQualifiedPromotions(snapshot.availablePromotions
-            .filter((promotion) => (promotion.activity_id ?? null) === (scope.activity_id ?? null))
+            .filter((promotion) => !promotion.target_category_ids?.length
+              || promotion.target_category_ids.includes(scope.category_id ?? ""))
             .filter((promotion) => !promotionRequirementsMet(promotion, previous) && promotionRequirementsMet(promotion, order))
             .map((promotion) => promotion.id));
           commit((orders) => [

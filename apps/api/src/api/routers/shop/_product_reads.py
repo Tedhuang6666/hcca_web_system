@@ -17,7 +17,6 @@ from api.routers.shop._common import (
     _class_purchase_buyer,
     _get_category_or_404,
     _get_product_or_404,
-    _product_activity,
     _require_shop_manager,
 )
 from api.schemas.shop import (
@@ -49,7 +48,6 @@ router = APIRouter()
 async def list_products(
     session: DbDep,
     current_user: OptionalUser,
-    activity_id: uuid.UUID | None = Query(None),
     category_id: uuid.UUID | None = Query(None),
     series_id: uuid.UUID | None = Query(None),
     status_filter: ProductStatus | None = Query(None, alias="status"),
@@ -58,7 +56,6 @@ async def list_products(
 ) -> list[ProductOut]:
     products = await shop_svc.list_products(
         session,
-        activity_id=activity_id,
         category_id=category_id,
         series_id=series_id,
         status=status_filter,
@@ -117,7 +114,7 @@ async def get_product_cost(
     product_id: uuid.UUID, session: DbDep, current_user: CurrentUser, response: Response
 ) -> ProductCostOut:
     product = await _get_product_or_404(product_id, session, current_user)
-    await _require_shop_manager(session, current_user, _product_activity(product))
+    await _require_shop_manager(session, current_user)
     response.headers["Cache-Control"] = "private, no-store"
     return ProductCostOut(unit_cost=product.unit_cost)
 
@@ -135,7 +132,7 @@ async def save_product_procurement(
     response: Response,
 ) -> ProductProcurementUpdate:
     product = await _get_product_or_404(product_id, session, current_user)
-    await _require_shop_manager(session, current_user, _product_activity(product))
+    await _require_shop_manager(session, current_user)
     await update_procurement(session, product, data)
     await audit_svc.record(
         session,
@@ -163,7 +160,7 @@ async def read_shop_profit(
     response: Response,
 ) -> ShopProfitOut:
     category = await _get_category_or_404(category_id, session)
-    await _require_shop_manager(session, current_user, category.activity_id)
+    await _require_shop_manager(session, current_user)
     response.headers["Cache-Control"] = "private, no-store"
     return await profit_analysis(session, category)
 
@@ -177,7 +174,7 @@ async def get_product_purchase_rules(
     product_id: uuid.UUID, session: DbDep, current_user: CurrentUser
 ) -> ProductPurchaseRules:
     product = await _get_product_or_404(product_id, session, current_user)
-    await _require_shop_manager(session, current_user, _product_activity(product))
+    await _require_shop_manager(session, current_user)
     return await lookups_svc.purchase_rules(session, product)
 
 
@@ -190,7 +187,7 @@ async def list_purchase_group_options(
     category_id: uuid.UUID, session: DbDep, current_user: CurrentUser
 ) -> list[ProductPurchaseGroupOptionOut]:
     category = await _get_category_or_404(category_id, session)
-    await _require_shop_manager(session, current_user, category.activity_id)
+    await _require_shop_manager(session, current_user)
     return await lookups_svc.purchase_group_options(session, category.id)
 
 
@@ -199,10 +196,8 @@ async def list_purchase_group_options(
     response_model=list[ProductPurchasePermissionOut],
     summary="商品購買資格可選權限（限商品管理者）",
 )
-async def list_purchase_permissions(
-    session: DbDep, current_user: CurrentUser, activity_id: uuid.UUID | None = None
-) -> list[dict]:
-    await _require_shop_manager(session, current_user, activity_id)
+async def list_purchase_permissions(session: DbDep, current_user: CurrentUser) -> list[dict]:
+    await _require_shop_manager(session, current_user)
     return ALL_PERMISSION_CODES
 
 
@@ -217,11 +212,9 @@ async def lookup_shop_targets(
     current_user: CurrentUser,
     response: Response,
 ) -> list[ShopTargetOut]:
-    activity_id = payload.activity_id
     if payload.product_id is not None:
-        product = await _get_product_or_404(payload.product_id, session, current_user)
-        activity_id = _product_activity(product)
-    await _require_shop_manager(session, current_user, activity_id)
+        await _get_product_or_404(payload.product_id, session, current_user)
+    await _require_shop_manager(session, current_user)
     response.headers["Cache-Control"] = "private, no-store"
     return await lookup_targets(
         session,

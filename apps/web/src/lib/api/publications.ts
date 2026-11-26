@@ -4,9 +4,8 @@ import type {
 import { get, post, patch } from "./core";
 
 export const publicationsApi = {
-  list: (params?: { activity_id?: string; status?: string; limit?: number }) => {
+  list: (params?: { status?: string; limit?: number }) => {
     const q = new URLSearchParams();
-    if (params?.activity_id) q.set("activity_id", params.activity_id);
     if (params?.status) q.set("status", params.status);
     if (params?.limit) q.set("limit", String(params.limit));
     const qs = q.toString();
@@ -15,7 +14,7 @@ export const publicationsApi = {
   get: (id: string) => get<PublicationCampaignOut>(`/publications/${id}`),
   create: (body: {
     title: string; body: string; source_type?: string | null; source_id?: string | null;
-    activity_id?: string | null; org_id?: string | null; audience_type?: string;
+    org_id?: string | null; audience_type?: string;
     audience_filter?: Record<string, unknown>; channels: string[]; scheduled_at?: string | null;
   }) => post<PublicationCampaignOut>("/publications", body),
   update: (id: string, body: Partial<PublicationCampaignOut>) =>

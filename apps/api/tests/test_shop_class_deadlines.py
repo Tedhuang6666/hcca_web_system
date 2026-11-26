@@ -6,7 +6,6 @@ import pytest
 from sqlalchemy import select
 
 from api.core.clock import local_today
-from api.models.activity import Activity, ActivityStatus
 from api.models.electronic_credential import ElectronicCredentialSettings
 from api.models.org import Org, Permission, Position, UserPosition
 from api.models.shop import ShopOrderClose
@@ -19,7 +18,6 @@ from api.schemas.shop import (
 )
 from api.services import school_class as class_svc
 from api.services import shop as shop_svc
-from api.services.shop import _class_close_status, _order_writes, _orders
 
 
 @pytest.fixture
@@ -48,16 +46,9 @@ async def class_deadlines(db_session, admin_user, make_user, authed_client_facto
     outsider = await make_user(student_id="311001", email="311001@hchs.hc.edu.tw")
     await class_svc.add_cadre(db_session, classes[0], user_id=cadre.id)
     await class_svc.add_cadre(db_session, classes[1], user_id=outsider.id)
-    activity = Activity(
-        name="活動收款",
-        status=ActivityStatus.ACTIVE,
-        order_closes_at=datetime.now(UTC) + timedelta(days=3),
-    )
-    db_session.add(activity)
-    await db_session.flush()
     category = await shop_svc.create_category(
         db_session,
-        data=ProductCategoryCreate(name="活動商品", activity_id=activity.id),
+        data=ProductCategoryCreate(name="商品"),
         created_by=admin_user.id,
     )
     series = await shop_svc.create_series(
@@ -80,7 +71,6 @@ async def class_deadlines(db_session, admin_user, make_user, authed_client_facto
         "student": authed_client_factory(buyer),
         "outsider": authed_client_factory(outsider),
         "manager": authed_client_factory(admin_user),
-        "activity": activity,
         "category": category,
         "product": product,
     }
@@ -186,58 +176,13 @@ async def test_class_cutoffs_lock_self_ordering_but_allow_cadre_assistance(
     assert (await s["cadre"].post("/shop/orders/class", json=order_payload(s))).status_code == 201
 
 
-async def pay_class(s, paid=True, activity_id="current"):
+async def pay_class(s, paid=True):
     response = await s["manager"].patch(
         f"/shop/orders/classes/{s['class'].id}/payment",
-        json={
-            "is_paid": paid,
-            "activity_id": str(s["activity"].id) if activity_id == "current" else activity_id,
-        },
+        json={"is_paid": paid},
     )
     assert response.status_code == 200, response.text
     return response
-
-
-async def test_unified_cutoff_locks_student_family_and_assisted_orders(
-    db_session, monkeypatch, class_deadlines
-):
-    s = class_deadlines
-    link = await s["student"].post(
-        "/shop/delegation-links", json={"name": "家人", "category_id": str(s["category"].id)}
-    )
-    created = await s["student"].put(registration_path(s), json={"variants": [{"quantity": 1}]})
-    assert created.status_code == 200
-    cutoff = s["activity"].order_closes_at
-    s["product"].sale_end = cutoff + timedelta(days=5)
-    await db_session.flush()
-    assert s["product"].effective_sale_end == cutoff
-
-    class AtCutoff(datetime):
-        @classmethod
-        def now(cls, tz=None):
-            return cutoff
-
-    monkeypatch.setattr(_orders, "datetime", AtCutoff)
-    monkeypatch.setattr(_class_close_status, "datetime", AtCutoff)
-    monkeypatch.setattr(_order_writes, "datetime", AtCutoff)
-    assert (await s["student"].put(registration_path(s), json={"variants": []})).status_code == 409
-    assert (await s["cadre"].post("/shop/orders/class", json=order_payload(s))).status_code == 422
-    assert (
-        await s["cadre"].put(
-            f"/shop/orders/class/members/{s['buyer'].id}/products/{s['product'].id}",
-            json={"variants": [{"quantity": 2}]},
-        )
-    ).status_code == 422
-    assert (
-        await s["student"].put(
-            "/shop/registrations/current/promotion",
-            json={"code": None, "activity_id": str(s["activity"].id)},
-        )
-    ).status_code == 422
-    assert (
-        await s["manager"].post("/shop/delegation/access", json={"token": link.json()["token"]})
-    ).status_code == 410
-    assert (await status(s))["is_closed"] is True
 
 
 async def test_council_payment_locks_self_ordering_but_allows_separate_cadre_supplements(
@@ -283,7 +228,7 @@ async def test_council_payment_locks_self_ordering_but_allows_separate_cadre_sup
         await shop_svc.checkout(db_session, s["buyer"])
 
 
-async def test_payment_locks_empty_class_and_future_categories_but_not_other_scopes(
+async def test_class_payment_locks_future_categories_but_not_other_classes(
     db_session, class_deadlines
 ):
     s = class_deadlines
@@ -291,7 +236,7 @@ async def test_payment_locks_empty_class_and_future_categories_but_not_other_sco
     await pay_class(s)  # 重送不產生重複班級收款紀錄。
     category = await shop_svc.create_category(
         db_session,
-        data=ProductCategoryCreate(name="追加主題", activity_id=s["activity"].id),
+        data=ProductCategoryCreate(name="追加主題"),
         created_by=s["buyer"].id,
     )
     closes = await shop_svc.get_close_status(db_session, [category.id], s["class"].id)
@@ -307,100 +252,14 @@ async def test_payment_locks_empty_class_and_future_categories_but_not_other_sco
     )
     assert (await shop_svc.get_close_status(db_session, [general.id], s["class"].id))[
         general.id
-    ] is None
-    await pay_class(s, activity_id=None)
-    # 空的一般商品收款紀錄不能推論每個未綁活動的主題都已收款。
+    ].is_closed is True
+    await pay_class(s, paid=False)
     assert (await shop_svc.get_close_status(db_session, [general.id], s["class"].id))[
         general.id
     ] is None
 
 
-@pytest.mark.parametrize("legacy_order", [False, True])
-async def test_paid_general_theme_does_not_lock_unpaid_merchandise_or_dance(
-    db_session, class_deadlines, legacy_order
-):
-    s = class_deadlines
-    s["category"].activity_id = None
-    await db_session.flush()
-    created = await s["student"].put(registration_path(s), json={"variants": [{"quantity": 1}]})
-    assert created.status_code == 200, created.text
-    old_order = await shop_svc.get_order(db_session, created.json()["id"])
-    if legacy_order:
-        old_order.category_id = None
-    await pay_class(s, activity_id=None)
-
-    for name in ("新校商", "聯合舞會"):
-        category = await shop_svc.create_category(
-            db_session, data=ProductCategoryCreate(name=name), created_by=s["buyer"].id
-        )
-        product = await shop_svc.create_product(
-            db_session,
-            data=ProductCreate(category_id=category.id, name=name, price=100, is_unlimited=True),
-            created_by=s["buyer"].id,
-        )
-        await shop_svc.activate_product(db_session, product)
-        status_response = await s["student"].get(
-            "/shop/close-status", params={"category_ids": str(category.id)}
-        )
-        item = status_response.json()["statuses"][str(category.id)]
-        assert item["is_closed"] is False
-        assert item["council_confirmed_at"] is None
-        registered = await s["student"].put(
-            f"/shop/registrations/current/products/{product.id}",
-            json={"variants": [{"quantity": 1}]},
-        )
-        assert registered.status_code == 200, registered.text
-        assert registered.json()["is_paid"] is False
-        assert registered.json()["is_class_collected"] is False
-        assisted = await s["cadre"].post(
-            "/shop/orders/class",
-            json={
-                "user_id": str(s["buyer"].id),
-                "items": [{"product_id": str(product.id), "quantity": 1}],
-            },
-        )
-        assert assisted.status_code == 201, assisted.text
-        assert assisted.json()[0]["class_id"] == str(s["class"].id)
-        assert assisted.json()[0]["supplement_class_id"] is None
-        link = await s["student"].post(
-            "/shop/delegation-links", json={"name": "家人", "category_id": str(category.id)}
-        )
-        assert link.status_code == 201, link.text
-        accessed = await s["manager"].post(
-            "/shop/delegation/access", json={"token": link.json()["token"]}
-        )
-        assert accessed.status_code == 200, accessed.text
-        assert accessed.json()["closed_category_ids"] == []
-
-    # 原主題的收款鎖仍在，另一班不受影響。
-    assert (await status(s))["is_closed"] is True
-    assert (await status(s))["council_confirmed_at"] is not None
-    assert (
-        await s["student"].put(registration_path(s), json={"variants": [{"quantity": 2}]})
-    ).status_code == 409
-    assert (
-        await s["outsider"].put(registration_path(s), json={"variants": [{"quantity": 1}]})
-    ).status_code == 200
-
-
-@pytest.mark.parametrize("inactive_status", ["cancelled", "refunded"])
-async def test_inactive_paid_order_does_not_lock_general_category(
-    db_session, class_deadlines, inactive_status
-):
-    s = class_deadlines
-    s["category"].activity_id = None
-    await db_session.flush()
-    created = await s["student"].put(registration_path(s), json={"variants": [{"quantity": 1}]})
-    assert created.status_code == 200, created.text
-    await pay_class(s, activity_id=None)
-    order = await shop_svc.get_order(db_session, created.json()["id"])
-    order.status = inactive_status
-    await db_session.flush()
-    assert (await status(s))["is_closed"] is False
-    assert (await status(s))["council_confirmed_at"] is None
-
-
-async def test_payment_revocation_obeys_unified_cutoff(db_session, class_deadlines):
+async def test_class_payment_revocation_reopens_registration(db_session, class_deadlines):
     s = class_deadlines
     await pay_class(s)
     await pay_class(s, False)
@@ -409,11 +268,11 @@ async def test_payment_revocation_obeys_unified_cutoff(db_session, class_deadlin
         await s["student"].put(registration_path(s), json={"variants": [{"quantity": 1}]})
     ).status_code == 200
     await pay_class(s)
-    s["activity"].order_closes_at = datetime.now(UTC) - timedelta(seconds=1)
-    await db_session.flush()
     await pay_class(s, False)
-    assert (await status(s))["is_closed"] is True
-    assert (await s["student"].put(registration_path(s), json={"variants": []})).status_code == 409
+    assert (await status(s))["is_closed"] is False
+    assert (
+        await s["student"].put(registration_path(s), json={"variants": [{"quantity": 1}]})
+    ).status_code == 200
 
 
 async def test_payment_blocks_family_and_cadre_cannot_confirm_receipt(client, class_deadlines):
@@ -422,7 +281,7 @@ async def test_payment_blocks_family_and_cadre_cannot_confirm_receipt(client, cl
         "/shop/delegation-links", json={"name": "家人", "category_id": str(s["category"].id)}
     )
     path = f"/shop/orders/classes/{s['class'].id}/payment"
-    body = {"is_paid": True, "activity_id": str(s["activity"].id)}
+    body = {"is_paid": True}
     assert (await client.patch(path, json=body)).status_code == 401
     for actor in ["cadre", "student", "outsider"]:
         assert (await s[actor].patch(path, json=body)).status_code == 403
@@ -448,12 +307,3 @@ async def test_assisted_order_respects_stock_and_preserves_collection(class_dead
     supplement = await s["cadre"].post("/shop/orders/class", json=order_payload(s))
     assert supplement.status_code == 201
     assert supplement.json()[0]["id"] != order_id
-
-
-async def test_payment_rejects_missing_activity(class_deadlines):
-    s = class_deadlines
-    response = await s["manager"].patch(
-        f"/shop/orders/classes/{s['class'].id}/payment",
-        json={"is_paid": True, "activity_id": "00000000-0000-0000-0000-000000000001"},
-    )
-    assert response.status_code == 404

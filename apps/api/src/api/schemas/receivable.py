@@ -13,7 +13,6 @@ from api.models.receivable import ReceivableSource, ReceivableStatus
 class ReceivableCreate(BaseModel):
     source_type: ReceivableSource = ReceivableSource.MANUAL
     source_id: uuid.UUID | None = None
-    activity_id: uuid.UUID | None = None
     org_id: uuid.UUID | None = None
     user_id: uuid.UUID | None = None
     class_id: uuid.UUID | None = None
@@ -30,7 +29,6 @@ class ReceivableCreate(BaseModel):
 
 
 class ReceivableUpdate(BaseModel):
-    activity_id: uuid.UUID | None = None
     org_id: uuid.UUID | None = None
     user_id: uuid.UUID | None = None
     class_id: uuid.UUID | None = None
@@ -59,7 +57,6 @@ class ReceivableOut(BaseModel):
     id: uuid.UUID
     source_type: ReceivableSource
     source_id: uuid.UUID | None
-    activity_id: uuid.UUID | None
     org_id: uuid.UUID | None
     user_id: uuid.UUID | None
     class_id: uuid.UUID | None

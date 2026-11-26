@@ -5,7 +5,6 @@ import uuid
 from datetime import UTC, datetime
 
 from api.main import app
-from api.models.activity import Activity
 from api.models.document import Document
 from api.models.governance import EntityRelation, Matter
 from api.models.org import Org
@@ -28,21 +27,19 @@ async def test_retired_receipt_has_no_http_handler(client):
     assert response.status_code == 404
 
 
-async def test_context_omits_retired_activity_and_matter_destinations(db_session, member_user):
+async def test_context_omits_retired_matter_destinations(db_session, member_user):
     org = Org(name="脈絡回歸組織")
     db_session.add(org)
     await db_session.flush()
-    activity = Activity(name="脈絡回歸活動", org_id=org.id)
     matter = Matter(title="脈絡回歸事項", matter_type="administration")
     petition_type = PetitionType(name="脈絡回歸類型", responsible_org_id=org.id)
-    db_session.add_all([activity, matter, petition_type])
+    db_session.add_all([matter, petition_type])
     await db_session.flush()
     document = Document(
         serial_number=f"CTX-{uuid.uuid4().hex[:12]}",
         title="脈絡回歸公文",
         org_id=org.id,
         created_by=member_user.id,
-        activity_id=activity.id,
     )
     petition = PetitionCase(
         case_number=f"{uuid.uuid4().int % 10_000_000:07d}",

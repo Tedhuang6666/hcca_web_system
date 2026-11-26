@@ -15,7 +15,6 @@ from api.models.user import User
 from api.services import receivable as receivable_svc
 from api.services import school_class as class_svc
 from api.services import shop as shop_svc
-from api.services.shop._class_payment_scope import paid_general_category_ids
 from tests.test_shop_router import (
     _bare_user,
     _grant_permission,
@@ -49,8 +48,6 @@ async def test_partial_class_payment_and_balance_collection(
     path = f"/shop/orders/classes/{school_class.id}/payment"
     payload = {
         "is_paid": True,
-        "activity_id": None,
-        "category_id": str(category.id),
         "received_amount": 2000,
         "expected_unpaid_amount": 3000,
     }
@@ -92,8 +89,6 @@ async def test_partial_class_payment_and_balance_collection(
         path,
         json={
             "is_paid": True,
-            "activity_id": None,
-            "category_id": str(category.id),
             "expected_unpaid_amount": 1000,
         },
     )
@@ -102,13 +97,9 @@ async def test_partial_class_payment_and_balance_collection(
     assert receivable.paid_amount == 3000 and receivable.status == "paid"
     report = await shop_svc.class_payment_report(db_session)
     assert sorted(row.amount for row in report) == [1000, 2000]
-    await ac.patch(
-        path, json={"is_paid": True, "activity_id": None, "category_id": str(category.id)}
-    )
+    await ac.patch(path, json={"is_paid": True})
     assert sum(row.amount for row in await shop_svc.class_payment_report(db_session)) == 3000
-    response = await ac.patch(
-        path, json={"is_paid": False, "activity_id": None, "category_id": str(category.id)}
-    )
+    response = await ac.patch(path, json={"is_paid": False})
     assert response.status_code == 200
     assert not order.is_paid and order.received_amount == 0 and not order.is_class_balance
     assert order.class_id == school_class.id and order.supplement_class_id is None
@@ -135,8 +126,6 @@ async def test_partial_payment_rejects_invalid_amounts(
         f"/shop/orders/classes/{school_class.id}/payment",
         json={
             "is_paid": True,
-            "activity_id": None,
-            "category_id": str(category.id),
             "received_amount": amount,
             "expected_unpaid_amount": expected,
         },
@@ -147,7 +136,7 @@ async def test_partial_payment_rejects_invalid_amounts(
 
 async def test_class_balance_preserves_receivable_sync_and_scope(db_session, authed_client_factory):
     actor, school_class, category, order = await setup_payment(db_session)
-    other_category = await _make_category(db_session, actor, name="另一活動")
+    other_category = await _make_category(db_session, actor, name="另一分類")
     buyer = await db_session.get(User, order.user_id)
     other = await _seed_order(db_session, buyer, class_id=school_class.id, total_price=500)
     other.category_id = other_category.id
@@ -157,18 +146,25 @@ async def test_class_balance_preserves_receivable_sync_and_scope(db_session, aut
         school_class.id,
         is_paid=True,
         actor_id=actor.id,
-        activity_id=None,
-        category_id=category.id,
         received_amount=2000,
-        expected_unpaid_amount=3000,
+        expected_unpaid_amount=3500,
     )
-    assert not other.is_paid and not other.is_class_balance and other.received_amount == 0
+    assert order.is_class_balance and other.is_class_balance
+    assert order.received_amount + other.received_amount == 2000
     receivable = await receivable_svc.sync_shop_order(db_session, order)
-    assert receivable.paid_amount == 2000
+    assert receivable.paid_amount == order.received_amount
     await receivable_svc.mark_paid(db_session, receivable, actor_id=actor.id)
-    assert order.is_paid and order.class_id == school_class.id
-    assert sum(row.amount for row in await shop_svc.class_payment_report(db_session)) == 3000
-    assert category.id in await paid_general_category_ids(db_session, school_class.id)
+    assert order.is_paid and other.class_id == school_class.id
+    expected_collected = sum(
+        item.total_price if item.is_paid else item.received_amount for item in (order, other)
+    )
+    assert sum(row.amount for row in await shop_svc.class_payment_report(db_session)) == (
+        expected_collected
+    )
+    class_payment = await db_session.scalar(
+        select(ShopClassPayment).where(ShopClassPayment.class_id == school_class.id)
+    )
+    assert class_payment is not None and class_payment.is_paid
 
 
 async def test_partial_payment_spans_orders_and_preserves_previous_payments(db_session):
@@ -194,8 +190,6 @@ async def test_partial_payment_spans_orders_and_preserves_previous_payments(db_s
         school_class.id,
         is_paid=True,
         actor_id=actor.id,
-        activity_id=None,
-        category_id=category.id,
         received_amount=2000,
         expected_unpaid_amount=2500,
     )
@@ -210,8 +204,6 @@ async def test_partial_payment_spans_orders_and_preserves_previous_payments(db_s
         school_class.id,
         is_paid=True,
         actor_id=actor.id,
-        activity_id=None,
-        category_id=category.id,
         expected_unpaid_amount=500,
     )
     assert all(item.is_paid for item in (order, paid, unpaid))

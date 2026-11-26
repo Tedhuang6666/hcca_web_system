@@ -67,7 +67,6 @@ class WorkflowInstanceOut(BaseModel):
     status: str
     current_step: str | None
     org_id: uuid.UUID | None
-    activity_id: uuid.UUID | None
     created_by_id: uuid.UUID | None
     completed_at: datetime | None
     is_active: bool

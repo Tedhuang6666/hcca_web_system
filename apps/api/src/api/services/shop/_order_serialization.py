@@ -14,7 +14,6 @@ from api.schemas.shop import (
 )
 from api.services import school_class as class_svc
 from api.services.shop._orders import (
-    _order_activity_id,
     _order_category,
     _product_order_scope,
 )
@@ -39,7 +38,6 @@ def serialize_order_item(item: OrderItem, *, direct_gift: bool = False) -> Order
 
 
 def serialize_order(order: Order) -> OrderOut:
-    activity = order.__dict__.get("activity")
     category = _order_category(order)
     return OrderOut(
         received_amount=order.total_price if order.is_paid else order.received_amount,
@@ -51,13 +49,11 @@ def serialize_order(order: Order) -> OrderOut:
         test_product_id=order.test_product_id,
         serial_number=order.serial_number,
         user_id=order.user_id,
-        activity_id=_order_activity_id(order),
-        activity_name=activity.name if activity else None,
         category_id=category.id if category else None,
         category_name=category.name
         if category
         else (
-            "跨活動歷史訂單"
+            "多分類歷史訂單"
             if len({_product_order_scope(item.product) for item in order.items}) > 1
             else None
         ),
@@ -96,7 +92,6 @@ def serialize_order(order: Order) -> OrderOut:
 
 
 def serialize_order_list_item(order: Order) -> OrderListItem:
-    activity = order.__dict__.get("activity")
     category = _order_category(order)
     return OrderListItem(
         received_amount=order.total_price if order.is_paid else order.received_amount,
@@ -109,13 +104,11 @@ def serialize_order_list_item(order: Order) -> OrderListItem:
         serial_number=order.serial_number,
         user_id=order.user_id,
         user_name=order.buyer_name or (order.user.display_name if order.user else None),
-        activity_id=_order_activity_id(order),
-        activity_name=activity.name if activity else None,
         category_id=category.id if category else None,
         category_name=category.name
         if category
         else (
-            "跨活動歷史訂單"
+            "多分類歷史訂單"
             if len({_product_order_scope(item.product) for item in order.items}) > 1
             else None
         ),

@@ -47,7 +47,9 @@ from api.services.shop._purchase_report import (
         ("council", []),
     ],
 )
-def test_every_report_pdf_includes_taipei_print_time(report_type: ReportType, data: ReportData) -> None:
+def test_every_report_pdf_includes_taipei_print_time(
+    report_type: ReportType, data: ReportData
+) -> None:
     pdf = render_order_report_pdf(report_type, data, "聖誕傳情")
     text = "\n".join(page.extract_text() or "" for page in PdfReader(BytesIO(pdf)).pages)
 
@@ -77,10 +79,7 @@ def test_class_sheet_pdf_numbers_pages_separately_for_each_class() -> None:
 
     pdf = render_order_report_pdf("class-sheet", pages, "聖誕傳情")
     page_texts = [page.extract_text() or "" for page in PdfReader(BytesIO(pdf)).pages]
-    markers = [
-        re.search(r"(101|102)\s*第\s*(\d+)\s*/\s*(\d+)\s*頁", text)
-        for text in page_texts
-    ]
+    markers = [re.search(r"(101|102)\s*第\s*(\d+)\s*/\s*(\d+)\s*頁", text) for text in page_texts]
 
     assert all(markers)
     for class_code in ("101", "102"):

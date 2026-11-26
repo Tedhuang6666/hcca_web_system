@@ -1,11 +1,10 @@
-"""活動免費券的指定人員、重複購買、完整計價與有效期回歸。"""
+"""分類免費券的指定人員、重複購買、完整計價與有效期回歸。"""
 
 from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
 
-from api.models.activity import Activity, ActivityStatus
 from api.models.receivable import Receivable
 from api.models.shop import Product, ProductStatus
 from api.schemas.shop import (
@@ -24,12 +23,9 @@ from api.services import shop as shop_svc
 @pytest.fixture
 async def free_coupon_shop(db_session, make_user):
     manager = await make_user()
-    activity = Activity(name="免費券活動", status=ActivityStatus.ACTIVE)
-    db_session.add(activity)
-    await db_session.flush()
     category = await shop_svc.create_category(
         db_session,
-        data=ProductCategoryCreate(name="校慶活動", activity_id=activity.id),
+        data=ProductCategoryCreate(name="校慶商品"),
         created_by=manager.id,
     )
     product = await shop_svc.create_product(
@@ -48,14 +44,14 @@ async def free_coupon_shop(db_session, make_user):
         created_by=manager.id,
     )
     await shop_svc.activate_product(db_session, product)
-    return manager, activity, category, await shop_svc.get_product(db_session, product.id)
+    return manager, category, await shop_svc.get_product(db_session, product.id)
 
 
 @pytest.mark.parametrize("registered_before_coupon", [False, True])
-async def test_activity_free_coupon_is_reusable_and_scoped_to_student_and_category(
+async def test_category_free_coupon_is_reusable_and_scoped_to_student_and_category(
     db_session, make_user, free_coupon_shop, registered_before_coupon
 ):
-    manager, activity, category, product = free_coupon_shop
+    manager, category, product = free_coupon_shop
     buyer = await make_user(student_id="410001") if registered_before_coupon else None
     promotion = await shop_svc.create_promotion(
         db_session,
@@ -127,7 +123,7 @@ async def test_activity_free_coupon_is_reusable_and_scoped_to_student_and_catego
     assert promotion.used_count == 2
     assert promotion.max_uses is None
     preview = await shop_svc.preview_registration_promotion(
-        db_session, user_id=buyer.id, code=None, activity_id=activity.id
+        db_session, user_id=buyer.id, code=None, category_id=category.id
     )
     assert preview.output.discount_amount == 2500
 
@@ -154,7 +150,7 @@ async def test_activity_free_coupon_is_reusable_and_scoped_to_student_and_catego
     )
     db_session.add(unrelated)
     await db_session.flush()
-    other_activity_order = (
+    other_category_order = (
         await shop_svc.create_direct_order(
             db_session,
             user_id=buyer.id,
@@ -167,14 +163,14 @@ async def test_activity_free_coupon_is_reusable_and_scoped_to_student_and_catego
             ),
         )
     )[0]
-    assert (other_activity_order.discount_amount, other_activity_order.total_price) == (0, 200)
+    assert (other_category_order.discount_amount, other_category_order.total_price) == (0, 200)
 
 
 @pytest.mark.parametrize("state", ["not_started", "expired", "inactive"])
-async def test_activity_free_coupon_respects_validity_and_deactivation(
+async def test_category_free_coupon_respects_validity_and_deactivation(
     db_session, make_user, free_coupon_shop, state
 ):
-    manager, activity, category, product = free_coupon_shop
+    manager, category, product = free_coupon_shop
     buyer = await make_user(student_id="410001")
     now = datetime.now(UTC)
     promotion = await shop_svc.create_promotion(

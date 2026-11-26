@@ -39,11 +39,10 @@ export type SurveySubmitBody = {
 };
 
 export const surveysApi = {
-  list: (params?: { status?: string; org_id?: string; activity_id?: string }) => {
+  list: (params?: { status?: string; org_id?: string }) => {
     const q = new URLSearchParams();
     if (params?.status) q.set("status", params.status);
     if (params?.org_id) q.set("org_id", params.org_id);
-    if (params?.activity_id) q.set("activity_id", params.activity_id);
     const qs = q.toString();
     return get<SurveyListItem[]>(`/surveys${qs ? `?${qs}` : ""}`);
   },
@@ -56,9 +55,9 @@ export const surveysApi = {
   },
   get: (id: string) => get<SurveyOut>(`/surveys/${pathSegment(id)}`),
   getPublic: (id: string) => get<SurveyOut>(`/surveys/public/${pathSegment(id)}`),
-  create: (body: { title: string; description?: string; is_anonymous?: boolean; allow_multiple?: boolean; opens_at?: string; closes_at?: string; org_id: string; activity_id?: string | null; is_public?: boolean; is_listed?: boolean; allowed_org_ids?: string[]; allowed_user_ids?: string[]; allowed_domains?: string[]; allowed_grades?: number[]; announcement?: string | null; announcement_title?: string | null; show_announcement_popup?: boolean }) =>
+  create: (body: { title: string; description?: string; is_anonymous?: boolean; allow_multiple?: boolean; opens_at?: string; closes_at?: string; org_id: string; is_public?: boolean; is_listed?: boolean; allowed_org_ids?: string[]; allowed_user_ids?: string[]; allowed_domains?: string[]; allowed_grades?: number[]; announcement?: string | null; announcement_title?: string | null; show_announcement_popup?: boolean }) =>
     post<SurveyOut>("/surveys", body),
-  update: (id: string, body: { title?: string; description?: string; opens_at?: string; closes_at?: string; activity_id?: string | null; is_public?: boolean; is_listed?: boolean; allowed_org_ids?: string[]; allowed_user_ids?: string[]; allowed_domains?: string[]; allowed_grades?: number[]; announcement?: string | null; announcement_title?: string | null; show_announcement_popup?: boolean }) =>
+  update: (id: string, body: { title?: string; description?: string; opens_at?: string; closes_at?: string; is_public?: boolean; is_listed?: boolean; allowed_org_ids?: string[]; allowed_user_ids?: string[]; allowed_domains?: string[]; allowed_grades?: number[]; announcement?: string | null; announcement_title?: string | null; show_announcement_popup?: boolean }) =>
     patch<SurveyOut>(`/surveys/${pathSegment(id)}`, body),
   open: (id: string) => post<SurveyOut>(`/surveys/${pathSegment(id)}/open`),
   close: (id: string) => post<SurveyOut>(`/surveys/${pathSegment(id)}/close`),

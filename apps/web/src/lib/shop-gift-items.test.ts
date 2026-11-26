@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mergeOrderItems, orderItemDisplayRows, summarizeOrderItems } from "./shop-order-items";
-import { groupActivityPreorders } from "./shop-preorders";
+import { groupCategoryPreorders } from "./shop-preorders";
 import type { OrderListItem } from "./types";
 
 const item = { id: "item", product_id: "shirt", product_name: "紀念衫", quantity: 3,
@@ -25,6 +25,6 @@ describe("贈品明細快照", () => {
       serial_number: "TEST-001", user_id: "student", payment_method: "cash_on_pickup",
       created_at: "2026-11-09T00:00:00Z", subtotal_price: 750, discount_amount: 100,
       assistance_scope: "self", total_price: 650, items };
-    expect(groupActivityPreorders([order])[0].items[0]).toMatchObject({ quantity: 5, gift_quantity: 1 });
+    expect(groupCategoryPreorders([order])[0].items[0]).toMatchObject({ quantity: 5, gift_quantity: 1 });
   });
 });

@@ -45,20 +45,20 @@ function groupByNote(rows: ProductRules[]) {
   return [...groups].sort(([left], [right]) => !left ? 1 : !right ? -1 : left.localeCompare(right, "zh-TW"));
 }
 
-function GroupMembers({ entry, activityId }: { entry: GroupProduct; activityId: string | null }) {
+function GroupMembers({ entry }: { entry: GroupProduct }) {
   const [result, setResult] = useState<{ rows: ShopTargetOut[]; error: string } | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [visible, setVisible] = useState(50);
   useEffect(() => {
     let active = true;
-    shopApi.lookupTargets({ activity_id: activityId, product_id: entry.product.id,
+    shopApi.lookupTargets({ product_id: entry.product.id,
       keyword: "", identifiers: entry.identifiers }).then((rows) => {
       if (active) setResult({ rows, error: "" });
     }).catch((error) => {
       if (active) setResult({ rows: [], error: apiErrorMessage(error, "名單核對失敗，請重試。") });
     });
     return () => { active = false; };
-  }, [entry, activityId, attempt]);
+  }, [entry, attempt]);
   const people = new Map(result?.rows.map((person) => [person.identifier, person]));
   return <div className="space-y-2 pt-2">
     {!result && <p role="status" className="text-sm">正在核對人員與訂購狀態…</p>}
@@ -131,7 +131,6 @@ export default function ShopNoteGroupsPanel() {
   const currentRules = rules?.key === rulesKey ? rules : null;
   const groups = useMemo(() => groupByNote(currentRules?.rows ?? []), [currentRules]);
   const filtered = groups.filter(([note]) => (note || "未填備註").toLocaleLowerCase().includes(noteQuery.trim().toLocaleLowerCase()));
-  const category = catalog?.categories.find((item) => item.id === categoryId);
   return <section className="card min-w-0 space-y-5 p-4 sm:p-6" aria-label="依備註分組查看購買名單">
     <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
       依允許購買名單統計，非實際訂購張數；不計禁止名單。
@@ -141,13 +140,13 @@ export default function ShopNoteGroupsPanel() {
         setCatalogError(""); setAttempt((value) => value + 1);
       }}>重新載入商品目錄</button>
     </div> : !catalog ? <p role="status">正在載入商品目錄…</p>
-      : catalog.categories.length === 0 ? <p>尚未建立活動，請先到商品設定新增活動與商品。</p>
+      : catalog.categories.length === 0 ? <p>尚未建立商品分類。</p>
         : <>
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="block text-sm font-medium" htmlFor={`${id}-category`}>活動
+            <label className="block text-sm font-medium" htmlFor={`${id}-category`}>商品分類
               <select id={`${id}-category`} className="input mt-1 min-h-11 w-full text-base" value={categoryId}
                 onChange={(event) => { setCategoryId(event.target.value); setNoteQuery(""); setOpened([]); }}>
-                <option value="">選擇活動</option>
+                <option value="">選擇商品分類</option>
                 {catalog.categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
               </select>
             </label>
@@ -156,14 +155,14 @@ export default function ShopNoteGroupsPanel() {
                 placeholder="例如：熱音" onChange={(event) => setNoteQuery(event.target.value)} />
             </label>
           </div>
-          {!categoryId ? <p className="text-sm">請選擇活動</p>
+          {!categoryId ? <p className="text-sm">請選擇商品分類</p>
             : !currentRules ? <p role="status">正在彙整購買名單…</p>
               : currentRules.error ? <div role="alert" className="text-sm" style={{ color: "var(--danger)" }}>
                 <p>{currentRules.error}</p><button type="button" className="btn btn-secondary min-h-11"
                   onClick={() => { setOpened([]); setRulesAttempt((value) => value + 1); }}>重新讀取購買名單</button>
               </div> : <>
                 <p role="status" className="text-sm">共 {groups.length} 組備註，顯示 {filtered.length} 組。相同完整備註視為同組，忽略前後空白；未填備註另列一組。</p>
-                {groups.length === 0 ? <p>此活動尚無允許購買名單，請先在商品的購買資格加入人員並儲存。</p>
+                {groups.length === 0 ? <p>此分類尚無允許購買名單，請先在商品的購買資格加入人員並儲存。</p>
                   : filtered.length === 0 ? <p>沒有符合的備註分組，請調整搜尋文字。</p>
                     : <div className="divide-y" style={{ borderColor: "var(--border)" }}>
                       {filtered.map(([note, entries]) => <section key={note} className="space-y-2 py-4" aria-label={`備註：${note || "未填備註"}`}>
@@ -179,7 +178,7 @@ export default function ShopNoteGroupsPanel() {
                               <span className="shrink-0 text-sm tabular-nums">{entry.identifiers.length} 人 · {isOpen ? "收起名單" : "查看名單"}</span>
                             </button>
                             {isOpen && <div id={`${id}-${encodeURIComponent(key)}`} className="px-2">
-                              <GroupMembers entry={entry} activityId={category?.activity_id ?? null} />
+                              <GroupMembers entry={entry} />
                             </div>}
                           </div>;
                         })}

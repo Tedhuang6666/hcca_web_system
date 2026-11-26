@@ -18,7 +18,7 @@ export default function ParentDelegationEntry({ isLoggedIn }: { isLoggedIn: bool
         <h3>還沒有驗證碼？請孩子這樣設定</h3>
         <ol>
           <li>用學生帳號登入，打開商品頁，點「家人代訂」。</li>
-          <li>選擇活動與家長稱呼，建立代訂驗證碼。</li>
+          <li>選擇商品分類與家長稱呼，建立代訂驗證碼。</li>
           <li>將驗證碼或分享連結傳給家長。</li>
         </ol>
       </div>

@@ -2,7 +2,7 @@ import type { OrderItemOut, OrderListItem } from "@/lib/types";
 import { mergeOrderItems } from "./shop-order-items";
 import { orderScopeKey } from "./shop-order-scope";
 
-type ActivityPreorder = {
+type CategoryPreorder = {
   key: string;
   label: string;
   orders: OrderListItem[];
@@ -13,8 +13,8 @@ type ActivityPreorder = {
   hasClassOrders: boolean;
 };
 
-export function groupActivityPreorders(orders: readonly OrderListItem[]): ActivityPreorder[] {
-  const groups = new Map<string, ActivityPreorder>();
+export function groupCategoryPreorders(orders: readonly OrderListItem[]): CategoryPreorder[] {
+  const groups = new Map<string, CategoryPreorder>();
   for (const order of orders) {
     if (order.status === "cancelled" || order.status === "refunded") continue;
     const separate = Boolean(order.supplement_class_id && !order.is_paid);
@@ -22,8 +22,7 @@ export function groupActivityPreorders(orders: readonly OrderListItem[]): Activi
     const key = gift ? `gift:${order.id}` : separate ? `separate:${order.id}` : orderScopeKey(order);
     const group = groups.get(key) ?? {
       key,
-      label: (order.activity_name ?? order.category_name
-        ?? (order.activity_id ? "已結束的活動" : "一般商品"))
+      label: (order.category_name ?? "一般商品")
         + (gift ? "（贈送，免付款）" : separate ? "（額外收款）" : ""),
       orders: [], items: [], amount: 0, received: 0, outstanding: 0, hasClassOrders: false,
     };

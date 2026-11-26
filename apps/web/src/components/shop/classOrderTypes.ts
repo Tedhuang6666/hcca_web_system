@@ -3,7 +3,7 @@ export type AssistedItemDraft = {
   id: string;
   product_id: string;
   product_name: string;
-  activity_id: string | null;
+  category_id: string | null;
   quantity: number;
   option_ids: string[];
   option_label: string;
@@ -20,5 +20,5 @@ export type AssistedOrderDraft = {
 
 export type AssistedOrderDraftRow = AssistedOrderDraft & {
   subtotal: number;
-  activity_totals: { key: string; activity_id: string | null; label: string; amount: number }[];
+  category_totals: { key: string; category_id: string | null; label: string; amount: number }[];
 };

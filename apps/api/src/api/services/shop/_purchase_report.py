@@ -92,7 +92,6 @@ class _ClassTotalsGroup:
 
 
 class _PurchaseFilters(TypedDict):
-    activity_id: uuid.UUID | None
     category_id: uuid.UUID | None
     product_id: uuid.UUID | None
     grade: int | None
@@ -108,7 +107,6 @@ def _purchase_order_query(
     session: AsyncSession,
     **filters: Unpack[_PurchaseFilters],
 ) -> Select[tuple[Order]]:
-    activity_id = filters["activity_id"]
     category_id = filters["category_id"]
     product_id = filters["product_id"]
     grade = filters["grade"]
@@ -133,8 +131,6 @@ def _purchase_order_query(
         statement = statement.where(
             Order.status.notin_([OrderStatus.CANCELLED, OrderStatus.REFUNDED])
         )
-    if activity_id is not None:
-        statement = statement.where(Order.activity_id == activity_id)
     if category_id is not None:
         statement = statement.where(
             Order.items.any(
@@ -258,7 +254,6 @@ def _product_positions_from_orders(orders: list[Order]) -> dict[uuid.UUID, int]:
 async def class_sheet_report(
     session: AsyncSession,
     *,
-    activity_id: uuid.UUID | None = None,
     category_id: uuid.UUID | None = None,
     product_id: uuid.UUID | None = None,
     grade: int | None = None,
@@ -271,7 +266,6 @@ async def class_sheet_report(
 ) -> list[ClassSheetPage]:
     orders = await _purchase_orders(
         session,
-        activity_id=activity_id,
         category_id=category_id,
         product_id=product_id,
         grade=grade,
@@ -389,7 +383,6 @@ async def class_sheet_report(
 async def class_totals_report(
     session: AsyncSession,
     *,
-    activity_id: uuid.UUID | None = None,
     category_id: uuid.UUID | None = None,
     product_id: uuid.UUID | None = None,
     grade: int | None = None,
@@ -402,7 +395,6 @@ async def class_totals_report(
 ) -> list[ClassTotalsPage]:
     orders = await _purchase_orders(
         session,
-        activity_id=activity_id,
         category_id=category_id,
         product_id=product_id,
         grade=grade,
@@ -486,7 +478,6 @@ async def class_totals_report(
 async def purchase_details_report(
     session: AsyncSession,
     *,
-    activity_id: uuid.UUID | None = None,
     category_id: uuid.UUID | None = None,
     product_id: uuid.UUID | None = None,
     grade: int | None = None,
@@ -499,7 +490,6 @@ async def purchase_details_report(
 ) -> list[OrderPurchaseDetailRow]:
     orders = await _purchase_orders(
         session,
-        activity_id=activity_id,
         category_id=category_id,
         product_id=product_id,
         grade=grade,

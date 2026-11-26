@@ -14,8 +14,8 @@ beforeEach(() => {
   vi.resetAllMocks();
   api.listPromotions.mockResolvedValue([]);
   api.listCategories.mockResolvedValue([
-    { id: "clothes", name: "紀念服飾", activity_id: "festival" },
-    { id: "gifts", name: "紀念用品", activity_id: "festival" },
+    { id: "clothes", name: "紀念服飾", },
+    { id: "gifts", name: "紀念用品", },
   ]);
   api.listSeries.mockResolvedValue([{ id: "gift-series", category_id: "gifts" }]);
   api.listProducts.mockResolvedValue([
@@ -29,25 +29,25 @@ beforeEach(() => {
   vi.stubGlobal("matchMedia", () => ({ matches: true }));
 });
 
-it("預設不限活動，分別列出同一活動的兩個活動並說明門檻分開計算", async () => {
+it("優惠可套用多個分類，門檻仍按分類分開計算", async () => {
   render(<ShopPromotionPanel />);
-  const topics = await screen.findByRole("group", { name: "適用活動（選填，可複選）" });
-  expect(within(topics).getByRole("checkbox", { name: "不限活動" })).toBeChecked();
+  const topics = await screen.findByRole("group", { name: "適用商品分類（選填，可複選）" });
+  expect(within(topics).getByRole("checkbox", { name: "不限分類" })).toBeChecked();
   expect(await within(topics).findByRole("checkbox", { name: "紀念服飾" })).not.toBeChecked();
   expect(within(topics).getByRole("checkbox", { name: "紀念用品" })).not.toBeChecked();
-  expect(screen.queryByText("適用活動")).not.toBeInTheDocument();
-  expect(screen.getByText(/滿額與最低件數依各活動分開計算/)).toBeVisible();
-  fireEvent.change(screen.getByRole("textbox", { name: "優惠名稱" }), { target: { value: "各活動滿額優惠" } });
-  fireEvent.change(screen.getByRole("spinbutton", { name: "每個活動最低消費（選填）" }), { target: { value: "500" } });
+  expect(screen.queryByText("適用商品分類")).not.toBeInTheDocument();
+  expect(screen.getByText(/滿額與最低件數依各商品分類分開計算/)).toBeVisible();
+  fireEvent.change(screen.getByRole("textbox", { name: "優惠名稱" }), { target: { value: "各商品分類滿額優惠" } });
+  fireEvent.change(screen.getByRole("spinbutton", { name: "每個商品分類最低消費（選填）" }), { target: { value: "500" } });
   fireEvent.click(screen.getByRole("button", { name: "建立優惠" }));
   await waitFor(() => expect(api.createPromotion).toHaveBeenCalledWith(expect.objectContaining({
-    activity_id: null, target_category_ids: [], min_order_price: 500,
+    target_category_ids: [], min_order_price: 500,
   })));
 });
 
-it("可在同一優惠選取多個活動的商品並逐項設定幹部價", async () => {
+it("可在同一優惠選取多個商品分類的商品並逐項設定幹部價", async () => {
   render(<ShopPromotionPanel />);
-  const topics = await screen.findByRole("group", { name: "適用活動（選填，可複選）" });
+  const topics = await screen.findByRole("group", { name: "適用商品分類（選填，可複選）" });
   fireEvent.click(await within(topics).findByRole("checkbox", { name: "紀念服飾" }));
   const products = screen.getByRole("group", { name: "適用商品（可複選）" });
   fireEvent.click(within(products).getByRole("checkbox", { name: /紀念衣/ }));
@@ -68,7 +68,7 @@ it("可在同一優惠選取多個活動的商品並逐項設定幹部價", asyn
   })));
 });
 
-it("編輯時保留活動限制，移除活動時移除範圍外的商品與價格", async () => {
+it("編輯時保留商品分類限制，移除商品分類時移除範圍外的商品與價格", async () => {
   api.listPromotions.mockResolvedValue([{
     id: "promo", name: "幹部價", target_category_ids: ["clothes", "gifts"],
     target_users: [], target_products: [{ id: "shirt", name: "紀念衣" }, { id: "cup", name: "紀念杯" }],
@@ -78,7 +78,7 @@ it("編輯時保留活動限制，移除活動時移除範圍外的商品與價�
   }]);
   render(<ShopPromotionPanel />);
   fireEvent.click(await screen.findByRole("button", { name: "編輯" }));
-  const topics = screen.getByRole("group", { name: "適用活動（選填，可複選）" });
+  const topics = screen.getByRole("group", { name: "適用商品分類（選填，可複選）" });
   expect(within(topics).getByRole("checkbox", { name: "紀念用品" })).toBeChecked();
   fireEvent.click(within(topics).getByRole("checkbox", { name: "紀念用品" }));
   fireEvent.click(screen.getByRole("button", { name: "儲存變更" }));

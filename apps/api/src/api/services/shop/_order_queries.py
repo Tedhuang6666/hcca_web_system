@@ -123,7 +123,6 @@ async def class_order_summary(
     session: AsyncSession,
     *,
     class_ids: list[uuid.UUID],
-    activity_id: uuid.UUID | None = None,
     category_id: uuid.UUID | None = None,
     general_only: bool = False,
     product_id: uuid.UUID | None = None,
@@ -135,7 +134,6 @@ async def class_order_summary(
         page = await list_orders(
             session,
             class_ids=class_ids,
-            activity_id=activity_id,
             category_id=category_id,
             general_only=general_only,
             assistance_scope=assistance_scope,
@@ -234,7 +232,6 @@ async def order_summary(
     session: AsyncSession,
     *,
     group_by: str,
-    activity_id: uuid.UUID | None = None,
     product_id: uuid.UUID | None = None,
     category_id: uuid.UUID | None = None,
     grade: int | None = None,
@@ -259,8 +256,6 @@ async def order_summary(
         q = q.where(Order.status == status)
     else:
         q = q.where(Order.status.notin_([OrderStatus.CANCELLED, OrderStatus.REFUNDED]))
-    if activity_id is not None:
-        q = q.where(Order.activity_id == activity_id)
     if product_id:
         q = q.where(Order.items.any(OrderItem.product_id == product_id))
     if category_id:
@@ -383,7 +378,6 @@ async def class_payment_report(session: AsyncSession) -> list[ClassPaymentReport
             ShopClassPayment,
             and_(
                 Order.class_id == ShopClassPayment.class_id,
-                Order.activity_id.is_not_distinct_from(ShopClassPayment.activity_id),
                 Order.supplement_class_id.is_(None),
                 ShopClassPayment.is_paid.is_(True),
             ),
@@ -435,15 +429,13 @@ async def class_payment_report(session: AsyncSession) -> list[ClassPaymentReport
         paid_at = paid_at.replace(tzinfo=UTC) if paid_at.tzinfo is None else paid_at
         paid_date = paid_at.astimezone(TAIPEI).date()
         individual = order.supplement_class_id is not None and not order.is_class_balance
-        activity_label = order.activity.name if order.activity else "一般商品"
         # 沿用收據的主題還原與折扣分攤，舊跨主題訂單亦不會重複計入全額。
         cumulative_total = allocated_amount = 0
         for category_id, (category_label, topic_orders) in _receipt_orders_by_topic(
             [order], "未分類商品"
         ).items():
             key = (
-                f"{school_class.id}:{order.activity_id}:{category_id}:{paid_date}:"
-                f"{order.id if individual else 'class'}"
+                f"{school_class.id}:{category_id}:{paid_date}:{order.id if individual else 'class'}"
             )
             row = groups.get(key)
             if row is None:
@@ -453,8 +445,6 @@ async def class_payment_report(session: AsyncSession) -> list[ClassPaymentReport
                     class_id=school_class.id,
                     class_label=class_svc.class_display_label(school_class) or "未命名班級",
                     grade=school_class.grade,
-                    activity_id=order.activity_id,
-                    activity_label=activity_label,
                     category_id=category_id,
                     category_label=category_label,
                     confirmed_at=paid_at,
@@ -490,7 +480,6 @@ async def class_payment_report(session: AsyncSession) -> list[ClassPaymentReport
 async def load_quantity_orders(
     session: AsyncSession,
     *,
-    activity_id: uuid.UUID | None = None,
     grade: int | None = None,
     class_id: uuid.UUID | None = None,
     category_id: uuid.UUID | None = None,
@@ -524,8 +513,6 @@ async def load_quantity_orders(
     q = q.where(Order.test_product_id.is_(None))
     if grade is not None:
         q = q.where(Order.school_class.has(grade=grade))
-    if activity_id is not None:
-        q = q.where(Order.activity_id == activity_id)
     if class_id:
         q = q.where(Order.class_id == class_id)
     if user_id is not None:
@@ -546,7 +533,6 @@ async def load_quantity_orders(
 async def order_quantities(
     session: AsyncSession,
     *,
-    activity_id: uuid.UUID | None = None,
     grade: int | None = None,
     class_id: uuid.UUID | None = None,
     category_id: uuid.UUID | None = None,
@@ -560,7 +546,6 @@ async def order_quantities(
     """回傳各商品規格組合的訂購數量（用於採購彙總）。"""
     orders = await load_quantity_orders(
         session,
-        activity_id=activity_id,
         grade=grade,
         class_id=class_id,
         category_id=category_id,

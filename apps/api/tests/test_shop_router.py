@@ -13,7 +13,6 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.models.activity import Activity, ActivityConvener, ActivityStatus
 from api.models.electronic_credential import ElectronicCredentialSettings
 from api.models.org import Org, Permission, Position, UserPosition
 from api.models.outbox import OutboxEvent
@@ -69,7 +68,7 @@ async def test_assisted_individual_payment_notices_target_buyer(
     if collection == "class_paid":
         from api.models.shop_class_payment import ShopClassPayment
 
-        db_session.add(ShopClassPayment(class_id=sc.id, activity_id=None, is_paid=True))
+        db_session.add(ShopClassPayment(class_id=sc.id, is_paid=True))
     elif collection == "council_separate":
         await _grant_permission(db_session, cadre, "shop:manage_orders")
     if collection in {"class_paid", "collected"}:
@@ -398,9 +397,7 @@ async def test_supplement_collection_rejoins_original_class_and_has_own_receipt(
     )
     assert original.status_code == 200
     original_id = original.json()["id"]
-    paid = await mc.patch(
-        f"/shop/orders/classes/{sc.id}/payment", json={"is_paid": True, "activity_id": None}
-    )
+    paid = await mc.patch(f"/shop/orders/classes/{sc.id}/payment", json={"is_paid": True})
     assert paid.status_code == 200
     assert (
         await bc.put(
@@ -806,11 +803,9 @@ async def _bare_user(db: AsyncSession, *, student_id: str | None = None) -> User
     return user
 
 
-async def _make_category(
-    db: AsyncSession, creator: User, *, activity_id: uuid.UUID | None = None, name: str = "商品"
-) -> ProductCategory:
+async def _make_category(db: AsyncSession, creator: User, *, name: str = "商品") -> ProductCategory:
     return await shop_svc.create_category(
-        db, data=ProductCategoryCreate(name=name, activity_id=activity_id), created_by=creator.id
+        db, data=ProductCategoryCreate(name=name), created_by=creator.id
     )
 
 
@@ -1282,32 +1277,6 @@ async def test_product_lifecycle_activate_and_deactivate(
     assert deactivated.json()["status"] == "cancelled"
 
 
-async def test_update_product_allowed_for_activity_convener_without_shop_manage(
-    db_session, member_user, authed_client_factory
-) -> None:
-    """驗證 _require_shop_manager 的第二條路徑：活動總召可管理自己活動下的商品，不需要 shop:manage。"""
-    creator = await _bare_user(db_session)
-    org = Org(name="活動部")
-    activity = Activity(name="園遊會", org=org, status=ActivityStatus.ACTIVE)
-    db_session.add_all([org, activity])
-    await db_session.flush()
-    convener = ActivityConvener(
-        activity_id=activity.id,
-        user_id=member_user.id,
-        start_date=date.today() - timedelta(days=1),
-    )
-    db_session.add(convener)
-    await db_session.flush()
-
-    category = await _make_category(db_session, creator, activity_id=activity.id)
-    product = await _make_active_product(db_session, creator, category=category)
-
-    ac = authed_client_factory(member_user)
-    resp = await ac.patch(f"/shop/products/{product.id}", json={"price": 999})
-    assert resp.status_code == 200
-    assert resp.json()["price"] == 999
-
-
 # ── 變體群組 / 選項 ───────────────────────────────────────────────────────────
 
 
@@ -1375,139 +1344,6 @@ async def test_current_registration_requires_login(client) -> None:
             json={"variants": []},
         )
     ).status_code == 401
-
-
-async def test_shop_activity_options_only_include_accessible_active_activities(
-    client, db_session, member_user, authed_client_factory
-) -> None:
-    first = Activity(name="校商預購", status=ActivityStatus.ACTIVE)
-    second = Activity(name="五校聯合聖誕傳情", status=ActivityStatus.ACTIVE)
-    archived = Activity(name="已封存活動", status=ActivityStatus.ARCHIVED)
-    db_session.add_all([first, second, archived])
-    await db_session.flush()
-
-    assert (await client.get("/shop/activities")).status_code == 401
-    member_client = authed_client_factory(member_user)
-    assert (await member_client.get("/shop/activities")).json() == []
-    assert (await member_client.get("/shop/activities?include_inactive=true")).status_code == 403
-
-    db_session.add(
-        ActivityConvener(
-            activity_id=first.id,
-            user_id=member_user.id,
-            start_date=date.today() - timedelta(days=1),
-        )
-    )
-    await db_session.flush()
-    own_activities = await member_client.get("/shop/activities")
-    assert own_activities.status_code == 200
-    assert [row["id"] for row in own_activities.json()] == [str(first.id)]
-
-    await _grant_permission(db_session, member_user, "shop:manage")
-    manager_activities = await member_client.get("/shop/activities")
-    assert manager_activities.status_code == 200
-    assert {row["id"] for row in manager_activities.json()} == {
-        str(first.id),
-        str(second.id),
-    }
-    all_activities = await member_client.get("/shop/activities?include_inactive=true")
-    assert all_activities.status_code == 200
-    assert {row["id"] for row in all_activities.json()} == {
-        str(first.id),
-        str(second.id),
-        str(archived.id),
-    }
-
-
-async def test_superuser_can_include_archived_shop_activities(
-    db_session, member_user, authed_client_factory
-) -> None:
-    archived = Activity(name="已封存主題", status=ActivityStatus.ARCHIVED)
-    db_session.add(archived)
-    member_user.is_superuser = True
-    await db_session.flush()
-
-    response = await authed_client_factory(member_user).get(
-        "/shop/activities?include_inactive=true"
-    )
-
-    assert response.status_code == 200
-    assert [row["id"] for row in response.json()] == [str(archived.id)]
-
-
-async def test_category_activity_update_checks_both_activity_scopes(
-    db_session, member_user, authed_client_factory
-) -> None:
-    creator = await _bare_user(db_session)
-    first = Activity(name="校商預購", status=ActivityStatus.ACTIVE)
-    second = Activity(name="五校聯合聖誕傳情", status=ActivityStatus.ACTIVE)
-    db_session.add_all([first, second])
-    await db_session.flush()
-    db_session.add(
-        ActivityConvener(
-            activity_id=first.id,
-            user_id=member_user.id,
-            start_date=date.today() - timedelta(days=1),
-        )
-    )
-    category = await _make_category(db_session, creator, activity_id=first.id)
-    await db_session.flush()
-    category_client = authed_client_factory(member_user)
-
-    move_to_other_activity = await category_client.patch(
-        f"/shop/categories/{category.id}", json={"activity_id": str(second.id)}
-    )
-    assert move_to_other_activity.status_code == 403
-    move_to_general = await category_client.patch(
-        f"/shop/categories/{category.id}", json={"activity_id": None}
-    )
-    assert move_to_general.status_code == 403
-
-
-async def test_assigning_categories_to_activities_splits_preorders(
-    db_session, authed_client_factory
-) -> None:
-    creator = await _bare_user(db_session)
-    buyer = await _bare_user(db_session, student_id="11510")
-    manager = await _bare_user(db_session)
-    first = Activity(name="校商預購", status=ActivityStatus.ACTIVE)
-    second = Activity(name="五校聯合聖誕傳情", status=ActivityStatus.ACTIVE)
-    db_session.add_all([first, second])
-    await db_session.flush()
-
-    first_category = await _make_category(db_session, creator, name="校商商品")
-    second_category = await _make_category(db_session, creator, name="傳情卡")
-    first_product = await _make_active_product(db_session, creator, category=first_category)
-    second_product = await _make_active_product(db_session, creator, category=second_category)
-    await _grant_permission(db_session, manager, "shop:manage")
-    manager_client = authed_client_factory(manager)
-
-    for category, activity in ((first_category, first), (second_category, second)):
-        updated = await manager_client.patch(
-            f"/shop/categories/{category.id}", json={"activity_id": str(activity.id)}
-        )
-        assert updated.status_code == 200
-        assert updated.json()["activity_id"] == str(activity.id)
-
-    buyer_client = authed_client_factory(buyer)
-    first_order = await buyer_client.put(
-        f"/shop/registrations/current/products/{first_product.id}",
-        json={"variants": [{"option_ids": [], "quantity": 1}]},
-    )
-    second_order = await buyer_client.put(
-        f"/shop/registrations/current/products/{second_product.id}",
-        json={"variants": [{"option_ids": [], "quantity": 1}]},
-    )
-    assert first_order.status_code == second_order.status_code == 200
-    assert first_order.json()["id"] != second_order.json()["id"]
-    assert first_order.json()["activity_id"] == str(first.id)
-    assert second_order.json()["activity_id"] == str(second.id)
-
-    registrations = await buyer_client.get("/shop/registrations")
-    assert {row["activity_id"] for row in registrations.json()} == {
-        str(first.id),
-        str(second.id),
-    }
 
 
 async def test_current_registration_is_scoped_to_authenticated_user(
@@ -2062,175 +1898,14 @@ async def test_coupon_applies_configured_prices_to_multiple_products(
     assert added_second_product.json()["total_price"] == 100
 
 
-async def test_activity_orders_keep_separate_and_stack_scoped_coupon_with_automatic_discount(
-    db_session, authed_client_factory
-) -> None:
-    creator = await _bare_user(db_session)
-    buyer = await _bare_user(db_session, student_id="11510")
-    manager = await _bare_user(db_session)
-    school_class = await _make_class(db_session)
-    org = Org(name=f"活動-{uuid.uuid4().hex[:6]}")
-    first_activity = Activity(name="校慶預購", org=org, status=ActivityStatus.ACTIVE)
-    second_activity = Activity(name="社團活動", org=org, status=ActivityStatus.ACTIVE)
-    db_session.add_all([org, first_activity, second_activity])
-    await db_session.flush()
-    card_category = await _make_category(
-        db_session, creator, activity_id=first_activity.id, name="卡片"
-    )
-    hat_category = await _make_category(
-        db_session, creator, activity_id=first_activity.id, name="帽子"
-    )
-    other_category = await _make_category(
-        db_session, creator, activity_id=second_activity.id, name="社團商品"
-    )
-    cards = await _make_active_product(db_session, creator, price=40, category=card_category)
-    hats = await _make_active_product(db_session, creator, price=999, category=hat_category)
-    other_product = await _make_active_product(
-        db_session, creator, price=100, category=other_category
-    )
-    catalog = await authed_client_factory(buyer).get("/shop/catalog")
-    assert catalog.status_code == 200
-    assert {row["activity_name"] for row in catalog.json()} == {"校慶預購", "社團活動"}
-    await _grant_permission(db_session, manager, "shop:manage")
-    manager_client = authed_client_factory(manager)
-    auto = await manager_client.post(
-        "/shop/promotions",
-        json={
-            "name": "第二件折抵",
-            "target_product_ids": [str(hats.id)],
-            "min_quantity": 2,
-            "discount_type": "fixed",
-            "discount_value": 20,
-        },
-    )
-    assert auto.status_code == 201
-    assert auto.json()["activity_id"] == str(first_activity.id)
-    coupon = await manager_client.post(
-        "/shop/promotions",
-        json={
-            "name": "校慶九折",
-            "activity_id": str(first_activity.id),
-            "code": "FESTIVAL10",
-            "discount_type": "percentage",
-            "discount_value": 10,
-            "min_order_price": 1000,
-        },
-    )
-    assert coupon.status_code == 201
-
-    buyer_client = authed_client_factory(buyer)
-    card_order = await buyer_client.put(
-        f"/shop/registrations/current/products/{cards.id}",
-        json={"variants": [{"option_ids": [], "quantity": 4}]},
-    )
-    assert card_order.status_code == 200
-    hat_order = await buyer_client.put(
-        f"/shop/registrations/current/products/{hats.id}",
-        json={"variants": [{"option_ids": [], "quantity": 2}]},
-    )
-    assert hat_order.status_code == 200
-    assert hat_order.json()["activity_id"] == str(first_activity.id)
-    assert hat_order.json()["discount_amount"] == 20
-    preview = await buyer_client.post(
-        "/shop/registrations/current/promotion/preview",
-        json={"code": "FESTIVAL10", "activity_id": str(first_activity.id)},
-    )
-    assert preview.status_code == 200
-    assert preview.json()["discount_amount"] == 235
-    assert preview.json()["total_price"] == 1923
-    applied = await buyer_client.put(
-        "/shop/registrations/current/promotion",
-        json={"code": "FESTIVAL10", "activity_id": str(first_activity.id)},
-    )
-    assert applied.status_code == 200
-    assert applied.json()["discount_amount"] == 235
-    assert applied.json()["total_price"] == 1923
-    assert {row["promotion_id"] for row in applied.json()["applied_promotions"]} == {
-        auto.json()["id"],
-        coupon.json()["id"],
-    }
-
-    other_order = await buyer_client.put(
-        f"/shop/registrations/current/products/{other_product.id}",
-        json={"variants": [{"option_ids": [], "quantity": 1}]},
-    )
-    assert other_order.status_code == 200
-    assert other_order.json()["id"] != applied.json()["id"]
-    mismatch = await buyer_client.post(
-        "/shop/registrations/current/promotion/preview",
-        json={"code": "FESTIVAL10", "activity_id": str(second_activity.id)},
-    )
-    assert mismatch.status_code == 200
-    assert mismatch.json()["reason_code"] == "activity_not_matched"
-
-    registrations = await buyer_client.get("/shop/registrations")
-    assert registrations.status_code == 200
-    assert {row["activity_id"] for row in registrations.json()} == {
-        str(first_activity.id),
-        str(second_activity.id),
-    }
-    by_activity = {row["activity_name"]: row for row in registrations.json()}
-    assert {item["product_id"]: item["quantity"] for item in by_activity["校慶預購"]["items"]} == {
-        str(cards.id): 4,
-        str(hats.id): 2,
-    }
-    listed = await buyer_client.get("/shop/orders", params={"my_only": "true"})
-    assert listed.status_code == 200
-    assert {row["activity_name"] for row in listed.json()} == {"校慶預購", "社團活動"}
-    listed_by_activity = {row["activity_name"]: row for row in listed.json()}
-    assert {
-        item["product_id"]: item["quantity"] for item in listed_by_activity["校慶預購"]["items"]
-    } == {
-        str(cards.id): 4,
-        str(hats.id): 2,
-    }
-    first_order_id = applied.json()["id"]
-    second_order_id = other_order.json()["id"]
-    first_order = await shop_svc.get_order(db_session, uuid.UUID(first_order_id))
-    second_order = await shop_svc.get_order(db_session, uuid.UUID(second_order_id))
-    assert first_order is not None and second_order is not None
-    await shop_svc.set_class_collected(
-        db_session, second_order, collected=True, actor_id=manager.id
-    )
-    assert first_order.is_class_collected is False
-    assert second_order.is_class_collected is True
-
-    first_paid = await manager_client.patch(
-        f"/shop/orders/classes/{school_class.id}/payment",
-        json={"is_paid": True, "activity_id": str(first_activity.id)},
-    )
-    assert first_paid.status_code == 200
-    assert first_paid.json()["updated_orders"] == 1
-    await db_session.refresh(first_order)
-    await db_session.refresh(second_order)
-    assert first_order.is_paid is True
-    assert second_order.is_paid is False
-    second_paid = await manager_client.patch(
-        f"/shop/orders/classes/{school_class.id}/payment",
-        json={"is_paid": True, "activity_id": str(second_activity.id)},
-    )
-    assert second_paid.status_code == 200
-    await db_session.refresh(second_order)
-    assert second_order.is_paid is True
-
-
-async def test_direct_class_order_splits_items_across_activities(db_session) -> None:
+async def test_direct_class_order_splits_items_across_categories(db_session) -> None:
     creator = await _bare_user(db_session)
     buyer = await _bare_user(db_session)
-    org = Org(name=f"活動-{uuid.uuid4().hex[:6]}")
-    first_activity = Activity(name="活動一", org=org, status=ActivityStatus.ACTIVE)
-    second_activity = Activity(name="活動二", org=org, status=ActivityStatus.ACTIVE)
-    db_session.add_all([org, first_activity, second_activity])
-    await db_session.flush()
     first_product = await _make_active_product(
-        db_session,
-        creator,
-        category=await _make_category(db_session, creator, activity_id=first_activity.id),
+        db_session, creator, category=await _make_category(db_session, creator, name="主題一")
     )
     second_product = await _make_active_product(
-        db_session,
-        creator,
-        category=await _make_category(db_session, creator, activity_id=second_activity.id),
+        db_session, creator, category=await _make_category(db_session, creator, name="主題二")
     )
     orders = await shop_svc.create_direct_order(
         db_session,
@@ -2245,7 +1920,10 @@ async def test_direct_class_order_splits_items_across_activities(db_session) -> 
         ),
     )
     assert len(orders) == 2
-    assert {order.activity_id for order in orders} == {first_activity.id, second_activity.id}
+    assert {order.category_id for order in orders} == {
+        first_product.category_id,
+        second_product.category_id,
+    }
     full_orders = [await shop_svc.get_order(db_session, order.id) for order in orders]
     assert all(order is not None and len(order.items) == 1 for order in full_orders)
 
@@ -2858,7 +2536,7 @@ async def test_council_can_confirm_whole_class_without_changing_cadre_notes(
     ac = authed_client_factory(manager)
     response = await ac.patch(
         f"/shop/orders/classes/{sc.id}/payment",
-        json={"is_paid": True, "activity_id": None},
+        json={"is_paid": True},
     )
     assert response.status_code == 200
     assert response.json()["updated_orders"] == 2
@@ -2892,17 +2570,17 @@ async def test_class_payment_report_summarizes_confirmed_valid_orders(
     client = authed_client_factory(manager)
     first_confirmed = await client.patch(
         f"/shop/orders/classes/{first_class.id}/payment",
-        json={"is_paid": True, "activity_id": None},
+        json={"is_paid": True},
     )
     assert first_confirmed.status_code == 200
     second_confirmed = await client.patch(
         f"/shop/orders/classes/{second_class.id}/payment",
-        json={"is_paid": True, "activity_id": None},
+        json={"is_paid": True},
     )
     assert second_confirmed.status_code == 200
     confirmed = await client.patch(
         f"/shop/orders/classes/{school_class.id}/payment",
-        json={"is_paid": True, "activity_id": None},
+        json={"is_paid": True},
     )
     assert confirmed.status_code == 200
     cancelled_order.status = OrderStatus.CANCELLED
@@ -2922,8 +2600,6 @@ async def test_class_payment_report_summarizes_confirmed_valid_orders(
     assert rows[0]["grade"] == 1
     assert rows[0]["record_id"]
     assert rows[0]["collection_type"] == "class"
-    assert rows[0]["activity_id"] is None
-    assert rows[0]["activity_label"] == "一般商品"
     assert rows[0]["confirmed_at"] is not None
     assert rows[0]["amount"] == 25
     assert rows[0]["order_count"] == 1
@@ -2944,140 +2620,6 @@ async def test_class_payment_report_requires_global_shop_read_permission(
     assert (
         await authed_client_factory(viewer).get("/shop/orders/class-payments")
     ).status_code == 403
-
-
-async def test_council_class_payment_emails_cadres_full_class_orders_once(
-    db_session, authed_client_factory
-) -> None:
-    school_class = await _make_class(db_session)
-    other_class = await _make_class(db_session, start="21501", end="21540")
-    cadre = await _bare_user(db_session, student_id="11501")
-    await class_svc.add_cadre(db_session, school_class, user_id=cadre.id)
-    manager = await _bare_user(db_session)
-    buyer_one = await _bare_user(db_session, student_id="11510")
-    buyer_two = await _bare_user(db_session, student_id="11511")
-    outsider = await _bare_user(db_session, student_id="21510")
-    activity = Activity(name="校慶商品", status=ActivityStatus.ACTIVE)
-    other_activity = Activity(name="其他活動", status=ActivityStatus.ACTIVE)
-    db_session.add_all([activity, other_activity])
-    await db_session.flush()
-    category = await _make_category(db_session, manager, activity_id=activity.id, name="紀念服飾")
-    other_category = await _make_category(
-        db_session, manager, activity_id=activity.id, name="紀念用品"
-    )
-    product = await _make_active_product(db_session, manager, price=50, category=category)
-    other_product = await _make_active_product(
-        db_session, manager, price=25, category=other_category
-    )
-    product.name = "紀念衫"
-
-    collected = await _seed_order(
-        db_session,
-        buyer_one,
-        class_id=school_class.id,
-        total_price=100,
-        is_class_collected=True,
-    )
-    collected.activity_id = activity.id
-    collected.category_id = category.id
-    db_session.add(
-        OrderItem(
-            order_id=collected.id,
-            product_id=product.id,
-            quantity=2,
-            unit_price=50,
-            selected_options=[{"group_name": "尺寸", "value": "M"}],
-        )
-    )
-    not_collected = await _seed_order(
-        db_session, buyer_two, class_id=school_class.id, total_price=150
-    )
-    not_collected.activity_id = activity.id
-    not_collected.category_id = category.id
-    db_session.add(
-        OrderItem(
-            order_id=not_collected.id,
-            product_id=product.id,
-            quantity=3,
-            unit_price=50,
-        )
-    )
-    other_topic_order = await _seed_order(
-        db_session, buyer_two, class_id=school_class.id, total_price=25
-    )
-    other_topic_order.activity_id = activity.id
-    other_topic_order.category_id = other_category.id
-    db_session.add(
-        OrderItem(
-            order_id=other_topic_order.id,
-            product_id=other_product.id,
-            quantity=1,
-            unit_price=25,
-        )
-    )
-    another_activity_order = await _seed_order(
-        db_session, buyer_two, class_id=school_class.id, total_price=900
-    )
-    another_activity_order.activity_id = other_activity.id
-    another_class_order = await _seed_order(
-        db_session, outsider, class_id=other_class.id, total_price=800
-    )
-    another_class_order.activity_id = activity.id
-    await _grant_permission(db_session, manager, "shop:manage_orders")
-    await db_session.flush()
-
-    ac = authed_client_factory(manager)
-    path = f"/shop/orders/classes/{school_class.id}/payment"
-    payload = {"is_paid": True, "activity_id": str(activity.id)}
-    response = await ac.patch(path, json=payload)
-    assert response.status_code == 200
-    assert response.json()["updated_orders"] == 3
-    assert collected.is_paid is True and not_collected.is_paid is True
-    assert other_topic_order.is_paid is True
-    assert another_activity_order.is_paid is False and another_class_order.is_paid is False
-
-    confirmation = await db_session.scalar(
-        select(OutboxEvent).where(OutboxEvent.event_type == "shop.class_payment_confirmed")
-    )
-    assert confirmation is not None
-    assert confirmation.payload["cadre_emails"] == [cadre.email]
-    assert confirmation.payload["class_label"] == (
-        f"{school_class.academic_year} 學年度 {school_class.class_code} 班"
-    )
-    assert confirmation.payload["topic_names"] == ["紀念服飾", "紀念用品"]
-    orders_by_serial = {item["serial_number"]: item for item in confirmation.payload["orders"]}
-    assert set(orders_by_serial) == {
-        collected.serial_number,
-        not_collected.serial_number,
-        other_topic_order.serial_number,
-    }
-    first_details = orders_by_serial[collected.serial_number]
-    assert first_details["student_name"] == buyer_one.display_name
-    assert first_details["student_id"] == buyer_one.student_id
-    assert first_details["total_price"] == 100
-    assert first_details["is_class_collected"] is True
-    assert first_details["items"][0]["product_name"] == "紀念衫"
-    assert first_details["items"][0]["selected_options"] == [{"group_name": "尺寸", "value": "M"}]
-    assert orders_by_serial[not_collected.serial_number]["is_class_collected"] is False
-    assert (
-        await db_session.scalar(
-            select(func.count())
-            .select_from(OutboxEvent)
-            .where(OutboxEvent.event_type == "shop.order_confirmed")
-        )
-        == 0
-    )
-
-    repeated = await ac.patch(path, json=payload)
-    assert repeated.status_code == 200
-    assert (
-        await db_session.scalar(
-            select(func.count())
-            .select_from(OutboxEvent)
-            .where(OutboxEvent.event_type == "shop.class_payment_confirmed")
-        )
-        == 1
-    )
 
 
 # ── 班級幹部檢視 ──────────────────────────────────────────────────────────────
@@ -3113,103 +2655,11 @@ async def test_class_receipt_rejects_users_without_shop_manage_permission(
     assert (
         await ac.post(
             "/shop/orders/classes/receipts.pdf",
-            json={"activity_id": None, "class_ids": [str(sc.id)]},
+            json={"class_ids": [str(sc.id)]},
         )
     ).status_code == 403
-    assert (
-        await client.post("/shop/orders/receipts/changed.pdf", json={"activity_id": None})
-    ).status_code == 401
-    assert (
-        await ac.post("/shop/orders/receipts/changed.pdf", json={"activity_id": None})
-    ).status_code == 403
-
-
-async def test_class_receipt_contains_all_active_orders_in_class_and_activity(
-    db_session, authed_client_factory, monkeypatch
-) -> None:
-    from io import BytesIO
-
-    from pypdf import PdfReader
-
-    from api.services.shop import _receipts
-
-    monkeypatch.setattr(_receipts, "local_today", lambda: date(2026, 10, 21))
-    sc = await _make_class(db_session)
-    other_class = await _make_class(db_session, start="21501", end="21540")
-    buyer = await _bare_user(db_session)
-    manager = await _bare_user(db_session)
-    await _grant_permission(db_session, manager, "shop:manage_orders")
-    activity = Activity(name="校慶預購", status=ActivityStatus.ACTIVE)
-    other_activity = Activity(name="其他活動", status=ActivityStatus.ACTIVE)
-    db_session.add_all([activity, other_activity])
-    await db_session.flush()
-    product = await _make_active_product(db_session, manager, price=999)
-    product.name = "紀念衫"
-    for quantity, amount, is_paid in [(3, 270, True), (1, 100, False)]:
-        order = await _seed_order(
-            db_session, buyer, class_id=sc.id, total_price=amount, is_paid=is_paid
-        )
-        order.activity_id = activity.id
-        order.subtotal_price = quantity * 100
-        order.discount_amount = quantity * 100 - amount
-        db_session.add(
-            OrderItem(
-                order_id=order.id,
-                product_id=product.id,
-                quantity=quantity,
-                unit_price=100,
-                selected_options=[{"group_name": "尺寸", "value": "L"}],
-            )
-        )
-    # 取消、退款、其他活動、一般商品，以及另一班均不得列入。
-    for class_id, activity_id, paid, order_status in [
-        (sc.id, activity.id, True, OrderStatus.CANCELLED),
-        (sc.id, activity.id, True, OrderStatus.REFUNDED),
-        (sc.id, other_activity.id, True, OrderStatus.PENDING),
-        (sc.id, None, True, OrderStatus.PENDING),
-        (other_class.id, activity.id, True, OrderStatus.PENDING),
-    ]:
-        excluded = await _seed_order(
-            db_session, buyer, class_id=class_id, total_price=9999, is_paid=paid
-        )
-        excluded.activity_id = activity_id
-        excluded.status = order_status
-    await db_session.flush()
-
-    response = await authed_client_factory(manager).get(
-        f"/shop/orders/classes/{sc.id}/receipt.pdf", params={"activity_id": str(activity.id)}
-    )
-    assert response.status_code == 200
-    assert response.headers["content-type"] == "application/pdf"
-    assert response.headers["cache-control"] == "no-store"
-    assert "filename*=UTF-8''" in response.headers["content-disposition"]
-    pdf = PdfReader(BytesIO(response.content))
-    assert len(pdf.pages) == 1
-    assert tuple(pdf.pages[0].mediabox) == (0, 0, 612, 792)
-    text = "".join(page.extract_text() for page in pdf.pages)
-    assert "收執聯" in text and "存根聯" in text
-    assert _receipt_totals(pdf) == ["370", "370"]
-    assert text.count("400") == 2
-    assert text.count("優惠折抵") == 2
-    assert sum(line.strip() == "優惠折抵 -30" for line in text.splitlines()) == 2
-    assert text.count("L:4") == 2
-    assert text.count("紀念衫") == 2  # 同品項合併，備註保留規格總數。
-    date_fields = []
-
-    def visit_date(value, cm, tm, _font, _size):
-        x = tm[4] * cm[0] + tm[5] * cm[2] + cm[4]
-        top = 792 - (tm[4] * cm[1] + tm[5] * cm[3] + cm[5])
-        if (
-            value.strip() in {"115", "10", "21"}
-            and 120 < x < 216
-            and (115 < top < 129 or 460 < top < 475)
-        ):
-            date_fields.append(value.strip())
-
-    pdf.pages[0].extract_text(visitor_text=visit_date)
-    assert date_fields == ["115", "10", "21", "115", "10", "21"]
-    assert "繳款人簽名" not in text and "班聯收款人簽名" not in text
-    assert "9,999" not in text
+    assert (await client.post("/shop/orders/receipts/changed.pdf", json={})).status_code == 401
+    assert (await ac.post("/shop/orders/receipts/changed.pdf", json={})).status_code == 403
 
 
 async def test_class_receipt_download_does_not_require_or_mark_paid(
@@ -3227,76 +2677,6 @@ async def test_class_receipt_download_does_not_require_or_mark_paid(
     assert order.is_paid is False and order.is_class_collected is True
 
 
-async def test_class_receipt_batch_combines_selected_classes_and_all_classes(
-    db_session, authed_client_factory
-) -> None:
-    from io import BytesIO
-
-    from pypdf import PdfReader
-
-    classes = [
-        await _make_class(db_session),
-        await _make_class(db_session, start="21501", end="21540"),
-        await _make_class(db_session, start="31501", end="31540"),
-    ]
-    buyer = await _bare_user(db_session)
-    manager = await _bare_user(db_session)
-    await _grant_permission(db_session, manager, "shop:manage_orders")
-    activity = Activity(name="批次收據活動", status=ActivityStatus.ACTIVE)
-    other_activity = Activity(name="其他活動", status=ActivityStatus.ACTIVE)
-    db_session.add_all([activity, other_activity])
-    await db_session.flush()
-    for school_class, amount, is_paid in zip(
-        classes, (100, 200, 300), (False, True, False), strict=True
-    ):
-        order = await _seed_order(
-            db_session, buyer, class_id=school_class.id, total_price=amount, is_paid=is_paid
-        )
-        order.activity_id = activity.id
-    other_order = await _seed_order(db_session, buyer, class_id=classes[2].id, total_price=900)
-    other_order.activity_id = other_activity.id
-    personal_order = await _seed_order(db_session, buyer, total_price=50)
-    personal_order.activity_id = activity.id
-    product = await _make_active_product(db_session, manager, price=50)
-    db_session.add(
-        OrderItem(order_id=personal_order.id, product_id=product.id, quantity=1, unit_price=50)
-    )
-    await db_session.flush()
-    ac = authed_client_factory(manager)
-
-    selected_response = await ac.post(
-        "/shop/orders/classes/receipts.pdf",
-        json={"activity_id": str(activity.id), "class_ids": [str(item.id) for item in classes[:2]]},
-    )
-    assert selected_response.status_code == 200
-    selected_pdf = PdfReader(BytesIO(selected_response.content))
-    selected_text = "".join(page.extract_text() for page in selected_pdf.pages)
-    assert len(selected_pdf.pages) == 2
-    assert classes[0].class_code in selected_text and classes[1].class_code in selected_text
-    assert classes[2].class_code not in selected_text
-    assert "900" not in selected_text
-    assert sorted(_receipt_totals(selected_pdf)) == ["100", "100", "200", "200"]
-
-    confirmed = await ac.patch(
-        f"/shop/orders/classes/{classes[1].id}/payment",
-        json={"is_paid": True, "activity_id": str(activity.id)},
-    )
-    assert confirmed.status_code == 200
-    all_response = await ac.post(
-        "/shop/orders/classes/receipts.pdf",
-        json={"activity_id": str(activity.id), "unpaid_only": True},
-    )
-    assert all_response.status_code == 200
-    all_pdf = PdfReader(BytesIO(all_response.content))
-    all_text = "".join(page.extract_text() for page in all_pdf.pages)
-    assert len(all_pdf.pages) == 3
-    assert classes[0].class_code in all_text and classes[2].class_code in all_text
-    assert classes[1].class_code not in all_text
-    assert "900" not in all_text
-    assert personal_order.serial_number in "".join(all_text.split())
-    assert sorted(_receipt_totals(all_pdf)) == ["100", "100", "300", "300", "50", "50"]
-
-
 async def test_receipt_batch_and_changed_downloads_scope_to_product_topic(
     db_session, authed_client_factory, monkeypatch
 ) -> None:
@@ -3310,11 +2690,8 @@ async def test_receipt_batch_and_changed_downloads_scope_to_product_topic(
     buyer = await _bare_user(db_session)
     manager = await _bare_user(db_session)
     await _grant_permission(db_session, manager, "shop:manage_orders")
-    activity = Activity(name="同活動", status=ActivityStatus.ACTIVE)
-    db_session.add(activity)
-    await db_session.flush()
-    topic_a = await _make_category(db_session, manager, activity_id=activity.id, name="主題甲")
-    topic_b = await _make_category(db_session, manager, activity_id=activity.id, name="主題乙")
+    topic_a = await _make_category(db_session, manager, name="主題甲")
+    topic_b = await _make_category(db_session, manager, name="主題乙")
     products = [
         await _make_active_product(db_session, manager, price=100, category=topic_a),
         await _make_active_product(db_session, manager, price=200, category=topic_b),
@@ -3324,7 +2701,6 @@ async def test_receipt_batch_and_changed_downloads_scope_to_product_topic(
         for amount in (100, 200)
     ]
     for order, topic, product in zip(orders, (topic_a, topic_b), products, strict=True):
-        order.activity_id = activity.id
         order.category_id = topic.id
         db_session.add(
             OrderItem(
@@ -3363,94 +2739,6 @@ async def test_receipt_batch_and_changed_downloads_scope_to_product_topic(
     assert _receipt_totals(changed_pdf) == ["125", "125"]
 
 
-@pytest.mark.parametrize("with_activity", [False, True])
-async def test_unpaid_receipts_include_individual_and_supplement_orders_without_classes(
-    db_session, authed_client_factory, client, with_activity
-) -> None:
-    from io import BytesIO
-
-    from pypdf import PdfReader
-
-    from api.models.shop_order_receipt_print import ShopOrderReceiptPrint
-
-    school_class = await _make_class(db_session)
-    buyer = await _bare_user(db_session)
-    manager = await _bare_user(db_session)
-    await _grant_permission(db_session, manager, "shop:manage_orders")
-    activity = Activity(name="個人收據活動", status=ActivityStatus.ACTIVE)
-    other_activity = Activity(name="排除活動", status=ActivityStatus.ACTIVE)
-    db_session.add_all([activity, other_activity])
-    await db_session.flush()
-    activity_id = activity.id if with_activity else None
-    personal = await _seed_order(db_session, buyer, total_price=70)
-    supplement = await _seed_order(db_session, buyer, total_price=60, is_class_collected=True)
-    supplement.supplement_class_id = school_class.id
-    for order in (personal, supplement):
-        order.activity_id = activity_id
-    excluded = []
-    for amount, status, is_paid in (
-        (80, OrderStatus.PENDING, True),
-        (90, OrderStatus.CANCELLED, False),
-        (91, OrderStatus.REFUNDED, False),
-    ):
-        order = await _seed_order(db_session, buyer, total_price=amount, is_paid=is_paid)
-        order.activity_id = activity_id
-        order.status = status
-        excluded.append(order)
-    outside_scope = await _seed_order(db_session, buyer, total_price=92)
-    outside_scope.activity_id = other_activity.id
-    test_product = await _make_active_product(db_session, manager)
-    for order in (personal, supplement, *excluded):
-        db_session.add(
-            OrderItem(
-                order_id=order.id,
-                product_id=test_product.id,
-                quantity=1,
-                unit_price=order.total_price,
-            )
-        )
-    test_order = await _seed_order(db_session, buyer, total_price=93)
-    test_order.activity_id = activity_id
-    test_order.test_product_id = test_product.id
-    excluded.extend([outside_scope, test_order])
-    await db_session.flush()
-    payload = {"activity_id": str(activity_id) if activity_id else None, "unpaid_only": True}
-    path = "/shop/orders/classes/receipts.pdf"
-    assert (await client.post(path, json=payload)).status_code == 401
-    assert (await authed_client_factory(buyer).post(path, json=payload)).status_code == 403
-    response = await authed_client_factory(manager).post(path, json=payload)
-    assert response.status_code == 200, response.text
-    pdf = PdfReader(BytesIO(response.content))
-    text = "".join(page.extract_text() for page in pdf.pages)
-    compact_text = "".join(text.split())
-    assert len(pdf.pages) == 2
-    assert personal.serial_number in compact_text and supplement.serial_number in compact_text
-    assert "補收款" in text
-    assert sorted(_receipt_totals(pdf)) == ["60", "60", "70", "70"]
-    for order in excluded:
-        assert order.serial_number not in compact_text
-        assert await db_session.get(ShopOrderReceiptPrint, order.id) is None
-    for order in (personal, supplement):
-        await db_session.refresh(order)
-        assert order.is_paid is False and order.class_id is None
-        assert await db_session.get(ShopOrderReceiptPrint, order.id) is not None
-    assert supplement.supplement_class_id == school_class.id
-    assert supplement.is_class_collected is True
-    # 相同內容已由批次列印記錄，不應再出現在增量列印。
-    unchanged = await authed_client_factory(manager).post(
-        "/shop/orders/receipts/changed.pdf", json={"activity_id": payload["activity_id"]}
-    )
-    # 已繳費個人單尚未列印，仍應由增量列印正常列出。
-    assert unchanged.status_code == 200
-    changed_text = "".join(
-        page.extract_text() for page in PdfReader(BytesIO(unchanged.content)).pages
-    )
-    compact_changed_text = "".join(changed_text.split())
-    assert excluded[0].serial_number in compact_changed_text
-    assert personal.serial_number not in compact_changed_text
-    assert supplement.serial_number not in compact_changed_text
-
-
 async def test_changed_receipts_include_unpaid_supplements(db_session, authed_client_factory):
     from io import BytesIO
 
@@ -3465,7 +2753,7 @@ async def test_changed_receipts_include_unpaid_supplements(db_session, authed_cl
     db_session.add(OrderItem(order_id=order.id, product_id=product.id, quantity=1, unit_price=60))
     await db_session.flush()
     ac = authed_client_factory(manager)
-    response = await ac.post("/shop/orders/receipts/changed.pdf", json={"activity_id": None})
+    response = await ac.post("/shop/orders/receipts/changed.pdf", json={})
     assert response.status_code == 200, response.text
     text = "".join(page.extract_text() for page in PdfReader(BytesIO(response.content)).pages)
     assert order.serial_number in "".join(text.split()) and "補收款" in text
@@ -3474,122 +2762,11 @@ async def test_changed_receipts_include_unpaid_supplements(db_session, authed_cl
     assert order.supplement_class_id == school_class.id
 
 
-async def test_changed_receipts_print_only_updated_classes_and_individual_orders(
-    db_session, authed_client_factory, monkeypatch
-) -> None:
-    from io import BytesIO
-
-    from pypdf import PdfReader
-
-    from api.services.shop import _receipts
-
-    classes = [
-        await _make_class(db_session),
-        await _make_class(db_session, start="21501", end="21540"),
-    ]
-    buyer = await _bare_user(db_session)
-    manager = await _bare_user(db_session)
-    await _grant_permission(db_session, manager, "shop:manage_orders")
-    activity = Activity(name="增量收據活動", status=ActivityStatus.ACTIVE)
-    db_session.add(activity)
-    await db_session.flush()
-    class_orders = [
-        await _seed_order(db_session, buyer, class_id=classes[0].id, total_price=100),
-        await _seed_order(db_session, buyer, class_id=classes[1].id, total_price=200),
-    ]
-    for order in class_orders:
-        order.activity_id = activity.id
-    personal_order = await _seed_order(db_session, buyer, total_price=50)
-    personal_order.activity_id = activity.id
-    await db_session.flush()
-
-    first_print = datetime.now(UTC) + timedelta(seconds=1)
-    monkeypatch.setattr(_receipts, "now_local", lambda: first_print)
-    client = authed_client_factory(manager)
-    initial = await client.post(
-        "/shop/orders/classes/receipts.pdf",
-        json={"activity_id": str(activity.id), "unpaid_only": True},
-    )
-    assert initial.status_code == 200
-    initial_text = "".join(
-        page.extract_text() for page in PdfReader(BytesIO(initial.content)).pages
-    )
-    assert classes[0].class_code in initial_text and classes[1].class_code in initial_text
-
-    class_orders[0].total_price = 125
-    class_orders[0].updated_at = first_print + timedelta(seconds=1)
-    personal_order.updated_at = first_print + timedelta(seconds=1)
-    await db_session.flush()
-    monkeypatch.setattr(_receipts, "now_local", lambda: first_print + timedelta(seconds=2))
-
-    changed = await client.post(
-        "/shop/orders/receipts/changed.pdf", json={"activity_id": str(activity.id)}
-    )
-    assert changed.status_code == 200, changed.text
-    changed_text = "".join(
-        page.extract_text() for page in PdfReader(BytesIO(changed.content)).pages
-    )
-    assert classes[0].class_code in changed_text
-    assert classes[1].class_code not in changed_text
-    assert changed_text.count("測試使用者") == 2
-    assert "列印時間：" in changed_text
-
-    unchanged = await client.post(
-        "/shop/orders/receipts/changed.pdf", json={"activity_id": str(activity.id)}
-    )
-    assert unchanged.status_code == 400
-    assert unchanged.json()["detail"] == "上次列印後沒有變更的有效訂單"
-
-
-async def test_class_receipt_missing_class_and_activity(db_session, authed_client_factory) -> None:
-    sc = await _make_class(db_session)
+async def test_class_receipt_missing_class_returns_404(db_session, authed_client_factory) -> None:
     manager = await _bare_user(db_session)
     await _grant_permission(db_session, manager, "admin:all")
     ac = authed_client_factory(manager)
     assert (await ac.get(f"/shop/orders/classes/{uuid.uuid4()}/receipt.pdf")).status_code == 404
-    missing_activity = await ac.get(
-        f"/shop/orders/classes/{sc.id}/receipt.pdf", params={"activity_id": str(uuid.uuid4())}
-    )
-    assert missing_activity.status_code == 400
-    assert missing_activity.json()["detail"] == "找不到此活動"
-
-
-async def test_class_receipt_without_activity_includes_only_general_goods(
-    db_session, admin_user, authed_client_factory
-) -> None:
-    from io import BytesIO
-
-    from pypdf import PdfReader
-
-    sc = await _make_class(db_session)
-    buyer = await _bare_user(db_session)
-    product = await _make_active_product(db_session, admin_user, price=100)
-    order = await _seed_order(db_session, buyer, class_id=sc.id, total_price=100, is_paid=True)
-    db_session.add(OrderItem(order_id=order.id, product_id=product.id, quantity=1, unit_price=100))
-    activity = Activity(name="其他活動", status=ActivityStatus.ACTIVE)
-    db_session.add(activity)
-    await db_session.flush()
-    excluded = await _seed_order(db_session, buyer, class_id=sc.id, total_price=9999, is_paid=True)
-    excluded.activity_id = activity.id
-    await db_session.flush()
-    response = await authed_client_factory(admin_user).get(
-        f"/shop/orders/classes/{sc.id}/receipt.pdf"
-    )
-    assert response.status_code == 200
-    pdf = PdfReader(BytesIO(response.content))
-    text = "".join(page.extract_text() for page in pdf.pages)
-    assert "一般商品" not in text
-    assert _receipt_totals(pdf) == ["100", "100"]
-    assert "9,999" not in text
-
-    batch_response = await authed_client_factory(admin_user).post(
-        "/shop/orders/classes/receipts.pdf",
-        json={"activity_id": None, "class_ids": [str(sc.id)]},
-    )
-    assert batch_response.status_code == 200
-    batch_pdf = PdfReader(BytesIO(batch_response.content))
-    assert len(batch_pdf.pages) == 1
-    assert "一般商品" not in batch_pdf.pages[0].extract_text()
 
 
 async def _add_person_class_member(db, user, school_class):
@@ -4335,20 +3512,19 @@ async def test_cadre_can_register_multiple_products_in_one_request(
     }
 
 
-async def test_cadre_multi_product_request_splits_activities(
+async def test_cadre_multi_product_request_splits_categories(
     db_session, authed_client_factory
 ) -> None:
     sc = await _make_class(db_session, start="11501", end="11540")
     cadre = await _bare_user(db_session, student_id="11501")
     await class_svc.add_cadre(db_session, sc, user_id=cadre.id)
     student = await _bare_user(db_session, student_id="11520")
-    general = await _make_active_product(db_session, cadre, price=15)
-    org = Org(name=f"shop-{uuid.uuid4().hex[:6]}")
-    activity = Activity(name="活動商品", org=org, status=ActivityStatus.ACTIVE)
-    db_session.add_all([org, activity])
-    await db_session.flush()
-    event_category = await _make_category(db_session, cadre, activity_id=activity.id)
-    event_product = await _make_active_product(db_session, cadre, price=25, category=event_category)
+    first_category = await _make_category(db_session, cadre, name="一般商品")
+    second_category = await _make_category(db_session, cadre, name="主題商品")
+    general = await _make_active_product(db_session, cadre, price=15, category=first_category)
+    topic_product = await _make_active_product(
+        db_session, cadre, price=25, category=second_category
+    )
 
     response = await authed_client_factory(cadre).post(
         "/shop/orders/class",
@@ -4356,7 +3532,7 @@ async def test_cadre_multi_product_request_splits_activities(
             "user_id": str(student.id),
             "items": [
                 {"product_id": str(general.id), "quantity": 2},
-                {"product_id": str(event_product.id), "quantity": 3},
+                {"product_id": str(topic_product.id), "quantity": 3},
             ],
         },
     )
@@ -4364,9 +3540,13 @@ async def test_cadre_multi_product_request_splits_activities(
     assert response.status_code == 201
     orders = response.json()
     assert len(orders) == 2
+    assert {order["category_id"] for order in orders} == {
+        str(first_category.id),
+        str(second_category.id),
+    }
     assert {order["items"][0]["product_id"]: order["total_price"] for order in orders} == {
         str(general.id): 30,
-        str(event_product.id): 75,
+        str(topic_product.id): 75,
     }
 
 
@@ -4962,7 +4142,7 @@ async def test_unlinked_catalog_activities_have_independent_registrations(
     registrations = (await ac.get("/shop/registrations")).json()
     assert len(registrations) == 2
     assert sum(order["total_price"] for order in registrations) == 4136
-    # Removing one activity does not remove or lock the other.
+    # Removing one category does not remove or lock another category.
     removed = await ac.put(f"/shop/registrations/current/products/{card.id}", json={"variants": []})
     assert removed.status_code == 200
     orders = (await ac.get("/shop/orders", params={"my_only": "true"})).json()
@@ -4976,7 +4156,7 @@ async def test_unlinked_catalog_activities_have_independent_registrations(
     assert cancelled.json()["category_name"] == "聖誕傳情"
 
 
-async def test_class_filters_unlinked_activity_and_keeps_other_classes_private(
+async def test_class_filters_categories_and_keeps_other_classes_private(
     client, db_session, authed_client_factory
 ) -> None:
     sc = await _make_class(db_session, start="11501", end="11540")
@@ -5044,7 +4224,7 @@ async def test_class_filters_unlinked_activity_and_keeps_other_classes_private(
     assert (await ac.get("/shop/orders/class/summary", params={"general_only": "true"})).json()[
         "total_amount"
     ] == 0
-    # Editing a scoped order cannot bring the other activity back into it.
+    # Editing a scoped order cannot bring a product from another category into it.
     edited = await ac.patch(
         f"/shop/orders/{filtered[0]['id']}",
         json={
@@ -5054,42 +4234,6 @@ async def test_class_filters_unlinked_activity_and_keeps_other_classes_private(
     )
     assert edited.status_code == 409
     assert (await ac.get("/shop/orders/class", params=params)).json()[0]["total_price"] == 120
-
-
-async def test_class_summary_activity_filter_includes_all_pages(db_session) -> None:
-    creator = await _bare_user(db_session)
-    buyer = await _bare_user(db_session, student_id="11520")
-    sc = await _make_class(db_session, start="11501", end="11540")
-    activity = Activity(name="校慶", status=ActivityStatus.ACTIVE)
-    db_session.add(activity)
-    await db_session.flush()
-    category = await _make_category(db_session, creator, activity_id=activity.id)
-    product = await _make_active_product(db_session, creator, category=category, price=10)
-    for index in range(501):
-        db_session.add(
-            Order(
-                serial_number=f"SCOPE-{uuid.uuid4().hex[:8]}-{index}",
-                user_id=buyer.id,
-                class_id=sc.id,
-                activity_id=activity.id,
-                status=OrderStatus.PENDING,
-                subtotal_price=10,
-                total_price=10,
-                items=[
-                    OrderItem(product_id=product.id, quantity=1, unit_price=10, selected_options=[])
-                ],
-            )
-        )
-    await db_session.flush()
-    summary = await shop_svc.class_order_summary(
-        db_session, class_ids=[sc.id], activity_id=activity.id
-    )
-    assert summary.order_count == 501
-    assert summary.item_count == 501
-    assert summary.total_amount == 5010
-    assert (
-        await shop_svc.class_order_summary(db_session, class_ids=[sc.id], activity_id=uuid.uuid4())
-    ).order_count == 0
 
 
 async def test_collected_legacy_mixed_order_cannot_be_registered_again(
@@ -5121,69 +4265,6 @@ async def test_collected_legacy_mixed_order_cannot_be_registered_again(
     assert response.status_code == 409
     assert await db_session.scalar(select(func.count()).select_from(Order)) == 1
     assert (await db_session.get(Product, first.id, populate_existing=True)).stock_quantity == 50
-
-
-async def test_categories_linked_to_same_activity_share_registration(
-    db_session, authed_client_factory
-):
-    buyer = await _bare_user(db_session)
-    activity = Activity(name="聖誕活動", status=ActivityStatus.ACTIVE)
-    db_session.add(activity)
-    await db_session.flush()
-    categories = [
-        await _make_category(db_session, buyer, activity_id=activity.id, name=name)
-        for name in ["餅乾", "卡片"]
-    ]
-    products = [await _make_active_product(db_session, buyer, category=c) for c in categories]
-    ac = authed_client_factory(buyer)
-    responses = [
-        await ac.put(
-            f"/shop/registrations/current/products/{p.id}",
-            json={"variants": [{"option_ids": [], "quantity": 1}]},
-        )
-        for p in products
-    ]
-    assert all(response.status_code == 200 for response in responses)
-    assert responses[0].json()["id"] == responses[1].json()["id"]
-    assert responses[1].json()["total_price"] == 200
-    assert responses[1].json()["category_id"] is None
-
-
-async def test_coupon_targets_selected_unlinked_activity(db_session, authed_client_factory):
-    from api.schemas.shop import ShopPromotionCreate
-
-    buyer = await _bare_user(db_session)
-    first = await _make_active_product(db_session, buyer, price=40)
-    second = await _make_active_product(db_session, buyer, price=100)
-    ac = authed_client_factory(buyer)
-    for product in (first, second):
-        assert (
-            await ac.put(
-                f"/shop/registrations/current/products/{product.id}",
-                json={"variants": [{"option_ids": [], "quantity": 1}]},
-            )
-        ).status_code == 200
-    await shop_svc.create_promotion(
-        db_session,
-        data=ShopPromotionCreate(
-            name="傳情折抵",
-            code="CARD10",
-            discount_type="fixed",
-            discount_value=10,
-            target_product_ids=[first.id],
-        ),
-        created_by=buyer.id,
-    )
-    first = await shop_svc.get_product(db_session, first.id)
-    payload = {"code": "CARD10", "category_id": str(first.series.category_id)}
-    preview = await ac.post("/shop/registrations/current/promotion/preview", json=payload)
-    assert preview.status_code == 200
-    assert preview.json()["eligible"] is True
-    applied = await ac.put("/shop/registrations/current/promotion", json=payload)
-    assert applied.status_code == 200
-    assert applied.json()["total_price"] == 30
-    orders = (await ac.get("/shop/registrations")).json()
-    assert sorted(order["total_price"] for order in orders) == [30, 100]
 
 
 async def _make_testing_product(db, creator, *, category=None, stock=3, series_id=None):
@@ -5468,136 +4549,6 @@ async def test_expired_product_testing_permission_does_not_grant_access(
             },
         )
     ).status_code == 403
-
-
-async def test_category_collection_does_not_collect_or_unlock_other_topics(
-    db_session, authed_client_factory
-) -> None:
-    manager = await _bare_user(db_session)
-    buyer = await _bare_user(db_session)
-    school_class = await _make_class(db_session, creator=manager)
-    other_class = await _make_class(db_session, start="11550", end="11590", creator=manager)
-    love = await shop_svc.create_category(
-        db_session, data=ProductCategoryCreate(name="傳情"), created_by=manager.id
-    )
-    dance = await shop_svc.create_category(
-        db_session, data=ProductCategoryCreate(name="舞會"), created_by=manager.id
-    )
-    products = [
-        await shop_svc.create_product(
-            db_session,
-            data=ProductCreate(name=category.name, price=amount, category_id=category.id),
-            created_by=manager.id,
-        )
-        for category, amount in [(love, 100), (dance, 300)]
-    ]
-    orders = []
-    for category, product, amount, class_id in [
-        (love, products[0], 100, school_class.id),
-        (dance, products[1], 300, school_class.id),
-        (love, products[0], 100, other_class.id),
-    ]:
-        order = await _seed_order(db_session, buyer, class_id=class_id, total_price=amount)
-        order.category_id = category.id
-        db_session.add(
-            OrderItem(order_id=order.id, product_id=product.id, quantity=1, unit_price=amount)
-        )
-        orders.append(order)
-    await _grant_permission(db_session, manager, "shop:manage_orders")
-    await db_session.flush()
-    ac = authed_client_factory(manager)
-    path = f"/shop/orders/classes/{school_class.id}/payment"
-    for category in [love, dance]:
-        response = await ac.patch(
-            path,
-            json={
-                "is_paid": True,
-                "activity_id": None,
-                "category_id": str(category.id),
-            },
-        )
-        assert response.status_code == 200
-        assert response.json()["updated_orders"] == 1
-        assert response.json()["category_id"] == str(category.id)
-        assert orders[0].is_paid is True
-        assert orders[2].is_paid is False
-        if category == love:
-            assert orders[1].is_paid is False
-            status = await shop_svc.get_close_status(
-                db_session, [love.id, dance.id], school_class.id
-            )
-            assert status[love.id] is not None
-            assert status[dance.id] is None
-    response = await ac.patch(
-        path,
-        json={
-            "is_paid": False,
-            "activity_id": None,
-            "category_id": str(love.id),
-        },
-    )
-    assert response.status_code == 200
-    assert orders[0].is_paid is False
-    assert orders[1].is_paid is True
-    status = await shop_svc.get_close_status(db_session, [love.id, dance.id], school_class.id)
-    assert status[love.id] is None
-    assert status[dance.id] is not None
-
-
-@pytest.mark.parametrize("permission", [None, "shop:view_all", "class:shop_collect"])
-async def test_category_collection_requires_council_permission(
-    db_session, client, authed_client_factory, permission
-) -> None:
-    user = await _bare_user(db_session)
-    school_class = await _make_class(db_session, creator=user)
-    if permission:
-        await _grant_permission(db_session, user, permission)
-    ac = authed_client_factory(user) if permission else client
-    response = await ac.patch(
-        f"/shop/orders/classes/{school_class.id}/payment",
-        json={
-            "is_paid": True,
-            "activity_id": None,
-            "category_id": str(uuid.uuid4()),
-        },
-    )
-    assert response.status_code == (403 if permission else 401)
-
-
-async def test_category_collection_rejects_linked_or_missing_topic(
-    db_session, authed_client_factory
-):
-    manager = await _bare_user(db_session)
-    school_class = await _make_class(db_session, creator=manager)
-    org = Org(name="收款範圍測試")
-    activity = Activity(name="正式活動", org=org, status=ActivityStatus.ACTIVE)
-    db_session.add_all([org, activity])
-    await db_session.flush()
-    category = await shop_svc.create_category(
-        db_session,
-        data=ProductCategoryCreate(
-            name="綁定活動主題",
-            activity_id=activity.id,
-        ),
-        created_by=manager.id,
-    )
-    await _grant_permission(db_session, manager, "shop:manage_orders")
-    ac = authed_client_factory(manager)
-    path = f"/shop/orders/classes/{school_class.id}/payment"
-    for activity_id, category_id in [
-        (None, category.id),
-        (activity.id, category.id),
-        (None, uuid.uuid4()),
-    ]:
-        response = await ac.patch(
-            path,
-            json={
-                "is_paid": True,
-                "activity_id": str(activity_id) if activity_id else None,
-                "category_id": str(category_id),
-            },
-        )
-        assert response.status_code == 400
 
 
 async def _paid_class_order(db_session, *, price: int = 40, quantity: int = 2):

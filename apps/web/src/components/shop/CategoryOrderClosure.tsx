@@ -7,7 +7,7 @@ import type { CatalogCategoryOut, CloseStatusItem } from "@/lib/types";
 
 type OrderBatch = Pick<CatalogCategoryOut, "id" | "name">;
 
-export default function ActivityOrderClosure({ categories, disabled = false, onSaved }: {
+export default function CategoryOrderClosure({ categories, disabled = false, onSaved }: {
   categories: OrderBatch[];
   disabled?: boolean;
   onSaved: () => void;
@@ -56,15 +56,15 @@ export default function ActivityOrderClosure({ categories, disabled = false, onS
         ? `「${category.name}」已由班聯結單，商品已從公開目錄隱藏；既有訂單與收款保留。`
         : `「${category.name}」已重新開放並恢復公開顯示，訂購仍依原期限與商品狀態判定。`);
     } catch (cause) {
-      setError(apiErrorMessage(cause, "活動鎖單狀態更新失敗，請再試一次。"));
+      setError(apiErrorMessage(cause, "商品分類結單狀態更新失敗，請再試一次。"));
     } finally {
       setBusyId(null);
     }
   }
 
   return (
-    <section aria-labelledby="activity-order-closure-title" className="card min-w-0 p-4">
-      <h2 id="activity-order-closure-title" className="flex items-center gap-2 text-base font-semibold"
+    <section aria-labelledby="category-order-closure-title" className="card min-w-0 p-4">
+      <h2 id="category-order-closure-title" className="flex items-center gap-2 text-base font-semibold"
         style={{ color: "var(--text-primary)" }}>
         <Lock size={18} aria-hidden="true" /> 班聯結單與公開入口
       </h2>

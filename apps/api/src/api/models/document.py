@@ -29,7 +29,6 @@ from api.models.base import TimestampMixin
 from api.models.types import JSONDict, JSONList
 
 if TYPE_CHECKING:
-    from api.models.activity import Activity
     from api.models.org import Org
     from api.models.school_class import SchoolClass
     from api.models.user import User
@@ -509,12 +508,6 @@ class Document(Base, TimestampMixin):
         nullable=False,
         index=True,
     )
-    activity_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("activities.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
     # 關聯的陳情案件；列印與寄送正式公文時會將陳情原文附於文後。
     petition_case_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
@@ -563,7 +556,6 @@ class Document(Base, TimestampMixin):
 
     # ── Relationships ────────────────────────────────────────────────────────
     org: Mapped[Org] = relationship("Org")
-    activity: Mapped[Activity | None] = relationship("Activity")
     petition_case: Mapped[Any | None] = relationship(
         "PetitionCase", foreign_keys=[petition_case_id]
     )

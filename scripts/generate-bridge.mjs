@@ -89,8 +89,6 @@ if (missing.length > 0) {
 // ── 4. 為 types.ts 中名稱與 schema 不同的型別額外生成別名 ─────────────────────
 // 格式：{ "types.ts 中的名稱": "api-types.ts schema 名稱" }
 const ALIAS_MAP = {
-  // Activity 模組（types.ts 省略 Out 後綴）
-  Activity: "ActivityOut",
   // Notification
   NotificationPreferences: "NotificationPreferencesOut",
   // Defense

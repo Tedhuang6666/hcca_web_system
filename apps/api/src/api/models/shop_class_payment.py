@@ -1,4 +1,4 @@
-"""班聯按班級與活動確認收款，獨立於學生的個別訂單。"""
+"""班聯按班級確認收款，獨立於學生的個別訂單。"""
 
 import uuid
 from datetime import datetime
@@ -13,22 +13,11 @@ from api.models.base import TimestampMixin
 
 class ShopClassPayment(Base, TimestampMixin):
     __tablename__ = "shop_class_payments"
-    __table_args__ = (
-        Index(
-            "uq_shop_class_payments_scope",
-            "class_id",
-            "activity_id",
-            unique=True,
-            postgresql_nulls_not_distinct=True,
-        ),
-    )
+    __table_args__ = (Index("uq_shop_class_payments_class", "class_id", unique=True),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     class_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("school_classes.id", ondelete="CASCADE"), nullable=False
-    )
-    activity_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("activities.id", ondelete="CASCADE"), nullable=True
     )
     is_paid: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"

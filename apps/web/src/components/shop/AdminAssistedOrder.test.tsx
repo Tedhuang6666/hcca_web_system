@@ -5,7 +5,7 @@ import type { CatalogCategoryOut, SchoolClassListItem } from "@/lib/types";
 
 const api = vi.hoisted(() => ({ listOrderRecipients: vi.fn(), getProduct: vi.fn(), createAdminAssistedOrder: vi.fn() }));
 vi.mock("@/lib/api", () => ({ shopApi: api, apiErrorMessage: (_: unknown, fallback: string) => fallback }));
-const catalog: CatalogCategoryOut[] = [{ id: "cat", name: "紀念品", activity_name: "校慶", sort_order: 0, series: [], products: [
+const catalog: CatalogCategoryOut[] = [{ id: "cat", name: "紀念品", sort_order: 0, series: [], products: [
   { id: "shirt", name: "紀念衫", price: 100, status: "active", stock_quantity: 10, purchase_allowed: true, is_unlimited: false, has_variants: true, has_option_surcharge: false },
 ] }];
 const classes: SchoolClassListItem[] = [

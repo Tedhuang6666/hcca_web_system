@@ -19,7 +19,7 @@ describe("家長授權入口", () => {
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "還沒有驗證碼？請孩子這樣設定" })).toBeVisible();
     expect(screen.getByText("用學生帳號登入，打開商品頁，點「家人代訂」。")).toBeVisible();
-    expect(screen.getByText(/選擇活動與家長稱呼/)).toBeVisible();
+    expect(screen.getByText(/選擇商品分類與家長稱呼/)).toBeVisible();
     expect(screen.getByText(/將驗證碼或分享連結傳給家長/)).toBeVisible();
     expect(screen.getByText(/授權有效至商品截止或班級結單/)).toBeVisible();
     fireEvent.click(screen.getByText("完整操作介紹與權限說明"));

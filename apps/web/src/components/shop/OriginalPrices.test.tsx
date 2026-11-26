@@ -20,7 +20,7 @@ const promotion: ShopPromotionPublicOut = { gift_quantity: 1,
 
 describe("商品與加價選項的原價", () => {
   it("原價400、售價300再九折為270，不以原價折扣", () => {
-    expect(productOfferPrice(shirt, [promotion], null, null)).toBe(270);
+    expect(productOfferPrice(shirt, [promotion], null, 0, 1, null)).toBe(270);
     const price = shopCardPrice(shirt, [promotion], null, null);
     expect(price).toEqual({ original: 400, current: 270 });
     render(<ShopPrice {...price} />);
@@ -34,7 +34,8 @@ describe("商品與加價選項的原價", () => {
     expect(result).toMatchObject({ original: 1000, saving: 350 });
     expect(shirt.price + pants.price).toBe(800);
     const subtotal = registrationReferenceSubtotal([
-      { product_id: "shirt", quantity: 3, unit_price: 350, selected_options: [{ price_delta: 50, original_price_delta: 100 }] },
+      { product_id: "shirt", quantity: 3, unit_price: 350,
+        selected_options: [{ price_delta: 50, original_price_delta: 100 }] },
       { product_id: "pants", quantity: 2, unit_price: 500, selected_options: [] },
     ], new Map([[shirt.id, shirt], [pants.id, pants]]));
     expect(subtotal).toBe(2700);
@@ -54,11 +55,17 @@ describe("商品與加價選項的原價", () => {
 
   it("已登記商品的比較價包含原始規格加價，實付價仍取優惠分配", () => {
     const order = {
-      activity_id: null, subtotal_price: 350, discount_amount: 35, total_price: 315,
-      items: [{ product_id: "shirt", quantity: 1, unit_price: 350,
-        selected_options: [{ price_delta: 50, original_price_delta: 100 }] }],
-    } as OrderOut;
-    expect(shopCardPrice(shirt, [promotion], null, order)).toEqual({
+      id: "order", user_id: "student", status: "pending", serial_number: "ORDER-1",
+      assistance_scope: "self", payment_method: "cash_on_pickup", created_at: "2026-10-10T00:00:00Z",
+      is_paid: false, is_class_balance: false, is_class_collected: false, category_id: null,
+      received_amount: 0, updated_at: "2026-10-10T00:00:00Z",
+      subtotal_price: 350, discount_amount: 35, total_price: 315,
+      items: [{ id: "item-1", product_id: "shirt", product_name: "紀念衫", quantity: 1, unit_price: 350,
+        subtotal: 350, gift_quantity: 0, gift_discount_amount: 0,
+        selected_options: [{ group_id: "size", group_name: "尺寸", option_id: "large", value: "L",
+          price_delta: 50, original_price_delta: 100 }] }],
+    } satisfies OrderOut;
+    expect(shopCardPrice(shirt, [promotion], order, null)).toEqual({
       original: 500, current: 315, note: "依已登記 1 件計算",
     });
   });
@@ -73,12 +80,17 @@ describe("商品與加價選項的原價", () => {
 
   it("登記後管理端再調價，仍以原價與已登記金額比較", () => {
     const repriced = { ...shirt, price: 350 };
-    const items = [{ product_id: "shirt", quantity: 1, unit_price: 350,
-      selected_options: [{ price_delta: 50, original_price_delta: 100 }] }];
+    const items = [{ id: "item-2", product_id: "shirt", product_name: "紀念衫", quantity: 1, unit_price: 350,
+      subtotal: 350, gift_quantity: 0, gift_discount_amount: 0,
+      selected_options: [{ group_id: "size", group_name: "尺寸", option_id: "large", value: "L",
+        price_delta: 50, original_price_delta: 100 }] }];
     expect(registrationReferenceSubtotal(items, new Map([[shirt.id, repriced]]))).toBe(500);
-    const order = { activity_id: null, subtotal_price: 350, discount_amount: 35,
-      total_price: 315, items } as OrderOut;
-    expect(shopCardPrice(repriced, [promotion], null, order).original).toBe(500);
+    const order = { id: "order", user_id: "student", status: "pending", serial_number: "ORDER-2",
+      assistance_scope: "self", payment_method: "cash_on_pickup", created_at: "2026-10-10T00:00:00Z",
+      is_paid: false, is_class_balance: false, is_class_collected: false, category_id: null,
+      received_amount: 0, updated_at: "2026-10-10T00:00:00Z", subtotal_price: 350,
+      discount_amount: 35, total_price: 315, items } satisfies OrderOut;
+    expect(shopCardPrice(repriced, [promotion], order, null).original).toBe(500);
     expect(registrationReferenceSubtotal(items, new Map([[shirt.id, { price: 350 }]]))).toBe(400);
   });
 });

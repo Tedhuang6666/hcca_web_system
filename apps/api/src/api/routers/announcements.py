@@ -22,7 +22,6 @@ from api.schemas.announcement import (
     AnnouncementStatsOut,
     AnnouncementUpdate,
 )
-from api.services import activity as activity_svc
 from api.services import announcement as ann_svc
 from api.services import audit as audit_svc
 from api.services.discord_bot import emit_announcement_notice
@@ -43,11 +42,10 @@ _PUBLIC_ANNOUNCEMENT_LIST_CACHE_TTL_SECONDS = 30
 
 def _public_announcement_list_cache_key(
     org_id: uuid.UUID | None,
-    activity_id: uuid.UUID | None,
     skip: int,
     limit: int,
 ) -> str:
-    return f"announcement:public-list:v1:{org_id or 'all'}:{activity_id or 'all'}:{skip}:{limit}"
+    return f"announcement:public-list:v1:{org_id or 'all'}:{skip}:{limit}"
 
 
 # 持有任一公告管理權限者可檢視所有公告（不受對象限制）
@@ -92,11 +90,8 @@ async def _require_announcement_action(
     db: AsyncSession,
     user: User,
     code: PermissionCode,
-    activity_id: uuid.UUID | None,
 ) -> None:
     if await _has_permission(db, user, code):
-        return
-    if await activity_svc.can_manage_activity_resource(db, user, activity_id):
         return
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"需要權限：{code}")
 
@@ -157,14 +152,13 @@ async def list_announcements(
     db: DbDep,
     viewer: OptionalUser,
     org_id: uuid.UUID | None = Query(None, description="篩選特定組織的公告（None=全站）"),
-    activity_id: uuid.UUID | None = Query(None, description="篩選特定活動"),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
 ) -> list[AnnouncementListItem]:
     """列出已發布且檢視者可見的公告，依發布時間倒序排列。"""
     cache_key = None
     if viewer is None:
-        cache_key = _public_announcement_list_cache_key(org_id, activity_id, skip, limit)
+        cache_key = _public_announcement_list_cache_key(org_id, skip, limit)
         cached = await cache_get(cache_key)
         if isinstance(cached, list):
             try:
@@ -175,7 +169,6 @@ async def list_announcements(
     anns = await ann_svc.list_announcements(
         db,
         org_id=org_id,
-        activity_id=activity_id,
         published_only=True,
         skip=skip,
         limit=limit,
@@ -207,14 +200,13 @@ async def list_all_announcements(
     db: DbDep,
     user: CurrentUser,
     org_id: uuid.UUID | None = Query(None),
-    activity_id: uuid.UUID | None = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
 ) -> list[AnnouncementListItem]:
-    """管理員用：列出所有公告（含草稿），活動總召可查自己活動公告。"""
-    await _require_announcement_action(db, user, PermissionCode.ANNOUNCEMENT_CREATE, activity_id)
+    """管理員用：列出所有公告（含草稿）。"""
+    await _require_announcement_action(db, user, PermissionCode.ANNOUNCEMENT_CREATE)
     anns = await ann_svc.list_announcements(
-        db, org_id=org_id, activity_id=activity_id, published_only=False, skip=skip, limit=limit
+        db, org_id=org_id, published_only=False, skip=skip, limit=limit
     )
     result = []
     for ann in anns:
@@ -254,10 +246,8 @@ async def get_announcement_stats(
     db: DbDep,
     user: CurrentUser,
 ) -> AnnouncementStatsOut:
-    ann = await ann_svc.get(db, ann_id)
-    await _require_announcement_action(
-        db, user, PermissionCode.ANNOUNCEMENT_VIEW_STATS, ann.activity_id
-    )
+    await ann_svc.get(db, ann_id)
+    await _require_announcement_action(db, user, PermissionCode.ANNOUNCEMENT_VIEW_STATS)
     return await ann_svc.get_stats(db, ann_id)
 
 
@@ -272,9 +262,7 @@ async def create_announcement(
     db: DbDep,
     user: CurrentUser,
 ) -> AnnouncementOut:
-    await _require_announcement_action(
-        db, user, PermissionCode.ANNOUNCEMENT_CREATE, body.activity_id
-    )
+    await _require_announcement_action(db, user, PermissionCode.ANNOUNCEMENT_CREATE)
     try:
         ann = await ann_svc.create(db, user, body)
     except ValueError as e:
@@ -289,7 +277,6 @@ async def create_announcement(
         meta={
             "title": ann.title,
             "org_id": str(ann.org_id) if ann.org_id else None,
-            "activity_id": str(ann.activity_id) if ann.activity_id else None,
         },
         summary=f"建立公告「{ann.title}」",
     )
@@ -312,9 +299,7 @@ async def update_announcement(
     user: CurrentUser,
 ) -> AnnouncementOut:
     before = await ann_svc.get(db, ann_id)
-    await _require_announcement_action(
-        db, user, PermissionCode.ANNOUNCEMENT_EDIT, before.activity_id
-    )
+    await _require_announcement_action(db, user, PermissionCode.ANNOUNCEMENT_EDIT)
     before_meta = {
         "title": before.title,
         "is_published": before.is_published,
@@ -359,10 +344,8 @@ async def publish_announcement(
     db: DbDep,
     user: CurrentUser,
 ) -> AnnouncementOut:
-    before = await ann_svc.get(db, ann_id)
-    await _require_announcement_action(
-        db, user, PermissionCode.ANNOUNCEMENT_PUBLISH, before.activity_id
-    )
+    await ann_svc.get(db, ann_id)
+    await _require_announcement_action(db, user, PermissionCode.ANNOUNCEMENT_PUBLISH)
     ann = await ann_svc.publish(db, ann_id)
     await audit_svc.record(
         db,
@@ -408,10 +391,8 @@ async def unpublish_announcement(
     db: DbDep,
     user: CurrentUser,
 ) -> AnnouncementOut:
-    before = await ann_svc.get(db, ann_id)
-    await _require_announcement_action(
-        db, user, PermissionCode.ANNOUNCEMENT_PUBLISH, before.activity_id
-    )
+    await ann_svc.get(db, ann_id)
+    await _require_announcement_action(db, user, PermissionCode.ANNOUNCEMENT_PUBLISH)
     ann = await ann_svc.unpublish(db, ann_id)
     await audit_svc.record(
         db,
@@ -441,10 +422,8 @@ async def set_urgent(
     user: CurrentUser,
 ) -> AnnouncementOut:
     """僅允許修改重要公告的顯示與期限設定。"""
-    before = await ann_svc.get(db, ann_id)
-    await _require_announcement_action(
-        db, user, PermissionCode.ANNOUNCEMENT_SET_URGENT, before.activity_id
-    )
+    await ann_svc.get(db, ann_id)
+    await _require_announcement_action(db, user, PermissionCode.ANNOUNCEMENT_SET_URGENT)
     filtered = AnnouncementUpdate(
         is_urgent=body.is_urgent,
         urgent_until=body.urgent_until,
@@ -482,7 +461,7 @@ async def delete_announcement(
     user: CurrentUser,
 ) -> None:
     ann = await ann_svc.get(db, ann_id)
-    await _require_announcement_action(db, user, PermissionCode.ANNOUNCEMENT_EDIT, ann.activity_id)
+    await _require_announcement_action(db, user, PermissionCode.ANNOUNCEMENT_EDIT)
     await audit_svc.record(
         db,
         entity_type="announcement",
@@ -514,10 +493,8 @@ async def upload_media(
     user: CurrentUser,
     file: UploadFile = File(...),
 ) -> AnnouncementMediaOut:
-    ann = await ann_svc.get(db, ann_id)
-    await _require_announcement_action(
-        db, user, PermissionCode.ANNOUNCEMENT_MEDIA_MANAGE, ann.activity_id
-    )
+    await ann_svc.get(db, ann_id)
+    await _require_announcement_action(db, user, PermissionCode.ANNOUNCEMENT_MEDIA_MANAGE)
     storage = get_storage()
     media = await ann_svc.upload_media(db, ann_id, file, storage)
     await audit_svc.record(
@@ -546,10 +523,8 @@ async def delete_media(
     db: DbDep,
     user: CurrentUser,
 ) -> None:
-    ann = await ann_svc.get(db, ann_id)
-    await _require_announcement_action(
-        db, user, PermissionCode.ANNOUNCEMENT_MEDIA_MANAGE, ann.activity_id
-    )
+    await ann_svc.get(db, ann_id)
+    await _require_announcement_action(db, user, PermissionCode.ANNOUNCEMENT_MEDIA_MANAGE)
     storage = get_storage()
     await audit_svc.record(
         db,

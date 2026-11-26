@@ -14,7 +14,7 @@ vi.mock("@/lib/api", () => ({ shopApi: api, apiErrorMessage: (error: Error) => e
 vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 
 const order: OrderOut = {
-  id: "order", user_id: "student", activity_id: "activity", status: "pending", serial_number: "ORDER",
+  id: "order", user_id: "student", category_id: "category", status: "pending", serial_number: "ORDER",
   assistance_scope: "self", payment_method: "school_collection", created_at: "2026-10-10", updated_at: "2026-10-10",
   subtotal_price: 300, discount_amount: 0, total_price: 300, is_paid: false, is_class_collected: false,
   items: [{ gift_quantity: 0, gift_discount_amount: 0, id: "own", product_id: "shirt", product_name: "衣服", quantity: 1,
@@ -37,8 +37,8 @@ function setup(overrides: Partial<Options> = {}) {
   const options: Options = {
     delegationToken: null, delegationContext: null, classMemberUserId: null, classMemberReady: true,
     isLoggedIn: true, authLoading: false, canOrderForSelf: true,
-    registrations: [order], setRegistrations: vi.fn(), scopeKey: "activity", productId: "shirt", testingProduct: false,
-    availablePromotions: [], couponCode: "", selectedPromotionScope: "activity",
+    registrations: [order], setRegistrations: vi.fn(), scopeKey: "category:category", productId: "shirt", testingProduct: false,
+    availablePromotions: [], couponCode: "", selectedPromotionScope: "category:category",
     refreshGeneration: { current: 0 }, mutationBusy: { current: false },
     onClassMemberReady: vi.fn(), onQualifiedPromotions: vi.fn(), ...overrides,
   };
@@ -148,21 +148,21 @@ it("preserves only the student's collected quantities while displaying all own o
   expect(result.current.registrationLocked).toBe(false);
 });
 
-it("preserves sibling variants, other activities and test orders when replacing a registration", async () => {
+it("preserves sibling variants, other category orders and test orders when replacing a registration", async () => {
   const selected = (id: string) => [{ group_id: "size", group_name: "尺寸", option_id: id, value: id, price_delta: 0 }];
   const variants: OrderOut = { ...order, items: [
     { ...order.items[0], id: "medium", selected_options: selected("M") },
     { ...order.items[0], id: "large", quantity: 2, selected_options: selected("L") },
     order.items[1],
   ] };
-  const other = { ...order, id: "other-activity", activity_id: "other" };
+  const other = { ...order, id: "other-category", category_id: "other" };
   const testing = { ...order, id: "trial", test_product_id: "trial-product" };
   const { result } = setup({ registrations: [variants, other, testing] });
   await act(async () => { await result.current.saveVariant("shirt", ["M"], 4); });
   expect(api.setCurrentRegistrationProduct).toHaveBeenCalledWith("shirt", {
     variants: [{ option_ids: ["L"], quantity: 2 }, { option_ids: ["M"], quantity: 4 }],
   });
-  expect(result.current.orders.map((row) => row.id)).toEqual(["other-activity", "trial", "order"]);
+  expect(result.current.orders.map((row) => row.id)).toEqual(["other-category", "trial", "order"]);
 });
 
 it("replaces the previous variant in one request for a single-purchase product", async () => {
@@ -215,8 +215,8 @@ it("can apply a bundle coupon immediately after its first save without waiting f
     await result.current.saveVariant("shirt", [], 1);
     await result.current.applyPromotion("BUNDLE");
   });
-  expect(api.previewCurrentPromotion).toHaveBeenCalledWith("BUNDLE", "activity", undefined);
-  expect(api.applyCurrentPromotion).toHaveBeenCalledWith("BUNDLE", "activity", undefined);
+  expect(api.previewCurrentPromotion).toHaveBeenCalledWith("BUNDLE", "category");
+  expect(api.applyCurrentPromotion).toHaveBeenCalledWith("BUNDLE", "category");
 });
 
 it("invalidates the previous visit even when the actor switches away and back", async () => {

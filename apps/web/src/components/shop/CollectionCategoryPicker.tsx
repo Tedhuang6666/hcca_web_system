@@ -2,7 +2,7 @@
 
 import { useId, useState } from "react";
 
-export default function CollectionActivityPicker({ options, selected, onChange, disabled, label = "收款活動" }: {
+export default function CollectionCategoryPicker({ options, selected, onChange, disabled, label = "收款商品分類" }: {
   options: { key: string; label: string; closed?: boolean; hasUncollectedOrders?: boolean }[]; selected: string | null;
   onChange: (key: string) => void; disabled: boolean; label?: string;
 }) {
@@ -21,10 +21,10 @@ export default function CollectionActivityPicker({ options, selected, onChange, 
         {option.closed && option.hasUncollectedOrders && <span className="text-xs" style={{ color: "var(--warning)" }}>待收款</span>}
       </label>)}
     </div>
-    {!visibleOptions.length && <p className="text-sm" style={{ color: "var(--text-secondary)" }}>目前沒有未結單活動。</p>}
+    {!visibleOptions.length && <p className="text-sm" style={{ color: "var(--text-secondary)" }}>目前沒有未結單商品分類。</p>}
     {closedOptions.length > 0 && <button type="button" className="btn btn-ghost mt-2 min-h-11 px-3 text-sm"
       aria-expanded={showClosed} onClick={() => setShowClosed((value) => !value)}>
-      {showClosed ? "收起已結單活動" : `查看已結單活動（${closedOptions.length}）`}
+      {showClosed ? "收起已結單分類" : `查看已結單分類（${closedOptions.length}）`}
     </button>}
   </fieldset>;
 }

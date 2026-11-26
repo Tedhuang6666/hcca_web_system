@@ -208,7 +208,7 @@ describe("銷售分析", () => {
     render(
       <ShopSalesAnalytics
         filters={{
-          activity_id: "festival",
+
           product_id: "shirt",
           date_from: "2026-10-22",
           date_to: "2026-10-23",
@@ -220,7 +220,7 @@ describe("銷售分析", () => {
     await screen.findByText("訂購金額", { selector: "dt" });
     expect(api.salesAnalytics).toHaveBeenCalledWith(
       expect.objectContaining({
-        activity_id: "festival",
+
         product_id: "shirt",
         is_paid: "false",
         compare: "false",
@@ -413,7 +413,7 @@ it("downloads generated PDF or Excel with scoped filters and retries report erro
   render(
     <ShopSalesAnalytics
       filters={{
-        activity_id: "festival",
+
         product_id: "shirt",
         is_paid: "false",
         grade: "1",
@@ -431,7 +431,7 @@ it("downloads generated PDF or Excel with scoped filters and retries report erro
   expect(api.downloadSalesReport).toHaveBeenLastCalledWith(
     expect.objectContaining({
       format: "xlsx",
-      activity_id: "festival",
+
       product_id: "shirt",
       is_paid: false,
       grade: 1,

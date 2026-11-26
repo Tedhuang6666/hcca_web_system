@@ -81,13 +81,11 @@ async def set_current_registration_product(
     else:
         await _assert_buyer_eligible(session, user)
 
-    activity_id, category_id = _product_order_scope(product)
+    category_id = _product_order_scope(product)
     order = await get_current_registration(
         session,
         user.id,
-        activity_id=activity_id,
         category_id=category_id,
-        match_activity=True,
         lock=True,
         reuse_cancelled=True,
         test_product_id=product.id if testing else None,
@@ -102,10 +100,8 @@ async def set_current_registration_product(
             OrderStatus.CANCELLED,
         ):
             raise ValueError("目前登記狀態無法修改")
-        if any(
-            _product_order_scope(item.product) != (activity_id, category_id) for item in order.items
-        ):
-            raise ValueError("這筆舊訂單包含多個活動，請聯繫班級幹部處理")
+        if any(_product_order_scope(item.product) != category_id for item in order.items):
+            raise ValueError("這筆舊訂單包含多個商品分類，請聯繫班級幹部處理")
 
     school_class = await class_svc.resolve_user_class(session, user)
     class_id = school_class.id if school_class else None
@@ -128,10 +124,9 @@ async def set_current_registration_product(
             if not existing_order.is_paid and not existing_order.is_class_collected:
                 continue
             if any(item.product_id == product.id for item in existing_order.items) and any(
-                _product_order_scope(item.product) != (activity_id, category_id)
-                for item in existing_order.items
+                _product_order_scope(item.product) != category_id for item in existing_order.items
             ):
-                raise ValueError("這筆舊訂單包含多個活動，請聯繫班級幹部處理")
+                raise ValueError("這筆舊訂單包含多個商品分類，請聯繫班級幹部處理")
             for item in existing_order.items:
                 if item.product_id == product.id and item.delegation_link_id is None:
                     signature = _options_signature(item.selected_options or [])
@@ -205,7 +200,6 @@ async def set_current_registration_product(
             serial_number=await generate_order_serial(session),
             user_id=user.id,
             test_product_id=product.id if testing else None,
-            activity_id=activity_id,
             category_id=category_id,
             class_id=class_id,
             status=OrderStatus.PENDING,

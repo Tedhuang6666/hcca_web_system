@@ -38,7 +38,6 @@ from api.schemas.survey import (
     SurveySubmit,
     SurveyUpdate,
 )
-from api.services import activity as activity_svc
 from api.services import audit as audit_svc
 from api.services import survey as survey_svc
 from api.services.storage import get_storage
@@ -75,18 +74,12 @@ async def _has_survey_manage(session: AsyncSession, user: User) -> bool:
     return str(PermissionCode.SURVEY_MANAGE) in codes or str(PermissionCode.ADMIN_ALL) in codes
 
 
-async def _can_manage_survey(
-    session: AsyncSession, user: User, activity_id: uuid.UUID | None
-) -> bool:
-    if await _has_survey_manage(session, user):
-        return True
-    return await activity_svc.can_manage_activity_resource(session, user, activity_id)
+async def _can_manage_survey(session: AsyncSession, user: User) -> bool:
+    return await _has_survey_manage(session, user)
 
 
-async def _require_survey_manager(
-    session: AsyncSession, user: User, activity_id: uuid.UUID | None
-) -> None:
-    if await _can_manage_survey(session, user, activity_id):
+async def _require_survey_manager(session: AsyncSession, user: User) -> None:
+    if await _can_manage_survey(session, user):
         return
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="需要權限：survey:manage")
 
@@ -139,7 +132,6 @@ async def list_surveys(
     session: DbDep,
     user: CurrentUser,
     org_id: uuid.UUID | None = Query(None),
-    activity_id: uuid.UUID | None = Query(None),
     status_filter: SurveyStatus | None = Query(None, alias="status"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
@@ -149,7 +141,6 @@ async def list_surveys(
             session,
             user,
             org_id=org_id,
-            activity_id=activity_id,
             status=status_filter,
             limit=limit,
             offset=offset,
@@ -157,7 +148,6 @@ async def list_surveys(
     return await survey_svc.list_surveys(
         session,
         org_id=org_id,
-        activity_id=activity_id,
         status=status_filter,
         limit=limit,
         offset=offset,
@@ -186,7 +176,7 @@ async def list_public_surveys(
 @router.get("/{survey_id}", response_model=SurveyOut, summary="取得問卷詳細（含題目）")
 async def get_survey(survey_id: str, session: DbDep, user: CurrentUser) -> Survey:
     survey = await _survey_or_404(survey_id, session)
-    if not await _can_manage_survey(session, user, survey.activity_id):
+    if not await _can_manage_survey(session, user):
         try:
             await survey_svc.check_survey_access(session, survey, user)
         except PermissionError as e:
@@ -221,7 +211,7 @@ async def get_public_survey(survey_id: str, session: DbDep) -> Survey:
     summary="新增問卷",
 )
 async def create_survey(payload: SurveyCreate, session: DbDep, user: CurrentUser) -> Survey:
-    await _require_survey_manager(session, user, payload.activity_id)
+    await _require_survey_manager(session, user)
     survey = await survey_svc.create_survey(session, data=payload, created_by=user.id)
     await audit_svc.record(
         session,
@@ -233,7 +223,6 @@ async def create_survey(payload: SurveyCreate, session: DbDep, user: CurrentUser
         meta={
             "title": survey.title,
             "org_id": str(survey.org_id),
-            "activity_id": str(survey.activity_id) if survey.activity_id else None,
             "is_anonymous": survey.is_anonymous,
             "allow_multiple": survey.allow_multiple,
             "opens_at": survey.opens_at.isoformat() if survey.opens_at else None,
@@ -256,7 +245,7 @@ async def update_survey(
     survey_id: str, payload: SurveyUpdate, session: DbDep, user: CurrentUser
 ) -> Survey:
     survey = await _survey_or_404(survey_id, session)
-    await _require_survey_manager(session, user, survey.activity_id)
+    await _require_survey_manager(session, user)
     before = {
         "title": survey.title,
         "description": survey.description,
@@ -307,7 +296,7 @@ async def update_survey(
 )
 async def open_survey(survey_id: str, session: DbDep, user: CurrentUser) -> Survey:
     survey = await _survey_or_404(survey_id, session)
-    await _require_survey_manager(session, user, survey.activity_id)
+    await _require_survey_manager(session, user)
     try:
         survey = await survey_svc.open_survey(session, survey)
     except ValueError as e:
@@ -332,7 +321,7 @@ async def open_survey(survey_id: str, session: DbDep, user: CurrentUser) -> Surv
 )
 async def close_survey(survey_id: str, session: DbDep, user: CurrentUser) -> Survey:
     survey = await _survey_or_404(survey_id, session)
-    await _require_survey_manager(session, user, survey.activity_id)
+    await _require_survey_manager(session, user)
     try:
         survey = await survey_svc.close_survey(session, survey)
     except ValueError as e:
@@ -363,7 +352,7 @@ async def add_question(
     survey_id: str, payload: SurveyQuestionCreate, session: DbDep, user: CurrentUser
 ) -> SurveyQuestion:
     survey = await _survey_or_404(survey_id, session)
-    await _require_survey_manager(session, user, survey.activity_id)
+    await _require_survey_manager(session, user)
     try:
         question = await survey_svc.add_question(session, survey, data=payload)
     except ValueError as e:
@@ -396,8 +385,8 @@ async def update_question(
     question_id: uuid.UUID, payload: SurveyQuestionUpdate, session: DbDep, user: CurrentUser
 ) -> SurveyQuestion:
     question = await _question_or_404(question_id, session)
-    survey = await _survey_or_404(question.survey_id, session)
-    await _require_survey_manager(session, user, survey.activity_id)
+    await _survey_or_404(question.survey_id, session)
+    await _require_survey_manager(session, user)
     before = {
         "question_text": question.question_text,
         "question_type": question.question_type.value,
@@ -443,8 +432,8 @@ async def update_question(
 )
 async def delete_question(question_id: uuid.UUID, session: DbDep, user: CurrentUser) -> None:
     question = await _question_or_404(question_id, session)
-    survey = await _survey_or_404(question.survey_id, session)
-    await _require_survey_manager(session, user, survey.activity_id)
+    await _survey_or_404(question.survey_id, session)
+    await _require_survey_manager(session, user)
     meta = {
         "survey_id": str(question.survey_id),
         "question_text": question.question_text,
@@ -662,7 +651,7 @@ async def update_response(
 )
 async def get_survey_stats(survey_id: str, session: DbDep, user: CurrentUser) -> SurveyStats:
     survey = await _survey_or_404(survey_id, session)
-    await _require_survey_manager(session, user, survey.activity_id)
+    await _require_survey_manager(session, user)
     return await survey_svc.get_survey_stats(session, survey)
 
 
@@ -679,7 +668,7 @@ async def list_survey_responses(
     offset: int = Query(0, ge=0),
 ) -> list[SurveyResponse]:
     survey = await _survey_or_404(survey_id, session)
-    await _require_survey_manager(session, user, survey.activity_id)
+    await _require_survey_manager(session, user)
     return await survey_svc.list_responses(session, survey, limit=limit, offset=offset)
 
 
@@ -695,7 +684,7 @@ async def delete_survey_response(
     user: CurrentUser,
 ) -> None:
     survey = await _survey_or_404(survey_id, session)
-    await _require_survey_manager(session, user, survey.activity_id)
+    await _require_survey_manager(session, user)
     deleted = await survey_svc.delete_response(session, survey, response_id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此問卷回應")
@@ -722,7 +711,7 @@ async def delete_all_survey_responses(
     user: CurrentUser,
 ) -> None:
     survey = await _survey_or_404(survey_id, session)
-    await _require_survey_manager(session, user, survey.activity_id)
+    await _require_survey_manager(session, user)
     deleted_count = await survey_svc.delete_all_responses(session, survey)
     await audit_svc.record(
         session,
@@ -747,7 +736,7 @@ async def delete_all_survey_responses(
 async def export_survey(survey_id: str, session: DbDep, user: CurrentUser) -> Response:
     """下載問卷回應與統計試算表（含「回應明細」與「統計摘要」工作表）。"""
     survey = await _survey_or_404(survey_id, session)
-    await _require_survey_manager(session, user, survey.activity_id)
+    await _require_survey_manager(session, user)
     xlsx_bytes = await survey_svc.build_survey_export(session, survey)
     ascii_name = f"survey_{survey.id}.xlsx"
     utf8_name = quote(f"{survey.title}.xlsx")

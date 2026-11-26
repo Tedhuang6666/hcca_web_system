@@ -6,7 +6,6 @@ import pytest
 from sqlalchemy import func, select
 
 from api.core.clock import local_today
-from api.models.activity import Activity, ActivityConvener, ActivityStatus
 from api.models.org import Org, Permission, Position, UserPosition
 from api.models.shop import Order
 from api.models.user import User
@@ -42,12 +41,9 @@ async def tickets(db_session, admin_user, make_user, authed_client_factory):
         ),
         created_by=admin_user.id,
     )
-    activity = Activity(name="演唱會", status=ActivityStatus.ACTIVE, is_active=True)
-    db_session.add(activity)
-    await db_session.flush()
     category = await shop_svc.create_category(
         db_session,
-        data=ProductCategoryCreate(name="票券", activity_id=activity.id),
+        data=ProductCategoryCreate(name="票券"),
         created_by=admin_user.id,
     )
     products = []
@@ -75,7 +71,6 @@ async def tickets(db_session, admin_user, make_user, authed_client_factory):
         "other_buyer": other,
         "products": products,
         "class": school_class,
-        "activity": activity,
         "category": category,
         "admin_user": admin_user,
     }
@@ -460,31 +455,6 @@ async def test_delegation_uses_students_designated_ticket(tickets):
     assert allowed.status_code == 200, allowed.text
 
 
-async def test_activity_convener_cannot_read_other_activity_rules(
-    tickets, db_session, make_user, authed_client_factory
-):
-    convener = await make_user()
-    other_activity = Activity(name="其他活動", status=ActivityStatus.ACTIVE, is_active=True)
-    db_session.add(other_activity)
-    await db_session.flush()
-    db_session.add(
-        ActivityConvener(
-            activity_id=other_activity.id, user_id=convener.id, start_date=local_today()
-        )
-    )
-    await db_session.flush()
-    actor = authed_client_factory(convener)
-    product = tickets["products"][1]
-    for suffix in ("/purchase-rules",):
-        assert (await actor.get(f"/shop/products/{product.id}" + suffix)).status_code == 403
-    assert (
-        await actor.get(f"/shop/purchase-permissions?activity_id={tickets['activity'].id}")
-    ).status_code == 403
-    assert (
-        await actor.get(f"/shop/purchase-permissions?activity_id={other_activity.id}")
-    ).status_code == 200
-
-
 @pytest.mark.parametrize(
     "rules",
     [
@@ -625,4 +595,4 @@ async def test_group_selection_rejects_other_themes(tickets, db_session):
         f"/shop/products/{normal.id}",
         json={"purchase_rules": {"exclusive_product_ids": [str(other.id)]}},
     )
-    assert result.status_code == 409 and "同一活動" in result.text
+    assert result.status_code == 409 and "同一商品分類" in result.text

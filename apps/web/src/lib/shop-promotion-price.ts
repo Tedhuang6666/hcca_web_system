@@ -4,7 +4,6 @@ import type { OrderOut, ShopPromotionPublicOut } from "@/lib/types";
 export function productOfferPrice(
   product: { id: string; price: number; category_id?: string | null },
   promotions: ShopPromotionPublicOut[],
-  activityId: string | null,
   registration: OrderOut | null,
   variantDelta = 0,
   quantity = 1,
@@ -13,9 +12,7 @@ export function productOfferPrice(
   const original = (product.price + variantDelta) * quantity;
   let best = original;
   for (const promotion of promotions) {
-    if (promotion.target_category_ids == null) {
-      if ((promotion.activity_id ?? null) !== activityId) continue;
-    } else if (promotion.target_category_ids.length > 0
+    if (promotion.target_category_ids?.length
       && !promotion.target_category_ids.includes(categoryId ?? product.category_id ?? "")) continue;
     // 舊登記未套用的自動優惠也可能適用本次購買；優惠碼仍須先兌換。
     if (promotion.code && !registration?.applied_promotions?.some((row) => row.promotion_id === promotion.id)

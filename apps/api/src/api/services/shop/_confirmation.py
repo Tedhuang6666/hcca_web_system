@@ -83,19 +83,16 @@ async def export_class_order_confirmations_pdf(
     session: AsyncSession,
     class_ids: list[uuid.UUID] | None,
     *,
-    activity_id: uuid.UUID | None,
-    category_id: uuid.UUID | None,
+    category_id: uuid.UUID | None = None,
 ) -> bytes:
-    category, activity, scoped_activity_id = await _resolve_receipt_scope(
-        session, activity_id=activity_id, category_id=category_id
-    )
-    label = category.name if category else activity.name if activity else "一般商品"
+    category = await _resolve_receipt_scope(session, category_id=category_id)
+    label = category.name if category else "全部商品"
     statement = (
         select(SchoolClass, Order)
         .join(Order, Order.class_id == SchoolClass.id)
         .where(
             Order.test_product_id.is_(None),
-            _receipt_order_scope(scoped_activity_id, category_id),
+            _receipt_order_scope(category_id),
             Order.status.notin_([OrderStatus.CANCELLED, OrderStatus.REFUNDED]),
         )
         .options(*_receipt_order_options())
@@ -107,7 +104,7 @@ async def export_class_order_confirmations_pdf(
     for school_class, order in (await session.execute(statement)).all():
         classes.setdefault(school_class.id, (school_class, []))[1].append(order)
     if not classes:
-        raise ValueError("此活動尚無班級有效訂單可產生總數確認單")
+        raise ValueError("尚無班級有效訂單可產生總數確認單")
     return await asyncio.to_thread(
         _render_class_order_confirmations_pdf, list(classes.values()), label, now_local()
     )

@@ -23,13 +23,10 @@ from api.services.outbox import emit
 async def list_campaigns(
     db: AsyncSession,
     *,
-    activity_id: uuid.UUID | None = None,
     status: str | None = None,
     limit: int = 100,
 ) -> list[PublicationCampaign]:
     stmt = select(PublicationCampaign).order_by(PublicationCampaign.updated_at.desc()).limit(limit)
-    if activity_id:
-        stmt = stmt.where(PublicationCampaign.activity_id == activity_id)
     if status:
         stmt = stmt.where(PublicationCampaign.status == status)
     return list((await db.execute(stmt)).scalars().all())
@@ -89,7 +86,6 @@ async def send(db: AsyncSession, campaign: PublicationCampaign) -> PublicationCa
                 is_published=True,
                 published_at=now,
                 org_id=campaign.org_id,
-                activity_id=campaign.activity_id,
                 author_id=campaign.created_by_id,
                 audience_type=AnnouncementAudience.ALL.value,
             )
@@ -108,7 +104,6 @@ async def send(db: AsyncSession, campaign: PublicationCampaign) -> PublicationCa
                     "channel": channel,
                     "title": campaign.title,
                     "body": _render_channel_body(campaign.body, channel),
-                    "activity_id": str(campaign.activity_id) if campaign.activity_id else None,
                 },
             )
     campaign.status = PublicationStatus.SENT.value

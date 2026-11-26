@@ -1,4 +1,4 @@
-"""依班級與活動產生班聯會收款簽收單。"""
+"""依班級與商品分類產生班聯會收款簽收單。"""
 
 from __future__ import annotations
 
@@ -20,7 +20,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Load, selectinload
 
 from api.core.clock import TAIPEI, local_today, now_local
-from api.models.activity import Activity
 from api.models.school_class import SchoolClass
 from api.models.shop import Order, OrderItem, OrderStatus, Product, ProductCategory, ProductSeries
 from api.models.shop_order_receipt_print import ShopOrderReceiptPrint
@@ -35,7 +34,7 @@ _RECEIPT_COPY_OFFSET = 345.77
 
 @dataclass(frozen=True)
 class _ReceiptOrder:
-    """僅供列印的活動品項與金額，不變更原始訂單。"""
+    """僅供列印的商品品項與金額，不變更原始訂單。"""
 
     items: list[OrderItem]
     total_price: int
@@ -126,7 +125,6 @@ def _receipt_order_options() -> tuple[Load, ...]:
         .selectinload(ProductSeries.category),
         selectinload(Order.category),
         selectinload(Order.user),
-        selectinload(Order.activity),
     )
 
 
@@ -156,7 +154,7 @@ def _receipt_orders_by_topic(
                 category.name if category else fallback_label,
                 [],
             )
-        # 舊訂單可能跨活動；按成交品項金額分攤實付總額，累計取整避免尾差遺失。
+        # 舊訂單可能跨分類；按成交品項金額分攤實付總額，累計取整避免尾差遺失。
         subtotal = sum(item.unit_price * item.quantity for item in order.items)
         cumulative_subtotal = allocated_total = allocated_received = 0
         received = (
@@ -259,7 +257,7 @@ def _receipt_field(
 def _render_class_receipt_pdf(
     class_label: str,
     academic_year: int,
-    activity_name: str,
+    receipt_label: str,
     orders: list[Order] | list[_ReceiptOrder],
     issued_on: date,
     printed_at: datetime | None = None,
@@ -364,8 +362,8 @@ def _render_class_receipt_pdf(
                 page_note = f"第 {page_index + 1}/{page_count} 頁，總額為整份收據合計"
             else:
                 page_note = f"第 {page_index + 1}/{page_count} 頁，新台幣 {total:,} 元整"
-            if activity_name != "一般商品":
-                page_note = f"{activity_name} · {page_note}"
+            if receipt_label not in {"一般商品", "全部商品"}:
+                page_note = f"{receipt_label} · {page_note}"
             fields.append(_receipt_field(page_note, 36, 380 + offset, 540, font_size=8))
         sections.append(f'<section class="page">{"".join(fields)}</section>')
     markup = f"""<!doctype html><html lang="zh-TW"><head><meta charset="UTF-8">
@@ -393,24 +391,15 @@ body {{ margin: 0; font-family: "OfficialKai", serif; color: #000; }}
 async def _resolve_receipt_scope(
     session: AsyncSession,
     *,
-    activity_id: uuid.UUID | None,
     category_id: uuid.UUID | None,
-) -> tuple[ProductCategory | None, Activity | None, uuid.UUID | None]:
-    if activity_id is not None and category_id is not None:
-        raise ValueError("收據範圍不可重複指定活動")
-
+) -> ProductCategory | None:
     category = await session.get(ProductCategory, category_id) if category_id else None
     if category_id is not None and category is None:
-        raise ValueError("找不到此活動")
-
-    scoped_activity_id = category.activity_id if category else activity_id
-    activity = await session.get(Activity, scoped_activity_id) if scoped_activity_id else None
-    if scoped_activity_id is not None and activity is None:
-        raise ValueError("找不到此活動")
-    return category, activity, scoped_activity_id
+        raise ValueError("找不到此商品分類")
+    return category
 
 
-def _receipt_order_scope(activity_id: uuid.UUID | None, category_id: uuid.UUID | None):
+def _receipt_order_scope(category_id: uuid.UUID | None):
     if category_id is not None:
         category_products = or_(
             Product.category_id == category_id,
@@ -426,42 +415,37 @@ def _receipt_order_scope(activity_id: uuid.UUID | None, category_id: uuid.UUID |
                 ~Order.items.any(other_item),
             ),
         )
-    return (
-        Order.activity_id == activity_id if activity_id is not None else Order.activity_id.is_(None)
-    )
+    return True
 
 
 async def export_class_receipt_pdf(
     session: AsyncSession,
     school_class: SchoolClass,
     *,
-    activity_id: uuid.UUID | None,
+    category_id: uuid.UUID | None = None,
 ) -> bytes:
     """匯出單一班級有效訂單；不受收款狀態、清單篩選或分頁影響。"""
-    return await export_class_receipts_pdf(session, [school_class], activity_id=activity_id)
+    return await export_class_receipts_pdf(session, [school_class], category_id=category_id)
 
 
 async def export_class_receipts_pdf(
     session: AsyncSession,
     school_classes: list[SchoolClass] | None,
     *,
-    activity_id: uuid.UUID | None,
     category_id: uuid.UUID | None = None,
     unpaid_only: bool = False,
     printed_at: datetime | None = None,
     record_prints: bool = True,
 ) -> bytes:
-    """依班級、活動各自開立收據；全部未收款另納入個人與獨立補收款。"""
-    category, activity, scoped_activity_id = await _resolve_receipt_scope(
-        session, activity_id=activity_id, category_id=category_id
-    )
-    receipt_label = category.name if category else activity.name if activity else "一般商品"
+    """依班級與商品分類開立收據；全部未收款另納入個人與獨立補收款。"""
+    category = await _resolve_receipt_scope(session, category_id=category_id)
+    receipt_label = category.name if category else "全部商品"
     statement = (
         select(SchoolClass, Order)
         .join(Order, Order.class_id == SchoolClass.id)
         .where(
             Order.test_product_id.is_(None),
-            _receipt_order_scope(scoped_activity_id, category_id),
+            _receipt_order_scope(category_id),
             Order.status.notin_([OrderStatus.CANCELLED, OrderStatus.REFUNDED]),
         )
         .options(*_receipt_order_options())
@@ -488,7 +472,7 @@ async def export_class_receipts_pdf(
                         Order.class_id.is_(None),
                         Order.is_paid.is_(False),
                         Order.test_product_id.is_(None),
-                        _receipt_order_scope(scoped_activity_id, category_id),
+                        _receipt_order_scope(category_id),
                         Order.status.notin_((OrderStatus.CANCELLED, OrderStatus.REFUNDED)),
                     )
                     .options(*_receipt_order_options())
@@ -498,8 +482,8 @@ async def export_class_receipts_pdf(
         )
     if not orders_by_class and not individual_orders:
         if unpaid_only:
-            raise ValueError("此活動沒有尚未確認收款的訂單")
-        raise ValueError("此活動尚無有效訂單可產生收據")
+            raise ValueError("目前範圍沒有尚未確認收款的訂單")
+        raise ValueError("此商品分類尚無有效訂單可產生收據")
     printed_at = printed_at or now_local()
 
     writer = PdfWriter()
@@ -578,11 +562,11 @@ async def render_individual_order_receipt(
             else f"{class_label} {buyer_name} 補收款"
         )
         academic_year = school_class.academic_year
-    activity_name = receipt_label or (order.activity.name if order.activity else "一般商品")
+    receipt_label = receipt_label or "全部商品"
     return await _render_topic_receipts_pdf(
         buyer_name,
         academic_year,
-        activity_name,
+        receipt_label,
         [order],
         local_today(),
         printed_at,
@@ -593,13 +577,10 @@ async def render_individual_order_receipt(
 async def export_changed_order_receipts_pdf(
     session: AsyncSession,
     *,
-    activity_id: uuid.UUID | None,
     category_id: uuid.UUID | None = None,
 ) -> bytes:
     """列印上次匯出後新增或更新的班級收據與個人訂單收據。"""
-    category, _activity, scoped_activity_id = await _resolve_receipt_scope(
-        session, activity_id=activity_id, category_id=category_id
-    )
+    category = await _resolve_receipt_scope(session, category_id=category_id)
     receipt_label = category.name if category else None
     changed_item = select(OrderItem.id).where(
         OrderItem.order_id == Order.id,
@@ -610,7 +591,7 @@ async def export_changed_order_receipts_pdf(
         .outerjoin(ShopOrderReceiptPrint, ShopOrderReceiptPrint.order_id == Order.id)
         .where(
             Order.test_product_id.is_(None),
-            _receipt_order_scope(scoped_activity_id, category_id),
+            _receipt_order_scope(category_id),
             Order.status.notin_((OrderStatus.CANCELLED, OrderStatus.REFUNDED)),
             or_(
                 ShopOrderReceiptPrint.order_id.is_(None),
@@ -642,7 +623,6 @@ async def export_changed_order_receipts_pdf(
         receipt = await export_class_receipts_pdf(
             session,
             school_classes,
-            activity_id=activity_id,
             category_id=category_id,
             printed_at=printed_at,
             record_prints=False,
@@ -653,7 +633,7 @@ async def export_changed_order_receipts_pdf(
             select(Order.id).where(
                 Order.class_id.in_(class_ids),
                 Order.test_product_id.is_(None),
-                _receipt_order_scope(scoped_activity_id, category_id),
+                _receipt_order_scope(category_id),
                 Order.status.notin_((OrderStatus.CANCELLED, OrderStatus.REFUNDED)),
             )
         )

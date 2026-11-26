@@ -371,7 +371,6 @@ class SurveyOut(BaseModel):
     opens_at: datetime | None
     closes_at: datetime | None
     org_id: uuid.UUID
-    activity_id: uuid.UUID | None = None
     created_by: uuid.UUID
     created_at: datetime
     updated_at: datetime
@@ -403,7 +402,6 @@ class SurveyOut(BaseModel):
             "opens_at",
             "closes_at",
             "org_id",
-            "activity_id",
             "created_by",
             "created_at",
             "updated_at",
@@ -434,7 +432,6 @@ class SurveyListItem(BaseModel):
     opens_at: datetime | None
     closes_at: datetime | None
     org_id: uuid.UUID
-    activity_id: uuid.UUID | None = None
     created_by: uuid.UUID
     created_at: datetime
     response_count: int = 0
@@ -467,7 +464,6 @@ class SurveyCreate(SurveyAudience):
     opens_at: datetime | None = None
     closes_at: datetime | None = None
     org_id: uuid.UUID
-    activity_id: uuid.UUID | None = None
     announcement: str | None = Field(None, max_length=3000)
     announcement_title: str | None = Field(None, max_length=200)
     show_announcement_popup: bool = False
@@ -490,7 +486,6 @@ class SurveyUpdate(BaseModel):
     allowed_user_ids: list[uuid.UUID] | None = None
     allowed_domains: list[str] | None = None
     allowed_grades: list[int] | None = None
-    activity_id: uuid.UUID | None = None
     announcement: str | None = Field(None, max_length=3000)
     announcement_title: str | None = Field(None, max_length=200)
     show_announcement_popup: bool | None = None

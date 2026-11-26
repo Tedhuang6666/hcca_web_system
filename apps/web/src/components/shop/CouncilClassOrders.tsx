@@ -31,9 +31,9 @@ function itemSummary(orders: OrderListItem[]) {
   const items = new Map<string, { label: string; quantity: number; separate: boolean }>();
   for (const order of orders) for (const item of orderItemDisplayRows(order.items ?? [])) {
     const options = item.selected_options.map((option) => `${option.group_name}：${option.value}`).join("／");
-    const scope = order.activity_name ?? order.category_name ?? "一般商品";
+    const scope = order.category_name ?? "一般商品";
     const separate = Boolean(order.supplement_class_id && !order.class_id);
-    const key = JSON.stringify([order.activity_id ?? order.category_id ?? scope, item.product_id,
+    const key = JSON.stringify([order.category_id ?? scope, item.product_id,
       item.selected_options.map((option) => option.option_id).sort(), separate, item.is_gift]);
     const previous = items.get(key);
     items.set(key, {
@@ -110,7 +110,7 @@ export default function CouncilClassOrders({ target, catalog, classes, canOrder,
 
   return <Modal title={`${target.label} · 訂購明細`} size="3xl" onClose={() => { if (!saving) onClose(); }}>
     <p className="mb-4 text-sm" style={{ color: "var(--text-secondary)" }}>
-      {target.scope ? `目前活動：${target.scope.label}。` : "顯示此班全部活動的有效訂購，"}取消與退款不計入。{canOrder
+      {target.scope ? `目前商品分類：${target.scope.label}。` : "顯示此班全部商品分類的有效訂購，"}取消與退款不計入。{canOrder
         ? "包含尚未訂購的名冊同學；獨立補收另外標示。"
         : "唯讀權限僅顯示已有班級訂單的同學。"}
     </p>

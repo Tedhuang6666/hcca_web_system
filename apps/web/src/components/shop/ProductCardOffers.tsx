@@ -55,8 +55,8 @@ export default function ProductCardOffers({ product, promotions, products, disab
                 ? Math.max(0, original - promotion.discount_value)
                 : null;
           const conditions = [
-            promotion.min_order_price > 0 ? `${promotion.target_category_ids != null ? "單一活動" : ""}滿 NT$${promotion.min_order_price.toLocaleString()}` : null,
-            promotion.min_quantity > 1 ? `${promotion.target_category_ids != null ? "單一活動" : ""}滿 ${promotion.min_quantity} 件` : null,
+            promotion.min_order_price > 0 ? `${promotion.target_category_ids?.length ? "單一分類" : ""}滿 NT$${promotion.min_order_price.toLocaleString()}` : null,
+            promotion.min_quantity > 1 ? `${promotion.target_category_ids?.length ? "單一分類" : ""}滿 ${promotion.min_quantity} 件` : null,
             promotion.code ? `優惠碼 ${promotion.code}` : null,
           ].filter(Boolean).join(" · ");
           return <div className="shop-product-card-offer" key={promotion.id}>

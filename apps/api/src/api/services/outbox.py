@@ -404,7 +404,7 @@ def _handle_shop_class_payment_confirmed(payload: dict) -> None:
         if isinstance(topic_names, list)
         else []
     )
-    raw_topic_name = "、".join(valid_topic_names) or str(payload.get("activity_name") or "一般商品")
+    raw_topic_name = "、".join(valid_topic_names) or "一般商品"
     valid_orders = [order for order in orders if isinstance(order, dict)]
     if not valid_orders:
         return

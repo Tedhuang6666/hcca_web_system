@@ -92,12 +92,11 @@ async def create_link(
         raise DelegationError("最多保留 20 個有效代訂連結，請先撤銷不再使用的連結", 409)
     category = await session.get(ProductCategory, data.category_id)
     if category is None or not category.is_active:
-        raise DelegationError("找不到此活動", 404)
+        raise DelegationError("找不到此商品分類", 404)
     token = secrets.token_urlsafe(32)
     link = ShopDelegationLink(
         user_id=user.id,
         category_id=category.id,
-        activity_id=category.activity_id,
         name=data.name,
         token_hash=token_hash(token),
     )
@@ -148,11 +147,9 @@ async def renew_link(session: AsyncSession, user: User, link_id: uuid.UUID) -> S
 
 async def assert_link_open(session: AsyncSession, link: ShopDelegationLink, user: User) -> None:
     school_class = await class_svc.resolve_user_class(session, user)
-    category_ids = select(ProductCategory.id).where(ProductCategory.is_active.is_(True))
-    category_ids = category_ids.where(
-        ProductCategory.activity_id == link.activity_id
-        if link.activity_id
-        else ProductCategory.id == link.category_id
+    category_ids = select(ProductCategory.id).where(
+        ProductCategory.id == link.category_id,
+        ProductCategory.is_active.is_(True),
     )
     series_ids = select(ProductSeries.id).where(
         ProductSeries.category_id.in_(category_ids),
@@ -161,10 +158,8 @@ async def assert_link_open(session: AsyncSession, link: ShopDelegationLink, user
     products = await session.scalars(
         select(Product)
         .options(
-            selectinload(Product.category).selectinload(ProductCategory.activity),
-            selectinload(Product.series)
-            .selectinload(ProductSeries.category)
-            .selectinload(ProductCategory.activity),
+            selectinload(Product.category),
+            selectinload(Product.series).selectinload(ProductSeries.category),
         )
         .where(
             (Product.series_id.is_(None) & Product.category_id.in_(category_ids))
@@ -213,8 +208,8 @@ async def resolve_link(
     ):
         raise DelegationError("學生帳號無法使用代訂", 410)
     category = await session.get(ProductCategory, link.category_id)
-    if category is None or not category.is_active or category.activity_id != link.activity_id:
-        raise DelegationError("此代訂連結的活動已變更或關閉", 410)
+    if category is None or not category.is_active:
+        raise DelegationError("此代訂連結的商品分類已關閉", 410)
     await assert_link_open(session, link, user)
     if actor.id == user.id:
         if claim or write:
@@ -240,8 +235,7 @@ def assert_product_scope(link: ShopDelegationLink, product: Product) -> None:
     ):
         raise DelegationError("找不到此商品", 404)
     scope = _orders._product_order_scope(product)
-    allowed = (link.activity_id, None if link.activity_id else link.category_id)
-    if scope != allowed:
+    if scope != link.category_id:
         raise DelegationError("此商品不在連結授權範圍內", 404)
 
 
@@ -249,8 +243,7 @@ async def context(
     session: AsyncSession, actor: User, token: str, *, claim: bool = False
 ) -> ShopDelegationContextOut:
     link, user = await resolve_link(session, actor, token, claim=claim)
-    catalog = await _catalog.build_catalog_tree(session, activity_id=link.activity_id, buyer=user)
-    catalog = [row for row in catalog if link.activity_id or row.id == link.category_id]
+    catalog = await _catalog.build_catalog_tree(session, category_id=link.category_id, buyer=user)
     school_class = await class_svc.resolve_user_class(session, user)
     closes = await _orders.get_close_status(
         session, [row.id for row in catalog], school_class.id if school_class else None
@@ -264,9 +257,7 @@ async def context(
         order = await _orders.get_current_registration(
             session,
             user.id,
-            activity_id=link.activity_id,
-            category_id=None if link.activity_id else link.category_id,
-            match_activity=True,
+            category_id=link.category_id,
         )
         promotions = await _promotions.list_public_promotions(session, user_id=user.id)
     return ShopDelegationContextOut(
@@ -279,7 +270,7 @@ async def context(
         promotions=[
             _promotions.serialize_public_promotion(p)
             for p in promotions
-            if p.activity_id == link.activity_id
+            if not p.target_category_ids or str(link.category_id) in p.target_category_ids
         ],
         closed_category_ids=closed_ids,
     )
@@ -320,7 +311,6 @@ async def list_delegated_orders(
             ShopDelegationLink.revoked_at.is_(None),
         )
         .options(
-            selectinload(Order.activity),
             selectinload(Order.category),
             selectinload(Order.school_class),
             selectinload(Order.user),
@@ -421,8 +411,7 @@ async def preview(
         session,
         user_id=user.id,
         code=code,
-        activity_id=link.activity_id,
-        category_id=None if link.activity_id else link.category_id,
+        category_id=link.category_id,
     )
     return result.output
 
@@ -468,9 +457,7 @@ async def update_owned_item(
     current = await _orders.get_current_registration(
         session,
         owner.id,
-        activity_id=order.activity_id,
         category_id=order.category_id,
-        match_activity=True,
         lock=True,
         editable_only=True,
     )

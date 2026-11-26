@@ -1,11 +1,10 @@
 """尺寸表的儲存、公開回應、規格歸屬與 PATCH 授權。"""
 
-import uuid
-
 import pytest
 
+from api.core.cache import cache_invalidate_user_permissions
 from api.core.clock import local_today
-from api.models.activity import Activity, ActivityConvener
+from api.models.org import Org, Permission, Position, UserPosition
 from api.schemas.shop import ProductCategoryCreate
 from api.services import shop as shop_svc
 
@@ -62,7 +61,7 @@ async def test_size_chart_roundtrip_preserves_and_clears(size_product, client, d
     assert cleared.json()["size_chart"] is None
 
 
-async def test_size_chart_requires_manager_and_activity_scope(
+async def test_size_chart_requires_shop_manager_permission(
     size_product, client, db_session, make_user, authed_client_factory
 ):
     admin, product, chart = size_product
@@ -71,20 +70,25 @@ async def test_size_chart_requires_manager_and_activity_scope(
     manager = await make_user()
     scoped = authed_client_factory(manager)
     assert (await scoped.patch(path, json={"size_chart": chart})).status_code == 403
-    own, other = Activity(name="自身活動"), Activity(name="其他活動")
-    db_session.add_all([own, other])
+    org = Org(name="商品管理範圍")
+    db_session.add(org)
     await db_session.flush()
-    category = await shop_svc.get_category(db_session, uuid.UUID(product["category_id"]))
-    category.activity_id = own.id
-    db_session.add(
-        ActivityConvener(activity_id=own.id, user_id=manager.id, start_date=local_today())
+    position = Position(org_id=org.id, name="商品管理員")
+    db_session.add(position)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            Permission(position_id=position.id, code="shop:manage"),
+            UserPosition(user_id=manager.id, position_id=position.id, start_date=local_today()),
+        ]
     )
     await db_session.flush()
+    await cache_invalidate_user_permissions(str(manager.id))
+    scoped = authed_client_factory(manager)
     assert (await scoped.patch(path, json={"size_chart": chart})).status_code == 200
-    category.activity_id = other.id
-    await db_session.flush()
-    assert (await scoped.patch(path, json={"size_chart": None})).status_code == 403
-    assert (await admin.get(path)).json()["size_chart"] == chart
+    cleared = await scoped.patch(path, json={"size_chart": None})
+    assert cleared.status_code == 200
+    assert (await admin.get(path)).json()["size_chart"] is None
 
 
 @pytest.mark.parametrize("foreign_field", ["group_id", "option_id"])

@@ -12,8 +12,6 @@ import type { components } from './api-types'
 
 // prettier-ignore-start
 export type AccessBlockStatus = components['schemas']['AccessBlockStatus']
-export type ActivityOut = components['schemas']['ActivityOut']
-export type ActivityStatus = components['schemas']['ActivityStatus']
 export type AddSinglePosition = components['schemas']['AddSinglePosition']
 export type AdminAssistedOrderCreate = components['schemas']['AdminAssistedOrderCreate']
 export type AdminDashboardStats = components['schemas']['AdminDashboardStats']
@@ -772,8 +770,6 @@ export type SerialTemplateCreate = components['schemas']['SerialTemplateCreate']
 export type SerialTemplateOut = components['schemas']['SerialTemplateOut']
 export type SerialTemplateUpdate = components['schemas']['SerialTemplateUpdate']
 export type SetFlagBody = components['schemas']['SetFlagBody']
-export type ShopActivityDeadlineUpdate = components['schemas']['ShopActivityDeadlineUpdate']
-export type ShopActivityOrderClosureUpdate = components['schemas']['ShopActivityOrderClosureUpdate']
 export type ShopClassProductSummaryRow = components['schemas']['ShopClassProductSummaryRow']
 export type ShopClassRepresentativeRecipientOut = components['schemas']['ShopClassRepresentativeRecipientOut']
 export type ShopClassSummaryOut = components['schemas']['ShopClassSummaryOut']
@@ -922,7 +918,6 @@ export type api__schemas__org__PositionUpdate = components['schemas']['api__sche
 
 // ── 別名（types.ts 使用不同名稱）────────────────────────────────────────────
 // prettier-ignore-start
-export type Activity = components['schemas']['ActivityOut']
 export type DefenseRule = components['schemas']['DefenseRuleOut']
 export type NotificationPreferences = components['schemas']['NotificationPreferencesOut']
 // prettier-ignore-end

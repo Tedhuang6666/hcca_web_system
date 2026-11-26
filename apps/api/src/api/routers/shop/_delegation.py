@@ -155,7 +155,7 @@ async def exchange_delegation_code(
             client_ip=request.client.host if request.client else "unknown",
         )
     )
-    # 回傳完整連結前必須確認未撤銷、帳號綁定、學生／活動仍有效及商品開放範圍。
+    # 回傳完整連結前必須確認未撤銷、帳號綁定、學生／商品分類仍有效及商品開放範圍。
     await _delegation_result(delegation_svc.resolve_link(session, current_user, token))
     return ShopDelegationCodeOut(token=token)
 
@@ -254,8 +254,7 @@ async def apply_delegation_promotion(
             session,
             student,
             code=payload.code,
-            activity_id=link.activity_id,
-            category_id=None if link.activity_id else link.category_id,
+            category_id=link.category_id,
         )
     )
     result = await _delegation_order_response(session, current_user, order)

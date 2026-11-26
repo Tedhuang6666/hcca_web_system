@@ -8,7 +8,7 @@ vi.mock("@/lib/api", () => ({ shopApi: api }));
 beforeEach(() => { vi.resetAllMocks(); api.lookupTargets.mockResolvedValue([]); api.purchaseGroupOptions.mockResolvedValue([{ id: "work", name: "工作票" }, { id: "show", name: "表演票" }, { id: "general", name: "一般預售票" }]); api.purchasePermissions.mockResolvedValue([{ code: "shop:manage", label: "管理商品", group: "商品" }]); });
 function Editor({ initial = emptyPurchaseRules }: { initial?: PurchaseRulesDraft }) {
   const [value, setValue] = useState(initial);
-  return <><ProductPurchaseRulesEditor value={value} onChange={setValue} disabled={false} activityId="event" categoryId="category" productId="work" />
+  return <><ProductPurchaseRulesEditor value={value} onChange={setValue} disabled={false} categoryId="category" productId="work" />
     <output data-testid="rules">{JSON.stringify(value)}</output></>;
 }
 it("設定年級、權限、名單、限購群組與指定票種模式", async () => {

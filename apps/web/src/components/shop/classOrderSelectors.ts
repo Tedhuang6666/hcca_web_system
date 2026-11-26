@@ -7,7 +7,7 @@ import type {
   ShopClassSummaryOut,
 } from "@/lib/types";
 
-export type ActivityOptionRow = {
+export type CategoryOptionRow = {
   key: string;
   label: string;
   closed: boolean;
@@ -18,44 +18,44 @@ export function isCollectableOrder(order: Pick<OrderListItem, "status">) {
   return order.status !== "cancelled" && order.status !== "refunded";
 }
 
-export function buildActivityLabels(catalog: CatalogCategoryOut[]) {
+export function buildCategoryLabels(catalog: CatalogCategoryOut[]) {
   const namesById = new Map<string, Set<string>>();
   for (const category of catalog) {
     const key = catalogScopeKey(category);
     const names = namesById.get(key) ?? new Set<string>();
-    names.add(category.activity_name ?? category.name);
+    names.add(category.name);
     namesById.set(key, names);
   }
   return new Map(Array.from(namesById, ([id, names]) => [id, Array.from(names).join("／")]));
 }
 
-export function buildActivityRows(
+export function buildCategoryRows(
   catalog: CatalogCategoryOut[],
-  activityOrders: OrderListItem[],
-  activityLabel: (activityId: string | null | undefined) => string,
-): ActivityOptionRow[] {
-  const rows = new Map<string, ActivityOptionRow>();
+  categoryOrders: OrderListItem[],
+  categoryLabel: (categoryId: string | null | undefined) => string,
+): CategoryOptionRow[] {
+  const rows = new Map<string, CategoryOptionRow>();
   for (const category of catalog) {
     const key = catalogScopeKey(category);
     const row = rows.get(key);
     const closed = isOrderingClosed(category);
     rows.set(key, {
       key,
-      label: category.activity_name ?? category.name,
+      label: category.name,
       closed: row ? row.closed && closed : closed,
     });
   }
-  for (const order of activityOrders) {
+  for (const order of categoryOrders) {
     if (!isCollectableOrder(order)) continue;
     const key = orderScopeKey(order);
     const row = rows.get(key) ?? {
       key,
-      label: order.category_name ?? activityLabel(key),
+      label: order.category_name ?? categoryLabel(key),
       closed: true,
     };
     rows.set(key, {
       ...row,
-      label: order.activity_name ?? order.category_name ?? row.label,
+      label: order.category_name ?? row.label,
       hasUncollectedOrders: row.hasUncollectedOrders || (!order.is_class_collected && order.total_price > 0),
     });
   }
@@ -63,28 +63,28 @@ export function buildActivityRows(
 }
 
 export function resolveActiveLedgerKey(
-  activityRows: ActivityOptionRow[],
+  categoryRows: CategoryOptionRow[],
   catalogLoading: boolean,
-  selectedActivityKey: string | null,
+  selectedCategoryKey: string | null,
 ) {
   if (catalogLoading) return "";
-  if (selectedActivityKey !== null) {
-    return activityRows.some((row) => row.key === selectedActivityKey) ? selectedActivityKey : "";
+  if (selectedCategoryKey !== null) {
+    return categoryRows.some((row) => row.key === selectedCategoryKey) ? selectedCategoryKey : "";
   }
-  const open = activityRows.filter((row) => !row.closed);
+  const open = categoryRows.filter((row) => !row.closed);
   return open.length === 1 ? open[0].key : "";
 }
 
 export function buildProductRows(
   activeProducts: CatalogChoice[],
   activeLedgerKey: string,
-  activityFilter: string,
+  categoryFilter: string,
   productSummaryRows: ShopClassSummaryOut["product_rows"],
 ): ShopClassSummaryOut["product_rows"] {
   const rows = new Map(productSummaryRows.map((row) => [row.product_id, row]));
   for (const product of activeProducts) {
-    if (orderScopeKey({ activity_id: product.activity_id, category_id: product.categoryId }) !== activeLedgerKey) continue;
-    if (activityFilter !== "all" && `category:${product.categoryId}` !== activityFilter) continue;
+    if (orderScopeKey({ category_id: product.categoryId }) !== activeLedgerKey) continue;
+    if (categoryFilter !== "all" && `category:${product.categoryId}` !== categoryFilter) continue;
     if (rows.has(product.id)) continue;
     rows.set(product.id, {
       product_id: product.id,
@@ -105,13 +105,13 @@ export function buildProductRows(
 export function buildProductFilterOptions(
   catalogProducts: CatalogChoice[],
   activeLedgerKey: string,
-  activityFilter: string,
+  categoryFilter: string,
   productRows: ShopClassSummaryOut["product_rows"],
 ) {
   const byId = new Map<string, string>();
   for (const product of catalogProducts) {
-    if (orderScopeKey({ activity_id: product.activity_id, category_id: product.categoryId }) !== activeLedgerKey) continue;
-    if (activityFilter === "all" || `category:${product.categoryId}` === activityFilter) {
+    if (orderScopeKey({ category_id: product.categoryId }) !== activeLedgerKey) continue;
+    if (categoryFilter === "all" || `category:${product.categoryId}` === categoryFilter) {
       byId.set(product.id, product.name);
     }
   }
@@ -120,12 +120,12 @@ export function buildProductFilterOptions(
 }
 
 export function buildSeatRows(
-  activityOrders: OrderListItem[],
+  categoryOrders: OrderListItem[],
   activeLedgerKey: string,
   members: ClassMemberOut[],
 ) {
   const ordersByMember = new Map<string, OrderListItem[]>();
-  for (const order of activityOrders) {
+  for (const order of categoryOrders) {
     if (!order.user_id) continue;
     if (orderScopeKey(order) !== activeLedgerKey || !isCollectableOrder(order)) continue;
     const memberOrders = ordersByMember.get(order.user_id) ?? [];

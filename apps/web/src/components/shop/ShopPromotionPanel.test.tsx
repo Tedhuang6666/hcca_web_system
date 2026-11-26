@@ -24,7 +24,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 const pendingStudentTarget = {
   id: "promotion-1",
   name: "新生註冊優惠",
-  activity_id: null,
+
   code: null,
   target_user_id: null,
   target_email: null,
@@ -145,7 +145,7 @@ describe("優惠管理的預先指定學號", () => {
     };
     api.listProducts.mockResolvedValue([draftProduct]);
     api.listCategories.mockResolvedValue([
-      { id: "goods", name: "一般商品", activity_id: null },
+      { id: "goods", name: "一般商品", },
     ]);
     api.createPromotion.mockResolvedValue({});
     render(<ShopPromotionPanel />);

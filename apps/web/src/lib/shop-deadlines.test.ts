@@ -8,8 +8,8 @@ const future = "2026-10-23T12:00:00Z";
 const product: CatalogProductOut = { id: "p", name: "商品", price: 100, status: "active", stock_quantity: 10, purchase_allowed: true, is_unlimited: false, has_variants: false, has_option_surcharge: false };
 const category = (id: string, products: CatalogProductOut[]): CatalogCategoryOut => ({ id, name: id, products, series: [], sort_order: 0 });
 
-describe("活動結單與多活動預購", () => {
-  it("跳過先前記住的已結單活動，在四個同時存在的活動中選擇可訂購商品", () => {
+describe("分類結單與多分類預購", () => {
+  it("跳過先前記住的已結單分類，在多個分類中選擇可訂購商品", () => {
     const catalog = [category("closed", [{ ...product, effective_sale_end: past }]),
       category("sold", [{ ...product, status: "sold_out" }]), category("open", [product]),
       category("later", [{ ...product, sale_start: future }])];
@@ -17,24 +17,24 @@ describe("活動結單與多活動預購", () => {
     expect(defaultShopCategory(catalog, null, now)?.id).toBe("open");
     expect(defaultShopCategory(catalog, "open", now)?.id).toBe("open");
   });
-  it("班聯統一截止後，單品延長仍不可訂購", () => {
-    const extended = { ...category("extended", []), order_closes_at: past,
+  it("商品分類結單後，單品延長仍不可訂購", () => {
+    const extended = { ...category("extended", []), order_closed_at: past,
       series: [{ id: "series", name: "系列", sort_order: 0, products: [{ ...product, sale_end: future, effective_sale_end: future }] }] };
     expect(categoryOrderable(extended, now)).toBe(false);
     expect(defaultShopCategory([extended, category("other", [product])], "extended", now)?.id).toBe("other");
     expect(defaultShopCategory([extended, category("other", [product])], "extended", now, { extended: { is_closed: true } })?.id).toBe("other");
   });
-  it("截止當下停止訂購，尚未開售及已結束活動不選為預設", () => {
+  it("截止當下停止訂購，尚未開售及已結單商品分類不選為預設", () => {
     expect(productOrderable({ ...product, effective_sale_end: new Date(now).toISOString() }, now)).toBe(false);
     expect(productOrderable({ ...product, sale_start: future }, now)).toBe(false);
-    expect(categoryOrderable({ ...category("ended", [product]), activity_status: "ended" }, now)).toBe(false);
+    expect(categoryOrderable({ ...category("ended", [product]), order_closed_at: past }, now)).toBe(false);
   });
-  it("手動結單優先於單品延長，收款用目錄仍可判定活動不可訂購", () => {
+  it("手動結單優先於單品延長，收款用目錄仍可判定分類不可訂購", () => {
     const closed = { ...category("closed", [{ ...product, effective_sale_end: future }]), order_closed_at: past };
     expect(categoryOrderable(closed, now)).toBe(false);
     expect(defaultShopCategory([closed, category("other", [product])], "closed", now)?.id).toBe("other");
   });
-  it("全部結單保留可查看的活動，空目錄安全回傳 null", () => {
+  it("全部結單保留可查看的分類，空目錄安全回傳 null", () => {
     const closed = category("closed", [{ ...product, effective_sale_end: past }]);
     expect(defaultShopCategory([closed], "closed", now)).toBe(closed);
     expect(defaultShopCategory([], null, now)).toBeNull();
@@ -44,7 +44,6 @@ describe("活動結單與多活動預購", () => {
     expect(categoryOrderable(category("formal", [product]), now, true)).toBe(false);
     expect(categoryOrderable(testing, now, true)).toBe(true);
     expect(categoryOrderable({ ...testing, order_closed_at: past }, now, true)).toBe(false);
-    expect(categoryOrderable({ ...testing, order_closes_at: past }, now, true)).toBe(false);
     expect(categoryOrderable(category("sold", [{ ...product, status: "testing", stock_quantity: 0 }]), now, true)).toBe(false);
   });
   it("班級截止後優先選擇仍可試訂的系列商品", () => {

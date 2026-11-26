@@ -7,8 +7,6 @@ const catalog: CatalogCategoryOut[] = [
   {
     id: "theme-1",
     name: "校慶商品",
-    activity_id: null,
-    activity_name: null,
     image_url: null,
     sort_order: 0,
     products: [
@@ -44,8 +42,6 @@ const catalog: CatalogCategoryOut[] = [
   {
     id: "theme-2",
     name: "特別活動",
-    activity_id: null,
-    activity_name: null,
     image_url: null,
     sort_order: 1,
     products: [

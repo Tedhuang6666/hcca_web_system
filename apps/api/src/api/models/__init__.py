@@ -4,7 +4,6 @@
 # 公文系統（含字號模板、受文者、審核步驟等）[M-17, M-18]
 # 公告系統
 # 稽核日誌（不可變）
-from api.models.activity import Activity, ActivityConvener, ActivityStatus  # noqa: F401
 from api.models.analytics_page_view import AnalyticsPageView  # noqa: F401
 from api.models.announcement import (  # noqa: F401
     Announcement,

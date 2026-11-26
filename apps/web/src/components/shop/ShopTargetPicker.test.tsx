@@ -12,7 +12,7 @@ const people: ShopTargetOut[] = [
 ];
 function Picker({ initial = [] }: { initial?: string[] }) {
   const [value, setValue] = useState(initial);
-  return <><ShopTargetPicker label="允許名單" value={value} onChange={setValue} activityId="activity" help="限定名單內人員" />
+  return <><ShopTargetPicker label="允許名單" value={value} onChange={setValue} help="限定名單內人員" />
     <output data-testid="selected">{JSON.stringify(value)}</output></>;
 }
 beforeEach(() => {
@@ -44,7 +44,7 @@ it("批次貼上後去除重複並核對姓名，查無資料時保留可預先�
   expect(await screen.findByText("測試同名")).toBeVisible();
   expect(screen.getByTestId("selected")).toHaveTextContent('["310001","399999"]');
   expect(screen.getByText(/1 筆查無人員資料/)).toBeVisible();
-  expect(api.lookupTargets).toHaveBeenCalledWith({ activity_id: "activity", keyword: "", identifiers: ["310001", "399999"] });
+  expect(api.lookupTargets).toHaveBeenCalledWith({ keyword: "", identifiers: ["310001", "399999"] });
 });
 
 it("核對失敗保留既有名單，重試後恢復姓名資訊", async () => {
@@ -84,7 +84,7 @@ it("依此商品訂購狀態篩選，單筆與批次備註只影響勾選人員"
   render(<ProductPicker initialNotes={{ "310001": "原備註" }} />);
   expect(await screen.findByText("已訂購")).toBeVisible();
   expect(screen.getByText("未訂購")).toBeVisible();
-  expect(api.lookupTargets).toHaveBeenCalledWith({ activity_id: null, product_id: "product", keyword: "", identifiers: ["310001", "310002"] });
+  expect(api.lookupTargets).toHaveBeenCalledWith({ product_id: "product", keyword: "", identifiers: ["310001", "310002"] });
   fireEvent.change(screen.getByRole("textbox", { name: "商品允許名單：310002 的備註" }), { target: { value: "個別備註" } });
   fireEvent.click(screen.getByText("批次編輯備註"));
   fireEvent.click(screen.getByRole("checkbox", { name: "勾選目前篩選結果（2 人）" }));

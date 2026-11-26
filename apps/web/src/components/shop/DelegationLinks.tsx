@@ -6,9 +6,8 @@ import type { ShopDelegationOut } from "@/lib/types";
 import CopyButton from "@/components/ui/CopyButton";
 import DelegationInstructions from "./DelegationInstructions";
 
-export default function DelegationLinks({ categoryId, activityId, scopeName, initiallyCreating = false }: {
+export default function DelegationLinks({ categoryId, scopeName, initiallyCreating = false }: {
   categoryId: string;
-  activityId: string | null;
   scopeName: string;
   initiallyCreating?: boolean;
 }) {
@@ -80,8 +79,7 @@ export default function DelegationLinks({ categoryId, activityId, scopeName, ini
       setBusy(false);
     }
   };
-  const visibleLinks = links.filter((link) => activityId
-    ? link.activity_id === activityId : !link.activity_id && link.category_id === categoryId);
+  const visibleLinks = links.filter((link) => link.category_id === categoryId);
   const otherLinks = links.filter((link) => !visibleLinks.includes(link));
   const renderLink = (link: ShopDelegationOut) => <li key={link.id}>
     <label>連結名稱
@@ -108,7 +106,7 @@ export default function DelegationLinks({ categoryId, activityId, scopeName, ini
   return (
     <section className="shop-delegation-links shop-delegation-entry" aria-label="建立與管理代訂授權">
       <p className="shop-delegation-scope"><strong>本次授權：{scopeName}</strong>
-        <span>{activityId ? "同活動商品皆可代訂" : "僅限此活動"}</span>
+        <span>僅限此分類</span>
       </p>
       <div id="shop-delegation-create" hidden={!creating}>
         <form className="shop-delegation-form" onSubmit={(event) => {
@@ -169,7 +167,7 @@ export default function DelegationLinks({ categoryId, activityId, scopeName, ini
             }}
           />
         </div>
-        <p className="shop-delegation-note">請先保存；關閉、重整或切換活動後須重新產生。</p>
+      <p className="shop-delegation-note">請先保存；關閉或重整頁面後須重新產生。</p>
       </div>}
       {!creating && <button type="button" className={shareUrl ? "shop-delegation-secondary" : "shop-delegation-primary"}
         aria-expanded={creating} aria-controls="shop-delegation-create" disabled={busy}
@@ -185,9 +183,9 @@ export default function DelegationLinks({ categoryId, activityId, scopeName, ini
           <summary tabIndex={0}>管理本次授權的連結（{visibleLinks.length}）</summary>
           <ul className="shop-delegation-list">{visibleLinks.map(renderLink)}</ul>
         </details>}
-        {!loading && !loadError && visibleLinks.length === 0 && <p className="shop-delegation-note">這個活動尚未建立代訂連結。</p>}
+        {!loading && !loadError && visibleLinks.length === 0 && <p className="shop-delegation-note">這個商品分類尚未建立代訂連結。</p>}
         {otherLinks.length > 0 && <details>
-          <summary tabIndex={0}>其他活動的連結（{otherLinks.length}）</summary>
+          <summary tabIndex={0}>其他商品分類的連結（{otherLinks.length}）</summary>
           <ul className="shop-delegation-list">{otherLinks.map(renderLink)}</ul>
         </details>}
       </div>

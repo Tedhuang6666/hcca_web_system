@@ -62,7 +62,6 @@ from api.schemas.document import (
     RecipientCreate,
     RecipientDownloadVariant,
 )
-from api.services import activity as activity_svc
 from api.services import audit as audit_svc
 from api.services import context as context_svc
 from api.services import document as doc_svc
@@ -206,16 +205,10 @@ async def create_document(
     """
     if not current_user.is_superuser:
         codes = await get_user_permission_codes_for_org(session, current_user.id, payload.org_id)
-        is_activity_manager = await activity_svc.can_manage_activity_resource(
-            session, current_user, payload.activity_id
-        )
-        if (
-            not ({"document:draft", "document:create", "document:admin"} & set(codes))
-            and not is_activity_manager
-        ):
+        if not ({"document:draft", "document:create", "document:admin"} & set(codes)):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="您在此組織或活動下無草擬公文的權限（需 document:draft/document:create 或活動總召）",
+                detail="您在此組織下無草擬公文的權限（需 document:draft/document:create）",
             )
     if payload.petition_case_id is not None:
         case_obj = await petition_svc.get_case(session, payload.petition_case_id)
@@ -263,7 +256,6 @@ async def list_documents(
     response: Response,
     current_user: OptionalUser,
     org_id: uuid.UUID | None = Query(None, description="過濾組織（不填則依使用者所在組織）"),
-    activity_id: uuid.UUID | None = Query(None, description="過濾活動"),
     status_filter: DocumentStatus | None = Query(None, alias="status", description="過濾狀態"),
     category: DocumentCategory | None = Query(None, description="過濾公文類別"),
     classification: DocumentClassification | None = Query(None, description="過濾密等"),
@@ -316,7 +308,6 @@ async def list_documents(
     docs = await doc_svc.list_documents(
         session,
         org_id=org_id,
-        activity_id=activity_id,
         status=status_filter,
         category=category,
         classification=classification,
@@ -410,19 +401,15 @@ async def update_document_visibility(
         )
     if not current_user.is_superuser:
         codes = await get_user_permission_codes_for_org(session, current_user.id, doc.org_id)
-        is_activity_manager = await activity_svc.can_manage_activity_resource(
-            session, current_user, doc.activity_id
-        )
         is_org_leader = await user_is_org_leader(session, current_user.id, doc.org_id)
         if not (
             doc.created_by == current_user.id
             or is_org_leader
             or {"document:admin", "document:edit", "document:create"} & set(codes)
-            or is_activity_manager
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="只有建立者、機關管理者、機關編輯者或活動管理者可以調整公文可見度",
+                detail="只有建立者、機關管理者或機關編輯者可以調整公文可見度",
             )
 
     previous_visibility = doc.visibility_level
@@ -460,16 +447,12 @@ async def update_document_petition_link(
     doc = await _get_doc_or_404(doc_id, session)
     if not current_user.is_superuser:
         codes = await get_user_permission_codes_for_org(session, current_user.id, doc.org_id)
-        is_activity_manager = await activity_svc.can_manage_activity_resource(
-            session, current_user, doc.activity_id
-        )
         is_org_leader = await user_is_org_leader(session, current_user.id, doc.org_id)
         if not (
             doc.created_by == current_user.id
             or is_org_leader
             or "document:admin" in codes
             or {"document:draft", "document:edit", "document:create"} & set(codes)
-            or is_activity_manager
         ):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權更新公文關聯")
     if payload.petition_case_id is not None:
@@ -525,9 +508,6 @@ async def update_document(
     doc = await _get_doc_or_404(doc_id, session)
     if not current_user.is_superuser:
         codes = await get_user_permission_codes_for_org(session, current_user.id, doc.org_id)
-        is_activity_manager = await activity_svc.can_manage_activity_resource(
-            session, current_user, doc.activity_id
-        )
         is_org_leader = await user_is_org_leader(session, current_user.id, doc.org_id)
         if not (
             (
@@ -536,11 +516,10 @@ async def update_document(
             )
             or is_org_leader
             or "document:admin" in codes
-            or is_activity_manager
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="只有建立者、部門最高權限者、document:edit/document:admin 或活動總召可以編輯",
+                detail="只有建立者、部門最高權限者或 document:edit/document:admin 可以編輯",
             )
     issued_at = doc.issued_at
     if issued_at is not None and issued_at.tzinfo is None:
@@ -593,16 +572,12 @@ async def delete_document(
     doc = await _get_doc_or_404(doc_id, session)
     if not current_user.is_superuser:
         codes = await get_user_permission_codes_for_org(session, current_user.id, doc.org_id)
-        is_activity_manager = await activity_svc.can_manage_activity_resource(
-            session, current_user, doc.activity_id
-        )
         is_org_leader = await user_is_org_leader(session, current_user.id, doc.org_id)
         if not (
             doc.created_by == current_user.id
             or is_org_leader
             or "document:delete" in codes
             or "document:admin" in codes
-            or is_activity_manager
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { OrderListItem } from "@/lib/types";
-import { groupActivityPreorders } from "./shop-preorders";
+import { groupCategoryPreorders } from "./shop-preorders";
 
 const order: OrderListItem = {
   id: "collected", serial_number: "001", user_id: "student", class_id: "class",
-  activity_id: "festival", activity_name: "校慶", assistance_scope: "self",
+  category_id: "festival", category_name: "校慶商品", assistance_scope: "self",
   status: "pending", is_class_collected: true, is_paid: false,
   created_at: "2026-10-10T00:00:00Z", payment_method: "cash_on_pickup",
   total_price: 180, subtotal_price: 200, discount_amount: 20,
@@ -12,30 +12,30 @@ const order: OrderListItem = {
     unit_price: 100, subtotal: 200, selected_options: [] }],
 };
 
-describe("依活動彙整預購", () => {
-  it("keeps gifts separate from paid items in the same activity with zero amount due", () => {
-    const groups = groupActivityPreorders([order, {
+describe("依商品分類彙整預購", () => {
+  it("keeps gifts separate from paid items in the same category with zero amount due", () => {
+    const groups = groupCategoryPreorders([order, {
       ...order, id: "gift", assistance_scope: "council_gift", is_class_collected: false,
       total_price: 0, subtotal_price: 0, discount_amount: 0,
       items: [{ ...order.items![0], unit_price: 0, subtotal: 0 }],
     }]);
     expect(groups).toHaveLength(2);
-    expect(groups[1]).toMatchObject({ key: "gift:gift", label: "校慶（贈送，免付款）",
+    expect(groups[1]).toMatchObject({ key: "gift:gift", label: "校慶商品（贈送，免付款）",
       amount: 0, received: 0, outstanding: 0 });
     expect(groups[1].items[0].quantity).toBe(2);
   });
 
   it("separates pending supplements and merges them after payment returns them to the class", () => {
     const supplement = { ...order, id: "extra", class_id: null, supplement_class_id: "class", is_class_collected: false };
-    const groups = groupActivityPreorders([order, supplement]);
+    const groups = groupCategoryPreorders([order, supplement]);
     expect(groups).toHaveLength(2);
     expect(groups[1].label).toContain("額外收款");
-    const rejoined = groupActivityPreorders([order, { ...supplement, class_id: "class", is_paid: true }]);
+    const rejoined = groupCategoryPreorders([order, { ...supplement, class_id: "class", is_paid: true }]);
     expect(rejoined).toHaveLength(1);
     expect(rejoined[0].received).toBe(360);
   });
   it("merges later additions into the items while retaining only the uncollected amount", () => {
-    const [group] = groupActivityPreorders([order, {
+    const [group] = groupCategoryPreorders([order, {
       ...order, id: "added", is_class_collected: false,
       total_price: 100, subtotal_price: 100, discount_amount: 0,
       items: [{ ...order.items![0], id: "added-bag", quantity: 1, subtotal: 100 }],
@@ -45,21 +45,21 @@ describe("依活動彙整預購", () => {
     expect(order.items![0].quantity).toBe(2);
   });
 
-  it("excludes cancellations and refunds, and never mixes activities or unlinked categories", () => {
-    const groups = groupActivityPreorders([
+  it("excludes cancellations and refunds, and never mixes categories", () => {
+    const groups = groupCategoryPreorders([
       order, { ...order, id: "cancelled", status: "cancelled" },
       { ...order, id: "refunded", status: "refunded" },
-      { ...order, id: "other", activity_id: "christmas", activity_name: "聖誕" },
-      { ...order, id: "category-a", activity_id: null, category_id: "a" },
-      { ...order, id: "category-b", activity_id: null, category_id: "b" },
+      { ...order, id: "other", category_id: "christmas", category_name: "聖誕商品" },
+      { ...order, id: "category-a", category_id: "a", category_name: "分類 A" },
+      { ...order, id: "category-b", category_id: "b", category_name: "分類 B" },
     ]);
-    expect(groups.map((group) => group.key)).toEqual(["festival", "christmas", "category:a", "category:b"]);
+    expect(groups.map((group) => group.key)).toEqual(["category:festival", "category:christmas", "category:a", "category:b"]);
     expect(groups[0].amount).toBe(180);
     expect(groups[0].items[0].quantity).toBe(2);
   });
 
   it("keeps variants and historical prices separate and treats council-confirmed payments as paid", () => {
-    const [group] = groupActivityPreorders([order, {
+    const [group] = groupCategoryPreorders([order, {
       ...order, id: "paid", is_class_collected: false, is_paid: true,
       items: [{ ...order.items![0], id: "variant", selected_options: [
         { option_id: "red", group_id: "color", group_name: "顏色", value: "紅", price_delta: 0 },
@@ -70,6 +70,6 @@ describe("依活動彙整預購", () => {
     }]);
     expect(group.items).toHaveLength(3);
     expect(group).toMatchObject({ amount: 540, received: 360, outstanding: 180 });
-    expect(groupActivityPreorders([])).toEqual([]);
+    expect(groupCategoryPreorders([])).toEqual([]);
   });
 });

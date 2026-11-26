@@ -1,9 +1,9 @@
-"""商品管理選人：姓名搜尋、名單核對與活動範圍。"""
+"""商品管理選人：姓名搜尋、名單核對與商品權限。"""
 
 import pytest
 
+from api.core.cache import cache_invalidate_user_permissions
 from api.core.clock import local_today
-from api.models.activity import Activity, ActivityConvener
 from api.models.org import Org, Permission, Position, UserPosition
 from api.models.person import Person
 from api.models.school_class import ClassRosterEntry, SchoolClass
@@ -85,30 +85,30 @@ async def test_lookup_includes_accounts_without_people_and_roster_without_accoun
     assert response.json()[0]["display_name"] is None
 
 
-async def test_target_lookup_requires_permission_and_respects_activity_scope(
+async def test_target_lookup_requires_shop_manager_permission(
     client, db_session, make_user, authed_client_factory
 ):
     user = await make_user()
     actor = authed_client_factory(user)
     assert (await client.post("/shop/target-options", json={"keyword": "測試"})).status_code == 401
     assert (await actor.post("/shop/target-options", json={"keyword": "測試"})).status_code == 403
-    activity = Activity(name="可管理活動")
-    other = Activity(name="其他活動")
-    db_session.add_all([activity, other])
+    org = Org(name="目標選擇管理範圍")
+    db_session.add(org)
     await db_session.flush()
-    db_session.add(
-        ActivityConvener(activity_id=activity.id, user_id=user.id, start_date=local_today())
+    position = Position(org_id=org.id, name="商品管理員")
+    db_session.add(position)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            Permission(position_id=position.id, code="shop:manage"),
+            UserPosition(user_id=user.id, position_id=position.id, start_date=local_today()),
+        ]
     )
     await db_session.flush()
-    response = await actor.post(
-        "/shop/target-options", json={"activity_id": str(activity.id), "keyword": "測試"}
-    )
+    await cache_invalidate_user_permissions(str(user.id))
+    actor = authed_client_factory(user)
+    response = await actor.post("/shop/target-options", json={"keyword": "測試"})
     assert response.status_code == 200, response.text
-    response = await actor.post(
-        "/shop/target-options", json={"activity_id": str(other.id), "keyword": "測試"}
-    )
-    assert response.status_code == 403
-    assert (await actor.post("/shop/target-options", json={"keyword": "測試"})).status_code == 403
 
 
 async def test_empty_search_and_wildcards_do_not_list_everyone(
@@ -206,21 +206,13 @@ async def test_product_target_order_status_uses_buyer_and_valid_items(
     assert response.json()[0]["has_ordered"] is None
 
 
-async def test_product_target_status_checks_actual_product_activity(
+async def test_product_target_status_requires_shop_manager_and_uses_product_scope(
     db_session, make_user, admin_user, client, authed_client_factory
 ):
     user = await make_user()
-    activities = [Activity(name="可管理"), Activity(name="不可管理")]
-    db_session.add_all(activities)
-    await db_session.flush()
-    db_session.add(
-        ActivityConvener(activity_id=activities[0].id, user_id=user.id, start_date=local_today())
-    )
     products = []
-    for activity in activities:
-        category = ProductCategory(
-            name=activity.name, activity_id=activity.id, created_by=admin_user.id
-        )
+    for category_name in ("服飾", "用品"):
+        category = ProductCategory(name=category_name, created_by=admin_user.id)
         db_session.add(category)
         await db_session.flush()
         product = Product(
@@ -229,16 +221,12 @@ async def test_product_target_status_checks_actual_product_activity(
         db_session.add(product)
         products.append(product)
     await db_session.flush()
-    payload = {
-        "activity_id": str(activities[0].id),
-        "product_id": str(products[1].id),
-        "identifiers": ["310001"],
-    }
+    payload = {"product_id": str(products[1].id), "identifiers": ["310001"]}
     assert (await client.post("/shop/target-options", json=payload)).status_code == 401
     actor = authed_client_factory(user)
     assert (await actor.post("/shop/target-options", json=payload)).status_code == 403
-    payload["product_id"] = str(products[0].id)
-    response = await actor.post("/shop/target-options", json=payload)
+    manager = authed_client_factory(admin_user)
+    response = await manager.post("/shop/target-options", json=payload)
     assert response.status_code == 200, response.text
     assert response.json()[0]["has_ordered"] is False
     outsider = authed_client_factory(await make_user())

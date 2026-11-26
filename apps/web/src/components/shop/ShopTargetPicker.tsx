@@ -14,11 +14,10 @@ function identityDetails(person: ShopTargetOut) {
     person.class_label, person.seat_number ? `${person.seat_number} 號` : null].filter(Boolean).join(" · ");
 }
 
-export default function ShopTargetPicker({ label, value, onChange, activityId = null, productId = null, notes = {}, onNotesChange, disabled = false, max = 2000, help }: {
+export default function ShopTargetPicker({ label, value, onChange, productId = null, notes = {}, onNotesChange, disabled = false, max = 2000, help }: {
   label: string;
   value: string[];
   onChange: (identifiers: string[]) => void;
-  activityId?: string | null;
   productId?: string | null;
   notes?: Record<string, string>;
   onNotesChange?: (notes: Record<string, string>) => void;
@@ -41,34 +40,34 @@ export default function ShopTargetPicker({ label, value, onChange, activityId = 
   const [search, setSearch] = useState<{ key: string; rows: ShopTargetOut[]; error: string } | null>(null);
   const [resolved, setResolved] = useState<{ key: string; rows: ShopTargetOut[]; error: string } | null>(null);
   const keyword = query.trim();
-  const searchKey = JSON.stringify([activityId, productId, keyword, attempt]);
-  const lookupKey = JSON.stringify([activityId, productId, valueKey, attempt]);
+  const searchKey = JSON.stringify([productId, keyword, attempt]);
+  const lookupKey = JSON.stringify([productId, valueKey, attempt]);
 
   useEffect(() => {
     if (!keyword) return;
     let cancelled = false;
     const timer = window.setTimeout(() => {
-      void shopApi.lookupTargets({ activity_id: activityId, ...(productId ? { product_id: productId } : {}), keyword }).then((rows) => {
+      void shopApi.lookupTargets({ ...(productId ? { product_id: productId } : {}), keyword }).then((rows) => {
         if (!cancelled) setSearch({ key: searchKey, rows, error: "" });
       }).catch((error) => {
         if (!cancelled) setSearch({ key: searchKey, rows: [], error: apiErrorMessage(error, "搜尋失敗，請重新搜尋。") });
       });
     }, 250);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [activityId, productId, keyword, searchKey]);
+  }, [productId, keyword, searchKey]);
 
   useEffect(() => {
     if (!valueKey || valueKey.split("\n").length > max) return;
     let cancelled = false;
     const timer = window.setTimeout(() => {
-      void shopApi.lookupTargets({ activity_id: activityId, ...(productId ? { product_id: productId } : {}), keyword: "", identifiers: valueKey.split("\n") }).then((rows) => {
+      void shopApi.lookupTargets({ ...(productId ? { product_id: productId } : {}), keyword: "", identifiers: valueKey.split("\n") }).then((rows) => {
         if (!cancelled) setResolved({ key: lookupKey, rows, error: "" });
       }).catch((error) => {
         if (!cancelled) setResolved({ key: lookupKey, rows: [], error: apiErrorMessage(error, "名單核對失敗，輸入內容已保留。") });
       });
     }, 250);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [activityId, productId, valueKey, lookupKey, max]);
+  }, [productId, valueKey, lookupKey, max]);
 
   const results = search?.key === searchKey ? search : null;
   const checked = resolved?.key === lookupKey ? resolved : null;

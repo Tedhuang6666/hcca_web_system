@@ -1,4 +1,4 @@
-"""活動優惠：每個活動分別判斷門檻與折抵，不合併不同活動的消費。"""
+"""分類優惠：各商品分類分別判斷門檻與折抵。"""
 
 from __future__ import annotations
 
@@ -35,10 +35,10 @@ async def validate_topic_scope(
             )
         )
         if found != set(unique_ids):
-            raise ValueError("找不到指定活動")
+            raise ValueError("找不到指定商品分類")
         categories = await product_topic_ids(session, {product.id for product in products})
         if any(category_id not in found for category_id in categories.values()):
-            raise ValueError("適用商品必須屬於已選擇的活動；跨活動設定請加入其他活動或取消活動限制")
+            raise ValueError("適用商品必須屬於已選擇的商品分類")
     return [str(category_id) for category_id in unique_ids]
 
 
@@ -59,7 +59,7 @@ def topic_totals(
     targets = {product.id for product in promotion.target_products}
     grouped: dict[uuid.UUID | None, dict[uuid.UUID, int]] = {}
     for product_id, amount in (amounts or {}).items():
-        # 缺少商品資料時不把未知活動湊在一起。
+        # 缺少商品資料時不把未知分類湊在一起。
         if product_id not in (categories or {}):
             continue
         category_id = (categories or {})[product_id]
@@ -94,7 +94,7 @@ def topic_issue(
     ):
         return "items_not_matched", "需同時登記指定商品才能使用此優惠。", 0, 0
     if not totals:
-        return "items_not_matched", "此優惠限適用活動內的指定商品使用。", 0, 0
+        return "items_not_matched", "此優惠限指定商品分類使用。", 0, 0
     issues = []
     for total in totals:
         shortfall = max(0, promotion.min_order_price - total.subtotal)
@@ -105,7 +105,7 @@ def topic_issue(
             issues.append(
                 (
                     "minimum_not_met",
-                    f"各活動分開計算；單一活動還差 NT${shortfall:,}，消費滿 NT${promotion.min_order_price:,} 即可使用。",
+                    f"各商品分類分開計算；單一分類還差 NT${shortfall:,}，消費滿 NT${promotion.min_order_price:,} 即可使用。",
                     shortfall,
                     quantity_shortfall,
                 )
@@ -114,7 +114,7 @@ def topic_issue(
             issues.append(
                 (
                     "quantity_not_met",
-                    f"各活動分開計算；單一活動再登記 {quantity_shortfall} 件即可達到 {promotion.min_quantity} 件優惠門檻。",
+                    f"各商品分類分開計算；單一分類再登記 {quantity_shortfall} 件即可達到 {promotion.min_quantity} 件優惠門檻。",
                     0,
                     quantity_shortfall,
                 )

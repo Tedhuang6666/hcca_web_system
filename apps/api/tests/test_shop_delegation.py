@@ -6,7 +6,6 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from api.core.security import redis_client
-from api.models.activity import Activity, ActivityStatus
 from api.models.shop import ShopDelegationLink
 from api.models.user_identity import UserIdentity
 from api.schemas.shop import ProductCategoryCreate, ProductCreate, ShopPromotionCreate
@@ -26,12 +25,9 @@ async def delegation_setup(db_session, make_user, admin_user, authed_client_fact
     student = await make_user(student_id="310001", display_name="學生")
     parent = await make_user(email="parent@example.test", display_name="媽媽")
     other = await make_user(email="other@example.test", display_name="其他人")
-    activity = Activity(name="校慶", status=ActivityStatus.ACTIVE, is_active=True)
-    db_session.add(activity)
-    await db_session.flush()
     category = await shop_svc.create_category(
         db_session,
-        data=ProductCategoryCreate(name="校慶商品", activity_id=activity.id),
+        data=ProductCategoryCreate(name="校慶商品"),
         created_by=admin_user.id,
     )
     product = await shop_svc.create_product(
@@ -480,7 +476,7 @@ async def test_self_and_delegated_previews_use_the_same_student_registration(
         db_session,
         data=ShopPromotionCreate(
             name="共同登記優惠",
-            activity_id=category.activity_id,
+            target_category_ids=[category.id],
             target_identifiers=[student.email],
             code="SHARED",
             discount_type="fixed",
@@ -495,7 +491,7 @@ async def test_self_and_delegated_previews_use_the_same_student_registration(
 
     own = await sc.post(
         "/shop/registrations/current/promotion/preview",
-        json={"activity_id": str(category.activity_id), "code": "SHARED"},
+        json={"category_id": str(category.id), "code": "SHARED"},
     )
     delegated = await pc.post(
         "/shop/delegation/promotion/preview",
@@ -514,7 +510,7 @@ async def test_reusable_link_combines_coupon_using_student_identity(delegation_s
         db_session,
         data=ShopPromotionCreate(
             name="學生專屬合計優惠",
-            activity_id=category.activity_id,
+            target_category_ids=[category.id],
             target_identifiers=[student.email],
             code="FAMILY",
             discount_type="fixed",
@@ -865,7 +861,6 @@ async def test_delegate_uses_students_class_for_closure_and_order(delegation_set
         parent_class.id,
         is_paid=True,
         actor_id=student.id,
-        activity_id=category.activity_id,
     )
     assert (await _set(pc, product, 2, link["token"])).status_code == 200
     await shop_svc.set_class_paid(
@@ -873,6 +868,5 @@ async def test_delegate_uses_students_class_for_closure_and_order(delegation_set
         student_class.id,
         is_paid=True,
         actor_id=student.id,
-        activity_id=category.activity_id,
     )
     assert (await _set(pc, product, 3, link["token"])).status_code == 410

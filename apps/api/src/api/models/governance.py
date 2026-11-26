@@ -44,7 +44,6 @@ class MatterVisibility(enum.StrEnum):
 
 
 class MatterType(enum.StrEnum):
-    ACTIVITY = "activity"
     POLICY = "policy"
     REGULATION = "regulation"
     PETITION = "petition"

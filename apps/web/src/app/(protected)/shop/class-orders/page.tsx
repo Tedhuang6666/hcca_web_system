@@ -2,7 +2,7 @@
 
 import NumberInput from "@/components/ui/NumberInput";
 import Modal from "@/components/ui/Modal";
-import CollectionActivityPicker from "@/components/shop/CollectionActivityPicker";
+import CollectionCategoryPicker from "@/components/shop/CollectionCategoryPicker";
 import SupplementOrders from "@/components/shop/SupplementOrders";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -19,7 +19,7 @@ import { ClassOrderCollectionPanel } from "@/components/shop/ClassOrderCollectio
 import { ClassOrdersListPanel } from "@/components/shop/ClassOrdersListPanel";
 import type { AssistedItemDraft, AssistedOrderDraft } from "@/components/shop/classOrderTypes";
 import {
-  buildActivityLabels, buildActivityRows, buildProductFilterOptions, buildProductRows,
+  buildCategoryLabels, buildCategoryRows, buildProductFilterOptions, buildProductRows,
   buildSeatRows, isCollectableOrder, resolveActiveLedgerKey,
 } from "@/components/shop/classOrderSelectors";
 import type {
@@ -74,7 +74,7 @@ export default function ClassOrdersPage() {
   const [seatFilter, setSeatFilter] = useState<"all" | "unpaid" | "paid">("all");
   const [seatSearch, setSeatSearch] = useState("");
   const [orders, setOrders] = useState<OrderListItem[]>([]);
-  const [activityOrders, setActivityOrders] = useState<OrderListItem[]>([]);
+  const [categoryOrders, setCategoryOrders] = useState<OrderListItem[]>([]);
   const [productSummary, setProductSummary] = useState<ShopClassSummaryOut>(emptySummary);
   const [members, setMembers] = useState<ClassMemberOut[]>([]);
   const [membersLoading, setMembersLoading] = useState(true);
@@ -96,11 +96,11 @@ export default function ClassOrdersPage() {
   const [creating, setCreating] = useState(false);
   const [paidFilter, setPaidFilter] = useState<PaidFilter>("all");
   const [assistedFilter, setAssistedFilter] = useState<AssistedFilter>("all");
-  const [activityFilter, setActivityFilter] = useState("all");
-  const [selectedActivityKey, setSelectedActivityKey] = useState<string | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [selectedCategoryKey, setSelectedCategoryKey] = useState<string | null>(null);
   const [collectionConfirmation, setCollectionConfirmation] = useState<{
-    memberId: string; name: string; activityLabel: string;
-    activities: { label: string; amount: number }[];
+    memberId: string; name: string; categoryLabel: string;
+    categories: { label: string; amount: number }[];
     orderIds: string[]; amount: number; collected: boolean;
   } | null>(null);
   const collectionSubmitting = useRef(false);
@@ -145,31 +145,31 @@ export default function ClassOrdersPage() {
   const [cancelReason, setCancelReason] = useState("");
 
   const catalogProducts = useMemo(() => flattenCatalog(catalog), [catalog]);
-  const activityLabels = useMemo(() => buildActivityLabels(catalog), [catalog]);
+  const categoryLabels = useMemo(() => buildCategoryLabels(catalog), [catalog]);
 
-  const activityLabel = useCallback((activityId: string | null | undefined) => {
-    if (!activityId || activityId === "none") return "一般商品";
-    return activityLabels.get(activityId) ?? `已結束活動 · ${activityId.slice(0, 6)}`;
-  }, [activityLabels]);
+  const categoryLabel = useCallback((categoryId: string | null | undefined) => {
+    if (!categoryId || categoryId === "none") return "一般商品";
+    return categoryLabels.get(categoryId) ?? `已結束分類 · ${categoryId.slice(0, 6)}`;
+  }, [categoryLabels]);
 
-  const activityRows = useMemo(
-    () => buildActivityRows(catalog, activityOrders, activityLabel),
-    [activityOrders, activityLabel, catalog],
+  const categoryRows = useMemo(
+    () => buildCategoryRows(catalog, categoryOrders, categoryLabel),
+    [categoryOrders, categoryLabel, catalog],
   );
   const activeLedgerKey = useMemo(
-    () => resolveActiveLedgerKey(activityRows, catalogLoading, selectedActivityKey),
-    [activityRows, catalogLoading, selectedActivityKey],
+    () => resolveActiveLedgerKey(categoryRows, catalogLoading, selectedCategoryKey),
+    [categoryRows, catalogLoading, selectedCategoryKey],
   );
-  const ledgerActivities = activityRows.filter((row) => row.key === activeLedgerKey);
-  const ledgerActivityLabel = ledgerActivities[0]?.label ?? "請先選擇活動";
-  const composerActivityKey = activeLedgerKey;
+  const ledgerCategories = categoryRows.filter((row) => row.key === activeLedgerKey);
+  const ledgerCategoryLabel = ledgerCategories[0]?.label ?? "請先選擇商品分類";
+  const composerCategoryKey = activeLedgerKey;
   const scopedCatalog = catalog.filter((category) => catalogScopeKey(category) === activeLedgerKey);
   const activeProducts = useMemo(
     () => catalogProducts.filter((product) => {
       const category = catalog.find((item) => item.id === product.categoryId);
       return product.status === "active" && !(category && isOrderingClosed(category))
         && !(closeStatus[product.categoryId]?.is_closed && closeStatus[product.categoryId]?.is_global)
-        && (!category?.order_closes_at || new Date(category.order_closes_at).getTime() > Date.now());
+        && (!category?.order_closed_at || new Date(category.order_closed_at).getTime() > Date.now());
     }),
     [catalogProducts, catalog, closeStatus],
   );
@@ -181,12 +181,12 @@ export default function ClassOrdersPage() {
         const existing = editOrder?.items.some((item) => item.product_id === product.id);
         const groupReserved = product.purchase_group && reservedGroups.has(product.purchase_group);
         const allowed = existing || (purchaseOptionsReady && purchaseOptions.allowed.has(product.id) && !groupReserved);
-        const scope = orderScopeKey({ activity_id: product.activity_id, category_id: product.categoryId });
+        const scope = orderScopeKey({ category_id: product.categoryId });
         return allowed && (editOrder ? scope === orderScopeKey(editOrder)
-          : scope === composerActivityKey);
+          : scope === composerCategoryKey);
       });
     },
-    [activeProducts, editOrder, composerActivityKey, assistedItems, assistedOrderDrafts, catalogProducts, composerRecipientIds, purchaseOptionsReady, purchaseOptions],
+    [activeProducts, editOrder, composerCategoryKey, assistedItems, assistedOrderDrafts, catalogProducts, composerRecipientIds, purchaseOptionsReady, purchaseOptions],
   );
   const orderProductResults = useMemo(() => {
     const needle = orderProductSearch.trim().toLocaleLowerCase("zh-Hant");
@@ -198,16 +198,16 @@ export default function ClassOrdersPage() {
   }, [formProducts, orderProductSearch]);
   const selectedOrderProduct = formProducts.find((product) => product.id === orderProductId);
   const productRows = useMemo(
-    () => buildProductRows(activeProducts, activeLedgerKey, activityFilter, productSummary.product_rows),
-    [activeProducts, activeLedgerKey, activityFilter, productSummary.product_rows],
+    () => buildProductRows(activeProducts, activeLedgerKey, categoryFilter, productSummary.product_rows),
+    [activeProducts, activeLedgerKey, categoryFilter, productSummary.product_rows],
   );
   const productFilterOptions = useMemo(
-    () => buildProductFilterOptions(catalogProducts, activeLedgerKey, activityFilter, productRows),
-    [activeLedgerKey, activityFilter, catalogProducts, productRows],
+    () => buildProductFilterOptions(catalogProducts, activeLedgerKey, categoryFilter, productRows),
+    [activeLedgerKey, categoryFilter, catalogProducts, productRows],
   );
   const seatRows = useMemo(
-    () => buildSeatRows(activityOrders, activeLedgerKey, members),
-    [activityOrders, activeLedgerKey, members],
+    () => buildSeatRows(categoryOrders, activeLedgerKey, members),
+    [categoryOrders, activeLedgerKey, members],
   );
   const filteredSeatRows = seatRows.filter((row) =>
     `${row.seat ?? ""} ${row.name}`.includes(seatSearch.trim())
@@ -219,13 +219,13 @@ export default function ClassOrdersPage() {
     collected: totals.collected + row.collected,
   }), { amount: 0, collected: 0 }), [seatRows]);
 
-  const filterActivityRows = scopedCatalog.map((category) => ({
+  const filterCategoryRows = scopedCatalog.map((category) => ({
     key: `category:${category.id}`, label: category.name,
   }));
-  const selectedActivityLabel = activityFilter === "all"
-    ? ledgerActivityLabel
-    : activityFilter === "none" ? "一般商品"
-      : filterActivityRows.find((row) => row.key === activityFilter)?.label ?? "所選活動";
+  const selectedCategoryLabel = categoryFilter === "all"
+    ? ledgerCategoryLabel
+    : categoryFilter === "none" ? "一般商品"
+      : filterCategoryRows.find((row) => row.key === categoryFilter)?.label ?? "所選分類";
 
   const currentOptionIds = productDetail?.variant_groups
     .map((group) => optionIds[group.id])
@@ -276,24 +276,24 @@ export default function ClassOrdersPage() {
     }
   }, [workspace, studentId, orderProductId, productDetail, editOrder, editProductsOpen]);
   const assistedOrderDraftRows = useMemo(() => assistedOrderDrafts.map((draft) => {
-    const activityTotals = new Map<string, { key: string; activity_id: string | null; label: string; amount: number }>();
+    const categoryTotals = new Map<string, { key: string; category_id: string | null; label: string; amount: number }>();
     for (const item of draft.items) {
       const key = item.scope_key;
-      const row = activityTotals.get(key) ?? {
+      const row = categoryTotals.get(key) ?? {
         key,
-        activity_id: item.activity_id,
-        label: activityLabel(key),
+        category_id: item.category_id,
+        label: categoryLabel(key),
         amount: 0,
       };
       row.amount += item.quantity * item.unit_price;
-      activityTotals.set(key, row);
+      categoryTotals.set(key, row);
     }
     return {
       ...draft,
       subtotal: draft.items.reduce((total, item) => total + item.quantity * item.unit_price, 0),
-      activity_totals: [...activityTotals.values()],
+      category_totals: [...categoryTotals.values()],
     };
-  }), [assistedOrderDrafts, activityLabel]);
+  }), [assistedOrderDrafts, categoryLabel]);
 
   const loadMembers = useCallback(async () => {
     const version = ++membersLoadVersion.current;
@@ -320,7 +320,7 @@ export default function ClassOrdersPage() {
     setLoadFailed(false);
     const scope = {
       ...orderScopeParams(activeLedgerKey),
-      ...(activityFilter.startsWith("category:") ? { category_id: activityFilter.slice(9) } : {}),
+      ...(categoryFilter.startsWith("category:") ? { category_id: categoryFilter.slice(9) } : {}),
     };
     const params: ClassOrderQuery = { ...scope };
     if (paidFilter !== "all") params.is_class_collected = paidFilter === "paid" ? "true" : "false";
@@ -328,17 +328,17 @@ export default function ClassOrdersPage() {
     if (productFilter) params.product_id = productFilter;
     if (memberFilter) params.member_user_id = memberFilter;
     const filteredOrdersPromise = activeLedgerKey ? listAllClassOrders(params) : Promise.resolve([]);
-    const activityOrdersPromise = listAllClassOrders();
+    const categoryOrdersPromise = listAllClassOrders();
     try {
-      const [orderItems, activityItems, productStatus] = await Promise.all([
+      const [orderItems, categoryItems, productStatus] = await Promise.all([
         filteredOrdersPromise,
-        activityOrdersPromise,
+        categoryOrdersPromise,
         activeLedgerKey ? shopApi.classSummary(scope) : Promise.resolve(emptySummary),
         refreshMembers ? loadMembers() : Promise.resolve(),
       ]);
       if (version !== loadVersion.current) return;
       setOrders(orderItems);
-      setActivityOrders(activityItems);
+      setCategoryOrders(categoryItems);
       setProductSummary(productStatus);
       setSelectedIds((cur) => cur.filter((id) => orderItems.some((order) =>
         order.id === id && isCollectableOrder(order))));
@@ -349,7 +349,7 @@ export default function ClassOrdersPage() {
     } finally {
       if (version === loadVersion.current) setLoading(false);
     }
-  }, [activeLedgerKey, activityFilter, assistedFilter, paidFilter, productFilter, memberFilter, loadMembers]);
+  }, [activeLedgerKey, categoryFilter, assistedFilter, paidFilter, productFilter, memberFilter, loadMembers]);
 
   const loadCloseStatus = useCallback(async (catIds: string[], classId: string) => {
     if (!catIds.length) return;
@@ -491,7 +491,7 @@ export default function ClassOrdersPage() {
         product_id: item.product_id,
         product_name: item.product_name ?? "未命名商品",
         scope_key: orderScopeKey(full),
-        activity_id: full.activity_id ?? null,
+        category_id: full.category_id ?? null,
         quantity: item.quantity,
         option_ids: (item.selected_options ?? []).map((option) => option.option_id),
         option_label: (item.selected_options ?? []).map((option) => `${option.group_name}：${option.value}`).join(" · "),
@@ -540,15 +540,15 @@ export default function ClassOrdersPage() {
       const option = group.options.find((item) => item.id === optionIds[group.id]);
       return option ? `${group.name} ${option.value}` : "";
     }).filter(Boolean).join(" · ");
-    const activityId = editOrder?.activity_id
-      ?? catalogProducts.find((product) => product.id === productDetail.id)?.activity_id
+    const categoryId = editOrder?.category_id
+      ?? catalogProducts.find((product) => product.id === productDetail.id)?.categoryId
       ?? null;
     const nextItems = mergeDraftItems([...assistedItems, {
       id: `${productDetail.id}-${Date.now()}-${Math.random()}`,
       product_id: productDetail.id,
       product_name: productDetail.name,
-      scope_key: editOrder ? orderScopeKey(editOrder) : orderScopeKey({ activity_id: activityId, category_id: catalogProducts.find((product) => product.id === productDetail.id)?.categoryId }),
-      activity_id: activityId,
+      scope_key: editOrder ? orderScopeKey(editOrder) : orderScopeKey({ category_id: categoryId }),
+      category_id: categoryId,
       quantity,
       option_ids: currentOptionIds,
       option_label: optionLabel,
@@ -573,9 +573,9 @@ export default function ClassOrdersPage() {
         id: `${productDetail.id}-${Date.now()}-${Math.random()}`,
         product_id: productDetail.id,
         product_name: productDetail.name,
-        scope_key: editOrder ? orderScopeKey(editOrder) : orderScopeKey({ activity_id: catalogProducts.find((product) => product.id === productDetail.id)?.activity_id, category_id: catalogProducts.find((product) => product.id === productDetail.id)?.categoryId }),
-        activity_id: editOrder?.activity_id
-          ?? catalogProducts.find((product) => product.id === productDetail.id)?.activity_id
+        scope_key: editOrder ? orderScopeKey(editOrder) : orderScopeKey({ category_id: catalogProducts.find((product) => product.id === productDetail.id)?.categoryId }),
+        category_id: editOrder?.category_id
+          ?? catalogProducts.find((product) => product.id === productDetail.id)?.categoryId
           ?? null,
         quantity,
         option_ids: currentOptionIds,
@@ -682,15 +682,15 @@ export default function ClassOrdersPage() {
   const selectedSet = new Set(selectedIds);
   const selectedOrders = visibleOrders.filter((order) =>
     selectedSet.has(order.id) && isCollectableOrder(order));
-  const selectedActivityGroups = new Map<string, { label: string; orders: OrderListItem[] }>();
+  const selectedCategoryGroups = new Map<string, { label: string; orders: OrderListItem[] }>();
   for (const order of selectedOrders) {
     const key = orderScopeKey(order);
-    const group = selectedActivityGroups.get(key) ?? {
-      label: order.category_name ?? activityLabel(key),
+    const group = selectedCategoryGroups.get(key) ?? {
+      label: order.category_name ?? categoryLabel(key),
       orders: [],
     };
     group.orders.push(order);
-    selectedActivityGroups.set(key, group);
+    selectedCategoryGroups.set(key, group);
   }
   const pageCount = Math.max(1, Math.ceil(visibleOrders.length / ORDER_LIST_PAGE_SIZE));
   const currentPage = Math.min(orderPage, pageCount - 1);
@@ -702,7 +702,7 @@ export default function ClassOrdersPage() {
   useEffect(() => {
     setOrderPage(0);
     setSelectedIds([]);
-  }, [activityFilter, assistedFilter, memberFilter, paidFilter, productFilter, query]);
+  }, [categoryFilter, assistedFilter, memberFilter, paidFilter, productFilter, query]);
 
   const togglePaid = async (order: OrderListItem) => {
     setBusy(order.id);
@@ -718,15 +718,15 @@ export default function ClassOrdersPage() {
   };
 
   const setSeatCollected = async (memberId: string, collected: boolean) => {
-    if (!ledgerActivities.length || busy !== null || batchBusy) return;
+    if (!ledgerCategories.length || busy !== null || batchBusy) return;
     const row = seatRows.find((item) => item.id === memberId);
     const targets = row?.orders.filter((order) => order.is_class_collected !== collected) ?? [];
     if (!targets.length) return;
     setCollectionConfirmation({
-      memberId, name: row?.name ?? "同學", activityLabel: ledgerActivityLabel,
-      activities: ledgerActivities.map((activity) => ({ label: activity.label,
-        amount: targets.filter((order) => orderScopeKey(order) === activity.key).reduce((sum, order) => sum + order.total_price, 0),
-      })).filter((activity) => activity.amount > 0), orderIds: targets.map((order) => order.id),
+      memberId, name: row?.name ?? "同學", categoryLabel: ledgerCategoryLabel,
+      categories: ledgerCategories.map((category) => ({ label: category.label,
+        amount: targets.filter((order) => orderScopeKey(order) === category.key).reduce((sum, order) => sum + order.total_price, 0),
+      })).filter((category) => category.amount > 0), orderIds: targets.map((order) => order.id),
       amount: targets.reduce((sum, order) => sum + order.total_price, 0), collected,
     });
   };
@@ -747,7 +747,7 @@ export default function ClassOrdersPage() {
         toast.error(`已更新 ${targets.length - failed.length} 筆，${failed.length} 筆未完成。請確認更新後的狀態再試。`);
         return;
       }
-      toast.success(`${target.name}的${target.activityLabel}預購已${collected ? "記錄收款" : "撤銷收款"}`);
+      toast.success(`${target.name}的${target.categoryLabel}預購已${collected ? "記錄收款" : "撤銷收款"}`);
     } catch (error) {
       toast.error(apiErrorMessage(error, "收款狀態更新失敗"));
     } finally {
@@ -757,8 +757,8 @@ export default function ClassOrdersPage() {
     }
   };
 
-  const batchSetPaid = async (activityKey: string, isPaid: boolean) => {
-    const targets = (selectedActivityGroups.get(activityKey)?.orders ?? [])
+  const batchSetPaid = async (categoryKey: string, isPaid: boolean) => {
+    const targets = (selectedCategoryGroups.get(categoryKey)?.orders ?? [])
       .filter((o) => o.is_class_collected !== isPaid);
     if (!targets.length) { toast.info(isPaid ? "選取訂單都已繳費" : "選取訂單都是未繳費"); return; }
     setBatchBusy(true);
@@ -914,7 +914,7 @@ export default function ClassOrdersPage() {
     setWorkspace("details");
     const product = catalogProducts.find((item) => item.id === productId);
     const category = catalog.find((item) => item.id === product?.categoryId);
-    setActivityFilter(category ? `category:${category.id}` : "none");
+    setCategoryFilter(category ? `category:${category.id}` : "none");
     setProductFilter(productId);
     setPaidFilter(hasUncollectedOrders ? "unpaid" : "all");
     setAssistedFilter("all");
@@ -924,7 +924,7 @@ export default function ClassOrdersPage() {
   };
 
   const clearFilters = () => {
-    setActivityFilter("all");
+    setCategoryFilter("all");
     setProductFilter("");
     setPaidFilter("all");
     setAssistedFilter("all");
@@ -947,16 +947,16 @@ export default function ClassOrdersPage() {
         </div>
       </header>
 
-      {activityRows.length > 0 && <section className="space-y-2" aria-label="目前處理活動">
-        <CollectionActivityPicker options={activityRows} selected={activeLedgerKey || null} label="活動"
+      {categoryRows.length > 0 && <section className="space-y-2" aria-label="目前處理商品分類">
+        <CollectionCategoryPicker options={categoryRows} selected={activeLedgerKey || null} label="商品分類"
           disabled={busy !== null || batchBusy || creating || loading || catalogLoading || catalogFailed || loadFailed
             || Boolean(editOrder || collectionConfirmation || cancelTarget || orderProductId)
             || assistedItems.length > 0 || assistedOrderDrafts.length > 0}
           onChange={(key) => {
             if (key === activeLedgerKey) return;
             loadVersion.current += 1;
-            setSelectedActivityKey(key);
-            setActivityFilter("all");
+            setSelectedCategoryKey(key);
+            setCategoryFilter("all");
             setOrders([]);
             setProductSummary(emptySummary);
             setLoading(true);
@@ -964,10 +964,10 @@ export default function ClassOrdersPage() {
             setSelectedIds([]); setOrderPage(0); setSeatSearch(""); setSeatFilter("all");
             setStudentId(""); setBatchStudentIds([]); setNotes(""); setOrderProductSearch(""); setSubmitMessage("");
           }} />
-        {(assistedItems.length > 0 || assistedOrderDrafts.length > 0 || orderProductId || editOrder) && <p className="text-sm text-fg-secondary!">請先完成目前的代訂或修改，再切換活動。</p>}
-        <p className="font-semibold">目前活動：{ledgerActivityLabel}</p>
+        {(assistedItems.length > 0 || assistedOrderDrafts.length > 0 || orderProductId || editOrder) && <p className="text-sm text-fg-secondary!">請先完成目前的代訂或修改，再切換商品分類。</p>}
+        <p className="font-semibold">目前商品分類：{ledgerCategoryLabel}</p>
       </section>}
-      {!activeLedgerKey && !loading && activityRows.length > 0 && <p role="status">尚未選擇活動</p>}
+      {!activeLedgerKey && !loading && categoryRows.length > 0 && <p role="status">尚未選擇商品分類</p>}
 
       {loadFailed && (
         <p className="rounded-md px-3 py-2 text-sm border! border-danger-border! bg-danger-soft! text-danger!" role="alert"
@@ -1013,7 +1013,7 @@ export default function ClassOrdersPage() {
           </button>
           <details>
             <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">追加訂單與補收款</summary>
-            {myClassId && activeLedgerKey && <SupplementOrders key={activeLedgerKey} activityKey={activeLedgerKey} canRejoin onRejoined={() => { void load(); }} />}
+            {myClassId && activeLedgerKey && <SupplementOrders key={activeLedgerKey} categoryKey={activeLedgerKey} canRejoin onRejoined={() => { void load(); }} />}
           </details>
           <details>
             <summary className="min-h-11 cursor-pointer py-3 text-sm">加購與繳款說明</summary>
@@ -1026,13 +1026,13 @@ export default function ClassOrdersPage() {
 
       {workspace === "details" && activeLedgerKey && (
         <label className="flex flex-wrap items-center gap-3 text-sm font-medium">
-          整理活動
-          <select className="input min-h-11 w-full sm:w-auto" aria-label="整理活動" value={activityFilter}
-            onChange={(event) => { setActivityFilter(event.target.value); setProductFilter(""); setSelectedIds([]); }}>
-            <option value="all">目前活動全部商品</option>
-            {filterActivityRows.map((row) => <option key={row.key} value={row.key}>{row.label}</option>)}
+          整理商品分類
+          <select className="input min-h-11 w-full sm:w-auto" aria-label="整理商品分類" value={categoryFilter}
+            onChange={(event) => { setCategoryFilter(event.target.value); setProductFilter(""); setSelectedIds([]); }}>
+            <option value="all">目前分類全部商品</option>
+            {filterCategoryRows.map((row) => <option key={row.key} value={row.key}>{row.label}</option>)}
           </select>
-          <span className="text-fg-muted!">商品統計與訂單清單依所選活動整理</span>
+          <span className="text-fg-muted!">商品統計與訂單清單依所選商品分類整理</span>
         </label>
       )}
 
@@ -1067,8 +1067,8 @@ export default function ClassOrdersPage() {
               <X size={15} />
             </button>
           </div>}
-          {(editOrder || composerActivityKey) && <p className="mb-3 text-sm text-fg-secondary!">
-            {editOrder ? "修改品項與數量後儲存。" : `目前代訂 ${activityRows.find((row) => row.key === composerActivityKey)?.label ?? "所選活動"}`}
+          {(editOrder || composerCategoryKey) && <p className="mb-3 text-sm text-fg-secondary!">
+            {editOrder ? "修改品項與數量後儲存。" : `目前代訂 ${categoryRows.find((row) => row.key === composerCategoryKey)?.label ?? "所選分類"}`}
           </p>}
           {!editOrder && <div className="mb-5">
             <ol className="shop-order-steps" aria-label="代訂步驟">
@@ -1427,7 +1427,7 @@ export default function ClassOrdersPage() {
                     <div className="w-full min-w-0 sm:w-auto sm:flex-1">
                       <p className="break-words text-sm font-medium text-fg-primary!">{item.product_name}</p>
                       <p className="mt-0.5 text-xs text-fg-secondary!">
-                        {activityLabel(item.scope_key)} · {item.option_label || "標準規格"} · {money(item.unit_price)} / 件
+                        {categoryLabel(item.scope_key)} · {item.option_label || "標準規格"} · {money(item.unit_price)} / 件
                       </p>
                     </div>
                     <label className="flex items-center gap-2 text-xs">
@@ -1521,12 +1521,12 @@ export default function ClassOrdersPage() {
       {collectionConfirmation && <Modal title={collectionConfirmation.collected ? "核對同學收款" : "撤銷同學收款"}
         size="sm" mobileFullscreen={false} onClose={() => { if (!collectionSubmitting.current) setCollectionConfirmation(null); }}>
         <dl className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-3 text-sm">
-          <dt>收款明細</dt><dd className="space-y-2">{collectionConfirmation.activities.map((activity) => <p key={activity.label} className="flex flex-wrap justify-between gap-x-3"><strong>{activity.label}</strong><span className="tabular-nums">{money(activity.amount)}</span></p>)}</dd>
+          <dt>收款明細</dt><dd className="space-y-2">{collectionConfirmation.categories.map((category) => <p key={category.label} className="flex flex-wrap justify-between gap-x-3"><strong>{category.label}</strong><span className="tabular-nums">{money(category.amount)}</span></p>)}</dd>
           <dt>同學</dt><dd>{collectionConfirmation.name}</dd>
           <dt>{collectionConfirmation.collected ? "本次合計" : "撤銷合計"}</dt>
           <dd className="text-lg font-semibold tabular-nums">{money(collectionConfirmation.amount)}</dd>
         </dl>
-        <p className="mt-4 text-sm text-fg-secondary!">只登記上列活動的款項。</p>
+        <p className="mt-4 text-sm text-fg-secondary!">只登記上列商品分類的款項。</p>
         <div className="mt-5 flex flex-wrap justify-end gap-2">
           <button type="button" className="btn btn-ghost min-h-11" disabled={busy !== null}
             onClick={() => setCollectionConfirmation(null)}>返回核對</button>
@@ -1536,9 +1536,9 @@ export default function ClassOrdersPage() {
       </Modal>}
       <div hidden={workspace !== "collect"} className="space-y-5">
         <ClassOrderCollectionPanel
-          activityRows={activityRows}
-          ledgerActivities={ledgerActivities}
-          ledgerActivityLabel={ledgerActivityLabel}
+          categoryRows={categoryRows}
+          ledgerCategories={ledgerCategories}
+          ledgerCategoryLabel={ledgerCategoryLabel}
           loading={loading}
           loadFailed={loadFailed}
           seatCollectionTotals={seatCollectionTotals}
@@ -1563,7 +1563,7 @@ export default function ClassOrdersPage() {
       <div className="space-y-5">
         {/* 訂單列表 */}
         <ClassOrdersListPanel
-          selectedActivityLabel={selectedActivityLabel}
+          selectedCategoryLabel={selectedCategoryLabel}
           visibleOrders={visibleOrders}
           query={query}
           setQuery={setQuery}
@@ -1576,22 +1576,22 @@ export default function ClassOrdersPage() {
           setAssistedFilter={setAssistedFilter}
           productFilter={productFilter}
           setProductFilter={setProductFilter}
-          setActivityFilter={(value) => { setActivityFilter(value); setProductFilter(""); setSelectedIds([]); }}
-          activityFilter={activityFilter}
+          setCategoryFilter={(value) => { setCategoryFilter(value); setProductFilter(""); setSelectedIds([]); }}
+          categoryFilter={categoryFilter}
           productFilterOptions={productFilterOptions}
-          filterActivityRows={filterActivityRows}
+          filterCategoryRows={filterCategoryRows}
           clearFilters={clearFilters}
           selectablePageOrders={selectablePageOrders}
           allVisibleSelected={allVisibleSelected}
           setSelectedIds={setSelectedIds}
           selectedOrders={selectedOrders}
-          selectedActivityGroups={selectedActivityGroups}
+          selectedCategoryGroups={selectedCategoryGroups}
           batchBusy={batchBusy}
           batchSetPaid={batchSetPaid}
           loading={loading}
           openCreate={openCreate}
           pageOrders={pageOrders}
-          activityLabel={activityLabel}
+          categoryLabel={categoryLabel}
           togglePaid={togglePaid}
           busy={busy}
           selectedSet={selectedSet}
@@ -1610,7 +1610,7 @@ export default function ClassOrdersPage() {
         <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium text-fg-secondary!">商品統計</summary>
       <section aria-labelledby="product-collection-heading" className="space-y-3">
         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-          <h2 id="product-collection-heading" className="text-lg font-semibold text-fg-primary!">商品收款明細 · {selectedActivityLabel}</h2>
+          <h2 id="product-collection-heading" className="text-lg font-semibold text-fg-primary!">商品收款明細 · {selectedCategoryLabel}</h2>
           <p className="text-xs text-fg-muted!">收款紀錄代表班代已向同學收款；整班繳款由班聯會確認。</p>
         </div>
         {loading && productSummary.product_rows.length === 0 ? (

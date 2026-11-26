@@ -69,7 +69,6 @@ _ACCOUNT_MERGE_EXCLUDED_TABLES = frozenset(
 )
 _ACCOUNT_MERGE_SAFE_DUPLICATE_TABLES = frozenset(
     {
-        "activity_members",
         "announcement_audience_users",
         "email_recipient_list_members",
         # 同一政策版本的同意是冪等資料；合併帳戶時保留主要帳戶那筆即可。
@@ -86,7 +85,6 @@ _ACCOUNT_MERGE_TABLE_LABELS = {
     "line_account_links": "LINE 綁定",
     "user_google_tasks_configs": "Google Tasks 連結",
     "partner_business_accounts": "店家管理身分",
-    "activity_conveners": "活動總召任期",
     "class_correction_requests": "待審核的班級更正申請",
 }
 _ACCOUNT_MERGE_FIELD_LABELS = {

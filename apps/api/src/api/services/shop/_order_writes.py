@@ -33,7 +33,6 @@ from api.services.shop._class_close_status import get_close_status
 from api.services.shop._class_payment_scope import class_payment_for_scope
 from api.services.shop._orders import (
     _apply_order_promotion,
-    _assert_activity_order_unlocked,
     _assert_buyer_eligible,
     _assert_product_registration_open,
     _assert_purchase_limit,
@@ -41,9 +40,8 @@ from api.services.shop._orders import (
     _lock_class_orders,
     _options_delta,
     _options_signature,
-    _order_activity_id,
     _order_category,
-    _product_category_filter,
+    _order_category_id,
     _product_order_scope,
     _resolve_selected_options,
     _sync_order_promotions,
@@ -64,10 +62,10 @@ from api.services.shop._registration_queries import (
 logger = logging.getLogger("api.services.shop._orders")
 
 
-async def _group_cart_items_by_activity(
+async def _group_cart_items_by_category(
     session: AsyncSession, cart_items: list[CartItem]
-) -> dict[tuple[uuid.UUID | None, uuid.UUID | None], list[CartItem]]:
-    groups: dict[tuple[uuid.UUID | None, uuid.UUID | None], list[CartItem]] = {}
+) -> dict[uuid.UUID | None, list[CartItem]]:
+    groups: dict[uuid.UUID | None, list[CartItem]] = {}
     for cart_item in cart_items:
         product = await get_product(session, cart_item.product_id)
         if product is None:
@@ -81,7 +79,7 @@ async def _create_order_from_items(
     *,
     user_id: uuid.UUID,
     class_id: uuid.UUID | None,
-    activity_id: uuid.UUID | None,
+    category_id: uuid.UUID | None,
     cart_items: list[CartItem],
     notes: str | None,
     assistance_scope: str = "self",
@@ -109,18 +107,14 @@ async def _create_order_from_items(
         for item in cart_items
         if (product := await get_product(session, item.product_id)) is not None
     }
-    if len(scopes) != 1 or next(iter(scopes))[0] != activity_id:
-        raise ValueError("同一筆訂單只能包含同一活動的商品")
+    if len(scopes) != 1 or next(iter(scopes)) != category_id:
+        raise ValueError("同一筆訂單只能包含同一商品分類的商品")
     order_scope = next(iter(scopes))
     if assisted_by_id is not None and class_id is None and supplement_class_id is None:
         paid_orders = await get_current_registrations(session, user_id)
         if any(
             (existing.is_paid or existing.is_class_collected or existing.received_amount > 0)
-            and _order_activity_id(existing) == activity_id
-            and (
-                activity_id is not None
-                or any(_product_order_scope(item.product) == order_scope for item in existing.items)
-            )
+            and _order_category_id(existing) == category_id
             for existing in paid_orders
         ):
             raise ValueError("已收款登記已鎖定，請先確認補收款原班級")
@@ -129,9 +123,7 @@ async def _create_order_from_items(
         order = await get_current_registration(
             session,
             user_id,
-            activity_id=activity_id,
-            category_id=order_scope[1],
-            match_activity=True,
+            category_id=category_id,
             lock=True,
             reuse_cancelled=True,
             editable_only=True,
@@ -147,7 +139,7 @@ async def _create_order_from_items(
         if order.class_id is not None and order.class_id != class_id:
             raise ValueError("目前訂單的班級歸戶已變更，請聯繫班級幹部處理")
         if any(_product_order_scope(item.product) != order_scope for item in order.items):
-            raise ValueError("這筆舊訂單包含多個活動，請聯繫班級幹部處理")
+            raise ValueError("這筆舊訂單包含多個商品分類，請聯繫班級幹部處理")
 
     specs: list[dict] = []
     replacing = replace_order is not None
@@ -204,7 +196,7 @@ async def _create_order_from_items(
         await assert_product_purchase_allowed(session, product, buyer)
         product_scope = _product_order_scope(product)
         if product_scope != order_scope:
-            raise ValueError("同一筆訂單只能包含同一活動的商品")
+            raise ValueError("同一筆訂單只能包含同一商品分類的商品")
         sale_end = product.effective_sale_end
         if sale_end is not None and sale_end.tzinfo is None:
             sale_end = sale_end.replace(tzinfo=UTC)
@@ -244,9 +236,8 @@ async def _create_order_from_items(
         order = Order(
             serial_number=await generate_order_serial(session),
             user_id=user_id,
-            activity_id=activity_id,
             class_id=class_id,
-            category_id=order_scope[1],
+            category_id=order_scope,
             assistance_scope=assistance_scope,
             assisted_by_id=assisted_by_id,
             supplement_class_id=supplement_class_id,
@@ -268,8 +259,7 @@ async def _create_order_from_items(
             await session.delete(item)
         order.status = OrderStatus.PENDING if cancelled else order.status
     order.class_id = class_id
-    order.activity_id = activity_id
-    order.category_id = order_scope[1]
+    order.category_id = order_scope
     if notes is not None:
         order.notes = notes
     actor = await session.get(User, assisted_by_id or user_id)
@@ -342,14 +332,13 @@ async def create_direct_order(
     council_override = assistance_scope in {"council_assisted", "council_separate", "council_gift"}
     cart_items = await _order_items_to_cart_items(session, data.items)
     orders: list[Order] = []
-    for (activity_id, category_id), activity_items in (
-        await _group_cart_items_by_activity(session, cart_items)
-    ).items():
+    groups = await _group_cart_items_by_category(session, cart_items)
+    for category_id, category_items in groups.items():
         supplement = assistance_scope == "council_separate"
         if council_override and not gift:
             categories = {
                 product.category or (product.series.category if product.series else None)
-                for item in activity_items
+                for item in category_items
                 if (product := await get_product(session, item.product_id)) is not None
             }
             closed = await get_close_status(
@@ -357,22 +346,13 @@ async def create_direct_order(
             )
             supplement = supplement or any(closed.values())
         if assisted_by_id is not None and class_id is not None and not gift:
-            class_paid = await class_payment_for_scope(session, class_id, activity_id, category_id)
+            class_paid = await class_payment_for_scope(session, class_id)
             collected = await session.scalar(
                 select(Order.id)
                 .where(
                     Order.user_id == user_id,
                     Order.class_id == class_id,
-                    Order.activity_id == activity_id,
-                    True
-                    if activity_id is not None
-                    else or_(
-                        Order.category_id == category_id,
-                        Order.category_id.is_(None)
-                        & Order.items.any(
-                            OrderItem.product.has(_product_category_filter(category_id))
-                        ),
-                    ),
+                    Order.category_id == category_id,
                     Order.test_product_id.is_(None),
                     Order.status.in_((OrderStatus.PENDING, OrderStatus.CONFIRMED)),
                     or_(Order.is_paid.is_(True), Order.is_class_collected.is_(True)),
@@ -384,8 +364,8 @@ async def create_direct_order(
             session,
             user_id=user_id,
             class_id=None if supplement else class_id,
-            activity_id=activity_id,
-            cart_items=activity_items,
+            category_id=category_id,
+            cart_items=category_items,
             notes=data.notes,
             assistance_scope="supplement" if supplement else assistance_scope,
             assisted_by_id=assisted_by_id,
@@ -491,7 +471,7 @@ async def checkout(
     *,
     notes: str | None = None,
     coupon_code: str | None = None,
-    coupon_activity_id: uuid.UUID | None = None,
+    coupon_category_id: uuid.UUID | None = None,
     payment_method: str | None = None,
 ) -> list[Order]:
     cart = await get_or_create_cart(session, user.id)
@@ -517,23 +497,23 @@ async def checkout(
             if closed_cats:
                 raise ValueError("您的班級已結單，無法送出訂購，請聯繫班級幹部")
 
-    grouped_items = await _group_cart_items_by_activity(session, list(cart.items))
-    if coupon_code and len(grouped_items) > 1 and coupon_activity_id is None:
-        raise ValueError("購物車包含多個活動，請指定優惠碼適用的活動")
-    if coupon_activity_id is not None and (coupon_activity_id, None) not in grouped_items:
-        raise ValueError("優惠碼適用活動不在購物車中")
+    grouped_items = await _group_cart_items_by_category(session, list(cart.items))
+    if coupon_code and len(grouped_items) > 1 and coupon_category_id is None:
+        raise ValueError("購物車包含多個商品分類，請指定優惠碼適用的分類")
+    if coupon_category_id is not None and coupon_category_id not in grouped_items:
+        raise ValueError("優惠碼適用分類不在購物車中")
     orders: list[Order] = []
-    for (activity_id, _category_id), activity_items in grouped_items.items():
+    for category_id, category_items in grouped_items.items():
         order = await _create_order_from_items(
             session,
             user_id=user.id,
             class_id=class_id,
-            activity_id=activity_id,
-            cart_items=activity_items,
+            category_id=category_id,
+            cart_items=category_items,
             notes=notes,
             coupon_code=(
                 coupon_code
-                if coupon_code and (len(grouped_items) == 1 or activity_id == coupon_activity_id)
+                if coupon_code and (len(grouped_items) == 1 or category_id == coupon_category_id)
                 else None
             ),
             payment_method=(
@@ -583,7 +563,6 @@ async def cancel_order(
     ):
         raise ValueError("班級幹部已登記收款，商品登記已鎖定")
     if not bypass_registration_window:
-        await _assert_activity_order_unlocked(session, _order_activity_id(order))
         for item in order.items:
             product = await get_product(session, item.product_id)
             if product is not None:
@@ -760,10 +739,9 @@ async def replace_order_items(
     ):
         raise ValueError("班級幹部已登記收款，商品登記已鎖定")
 
-    activity_id = _order_activity_id(order)
     category = _order_category(order)
-    original_scope = (activity_id, category.id if category else None)
-    requested_scopes: set[tuple[uuid.UUID | None, uuid.UUID | None]] = set()
+    original_scope = order.category_id or (category.id if category else None)
+    requested_scopes: set[uuid.UUID | None] = set()
 
     for item in order.items:
         product = await get_product(session, item.product_id)
@@ -788,21 +766,16 @@ async def replace_order_items(
     if len(requested_scopes) > 1 or (
         requested_scopes and order.items and next(iter(requested_scopes)) != original_scope
     ):
-        raise ValueError("同一筆訂單只能包含原活動的商品")
-    if order.activity_id is None:
-        order.activity_id = activity_id
-        order.category_id = category.id if category else None
+        raise ValueError("同一筆訂單只能包含原商品分類的商品")
     if not order.items and requested_scopes:
-        activity_id, category_id = next(iter(requested_scopes))
-        order.activity_id = activity_id
-        order.category_id = category_id
+        order.category_id = next(iter(requested_scopes))
 
     temp_items = await _order_items_to_cart_items(session, data.items)
     order = await _create_order_from_items(
         session,
         user_id=order.user_id,
         class_id=order.class_id,
-        activity_id=activity_id,
+        category_id=order.category_id,
         cart_items=temp_items,
         notes=data.notes,
         coupon_code=order.promotion_code,

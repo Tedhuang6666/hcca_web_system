@@ -29,7 +29,7 @@ export function EntityModal({
   const [isActive, setIsActive] = useState(initial?.is_active ?? true);
   const [busy, setBusy] = useState(false);
 
-  const label = kind === "category" ? "活動" : "系列";
+  const label = kind === "category" ? "商品分類" : "系列";
 
   return (
     <Modal title={`${editing ? "編輯" : "新增"}${label}`} onClose={onClose} size="md">
@@ -369,12 +369,12 @@ export function ProductFormModal({
         </div>
       ) : <div className="shop-product-form space-y-5">
         {!editing && !seriesId && categories.length > 1 ? (
-          <Field label="活動">
+          <Field label="商品分類">
             <select className="input min-h-11 w-full min-w-0" value={selectedCategoryId} onChange={(event) => setSelectedCategoryId(event.target.value)}>
               {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
             </select>
           </Field>
-        ) : <p className="text-sm text-fg-secondary!">活動：{categories.find((category) => category.id === selectedCategoryId)?.name}{seriesId ? "／目前系列" : ""}</p>}
+        ) : <p className="text-sm text-fg-secondary!">商品分類：{categories.find((category) => category.id === selectedCategoryId)?.name}{seriesId ? "／目前系列" : ""}</p>}
         <div>
           <Field label="商品名稱">
             <input maxLength={200} placeholder="例如：校慶紀念衫" value={name} onChange={(e) => setName(e.target.value)} className="input min-h-11 w-full min-w-0"
@@ -556,7 +556,7 @@ export function ProductFormModal({
         )}
         {rulesState === "ready" ? <ProductPurchaseRulesEditor value={purchaseRules} onChange={setPurchaseRules}
           categoryId={selectedCategoryId} productId={initial?.id ?? null}
-          activityId={categories.find((category) => category.id === selectedCategoryId)?.activity_id ?? null} disabled={busy} />
+          disabled={busy} />
           : rulesState === "loading" ? <p role="status" className="text-sm">正在讀取購買資格…</p>
             : <p role="alert" className="text-sm text-danger!">
               購買資格讀取失敗，為保留原有名單，請重新讀取後再儲存。

@@ -48,14 +48,13 @@ export async function refreshAutomaticRegistrationPromotions(orders: OrderOut[])
       || order.status === "cancelled" || order.status === "refunded"
       || order.promotion_code?.trim()) continue;
 
-    const activityId = order.activity_id ?? null;
-    const categoryId = activityId ? null : order.category_id ?? null;
+    const categoryId = order.category_id ?? null;
 
     try {
-      const preview = await shopApi.previewCurrentPromotion(null, activityId, categoryId);
+      const preview = await shopApi.previewCurrentPromotion(null, categoryId);
       if (automaticPromotionMatches(order, preview)) continue;
 
-      const updated = await shopApi.applyCurrentPromotion(null, activityId, categoryId);
+      const updated = await shopApi.applyCurrentPromotion(null, categoryId);
       const index = refreshed.findIndex((candidate) => candidate.id === updated.id);
       if (index >= 0) {
         refreshed[index] = updated;

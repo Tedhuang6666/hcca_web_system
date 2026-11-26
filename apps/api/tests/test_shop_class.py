@@ -9,7 +9,6 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.clock import local_today
-from api.models.activity import Activity
 from api.models.electronic_credential import ElectronicCredentialSettings
 from api.models.person import PersonAffiliationKind, PersonAffiliationStatus
 from api.models.shop import Order, OrderItem, OrderStatus, Product, ProductMedia
@@ -950,7 +949,7 @@ async def test_filtered_shop_statistics_use_discounted_amount(db_session: AsyncS
 
 
 @pytest.mark.parametrize("collected", [False, True])
-async def test_class_summary_category_excludes_other_themes_in_shared_activity(
+async def test_class_summary_category_excludes_other_categories(
     db_session: AsyncSession, collected: bool
 ) -> None:
     school_class = await _make_class(db_session)
@@ -959,10 +958,6 @@ async def test_class_summary_category_excludes_other_themes_in_shared_activity(
     product_b = await _make_product(db_session, price=200)
     category_a = product_a.series.category
     category_b = product_b.series.category
-    activity = Activity(name="同一活動")
-    db_session.add(activity)
-    await db_session.flush()
-    category_a.activity_id = category_b.activity_id = activity.id
     # 同時涵蓋直屬主題與放在系列內的商品。
     product_a.category_id = category_a.id
     product_a.series_id = None
@@ -970,7 +965,7 @@ async def test_class_summary_category_excludes_other_themes_in_shared_activity(
         serial_number="ORD-CATEGORY-SUMMARY",
         user_id=buyer.id,
         class_id=school_class.id,
-        activity_id=activity.id,
+        category_id=category_a.id,
         status=OrderStatus.PENDING,
         subtotal_price=300,
         discount_amount=30,

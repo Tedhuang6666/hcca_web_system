@@ -73,7 +73,6 @@ async def list_workflow_instances(
     _: CurrentUser,
     workflow_type: str | None = Query(None),
     status_filter: str | None = Query(None, alias="status"),
-    activity_id: uuid.UUID | None = Query(None),
     limit: int = Query(80, ge=1, le=300),
     offset: int = Query(0, ge=0),
 ) -> list[WorkflowInstance]:
@@ -81,7 +80,6 @@ async def list_workflow_instances(
         db,
         workflow_type=workflow_type,
         status=status_filter,
-        activity_id=activity_id,
         limit=limit,
         offset=offset,
     )

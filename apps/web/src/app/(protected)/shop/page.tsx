@@ -128,7 +128,7 @@ function flyProductIntoOrder() {
   });
 }
 
-const GENERAL_ACTIVITY_SCOPE = "none";
+const GENERAL_CATEGORY_SCOPE = "none";
 
 type ShopPageProps = {
   topicSlug?: string;
@@ -172,7 +172,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
   const [availablePromotions, setAvailablePromotions] = useState<ShopPromotionPublicOut[]>([]);
   const [activeBundleId, setActiveBundleId] = useState<string | null>(null);
   const [couponCode, setCouponCode] = useState("");
-  const [selectedPromotionScope, setSelectedPromotionScope] = useState(GENERAL_ACTIVITY_SCOPE);
+  const [selectedPromotionScope, setSelectedPromotionScope] = useState(GENERAL_CATEGORY_SCOPE);
   const [promotionCelebration, setPromotionCelebration] = useState<{
     promotionIds: string[];
     token: number;
@@ -615,7 +615,6 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
       ? visibleCatalog
       : visibleCatalog.filter((category) => (
         !category.order_closed_at
-        && !(category.order_closes_at && new Date(category.order_closes_at).getTime() <= catalogTime)
         && !(closeStatus[category.id]?.is_closed && closeStatus[category.id]?.is_global)
       ));
   const openProductDisplayed = !loading && displayedCatalog.some((category) => (
@@ -633,7 +632,6 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
   const selectedCategoryClosure = resolveOrderClosureState(
     selectedCategoryCloseStatus,
     selectedCategory?.order_closed_at ?? null,
-    selectedCategory?.order_closes_at ?? null,
     catalogTime,
   );
   const directLinkClosed = directProductRoute && selectedCategoryClosure.isClosed
@@ -669,7 +667,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
     setSelectedPromotionScope(catalogScopeKey(category));
   }, [catalog, selectedCategoryId]);
 
-  const selectedCategoryScope = selectedCategory ? catalogScopeKey(selectedCategory) : GENERAL_ACTIVITY_SCOPE;
+  const selectedCategoryScope = selectedCategory ? catalogScopeKey(selectedCategory) : "none";
   const delegatedRegistration = delegationContext ? registrations[0] ?? null : null;
   const testingProduct = catalog.flatMap((category) => [
     ...category.products, ...category.series.flatMap((series) => series.products),
@@ -742,33 +740,21 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
     ...category.products.map((product) => [product.id, category] as const),
     ...category.series.flatMap((series) => series.products.map((product) => [product.id, category] as const)),
   ]));
-  const activityScopeKey = (category: CatalogCategoryOut) => category.activity_id
-    ? `activity:${category.activity_id}`
-    : `category:${category.id}`;
-  const selectedActivityScope = selectedCategory ? activityScopeKey(selectedCategory) : null;
+  const categoryScopeKey = (category: CatalogCategoryOut) => catalogScopeKey(category);
+  const selectedTargetCategoryScope = selectedCategory ? categoryScopeKey(selectedCategory) : null;
   const categoryPromotions = classMemberUserId || !selectedCategory ? [] : availablePromotions.filter((promotion) => {
-    if (promotion.target_category_ids != null) {
-      if (promotion.target_category_ids.length > 0
-        && !promotion.target_category_ids.includes(selectedCategory.id)) return false;
-      const targets = promotion.target_products ?? [];
-      if (targets.length === 0) return true;
-      return targets.some((target) => catalogCategoryByProductId.get(target.id)?.id === selectedCategory.id)
-        && (promotion.discount_type === "price_override" || targets.every((target) => catalogProducts.has(target.id)));
-    }
-    if (promotion.activity_id != null && promotion.activity_id !== selectedCategory.activity_id) return false;
-
+    if (promotion.target_category_ids?.length
+      && !promotion.target_category_ids.includes(selectedCategory.id)) return false;
     const targets = promotion.target_products ?? [];
     if (targets.some((target) => !catalogProducts.has(target.id))) return false;
     const targetScopes = new Set(targets.flatMap((target) => {
       const category = catalogCategoryByProductId.get(target.id);
-      return category ? [activityScopeKey(category)] : [];
+      return category ? [categoryScopeKey(category)] : [];
     }));
     if (targetScopes.size > 1) return false;
 
     const [targetScope] = targetScopes;
-    if (targetScope) return targetScope === selectedActivityScope;
-    if (targets.length > 0) return promotion.activity_id != null;
-    return promotion.activity_id === selectedCategory.activity_id;
+    return !targetScope || targetScope === selectedTargetCategoryScope;
   });
   const bundlePromotions = categoryPromotions.filter((promotion) => (
     promotion.discount_type === "bundle_price"
@@ -809,8 +795,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
         <h2 ref={delegationReadyRef} tabIndex={-1}>{delegationContext ? `${delegationContext.link.name} · 為 ${delegationContext.student_name} 代訂` : "家長代訂"}</h2>
         {authLoading && <p role="status">確認登入帳號與代訂授權中…</p>}
         {!authLoading && isLoggedIn && <p className="shop-delegation-account">目前帳號：<strong>{currentAccount}</strong></p>}
-        {delegationContext && <p className="shop-delegation-scope"><strong>授權範圍：{[...new Set((delegationContext.catalog ?? []).map((category) =>
-          category.activity_name ?? category.name))].join("、") || "此連結的活動"}</strong>。本頁只顯示可代訂的商品。</p>}
+        {delegationContext && <p className="shop-delegation-scope"><strong>授權分類：{[...new Set((delegationContext.catalog ?? []).map((category) => category.name))].join("、") || "商品分類"}</strong>。本頁只顯示可代訂的商品。</p>}
         {delegationError && <p role="alert">{delegationError}</p>}
         {delegationContext?.can_claim && <>
           <p><strong>請先確認學生與登入帳號。</strong>綁定後僅限目前帳號使用；帳號有誤請先重新登入。</p>
@@ -836,10 +821,10 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
             className="shop-delegation-registration"
             aria-labelledby="shop-delegation-registration-title"
           >
-            <h3 id="shop-delegation-registration-title">學生在此活動的預購</h3>
+            <h3 id="shop-delegation-registration-title">學生在此商品分類的預購</h3>
             <p>僅可修改此連結登記的品項。</p>
             {delegatedRegistration?.items.length ? (
-              <ul aria-label="學生本活動已登記品項">
+              <ul aria-label="學生本商品分類已登記品項">
                 {delegatedRegistration.items.map((item) => (
                   <li key={item.id}>
                     <div>
@@ -1001,27 +986,27 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
         </div>
       ) : selectedCategory && (
         directLinkClosed ? (
-          <section className="shop-public-closed-page" aria-label="活動結單通知" role="status">
+          <section className="shop-public-closed-page" aria-label="商品分類結單通知" role="status">
             <CircleAlert size={22} aria-hidden="true" />
             <div>
               <h2>{selectedCategoryClosure.councilClosed
                 ? "班聯已結單"
                 : selectedCategoryClosure.classPaid
                   ? "班聯已確認本班收款"
-                  : "活動已到統一結單時間"}</h2>
+                  : "商品分類已結單"}</h2>
               <p>{selectedCategoryClosure.councilClosed
-                ? "此活動商品已從公開目錄隱藏。這個舊連結僅供查看商品詳情與收款紀錄，無法訂購。"
+                ? "此商品分類已從公開目錄隱藏。這個舊連結僅供查看商品詳情與收款紀錄，無法訂購。"
                 : selectedCategoryClosure.classPaid
-                  ? "本班此活動已完成收款確認，暫停登記；其他班級與本班其他活動仍可訂購。"
-                  : "此活動商品已停止登記。這個舊連結僅供查看商品詳情與收款紀錄，無法訂購。"}</p>
+                  ? "本班此商品分類已完成收款確認，暫停登記；其他班級與本班其他商品分類仍可訂購。"
+                  : "此商品分類已停止登記。這個舊連結僅供查看商品詳情與收款紀錄，無法訂購。"}</p>
             </div>
           </section>
         ) : <div>
-          {displayedCatalog.length > 1 && <section className="shop-public-activity-picker" aria-labelledby="shop-activity-title">
-            <div className="shop-public-activity-heading">
-              <h2 id="shop-activity-title">選擇活動</h2>
+          {displayedCatalog.length > 1 && <section className="shop-public-category-picker" aria-labelledby="shop-category-title">
+            <div className="shop-public-category-picker-heading">
+              <h2 id="shop-category-title">選擇商品分類</h2>
             </div>
-            <nav className="shop-public-category-nav" aria-label="選擇商品活動">
+            <nav className="shop-public-category-nav" aria-label="選擇商品分類">
               {displayedCatalog.map((category) => {
                 const isSelected = category.id === selectedCategory.id;
                 const productCount = category.products.length
@@ -1050,16 +1035,13 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
               <h2>{selectedCategory.name}</h2>
               <p>{visibleProductCount} 件商品</p>
             </header>
-            {selectedCategory.order_closes_at && <p className="shop-public-product-deadline">
-              活動結單：{new Date(selectedCategory.order_closes_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}（單品另設期限時以商品標示為準）
-            </p>}
             <TopicOffers key={selectedCategory.id} promotions={categoryPromotions} />
             {bundlePromotions.length > 0 && <section className="shop-bundles" aria-labelledby="shop-bundles-title">
               <div className="shop-bundles-heading">
                 <h2 id="shop-bundles-title" tabIndex={-1}><Gift size={18} aria-hidden="true" />一起買更划算</h2>
                 <p>選購優惠套組</p>
               </div>
-              <BundleCarousel key={selectedCategory.activity_id ?? selectedCategory.id}>
+              <BundleCarousel key={selectedCategory.id}>
                 {bundlePromotions.map((promotion) => <BundleOffer key={promotion.id}
                   promotion={promotion} promotions={bundlePromotions}
                   products={catalogProducts} registration={selectedCategoryRegistration}
@@ -1093,8 +1075,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
             )}
             <OrderClosureNotice
               status={selectedCategoryCloseStatus}
-              activityClosedAt={selectedCategory.order_closed_at ?? null}
-              activityClosesAt={selectedCategory.order_closes_at ?? null}
+              categoryClosedAt={selectedCategory.order_closed_at ?? null}
             />
             <div id="shop-product-selection" className="shop-public-series-list" tabIndex={-1}>
               {!selectedSeriesId && selectedCategory.products.length > 0 && (
@@ -1105,7 +1086,6 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                         key={product.id}
                         product={product}
                         featured={selectedCategory.products.length === 1}
-                        categoryDeadline={selectedCategory.order_closes_at ?? null}
                         bundleHint={bundleHintFor(product)}
                         promotions={categoryPromotions}
                         products={catalogProducts}
@@ -1116,7 +1096,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                             ? Boolean(delegationContext?.can_edit)
                             : canOrderForSelf || product.status === "testing")}
                         onSelectBundle={(promotion) => selectBundleProduct(promotion, product.id)}
-                        cardPrice={shopCardPrice(product, categoryPromotions, selectedCategory.activity_id ?? null, selectedCategoryRegistration, selectedCategory.id)}
+                        cardPrice={shopCardPrice(product, categoryPromotions, selectedCategoryRegistration, selectedCategory.id)}
                         classClosed={Boolean(closeStatus[selectedCategory.id]?.is_closed && !closeStatus[selectedCategory.id]?.is_global)}
                         councilClosed={Boolean(closeStatus[selectedCategory.id]?.is_global)}
                         registeredQuantity={registeredByProduct.get(product.id) ?? 0}
@@ -1146,7 +1126,6 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                         <ProductCard
                           key={product.id}
                           product={product}
-                          categoryDeadline={selectedCategory.order_closes_at ?? null}
                           bundleHint={bundleHintFor(product)}
                           promotions={categoryPromotions}
                           products={catalogProducts}
@@ -1157,7 +1136,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
                               ? Boolean(delegationContext?.can_edit)
                               : canOrderForSelf || product.status === "testing")}
                           onSelectBundle={(promotion) => selectBundleProduct(promotion, product.id)}
-                          cardPrice={shopCardPrice(product, categoryPromotions, selectedCategory.activity_id ?? null, selectedCategoryRegistration, selectedCategory.id)}
+                          cardPrice={shopCardPrice(product, categoryPromotions, selectedCategoryRegistration, selectedCategory.id)}
                           classClosed={Boolean(closeStatus[selectedCategory.id]?.is_closed && !closeStatus[selectedCategory.id]?.is_global)}
                           councilClosed={Boolean(closeStatus[selectedCategory.id]?.is_global)}
                           registeredQuantity={registeredByProduct.get(product.id) ?? 0}
@@ -1211,22 +1190,21 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
         <div className="public-site shop-delegation-panel">
           {authLoading ? <p role="status">正在確認帳號身分…</p> : isStudent ? <>
             <p className="shop-delegation-intro">建立一組驗證碼，讓家人用自己的帳號替你選購。</p>
-            {catalog.length > 0 && <label className="shop-delegation-activity">選擇活動
+            {catalog.length > 0 && <label className="shop-delegation-activity">商品分類
               <select value={selectedCategory?.id ?? ""} onChange={(event) => setSelectedCategoryId(event.target.value)}>
                 {catalog.map((category) => <option key={category.id} value={category.id}>
-                  {category.activity_name ? `${category.activity_name} · ${category.name}` : category.name}
+                  {category.name}
                 </option>)}
               </select>
             </label>}
             {selectedCategory ? <DelegationLinks
               key={catalogScopeKey(selectedCategory)} initiallyCreating
-              categoryId={selectedCategory.id} activityId={selectedCategory.activity_id ?? null}
-              scopeName={selectedCategory.activity_name ?? selectedCategory.name} />
+              categoryId={selectedCategory.id} scopeName={selectedCategory.name} />
               : <>
                 <h2>邀請家人幫我訂購</h2>
-                <p>{loading ? "正在載入可授權的活動…" : loadError
-                  ? "活動載入失敗，請重試後建立代訂連結。" : "目前沒有可授權的商品活動，開放預購後即可建立代訂連結。"}</p>
-                {loadError && <button type="button" className="btn btn-secondary" onClick={() => void loadCatalog()}>重新載入活動</button>}
+                <p>{loading ? "正在載入商品分類…" : loadError
+                  ? "商品分類載入失敗，請重試後建立代訂連結。" : "目前沒有可授權的商品分類，開放預購後即可建立代訂連結。"}</p>
+                {loadError && <button type="button" className="btn btn-secondary" onClick={() => void loadCatalog()}>重新載入商品分類</button>}
                 <DelegationInstructions />
               </>}
           </> : <ParentDelegationEntry isLoggedIn={isLoggedIn} />}
@@ -1237,7 +1215,6 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
         <ProductModal
           productId={openProduct}
           promotions={categoryPromotions}
-          activityId={selectedCategory?.activity_id ?? null}
           categoryId={selectedCategory?.id ?? null}
           bundleAddOn={(disabled) => <BundleAddOn productId={openProduct} promotions={categoryPromotions}
             products={catalogProducts} registration={selectedCategoryRegistration}
@@ -1260,8 +1237,7 @@ export default function ShopPage({ topicSlug, productSlug }: ShopPageProps = {})
           getProduct={getProduct}
           saveVariant={saveVariant}
           closeStatus={selectedCategory ? closeStatus[selectedCategory.id] : undefined}
-          activityClosedAt={selectedCategory?.order_closed_at ?? null}
-          activityClosesAt={selectedCategory?.order_closes_at ?? null}
+          categoryClosedAt={selectedCategory?.order_closed_at ?? null}
           isLoggedIn={isLoggedIn}
           authLoading={authLoading}
           classStatusLoading={classStatusLoading}

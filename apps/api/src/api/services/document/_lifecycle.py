@@ -257,7 +257,6 @@ async def create_document(
         issuer_postal_code=data.issuer_postal_code,
         issuer_address=data.issuer_address,
         org_id=data.org_id,
-        activity_id=data.activity_id,
         petition_case_id=data.petition_case_id,
         created_by=created_by,
         status=DocumentStatus.DRAFT,

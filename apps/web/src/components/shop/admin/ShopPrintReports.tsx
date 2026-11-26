@@ -14,7 +14,6 @@ import styles from "./ShopPrintDocument.module.css";
 import { classOrderPages } from "./class-order-document";
 
 export type ShopPurchaseReportFilters = {
-  activity_id?: string;
   category_id?: string;
   product_id?: string;
   grade?: string;

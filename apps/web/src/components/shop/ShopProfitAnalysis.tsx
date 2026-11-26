@@ -171,7 +171,7 @@ export default function ShopProfitAnalysis({ refresh = 0 }: { refresh?: number }
       setCategories(rows);
       setSelected((id) => rows.some((row) => row.id === id) ? id : rows[0]?.id ?? "");
     }).catch((cause) => {
-      if (!cancelled) setOptionsError(apiErrorMessage(cause, "無法載入分析活動，請重試。"));
+      if (!cancelled) setOptionsError(apiErrorMessage(cause, "無法載入分析商品分類，請重試。"));
     }).finally(() => { if (!cancelled) setOptionsBusy(false); });
     return () => { cancelled = true; };
   }, [optionsRetry]);
@@ -204,17 +204,17 @@ export default function ShopProfitAnalysis({ refresh = 0 }: { refresh?: number }
       <button className="btn btn-ghost" type="button" disabled={!current || busy || Boolean(error) || editing.size > 0} onClick={download}><Download size={16} />匯出採購分析 CSV</button>
     </header>
     <div className={styles.scope}>
-      <label>盈利分析活動
+      <label>盈利分析商品分類
         <select className="input" value={selected} disabled={optionsBusy || editing.size > 0} onChange={(e) => { setSelected(e.target.value); setMessage(""); }}>
-          {!categories.length && <option value="">{optionsBusy ? "載入中…" : "尚無活動"}</option>}
+          {!categories.length && <option value="">{optionsBusy ? "載入中…" : "尚無商品分類"}</option>}
           {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
         </select>
       </label>
     </div>
-    {editing.size > 0 && <p role="status">正在編輯採購設定；請儲存或取消後再切換活動、匯出。離開此頁籤會捨棄未儲存內容。</p>}
-    {optionsError && <p role="alert">{optionsError}<button className="btn btn-ghost" type="button" onClick={() => setOptionsRetry((v) => v + 1)}>重試活動</button></p>}
+    {editing.size > 0 && <p role="status">正在編輯採購設定；請儲存或取消後再切換商品分類、匯出。離開此頁籤會捨棄未儲存內容。</p>}
+    {optionsError && <p role="alert">{optionsError}<button className="btn btn-ghost" type="button" onClick={() => setOptionsRetry((v) => v + 1)}>重試商品分類</button></p>}
     {error && <p role="alert">{error}<button className="btn btn-ghost" type="button" onClick={() => setRevision((v) => v + 1)}>重試盈利分析</button>{current && "下方保留上次資料，尚未更新。"}</p>}
-    <p role="status" className={styles.muted}>{busy || optionsBusy ? "正在載入盈利分析…" : message || (current ? `更新時間：${new Date(current.generated_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}` : !categories.length && !optionsError ? "尚無可分析的活動。" : "")}</p>
+    <p role="status" className={styles.muted}>{busy || optionsBusy ? "正在載入盈利分析…" : message || (current ? `更新時間：${new Date(current.generated_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}` : !categories.length && !optionsError ? "尚無可分析的商品分類。" : "")}</p>
     {summary && <>
       <div className={styles.overview}>
         <div className={styles.balance}>
@@ -242,7 +242,7 @@ export default function ShopProfitAnalysis({ refresh = 0 }: { refresh?: number }
       </dl>
       <p className={styles.cash}>班聯已確認收款 <b>{money(summary.paid_amount)}</b> · 未確認 <b>{money(summary.unpaid_amount)}</b> · 已確認收款減整批成本 <b>{money(summary.cash_balance)}</b>。此為資金需求估算，未追蹤實際支付廠商款項。</p>
       <h3 className={styles.sectionTitle}>逐商品採購與分析</h3>
-      {!current.products.length && <p>此活動尚無商品，請先到商品管理建立商品。</p>}
+      {!current.products.length && <p>此商品分類尚無商品，請先到商品管理建立商品。</p>}
       {current.products.map((row) => <ProductPlan key={row.product_id} row={row}
         onEditing={(active) => setEditing((ids) => { const next = new Set(ids); if (active) next.add(row.product_id); else next.delete(row.product_id); return next; })}
         onSaved={() => { setMessage(`${row.name}採購設定已儲存。`); setRevision((v) => v + 1); }} />)}

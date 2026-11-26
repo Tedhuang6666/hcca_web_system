@@ -43,8 +43,8 @@ const firstOrder = {
   id: "first",
   serial_number: "ORDER-001",
   user_id: "student",
-  activity_id: "festival",
-  activity_name: "校慶",
+
+
   category_id: "goods",
   category_name: "紀念品",
   status: "pending",
@@ -136,7 +136,7 @@ describe("公開訂單詳情", () => {
   });
 
   it("allows direct editing of the pending addition when a collected order appears first", async () => {
-    navigation.search = "view=activity";
+    navigation.search = "view=category";
     api.getCurrentRegistrations.mockResolvedValue([firstOrder, addedOrder]);
     api.catalog.mockResolvedValue([{ id: "goods", products: [{ id: "bag", status: "active" }], series: [] }]);
     api.getCloseStatus.mockResolvedValue({ statuses: { goods: { is_closed: false } } });
@@ -161,13 +161,13 @@ describe("公開訂單詳情", () => {
     expect(screen.queryByText("NT$100")).not.toBeInTheDocument();
   });
 
-  it("combines every preorder from the same activity into one detail view", async () => {
-    navigation.search = "view=activity";
+  it("combines every preorder from the same category into one detail view", async () => {
+    navigation.search = "view=category";
     const { container } = render(<OrderDetailPage />);
 
-    expect(await screen.findByRole("heading", { name: "校慶" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "紀念品" })).toBeVisible();
     expect(container.querySelector('img[alt=""]')).toHaveAttribute("src", expect.stringContaining("bag.png"));
-    expect(screen.getByText("活動預購總額").parentElement).toHaveTextContent("NT$300");
+    expect(screen.getByText("分類預購總額").parentElement).toHaveTextContent("NT$300");
     expect(screen.getAllByText("NT$300").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText(/×\s*3/)).toBeVisible();
     expect(screen.getByText("已繳金額")).toBeVisible();
@@ -176,10 +176,10 @@ describe("公開訂單詳情", () => {
     expect(api.getOrder).toHaveBeenCalledWith("added");
   });
 
-  it("reloads a single saved order when leaving the activity summary", async () => {
-    navigation.search = "view=activity";
+  it("reloads a single saved order when leaving the category summary", async () => {
+    navigation.search = "view=category";
     const { rerender } = render(<OrderDetailPage />);
-    expect(await screen.findByText("活動預購總額")).toHaveTextContent("活動預購總額");
+    expect(await screen.findByText("分類預購總額")).toHaveTextContent("分類預購總額");
 
     navigation.search = "";
     rerender(<OrderDetailPage />);
@@ -196,7 +196,7 @@ describe("公開訂單詳情", () => {
     });
     const { container } = render(<OrderDetailPage />);
 
-    expect(await screen.findByRole("heading", { name: "校慶" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "紀念品" })).toBeVisible();
     expect(container.querySelector('img[alt=""]')).toHaveAttribute(
       "src",
       expect.stringContaining("bag-gallery.png"),

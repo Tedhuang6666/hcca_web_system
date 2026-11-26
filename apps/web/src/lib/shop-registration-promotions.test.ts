@@ -9,7 +9,7 @@ const api = vi.hoisted(() => ({
 vi.mock("@/lib/api", () => ({ shopApi: api }));
 
 const order: OrderOut = {
-  id: "order-1", user_id: "user-1", activity_id: "activity-1", category_id: "category-1",
+  id: "order-1", user_id: "user-1", category_id: "category-1",
   status: "pending", serial_number: "ORDER-001", created_at: "2026-10-25T00:00:00Z",
   updated_at: "2026-10-25T00:00:00Z", subtotal_price: 200, discount_amount: 0, total_price: 200,
   promotion_id: null, promotion_code: null, applied_promotions: [], is_paid: false,
@@ -43,8 +43,8 @@ it("applies the latest automatic promotion to an existing unpaid registration", 
   api.applyCurrentPromotion.mockResolvedValue(updated);
 
   await expect(refreshAutomaticRegistrationPromotions([order])).resolves.toEqual([updated]);
-  expect(api.previewCurrentPromotion).toHaveBeenCalledWith(null, "activity-1", null);
-  expect(api.applyCurrentPromotion).toHaveBeenCalledWith(null, "activity-1", null);
+  expect(api.previewCurrentPromotion).toHaveBeenCalledWith(null, "category-1");
+  expect(api.applyCurrentPromotion).toHaveBeenCalledWith(null, "category-1");
 });
 
 it("recalculates changed discounts and clears an automatic promotion that is no longer eligible", async () => {
@@ -76,7 +76,7 @@ it("updates an existing automatic discount when its current value changes", asyn
   api.applyCurrentPromotion.mockResolvedValue(updated);
 
   await expect(refreshAutomaticRegistrationPromotions([previouslyDiscounted])).resolves.toEqual([updated]);
-  expect(api.applyCurrentPromotion).toHaveBeenCalledWith(null, "activity-1", null);
+  expect(api.applyCurrentPromotion).toHaveBeenCalledWith(null, "category-1");
 });
 
 it("does not write again when the saved automatic promotion matches the current preview", async () => {

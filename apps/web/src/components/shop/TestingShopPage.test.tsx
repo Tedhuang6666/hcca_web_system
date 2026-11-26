@@ -47,7 +47,7 @@ it("商品詳情的尺寸表隨尺寸按鈕切換標示", async () => {
 });
 
 const formalOrder: OrderOut = {
-  id: "formal-order", user_id: "tester", activity_id: "festival", status: "pending",
+  id: "formal-order", user_id: "tester", category_id: "goods", status: "pending",
   serial_number: "FORMAL-001", created_at: "2026-10-22T00:00:00Z", updated_at: "2026-10-22T00:00:00Z",
   assistance_scope: "self", payment_method: "cash_on_pickup",
   total_price: 200, subtotal_price: 200, discount_amount: 0, is_paid: false, is_class_collected: false,
@@ -59,7 +59,7 @@ it("優惠很多時先選規格，優惠收合且不影響登記購買", async (
   api.me.mockResolvedValue({ id: "tester", student_id: "310001" });
   api.getCurrentRegistrations.mockResolvedValue([]);
   api.listAvailablePromotions.mockResolvedValue(Array.from({ length: 12 }, (_, index) => ({ gift_quantity: 1,
-    id: `sale-${index}`, name: `滿額優惠 ${index + 1}`, activity_id: "festival",
+    id: `sale-${index}`, name: `滿額優惠 ${index + 1}`, target_category_ids: ["goods"],
     discount_type: "fixed", discount_value: 10, min_order_price: 1000, min_quantity: 1,
     target_products: [{ id: "formal", name: "正式商品" }],
   })));
@@ -138,11 +138,11 @@ it("登記贈品後，商品詳情由尚未登記更新為已套用贈品優惠"
   api.me.mockResolvedValue({ id: "tester", student_id: "310001", email: "tester@example.test" });
   api.getCurrentRegistrations.mockResolvedValue([]);
   api.listAvailablePromotions.mockResolvedValue([{ gift_quantity: 1,
-    id: "gift", name: "抽獎贈品", activity_id: "festival", discount_type: "percentage", discount_value: 100,
+    id: "gift", name: "抽獎贈品", target_category_ids: ["goods"], discount_type: "percentage", discount_value: 100,
     min_order_price: 0, min_quantity: 1, target_products: [{ id: "formal", name: "正式商品" }],
   }]);
   api.setCurrentRegistrationProduct.mockResolvedValue({ ...formalOrder, subtotal_price: 100, total_price: 0,
-    discount_amount: 100, promotion_id: "gift", applied_promotions: [{ promotion_id: "gift", name: "抽獎贈品", discount_amount: 100 }],
+    discount_amount: 100, promotion_id: "gift", applied_promotions: [{ promotion_id: "gift", name: "抽獎贈品", target_category_ids: ["goods"], discount_amount: 100 }],
     items: [{ ...formalOrder.items[0], quantity: 1, subtotal: 100 }],
   });
   render(<ShopPage />);
@@ -162,7 +162,7 @@ afterEach(() => { vi.unstubAllGlobals(); });
 
 it.each(["棉T", "刷毛帽T", "風衣外套"])("%s 使用後台主圖與圖集，不自動加入模特兒照", async (name) => {
   const product = { ...formalProduct, name, image_url: "/front.png" };
-  api.catalog.mockResolvedValue([{ id: "goods", name: "104 校慶商品", activity_id: "festival",
+  api.catalog.mockResolvedValue([{ id: "goods", name: "104 校慶商品",
     sort_order: 0, products: [product], series: [] }]);
   api.getProduct.mockResolvedValue({ ...product, variant_groups: [], media: [
     { id: "front", image_url: "/front.png", label: "正面", kind: "product" },
@@ -184,7 +184,7 @@ it.each(["棉T", "刷毛帽T", "風衣外套"])("%s 使用後台主圖與圖集�
 });
 
 it("未上傳照片的服飾不產生虛構圖片", async () => {
-  api.catalog.mockResolvedValue([{ id: "goods", name: "104 校慶商品", activity_id: "festival",
+  api.catalog.mockResolvedValue([{ id: "goods", name: "104 校慶商品",
     sort_order: 0, products: [{ ...formalProduct, name: "棉T" }], series: [] }]);
   render(<ShopPage />);
   const card = await screen.findByRole("link", { name: "查看商品：棉T" });
@@ -322,7 +322,7 @@ beforeEach(() => {
   window.localStorage.clear();
   window.history.replaceState({}, "", "/shop");
   api.me.mockResolvedValue({ id: "tester", email: "tester@example.test", display_name: "測試人員" });
-  api.catalog.mockResolvedValue([{ id: "goods", name: "商品", activity_id: "festival",
+  api.catalog.mockResolvedValue([{ id: "goods", name: "商品",
     sort_order: 0, products: [testingProduct, formalProduct], series: [] }]);
   api.getCloseStatus.mockResolvedValue({ statuses: {} });
   api.myClass.mockResolvedValue(null);
@@ -341,11 +341,11 @@ it.each([
   { discount_type: "price_override" as const, discount_value: 0, price: 60 },
 ])("已有登記時商品卡片與詳情仍顯示 $discount_type 特殊優惠價", async (sale) => {
   const product = { ...formalProduct, original_price: 150 };
-  api.catalog.mockResolvedValue([{ id: "goods", name: "商品", activity_id: "festival",
+  api.catalog.mockResolvedValue([{ id: "goods", name: "商品",
     sort_order: 0, products: [product], series: [] }]);
   api.getProduct.mockResolvedValue({ ...product, variant_groups: [], media: [] });
   api.listAvailablePromotions.mockResolvedValue([{ gift_quantity: 1,
-    id: "sale", name: "特殊優惠", activity_id: "festival", code: null,
+    id: "sale", name: "特殊優惠", target_category_ids: ["goods"], code: null,
     discount_type: sale.discount_type, discount_value: sale.discount_value,
     min_quantity: 1, min_order_price: 0, target_products: [{ id: product.id, name: product.name }],
     product_price_overrides: [{ product_id: product.id, product_name: product.name, unit_price: 60 }],
@@ -385,7 +385,7 @@ it("only shows eligible tickets and removes empty series, themes and related bun
   for (const name of ["工作人員票", "工作票種", "表演人員專屬", "限定工作套組", "您不符合購買資格"]) {
     expect(screen.queryByText(name)).not.toBeInTheDocument();
   }
-  expect(screen.queryByRole("navigation", { name: "選擇商品活動" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("navigation", { name: "選擇商品分類" })).not.toBeInTheDocument();
 });
 
 it("does not open a restricted ticket through its direct link", async () => {
@@ -412,7 +412,7 @@ it.each(["product", "group"])("keeps a purchased %s-limited ticket editable and 
   const changed: OrderOut = { ...original,
     items: [{ ...original.items[0], selected_options: [option("B")] }] };
   api.me.mockResolvedValue({ id: "tester", student_id: "310001" });
-  api.catalog.mockResolvedValue([{ id: "goods", name: "商品", activity_id: "festival",
+  api.catalog.mockResolvedValue([{ id: "goods", name: "商品",
     sort_order: 0, products: [], series: [
       { id: "tickets", name: "門票", sort_order: 0, products: [ticket] },
     ] }]);
@@ -449,7 +449,7 @@ it.each(["product", "group"])("keeps a purchased %s-limited ticket editable and 
 
 it("keeps a single-purchase product visible when the catalog refreshes after registration", async () => {
   const ticket = { ...formalProduct, max_quantity_per_user: 1, purchase_allowed: true };
-  const catalog = (purchaseAllowed: boolean) => [{ id: "goods", name: "商品", activity_id: "festival",
+  const catalog = (purchaseAllowed: boolean) => [{ id: "goods", name: "商品",
     sort_order: 0, products: [{ ...ticket, purchase_allowed: purchaseAllowed }], series: [] }];
   const registered: OrderOut = { ...formalOrder, total_price: 100, subtotal_price: 100,
     items: [{ ...formalOrder.items[0], quantity: 1, subtotal: 100 }] };
@@ -505,11 +505,11 @@ it("refreshes the latest automatic promotion on an existing registration", async
   render(<ShopPage />);
 
   expect(await screen.findByText(/共省 NT\$40/)).toBeVisible();
-  expect(api.previewCurrentPromotion).toHaveBeenCalledWith(null, "festival", null);
-  expect(api.applyCurrentPromotion).toHaveBeenCalledWith(null, "festival", null);
+  expect(api.previewCurrentPromotion).toHaveBeenCalledWith(null, "goods");
+  expect(api.applyCurrentPromotion).toHaveBeenCalledWith(null, "goods");
 });
 
-it("lets an authorized tester order before launch and preserves the formal registration in the same activity", async () => {
+it("lets an authorized tester order before launch while preserving formal registrations", async () => {
   api.setCurrentRegistrationProduct.mockResolvedValue({ ...formalOrder, id: "test-order",
     test_product_id: "testing", total_price: 100, subtotal_price: 100,
     items: [{ ...formalOrder.items[0], id: "test-item", product_id: "testing", product_name: "測試限定商品", quantity: 1, subtotal: 100 }],
@@ -533,23 +533,23 @@ it("lets an authorized tester order before launch and preserves the formal regis
   expect(await screen.findByRole("button", { name: "移除這項登記" })).toBeEnabled();
 });
 
-it("keeps a saved activity promotion out of a product route for another activity", async () => {
+it("keeps a saved category promotion out of a product route for another category", async () => {
   const christmasProduct = { ...formalProduct, id: "christmas-card", name: "聖誕卡片" };
   const christmasSnack = { ...formalProduct, id: "christmas-snack", name: "聖誕點心" };
   const festivalProduct = { ...formalProduct, id: "festival-shirt", name: "校慶衣服" };
   const festivalSnack = { ...formalProduct, id: "festival-drink", name: "校慶飲料" };
   window.localStorage.setItem("hcca:pref:shop:category:v1", JSON.stringify("christmas"));
   api.catalog.mockResolvedValue([
-    { id: "christmas", name: "聖誕傳情", activity_id: "christmas", activity_name: "聖誕傳情",
+    { id: "christmas", name: "聖誕傳情",
       sort_order: 0, products: [christmasProduct, christmasSnack], series: [] },
-    { id: "festival", name: "校慶商品", activity_id: "festival", activity_name: "校慶",
+    { id: "festival", name: "校慶商品",
       sort_order: 1, products: [festivalProduct, festivalSnack], series: [] },
   ]);
   api.listAvailablePromotions.mockResolvedValue([
-    { gift_quantity: 1, id: "christmas-bundle", name: "聖誕傳情套組", activity_id: "christmas",
+    { gift_quantity: 1, id: "christmas-bundle", name: "聖誕傳情套組", target_category_ids: ["christmas"],
       discount_type: "bundle_price", discount_value: 150, min_order_price: 0, min_quantity: 1,
       target_products: [christmasProduct, christmasSnack] },
-    { gift_quantity: 1, id: "festival-bundle", name: "校慶優惠套組", activity_id: "festival",
+    { gift_quantity: 1, id: "festival-bundle", name: "校慶優惠套組", target_category_ids: ["festival"],
       discount_type: "bundle_price", discount_value: 150, min_order_price: 0, min_quantity: 1,
       target_products: [festivalProduct, festivalSnack] },
   ]);
@@ -563,7 +563,7 @@ it("keeps a saved activity promotion out of a product route for another activity
   expect(screen.queryByRole("button", { name: "選購套組：聖誕傳情套組" })).not.toBeInTheDocument();
 });
 
-it("keeps unscoped bundle offers with another category's products out of the selected activity", async () => {
+it("keeps unscoped bundle offers with another category's products out of the selected category", async () => {
   const christmasProduct = { ...formalProduct, id: "christmas-card", name: "聖誕卡片" };
   const christmasSnack = { ...formalProduct, id: "christmas-snack", name: "聖誕點心" };
   const festivalProduct = { ...formalProduct, id: "festival-shirt", name: "校慶衣服" };
@@ -575,10 +575,10 @@ it("keeps unscoped bundle offers with another category's products out of the sel
       products: [festivalProduct, festivalSnack], series: [] },
   ]);
   api.listAvailablePromotions.mockResolvedValue([
-    { gift_quantity: 1, id: "christmas-bundle", name: "聖誕傳情套組", activity_id: null,
+    { gift_quantity: 1, id: "christmas-bundle", name: "聖誕傳情套組", target_category_ids: ["christmas"],
       discount_type: "bundle_price", discount_value: 150, min_order_price: 0, min_quantity: 1,
       target_products: [christmasProduct, christmasSnack] },
-    { gift_quantity: 1, id: "festival-bundle", name: "校慶優惠套組", activity_id: null,
+    { gift_quantity: 1, id: "festival-bundle", name: "校慶優惠套組", target_category_ids: ["festival"],
       discount_type: "bundle_price", discount_value: 150, min_order_price: 0, min_quantity: 1,
       target_products: [festivalProduct, festivalSnack] },
   ]);
@@ -590,18 +590,17 @@ it("keeps unscoped bundle offers with another category's products out of the sel
   expect(screen.queryByRole("article", { name: "校慶優惠套組" })).not.toBeInTheDocument();
 });
 
-it("shows a shared deadline once and keeps a product's extended deadline visible", async () => {
-  api.catalog.mockResolvedValue([{ id: "goods", name: "校慶預購", activity_id: "festival",
-    sort_order: 0, order_closes_at: "2099-10-31T00:00:00Z", series: [], products: [
+it("shows the category deadline once and keeps a product's extended deadline visible", async () => {
+  api.catalog.mockResolvedValue([{ id: "goods", name: "校慶預購",
+    sort_order: 0, series: [], products: [
       { ...formalProduct, sale_end: "2099-10-31T00:00:00Z" },
       { ...formalProduct, id: "extended", name: "延長預購商品", sale_end: "2099-11-02T00:00:00Z" },
     ] }]);
   render(<ShopPage />);
 
   await screen.findByRole("heading", { name: "校慶預購" });
-  expect(screen.queryByRole("navigation", { name: "選擇商品活動" })).not.toBeInTheDocument();
-  expect(screen.getByText(/活動結單：/)).toBeVisible();
-  expect(within(screen.getByRole("article", { name: "正式商品商品" })).queryByText(/^截止/)).not.toBeInTheDocument();
+  expect(screen.queryByRole("navigation", { name: "選擇商品分類" })).not.toBeInTheDocument();
+  expect(within(screen.getByRole("article", { name: "正式商品商品" })).getByText(/^截止/)).toBeVisible();
   expect(within(screen.getByRole("article", { name: "延長預購商品商品" })).getByText(/^截止/)).toBeVisible();
 });
 
@@ -609,11 +608,8 @@ it("shows old links to globally closed products as closed details with both coll
   const closedProduct = { ...formalProduct, id: "closed-product", name: "結單商品" };
   const closedCategory = {
     id: "closed-category",
-    name: "已結單活動",
-    activity_id: "closed-activity",
-    activity_name: "已結單活動",
+    name: "已結單分類",
     order_closed_at: "2026-10-20T10:00:00Z",
-    order_closes_at: null,
     sort_order: 0,
     products: [closedProduct],
     series: [],
@@ -641,20 +637,18 @@ it("shows old links to globally closed products as closed details with both coll
   expect(within(dialog).getByText("班聯確認時間")).toBeVisible();
   expect(within(dialog).getByText(/2026.*10.*21/)).toBeVisible();
   expect(within(dialog).getByText(/2026.*10.*22/)).toBeVisible();
-  expect(screen.queryByRole("navigation", { name: "選擇商品活動" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("navigation", { name: "選擇商品分類" })).not.toBeInTheDocument();
   expect(within(dialog).getByRole("button", { name: "班聯已結單" })).toBeDisabled();
   expect(within(dialog).queryByRole("link", { name: "登入後登記商品" })).not.toBeInTheDocument();
-  expect(within(dialog).getByText("班聯已結單，此活動商品已停止訂購")).toBeVisible();
+  expect(within(dialog).getByRole("button", { name: "班聯已結單" })).toBeDisabled();
   expect(within(dialog).queryByText(/代訂需要學生授權/)).not.toBeInTheDocument();
 });
 
-it("hides closed activities from the public catalog and shows an empty state", async () => {
+it("hides closed categories from the public catalog and shows an empty state", async () => {
   api.catalog.mockResolvedValue([{
     id: "closed-category",
-    name: "已結單活動",
-    activity_id: "closed-activity",
+    name: "已結單分類",
     order_closed_at: "2026-10-20T10:00:00Z",
-    order_closes_at: null,
     sort_order: 0,
     products: [{ ...formalProduct, id: "closed-product", name: "結單商品" }],
     series: [],
@@ -664,19 +658,18 @@ it("hides closed activities from the public catalog and shows an empty state", a
 
   expect(await screen.findByText("目前沒有可訂購的商品，請稍後再來看看。")).toBeVisible();
   expect(screen.queryByText("結單商品")).not.toBeInTheDocument();
-  expect(screen.queryByRole("navigation", { name: "選擇商品活動" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("navigation", { name: "選擇商品分類" })).not.toBeInTheDocument();
 });
 
-it.each(["activity", "deadline", "global"] as const)(
-  "hides an activity closed by %s without closure or payment notices",
+it.each(["category", "global"] as const)(
+  "hides a category closed by %s without closure or payment notices",
   async (reason) => {
     window.history.replaceState({}, "", "/shop?product=closed-product");
     window.localStorage.setItem("hcca:pref:shop:category:v1", JSON.stringify("closed-category"));
     api.myClass.mockResolvedValue({ id: "class-1", label: "一年一班" });
     api.catalog.mockResolvedValue([
-      { id: "closed-category", name: "已結單活動", sort_order: 0, series: [],
-        order_closed_at: reason === "activity" ? "2026-10-20T10:00:00Z" : null,
-        order_closes_at: reason === "deadline" ? "2026-10-20T10:00:00Z" : null,
+      { id: "closed-category", name: "已結單分類", sort_order: 0, series: [],
+        order_closed_at: reason === "category" ? "2026-10-20T10:00:00Z" : null,
         products: [{ ...formalProduct, id: "closed-product", name: "結單商品" }] },
       { id: "winter", name: "冬季預購", sort_order: 1, series: [],
         products: [{ ...formalProduct, id: "winter-product", name: "冬季商品" }] },
@@ -689,18 +682,18 @@ it.each(["activity", "deadline", "global"] as const)(
     render(<ShopPage />);
 
     expect(await screen.findByRole("link", { name: "查看商品：冬季商品" })).toBeVisible();
-    expect(screen.queryByText("已結單活動")).not.toBeInTheDocument();
+    expect(screen.queryByText("已結單分類")).not.toBeInTheDocument();
     expect(screen.queryByText("結單商品")).not.toBeInTheDocument();
-    expect(screen.queryByText("部分活動已結單")).not.toBeInTheDocument();
+    expect(screen.queryByText("部分商品分類已結單")).not.toBeInTheDocument();
     expect(screen.queryByText("班聯已確認本班收款")).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "活動結單通知" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("navigation", { name: "選擇商品活動" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "商品分類結單通知" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "選擇商品分類" })).not.toBeInTheDocument();
     expect(screen.getByRole("group", { name: "我的班級" })).not.toHaveAttribute("data-closed");
   },
 );
 
-it("keeps a paid class activity visible and another activity orderable", async () => {
+it("keeps one paid category visible while another category remains orderable", async () => {
   window.localStorage.setItem("hcca:pref:shop:category:v1", JSON.stringify("goods"));
   api.me.mockResolvedValue({ id: "tester", display_name: "測試同學", email: "student@example.test", student_id: "student-1" });
   api.myClass.mockResolvedValue({ id: "class-1", label: "一年一班" });
@@ -709,9 +702,9 @@ it("keeps a paid class activity visible and another activity orderable", async (
     variant_groups: [], media: [] });
   api.setCurrentRegistrationProduct.mockResolvedValue(null);
   api.catalog.mockResolvedValue([
-    { id: "goods", name: "校慶商品", activity_id: "festival", sort_order: 0,
+    { id: "goods", name: "校慶商品", sort_order: 0,
       products: [formalProduct], series: [] },
-    { id: "winter", name: "冬季預購", activity_id: "winter", sort_order: 1,
+    { id: "winter", name: "冬季預購", sort_order: 1,
       products: [{ ...formalProduct, id: "winter-product", name: "冬季商品" }], series: [] },
   ]);
   api.getCloseStatus.mockResolvedValue({ statuses: {
@@ -724,8 +717,8 @@ it("keeps a paid class activity visible and another activity orderable", async (
 
   const product = await screen.findByRole("link", { name: "查看商品：冬季商品" });
   expect(product).toBeVisible();
-  const activities = screen.getByRole("navigation", { name: "選擇商品活動" });
-  expect(within(activities).getByRole("button", { name: /校慶商品.*暫停訂購/ })).toBeVisible();
+  const categories = screen.getByRole("navigation", { name: "選擇商品分類" });
+  expect(within(categories).getByRole("button", { name: /校慶商品.*暫停訂購/ })).toBeVisible();
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(screen.queryByText("目前沒有可訂購的商品，請稍後再來看看。")).not.toBeInTheDocument();
   fireEvent.click(product);
@@ -741,7 +734,7 @@ it("unlocks visible products after payment is revoked while away", async () => {
   api.me.mockResolvedValue({ id: "tester", student_id: "student-1" });
   api.myClass.mockResolvedValue({ id: "class-1", label: "一年一班" });
   api.getCurrentRegistrations.mockResolvedValue([]);
-  api.catalog.mockResolvedValue([{ id: "dance", name: "聯合舞會", activity_id: null,
+  api.catalog.mockResolvedValue([{ id: "dance", name: "聯合舞會",
     sort_order: 0, products: [formalProduct], series: [] }]);
   api.getCloseStatus.mockResolvedValueOnce({ statuses: { dance: { is_closed: true } } });
   api.getCloseStatus.mockResolvedValue({ statuses: { dance: { is_closed: false } } });
@@ -764,7 +757,7 @@ it("refreshes a closed direct link without closing the open product dialog", asy
   api.me.mockResolvedValue({ id: "tester", student_id: "student-1" });
   api.myClass.mockResolvedValue({ id: "class-1", label: "一年一班" });
   api.getCurrentRegistrations.mockResolvedValue([]);
-  api.catalog.mockResolvedValue([{ id: "goods", name: "校商", activity_id: null,
+  api.catalog.mockResolvedValue([{ id: "goods", name: "校商",
     sort_order: 0, products: [formalProduct], series: [] }]);
   api.getCloseStatus.mockResolvedValueOnce({ statuses: { goods: { is_closed: true } } });
   api.getCloseStatus.mockResolvedValue({ statuses: { goods: { is_closed: false } } });
@@ -785,7 +778,7 @@ it("shows direct product details while class closure loads, and holds registrati
   api.listAvailablePromotions.mockResolvedValue([]);
   api.getProduct.mockResolvedValue({ ...formalProduct, variant_groups: [], media: [] });
 
-  const catalog = [{ id: "goods", name: "校商", activity_id: null,
+  const catalog = [{ id: "goods", name: "校商",
     sort_order: 0, products: [formalProduct], series: [] }];
   let finishCatalog!: (data: typeof catalog) => void;
   api.catalog.mockImplementation(() => new Promise<typeof catalog>((resolve) => { finishCatalog = resolve; }));
@@ -802,18 +795,18 @@ it("shows direct product details while class closure loads, and holds registrati
   const dialog = await screen.findByRole("dialog");
   expect(await within(dialog).findByRole("heading", { name: "正式商品" })).toBeVisible();
   expect(api.getCloseStatus).toHaveBeenCalledWith(["goods"], "class-1");
-  expect(screen.getByText("正在確認活動結單狀態…")).toBeVisible();
+  expect(screen.getByText("正在確認商品分類結單狀態…")).toBeVisible();
   expect(screen.getByRole("button", { name: "登記購買 · NT$100" })).toBeDisabled();
 
   await act(async () => { finishCloseStatus({ statuses: { goods: { is_closed: false } } }); });
   await waitFor(() => expect(screen.getByRole("button", { name: "登記購買 · NT$100" })).toBeEnabled());
 });
 
-it("keeps the same activity orderable for another class without payment confirmation", async () => {
+it("keeps the same category orderable for another class without payment confirmation", async () => {
   api.me.mockResolvedValue({ id: "tester", display_name: "測試同學", email: "student@example.test", student_id: "student-2" });
   api.myClass.mockResolvedValue({ id: "class-2", label: "一年二班" });
   api.getCurrentRegistrations.mockResolvedValue([]);
-  api.catalog.mockResolvedValue([{ id: "goods", name: "校慶商品", activity_id: "festival",
+  api.catalog.mockResolvedValue([{ id: "goods", name: "校慶商品",
     sort_order: 0, products: [formalProduct], series: [] }]);
   api.getCloseStatus.mockResolvedValue({ statuses: { goods: { is_closed: false } } });
 
@@ -827,9 +820,9 @@ it("keeps the same activity orderable for another class without payment confirma
   await waitFor(() => expect(register).toBeEnabled());
 });
 
-it.each(["direct", "series"] as const)("keeps the only paid class activity browsable with registration disabled (%s)", async (placement) => {
+it.each(["direct", "series"] as const)("keeps the only paid class category browsable with registration disabled (%s)", async (placement) => {
   api.myClass.mockResolvedValue({ id: "class-1", label: "一年一班" });
-  api.catalog.mockResolvedValue([{ id: "goods", name: "校慶商品", activity_id: "festival",
+  api.catalog.mockResolvedValue([{ id: "goods", name: "校慶商品",
     sort_order: 0, products: placement === "direct" ? [formalProduct] : [],
     series: placement === "series" ? [{ id: "shirts", name: "衣服", products: [formalProduct] }] : [] }]);
   api.getCloseStatus.mockResolvedValue({ statuses: {
@@ -852,9 +845,9 @@ it.each(["direct", "series"] as const)("keeps the only paid class activity brows
   expect(api.setCurrentRegistrationProduct).not.toHaveBeenCalled();
 });
 
-it("does not label class payment confirmation as the activity closure time on a direct link", async () => {
+it("does not label class payment confirmation as the category closure time on a direct link", async () => {
   api.myClass.mockResolvedValue({ id: "class-1", label: "一年一班" });
-  api.catalog.mockResolvedValue([{ id: "goods", name: "校慶商品", activity_id: "festival",
+  api.catalog.mockResolvedValue([{ id: "goods", name: "校慶商品",
     sort_order: 0, products: [formalProduct], series: [] }]);
   api.getCloseStatus.mockResolvedValue({ statuses: {
     goods: { is_closed: true, is_global: false, closed_at: "2026-10-30T08:15:03Z",
@@ -866,8 +859,8 @@ it("does not label class payment confirmation as the activity closure time on a 
   const dialog = await screen.findByRole("dialog");
   expect(within(dialog).getByRole("heading", { name: "班聯已確認本班收款" })).toBeVisible();
   expect(within(dialog).getByText("班聯確認時間")).toBeVisible();
-  expect(within(dialog).queryByText("活動結單時間")).not.toBeInTheDocument();
-  expect(screen.queryByText("部分活動已結單")).not.toBeInTheDocument();
+  expect(within(dialog).queryByText("商品分類結單時間")).not.toBeInTheDocument();
+  expect(screen.queryByText("部分商品分類已結單")).not.toBeInTheDocument();
   expect(within(dialog).getByRole("button", { name: "班聯已確認本班收款" })).toBeDisabled();
 });
 
@@ -877,7 +870,7 @@ it.each(["direct", "series", "route"] as const)("allows authorized testing after
   api.getCloseStatus.mockResolvedValue({ statuses: {
     goods: { is_closed: true, is_global: false },
   } });
-  api.catalog.mockResolvedValue([{ id: "goods", name: "商品", activity_id: "festival",
+  api.catalog.mockResolvedValue([{ id: "goods", name: "商品",
     sort_order: 0, products: inSeries ? [] : [testingProduct], series: inSeries
       ? [{ id: "series", name: "校慶系列", products: [testingProduct] }] : [] }]);
   api.setCurrentRegistrationProduct.mockResolvedValue({ ...formalOrder, id: "test-order",
@@ -888,7 +881,7 @@ it.each(["direct", "series", "route"] as const)("allows authorized testing after
   render(<ShopPage productSlug={placement === "route" ? encodeURIComponent(testingProduct.name) : undefined} />);
 
   fireEvent.click(await screen.findByRole("link", { name: "查看商品：測試限定商品" }));
-  expect(screen.queryByRole("region", { name: "活動結單通知" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "商品分類結單通知" })).not.toBeInTheDocument();
   expect(within(await screen.findByRole("dialog")).queryByRole("heading", {
     name: "班聯已確認本班收款",
   })).not.toBeInTheDocument();
@@ -932,7 +925,7 @@ it("still loads the public catalog when authentication is unavailable", async ()
   expect(screen.queryByRole("link", { name: "查看商品：測試限定商品" })).not.toBeInTheDocument();
 });
 
-it("ignores closure statuses for activities absent from the catalog", async () => {
+it("ignores closure statuses for categories absent from the catalog", async () => {
   api.myClass.mockResolvedValue({ id: "class-1", label: "一年一班" });
   api.getCloseStatus.mockResolvedValue({ statuses: {
     "hidden-category": { is_closed: true, is_global: true },
@@ -941,11 +934,11 @@ it("ignores closure statuses for activities absent from the catalog", async () =
   render(<ShopPage />);
 
   expect(await screen.findByRole("link", { name: "查看商品：正式商品" })).toBeVisible();
-  expect(screen.queryByText("部分活動已結單")).not.toBeInTheDocument();
+  expect(screen.queryByText("部分商品分類已結單")).not.toBeInTheDocument();
   expect(screen.getByRole("group", { name: "我的班級" })).not.toHaveAttribute("data-closed");
 });
 
-it("keeps multiple activities switchable in the compact catalog", async () => {
+it("keeps multiple categories switchable in the compact catalog", async () => {
   api.catalog.mockResolvedValue([
     { id: "goods", name: "校慶預購", sort_order: 0, products: [formalProduct], series: [] },
     { id: "winter", name: "冬季預購", sort_order: 1,
@@ -953,7 +946,7 @@ it("keeps multiple activities switchable in the compact catalog", async () => {
   ]);
   render(<ShopPage />);
 
-  const picker = await screen.findByRole("navigation", { name: "選擇商品活動" });
+  const picker = await screen.findByRole("navigation", { name: "選擇商品分類" });
   fireEvent.click(within(picker).getByRole("button", { name: /冬季預購/ }));
   expect(await screen.findByRole("link", { name: "查看商品：冬季商品" })).toBeVisible();
   expect(screen.queryByRole("link", { name: "查看商品：正式商品" })).not.toBeInTheDocument();
@@ -987,7 +980,7 @@ it("submits a Christmas card without options and shows failure and success besid
   const card = { ...formalProduct, id: "card", name: "卡片", price: 40,
     is_unlimited: true, stock_quantity: 0 };
   api.me.mockResolvedValue({ id: "student", student_id: "synthetic", display_name: "測試學生" });
-  api.catalog.mockResolvedValue([{ id: "christmas", name: "聖誕傳情", activity_id: null,
+  api.catalog.mockResolvedValue([{ id: "christmas", name: "聖誕傳情",
     sort_order: 0, products: [card], series: [] }]);
   api.getCurrentRegistrations.mockResolvedValue([]);
   api.getProduct.mockResolvedValue({ ...card, variant_groups: [], media: [] });
@@ -995,7 +988,7 @@ it("submits a Christmas card without options and shows failure and success besid
   api.setCurrentRegistrationProduct.mockImplementationOnce(() => new Promise((_, reject) => {
     rejectSave = reject;
   }));
-  const saved: OrderOut = { ...formalOrder, activity_id: null, category_id: "christmas", total_price: 40, subtotal_price: 40, items: [
+  const saved: OrderOut = { ...formalOrder, category_id: "christmas", total_price: 40, subtotal_price: 40, items: [
     { ...formalOrder.items[0], product_id: "card", product_name: "卡片", quantity: 1,
       unit_price: 40, subtotal: 40 },
   ] };

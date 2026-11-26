@@ -7,7 +7,7 @@ const api = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn(), configure: vi.fn
 vi.mock("@/lib/api", () => ({ shopSheetApi: api, shopApi: { listProducts: api.listProducts }, apiErrorMessage: (_cause: unknown, fallback: string) => fallback }));
 const categories: ProductCategoryOut[] = [{ id: "category", name: "校慶商品", sort_order: 0, is_active: true,
   created_at: "2026-11-09T00:00:00Z", updated_at: "2026-11-09T00:00:00Z", created_by: "manager",
-  description: null, image_url: null, activity_id: null }];
+  description: null, image_url: null }];
 const source = { id: "source", name: "教師預購", spreadsheet_id: "1otp3Zr-1iRPE2TRzr0Iu5NQmf3XgrkYE_JUT0LQ8f18", sheet_name: "表單回覆 1", category_id: "category", enabled: false, config: {}, last_synced_at: null, last_error: null };
 
 beforeEach(() => {
@@ -20,7 +20,7 @@ it("creates a disabled source and keeps the form after a failed save", async () 
   api.list.mockResolvedValue([]); api.create.mockRejectedValueOnce(new Error("offline")).mockResolvedValue(source);
   render(<ShopSheetImportPanel categories={categories} />);
   await screen.findByText(/尚未設定來源/);
-  fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "category" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "商品分類" }), { target: { value: "category" } });
   fireEvent.click(screen.getByRole("button", { name: "新增同步來源" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("設定未儲存");
   expect(screen.getByRole("textbox", { name: "來源名稱" })).toHaveValue("教師與組織預購");

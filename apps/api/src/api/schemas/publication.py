@@ -15,7 +15,6 @@ class PublicationCampaignCreate(BaseModel):
     body: str = Field(..., min_length=1, max_length=20000)
     source_type: str | None = Field(None, max_length=50)
     source_id: uuid.UUID | None = None
-    activity_id: uuid.UUID | None = None
     org_id: uuid.UUID | None = None
     audience_type: str = Field("all", max_length=50)
     audience_filter: dict = Field(default_factory=dict)
@@ -28,7 +27,6 @@ class PublicationCampaignUpdate(BaseModel):
     body: str | None = Field(None, min_length=1, max_length=20000)
     source_type: str | None = Field(None, max_length=50)
     source_id: uuid.UUID | None = None
-    activity_id: uuid.UUID | None = None
     org_id: uuid.UUID | None = None
     audience_type: str | None = Field(None, max_length=50)
     audience_filter: dict | None = None
@@ -45,7 +43,6 @@ class PublicationCampaignOut(BaseModel):
     body: str
     source_type: str | None
     source_id: uuid.UUID | None
-    activity_id: uuid.UUID | None
     org_id: uuid.UUID | None
     audience_type: str
     audience_filter: dict

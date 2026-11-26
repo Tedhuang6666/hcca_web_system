@@ -13,10 +13,8 @@ from api.services import receivable as receivable_svc
 from api.services import school_class as class_svc
 from api.services.shop._orders import (
     _apply_order_promotion,
-    _assert_activity_order_unlocked,
     _assert_product_registration_open,
     _lock_class_orders,
-    _order_activity_id,
     _order_detail_query,
     _product_category_filter,
     get_order,
@@ -27,8 +25,6 @@ async def get_current_registration(
     session: AsyncSession,
     user_id: uuid.UUID,
     *,
-    activity_id: uuid.UUID | None = None,
-    match_activity: bool = False,
     category_id: uuid.UUID | None = None,
     lock: bool = False,
     reuse_cancelled: bool = False,
@@ -52,11 +48,7 @@ async def get_current_registration(
             Order.is_class_balance.is_(False),
             Order.received_amount == 0,
         )
-    if match_activity:
-        query = query.where(
-            Order.activity_id.is_(None) if activity_id is None else Order.activity_id == activity_id
-        )
-    if match_activity and activity_id is None and category_id is not None:
+    if category_id is not None:
         query = query.where(
             or_(
                 Order.category_id == category_id,
@@ -129,7 +121,6 @@ async def apply_registration_promotion(
     user: User,
     *,
     code: str | None,
-    activity_id: uuid.UUID | None = None,
     category_id: uuid.UUID | None = None,
 ) -> Order:
     school_class = await class_svc.resolve_user_class(session, user)
@@ -137,9 +128,7 @@ async def apply_registration_promotion(
     order = await get_current_registration(
         session,
         user.id,
-        activity_id=activity_id,
         category_id=category_id,
-        match_activity=True,
         lock=True,
         editable_only=True,
     )
@@ -153,8 +142,7 @@ async def apply_registration_promotion(
     ):
         raise ValueError("班級幹部已登記收款，商品登記已鎖定")
     if category_id is not None and order.category_id != category_id:
-        raise ValueError("這筆舊訂單包含多個活動，請聯繫班級幹部處理")
-    await _assert_activity_order_unlocked(session, _order_activity_id(order))
+        raise ValueError("這筆舊訂單包含多個商品分類，請聯繫班級幹部處理")
     for item in order.items:
         await _assert_product_registration_open(
             session, item.product, class_id=order.class_id, allow_sold_out=True

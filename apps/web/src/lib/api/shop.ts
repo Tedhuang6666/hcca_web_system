@@ -11,7 +11,7 @@ import type {
   ShopProfitOut,
   ProductProcurementUpdate,
   ClassOrderCreate, ShopDelegatedOrderOut, ShopDelegationCodeOut, ShopDelegationContextOut, ShopDelegationCreate, ShopDelegationOut,
-  ActivityOut, CatalogCategoryOut, ClassPaymentOut, ClassPaymentReportItemOut, CloseStatusOut, OrderDistributionRow, OrderListItem, OrderOut, OrderPurchaseDetailRow, OrderQuantityRow, OrderSummaryOut, ProductCategoryOut, ProductOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut, ShopClassRepresentativeRecipientOut, ShopClassSummaryOut, ShopOrderCloseOut, ShopOrdersClearOut, ShopPromotionCreate, ShopPromotionOut, ShopPromotionPreviewOut, ShopPromotionPublicOut, ShopPromotionUpdate,
+  CatalogCategoryOut, ClassPaymentOut, ClassPaymentReportItemOut, CloseStatusOut, OrderDistributionRow, OrderListItem, OrderOut, OrderPurchaseDetailRow, OrderQuantityRow, OrderSummaryOut, ProductCategoryOut, ProductOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut, ShopClassRepresentativeRecipientOut, ShopClassSummaryOut, ShopOrderCloseOut, ShopOrdersClearOut, ShopPromotionCreate, ShopPromotionOut, ShopPromotionPreviewOut, ShopPromotionPublicOut, ShopPromotionUpdate,
 } from "../types";
 import { authFetch, BASE, get, post, put, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, uploadWithProgress } from "./core";
 import type { OrderRecalculateOut } from "../api-bridge";
@@ -19,10 +19,9 @@ import type { ProductPurchaseRules, ProductPurchasePermissionOut } from "../type
 import type { ProductPurchaseGroupOptionOut } from "../types";
 import type { ShopTargetLookupRequest, ShopTargetOut } from "../types";
 
-type ReceiptScope = Pick<ClassReceiptBatchCreate, "activity_id" | "category_id">;
+type ReceiptScope = Pick<ClassReceiptBatchCreate, "category_id">;
 
 type OrderQuantityFilters = {
-  activity_id?: string;
   grade?: string;
   class_id?: string;
   category_id?: string;
@@ -59,10 +58,6 @@ export const shopApi = {
     if (!response.ok) throw new ApiError(response.status, await errorMessageFromResponse(response));
     return response;
   },
-  updateActivityDeadline: (id: string, orderClosesAt: string | null) =>
-    patch<ActivityOut>(`/shop/activities/${id}/order-deadline`, { order_closes_at: orderClosesAt }),
-  updateActivityOrderClosure: (id: string, isClosed: boolean) =>
-    patch<ActivityOut>(`/shop/activities/${id}/order-closure`, { is_closed: isClosed }),
   listDelegationLinks: () => get<ShopDelegationOut[]>("/shop/delegation-links"),
   createDelegationLink: (body: ShopDelegationCreate) => post<ShopDelegationOut>("/shop/delegation-links", body),
   renameDelegationLink: (id: string, name: string) => patch<ShopDelegationOut>(`/shop/delegation-links/${id}`, { name }),
@@ -82,9 +77,9 @@ export const shopApi = {
   updateOrderItem: (orderId: string, itemId: string, body: OrderItemQuantityUpdate) =>
     patch<OrderOut | null>(`/shop/orders/${orderId}/items/${itemId}`, body),
   // 瀏覽
-  catalog: (activityId?: string, includeClosed = false, directPath?: string[], classMemberId?: string) => {
+  catalog: (categoryId?: string, includeClosed = false, directPath?: string[], classMemberId?: string) => {
     const q = new URLSearchParams();
-    if (activityId) q.set("activity_id", activityId);
+    if (categoryId) q.set("category_id", categoryId);
     if (includeClosed) q.set("include_closed", "true");
     if (classMemberId) q.set("class_member_id", classMemberId);
     directPath?.forEach((segment) => q.append("direct_path", segment));
@@ -99,8 +94,7 @@ export const shopApi = {
   getProductPurchaseRules: (id: string) => get<ProductPurchaseRules>(`/shop/products/${id}/purchase-rules`),
   getProductCost: (id: string) => get<import("../types").ProductCostOut>(`/shop/products/${id}/cost`),
   purchaseGroupOptions: (categoryId: string) => get<ProductPurchaseGroupOptionOut[]>(`/shop/purchase-group-options?category_id=${encodeURIComponent(categoryId)}`),
-  purchasePermissions: (activityId?: string | null) =>
-    get<ProductPurchasePermissionOut[]>(`/shop/purchase-permissions${activityId ? `?activity_id=${encodeURIComponent(activityId)}` : ""}`),
+  purchasePermissions: () => get<ProductPurchasePermissionOut[]>("/shop/purchase-permissions"),
 
   // 商品登記
   getCurrentRegistration: () => get<OrderOut | null>("/shop/registrations/current"),
@@ -109,16 +103,14 @@ export const shopApi = {
     productId: string,
     body: { variants: { option_ids: string[]; quantity: number }[] },
   ) => put<OrderOut | null>(`/shop/registrations/current/products/${productId}`, body),
-  previewCurrentPromotion: (code: string | null, activityId: string | null, categoryId?: string | null) =>
+  previewCurrentPromotion: (code: string | null, categoryId?: string | null) =>
     post<ShopPromotionPreviewOut>("/shop/registrations/current/promotion/preview", {
       code,
-      activity_id: activityId,
       category_id: categoryId,
     }),
-  applyCurrentPromotion: (code: string | null, activityId: string | null, categoryId?: string | null) =>
+  applyCurrentPromotion: (code: string | null, categoryId?: string | null) =>
     put<OrderOut>("/shop/registrations/current/promotion", {
       code,
-      activity_id: activityId,
       category_id: categoryId,
     }),
 
@@ -147,7 +139,6 @@ export const shopApi = {
   listClassOrders: (params?: {
     is_class_collected?: string;
     assisted_only?: string;
-    activity_id?: string;
     category_id?: string;
     general_only?: string;
     product_id?: string;
@@ -168,7 +159,6 @@ export const shopApi = {
   classSummary: (params?: {
     is_class_collected?: string;
     assisted_only?: string;
-    activity_id?: string;
     category_id?: string;
     general_only?: string;
     product_id?: string;
@@ -179,7 +169,6 @@ export const shopApi = {
   },
   orderSummary: (params: {
     group_by: "class" | "grade" | "user";
-    activity_id?: string;
     product_id?: string;
     category_id?: string;
     grade?: string;
@@ -230,21 +219,19 @@ export const shopApi = {
     patch<OrderOut>(`/shop/orders/${id}/payment`, { is_paid: isPaid }),
   setClassCollected: (id: string, collected: boolean) =>
     patch<OrderOut>(`/shop/orders/${id}/collection`, { is_class_collected: collected }),
-  setClassPaid: (classId: string, isPaid: boolean, activityId: string | null, categoryId?: string,
+  setClassPaid: (classId: string, isPaid: boolean,
     collection?: { received_amount?: number; expected_unpaid_amount: number }) =>
     patch<ClassPaymentOut>(
       `/shop/orders/classes/${classId}/payment`, {
         is_paid: isPaid,
-        activity_id: activityId,
-        ...(categoryId ? { category_id: categoryId } : {}),
         ...collection,
       },
     ),
   classPaymentReport: () => get<ClassPaymentReportItemOut[]>("/shop/orders/class-payments"),
   classRepresentativeReminderTargets: () =>
     get<ShopClassRepresentativeRecipientOut[]>("/shop/orders/reminder-targets/class-representatives"),
-  downloadClassReceipt: async (classId: string, activityId: string | null) => {
-    const query = activityId ? `?${new URLSearchParams({ activity_id: activityId })}` : "";
+  downloadClassReceipt: async (classId: string, categoryId?: string | null) => {
+    const query = categoryId ? `?${new URLSearchParams({ category_id: categoryId })}` : "";
     const response = await authFetch(`${BASE}/shop/orders/classes/${classId}/receipt.pdf${query}`, {
       credentials: "include",
     });
@@ -281,9 +268,9 @@ export const shopApi = {
     if (!response.ok) throw new ApiError(response.status, await errorMessageFromResponse(response));
     return response;
   },
-  downloadReport: (format: "xlsx" | "csv", params?: { activity_id?: string }) => {
+  downloadReport: (format: "xlsx" | "csv", params?: { category_id?: string }) => {
     const q = new URLSearchParams();
-    if (params?.activity_id) q.set("activity_id", params.activity_id);
+    if (params?.category_id) q.set("category_id", params.category_id);
     const qs = q.toString();
     return authFetch(`${BASE}/shop/reports/orders.${format}${qs ? `?${qs}` : ""}`, {
       credentials: "include",
@@ -291,7 +278,6 @@ export const shopApi = {
   },
 
   // 分類管理（shop:manage）
-  listActivities: (includeInactive = false) => get<ActivityOut[]>(`/shop/activities${includeInactive ? "?include_inactive=true" : ""}`),
   listCategories: (params?: Record<string, string>) => {
     const qs = params ? "?" + new URLSearchParams(params).toString() : "";
     return get<ProductCategoryOut[]>(`/shop/categories${qs}`);
@@ -363,7 +349,7 @@ export const shopApi = {
     const qs = query.toString();
     return get<OrderQuantityRow[]>(`/shop/orders/quantities${qs ? `?${qs}` : ""}`);
   },
-  orderDistribution: (params?: Pick<OrderQuantityFilters, "activity_id" | "grade" | "class_id" | "category_id" | "product_id">) => {
+  orderDistribution: (params?: Pick<OrderQuantityFilters, "grade" | "class_id" | "category_id" | "product_id">) => {
     const query = new URLSearchParams();
     Object.entries(params ?? {}).forEach(([key, value]) => {
       if (value) query.set(key, value);

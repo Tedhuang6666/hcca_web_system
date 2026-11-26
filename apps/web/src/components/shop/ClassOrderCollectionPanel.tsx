@@ -4,7 +4,7 @@ import type { ClassMemberOut, OrderListItem } from "@/lib/types";
 import { orderScopeKey } from "@/lib/shop-order-scope";
 import { summarizeOrderItems } from "@/lib/shop-order-items";
 import { money } from "@/lib/shop-class-orders";
-import type { ActivityOptionRow } from "@/components/shop/classOrderSelectors";
+import type { CategoryOptionRow } from "@/components/shop/classOrderSelectors";
 
 type SeatRow = {
   id: string;
@@ -17,9 +17,9 @@ type SeatRow = {
 };
 
 type Props = {
-  activityRows: ActivityOptionRow[];
-  ledgerActivities: ActivityOptionRow[];
-  ledgerActivityLabel: string;
+  categoryRows: CategoryOptionRow[];
+  ledgerCategories: CategoryOptionRow[];
+  ledgerCategoryLabel: string;
   loading: boolean;
   loadFailed: boolean;
   seatCollectionTotals: { amount: number; collected: number };
@@ -38,7 +38,7 @@ type Props = {
 };
 
 export function ClassOrderCollectionPanel({
-  activityRows, ledgerActivities, ledgerActivityLabel, loading, loadFailed, seatCollectionTotals,
+  categoryRows, ledgerCategories, ledgerCategoryLabel, loading, loadFailed, seatCollectionTotals,
   seatSearch, setSeatSearch, seatFilter, setSeatFilter, membersLoading, membersLoadFailed,
   filteredSeatRows, members, busy, batchBusy, setSeatCollected, openCreateForSeat,
 }: Props) {
@@ -49,8 +49,8 @@ export function ClassOrderCollectionPanel({
               <h2 id="seat-collection-heading" className="text-lg font-semibold text-[var(--text-primary)]">登記收款</h2>
             </div>
           </div>
-          {ledgerActivities.length > 0 && <p className="text-base font-semibold">本次收款：{ledgerActivityLabel}</p>}
-          {ledgerActivities.length > 0 && (loading ? (
+          {ledgerCategories.length > 0 && <p className="text-base font-semibold">本次收款：{ledgerCategoryLabel}</p>}
+          {ledgerCategories.length > 0 && (loading ? (
             <p className="rounded-lg border border-[var(--border)] px-4 py-3 text-sm text-[var(--text-secondary)]" role="status">
               正在載入全班收款統計…
             </p>
@@ -60,7 +60,7 @@ export function ClassOrderCollectionPanel({
             </p>
           ) : (
             <div className="rounded-lg border border-[var(--border)] bg-[var(--card-bg)] px-4 py-3" role="group" aria-label="全班收款統計">
-              <p className="mb-2 text-xs text-[var(--text-secondary)]">全班進度 · {ledgerActivityLabel}（不受下方篩選影響）</p>
+              <p className="mb-2 text-xs text-[var(--text-secondary)]">全班進度 · {ledgerCategoryLabel}（不受下方篩選影響）</p>
               <dl className="grid gap-y-2 text-sm sm:grid-cols-2 sm:gap-x-6">
                 <div className="flex items-baseline justify-between gap-3">
                   <dt className="text-[var(--text-secondary)]">全班應收</dt>
@@ -77,12 +77,12 @@ export function ClassOrderCollectionPanel({
               </dl>
             </div>
           ))}
-          {activityRows.length === 0 ? (
+          {categoryRows.length === 0 ? (
             <p className="rounded-lg border border-[var(--border)] px-4 py-6 text-sm text-[var(--text-secondary)]" role={loadFailed ? "alert" : "status"}>
-              {loading ? "正在載入活動與座號收款資料…" : loadFailed ? "無法載入活動與座號收款資料，請重新整理後再試。" : "目前沒有可收款的活動"}
+              {loading ? "正在載入商品分類與座號收款資料…" : loadFailed ? "無法載入商品分類與座號收款資料，請重新整理後再試。" : "目前沒有可收款的商品分類"}
             </p>
-          ) : !ledgerActivities.length ? (
-            <p role="status" className="py-4 text-sm text-[var(--text-secondary)]">請在頁面上方選擇本次要收款的活動。</p>
+          ) : !ledgerCategories.length ? (
+            <p role="status" className="py-4 text-sm text-[var(--text-secondary)]">請在頁面上方選擇本次要收款的商品分類。</p>
           ) : (
             <>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_12rem]">
@@ -112,7 +112,7 @@ export function ClassOrderCollectionPanel({
                           </div>
                           <p className="text-sm text-[var(--text-secondary)] wrap-anywhere">
                             {summarizeOrderItems(row.orders.flatMap((order) => order.items ?? [])) || (row.orders.length ? "品項資訊請查看明細" : "尚未登記")}
-                            {ledgerActivities.length > 1 && <span className="mt-1 block text-xs">{ledgerActivities.map((activity) => `${activity.label} ${money(row.orders.filter((order) => orderScopeKey(order) === activity.key && !order.is_class_collected).reduce((sum, order) => sum + order.total_price, 0))}`).join("／")}</span>}
+                            {ledgerCategories.length > 1 && <span className="mt-1 block text-xs">{ledgerCategories.map((category) => `${category.label} ${money(row.orders.filter((order) => orderScopeKey(order) === category.key && !order.is_class_collected).reduce((sum, order) => sum + order.total_price, 0))}`).join("／")}</span>}
                           </p>
                           <p className="flex items-baseline justify-between gap-3 text-sm">
                             <span className="text-[var(--text-secondary)]">{outstanding > 0 ? row.collected > 0 ? "還要補收" : "還要收" : row.orders.length ? "已收齊" : "尚未訂購"}</span>
@@ -142,7 +142,7 @@ export function ClassOrderCollectionPanel({
                     })}
                   </div>
                   <div className="hidden max-w-full overflow-x-auto lg:block" tabIndex={0} role="region" aria-label="座號收款名冊，可水平捲動">
-                  <table className="w-full text-sm" aria-label={`${ledgerActivityLabel || "活動"}各座號收款`}>
+                  <table className="w-full text-sm" aria-label={`${ledgerCategoryLabel || "商品分類"}各座號收款`}>
                     <thead className="bg-[var(--bg-elevated)] text-[var(--text-secondary)]">
                       <tr>
                         {["同學", "預購品項", "還要收", "收款"].map((heading) => (
@@ -162,7 +162,7 @@ export function ClassOrderCollectionPanel({
                             </th>
                             <td className="max-w-64 px-3 py-3 text-[var(--text-secondary)] wrap-anywhere">
                               {summarizeOrderItems(row.orders.flatMap((order) => order.items ?? [])) || (row.orders.length ? "品項資訊請查看明細" : "尚未登記")}
-                            {ledgerActivities.length > 1 && <span className="mt-1 block text-xs">{ledgerActivities.map((activity) => `${activity.label} ${money(row.orders.filter((order) => orderScopeKey(order) === activity.key && !order.is_class_collected).reduce((sum, order) => sum + order.total_price, 0))}`).join("／")}</span>}
+                            {ledgerCategories.length > 1 && <span className="mt-1 block text-xs">{ledgerCategories.map((category) => `${category.label} ${money(row.orders.filter((order) => orderScopeKey(order) === category.key && !order.is_class_collected).reduce((sum, order) => sum + order.total_price, 0))}`).join("／")}</span>}
                             </td>
                             <td className="px-3 py-3 font-semibold tabular-nums text-[var(--text-primary)]">
                               {outstanding > 0 ? <>{row.collected > 0 && <span className="block text-xs">待補收</span>}{money(outstanding)}</> : row.orders.length ? "已收齊" : "尚未訂購"}

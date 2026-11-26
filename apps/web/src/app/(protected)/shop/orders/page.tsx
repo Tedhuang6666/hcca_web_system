@@ -6,7 +6,7 @@ import { shopApi, apiErrorMessage } from "@/lib/api";
 import type { OrderListItem, ShopDelegatedOrderOut } from "@/lib/types";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import { useWS } from "@/hooks/useWS";
-import { groupActivityPreorders } from "@/lib/shop-preorders";
+import { groupCategoryPreorders } from "@/lib/shop-preorders";
 import ProductThumbnail from "@/components/shop/ProductThumbnail";
 import ShopPrice from "@/components/shop/ShopPrice";
 import { orderItemDisplayRows } from "@/lib/shop-order-items";
@@ -54,8 +54,8 @@ export default function OrdersPage() {
     if (message.type === "order.updated") void load();
   }, [load]));
 
-  const activityGroups = groupActivityPreorders(orders);
-  const productIdsKey = [...new Set(activityGroups.flatMap((group) =>
+  const categoryGroups = groupCategoryPreorders(orders);
+  const productIdsKey = [...new Set(categoryGroups.flatMap((group) =>
     group.items.map((item) => item.product_id),
   ))].join(",");
 
@@ -111,22 +111,22 @@ export default function OrdersPage() {
             <p>{loadError}</p>
             <button type="button" onClick={() => void load()} className="shop-order-details">重新載入</button>
           </div>
-        ) : activityGroups.length === 0 ? (
+        ) : categoryGroups.length === 0 ? (
           <div className="shop-public-empty">
             <p>目前沒有預購品項，先到商品頁挑選商品。</p>
             <Link href="/shop" className="btn btn-primary mt-4 min-h-11">去選購商品</Link>
           </div>
         ) : (
-          <div className="shop-order-activity-list">
-            {activityGroups.map((group) => (
+          <div className="shop-order-category-list">
+            {categoryGroups.map((group) => (
               <Link
                 key={group.key}
-                href={`/shop/orders/${group.orders[0].id}?view=activity`}
-                className="shop-order-activity-link"
+                href={`/shop/orders/${group.orders[0].id}?view=category`}
+                className="shop-order-category-link"
                 aria-label={`查看${group.label}預購詳情`}
               >
-                <section className="shop-order-activity" aria-label={`${group.label}預購`}>
-                  <div className="shop-order-activity-heading">
+                <section className="shop-order-category" aria-label={`${group.label}預購`}>
+                  <div className="shop-order-category-heading">
                     <div>
                       <h3>{group.label}</h3>
                       {group.orders.some((order) => delegatedOrderIds.has(order.id)) && (
@@ -135,7 +135,7 @@ export default function OrdersPage() {
                         </p>
                       )}
                     </div>
-                    <div className="shop-order-activity-amounts">
+                    <div className="shop-order-category-amounts">
                       {group.orders.some((order) => order.discount_amount > 0)
                         ? <strong>合計 <ShopPrice original={group.amount + group.orders.reduce((sum, order) => sum + order.discount_amount, 0)} current={group.amount} /></strong>
                         : <strong>合計 NT${group.amount.toLocaleString("zh-TW")}</strong>}
@@ -161,9 +161,9 @@ export default function OrdersPage() {
                   </ul>
                   {group.items.length === 0 && <p className="shop-order-row-items">品項資訊請查看訂單詳情。</p>}
                   <div className="shop-preorder-info">
-                    <span>{group.hasClassOrders ? "向班代繳款" : "依活動通知繳款"}</span>
+                    <span>{group.hasClassOrders ? "向班代繳款" : "依商品分類通知繳款"}</span>
                     <span className="shop-order-details">
-                      查看活動預購詳情 <ArrowRight size={15} aria-hidden="true" />
+                      查看分類預購詳情 <ArrowRight size={15} aria-hidden="true" />
                     </span>
                   </div>
                 </section>

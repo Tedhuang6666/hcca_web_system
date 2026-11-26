@@ -5,7 +5,7 @@
 正式環境備份後經維護者核准才能套用。
 
 設計概念（與商品系統整合）：
-    Activity → ProductCategory(activity_id) → ProductSeries → Product(票種)
+    ProductCategory → ProductSeries → Product(票種)
         └─ SeatingZone(場次，含座位圖)
              ├─ Seat(單一座位)
              └─ SeatingWave(分批開放時段，決定劃位優先順序)

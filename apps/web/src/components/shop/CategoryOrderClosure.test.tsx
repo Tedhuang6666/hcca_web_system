@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import ActivityOrderClosure from "./ActivityOrderClosure";
+import CategoryOrderClosure from "./CategoryOrderClosure";
 
 const api = vi.hoisted(() => ({ getCloseStatus: vi.fn(), closeCategory: vi.fn(), reopenCategory: vi.fn() }));
 vi.mock("@/lib/api", () => ({ shopApi: api, apiErrorMessage: (_: unknown, fallback: string) => fallback }));
@@ -8,7 +8,7 @@ vi.mock("@/lib/api", () => ({ shopApi: api, apiErrorMessage: (_: unknown, fallba
 const categories = [{ id: "a", name: "校慶預購" }];
 
 function ClosureSettings({ onSaved = vi.fn() }: { onSaved?: () => void }) {
-  return <ActivityOrderClosure categories={categories} onSaved={onSaved} />;
+  return <CategoryOrderClosure categories={categories} onSaved={onSaved} />;
 }
 
 beforeEach(() => {
@@ -40,7 +40,7 @@ describe("商品批次全域鎖單", () => {
     await screen.findByText("尚未結單");
     api.closeCategory.mockRejectedValueOnce(new Error("offline"));
     fireEvent.click(screen.getByRole("button", { name: "結單並隱藏入口校慶預購" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("活動鎖單狀態更新失敗");
+    expect(await screen.findByRole("alert")).toHaveTextContent("商品分類結單狀態更新失敗");
     expect(screen.getByText("尚未結單")).toBeVisible();
     const retry = screen.getByRole("button", { name: "結單並隱藏入口校慶預購" });
     expect(retry).toBeEnabled();
@@ -71,7 +71,7 @@ describe("商品批次全域鎖單", () => {
 
   it("更新中不接受重複操作或另一批次的操作", async () => {
     api.closeCategory.mockReturnValue(new Promise(() => {}));
-    render(<ActivityOrderClosure categories={[...categories, { id: "b", name: "冬季預購" }]} onSaved={vi.fn()} />);
+    render(<CategoryOrderClosure categories={[...categories, { id: "b", name: "冬季預購" }]} onSaved={vi.fn()} />);
     const lock = screen.getByRole("button", { name: "結單並隱藏入口校慶預購" });
     await waitFor(() => expect(lock).toBeEnabled());
     fireEvent.click(lock);
@@ -100,8 +100,8 @@ describe("商品批次全域鎖單", () => {
     expect(screen.getByRole("button", { name: "結單並隱藏入口校慶預購" })).toBeDisabled();
   });
 
-  it("沒有商品批次時不顯示無用區塊或要求另外建立活動", () => {
-    const { container } = render(<ActivityOrderClosure categories={[]} onSaved={vi.fn()} />);
+  it("沒有商品批次時不顯示無用區塊或要求另外建立商品分類", () => {
+    const { container } = render(<CategoryOrderClosure categories={[]} onSaved={vi.fn()} />);
     expect(container).toBeEmptyDOMElement();
     expect(api.getCloseStatus).not.toHaveBeenCalled();
   });

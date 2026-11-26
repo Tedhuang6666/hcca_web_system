@@ -28,7 +28,6 @@ from api.models.base import TimestampMixin
 from api.models.types import JSONDict
 
 if TYPE_CHECKING:
-    from api.models.activity import Activity
     from api.models.org import Org
     from api.models.user import User
 
@@ -98,12 +97,6 @@ class Announcement(Base, TimestampMixin):
             text("created_at DESC"),
         ).ddl_if(dialect="postgresql"),
         Index("ix_announcements_created_at_desc", text("created_at DESC")),
-        Index(
-            "ix_announcements_activity_published",
-            "activity_id",
-            "is_published",
-            text("published_at DESC NULLS LAST"),
-        ).ddl_if(dialect="postgresql"),
         # 全文搜尋 GIN 索引（PostgreSQL tsvector，generated column 由 migration 建立）
         Index("ix_announcements_search_vector", "search_vector", postgresql_using="gin"),
     )
@@ -137,12 +130,6 @@ class Announcement(Base, TimestampMixin):
         nullable=True,
         index=True,
     )
-    activity_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("activities.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
     author_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="RESTRICT"),
@@ -164,7 +151,6 @@ class Announcement(Base, TimestampMixin):
     search_vector: Mapped[str | None] = mapped_column(TSVECTOR(), FetchedValue(), nullable=True)
 
     org: Mapped[Org | None] = relationship("Org")
-    activity: Mapped[Activity | None] = relationship("Activity")
     author: Mapped[User] = relationship("User", foreign_keys=[author_id])
     media: Mapped[list[AnnouncementMedia]] = relationship(
         "AnnouncementMedia",

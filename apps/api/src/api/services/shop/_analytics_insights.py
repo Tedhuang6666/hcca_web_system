@@ -12,7 +12,7 @@ def build_sales_insights(
         return [
             ShopSalesInsight(
                 title="本期沒有有效訂單",
-                detail="請調整活動、品項或日期；取消與退款仍可在訂單狀態分析中查看。",
+                detail="請調整商品分類、品項或日期；取消與退款仍可在訂單狀態分析中查看。",
             )
         ]
     peak = max(current.daily, key=lambda row: row.total_amount)

@@ -21,7 +21,6 @@ async def queue_class_payment_confirmation(
     session: AsyncSession,
     *,
     class_id: uuid.UUID,
-    activity_id: uuid.UUID | None,
     order_ids: list[uuid.UUID],
 ) -> None:
     """將整班有效訂單與班代收件地址寫入交易式 outbox。"""
@@ -65,9 +64,6 @@ async def queue_class_payment_confirmation(
     if not cadre_emails:
         return
 
-    activity_filter = (
-        Order.activity_id.is_(None) if activity_id is None else Order.activity_id == activity_id
-    )
     orders = list(
         (
             await session.scalars(
@@ -75,7 +71,6 @@ async def queue_class_payment_confirmation(
                 .where(
                     Order.id.in_(order_ids),
                     Order.class_id == class_id,
-                    activity_filter,
                     Order.status.notin_([OrderStatus.CANCELLED, OrderStatus.REFUNDED]),
                 )
                 .options(

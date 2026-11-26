@@ -255,7 +255,7 @@ async def test_export_incidents_csv_contains_event_timeline(
 
 async def test_slow_query_export_keeps_predicates_and_correlation(db_session: AsyncSession) -> None:
     template = "SELECT " + ", ".join(f"orders.column_{i}" for i in range(30))
-    template += " FROM orders WHERE orders.class_id = ? GROUP BY orders.activity_id"
+    template += " FROM orders WHERE orders.class_id = ? GROUP BY orders.category_id"
     report = await export_incidents_csv(
         db_session,
         slow_queries=[

@@ -1,4 +1,4 @@
-"""優惠主題範圍、各主題門檻與跨主題指定價格的 PostgreSQL 回歸。"""
+"""優惠分類範圍、各分類門檻與分類內指定價格的 PostgreSQL 回歸。"""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ import uuid
 import pytest
 from sqlalchemy import select
 
-from api.models.activity import Activity, ActivityStatus
 from api.models.receivable import Receivable
 from api.models.shop import Product, ProductCategory, ProductSeries, ProductStatus
 from api.schemas.shop import (
@@ -24,13 +23,8 @@ from api.services.shop._promotions import resolve_promotions
 async def topic_shop(db_session, make_user):
     manager = await make_user()
     buyer = await make_user(student_id="410001")
-    activity = Activity(name="共同活動", status=ActivityStatus.ACTIVE)
-    db_session.add(activity)
-    await db_session.flush()
     categories = [
-        ProductCategory(
-            name=name, activity_id=activity.id if index < 2 else None, created_by=manager.id
-        )
+        ProductCategory(name=name, created_by=manager.id)
         for index, name in enumerate(["衣服", "紀念品", "其他商品"])
     ]
     db_session.add_all(categories)
@@ -52,11 +46,11 @@ async def topic_shop(db_session, make_user):
     ]
     db_session.add_all(products)
     await db_session.flush()
-    return manager, buyer, activity, categories, products
+    return manager, buyer, categories, products
 
 
 async def _promotion(session, setup, **values):
-    manager, _, _, _, _ = setup
+    manager, _, _, _ = setup
     return await shop_svc.create_promotion(
         session,
         created_by=manager.id,
@@ -83,14 +77,13 @@ async def _order(session, buyer, product, quantity=1):
     )[0]
 
 
-async def test_minimum_spend_never_combines_topics_sharing_one_activity(db_session, topic_shop):
-    _, buyer, activity, _, products = topic_shop
+async def test_minimum_spend_never_combines_topics_across_categories(db_session, topic_shop):
+    _, buyer, _, products = topic_shop
     await _promotion(db_session, topic_shop, code="TOPIC500", min_order_price=500)
     preview = await shop_svc.preview_promotion(
         db_session,
         user_id=buyer.id,
         subtotal=600,
-        activity_id=activity.id,
         code="TOPIC500",
         product_subtotals={products[0].id: 300, products[1].id: 300},
         product_quantities={products[0].id: 1, products[1].id: 1},
@@ -98,12 +91,11 @@ async def test_minimum_spend_never_combines_topics_sharing_one_activity(db_sessi
     assert not preview.eligible
     assert preview.reason_code == "minimum_not_met"
     assert preview.shortfall == 200
-    with pytest.raises(ValueError, match="各活動分開計算"):
+    with pytest.raises(ValueError, match="各商品分類分開計算"):
         await shop_svc.resolve_promotion(
             db_session,
             user_id=buyer.id,
             subtotal=600,
-            activity_id=activity.id,
             code="TOPIC500",
             product_subtotals={products[0].id: 300, products[1].id: 300},
             product_quantities={products[0].id: 1, products[1].id: 1},
@@ -114,7 +106,7 @@ async def test_minimum_spend_never_combines_topics_sharing_one_activity(db_sessi
 async def test_each_qualifying_topic_gets_its_own_discount(
     db_session, topic_shop, quantities, expected
 ):
-    _, buyer, activity, _, products = topic_shop
+    _, buyer, _, products = topic_shop
     await _promotion(db_session, topic_shop, code="PER_TOPIC", min_order_price=500)
     amounts = {
         product.id: count * product.price
@@ -124,7 +116,6 @@ async def test_each_qualifying_topic_gets_its_own_discount(
         db_session,
         user_id=buyer.id,
         subtotal=sum(amounts.values()),
-        activity_id=activity.id,
         code="PER_TOPIC",
         product_subtotals=amounts,
         product_quantities={
@@ -135,13 +126,12 @@ async def test_each_qualifying_topic_gets_its_own_discount(
 
 
 async def test_minimum_quantity_also_stays_within_each_topic(db_session, topic_shop):
-    _, buyer, activity, _, products = topic_shop
+    _, buyer, _, products = topic_shop
     await _promotion(db_session, topic_shop, min_quantity=2)
     preview = await shop_svc.preview_promotion(
         db_session,
         user_id=buyer.id,
         subtotal=600,
-        activity_id=activity.id,
         product_subtotals={row.id: 300 for row in products[:2]},
         product_quantities={row.id: 1 for row in products[:2]},
     )
@@ -151,7 +141,7 @@ async def test_minimum_quantity_also_stays_within_each_topic(db_session, topic_s
 
 
 async def test_coupon_preview_matches_stacked_topic_automatic_discount(db_session, topic_shop):
-    manager, buyer, activity, categories, products = topic_shop
+    manager, buyer, categories, products = topic_shop
     await _promotion(db_session, topic_shop)
     await shop_svc.create_promotion(
         db_session,
@@ -167,7 +157,6 @@ async def test_coupon_preview_matches_stacked_topic_automatic_discount(db_sessio
     context = {
         "user_id": buyer.id,
         "subtotal": 600,
-        "activity_id": activity.id,
         "code": "CLOTHES25",
         "product_subtotals": {row.id: 300 for row in products[:2]},
         "product_quantities": {row.id: 1 for row in products[:2]},
@@ -179,39 +168,26 @@ async def test_coupon_preview_matches_stacked_topic_automatic_discount(db_sessio
     assert len(preview.allocations) == len(result.allocations) == 2
 
 
-async def test_bundle_can_span_topics_without_combining_their_spend_threshold(
-    db_session, topic_shop
-):
-    manager, buyer, activity, categories, products = topic_shop
-    promotion = await shop_svc.create_promotion(
-        db_session,
-        created_by=manager.id,
-        data=ShopPromotionCreate(
-            name="衣服紀念品套組",
-            target_category_ids=[row.id for row in categories[:2]],
-            target_product_ids=[row.id for row in products[:2]],
-            discount_type="bundle_price",
-            discount_value=450,
-        ),
-    )
-    context = {
-        "user_id": buyer.id,
-        "subtotal": 600,
-        "activity_id": activity.id,
-        "product_subtotals": {row.id: 300 for row in products[:2]},
-        "product_quantities": {row.id: 1 for row in products[:2]},
-    }
-    assert (await shop_svc.resolve_promotion(db_session, **context)).discount_amount == 150
-    await shop_svc.update_promotion(
-        db_session, promotion, data=ShopPromotionUpdate(min_order_price=500)
-    )
-    assert (await shop_svc.resolve_promotion(db_session, **context)).discount_amount == 0
+async def test_bundle_rejects_products_from_multiple_categories(db_session, topic_shop):
+    manager, buyer, categories, products = topic_shop
+    with pytest.raises(ValueError, match="同一商品分類"):
+        await shop_svc.create_promotion(
+            db_session,
+            created_by=manager.id,
+            data=ShopPromotionCreate(
+                name="跨分類套組",
+                target_category_ids=[row.id for row in categories[:2]],
+                target_product_ids=[row.id for row in products[:2]],
+                discount_type="bundle_price",
+                discount_value=450,
+            ),
+        )
 
 
 async def test_selected_topics_exclude_other_topics_and_include_future_products(
     db_session, topic_shop
 ):
-    manager, buyer, activity, categories, products = topic_shop
+    manager, buyer, categories, products = topic_shop
     promotion = await shop_svc.create_promotion(
         db_session,
         created_by=manager.id,
@@ -236,7 +212,6 @@ async def test_selected_topics_exclude_other_topics_and_include_future_products(
         db_session,
         user_id=buyer.id,
         subtotal=800,
-        activity_id=activity.id,
         product_subtotals={products[0].id: 300, products[1].id: 300, later.id: 200},
         product_quantities={products[0].id: 1, products[1].id: 1, later.id: 1},
     )
@@ -245,7 +220,7 @@ async def test_selected_topics_exclude_other_topics_and_include_future_products(
 
 
 async def test_override_prices_work_across_topics_and_order_scopes(db_session, topic_shop):
-    manager, buyer, _, categories, products = topic_shop
+    manager, buyer, categories, products = topic_shop
     promotion = await shop_svc.create_promotion(
         db_session,
         created_by=manager.id,
@@ -262,19 +237,18 @@ async def test_override_prices_work_across_topics_and_order_scopes(db_session, t
             ],
         ),
     )
-    assert promotion.activity_id is None
     for index, product in enumerate(products):
         order = await _order(db_session, buyer, product)
         assert order.promotion_id == promotion.id
         assert next(item for item in order.items if item.product_id == product.id).unit_price == 300
-        expected = sum(200 - i * 10 for i in range(index + 1)) if index < 2 else 180
+        expected = 200 - index * 10
         assert order.discount_amount == expected
     serialized = shop_svc.serialize_promotion(promotion)
     assert set(serialized.target_category_ids) == {row.id for row in categories}
 
 
-async def test_topic_update_reprices_unpaid_orders_in_every_activity(db_session, topic_shop):
-    _, buyer, _, categories, products = topic_shop
+async def test_topic_update_reprices_unpaid_orders_in_every_category(db_session, topic_shop):
+    _, buyer, categories, products = topic_shop
     orders = [await _order(db_session, buyer, products[index]) for index in [0, 2]]
     promotion = await _promotion(db_session, topic_shop)
     assert [order.discount_amount for order in orders] == [50, 50]
@@ -301,7 +275,7 @@ async def test_topic_update_reprices_unpaid_orders_in_every_activity(db_session,
 async def test_topic_scope_api_validates_ids_and_keeps_manager_permission(
     db_session, topic_shop, admin_user, member_user, client, authed_client_factory
 ):
-    _, _, _, categories, products = topic_shop
+    _, _, categories, products = topic_shop
     payload = {
         "name": "主題優惠",
         "target_category_ids": [str(categories[0].id)],
@@ -330,7 +304,7 @@ async def test_topic_scope_api_validates_ids_and_keeps_manager_permission(
 async def test_all_automatic_promotions_stack_and_match_preview(
     db_session, topic_shop, with_coupon
 ):
-    manager, buyer, activity, categories, products = topic_shop
+    manager, buyer, categories, products = topic_shop
     promotions = []
     for index, amount in enumerate([40, 60, 80]):
         promotions.append(
@@ -351,7 +325,6 @@ async def test_all_automatic_promotions_stack_and_match_preview(
     context = {
         "user_id": buyer.id,
         "subtotal": 600,
-        "activity_id": activity.id,
         "code": "STACK50" if with_coupon else None,
         "product_subtotals": {row.id: 300 for row in products[:2]},
         "product_quantities": {row.id: 1 for row in products[:2]},
@@ -371,7 +344,7 @@ async def test_all_automatic_promotions_stack_and_match_preview(
 
 @pytest.mark.parametrize("with_coupon", [False, True])
 async def test_stacked_discounts_never_exceed_subtotal(db_session, topic_shop, with_coupon):
-    manager, buyer, activity, categories, products = topic_shop
+    manager, buyer, categories, products = topic_shop
     for index in range(3):
         await shop_svc.create_promotion(
             db_session,
@@ -388,7 +361,6 @@ async def test_stacked_discounts_never_exceed_subtotal(db_session, topic_shop, w
     context = {
         "user_id": buyer.id,
         "subtotal": 300,
-        "activity_id": activity.id,
         "code": "CAP50" if with_coupon else None,
         "product_subtotals": {products[0].id: 300},
         "product_quantities": {products[0].id: 1},
@@ -402,7 +374,7 @@ async def test_stacked_discounts_never_exceed_subtotal(db_session, topic_shop, w
 
 
 async def test_multiple_automatic_promotions_reprice_orders_and_receivables(db_session, topic_shop):
-    manager, buyer, activity, categories, products = topic_shop
+    manager, buyer, categories, products = topic_shop
     order = await _order(db_session, buyer, products[0])
     promotions = []
     for index, amount in enumerate([50, 80, 100]):
@@ -424,12 +396,12 @@ async def test_multiple_automatic_promotions_reprice_orders_and_receivables(db_s
     receivable = await db_session.scalar(select(Receivable).where(Receivable.source_id == order.id))
     assert receivable.amount == 70
     preview = await shop_svc.preview_registration_promotion(
-        db_session, user_id=buyer.id, code=None, activity_id=activity.id
+        db_session, user_id=buyer.id, code=None, category_id=categories[0].id
     )
     assert len(preview.output.applied_promotions) == 3
     assert preview.output.discount_amount == 230
     await shop_svc.apply_registration_promotion(
-        db_session, buyer, code=None, activity_id=activity.id
+        db_session, buyer, code=None, category_id=categories[0].id
     )
     assert [row.used_count for row in promotions] == [1, 1, 1]
     assert order.total_price == 70
@@ -447,7 +419,7 @@ async def test_multiple_automatic_promotions_reprice_orders_and_receivables(db_s
 async def test_each_target_product_has_one_shared_gift_limit_across_quantities(
     db_session, topic_shop
 ):
-    manager, buyer, activity, categories, products = topic_shop
+    manager, buyer, categories, products = topic_shop
     promotion = await shop_svc.create_promotion(
         db_session,
         created_by=manager.id,
@@ -464,7 +436,6 @@ async def test_each_target_product_has_one_shared_gift_limit_across_quantities(
     context = {
         "user_id": buyer.id,
         "subtotal": 1500,
-        "activity_id": activity.id,
         "product_subtotals": {products[0].id: 900, products[1].id: 600},
         "product_quantities": {products[0].id: 3, products[1].id: 2},
     }
@@ -484,14 +455,21 @@ async def test_each_target_product_has_one_shared_gift_limit_across_quantities(
 async def test_bundle_pricing_matches_preview_orders_and_receivables(
     db_session, topic_shop, topic_scope, with_coupon
 ):
-    manager, buyer, activity, categories, products = topic_shop
-    badge, charm = products[:2]
+    manager, buyer, categories, products = topic_shop
+    badge = products[0]
+    charm = Product(
+        name="新吊飾",
+        price=50,
+        stock_quantity=100,
+        category_id=categories[0].id,
+        status=ProductStatus.ACTIVE,
+        created_by=manager.id,
+    )
     badge.price, charm.price = 30, 50
+    db_session.add(charm)
     await db_session.flush()
     scope = (
-        {"target_category_ids": [row.id for row in categories[:2]]}
-        if topic_scope
-        else {"activity_id": activity.id}
+        {"target_category_ids": [categories[0].id]} if topic_scope else {"target_category_ids": []}
     )
     public_bundle = await shop_svc.create_promotion(
         db_session,
@@ -534,7 +512,7 @@ async def test_bundle_pricing_matches_preview_orders_and_receivables(
     )[0]
     if with_coupon:
         order = await shop_svc.apply_registration_promotion(
-            db_session, buyer, code="NEREID75", activity_id=activity.id
+            db_session, buyer, code="NEREID75", category_id=None
         )
     assert order.total_price == 70
     staff_bundle = await shop_svc.create_promotion(
@@ -553,7 +531,6 @@ async def test_bundle_pricing_matches_preview_orders_and_receivables(
     context = {
         "user_id": buyer.id,
         "subtotal": 80,
-        "activity_id": activity.id,
         "code": "NEREID75" if with_coupon else None,
         "product_subtotals": {badge.id: 30, charm.id: 50},
         "product_quantities": {badge.id: 1, charm.id: 1},
@@ -568,9 +545,7 @@ async def test_bundle_pricing_matches_preview_orders_and_receivables(
     assert [row.used_count for row in [public_bundle, staff_price, staff_bundle]] == [0, 0, 1]
     receivable = await db_session.scalar(select(Receivable).where(Receivable.source_id == order.id))
     assert receivable.amount == 65
-    await shop_svc.apply_registration_promotion(
-        db_session, buyer, code=None, activity_id=activity.id
-    )
+    await shop_svc.apply_registration_promotion(db_session, buyer, code=None, category_id=None)
     assert (order.total_price, receivable.amount, staff_bundle.used_count) == (65, 65, 1)
 
     # 幹部套組停用後，改採更划算的幹部單品價，並釋放未採用套組的名額。
@@ -579,7 +554,7 @@ async def test_bundle_pricing_matches_preview_orders_and_receivables(
     )
     if with_coupon:
         await shop_svc.apply_registration_promotion(
-            db_session, buyer, code="NEREID75", activity_id=activity.id
+            db_session, buyer, code="NEREID75", category_id=None
         )
     assert (order.total_price, receivable.amount) == (70, 70)
     assert [row.used_count for row in [public_bundle, staff_price, staff_bundle]] == [0, 1, 0]
@@ -588,11 +563,12 @@ async def test_bundle_pricing_matches_preview_orders_and_receivables(
 async def test_author_discount_and_bundles_choose_lower_price_across_order_lifecycle(
     db_session, topic_shop
 ):
-    manager, buyer, activity, categories, products = topic_shop
+    manager, buyer, categories, products = topic_shop
     shirt, jacket = products[:2]
     shirt.price, jacket.price = 300, 750
+    jacket.category_id = categories[0].id
     await db_session.flush()
-    scope = {"target_category_ids": [row.id for row in categories[:2]]}
+    scope = {"target_category_ids": [categories[0].id]}
     bundle = await shop_svc.create_promotion(
         db_session,
         created_by=manager.id,
@@ -650,7 +626,6 @@ async def test_author_discount_and_bundles_choose_lower_price_across_order_lifec
     context = {
         "user_id": buyer.id,
         "subtotal": 3600,
-        "activity_id": activity.id,
         "product_subtotals": {shirt.id: 600, jacket.id: 3000},
         "product_quantities": {shirt.id: 2, jacket.id: 4},
         "current_promotion_ids": {author.id, gift.id},
@@ -680,9 +655,10 @@ async def test_manual_recalculation_repairs_stale_totals_and_skips_paid_orders(
 ):
     from api.services.shop._promotion_orders import recalculate_orders
 
-    manager, buyer, activity, categories, products = topic_shop
+    manager, buyer, categories, products = topic_shop
     shirt, jacket = products[:2]
     shirt.price, jacket.price = 300, 750
+    jacket.category_id = categories[0].id
     await db_session.flush()
     await shop_svc.create_promotion(
         db_session,
@@ -692,7 +668,7 @@ async def test_manual_recalculation_repairs_stale_totals_and_skips_paid_orders(
             target_product_ids=[shirt.id, jacket.id],
             discount_type="bundle_price",
             discount_value=1000,
-            target_category_ids=[row.id for row in categories[:2]],
+            target_category_ids=[categories[0].id],
         ),
     )
     order = (

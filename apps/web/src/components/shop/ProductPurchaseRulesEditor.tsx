@@ -13,10 +13,9 @@ export const emptyPurchaseRules: PurchaseRulesDraft = {
   identifier_notes: {},
 };
 
-export default function ProductPurchaseRulesEditor({ value, onChange, activityId, categoryId, productId, disabled }: {
+export default function ProductPurchaseRulesEditor({ value, onChange, categoryId, productId, disabled }: {
   value: PurchaseRulesDraft;
   onChange: (value: PurchaseRulesDraft) => void;
-  activityId: string | null;
   categoryId: string;
   productId: string | null;
   disabled: boolean;
@@ -37,11 +36,11 @@ export default function ProductPurchaseRulesEditor({ value, onChange, activityId
   }, [categoryId, groupAttempt]);
   useEffect(() => {
     let active = true;
-    shopApi.purchasePermissions(activityId).then((options) => {
+    shopApi.purchasePermissions().then((options) => {
       if (active) { setPermissions(options); setPermissionsState("ready"); }
     }).catch(() => { if (active) setPermissionsState("error"); });
     return () => { active = false; };
-  }, [activityId, attempt]);
+  }, [attempt]);
 
   return <fieldset disabled={disabled} className="space-y-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
     <legend className="px-1 text-base font-semibold">購買資格</legend>
@@ -51,12 +50,12 @@ export default function ProductPurchaseRulesEditor({ value, onChange, activityId
     <div className="space-y-2">
       <fieldset aria-describedby={`${id}-group-help`}>
         <legend className="text-sm font-medium">同組合計限購一件</legend>
-        {groupState === "loading" ? <p role="status" className="py-2 text-sm">正在讀取活動商品…</p>
+        {groupState === "loading" ? <p role="status" className="py-2 text-sm">正在讀取商品分類…</p>
           : groupState === "error" ? <p role="alert" className="text-sm" style={{ color: "var(--danger)" }}>
             商品清單讀取失敗，原有選擇已保留。<button type="button" className="min-h-11 underline" onClick={() => {
               setGroupState("loading"); setGroupAttempt((current) => current + 1);
             }}>重新讀取商品</button>
-          </p> : products.length === 0 ? <p className="py-2 text-sm">此活動還沒有其他商品，可建立商品後再設定同組限購。</p>
+          </p> : products.length === 0 ? <p className="py-2 text-sm">此分類還沒有其他商品，可建立商品後再設定同組限購。</p>
             : <div className="max-h-64 overflow-y-auto">
               {products.map((product) => <label key={product.id} className="flex min-h-11 cursor-pointer items-center gap-2 text-sm">
                 <input type="checkbox" checked={value.exclusive_product_ids.includes(product.id)} onChange={(event) => {
@@ -70,7 +69,7 @@ export default function ProductPurchaseRulesEditor({ value, onChange, activityId
             </div>}
       </fieldset>
       <p id={`${id}-group-help`} className="text-xs" style={{ color: "var(--text-secondary)" }}>
-        可複選此活動的商品，包含系列中的商品；本商品會自動加入。儲存後所選商品合計每人限購一件，原有同組設定會依這次選擇調整。留空表示不設同組限制。
+        可複選此分類的商品，包含系列中的商品；本商品會自動加入。儲存後所選商品合計每人限購一件，原有同組設定會依這次選擇調整。留空表示不設同組限制。
       </p>
       <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-medium">
         <input type="checkbox" checked={value.designated_only}
@@ -114,13 +113,13 @@ export default function ProductPurchaseRulesEditor({ value, onChange, activityId
         </li>)}
       </ul>}
     </div>
-    <ShopTargetPicker label="允許購買名單" value={value.allowed_identifiers} activityId={activityId} productId={productId} disabled={disabled}
+    <ShopTargetPicker label="允許購買名單" value={value.allowed_identifiers} productId={productId} disabled={disabled}
       notes={value.identifier_notes} onNotesChange={(identifier_notes) => onChange({ ...value, identifier_notes })}
       onChange={(identifiers) => onChange({ ...value, allowed_identifiers: identifiers,
         identifier_notes: Object.fromEntries(Object.entries(value.identifier_notes).filter(([key]) => identifiers.includes(key) || value.blocked_identifiers.includes(key))),
       })}
       help="填寫後只有名單中的學生能購買；學號可預先指定。指定票種的名單留空時，暫無人可購買。" />
-    <ShopTargetPicker label="禁止購買名單" value={value.blocked_identifiers} activityId={activityId} productId={productId} disabled={disabled}
+    <ShopTargetPicker label="禁止購買名單" value={value.blocked_identifiers} productId={productId} disabled={disabled}
       notes={value.identifier_notes} onNotesChange={(identifier_notes) => onChange({ ...value, identifier_notes })}
       onChange={(identifiers) => onChange({ ...value, blocked_identifiers: identifiers,
         identifier_notes: Object.fromEntries(Object.entries(value.identifier_notes).filter(([key]) => identifiers.includes(key) || value.allowed_identifiers.includes(key))),

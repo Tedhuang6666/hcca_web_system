@@ -81,18 +81,7 @@ class ProductVariantGroupOut(BaseModel):
 # ── 主題 / 系列 ───────────────────────────────────────────────────────────────
 
 
-class ShopActivityDeadlineUpdate(BaseModel):
-    order_closes_at: AwareDatetime | None = Field(
-        ..., description="活動商品停止訂購時間；null 表示取消活動統一期限"
-    )
-
-
-class ShopActivityOrderClosureUpdate(BaseModel):
-    is_closed: bool = Field(..., description="結單鎖定活動訂購；false 重新開放，仍受原期限限制")
-
-
 class ProductCategoryCreate(BaseModel):
-    activity_id: uuid.UUID | None = Field(None, description="所屬活動 ID")
     name: str = Field(..., min_length=1, max_length=200, description="主題名稱，如「商品」")
     description: str | None = None
     image_url: str | None = None
@@ -109,14 +98,12 @@ class ProductCategoryUpdate(BaseModel):
     image_url: str | None = None
     sort_order: int | None = None
     is_active: bool | None = None
-    activity_id: uuid.UUID | None = None
 
 
 class ProductCategoryOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    activity_id: uuid.UUID | None = None
     name: str
     description: str | None
     image_url: str | None
@@ -283,7 +270,7 @@ class ProductCreate(BaseModel):
         None, ge=1, description="每位使用者累計購買上限；留空表示不限購"
     )
     sale_start: datetime | None = Field(None, description="開售時間")
-    sale_end: datetime | None = Field(None, description="單品截止時間；留空沿用活動結單時間")
+    sale_end: datetime | None = Field(None, description="單品截止時間；留空沿用商品分類結單時間")
     variant_groups: list[ProductVariantGroupCreate] = Field(default_factory=list)
     media: list[ProductMediaCreate] = Field(default_factory=list, max_length=20)
 
@@ -444,11 +431,7 @@ class CatalogSeriesOut(BaseModel):
 class CatalogCategoryOut(BaseModel):
     id: uuid.UUID
     name: str
-    activity_id: uuid.UUID | None = None
-    activity_name: str | None = None
-    order_closes_at: datetime | None = None
     order_closed_at: datetime | None = None
-    activity_status: str | None = None
     image_url: str | None = None
     sort_order: int = 0
     products: list[CatalogProductOut] = []
@@ -564,7 +547,6 @@ class ShopDelegationOut(BaseModel):
 
     id: uuid.UUID
     category_id: uuid.UUID
-    activity_id: uuid.UUID | None = None
     name: str
     bound_user_name: str | None = None
     bound_user_email: str | None = None
@@ -653,8 +635,6 @@ class OrderOut(BaseModel):
     test_product_id: uuid.UUID | None = None
     serial_number: str
     user_id: uuid.UUID | None
-    activity_id: uuid.UUID | None = None
-    activity_name: str | None = None
     category_id: uuid.UUID | None = None
     category_name: str | None = None
     status: OrderStatus
@@ -690,8 +670,6 @@ class OrderListItem(BaseModel):
     serial_number: str
     user_id: uuid.UUID | None
     user_name: str | None = None
-    activity_id: uuid.UUID | None = None
-    activity_name: str | None = None
     category_id: uuid.UUID | None = None
     category_name: str | None = None
     status: OrderStatus
@@ -723,8 +701,7 @@ class CheckoutRequest(BaseModel):
 
 class ShopPromotionPreviewRequest(BaseModel):
     code: str | None = Field(None, max_length=80, description="優惠碼；留空時檢查帳號自動優惠")
-    activity_id: uuid.UUID | None = Field(None, description="優惠所屬活動")
-    category_id: uuid.UUID | None = Field(None, description="未綁活動時的商品分類")
+    category_id: uuid.UUID | None = Field(None, description="商品分類")
 
 
 class ShopPromotionProductPriceCreate(BaseModel):
@@ -754,7 +731,6 @@ class ShopPromotionPreviewOut(BaseModel):
         "account_not_eligible",
         "items_not_matched",
         "quantity_not_met",
-        "activity_not_matched",
         "no_promotion",
     ]
     reason: str | None = None
@@ -787,22 +763,14 @@ class ClassPaymentUpdate(BaseModel):
         default=None, ge=0, strict=True, description="核對時的待收金額，避免重送或覆蓋其他收款"
     )
     is_paid: bool = Field(description="班聯會是否已收到款項")
-    activity_id: uuid.UUID | None = Field(description="本次更新的活動；null 代表一般商品")
-    category_id: uuid.UUID | None = Field(
-        default=None, description="未綁活動時，只更新此商品主題的收款"
-    )
 
 
 class ClassOrderConfirmationCreate(BaseModel):
-    activity_id: uuid.UUID | None = None
     category_id: uuid.UUID | None = None
     class_ids: list[uuid.UUID] | None = Field(default=None, min_length=1, max_length=200)
 
 
 class ClassReceiptBatchCreate(BaseModel):
-    activity_id: uuid.UUID | None = Field(
-        default=None, description="收據活動；保留相容舊呼叫，null 時依主題或一般商品處理"
-    )
     category_id: uuid.UUID | None = Field(default=None, description="收據商品主題")
     class_ids: list[uuid.UUID] | None = Field(
         default=None,
@@ -817,9 +785,6 @@ class ClassReceiptBatchCreate(BaseModel):
 
 
 class ChangedOrderReceiptCreate(BaseModel):
-    activity_id: uuid.UUID | None = Field(
-        default=None, description="收據活動；保留相容舊呼叫，null 時依主題或一般商品處理"
-    )
     category_id: uuid.UUID | None = Field(default=None, description="收據商品主題")
 
 
@@ -833,8 +798,6 @@ class ClassPaymentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     class_id: uuid.UUID
-    activity_id: uuid.UUID | None = None
-    category_id: uuid.UUID | None = None
     updated_orders: int
     is_paid: bool
 
@@ -845,8 +808,6 @@ class ClassPaymentReportItemOut(BaseModel):
     class_id: uuid.UUID
     class_label: str
     grade: int
-    activity_id: uuid.UUID | None = None
-    activity_label: str
     category_id: uuid.UUID | None = None
     category_label: str = "未分類商品"
     confirmed_at: datetime
@@ -863,11 +824,10 @@ class ShopClassRepresentativeRecipientOut(BaseModel):
 
 class ShopPromotionCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
-    activity_id: uuid.UUID | None = Field(None, description="適用活動；未指定時僅適用一般商品")
     target_category_ids: list[uuid.UUID] | None = Field(
         None,
         max_length=100,
-        description="適用商品主題，可複選；空列表不限主題，滿額與件數按各主題分開計算；null 保留舊活動範圍",
+        description="適用商品主題；空列表或 null 代表不限主題",
     )
     target_email: str | None = Field(None, max_length=255, description="指定帳號 Email")
     target_identifiers: list[str] = Field(
@@ -902,11 +862,10 @@ class ShopPromotionCreate(BaseModel):
 
 class ShopPromotionUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=200)
-    activity_id: uuid.UUID | None = Field(None, description="適用活動；未指定時僅適用一般商品")
     target_category_ids: list[uuid.UUID] | None = Field(
         None,
         max_length=100,
-        description="適用商品主題；空列表不限主題，null 保留舊活動範圍；未提供時不變更",
+        description="適用商品主題；空列表或 null 代表不限主題；未提供時不變更",
     )
     target_email: str | None = Field(None, max_length=255)
     target_identifiers: list[str] | None = Field(None, max_length=500)
@@ -969,7 +928,6 @@ class ShopPromotionProductTargetOut(BaseModel):
 class ShopPromotionPublicOut(BaseModel):
     id: uuid.UUID
     name: str
-    activity_id: uuid.UUID | None = None
     target_category_ids: list[uuid.UUID] | None = None
     code: str | None = None
     discount_type: ShopDiscountType
@@ -987,7 +945,6 @@ class ShopPromotionPublicOut(BaseModel):
 class ShopPromotionOut(BaseModel):
     id: uuid.UUID
     name: str
-    activity_id: uuid.UUID | None = None
     target_category_ids: list[uuid.UUID] | None = None
     code: str | None = None
     target_user_id: uuid.UUID | None = None
@@ -1092,7 +1049,7 @@ class ShopOrderCloseCreate(BaseModel):
     @model_validator(mode="after")
     def validate_deadline_scope(self) -> Self:
         if self.class_id is None and self.closes_at is not None:
-            raise ValueError("班聯統一截止時間請在活動設定調整")
+            raise ValueError("班聯統一截止時間請在商品分類設定調整")
         return self
 
 

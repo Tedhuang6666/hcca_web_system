@@ -9,7 +9,7 @@ const product: CatalogProductOut = {
 };
 const pants = { ...product, id: "pants", name: "褲子", price: 500 };
 const promotion: ShopPromotionPublicOut = { gift_quantity: 1,
-  id: "bundle", name: "衣褲套組", activity_id: null, code: null,
+  id: "bundle", name: "衣褲套組", target_category_ids: [], code: null,
   discount_type: "bundle_price", discount_value: 650, min_order_price: 0, min_quantity: 1,
   target_products: [{ id: "shirt", name: "衣服" }, { id: "pants", name: "褲子" }],
 };
@@ -113,7 +113,7 @@ describe("商品卡片內的優惠", () => {
     expect(screen.queryByText(/贈品：/)).not.toBeInTheDocument();
   });
 
-  it("活動優惠不重複顯示，單品優惠與套組入口仍可使用", () => {
+  it("商品分類優惠不重複顯示，單品優惠與套組入口仍可使用", () => {
     const select = vi.fn();
     render(<ProductCardOffers product={product} promotions={[promotion, {
       ...promotion, id: "threshold", name: "Six Seven！！！", discount_type: "fixed",

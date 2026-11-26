@@ -6,14 +6,13 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.shop import Order, OrderStatus, ShopPromotion
 from api.services import receivable as receivable_svc
 from api.services.shop._gift_allocations import snapshot_order_gifts
 from api.services.shop._orders import (
-    _order_activity_id,
     _order_detail_query,
     _promotion_product_quantities,
     _promotion_product_subtotals,
@@ -30,10 +29,7 @@ from api.services.shop._promotions import (
 )
 
 
-async def lock_promotion_orders(
-    session: AsyncSession, *, activity_ids: set[uuid.UUID | None] | None
-) -> list[Order]:
-    # 舊登記單可能尚未寫入 activity_id；載入品項後再核對實際活動。
+async def lock_promotion_orders(session: AsyncSession) -> list[Order]:
     orders = await session.scalars(
         _order_detail_query()
         .where(
@@ -41,18 +37,11 @@ async def lock_promotion_orders(
             Order.is_paid.is_(False),
             Order.is_class_collected.is_(False),
             Order.test_product_id.is_(None),
-            or_(Order.activity_id.in_(activity_ids - {None}), Order.activity_id.is_(None))
-            if activity_ids is not None
-            else True,
         )
         .order_by(Order.created_at, Order.id)
         .with_for_update()
     )
-    return [
-        order
-        for order in orders.all()
-        if activity_ids is None or _order_activity_id(order) in activity_ids
-    ]
+    return list(orders.all())
 
 
 async def _save_allocations(
@@ -114,7 +103,6 @@ async def _reprice_order(
                     categories=categories,
                     product_subtotals=subtotals,
                     product_quantities=quantities,
-                    activity_id=_order_activity_id(order),
                     current_ids=current_ids,
                 ),
             ],
@@ -149,18 +137,12 @@ async def refresh_promotion_orders(
         session, {item.product_id for order in orders for item in order.items}
     )
     now = datetime.now(UTC)
-    activity_ids = {_order_activity_id(order) for order in orders}
     automatic_promotions = list(
         await session.scalars(
             select(ShopPromotion)
             .where(
                 ShopPromotion.code.is_(None),
                 ShopPromotion.is_active.is_(True),
-                or_(
-                    ShopPromotion.activity_id.in_(activity_ids - {None}),
-                    ShopPromotion.activity_id.is_(None) if None in activity_ids else False,
-                    ShopPromotion.target_category_ids.is_not(None),
-                ),
             )
             .order_by(ShopPromotion.id)
             .with_for_update()
@@ -185,7 +167,6 @@ async def refresh_promotion_orders(
                 product_category_ids=categories,
                 product_subtotals=subtotals,
                 product_quantities=quantities,
-                activity_id=_order_activity_id(order),
                 current_promotion_ids=current_ids,
             )
             is None
@@ -271,18 +252,12 @@ async def recalculate_orders(
             session, {item.product_id for order in eligible for item in order.items}
         )
         now = datetime.now(UTC)
-        activity_ids = {_order_activity_id(order) for order in eligible}
         automatic_promotions = list(
             await session.scalars(
                 select(ShopPromotion)
                 .where(
                     ShopPromotion.code.is_(None),
                     ShopPromotion.is_active.is_(True),
-                    or_(
-                        ShopPromotion.activity_id.in_(activity_ids - {None}),
-                        ShopPromotion.activity_id.is_(None) if None in activity_ids else False,
-                        ShopPromotion.target_category_ids.is_not(None),
-                    ),
                 )
                 .order_by(ShopPromotion.id)
                 .with_for_update()

@@ -26,7 +26,7 @@ export function AssistedOrderDraftList({
                     待送出登記 · {rows.length} 位同學
                   </h3>
                   <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
-                    {rows.reduce((count, row) => count + row.items.length, 0)} 項商品 · 各活動小計分開計算
+                    {rows.reduce((count, row) => count + row.items.length, 0)} 項商品 · 各分類小計分開計算
                   </p>
                 </div>
                 <strong className="text-sm tabular-nums" style={{ color: "var(--primary-text)" }}>
@@ -48,8 +48,8 @@ export function AssistedOrderDraftList({
                       ))}
                     </div>
                     <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs tabular-nums" style={{ color: "var(--text-muted)" }}>
-                      {row.activity_totals.map((activity) => (
-                        <span key={activity.key}>{activity.label} {money(activity.amount)}</span>
+                      {row.category_totals.map((category) => (
+                        <span key={category.key}>{category.label} {money(category.amount)}</span>
                       ))}
                     </div>
                     <div className="flex gap-2">
@@ -68,7 +68,7 @@ export function AssistedOrderDraftList({
                 <table className="w-full min-w-[860px] text-sm" aria-label="待送出的班級代訂清單">
                   <thead>
                     <tr style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
-                      {["同學", "商品品項", "活動小計", "商品小計", "操作"].map((heading) => (
+                      {["同學", "商品品項", "分類小計", "商品小計", "操作"].map((heading) => (
                         <th key={heading} scope="col" className="px-3 py-2 text-left text-xs font-semibold"
                           style={{ color: "var(--text-muted)" }}>{heading}</th>
                       ))}
@@ -91,8 +91,8 @@ export function AssistedOrderDraftList({
                         </td>
                         <td className="px-3 py-3 text-xs tabular-nums" style={{ color: "var(--text-secondary)" }}>
                           <div className="space-y-1">
-                            {row.activity_totals.map((activity) => (
-                              <p key={activity.key}>{activity.label} · {money(activity.amount)}</p>
+                            {row.category_totals.map((category) => (
+                              <p key={category.key}>{category.label} · {money(category.amount)}</p>
                             ))}
                           </div>
                         </td>

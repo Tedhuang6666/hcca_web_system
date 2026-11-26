@@ -42,19 +42,17 @@ function getActiveUrgent(): Promise<AnnouncementOut | null> {
 export const announcementsApi = {
   activeUrgent: getActiveUrgent,
   refreshActiveUrgent,
-  list: (params?: { org_id?: string; activity_id?: string; skip?: number; limit?: number }) => {
+  list: (params?: { org_id?: string; skip?: number; limit?: number }) => {
     const qs = new URLSearchParams();
     if (params?.org_id) qs.set("org_id", params.org_id);
-    if (params?.activity_id) qs.set("activity_id", params.activity_id);
     if (params?.skip != null) qs.set("skip", String(params.skip));
     if (params?.limit != null) qs.set("limit", String(params.limit));
     const q = qs.toString();
     return get<AnnouncementListItem[]>(`/announcements${q ? `?${q}` : ""}`);
   },
-  listAll: (params?: { org_id?: string; activity_id?: string; skip?: number; limit?: number }) => {
+  listAll: (params?: { org_id?: string; skip?: number; limit?: number }) => {
     const qs = new URLSearchParams();
     if (params?.org_id) qs.set("org_id", params.org_id);
-    if (params?.activity_id) qs.set("activity_id", params.activity_id);
     if (params?.skip != null) qs.set("skip", String(params.skip));
     if (params?.limit != null) qs.set("limit", String(params.limit));
     const q = qs.toString();

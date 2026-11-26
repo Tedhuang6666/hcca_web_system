@@ -10,13 +10,13 @@ import { authApi, shopApi, apiErrorMessage } from "@/lib/api";
 import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 import type { OrderListItem, OrderOut } from "@/lib/types";
 import { useWS } from "@/hooks/useWS";
-import { groupActivityPreorders } from "@/lib/shop-preorders";
+import { groupCategoryPreorders } from "@/lib/shop-preorders";
 import { refreshAutomaticRegistrationPromotions } from "@/lib/shop-registration-promotions";
 import OrderItemSources from "@/components/shop/OrderItemSources";
 import ProductThumbnail from "@/components/shop/ProductThumbnail";
 import OrderItemGiftBreakdown from "@/components/shop/OrderItemGiftBreakdown";
 
-type ActivityPreorder = ReturnType<typeof groupActivityPreorders>[number];
+type CategoryPreorder = ReturnType<typeof groupCategoryPreorders>[number];
 
 export default function OrderDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -24,10 +24,10 @@ export default function OrderDetailPage() {
   const from = searchParams.get("from");
   const fromClass = from === "class";
   const fromCouncil = from === "council";
-  const activityView = searchParams.get("view") === "activity" && !fromClass && !fromCouncil;
+  const categoryView = searchParams.get("view") === "category" && !fromClass && !fromCouncil;
   const loginNext = fromClass ? `/shop/orders/${id}?from=class`
     : fromCouncil ? `/shop/orders/${id}?from=council`
-      : activityView ? `/shop/orders/${id}?view=activity`
+      : categoryView ? `/shop/orders/${id}?view=category`
       : `/shop/orders/${id}`;
   const loginHref = `/login?next=${encodeURIComponent(loginNext)}`;
   const backHref = fromClass ? "/shop/class-orders"
@@ -36,7 +36,7 @@ export default function OrderDetailPage() {
     : fromCouncil ? "返回全校訂單" : "返回我的預購";
   const [order, setOrder] = useState<OrderOut | null>(null);
   const [orders, setOrders] = useState<OrderOut[]>([]);
-  const [activityPreorder, setActivityPreorder] = useState<ActivityPreorder | null>(null);
+  const [categoryPreorder, setCategoryPreorder] = useState<CategoryPreorder | null>(null);
   const [productImages, setProductImages] = useState<Record<string, string | null>>({});
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -79,10 +79,10 @@ export default function OrderDetailPage() {
       const delegatedItemIds = new Set(delegatedOrder?.editable_item_ids ?? []);
       setDelegatedEditableItemIds(delegatedItemIds);
 
-      let summary: ActivityPreorder | null = null;
+      let summary: CategoryPreorder | null = null;
       // A single order URL always shows its saved amount, regardless of who opens it.
-      // Only the explicit activity entry combines other registrations.
-      if (activityView && user.id === o.user_id) {
+      // Only the explicit category entry combines registrations in this category.
+      if (categoryView && user.id === o.user_id) {
         const allOrders: OrderListItem[] = [];
         for (let offset = 0; ; offset += 500) {
           const page = await shopApi.listOrders({
@@ -93,7 +93,7 @@ export default function OrderDetailPage() {
           allOrders.push(...page);
           if (page.length < 500) break;
         }
-        summary = groupActivityPreorders(allOrders)
+        summary = groupCategoryPreorders(allOrders)
           .find((group) => group.orders.some((candidate) => candidate.id === o.id)) ?? null;
       }
 
@@ -104,7 +104,7 @@ export default function OrderDetailPage() {
         )),
         shopApi.getCurrentRegistrations().catch(() => []),
       ]);
-      const currentOrders = activityView
+      const currentOrders = categoryView
         ? savedRelatedOrders.filter((related) => related.user_id === user.id
           && currentRegistrations.some((registration) => registration.id === related.id))
         : [];
@@ -113,13 +113,13 @@ export default function OrderDetailPage() {
         refreshed.find((updated) => updated.id === related.id) ?? related);
       setOrder(relatedOrders.find((related) => related.id === o.id) ?? o);
       if (summary) {
-        summary = groupActivityPreorders(summary.orders.map((related) => ({
+        summary = groupCategoryPreorders(summary.orders.map((related) => ({
           ...related,
           ...relatedOrders.find((updated) => updated.id === related.id),
         })))[0] ?? null;
       }
       setOrders(relatedOrders);
-      setActivityPreorder(summary);
+      setCategoryPreorder(summary);
       const currentRegistration = currentRegistrations.find((registration) =>
         relatedOrderIds.includes(registration.id) && !registration.is_paid && !registration.is_class_collected,
       ) ?? currentRegistrations.find((registration) =>
@@ -213,7 +213,7 @@ export default function OrderDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [activityView, id]);
+  }, [categoryView, id]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -254,14 +254,14 @@ export default function OrderDetailPage() {
 
   const detailOrders = orders.length > 0 ? orders : [order];
   const isGrouped = detailOrders.length > 1;
-  const itemsToDisplay = activityPreorder?.items ?? order.items;
-  const detailTotal = activityPreorder?.amount ?? order.total_price;
-  const subtotalPrice = activityPreorder
+  const itemsToDisplay = categoryPreorder?.items ?? order.items;
+  const detailTotal = categoryPreorder?.amount ?? order.total_price;
+  const subtotalPrice = categoryPreorder
     ? detailOrders.reduce((sum, relatedOrder) => sum + relatedOrder.subtotal_price, 0)
     : order.subtotal_price || order.items.reduce((sum, item) => sum + item.subtotal, 0);
-  const receivedAmount = activityPreorder?.received
+  const receivedAmount = categoryPreorder?.received
     ?? (order.is_paid || (order.class_id && order.is_class_collected) ? order.total_price : 0);
-  const amountDue = activityPreorder?.outstanding
+  const amountDue = categoryPreorder?.outstanding
     ?? (order.status === "cancelled" || order.status === "refunded"
       || order.is_paid || order.is_class_collected ? 0 : order.total_price);
   const currentRegistration = detailOrders.find((relatedOrder) => relatedOrder.id === currentRegistrationId);
@@ -296,9 +296,9 @@ export default function OrderDetailPage() {
 
       <header className="shop-order-detail-hero">
         <div>
-          <h1>{activityPreorder?.label ?? order.activity_name ?? (order.activity_id ? "活動預購" : "一般商品預購")}</h1>
+          <h1>{categoryPreorder?.label ?? order.category_name ?? (order.category_id ? "商品分類預購" : "一般商品預購")}</h1>
           {isGrouped ? (
-            <p className="shop-order-detail-serial">活動預購詳情</p>
+            <p className="shop-order-detail-serial">分類預購詳情</p>
           ) : (
             <>
               <p className="shop-order-detail-serial">訂單 {order.serial_number}</p>
@@ -310,7 +310,7 @@ export default function OrderDetailPage() {
           </p>
         </div>
         <dl className="shop-order-detail-total">
-          <dt>{isGrouped ? "活動預購總額" : "預購總額"}</dt>
+          <dt>{isGrouped ? "分類預購總額" : "預購總額"}</dt>
           <dd>NT${detailTotal.toLocaleString()}</dd>
         </dl>
       </header>
@@ -322,7 +322,7 @@ export default function OrderDetailPage() {
             <dt style={{ color: "var(--text-muted)" }}>目前尚待繳交</dt>
             <dd>NT${amountDue.toLocaleString()}</dd>
           </div>
-          {activityPreorder && <div>
+          {categoryPreorder && <div>
             <dt style={{ color: "var(--text-muted)" }}>已繳金額</dt>
             <dd>NT${receivedAmount.toLocaleString()}</dd>
           </div>}
@@ -371,7 +371,7 @@ export default function OrderDetailPage() {
                 </p>
                 <OrderItemGiftBreakdown items={[it]} />
                 <OrderItemSources sources={detailOrders.flatMap((sourceOrder) => sourceOrder.items
-                  .filter((source) => activityPreorder ? source.product_id === it.product_id && source.unit_price === it.unit_price
+                  .filter((source) => categoryPreorder ? source.product_id === it.product_id && source.unit_price === it.unit_price
                     && source.selected_options.map((option) => option.option_id).sort().join(",")
                       === it.selected_options.map((option) => option.option_id).sort().join(",") : source.id === it.id)
                   .map((item) => ({

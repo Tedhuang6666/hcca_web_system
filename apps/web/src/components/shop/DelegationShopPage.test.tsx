@@ -26,12 +26,12 @@ vi.mock("next/link", () => ({
 vi.mock("@/lib/api-cache", () => ({ cacheGet: () => null, cacheHas: () => false, cacheSet: vi.fn() }));
 
 const product = {
-  id: "bag", name: "紀念袋", price: 100, image_url: null, status: "active" as const,
+  id: "bag", name: "紀念袋", price: 100, category_id: "goods", image_url: null, status: "active" as const,
   purchase_allowed: true, is_unlimited: true, stock_quantity: 10, has_variants: false,
   has_option_surcharge: false, sale_start: null, sale_end: "2099-10-12T00:00:00Z",
 };
 const order: OrderOut = {
-  id: "order", user_id: "student", activity_id: "festival", status: "pending",
+  id: "order", user_id: "student", category_id: "goods", status: "pending",
   serial_number: "ORDER-001", assistance_scope: "self", payment_method: "school_collection",
   created_at: "2026-10-10T00:00:00Z", updated_at: "2026-10-10T00:00:00Z",
   subtotal_price: 500, discount_amount: 0, total_price: 500, is_paid: false, is_class_collected: false,
@@ -42,9 +42,9 @@ const order: OrderOut = {
   ],
 };
 const context: ShopDelegationContextOut = {
-  link: { id: "link", category_id: "goods", activity_id: "festival", name: "給媽媽代訂", created_at: "2026-10-10T00:00:00Z", revoked_at: null },
+  link: { id: "link", category_id: "goods", name: "給媽媽代訂", created_at: "2026-10-10T00:00:00Z", revoked_at: null },
   student_name: "學生", can_claim: false, can_edit: true, registration: order,
-  catalog: [{ id: "goods", name: "校慶商品", activity_id: "festival", activity_name: "校慶", sort_order: 0, products: [product], series: [] }],
+  catalog: [{ id: "goods", name: "校慶商品", sort_order: 0, products: [product], series: [] }],
   promotions: [], closed_category_ids: [],
 };
 
@@ -64,7 +64,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 it("在一起買更划算區塊將已被更優惠套餐取代的套組變灰", async () => {
   const pants = { ...product, id: "pants", name: "長褲", price: 200 };
-  const bundle = { gift_quantity: 1, id: "bundle", name: "衣褲套組", activity_id: "festival",
+  const bundle = { gift_quantity: 1, id: "bundle", name: "衣褲套組",
     discount_type: "bundle_price" as const, discount_value: 250, min_order_price: 0,
     min_quantity: 1, target_products: [product, pants] };
   const better = { ...bundle, id: "better", name: "早鳥衣褲套組", discount_value: 200 };
@@ -135,7 +135,7 @@ describe("原商品頁的家人代訂模式", () => {
   it("一般單品登記後立即提示加購、折抵與商品描邊，能直接開啟缺少的品項", async () => {
     const pants = { ...product, id: "pants", name: "長褲", price: 200 };
     const promotion = { gift_quantity: 1,
-      id: "bundle", name: "衣褲套組", activity_id: "festival", discount_type: "bundle_price" as const,
+      id: "bundle", name: "衣褲套組", discount_type: "bundle_price" as const,
       discount_value: 250, min_order_price: 0, min_quantity: 1, target_products: [product, pants],
     };
     api.accessDelegation.mockResolvedValue({ ...context, registration: null,
@@ -147,7 +147,7 @@ describe("原商品頁的家人代訂模式", () => {
     api.setDelegationProduct.mockImplementation(() => new Promise<OrderOut>((resolve) => { finishSave = resolve; }));
     render(<ShopPage />);
     const section = await screen.findByRole("region", { name: "一起買更划算" });
-    expect(screen.queryByRole("navigation", { name: "選擇商品活動" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "選擇商品分類" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "查看商品：紀念袋" }).compareDocumentPosition(section)
       & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "查看商品：紀念袋" }));
@@ -172,17 +172,17 @@ describe("原商品頁的家人代訂模式", () => {
     expect(screen.getByText("正在選購「衣褲套組」，每項各一件；選齊後享套組價。")).toBeVisible();
   });
 
-  it.each([false, true])("套組隨活動切換，已收款時停用加購（收款：%s）", async (paid) => {
+  it.each([false, true])("套組隨商品分類切換，已收款時停用加購（收款：%s）", async (paid) => {
     const pants = { ...product, id: "pants", name: "長褲", price: 200 };
-    const other = { ...context.catalog![0], id: "other", activity_id: "other-event", name: "其他活動",
+    const other = { ...context.catalog![0], id: "other", name: "其他商品分類",
       products: [{ ...product, id: "other-product", name: "其他商品" }] };
     api.accessDelegation.mockResolvedValue({ ...context, registration: paid ? { ...order, is_paid: true } : null,
       catalog: [other, { ...context.catalog![0], products: [product, pants] }], promotions: [{ gift_quantity: 1,
-        id: "bundle", name: "衣褲套組", activity_id: "festival", discount_type: "bundle_price",
+        id: "bundle", name: "衣褲套組", discount_type: "bundle_price",
         discount_value: 250, min_order_price: 0, min_quantity: 1, target_products: [product, pants], code: "SET",
       }] });
     render(<ShopPage />);
-    await screen.findByRole("heading", { name: "其他活動", level: 2 });
+    await screen.findByRole("heading", { name: "其他商品分類", level: 2 });
     expect(screen.queryByRole("article", { name: "衣褲套組" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /校慶商品/ }));
     const bundle = await screen.findByRole("article", { name: "衣褲套組" });
@@ -193,7 +193,7 @@ describe("原商品頁的家人代訂模式", () => {
       fireEvent.click(within(bundle).getByRole("button", { name: "選購套組" }));
       await screen.findByRole("heading", { name: "紀念袋", level: 3 });
       expect(screen.getByRole("heading", { name: "校慶商品", level: 2 })).toBeVisible();
-      expect(screen.queryByLabelText("優惠適用活動")).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("優惠適用商品分類")).not.toBeInTheDocument();
       expect(screen.queryByLabelText("優惠碼")).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: "儲存並選下一項：長褲" }));
       await waitFor(() => expect(api.applyDelegationPromotion).toHaveBeenCalledWith(
@@ -227,7 +227,7 @@ describe("原商品頁的家人代訂模式", () => {
       series: inSeries ? [{ id: "series", name: "紀念系列", products }] : [],
     };
     api.accessDelegation.mockResolvedValue({ ...context, registration: null, catalog: [category], promotions: [{ gift_quantity: 1,
-      id: "bundle", name: "衣褲套組", activity_id: "festival", code: null,
+      id: "bundle", name: "衣褲套組", code: null,
       discount_type: "bundle_price", discount_value: 250, min_order_price: 0, min_quantity: 1,
       target_products: products.map((row) => ({ id: row.id, name: row.name })),
     }] });
@@ -256,7 +256,7 @@ describe("原商品頁的家人代訂模式", () => {
   it("套組可逐項選購，選齊後顯示原價刪除線與實付合計", async () => {
     const pants = { ...product, id: "pants", name: "長褲", price: 200 };
     const promotion = { gift_quantity: 1,
-      id: "bundle", name: "衣褲套組", activity_id: "festival", code: null,
+      id: "bundle", name: "衣褲套組", code: null,
       discount_type: "bundle_price" as const, discount_value: 250, min_order_price: 0, min_quantity: 1,
       target_products: [{ id: "bag", name: "紀念袋" }, { id: "pants", name: "長褲" }],
     };
@@ -296,7 +296,7 @@ describe("原商品頁的家人代訂模式", () => {
     const pants = { ...product, id: "pants", name: "長褲", price: 200 };
     api.accessDelegation.mockResolvedValue({ ...context, registration: null,
       catalog: [{ ...context.catalog![0], products: [product, pants] }], promotions: [{ gift_quantity: 1,
-        id: "bundle", name: "衣褲套組", activity_id: "festival", discount_type: "bundle_price",
+        id: "bundle", name: "衣褲套組", discount_type: "bundle_price",
         discount_value: 250, min_order_price: 0, min_quantity: 1, target_products: [product, pants],
       }] });
     api.getDelegationProduct.mockImplementation((_token, id) => Promise.resolve({
@@ -336,7 +336,7 @@ describe("原商品頁的家人代訂模式", () => {
 
   it("單品優惠價會同時顯示原價與優惠價", async () => {
     api.accessDelegation.mockResolvedValue({ ...context, registration: null, promotions: [{ gift_quantity: 1,
-      id: "sale", name: "商品九折", activity_id: "festival", code: null,
+      id: "sale", name: "商品九折", code: null,
       discount_type: "percentage", discount_value: 10, min_order_price: 0, min_quantity: 1,
       target_products: [],
     }] });
@@ -400,7 +400,7 @@ describe("原商品頁的家人代訂模式", () => {
   it("uses only this link's rows for editing while displaying the combined order", async () => {
     render(<ShopPage />);
     expect(await screen.findByRole("heading", { name: "給媽媽代訂 · 為 學生 代訂" })).toBeVisible();
-    const existingOrder = screen.getByRole("region", { name: "學生在此活動的預購" });
+    const existingOrder = screen.getByRole("region", { name: "學生在此商品分類的預購" });
     expect(within(existingOrder).getByText("僅可修改此連結登記的品項。"))
       .toBeVisible();
     expect(within(existingOrder).getAllByRole("listitem")).toHaveLength(3);
@@ -539,7 +539,7 @@ describe("原商品頁的家人代訂模式", () => {
     const { unmount } = render(<ShopPage />);
     fireEvent.click(await screen.findByRole("button", { name: "家人代訂" }));
     expect(await screen.findByRole("textbox", { name: "邀請誰來代訂" })).toBeVisible();
-    expect(screen.getByRole("combobox", { name: "選擇活動" })).toHaveValue("goods");
+    expect(screen.getByRole("combobox", { name: "商品分類" })).toHaveValue("goods");
     expect(screen.queryByRole("textbox", { name: "學生提供的七位數代訂驗證碼" })).not.toBeInTheDocument();
     unmount();
     api.me.mockRejectedValue(new Error("未登入"));
@@ -568,7 +568,7 @@ describe("原商品頁的家人代訂模式", () => {
     api.getCurrentRegistrations.mockResolvedValue([]);
     render(<ShopPage />);
     fireEvent.click(await screen.findByRole("button", { name: "家人代訂" }));
-    expect(await screen.findByText("目前沒有可授權的商品活動，開放預購後即可建立代訂連結。")).toBeVisible();
+    expect(await screen.findByText("目前沒有可授權的商品分類，開放預購後即可建立代訂連結。")).toBeVisible();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(api.listDelegationLinks).not.toHaveBeenCalled();
   });
@@ -652,12 +652,12 @@ describe("原商品頁的家人代訂模式", () => {
     fireEvent(window, new HashChangeEvent("hashchange"));
     await screen.findByRole("heading", { name: "給媽媽代訂 · 為 學生 代訂" });
     await act(async () => {
-      finishCatalog([{ ...context.catalog![0], id: "own-category", name: "本人其他活動", products: [], series: [] }]);
+      finishCatalog([{ ...context.catalog![0], id: "own-category", name: "本人其他商品分類", products: [], series: [] }]);
       finishOrders([]);
     });
     expect(screen.getByText("已登記 5 件")).toBeVisible();
     expect(screen.getByRole("button", { name: "查看商品：紀念袋" })).toBeVisible();
-    expect(screen.queryByText("本人其他活動")).not.toBeInTheDocument();
+    expect(screen.queryByText("本人其他商品分類")).not.toBeInTheDocument();
   });
 
   it("uses the latest link if it changes while the login account is loading", async () => {
@@ -673,28 +673,28 @@ describe("原商品頁的家人代訂模式", () => {
   });
 });
 
-it.each([false, true])("活動滿額優惠只集中顯示一次，切換活動時更新（系列商品：%s）", async (inSeries) => {
+it.each([false, true])("商品分類滿額優惠只集中顯示一次，切換商品分類時更新（系列商品：%s）", async (inSeries) => {
   const pants = { ...product, id: "pants", name: "長褲", price: 200 };
   const products = [product, pants];
   api.accessDelegation.mockResolvedValue({ ...context, registration: null,
     catalog: [{ ...context.catalog![0], products: inSeries ? [] : products,
       series: inSeries ? [{ id: "series", name: "紀念系列", products }] : [],
-    }, { ...context.catalog![0], id: "other", name: "其他活動", products: [{ ...product, id: "other-product", name: "其他商品" }] }],
+    }, { ...context.catalog![0], id: "other", name: "其他商品分類", products: [{ ...product, id: "other-product", name: "其他商品" }] }],
     promotions: [{ gift_quantity: 1,
-      id: "threshold", name: "活動滿千折百", target_category_ids: ["goods"],
+      id: "threshold", name: "商品分類滿千折百", target_category_ids: ["goods"],
       discount_type: "fixed", discount_value: 100, min_order_price: 1000, min_quantity: 2,
       target_products: [], code: "SAVE100",
     }],
   });
   render(<ShopPage />);
-  const offers = await screen.findByRole("region", { name: "活動優惠" });
-  expect(screen.getAllByText("活動滿千折百")).toHaveLength(1);
-  expect(within(offers).getByText("活動滿千折百")).not.toBeVisible();
-  fireEvent.click(within(offers).getByText("活動優惠（1 項）"));
+  const offers = await screen.findByRole("region", { name: "商品分類優惠" });
+  expect(screen.getAllByText("商品分類滿千折百")).toHaveLength(1);
+  expect(within(offers).getByText("商品分類滿千折百")).not.toBeVisible();
+  fireEvent.click(within(offers).getByText("分類優惠（1 項）"));
   expect(within(offers).getByText("滿 NT$1,000、滿 2 件，折抵 NT$100 · 優惠碼 SAVE100")).toBeVisible();
   for (const name of ["紀念袋商品", "長褲商品"]) {
     expect(screen.getByRole("article", { name }).querySelector(".shop-product-card-offers")).toBeNull();
   }
-  fireEvent.click(screen.getByRole("button", { name: /其他活動/ }));
-  expect(screen.queryByRole("region", { name: "活動優惠" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /其他商品分類/ }));
+  expect(screen.queryByRole("region", { name: "商品分類優惠" })).not.toBeInTheDocument();
 });

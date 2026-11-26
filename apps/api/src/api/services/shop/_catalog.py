@@ -88,12 +88,9 @@ async def get_category(session: AsyncSession, category_id: uuid.UUID) -> Product
 async def list_categories(
     session: AsyncSession,
     *,
-    activity_id: uuid.UUID | None = None,
     include_inactive: bool = True,
 ) -> list[ProductCategory]:
     q = select(ProductCategory)
-    if activity_id:
-        q = q.where(ProductCategory.activity_id == activity_id)
     if not include_inactive:
         q = q.where(ProductCategory.is_active.is_(True))
     q = q.order_by(ProductCategory.sort_order, ProductCategory.created_at, ProductCategory.id)
@@ -109,7 +106,6 @@ async def create_category(
         last_order = await session.scalar(select(func.max(ProductCategory.sort_order)))
         sort_order = _next_sort_order(last_order)
     category = ProductCategory(
-        activity_id=data.activity_id,
         name=data.name,
         description=data.description,
         image_url=data.image_url,
@@ -137,12 +133,12 @@ async def delete_category(session: AsyncSession, category: ProductCategory) -> N
         select(Product.id).where(Product.category_id == category.id).limit(1)
     )
     if result.scalar_one_or_none() is not None or direct_product is not None:
-        raise ValueError("活動下仍有系列或商品，無法刪除（請先刪除或移動內容）")
+        raise ValueError("分類下仍有系列或商品，無法刪除（請先刪除或移動內容）")
     delegation_link_id = await session.scalar(
         select(ShopDelegationLink.id).where(ShopDelegationLink.category_id == category.id).limit(1)
     )
     if delegation_link_id is not None:
-        raise ValueError("活動仍有代訂授權連結，無法刪除（請先刪除或移動連結）")
+        raise ValueError("分類仍有代訂授權連結，無法刪除（請先刪除或移動連結）")
     await session.delete(category)
     await session.flush()
 
@@ -171,7 +167,7 @@ async def list_series(
 async def create_series(session: AsyncSession, *, data: ProductSeriesCreate) -> ProductSeries:
     category = await get_category(session, data.category_id)
     if category is None:
-        raise ValueError("找不到所屬活動")
+        raise ValueError("找不到此商品分類")
     sort_order = data.sort_order
     if sort_order is None:
         last_order = await session.scalar(
@@ -215,10 +211,8 @@ async def get_product(session: AsyncSession, product_id: uuid.UUID) -> Product |
         select(Product)
         .options(
             selectinload(Product.variant_groups).selectinload(ProductVariantGroup.options),
-            selectinload(Product.category).selectinload(ProductCategory.activity),
-            selectinload(Product.series)
-            .selectinload(ProductSeries.category)
-            .selectinload(ProductCategory.activity),
+            selectinload(Product.category),
+            selectinload(Product.series).selectinload(ProductSeries.category),
             selectinload(Product.media),
         )
         .where(Product.id == product_id)
@@ -229,7 +223,6 @@ async def get_product(session: AsyncSession, product_id: uuid.UUID) -> Product |
 async def list_products(
     session: AsyncSession,
     *,
-    activity_id: uuid.UUID | None = None,
     category_id: uuid.UUID | None = None,
     series_id: uuid.UUID | None = None,
     status: ProductStatus | None = None,
@@ -264,22 +257,16 @@ async def list_products(
         ),
         selectinload(Product.variant_groups).selectinload(ProductVariantGroup.options),
         selectinload(Product.media),
-        selectinload(Product.category).selectinload(ProductCategory.activity),
-        selectinload(Product.series)
-        .selectinload(ProductSeries.category)
-        .selectinload(ProductCategory.activity),
+        selectinload(Product.category),
+        selectinload(Product.series).selectinload(ProductSeries.category),
     )
-    if activity_id:
+    if category_id:
         q = q.where(
             or_(
-                Product.category.has(ProductCategory.activity_id == activity_id),
-                Product.series.has(
-                    ProductSeries.category.has(ProductCategory.activity_id == activity_id)
-                ),
+                Product.category_id == category_id,
+                Product.series.has(ProductSeries.category_id == category_id),
             )
         )
-    if category_id:
-        q = q.where(Product.category_id == category_id, Product.series_id.is_(None))
     if series_id:
         q = q.where(Product.series_id == series_id)
     if status:
@@ -304,12 +291,12 @@ async def create_product(
         raise ValueError("找不到所屬系列")
     category_id = data.category_id or (series.category_id if series else None)
     if category_id is None:
-        raise ValueError("請選擇所屬活動")
+        raise ValueError("請選擇商品分類")
     category = await get_category(session, category_id)
     if category is None:
-        raise ValueError("找不到所屬活動")
+        raise ValueError("找不到此商品分類")
     if series and series.category_id != category.id:
-        raise ValueError("所選系列不屬於此活動")
+        raise ValueError("所選系列不屬於此商品分類")
     if series is None:
         sibling_filter = (Product.category_id == category.id) & Product.series_id.is_(None)
     else:
@@ -416,12 +403,12 @@ async def update_product(
         if target_category_id is None and target_series is not None:
             target_category_id = target_series.category_id
         if target_category_id is None:
-            raise ValueError("請選擇所屬活動")
+            raise ValueError("請選擇商品分類")
         target_category = await get_category(session, target_category_id)
         if target_category is None:
-            raise ValueError("找不到所屬活動")
+            raise ValueError("找不到此商品分類")
         if target_series and target_series.category_id != target_category.id:
-            raise ValueError("所選系列不屬於此活動")
+            raise ValueError("所選系列不屬於此商品分類")
         payload["category_id"] = target_category.id
         target_parent = (target_category.id, target_series.id if target_series else None)
         if target_parent != previous_parent:
@@ -463,7 +450,7 @@ async def sync_purchase_group(
     if len(members) != len(ids):
         raise ValueError("部分限購商品已不存在，請重新讀取商品清單")
     if any(member.category_id != product.category_id for member in members):
-        raise ValueError("同組限購只能選擇同一活動內的商品")
+        raise ValueError("同組限購只能選擇同一商品分類內的商品")
     group_id = str(uuid.uuid4())
     for member in members:
         member.purchase_rules = {**(member.purchase_rules or {}), "exclusive_group": group_id}
@@ -611,7 +598,7 @@ async def delete_variant_option(session: AsyncSession, option: ProductVariantOpt
 async def build_catalog_tree(
     session: AsyncSession,
     *,
-    activity_id: uuid.UUID | None = None,
+    category_id: uuid.UUID | None = None,
     include_testing: bool = False,
     include_closed: bool = False,
     buyer: User | None = None,
@@ -619,7 +606,6 @@ async def build_catalog_tree(
     q = (
         select(ProductCategory)
         .options(
-            selectinload(ProductCategory.activity),
             selectinload(ProductCategory.series)
             .selectinload(ProductSeries.products)
             .selectinload(Product.variant_groups),
@@ -632,8 +618,8 @@ async def build_catalog_tree(
         .where(ProductCategory.is_active.is_(True))
         .order_by(ProductCategory.sort_order, ProductCategory.created_at, ProductCategory.id)
     )
-    if activity_id:
-        q = q.where(ProductCategory.activity_id == activity_id)
+    if category_id:
+        q = q.where(ProductCategory.id == category_id)
     categories = (await session.execute(q)).scalars().unique().all()
     catalog_products = [product for category in categories for product in category.products]
     catalog_products.extend(
@@ -683,13 +669,8 @@ async def build_catalog_tree(
     tree: list[CatalogCategoryOut] = []
     now = datetime.now(UTC)
     for category in categories:
-        activity_deadline = category.activity.order_closes_at if category.activity else None
-        if activity_deadline is not None and activity_deadline.tzinfo is None:
-            activity_deadline = activity_deadline.replace(tzinfo=UTC)
-        activity_closed = bool(category.activity and category.activity.order_closed_at)
-        deadline_passed = activity_deadline is not None and activity_deadline <= now
         category_closed = category.id in category_close_times
-        if not include_closed and (activity_closed or deadline_passed or category_closed):
+        if not include_closed and category_closed:
             continue
         category_products = [
             CatalogProductOut(
@@ -706,10 +687,7 @@ async def build_catalog_tree(
                 purchase_group=(product.purchase_rules or {}).get("exclusive_group"),
                 sale_start=product.sale_start,
                 sale_end=product.sale_end,
-                effective_sale_end=effective_product_deadline(
-                    product.sale_end,
-                    category.activity.order_closes_at if category.activity else None,
-                ),
+                effective_sale_end=effective_product_deadline(product.sale_end),
                 has_variants=len(product.variant_groups) > 0,
                 has_option_surcharge=product.id in products_with_option_surcharge,
             )
@@ -740,9 +718,7 @@ async def build_catalog_tree(
                     purchase_group=(p.purchase_rules or {}).get("exclusive_group"),
                     sale_start=p.sale_start,
                     sale_end=p.sale_end,
-                    effective_sale_end=effective_product_deadline(
-                        p.sale_end, category.activity.order_closes_at if category.activity else None
-                    ),
+                    effective_sale_end=effective_product_deadline(p.sale_end),
                     has_variants=len(p.variant_groups) > 0,
                     has_option_surcharge=p.id in products_with_option_surcharge,
                 )
@@ -762,16 +738,7 @@ async def build_catalog_tree(
             CatalogCategoryOut(
                 id=category.id,
                 name=category.name,
-                activity_id=category.activity_id,
-                activity_name=category.activity.name if category.activity else None,
-                order_closes_at=category.activity.order_closes_at if category.activity else None,
-                order_closed_at=(
-                    category.activity.order_closed_at
-                    if category.activity and category.activity.order_closed_at
-                    else category_close_times.get(category.id)
-                    or (activity_deadline if deadline_passed else None)
-                ),
-                activity_status=category.activity.status if category.activity else None,
+                order_closed_at=category_close_times.get(category.id),
                 image_url=category.image_url,
                 sort_order=category.sort_order,
                 products=category_products,

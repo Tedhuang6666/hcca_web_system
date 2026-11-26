@@ -166,7 +166,7 @@ function ShopWorkspaceDenied({ section }: { section: "class" | "oversight" | "ma
     ? "這個工作區提供給負責班級收款與代訂的人員。"
     : section === "oversight"
       ? "這個工作區提供給負責統籌全校訂單的班聯人員。"
-      : "這個工作區提供給負責商品與活動設定的班聯人員。";
+      : "這個工作區提供給負責商品與分類設定的班聯人員。";
 
   return (
     <div className="mx-auto my-8 max-w-xl px-4" role="alert">

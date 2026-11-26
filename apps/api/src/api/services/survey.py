@@ -153,7 +153,6 @@ async def list_surveys(
     session: AsyncSession,
     *,
     org_id: uuid.UUID | None = None,
-    activity_id: uuid.UUID | None = None,
     status: SurveyStatus | None = None,
     public_only: bool = False,
     limit: int = 20,
@@ -178,7 +177,6 @@ async def list_surveys(
                 Survey.opens_at,
                 Survey.closes_at,
                 Survey.org_id,
-                Survey.activity_id,
                 Survey.created_by,
                 Survey.created_at,
                 Survey.is_public,
@@ -195,8 +193,6 @@ async def list_surveys(
     )
     if org_id:
         q = q.where(Survey.org_id == org_id)
-    if activity_id:
-        q = q.where(Survey.activity_id == activity_id)
     if public_only:
         # 年級限制需要登入並確認本校班級，不出現在未登入可填答的公開列表。
         q = q.where(
@@ -233,7 +229,6 @@ async def create_survey(
         opens_at=data.opens_at,
         closes_at=data.closes_at,
         org_id=data.org_id,
-        activity_id=data.activity_id,
         created_by=created_by,
         is_public=data.is_public,
         is_listed=data.is_listed,
@@ -318,7 +313,6 @@ async def sync_announcement(
     announcement.link_label = "前往填答"
     announcement.show_on_every_visit = announcement.is_urgent
     announcement.org_id = None
-    announcement.activity_id = survey.activity_id
     announcement.audience_type = AnnouncementAudience.ALL.value
     if announcement.is_published and (not was_published or announcement.published_at is None):
         announcement.published_at = datetime.now(UTC)
@@ -408,7 +402,6 @@ async def list_respondable_surveys(
     user: User,
     *,
     org_id: uuid.UUID | None = None,
-    activity_id: uuid.UUID | None = None,
     status: SurveyStatus | None = None,
     limit: int = 20,
     offset: int = 0,
@@ -431,7 +424,6 @@ async def list_respondable_surveys(
         candidates = await list_surveys(
             session,
             org_id=org_id,
-            activity_id=activity_id,
             status=status,
             limit=page_size,
             offset=candidate_offset,

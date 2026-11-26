@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from api.models.shop import Cart, CartItem, Product, ProductCategory, ProductSeries, ProductStatus
+from api.models.shop import Cart, CartItem, Product, ProductSeries, ProductStatus
 from api.models.user import User
 from api.schemas.shop import CartItemCreate, CartItemOut, CartOut
 from api.services.shop._catalog import get_product
@@ -43,15 +43,11 @@ async def get_or_create_cart(session: AsyncSession, user_id: uuid.UUID) -> Cart:
     result = await session.execute(
         select(Cart)
         .options(
-            selectinload(Cart.items)
-            .selectinload(CartItem.product)
-            .selectinload(Product.category)
-            .selectinload(ProductCategory.activity),
+            selectinload(Cart.items).selectinload(CartItem.product).selectinload(Product.category),
             selectinload(Cart.items)
             .selectinload(CartItem.product)
             .selectinload(Product.series)
-            .selectinload(ProductSeries.category)
-            .selectinload(ProductCategory.activity),
+            .selectinload(ProductSeries.category),
         )
         .where(Cart.user_id == user_id)
     )
@@ -147,9 +143,6 @@ async def clear_cart(session: AsyncSession, user_id: uuid.UUID) -> Cart:
 
 def _cart_item_availability(product: Product, quantity: int) -> tuple[bool, str | None]:
     now = datetime.now(UTC)
-    category = product.category or (product.series.category if product.series else None)
-    if category and category.activity and category.activity.order_closed_at:
-        return False, "活動已結單，訂購已鎖定"
     if product.status != ProductStatus.ACTIVE:
         return False, "商品已下架"
     sale_start = product.sale_start

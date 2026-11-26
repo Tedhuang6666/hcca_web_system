@@ -93,7 +93,6 @@ async def list_instances(
     *,
     workflow_type: str | None = None,
     status: str | None = None,
-    activity_id: uuid.UUID | None = None,
     limit: int = 80,
     offset: int = 0,
 ) -> list[WorkflowInstance]:
@@ -109,8 +108,6 @@ async def list_instances(
         stmt = stmt.where(WorkflowInstance.workflow_type == workflow_type)
     if status:
         stmt = stmt.where(WorkflowInstance.status == status)
-    if activity_id:
-        stmt = stmt.where(WorkflowInstance.activity_id == activity_id)
     return list((await db.execute(stmt)).scalars().all())
 
 
@@ -124,7 +121,6 @@ async def ensure_instance(
     status: str,
     created_by_id: uuid.UUID | None = None,
     org_id: uuid.UUID | None = None,
-    activity_id: uuid.UUID | None = None,
     meta: dict | None = None,
     actor_email: str | None = None,
 ) -> WorkflowInstance:
@@ -134,7 +130,6 @@ async def ensure_instance(
         existing.status = status
         existing.current_step = _step_for(workflow_type, status)
         existing.org_id = org_id
-        existing.activity_id = activity_id
         existing.meta = meta or existing.meta or {}
         await db.flush()
         await _ensure_matter_for_instance(
@@ -153,7 +148,6 @@ async def ensure_instance(
         status=status,
         current_step=_step_for(workflow_type, status),
         org_id=org_id,
-        activity_id=activity_id,
         created_by_id=created_by_id,
         meta=meta or {},
     )
@@ -408,8 +402,6 @@ async def _ensure_matter_for_instance(
 
 
 def _matter_type_for_workflow(instance: WorkflowInstance) -> str:
-    if instance.source_type == "activity":
-        return MatterType.ACTIVITY
     if instance.source_type == "judicial_petition":
         return MatterType.PETITION
     if instance.source_type == "council_proposal":
@@ -419,7 +411,6 @@ def _matter_type_for_workflow(instance: WorkflowInstance) -> str:
 
 def _href_for_source(source_type: str, source_id: uuid.UUID) -> str | None:
     hrefs = {
-        "activity": f"/activities/{source_id}",
         "judicial_petition": f"/judicial-petitions/{source_id}",
         "council_proposal": f"/council-proposals/{source_id}",
     }
@@ -620,7 +611,6 @@ async def _ensure_publication_campaign(
         body=instance.meta.get("summary") or instance.title,
         source_type=instance.source_type,
         source_id=instance.source_id,
-        activity_id=instance.activity_id,
         org_id=instance.org_id,
         audience_type="all",
         audience_filter={},

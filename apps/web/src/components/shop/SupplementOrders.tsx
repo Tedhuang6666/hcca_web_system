@@ -10,12 +10,12 @@ import { confirmAction } from "@/components/ui/ConfirmDialog";
 const balanceKey = (order: OrderListItem) => `${order.supplement_class_id}:${orderScopeKey(order)}`;
 const outstanding = (order: OrderListItem) => order.is_paid ? 0 : Math.max(0, order.total_price - (order.received_amount ?? 0));
 
-export default function SupplementOrders({ canCollect = false, canRejoin = false, refreshKey = 0, classes = [], activityKey, onCollected, onRejoined }: {
+export default function SupplementOrders({ canCollect = false, canRejoin = false, refreshKey = 0, classes = [], categoryKey, onCollected, onRejoined }: {
   canCollect?: boolean;
   canRejoin?: boolean;
   refreshKey?: number;
   classes?: SchoolClassListItem[];
-  activityKey?: string;
+  categoryKey?: string;
   onCollected?: () => void;
   onRejoined?: () => void;
 }) {
@@ -59,8 +59,8 @@ export default function SupplementOrders({ canCollect = false, canRejoin = false
     setMessage("");
     try {
       const response = order.is_class_balance && order.supplement_class_id
-        ? order.activity_id
-          ? await shopApi.downloadClassReceipt(order.supplement_class_id, order.activity_id)
+        ? order.category_id
+          ? await shopApi.downloadClassReceipt(order.supplement_class_id, order.category_id)
           : await shopApi.downloadClassReceipts({ category_id: order.category_id ?? undefined }, [order.supplement_class_id])
         : await shopApi.downloadSupplementReceipt(order.id);
       const url = URL.createObjectURL(await response.blob());
@@ -86,10 +86,9 @@ export default function SupplementOrders({ canCollect = false, canRejoin = false
     try {
       if (!order.is_paid) {
         if (order.is_class_balance && order.supplement_class_id) {
-          const amount = orders.filter((row) => row.is_class_balance && balanceKey(row) === balanceKey(order))
-            .reduce((sum, row) => sum + outstanding(row), 0);
-          await shopApi.setClassPaid(order.supplement_class_id, true, order.activity_id ?? null,
-            order.activity_id ? undefined : order.category_id ?? undefined, { expected_unpaid_amount: amount });
+          const balanceOrders = orders.filter((row) => row.is_class_balance
+            && balanceKey(row) === balanceKey(order) && !row.is_paid);
+          await Promise.all(balanceOrders.map((row) => shopApi.setOrderPaid(row.id, true)));
           setRetry((value) => value + 1);
         } else {
           await shopApi.setOrderPaid(order.id, true);
@@ -126,7 +125,7 @@ export default function SupplementOrders({ canCollect = false, canRejoin = false
     }
   }
 
-  const scopedOrders = activityKey ? orders.filter((order) => orderScopeKey(order) === activityKey) : orders;
+  const scopedOrders = categoryKey ? orders.filter((order) => orderScopeKey(order) === categoryKey) : orders;
   const pending = scopedOrders.filter((order) => !order.is_paid);
   const visible = (showPaid ? scopedOrders : pending).filter((order) => !order.is_class_balance);
   const balances = new Map<string, OrderListItem[]>();
@@ -151,7 +150,7 @@ export default function SupplementOrders({ canCollect = false, canRejoin = false
           const label = classes.find((item) => item.id === order.supplement_class_id)?.label ?? order.class_label ?? "原班級";
           return <li key={key} className="flex flex-wrap items-center justify-between gap-3 py-3">
             <div><p className="font-medium">{label} · 整班尾款</p>
-              <p className="text-sm" style={{ color: "var(--text-secondary)" }}>{order.activity_name ?? order.category_name ?? "一般商品"} · {due > 0 ? `待補收 ${money(due)}` : "已收齊"}</p></div>
+              <p className="text-sm" style={{ color: "var(--text-secondary)" }}>{order.category_name ?? "一般商品"} · {due > 0 ? `待補收 ${money(due)}` : "已收齊"}</p></div>
             <div className="flex flex-wrap gap-2">
               <button type="button" className="btn btn-secondary min-h-11" disabled={busy !== null} onClick={() => void download(order)}>下載班級收據</button>
               {due > 0 && canCollect && <button type="button" className="btn btn-secondary min-h-11" disabled={busy !== null}
@@ -165,7 +164,7 @@ export default function SupplementOrders({ canCollect = false, canRejoin = false
       {!visible.length && !visibleBalances.length ? <p className="text-sm" style={{ color: "var(--text-secondary)" }}>目前沒有{showPaid ? "補收款訂單" : "待補收款項"}。</p> : <ul className="divide-y" style={{ borderColor: "var(--border)" }}>
         {visible.map((order) => <li key={order.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
           <div className="min-w-0">
-            <p className="break-words font-medium">{order.user_name ?? "同學"} · {order.activity_name ?? order.category_name ?? "一般商品"}</p>
+            <p className="break-words font-medium">{order.user_name ?? "同學"} · {order.category_name ?? "一般商品"}</p>
             <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
               {classes.find((item) => item.id === order.supplement_class_id)?.label ?? order.class_label ?? "原班級"} · {order.serial_number} · {money(order.is_paid ? order.total_price : outstanding(order))} · {order.is_paid ? "已收款並歸班" : order.is_class_collected ? "班代已收、待班聯確認繳款" : "待訂購同學自行繳款"}
             </p>

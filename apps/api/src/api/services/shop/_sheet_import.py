@@ -187,7 +187,7 @@ async def _parse_response(
         if normalize(answer) in {"0", "無", "不要", "不需要", "不訂購", "-", "—"}:
             continue
         if len(candidates) != 1:
-            raise AnswerNeedsReview(f"欄位「{header[:100]}」無法唯一對應本活動商品，請設定欄位對應")
+            raise AnswerNeedsReview(f"欄位「{header[:100]}」無法唯一對應此商品分類，請設定欄位對應")
         product = candidates[0]
         groups = product.variant_groups
         if len(groups) > 1:
@@ -247,10 +247,8 @@ async def _build_order(
     name, email, office = parsed.name, parsed.email, parsed.office
     by_id, items, quantities = parsed.products, parsed.items, parsed.quantities
     scopes = {_product_order_scope(by_id[item.product_id]) for item in items}
-    if len(scopes) != 1 or (
-        order is not None and next(iter(scopes)) != (order.activity_id, order.category_id)
-    ):
-        raise AnswerNeedsReview("同一筆訂單只能包含原活動的商品，請管理者核對來源設定")
+    if len(scopes) != 1 or (order is not None and next(iter(scopes)) != order.category_id):
+        raise AnswerNeedsReview("同一筆訂單只能包含原商品分類的商品，請管理者核對來源設定")
     for product_id in sorted(set(quantities) | set(old_quantities)):
         product = by_id[product_id]
         await _assert_product_registration_open(
@@ -272,7 +270,7 @@ async def _build_order(
                 product.status = ProductStatus.ACTIVE
     category = await session.get(ProductCategory, source.category_id)
     if category is None:
-        raise AnswerNeedsReview("來源活動不存在")
+        raise AnswerNeedsReview("來源商品分類不存在")
     total = sum(item.quantity * item.unit_price for item in items)
     if order is None:
         scope = next(iter(scopes))
@@ -280,8 +278,7 @@ async def _build_order(
             serial_number=await generate_order_serial(session),
             user_id=None,
             class_id=None,
-            activity_id=scope[0],
-            category_id=scope[1],
+            category_id=scope,
             status=OrderStatus.CONFIRMED,
             assistance_scope="sheet_import",
             payment_method="cash_on_pickup",

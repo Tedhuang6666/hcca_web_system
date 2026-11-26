@@ -19,7 +19,7 @@ function product(): ShopProfitProduct {
 }
 function fixture(): ShopProfitOut {
   return {
-    category_id: "shirts", category_name: "服飾活動", generated_at: "2026-11-05T04:00:00Z",
+    category_id: "shirts", category_name: "服飾分類", generated_at: "2026-11-05T04:00:00Z",
     products: [product()],
     summary: { ordered_quantity: 3, purchase_quantity: 10, sellable_stock_quantity: 6,
       reserve_quantity: 1, supplier_gift_quantity: 0, minimum_top_up_quantity: 4, revenue: 240, paid_amount: 240,
@@ -29,7 +29,7 @@ function fixture(): ShopProfitOut {
 }
 beforeEach(() => {
   vi.resetAllMocks();
-  api.listCategories.mockResolvedValue([{ id: "shirts", name: "服飾活動" }, { id: "cards", name: "卡片活動" }]);
+  api.listCategories.mockResolvedValue([{ id: "shirts", name: "服飾分類" }, { id: "cards", name: "卡片分類" }]);
   api.profitAnalysis.mockResolvedValue(fixture());
   api.saveProcurement.mockResolvedValue({});
 });
@@ -66,7 +66,7 @@ it("廠商贈品可編輯、失敗保留並重試，重算後呈現及匯出", a
   expect(csv).toContain('"3","2","6","10","8"');
 });
 
-it("整批盈利獨立分析單一完整活動，呈現備品與可售庫存並可試算回本", async () => {
+it("整批盈利獨立分析單一完整商品分類，呈現備品與可售庫存並可試算回本", async () => {
   render(<ShopProfitAnalysis />);
   const row = await screen.findByRole("article", { name: "紀念衫盈利分析" });
   expect(api.profitAnalysis).toHaveBeenCalledWith("shirts");
@@ -87,7 +87,7 @@ it("整批盈利獨立分析單一完整活動，呈現備品與可售庫存並�
 it("儲存完整採購設定，重算資料並保留零成本與 null 的差異", async () => {
   const view = render(<ShopProfitAnalysis />);
   fireEvent.click(await screen.findByRole("button", { name: "編輯紀念衫採購設定" }));
-  expect(screen.getByRole("combobox", { name: "盈利分析活動" })).toBeDisabled();
+  expect(screen.getByRole("combobox", { name: "盈利分析商品分類" })).toBeDisabled();
   const form = screen.getByRole("form", { name: "紀念衫採購設定" });
   fireEvent.change(within(form).getByRole("spinbutton", { name: "單位成本（NT$；留空為未知）" }), { target: { value: "" } });
   fireEvent.change(within(form).getByRole("spinbutton", { name: "廠商起訂量（件）" }), { target: { value: "20" } });
@@ -97,7 +97,7 @@ it("儲存完整採購設定，重算資料並保留零成本與 null 的差異"
     unit_cost: null, minimum_order_quantity: 20, stock_extra_quantity: 2, reserve_quantity: 1, supplier_gift_quantity: 0, extra_cost: 50, note: "加購",
   }));
   await waitFor(() => expect(api.profitAnalysis).toHaveBeenCalledTimes(2));
-  expect(screen.getByRole("combobox", { name: "盈利分析活動" })).toBeEnabled();
+  expect(screen.getByRole("combobox", { name: "盈利分析商品分類" })).toBeEnabled();
   fireEvent.click(screen.getByRole("button", { name: "編輯紀念衫採購設定" }));
   fireEvent.change(screen.getByRole("spinbutton", { name: "單位成本（NT$；留空為未知）" }), { target: { value: "0" } });
   fireEvent.submit(screen.getByRole("form", { name: "紀念衫採購設定" }));
@@ -118,7 +118,7 @@ it("儲存失敗時保留草稿、聚焦錯誤並能重試", async () => {
   await waitFor(() => expect(screen.queryByRole("form")).not.toBeInTheDocument());
 });
 
-it("成本缺漏不顯示假盈利，空活動不發出分析", async () => {
+it("成本缺漏不顯示假盈利，空商品分類不發出分析", async () => {
   const data = fixture();
   data.summary.profit_amount = data.summary.total_cost = null;
   data.summary.missing_cost_product_count = 1;
@@ -129,31 +129,31 @@ it("成本缺漏不顯示假盈利，空活動不發出分析", async () => {
   api.profitAnalysis.mockClear();
   api.listCategories.mockResolvedValue([]);
   render(<ShopProfitAnalysis />);
-  expect(await screen.findByText("尚無可分析的活動。")).toBeVisible();
+  expect(await screen.findByText("尚無可分析的商品分類。")).toBeVisible();
   expect(api.profitAnalysis).not.toHaveBeenCalled();
 });
 
-it("活動載入與分析失敗可分別重試", async () => {
+it("商品分類載入與分析失敗可分別重試", async () => {
   api.listCategories.mockRejectedValueOnce(new Error("offline"));
   api.profitAnalysis.mockRejectedValueOnce(new Error("offline"));
   render(<ShopProfitAnalysis />);
-  fireEvent.click(await screen.findByRole("button", { name: "重試活動" }));
+  fireEvent.click(await screen.findByRole("button", { name: "重試商品分類" }));
   fireEvent.click(await screen.findByRole("button", { name: "重試盈利分析" }));
   expect(await screen.findByRole("article", { name: "紀念衫盈利分析" })).toBeVisible();
 });
 
-it("切換活動清除舊資料並忽略過時回應", async () => {
+it("切換商品分類清除舊資料並忽略過時回應", async () => {
   let finish!: (data: ShopProfitOut) => void;
   api.profitAnalysis.mockReturnValueOnce(new Promise<ShopProfitOut>((resolve) => { finish = resolve; }));
   const next = fixture();
   next.category_id = "cards";
-  next.category_name = "卡片活動";
+  next.category_name = "卡片分類";
   next.products = [];
   api.profitAnalysis.mockResolvedValueOnce(next);
   render(<ShopProfitAnalysis />);
   await waitFor(() => expect(api.profitAnalysis).toHaveBeenCalledTimes(1));
-  fireEvent.change(screen.getByRole("combobox", { name: "盈利分析活動" }), { target: { value: "cards" } });
-  expect(await screen.findByText("此活動尚無商品，請先到商品管理建立商品。")).toBeVisible();
+  fireEvent.change(screen.getByRole("combobox", { name: "盈利分析商品分類" }), { target: { value: "cards" } });
+  expect(await screen.findByText("此商品分類尚無商品，請先到商品管理建立商品。")).toBeVisible();
   await act(async () => { finish(fixture()); });
   expect(screen.queryByRole("article")).not.toBeInTheDocument();
 });
@@ -172,7 +172,7 @@ it("CSV 匯出包含整批規劃且防止商品或備註變成試算表公式", 
   const row = product();
   row.name = '=HYPERLINK("https://example.test")';
   row.plan.note = " @SUM(1,2)\n多行";
-  const csv = profitCsv([row], "活動");
+  const csv = profitCsv([row], "商品分類");
   expect(csv).toContain("不可售備用品");
   expect(csv).toContain('"\'=HYPERLINK(""https://example.test"")"');
   expect(csv).toContain("' @SUM(1,2)\n多行");
@@ -206,7 +206,7 @@ it("CSV 同時匯出選項成本與逐選項明細", () => {
   row.option_cost = 12;
   row.options = [{ key: "id:xl", group_name: "尺寸", value: "=XL", unit_cost: 4,
     ordered_quantity: 3, total_cost: 12 }];
-  const csv = profitCsv([row], "活動");
+  const csv = profitCsv([row], "商品分類");
   expect(csv).toContain('"訂單選項成本"');
   expect(csv).toContain('"紀念衫","尺寸","\'=XL","4","3","12"');
 });

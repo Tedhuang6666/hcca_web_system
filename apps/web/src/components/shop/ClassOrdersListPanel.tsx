@@ -7,18 +7,18 @@ import SeparateOrderButton from "@/components/shop/SeparateOrderButton";
 import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 import { orderScopeKey } from "@/lib/shop-order-scope";
 import { money } from "@/lib/shop-class-orders";
-import type { ActivityOptionRow } from "@/components/shop/classOrderSelectors";
+import type { CategoryOptionRow } from "@/components/shop/classOrderSelectors";
 import { isCollectableOrder } from "@/components/shop/classOrderSelectors";
 import type { ClassMemberOut, OrderListItem } from "@/lib/types";
 
 type PaidFilter = "all" | "paid" | "unpaid";
 type AssistedFilter = "all" | "assisted";
 type ProductFilterOption = [string, string];
-type ActivityFilterOption = Pick<ActivityOptionRow, "key" | "label">;
-type ActivityGroup = { label: string; orders: OrderListItem[] };
+type CategoryFilterOption = Pick<CategoryOptionRow, "key" | "label">;
+type CategoryGroup = { label: string; orders: OrderListItem[] };
 
 type Props = {
-  selectedActivityLabel: string;
+  selectedCategoryLabel: string;
   visibleOrders: OrderListItem[];
   query: string;
   setQuery: (value: string) => void;
@@ -31,22 +31,22 @@ type Props = {
   setAssistedFilter: (value: AssistedFilter) => void;
   productFilter: string;
   setProductFilter: (value: string) => void;
-  setActivityFilter: (value: string) => void;
-  activityFilter: string;
+  setCategoryFilter: (value: string) => void;
+  categoryFilter: string;
   productFilterOptions: ProductFilterOption[];
-  filterActivityRows: ActivityFilterOption[];
+  filterCategoryRows: CategoryFilterOption[];
   clearFilters: () => void;
   selectablePageOrders: OrderListItem[];
   allVisibleSelected: boolean;
   setSelectedIds: Dispatch<SetStateAction<string[]>>;
   selectedOrders: OrderListItem[];
-  selectedActivityGroups: Map<string, ActivityGroup>;
+  selectedCategoryGroups: Map<string, CategoryGroup>;
   batchBusy: boolean;
-  batchSetPaid: (activityKey: string, collected: boolean) => void | Promise<void>;
+  batchSetPaid: (categoryKey: string, collected: boolean) => void | Promise<void>;
   loading: boolean;
   openCreate: () => void;
   pageOrders: OrderListItem[];
-  activityLabel: (activityId: string | null | undefined) => string;
+  categoryLabel: (categoryId: string | null | undefined) => string;
   togglePaid: (order: OrderListItem) => void | Promise<void>;
   busy: string | null;
   selectedSet: Set<string>;
@@ -60,18 +60,18 @@ type Props = {
 };
 
 export function ClassOrdersListPanel({
-  selectedActivityLabel, visibleOrders, query, setQuery, members, memberFilter, setMemberFilter,
+  selectedCategoryLabel, visibleOrders, query, setQuery, members, memberFilter, setMemberFilter,
   paidFilter, setPaidFilter, assistedFilter, setAssistedFilter, productFilter, setProductFilter,
-  setActivityFilter, activityFilter, productFilterOptions, filterActivityRows, clearFilters,
-  selectablePageOrders, allVisibleSelected, setSelectedIds, selectedOrders, selectedActivityGroups,
-  batchBusy, batchSetPaid, loading, openCreate, pageOrders, activityLabel, togglePaid, busy, selectedSet,
+  setCategoryFilter, categoryFilter, productFilterOptions, filterCategoryRows, clearFilters,
+  selectablePageOrders, allVisibleSelected, setSelectedIds, selectedOrders, selectedCategoryGroups,
+  batchBusy, batchSetPaid, loading, openCreate, pageOrders, categoryLabel, togglePaid, busy, selectedSet,
   openEdit, load, onCancelOrder, currentPage, pageCount, setOrderPage, orderListPageSize,
 }: Props) {
   return (
 <section id="class-orders-list" className="min-w-0 scroll-mt-5 space-y-4">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <div>
-              <h2 className="text-lg font-semibold text-fg-primary!" >班級訂單 · {selectedActivityLabel}</h2>
+              <h2 className="text-lg font-semibold text-fg-primary!" >班級訂單 · {selectedCategoryLabel}</h2>
               <p className="mt-1 text-xs text-fg-muted!" >此操作僅記錄班代收款，班聯仍須確認。</p>
             </div>
             <span className="text-sm tabular-nums text-fg-muted!" >{visibleOrders.length} 筆</span>
@@ -103,14 +103,14 @@ export function ClassOrdersListPanel({
                 <option value="">全部商品</option>
                 {productFilterOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
               </select>
-              <select className="input min-h-11" value={activityFilter} onChange={(e) => { setActivityFilter(e.target.value); setProductFilter(""); setSelectedIds([]); }} aria-label="依活動篩選">
-                <option value="all">目前活動全部商品</option>
-                {filterActivityRows.map((row) => (
+              <select className="input min-h-11" value={categoryFilter} onChange={(e) => { setCategoryFilter(e.target.value); setProductFilter(""); setSelectedIds([]); }} aria-label="依商品分類篩選">
+                <option value="all">目前分類全部商品</option>
+                {filterCategoryRows.map((row) => (
                   <option key={row.key} value={row.key}>{row.label}</option>
                 ))}
               </select>
             </div>
-            {(activityFilter !== "all" || productFilter || paidFilter !== "all" || assistedFilter !== "all" || memberFilter || query) && (
+            {(categoryFilter !== "all" || productFilter || paidFilter !== "all" || assistedFilter !== "all" || memberFilter || query) && (
               <div className="mt-3 flex justify-end">
                 <button type="button" onClick={clearFilters} className="btn btn-ghost min-h-11 px-3 text-xs">
                   清除所有篩選
@@ -138,16 +138,16 @@ export function ClassOrdersListPanel({
                 <span className="text-xs text-fg-muted!" >已選 {selectedOrders.length} 筆</span>
               </div>
               <div className="flex flex-wrap gap-2">
-                {[...selectedActivityGroups.entries()].map(([activityKey, group]) => (
-                  <div key={activityKey} className="flex flex-wrap items-center gap-1 rounded-md px-2 py-1 border! border-border!"
+                {[...selectedCategoryGroups.entries()].map(([categoryKey, group]) => (
+                  <div key={categoryKey} className="flex flex-wrap items-center gap-1 rounded-md px-2 py-1 border! border-border!"
                     >
                     <span className="mr-1 text-xs text-fg-muted!" >
                       {group.label} · {group.orders.length} 筆
                     </span>
-                    <button type="button" disabled={batchBusy} onClick={() => batchSetPaid(activityKey, true)}
+                    <button type="button" disabled={batchBusy} onClick={() => batchSetPaid(categoryKey, true)}
                       className="min-h-9 rounded-md px-2 text-xs font-medium disabled:opacity-50 border! border-border! text-success!"
                       >標記已收款</button>
-                    <button type="button" disabled={batchBusy} onClick={() => batchSetPaid(activityKey, false)}
+                    <button type="button" disabled={batchBusy} onClick={() => batchSetPaid(categoryKey, false)}
                       className="min-h-9 rounded-md px-2 text-xs font-medium disabled:opacity-50 border! border-border! text-fg-secondary!"
                       >撤銷收款</button>
                   </div>
@@ -174,7 +174,7 @@ export function ClassOrdersListPanel({
                         </Link>
                         <p className="mt-1 truncate text-sm font-medium text-fg-primary!" >{order.user_name ?? "未具名訂購人"}</p>
                         <p className="mt-0.5 text-xs text-fg-muted!" >
-                          {order.activity_name ?? order.category_name ?? activityLabel(orderScopeKey(order))} · {order.assistance_scope === "class_assisted" ? "幹部代訂" : "自行訂購"}
+                          {order.category_name ?? order.category_name ?? categoryLabel(orderScopeKey(order))} · {order.assistance_scope === "class_assisted" ? "幹部代訂" : "自行訂購"}
                         </p>
                       </div>
                       <span className="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium"
@@ -226,7 +226,7 @@ export function ClassOrdersListPanel({
                 <table className="w-full min-w-[820px] text-sm" role="table">
                   <thead>
                     <tr  className="border-b! border-b-border!">
-                      {["", "訂單編號", "訂購人", "活動", "來源", "狀態", "應收金額", "班代收款", "操作"].map((h, i) => (
+                      {["", "訂單編號", "訂購人", "商品分類", "來源", "狀態", "應收金額", "班代收款", "操作"].map((h, i) => (
                         <th key={i} className="px-4 py-3 text-left text-xs font-semibold text-fg-muted!"
                            scope="col">{h}</th>
                       ))}
@@ -251,7 +251,7 @@ export function ClassOrdersListPanel({
                           </Link>
                         </td>
                         <td className="px-4 py-3 text-xs text-fg-secondary!" >{order.user_name ?? "-"}</td>
-                        <td className="px-4 py-3 text-xs text-fg-muted!" >{order.activity_name ?? order.category_name ?? activityLabel(orderScopeKey(order))}</td>
+                        <td className="px-4 py-3 text-xs text-fg-muted!" >{order.category_name ?? order.category_name ?? categoryLabel(orderScopeKey(order))}</td>
                         <td className="px-4 py-3 text-xs text-fg-muted!" >
                           {order.assistance_scope === "class_assisted" ? "幹部代訂" : "自行訂購"}
                         </td>

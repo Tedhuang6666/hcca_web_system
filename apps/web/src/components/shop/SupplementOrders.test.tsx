@@ -16,14 +16,14 @@ beforeEach(() => {
   vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
 });
 
-it("指定活動時補收款名單、金額與收款操作不包含其他活動", async () => {
+it("指定商品分類時補收款名單、金額與收款操作不包含其他分類", async () => {
   api.listSupplementOrders.mockResolvedValue([
     { ...order, category_id: "love" },
-    { ...order, id: "other", category_id: "dance", total_price: 900, user_name: "其他活動同學" },
+    { ...order, id: "other", category_id: "dance", total_price: 900, user_name: "其他分類同學" },
   ]);
-  render(<SupplementOrders activityKey="category:love" canCollect />);
+  render(<SupplementOrders categoryKey="category:love" canCollect />);
   expect(await screen.findByText("待補收 NT$120")).toBeVisible();
-  expect(screen.queryByText("其他活動同學")).not.toBeInTheDocument();
+  expect(screen.queryByText("其他分類同學")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "登記繳費" }));
   await waitFor(() => expect(api.setOrderPaid).toHaveBeenCalledExactlyOnceWith("extra", true));
 });

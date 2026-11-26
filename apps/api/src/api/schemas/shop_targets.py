@@ -7,7 +7,6 @@ from pydantic import BaseModel, Field
 
 
 class ShopTargetLookupRequest(BaseModel):
-    activity_id: uuid.UUID | None = None
     product_id: uuid.UUID | None = None
     keyword: str = Field("", max_length=100)
     identifiers: list[Annotated[str, Field(max_length=255)]] = Field(

@@ -10,7 +10,6 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from api.models.activity import Activity
 from api.models.shop import (
     Order,
     Product,
@@ -111,7 +110,7 @@ def _free_pricing_results(
             results, subtotal, product_subtotals, product_quantities, categories
         )
 
-    # 活動全免（含規格加價）優先，其次保留指定商品的贈品件數；
+    # 全額折抵（含規格加價）優先，其次保留指定商品的贈品件數；
     # 只有其餘件數參與套組與其他折扣，贈品的規格加價仍照常計費。
     amounts = dict(product_subtotals or {})
     quantities = dict(product_quantities or {})
@@ -231,15 +230,8 @@ def _validate_bundle_price(
         return
     if len(products) < 2:
         raise ValueError("套組優惠至少要選擇兩項不同商品，每項各一件")
-    # 套組須能在同一登記單湊齊；同活動的不同主題仍可合組。
-    _resolve_activity_scope(None, products, infer_activity=True)
-    if _product_activity_id(products[0]) is None:
-        category_ids = {
-            product.category_id or (product.series.category_id if product.series else None)
-            for product in products
-        }
-        if len(category_ids) > 1:
-            raise ValueError("未綁定活動的套組商品必須屬於同一商品分類")
+    # 訂單依商品分類拆分，套組商品必須屬於同一分類。
+    _resolve_category_scope(products)
     if not 0 < discount_value < sum(product.price for product in products):
         raise ValueError("套組價必須大於 0，且低於各商品原價合計")
 
@@ -368,28 +360,18 @@ def _build_product_price_override_rows(
     ]
 
 
-def _product_activity_id(product: Product) -> uuid.UUID | None:
+def _product_category_id(product: Product) -> uuid.UUID | None:
     category = product.category
     if category is None and product.series is not None:
         category = product.series.category
-    return category.activity_id if category is not None else None
+    return category.id if category is not None else None
 
 
-def _resolve_activity_scope(
-    requested_activity_id: uuid.UUID | None,
-    target_products: list[Product],
-    *,
-    infer_activity: bool,
-) -> uuid.UUID | None:
-    product_scopes = {_product_activity_id(product) for product in target_products}
+def _resolve_category_scope(target_products: list[Product]) -> uuid.UUID | None:
+    product_scopes = {_product_category_id(product) for product in target_products}
     if len(product_scopes) > 1:
-        raise ValueError("同一項優惠的指定商品必須屬於同一活動")
-    product_scope = next(iter(product_scopes), None)
-    if infer_activity and requested_activity_id is None:
-        return product_scope
-    if target_products and product_scope != requested_activity_id:
-        raise ValueError("優惠適用活動必須與指定商品所屬活動一致")
-    return requested_activity_id
+        raise ValueError("同一項套組優惠的指定商品必須屬於同一商品分類")
+    return next(iter(product_scopes), None)
 
 
 def _promotion_targets_user(user_id: uuid.UUID):
@@ -467,7 +449,6 @@ def _promotion_issue(
     now: datetime,
     product_subtotals: dict[uuid.UUID, int] | None = None,
     product_quantities: dict[uuid.UUID, int] | None = None,
-    activity_id: uuid.UUID | None = None,
     current_promotion_id: uuid.UUID | None = None,
     current_promotion_ids: set[uuid.UUID] | None = None,
     product_category_ids: dict[uuid.UUID, uuid.UUID | None] | None = None,
@@ -479,8 +460,6 @@ def _promotion_issue(
         return "not_started", f"此優惠將於 {start} 開始。", 0, 0
     if promotion.ends_at and promotion.ends_at < now:
         return "expired", "此優惠已結束。", 0, 0
-    if promotion.target_category_ids is None and promotion.activity_id != activity_id:
-        return "activity_not_matched", "此優惠僅適用於所屬活動。", 0, 0
     current_ids = set(current_promotion_ids or ())
     if current_promotion_id is not None:
         current_ids.add(current_promotion_id)
@@ -547,7 +526,6 @@ async def preview_promotion(
     code: str | None = None,
     product_subtotals: dict[uuid.UUID, int] | None = None,
     product_quantities: dict[uuid.UUID, int] | None = None,
-    activity_id: uuid.UUID | None = None,
     current_promotion_id: uuid.UUID | None = None,
     current_promotion_ids: set[uuid.UUID] | None = None,
 ) -> PromotionPreviewResult:
@@ -581,9 +559,6 @@ async def preview_promotion(
         or_(ShopPromotion.ends_at.is_(None), ShopPromotion.ends_at >= now),
         usage_filter,
         ShopPromotion.code.is_(None),
-        or_(
-            ShopPromotion.activity_id == activity_id, ShopPromotion.target_category_ids.is_not(None)
-        ),
         _promotion_can_target_user(user_id),
     )
 
@@ -610,7 +585,6 @@ async def preview_promotion(
             product_category_ids=categories,
             product_subtotals=product_subtotals,
             product_quantities=product_quantities,
-            activity_id=activity_id,
             current_promotion_id=current_promotion_id,
             current_promotion_ids=current_promotion_ids,
         )
@@ -635,10 +609,6 @@ async def preview_promotion(
                     .options(*load_targets)
                     .where(
                         *base_filters,
-                        or_(
-                            ShopPromotion.activity_id == activity_id,
-                            ShopPromotion.target_category_ids.is_not(None),
-                        ),
                         ShopPromotion.code.is_(None),
                         _promotion_can_target_user(user_id),
                     )
@@ -659,7 +629,6 @@ async def preview_promotion(
                 product_category_ids=categories,
                 product_subtotals=product_subtotals,
                 product_quantities=product_quantities,
-                activity_id=activity_id,
                 current_promotion_id=current_promotion_id,
                 current_promotion_ids=current_promotion_ids,
             )
@@ -714,7 +683,6 @@ async def preview_promotion(
             product_category_ids=categories,
             product_subtotals=product_subtotals,
             product_quantities=product_quantities,
-            activity_id=activity_id,
             current_promotion_id=current_promotion_id,
             current_promotion_ids=current_promotion_ids,
         )
@@ -756,7 +724,6 @@ async def preview_promotion(
             product_category_ids=categories,
             product_subtotals=product_subtotals,
             product_quantities=product_quantities,
-            activity_id=activity_id,
             current_promotion_id=current_promotion_id,
             current_promotion_ids=current_promotion_ids,
         )
@@ -809,18 +776,9 @@ async def create_promotion(
         identifier for kind, identifier in normalized_identifiers if kind == "student_id"
     ]
     target_products = await _target_products(session, data.target_product_ids)
-    category_ids = (
-        await validate_topic_scope(session, data.target_category_ids, target_products)
-        if data.target_category_ids is not None
-        else None
+    category_ids = await validate_topic_scope(
+        session, data.target_category_ids or [], target_products
     )
-    activity_id = (
-        _resolve_activity_scope(data.activity_id, target_products, infer_activity=True)
-        if category_ids is None
-        else None
-    )
-    if activity_id is not None and await session.get(Activity, activity_id) is None:
-        raise ValueError("找不到指定活動")
     _validate_discount(data.discount_type, data.discount_value)
     _validate_bundle_price(
         data.discount_type,
@@ -842,7 +800,6 @@ async def create_promotion(
 
     promotion = ShopPromotion(
         name=data.name.strip(),
-        activity_id=activity_id,
         target_category_ids=category_ids,
         code=code,
         target_user_id=target_users[0].id if len(target_users) == 1 else None,
@@ -867,9 +824,7 @@ async def create_promotion(
     session.add(promotion)
     await session.flush()
     if promotion.code is None:
-        orders = await lock_promotion_orders(
-            session, activity_ids={promotion.activity_id} if category_ids is None else None
-        )
+        orders = await lock_promotion_orders(session)
         await refresh_promotion_orders(session, promotion=promotion, orders=orders)
     return await get_promotion(session, promotion.id) or promotion
 
@@ -968,21 +923,15 @@ async def update_promotion(
 ) -> ShopPromotion:
     from api.services.shop._promotion_orders import lock_promotion_orders, refresh_promotion_orders
 
-    previous_activity_id = promotion.activity_id
-    previous_category_ids = promotion.target_category_ids
     was_automatic = promotion.code is None
     payload = data.model_dump(exclude_unset=True)
-    activity_was_explicit = "activity_id" in payload
-    category_scope_was_explicit = "target_category_ids" in payload
-    requested_category_ids = payload.pop("target_category_ids", promotion.target_category_ids)
-    target_products_changed = "target_product_ids" in payload
+    requested_category_ids = payload.pop("target_category_ids", promotion.target_category_ids or [])
     price_overrides_were_explicit = "product_price_overrides" in payload
     requested_price_overrides = payload.pop("product_price_overrides", None)
     if requested_price_overrides is not None:
         requested_price_overrides = [
             ShopPromotionProductPriceCreate.model_validate(row) for row in requested_price_overrides
         ]
-    requested_activity_id = payload.pop("activity_id", promotion.activity_id)
     target_users: list[User] | None = None
     target_student_ids: list[str] | None = None
     target_products: list[Product] | None = None
@@ -1010,48 +959,21 @@ async def update_promotion(
             )
         ):
             raise ValueError("優惠碼已存在")
-    activity_id = promotion.activity_id
-    if requested_category_ids is not None:
-        category_ids = await validate_topic_scope(
-            session,
-            [uuid.UUID(str(value)) for value in requested_category_ids],
-            target_products
-            if target_products is not None
-            else list(promotion.target_products or []),
-        )
-        activity_id = None
-    else:
-        category_ids = None
-    if category_ids is None and (
-        activity_was_explicit or target_products_changed or category_scope_was_explicit
-    ):
-        effective_products = target_products
-        if effective_products is None:
-            effective_products = await _target_products(
-                session, [product.id for product in (promotion.target_products or [])]
-            )
-        activity_id = _resolve_activity_scope(
-            requested_activity_id,
-            effective_products,
-            infer_activity=(
-                target_products_changed and not activity_was_explicit and bool(effective_products)
-            ),
-        )
-        if activity_id is not None and await session.get(Activity, activity_id) is None:
-            raise ValueError("找不到指定活動")
+    effective_products = target_products
+    if effective_products is None:
+        effective_products = list(promotion.target_products or [])
+    category_ids = await validate_topic_scope(
+        session,
+        [uuid.UUID(str(value)) for value in (requested_category_ids or [])],
+        effective_products,
+    )
 
     # 商品登記先鎖訂單、再鎖優惠；更新優惠沿用相同順序，避免與登記／收款互鎖。
     orders = (
-        await lock_promotion_orders(
-            session,
-            activity_ids={previous_activity_id, activity_id}
-            if previous_category_ids is None and category_ids is None
-            else None,
-        )
+        await lock_promotion_orders(session)
         if was_automatic or payload.get("code", promotion.code) is None
         else []
     )
-    promotion.activity_id = activity_id
     promotion.target_category_ids = category_ids
     if target_users is not None:
         promotion.target_users = target_users
@@ -1167,7 +1089,6 @@ async def resolve_promotion(
     code: str | None = None,
     product_subtotals: dict[uuid.UUID, int] | None = None,
     product_quantities: dict[uuid.UUID, int] | None = None,
-    activity_id: uuid.UUID | None = None,
     current_promotion_id: uuid.UUID | None = None,
     current_promotion_ids: set[uuid.UUID] | None = None,
 ) -> PromotionResult:
@@ -1233,7 +1154,6 @@ async def resolve_promotion(
             product_category_ids=categories,
             product_subtotals=product_subtotals,
             product_quantities=product_quantities,
-            activity_id=activity_id,
             current_promotion_id=current_promotion_id,
             current_promotion_ids=current_ids,
         )
@@ -1267,7 +1187,6 @@ async def resolve_promotion(
         subtotal=subtotal,
         product_subtotals=product_subtotals,
         product_quantities=product_quantities,
-        activity_id=activity_id,
         current_ids=current_ids,
     )
     return automatic[0] if automatic else PromotionResult(promotion=None, discount_amount=0)
@@ -1280,7 +1199,6 @@ async def _resolve_automatic_promotions(
     subtotal: int,
     product_subtotals: dict[uuid.UUID, int] | None,
     product_quantities: dict[uuid.UUID, int] | None,
-    activity_id: uuid.UUID | None,
     current_ids: set[uuid.UUID],
 ) -> list[PromotionResult]:
     categories = await product_topic_ids(session, set(product_subtotals or {}))
@@ -1308,10 +1226,6 @@ async def _resolve_automatic_promotions(
                 .where(
                     *base_filters,
                     ShopPromotion.code.is_(None),
-                    or_(
-                        ShopPromotion.activity_id == activity_id,
-                        ShopPromotion.target_category_ids.is_not(None),
-                    ),
                     _promotion_can_target_user(user_id),
                 )
                 .with_for_update()
@@ -1329,7 +1243,6 @@ async def _resolve_automatic_promotions(
         categories=categories,
         product_subtotals=product_subtotals,
         product_quantities=product_quantities,
-        activity_id=activity_id,
         current_ids=current_ids,
     )
 
@@ -1344,7 +1257,6 @@ def _automatic_promotion_results(
     categories: dict[uuid.UUID, uuid.UUID | None],
     product_subtotals: dict[uuid.UUID, int] | None,
     product_quantities: dict[uuid.UUID, int] | None,
-    activity_id: uuid.UUID | None,
     current_ids: set[uuid.UUID],
 ) -> list[PromotionResult]:
     """共用單筆與批次試算，名額依同一交易中最新的 used_count 判斷。"""
@@ -1360,7 +1272,6 @@ def _automatic_promotion_results(
             product_category_ids=categories,
             product_subtotals=product_subtotals,
             product_quantities=product_quantities,
-            activity_id=activity_id,
             current_promotion_ids=current_ids,
         )
         is None
@@ -1380,7 +1291,6 @@ async def resolve_promotions(
     code: str | None = None,
     product_subtotals: dict[uuid.UUID, int] | None = None,
     product_quantities: dict[uuid.UUID, int] | None = None,
-    activity_id: uuid.UUID | None = None,
     current_promotion_id: uuid.UUID | None = None,
     current_promotion_ids: set[uuid.UUID] | None = None,
 ) -> PromotionBundleResult:
@@ -1396,7 +1306,6 @@ async def resolve_promotions(
             code=code,
             product_subtotals=product_subtotals,
             product_quantities=product_quantities,
-            activity_id=activity_id,
             current_promotion_ids=current_ids,
         )
         selected.append(coupon)
@@ -1407,7 +1316,6 @@ async def resolve_promotions(
         subtotal=subtotal,
         product_subtotals=product_subtotals,
         product_quantities=product_quantities,
-        activity_id=activity_id,
         current_ids=current_ids,
     )
     results = [*selected, *automatic]
@@ -1455,10 +1363,7 @@ def serialize_promotion(promotion: ShopPromotion) -> ShopPromotionOut:
     return ShopPromotionOut(
         id=promotion.id,
         name=promotion.name,
-        activity_id=promotion.activity_id,
-        target_category_ids=[uuid.UUID(value) for value in promotion.target_category_ids]
-        if promotion.target_category_ids is not None
-        else None,
+        target_category_ids=[uuid.UUID(value) for value in (promotion.target_category_ids or [])],
         code=promotion.code,
         target_user_id=promotion.target_user_id,
         target_email=promotion.target_user.email if promotion.target_user else None,
@@ -1489,10 +1394,7 @@ def serialize_public_promotion(promotion: ShopPromotion) -> ShopPromotionPublicO
     return ShopPromotionPublicOut(
         id=promotion.id,
         name=promotion.name,
-        activity_id=promotion.activity_id,
-        target_category_ids=[uuid.UUID(value) for value in promotion.target_category_ids]
-        if promotion.target_category_ids is not None
-        else None,
+        target_category_ids=[uuid.UUID(value) for value in (promotion.target_category_ids or [])],
         code=promotion.code,
         discount_type=promotion.discount_type,
         discount_value=promotion.discount_value,

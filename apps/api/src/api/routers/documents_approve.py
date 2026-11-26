@@ -58,7 +58,6 @@ from api.schemas.document import (
     RejectRequest,
     SubmitRequest,
 )
-from api.services import activity as activity_svc
 from api.services import audit as audit_svc
 from api.services import document as doc_svc
 from api.services.permission import get_user_permission_codes_for_org, user_is_org_leader
@@ -93,19 +92,15 @@ async def resend_document_email(
         )
     if not current_user.is_superuser:
         codes = await get_user_permission_codes_for_org(session, current_user.id, doc.org_id)
-        is_activity_manager = await activity_svc.can_manage_activity_resource(
-            session, current_user, doc.activity_id
-        )
         is_org_leader = await user_is_org_leader(session, current_user.id, doc.org_id)
         if not (
             doc.created_by == current_user.id
             or is_org_leader
             or {"document:admin", "document:edit", "document:create"} & set(codes)
-            or is_activity_manager
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="只有建立者、部門最高權限者、文件編輯者或活動管理者可以重寄 Email",
+                detail="只有建立者、部門最高權限者或文件編輯者可以重寄 Email",
             )
 
     queued = await doc_svc.queue_document_recipient_emails(session, doc, force=True)
@@ -147,19 +142,15 @@ async def dispatch_document(
         )
     if not current_user.is_superuser:
         codes = await get_user_permission_codes_for_org(session, current_user.id, doc.org_id)
-        is_activity_manager = await activity_svc.can_manage_activity_resource(
-            session, current_user, doc.activity_id
-        )
         is_org_leader = await user_is_org_leader(session, current_user.id, doc.org_id)
         if not (
             doc.created_by == current_user.id
             or is_org_leader
             or {"document:admin", "document:edit", "document:create"} & set(codes)
-            or is_activity_manager
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="只有建立者、部門最高權限者、文件編輯者或活動管理者可以指定派送",
+                detail="只有建立者、部門最高權限者或文件編輯者可以指定派送",
             )
 
     try:
@@ -394,19 +385,15 @@ async def submit_document(
     doc = await get_doc_or_404(doc_id, session)
     if not current_user.is_superuser:
         codes = await get_user_permission_codes_for_org(session, current_user.id, doc.org_id)
-        is_activity_manager = await activity_svc.can_manage_activity_resource(
-            session, current_user, doc.activity_id
-        )
         is_org_leader = await user_is_org_leader(session, current_user.id, doc.org_id)
         if not (
             (doc.created_by == current_user.id and "document:submit" in codes)
             or is_org_leader
             or "document:admin" in codes
-            or is_activity_manager
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="只有部門最高權限者、建立者 + document:submit、document:admin 或活動總召可以送審",
+                detail="只有部門最高權限者、建立者 + document:submit 或 document:admin 可以送審",
             )
     try:
         updated = await doc_svc.submit_for_approval(session, doc, approver_ids=payload.approver_ids)

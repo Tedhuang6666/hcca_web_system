@@ -24,7 +24,6 @@ from api.models.shop import (
 )
 from api.models.user import User
 from api.routers._common import or_404
-from api.services import activity as activity_svc
 from api.services import shop as shop_svc
 from api.services.permission import get_user_permission_codes
 from api.services.shop import _buyer as buyer_svc
@@ -63,7 +62,7 @@ _COUNCIL_CODES = {
 
 async def _get_category_or_404(category_id: uuid.UUID, session: AsyncSession) -> ProductCategory:
     obj = await shop_svc.get_category(session, category_id)
-    return or_404(obj, "找不到此活動")
+    return or_404(obj, "找不到此商品分類")
 
 
 async def _get_series_or_404(series_id: uuid.UUID, session: AsyncSession) -> ProductSeries:
@@ -171,26 +170,10 @@ async def _has_shop_manage(session: AsyncSession, user: User) -> bool:
     return str(PermissionCode.SHOP_MANAGE) in codes or str(PermissionCode.ADMIN_ALL) in codes
 
 
-async def _require_shop_manager(
-    session: AsyncSession, user: User, activity_id: uuid.UUID | None
-) -> None:
+async def _require_shop_manager(session: AsyncSession, user: User) -> None:
     if await _has_shop_manage(session, user):
         return
-    if await activity_svc.can_manage_activity_resource(session, user, activity_id):
-        return
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="需要權限：shop:manage")
-
-
-def _category_activity(category: ProductCategory | None) -> uuid.UUID | None:
-    return category.activity_id if category else None
-
-
-def _product_activity(product: Product) -> uuid.UUID | None:
-    category = getattr(product, "category", None)
-    if category is not None:
-        return _category_activity(category)
-    series = getattr(product, "series", None)
-    return _category_activity(getattr(series, "category", None) if series else None)
 
 
 async def _class_order_scope_ids(session: AsyncSession, user: User) -> list[uuid.UUID]:

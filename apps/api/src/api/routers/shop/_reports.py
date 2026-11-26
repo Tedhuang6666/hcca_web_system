@@ -41,7 +41,7 @@ router = APIRouter()
 @router.get(
     "/orders/analytics",
     response_model=ShopSalesAnalyticsOut,
-    summary="活動與品項銷售分析（台北時間、最多 366 天）",
+    summary="商品分類與品項銷售分析（台北時間、最多 366 天）",
     dependencies=[Depends(require_any(*_ADMIN_VIEW_CODES))],
 )
 async def order_sales_analytics(
@@ -51,7 +51,6 @@ async def order_sales_analytics(
     date_to: date | None = Query(None, ge=date(2000, 1, 1), le=date(2100, 12, 31)),
     compare: bool = Query(False),
     compare_from: date | None = Query(None, ge=date(2000, 1, 1), le=date(2100, 12, 31)),
-    activity_id: uuid.UUID | None = Query(None),
     category_id: uuid.UUID | None = Query(None),
     product_id: uuid.UUID | None = Query(None),
     grade: int | None = Query(None, ge=0),
@@ -65,7 +64,6 @@ async def order_sales_analytics(
             date_to=date_to,
             compare=compare,
             compare_from=compare_from,
-            activity_id=activity_id,
             category_id=category_id,
             product_id=product_id,
             grade=grade,
@@ -120,7 +118,6 @@ async def download_order_report_pdf(
         ...
     ),
     scope: str = Query("全部主題", max_length=300),
-    activity_id: uuid.UUID | None = Query(None),
     category_id: uuid.UUID | None = Query(None),
     product_id: uuid.UUID | None = Query(None),
     grade: int | None = Query(None, ge=0),
@@ -135,7 +132,6 @@ async def download_order_report_pdf(
         report_data = await shop_svc.order_summary(
             session,
             group_by="class",
-            activity_id=activity_id,
             product_id=product_id,
             category_id=category_id,
             grade=grade,
@@ -149,7 +145,6 @@ async def download_order_report_pdf(
     elif report_type == "people":
         report_data = await purchase_details_report(
             session,
-            activity_id=activity_id,
             category_id=category_id,
             product_id=product_id,
             grade=grade,
@@ -163,7 +158,6 @@ async def download_order_report_pdf(
     elif report_type == "class-sheet":
         report_data = await class_sheet_report(
             session,
-            activity_id=activity_id,
             category_id=category_id,
             product_id=product_id,
             grade=grade,
@@ -177,7 +171,6 @@ async def download_order_report_pdf(
     elif report_type == "class-totals":
         report_data = await class_totals_report(
             session,
-            activity_id=activity_id,
             category_id=category_id,
             product_id=product_id,
             grade=grade,
@@ -191,7 +184,6 @@ async def download_order_report_pdf(
     else:
         report_data = await shop_svc.order_quantities(
             session,
-            activity_id=activity_id,
             grade=grade,
             class_id=class_id,
             category_id=category_id,
@@ -235,7 +227,6 @@ async def order_summary(
     session: DbDep,
     _: CurrentUser,
     group_by: str = Query("class", pattern="^(class|grade|user)$"),
-    activity_id: uuid.UUID | None = Query(None),
     product_id: uuid.UUID | None = Query(None),
     category_id: uuid.UUID | None = Query(None),
     grade: int | None = Query(None, ge=0),
@@ -249,7 +240,6 @@ async def order_summary(
     return await shop_svc.order_summary(
         session,
         group_by=group_by,
-        activity_id=activity_id,
         product_id=product_id,
         category_id=category_id,
         grade=grade,
@@ -281,7 +271,6 @@ async def order_summary(
 async def order_purchase_details(
     session: DbDep,
     _: CurrentUser,
-    activity_id: uuid.UUID | None = Query(None),
     category_id: uuid.UUID | None = Query(None),
     product_id: uuid.UUID | None = Query(None),
     grade: int | None = Query(None, ge=0),
@@ -294,7 +283,6 @@ async def order_purchase_details(
 ) -> list[OrderPurchaseDetailRow]:
     return await purchase_details_report(
         session,
-        activity_id=activity_id,
         category_id=category_id,
         product_id=product_id,
         grade=grade,
@@ -348,7 +336,6 @@ async def class_payment_report(
 async def order_quantities(
     session: DbDep,
     _: CurrentUser,
-    activity_id: uuid.UUID | None = Query(None),
     grade: int | None = Query(None),
     class_id: uuid.UUID | None = Query(None),
     category_id: uuid.UUID | None = Query(None),
@@ -361,7 +348,6 @@ async def order_quantities(
 ) -> list[OrderQuantityRow]:
     return await shop_svc.order_quantities(
         session,
-        activity_id=activity_id,
         grade=grade,
         class_id=class_id,
         category_id=category_id,
@@ -392,7 +378,6 @@ async def order_quantities(
 async def order_distribution(
     session: DbDep,
     _: CurrentUser,
-    activity_id: uuid.UUID | None = Query(None),
     grade: int | None = Query(None, ge=0),
     class_id: uuid.UUID | None = Query(None),
     category_id: uuid.UUID | None = Query(None),
@@ -400,7 +385,6 @@ async def order_distribution(
 ) -> list[OrderDistributionRow]:
     return await shop_svc.order_distribution(
         session,
-        activity_id=activity_id,
         grade=grade,
         class_id=class_id,
         category_id=category_id,
@@ -419,7 +403,6 @@ async def order_distribution(
 async def download_order_quantities(
     session: DbDep,
     _: ManagerUser,
-    activity_id: uuid.UUID | None = Query(None),
     grade: int | None = Query(None),
     class_id: uuid.UUID | None = Query(None),
     category_id: uuid.UUID | None = Query(None),
@@ -432,7 +415,6 @@ async def download_order_quantities(
     try:
         content = await export_quantity_excel(
             session,
-            activity_id=activity_id,
             grade=grade,
             class_id=class_id,
             category_id=category_id,

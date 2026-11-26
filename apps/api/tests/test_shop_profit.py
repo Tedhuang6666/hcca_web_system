@@ -1,26 +1,18 @@
-"""全期採購盈利：真實 DB、整批成本、折扣分攤與活動資料範圍。"""
+"""全期採購盈利：真實 DB、整批成本、折扣分攤與商品分類範圍。"""
 
 import uuid
 
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from api.core.clock import local_today
-from api.models.activity import Activity, ActivityConvener
 from api.models.shop import Order, OrderItem, OrderStatus, Product, ProductCategory, ProductStatus
 from api.services.shop._profit import profit_analysis
 
 
 @pytest.fixture
 async def procurement_data(db_session, admin_user, authed_client_factory):
-    activity = Activity(name="盈利活動")
-    other_activity = Activity(name="另一活動")
-    db_session.add_all([activity, other_activity])
-    await db_session.flush()
-    category = ProductCategory(name="服飾", activity_id=activity.id, created_by=admin_user.id)
-    other = ProductCategory(
-        name="其他商品", activity_id=other_activity.id, created_by=admin_user.id
-    )
+    category = ProductCategory(name="服飾", created_by=admin_user.id)
+    other = ProductCategory(name="其他商品", created_by=admin_user.id)
     db_session.add_all([category, other])
     await db_session.flush()
     shirt = Product(
@@ -39,7 +31,6 @@ async def procurement_data(db_session, admin_user, authed_client_factory):
         result = Order(
             serial_number=f"PROFIT-{uuid.uuid4().hex[:12]}",
             user_id=admin_user.id,
-            activity_id=activity.id,
             status=status,
             test_product_id=shirt.id if test else None,
             subtotal_price=700,
@@ -58,11 +49,11 @@ async def procurement_data(db_session, admin_user, authed_client_factory):
     await order(OrderStatus.CANCELLED)
     await order(OrderStatus.REFUNDED)
     await order(test=True)
-    return authed_client_factory(admin_user), activity, category, other, shirt, bag, order
+    return authed_client_factory(admin_user), category, other, shirt, bag, order
 
 
 async def test_minimum_stock_reserves_and_discounted_revenue(procurement_data, db_session):
-    admin, _, category, _, shirt, _, _ = procurement_data
+    admin, category, _, shirt, _, _ = procurement_data
     stock = shirt.stock_quantity
     result = await admin.put(
         f"/shop/products/{shirt.id}/procurement",
@@ -100,7 +91,7 @@ async def test_minimum_stock_reserves_and_discounted_revenue(procurement_data, d
 
 
 async def test_demand_above_minimum_and_unpaid_revenue(procurement_data, db_session):
-    _, _, category, _, shirt, _, order = procurement_data
+    _, category, _, shirt, _, order = procurement_data
     shirt.procurement_minimum, shirt.procurement_stock, shirt.procurement_reserve = 1, 2, 1
     await order(paid=False)
     await db_session.flush()
@@ -119,7 +110,7 @@ async def test_demand_above_minimum_and_unpaid_revenue(procurement_data, db_sess
 async def test_no_order_procurement_unknown_zero_cost_and_unused_product(
     procurement_data, db_session
 ):
-    _, _, category, _, shirt, _, _ = procurement_data
+    _, category, _, shirt, _, _ = procurement_data
     unsold = Product(
         name="未售商品",
         category_id=category.id,
@@ -164,10 +155,10 @@ async def test_no_order_procurement_unknown_zero_cost_and_unused_product(
     assert changed.summary.profit_amount == -150
 
 
-async def test_procurement_access_is_private_and_activity_scoped(
-    procurement_data, client, make_user, authed_client_factory, db_session
+async def test_procurement_access_is_private_and_category_filtered(
+    procurement_data, client, make_user, authed_client_factory
 ):
-    admin, activity, category, other, shirt, bag, _ = procurement_data
+    admin, category, other, shirt, bag, _ = procurement_data
     read = f"/shop/profit?category_id={category.id}"
     write = f"/shop/products/{shirt.id}/procurement"
     assert (await client.get(read)).status_code == 401
@@ -175,18 +166,10 @@ async def test_procurement_access_is_private_and_activity_scoped(
     outsider = authed_client_factory(await make_user())
     assert (await outsider.get(read)).status_code == 403
     assert (await outsider.put(write, json={"unit_cost": 1})).status_code == 403
-    convener = await make_user()
-    db_session.add(
-        ActivityConvener(activity_id=activity.id, user_id=convener.id, start_date=local_today())
-    )
-    await db_session.flush()
-    scoped = authed_client_factory(convener)
-    assert (await scoped.get(read)).status_code == 200
-    assert (await scoped.put(write, json={"unit_cost": 10})).status_code == 200
-    assert (await scoped.get(f"/shop/profit?category_id={other.id}")).status_code == 403
+    assert (await admin.get(f"/shop/profit?category_id={other.id}")).status_code == 200
     assert (
-        await scoped.put(f"/shop/products/{bag.id}/procurement", json={"unit_cost": 1})
-    ).status_code == 403
+        await admin.put(f"/shop/products/{bag.id}/procurement", json={"unit_cost": 1})
+    ).status_code == 200
     assert (await admin.get(f"/shop/profit?category_id={uuid.uuid4()}")).status_code == 404
     assert (await admin.get("/shop/profit")).status_code == 422
     for response in [
@@ -203,7 +186,7 @@ async def test_procurement_access_is_private_and_activity_scoped(
 )
 @pytest.mark.parametrize("value", [-1, 1.5, None, True, 2147483648])
 async def test_invalid_procurement_rejected(procurement_data, field, value):
-    admin, _, _, _, shirt, _, _ = procurement_data
+    admin, _, _, shirt, _, _ = procurement_data
     result = await admin.put(
         f"/shop/products/{shirt.id}/procurement", json={"unit_cost": 0, field: value}
     )
@@ -213,7 +196,7 @@ async def test_invalid_procurement_rejected(procurement_data, field, value):
 async def test_database_rejects_negative_procurement_and_settings_survive_cost_patch(
     procurement_data, db_session
 ):
-    admin, _, category, _, shirt, _, _ = procurement_data
+    admin, category, _, shirt, _, _ = procurement_data
     assert (
         await admin.put(
             f"/shop/products/{shirt.id}/procurement",
@@ -236,7 +219,7 @@ async def test_database_rejects_negative_procurement_and_settings_survive_cost_p
 
 
 async def test_empty_category_has_zero_cost(procurement_data, db_session):
-    _, _, _, _, shirt, _, _ = procurement_data
+    _, _, _, shirt, _, _ = procurement_data
     empty = ProductCategory(name="空主題", created_by=shirt.created_by)
     db_session.add(empty)
     await db_session.flush()
@@ -249,12 +232,11 @@ async def test_empty_category_has_zero_cost(procurement_data, db_session):
 async def test_gift_discount_does_not_reduce_other_category_profit(
     procurement_data, db_session, paid
 ):
-    _, activity, category, other, shirt, bag, _ = procurement_data
+    _, category, other, shirt, bag, _ = procurement_data
     db_session.add(
         Order(
             serial_number=f"PROFIT-{uuid.uuid4().hex[:12]}",
             user_id=shirt.created_by,
-            activity_id=activity.id,
             status=OrderStatus.CONFIRMED,
             subtotal_price=450,
             discount_amount=100,
@@ -298,7 +280,7 @@ async def test_gift_discount_does_not_reduce_other_category_profit(
 async def test_supplier_gifts_reduce_paid_cost_and_preserve_minimum(
     procurement_data, db_session, gifts, minimum, purchase, stock, top_up, order_cost, reserve_cost
 ):
-    admin, _, category, _, shirt, _, _ = procurement_data
+    admin, category, _, shirt, _, _ = procurement_data
     original_stock = shirt.stock_quantity
     response = await admin.put(
         f"/shop/products/{shirt.id}/procurement",
@@ -335,7 +317,7 @@ async def test_supplier_gifts_reduce_paid_cost_and_preserve_minimum(
 
 @pytest.mark.parametrize("gifts", [2, 3, 5])
 async def test_supplier_gifts_with_unknown_unit_cost(procurement_data, db_session, gifts):
-    _, _, category, _, shirt, _, _ = procurement_data
+    _, category, _, shirt, _, _ = procurement_data
     shirt.unit_cost = None
     shirt.procurement_supplier_gift = gifts
     shirt.procurement_extra_cost = 20
@@ -357,7 +339,7 @@ async def test_supplier_gifts_with_unknown_unit_cost(procurement_data, db_sessio
 
 @pytest.mark.parametrize("value", [-1, 1.5, None, True, 1000001, "2"])
 async def test_invalid_supplier_gift_quantity_rejected(procurement_data, value):
-    admin, _, _, _, shirt, _, _ = procurement_data
+    admin, _, _, shirt, _, _ = procurement_data
     response = await admin.put(
         f"/shop/products/{shirt.id}/procurement",
         json={"unit_cost": 0, "supplier_gift_quantity": value},
@@ -366,7 +348,7 @@ async def test_invalid_supplier_gift_quantity_rejected(procurement_data, value):
 
 
 async def test_database_rejects_negative_supplier_gifts(procurement_data, db_session):
-    _, _, _, _, shirt, _, _ = procurement_data
+    _, _, _, shirt, _, _ = procurement_data
     with pytest.raises(IntegrityError):
         async with db_session.begin_nested():
             shirt.procurement_supplier_gift = -1
@@ -377,7 +359,7 @@ async def test_database_rejects_negative_supplier_gifts(procurement_data, db_ses
 async def test_supplier_gifts_leave_option_costs_and_extra_fees_separate(
     procurement_data, db_session, option_cost
 ):
-    _, activity, category, _, shirt, _, _ = procurement_data
+    _, category, _, shirt, _, _ = procurement_data
     option_id = str(uuid.uuid4())
     shirt.procurement_supplier_gift = 6
     shirt.procurement_extra_cost = 50
@@ -386,7 +368,6 @@ async def test_supplier_gifts_leave_option_costs_and_extra_fees_separate(
         Order(
             serial_number=f"PROFIT-{uuid.uuid4().hex[:12]}",
             user_id=shirt.created_by,
-            activity_id=activity.id,
             status=OrderStatus.CONFIRMED,
             subtotal_price=330,
             total_price=330,
@@ -421,7 +402,7 @@ async def test_supplier_gifts_leave_option_costs_and_extra_fees_separate(
 
 
 async def test_supplier_gifts_without_orders_and_category_totals(procurement_data, db_session):
-    _, _, category, _, shirt, _, _ = procurement_data
+    _, category, _, shirt, _, _ = procurement_data
     shirt.procurement_supplier_gift = 2
     unsold = Product(
         name="僅有廠商贈品",

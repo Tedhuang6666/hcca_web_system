@@ -54,7 +54,6 @@ async def _apply(operation: Awaitable[Receivable]) -> Receivable:
 async def list_receivables(
     db: DbDep,
     _: CurrentUser,
-    activity_id: uuid.UUID | None = None,
     class_id: uuid.UUID | None = None,
     user_id: uuid.UUID | None = None,
     status_filter: str | None = Query(None, alias="status"),
@@ -62,7 +61,6 @@ async def list_receivables(
 ) -> list[ReceivableOut]:
     rows = await receivable_svc.list_receivables(
         db,
-        activity_id=activity_id,
         class_id=class_id,
         user_id=user_id,
         status=status_filter,
@@ -80,12 +78,9 @@ async def list_receivables(
 async def receivable_summary(
     db: DbDep,
     _: CurrentUser,
-    activity_id: uuid.UUID | None = None,
     class_id: uuid.UUID | None = None,
 ) -> ReceivableSummaryOut:
-    return ReceivableSummaryOut(
-        **await receivable_svc.summary(db, activity_id=activity_id, class_id=class_id)
-    )
+    return ReceivableSummaryOut(**await receivable_svc.summary(db, class_id=class_id))
 
 
 @router.post(
@@ -217,12 +212,9 @@ async def refund(
 async def export_receivables_csv(
     db: DbDep,
     _: CurrentUser,
-    activity_id: uuid.UUID | None = None,
     class_id: uuid.UUID | None = None,
 ) -> Response:
-    rows = await receivable_svc.list_receivables(
-        db, activity_id=activity_id, class_id=class_id, limit=500
-    )
+    rows = await receivable_svc.list_receivables(db, class_id=class_id, limit=500)
     csv_text = await receivable_svc.export_csv(db, rows)
     return Response(
         content=csv_text,

@@ -11,8 +11,8 @@ const bundle = { id: "bundle", name: "套票", category_id: null, series_id: "ti
 const allowed = ["310001", "310002", "310003", "310004", "310005"];
 beforeEach(() => {
   vi.resetAllMocks();
-  api.listCategories.mockResolvedValue([{ id: "concert", name: "校園演唱會", activity_id: "activity" },
-    { id: "other", name: "其他活動", activity_id: null }]);
+  api.listCategories.mockResolvedValue([{ id: "concert", name: "校園演唱會", },
+    { id: "other", name: "其他商品分類", }]);
   api.listSeries.mockResolvedValue([{ id: "tickets", category_id: "concert" }]);
   api.listProducts.mockResolvedValue([regular, bundle, { id: "other-product", category_id: "other" }]);
   api.getProductPurchaseRules.mockResolvedValue({ allowed_identifiers: allowed,
@@ -25,10 +25,10 @@ beforeEach(() => {
 
 async function selectCategory() {
   await screen.findByRole("option", { name: "校園演唱會" });
-  fireEvent.change(screen.getByRole("combobox", { name: "活動" }), { target: { value: "concert" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "商品分類" }), { target: { value: "concert" } });
 }
 
-it("同活動跨系列依備註彙總各票種五人，展開才核對名單與訂購狀態", async () => {
+it("同商品分類跨系列依備註彙總各票種五人，展開才核對名單與訂購狀態", async () => {
   render(<ShopNoteGroupsPanel />);
   await selectCategory();
   const group = await screen.findByRole("region", { name: "備註：熱音" });
@@ -41,7 +41,7 @@ it("同活動跨系列依備註彙總各票種五人，展開才核對名單與�
   expect(await screen.findByText("合成人員 1")).toBeVisible();
   expect(screen.getByText("已訂購")).toBeVisible();
   expect(screen.getAllByText("未訂購")).toHaveLength(4);
-  expect(api.lookupTargets).toHaveBeenCalledWith({ activity_id: "activity", product_id: "regular", keyword: "", identifiers: allowed });
+  expect(api.lookupTargets).toHaveBeenCalledWith({ product_id: "regular", keyword: "", identifiers: allowed });
   fireEvent.click(within(group).getByRole("button", { name: /套票/ }));
   await screen.findByRole("list", { name: "套票人員名單" });
   await waitFor(() => expect(api.lookupTargets).toHaveBeenCalledTimes(2));
@@ -78,7 +78,7 @@ it("讀取完整商品分頁，任一購買名單失敗時隱藏不完整合計�
   expect(await screen.findByRole("button", { name: "套票 5 人 · 查看名單" })).toBeVisible();
 });
 
-it("切換活動後忽略舊回應；空名單與名單核對失敗皆有回饋及重試", async () => {
+it("切換商品分類後忽略舊回應；空名單與名單核對失敗皆有回饋及重試", async () => {
   let resolve!: (rules: object) => void;
   api.getProductPurchaseRules.mockReturnValueOnce(new Promise((done) => { resolve = done; }));
   render(<ShopNoteGroupsPanel />);
@@ -90,7 +90,7 @@ it("切換活動後忽略舊回應；空名單與名單核對失敗皆有回饋�
   expect(screen.queryByRole("heading", { name: "舊組" })).not.toBeInTheDocument();
   api.getProductPurchaseRules.mockResolvedValue({ allowed_identifiers: [] });
   fireEvent.change(screen.getByRole("combobox"), { target: { value: "concert" } });
-  expect(await screen.findByText(/此活動尚無允許購買名單/)).toBeVisible();
+  expect(await screen.findByText(/此分類尚無允許購買名單/)).toBeVisible();
 });
 
 it("核對失敗保留識別碼且不誤標未訂購，重試並逐批查看超過五十人", async () => {
@@ -109,10 +109,10 @@ it("核對失敗保留識別碼且不誤標未訂購，重試並逐批查看超�
   expect(screen.getByText("合成人員 51")).toBeVisible();
 });
 
-it("商品目錄載入失敗可重試，無活動時說明下一步", async () => {
+it("商品目錄載入失敗可重試，無商品分類時說明下一步", async () => {
   api.listCategories.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce([]);
   render(<ShopNoteGroupsPanel />);
   expect(await screen.findByRole("alert")).toHaveTextContent("商品目錄讀取失敗");
   fireEvent.click(screen.getByRole("button", { name: "重新載入商品目錄" }));
-  expect(await screen.findByText(/尚未建立活動/)).toBeVisible();
+  expect(await screen.findByText(/尚未建立商品分類/)).toBeVisible();
 });

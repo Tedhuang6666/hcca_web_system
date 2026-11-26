@@ -22,11 +22,7 @@ async def test_report_keeps_previous_topic_on_its_actual_payment_day(
     await db_session.flush()
     yesterday = datetime(2026, 11, 10, 15, 59, 59, tzinfo=UTC)
     today = datetime(2026, 11, 10, 16, 0, tzinfo=UTC)
-    db_session.add(
-        ShopClassPayment(
-            class_id=school_class.id, activity_id=None, is_paid=True, confirmed_at=today
-        )
-    )
+    db_session.add(ShopClassPayment(class_id=school_class.id, is_paid=True, confirmed_at=today))
     for category, paid_at, amount in [
         (shirts, yesterday, 700),
         (dance, today, 100),
@@ -103,9 +99,7 @@ async def test_report_uses_legacy_confirmation_only_when_order_has_no_paid_at(db
     school_class = await _make_class(db_session)
     buyer = await _bare_user(db_session)
     confirmed = datetime(2026, 11, 11, tzinfo=UTC)
-    payment = ShopClassPayment(
-        class_id=school_class.id, activity_id=None, is_paid=True, confirmed_at=confirmed
-    )
+    payment = ShopClassPayment(class_id=school_class.id, is_paid=True, confirmed_at=confirmed)
     db_session.add(payment)
     order = await _seed_order(
         db_session, buyer, class_id=school_class.id, total_price=123, is_paid=True

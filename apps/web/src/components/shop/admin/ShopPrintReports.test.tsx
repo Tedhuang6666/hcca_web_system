@@ -74,7 +74,7 @@ describe("ShopPrintReports", () => {
 
   it("shows only the remaining reports with PDF as the only export action", async () => {
     const filters = { category_id: "shirts", is_paid: "false" };
-    render(<ShopPrintReports filters={filters} scope="商品活動 · 班聯未確認" titleScope="商品分類" />);
+    render(<ShopPrintReports filters={filters} scope="商品分類 · 班聯未確認" titleScope="商品分類" />);
 
     expect(await screen.findByRole("heading", { name: "班級訂購明細" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "列印" })).not.toBeInTheDocument();
@@ -142,7 +142,7 @@ describe("ShopPrintReports", () => {
 
   it("shows a recoverable load error", async () => {
     api.purchaseDetails.mockRejectedValueOnce(new Error("offline"));
-    render(<ShopPrintReports filters={{}} scope="全部活動" titleScope="全部主題" />);
+    render(<ShopPrintReports filters={{}} scope="全部商品分類" titleScope="全部主題" />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("報表載入失敗");
     fireEvent.click(screen.getByRole("button", { name: "重新載入報表" }));

@@ -124,7 +124,7 @@ export default function ShopAdminPage() {
     shopApi
       .listCategories()
       .then(setCategories)
-      .catch((error) => setCatalogError(apiErrorMessage(error, "無法載入活動，請重新載入。")))
+      .catch((error) => setCatalogError(apiErrorMessage(error, "無法載入商品分類，請重新載入。")))
       .finally(() => setCatalogLoading(false));
   }, []);
   const loadSeries = useCallback((categoryId: string) => {
@@ -193,7 +193,7 @@ export default function ShopAdminPage() {
   }
 
   const delCategory = async (c: ProductCategoryOut) => {
-    if (!(await confirmAction({ title: `確定刪除活動「${c.name}」？活動下必須沒有系列或商品才能刪除。`, danger: true }))) return;
+    if (!(await confirmAction({ title: `確定刪除商品分類「${c.name}」？分類下必須沒有系列或商品才能刪除。`, danger: true }))) return;
     try {
       await shopApi.deleteCategory(c.id);
       loadCategories();
@@ -322,7 +322,7 @@ export default function ShopAdminPage() {
           )}
           <p className="text-xs mt-2 text-fg-muted!" >
             NT${product.price.toLocaleString()} · {product.is_unlimited ? "無限量" : `庫存 ${product.stock_quantity}`} · {STATUS_LABEL[product.status] ?? product.status}
-            {product.effective_sale_end && ` · 截止 ${new Date(product.effective_sale_end).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}${product.sale_end ? "（單品設定）" : "（沿用活動）"}`}
+            {product.effective_sale_end && ` · 截止 ${new Date(product.effective_sale_end).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}${product.sale_end ? "（單品設定）" : "（沿用分類設定）"}`}
             {product.max_quantity_per_user != null && ` · 每人限購 ${product.max_quantity_per_user} 件`}
           </p>
         </div>
@@ -364,14 +364,14 @@ export default function ShopAdminPage() {
     <div className="p-5 space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-widest text-fg-muted!" >活動詳情</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-fg-muted!" >商品分類詳情</p>
           <h2 className="text-xl font-semibold mt-1 break-words text-fg-primary!" >{cat.name}</h2>
           <p className="text-sm mt-2 text-fg-muted!" >{cat.description || "無描述"}</p>
         </div>
         <Thumb url={cat.image_url} size={72} />
       </div>
       <div className="flex flex-wrap gap-2">
-        <MiniBtn tone="primary" onClick={() => setCatModal({ initial: cat })}>編輯活動</MiniBtn>
+        <MiniBtn tone="primary" onClick={() => setCatModal({ initial: cat })}>編輯商品分類</MiniBtn>
         <MiniBtn tone="primary" onClick={() => setProductModal({ initial: null, seriesId: null })}>新增商品</MiniBtn>
       </div>
     </div>
@@ -406,7 +406,7 @@ export default function ShopAdminPage() {
           {tab === "catalog" && <Link href="/shop/admin?view=note-groups" className="btn btn-secondary min-h-11">依備註查看購買名單</Link>}
           {tab === "catalog" && <Link href="/shop/admin?view=offices" className="btn btn-secondary min-h-11">教師處室設定</Link>}
           {tab === "catalog" && <Link href="/shop/admin?view=imports" className="btn btn-secondary min-h-11">組織預購同步</Link>}
-          {tab === "catalog" && <Link href="/shop/council-orders#activity-order-closure-title" className="btn btn-secondary min-h-11">活動鎖單</Link>}
+          {tab === "catalog" && <Link href="/shop/council-orders#category-order-closure-title" className="btn btn-secondary min-h-11">商品分類結單</Link>}
           {tab === "catalog" && <Link href="/shop" className="btn btn-ghost min-h-11">查看商品頁</Link>}
           {tab === "stats" && <Link href="/shop/council-orders" className="btn btn-ghost min-h-11">返回班聯工作</Link>}
         </div>
@@ -436,10 +436,10 @@ export default function ShopAdminPage() {
             <aside className="min-w-0 overflow-hidden flex flex-col border-r! border-r-border!" >
               <div className="px-4 py-3 flex items-center justify-between border-b! border-b-border!" >
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-widest text-fg-muted!" >活動</p>
-                  <p className="text-xs mt-0.5 text-fg-muted!" >{categories.length} 個活動</p>
+                  <p className="text-xs font-semibold uppercase tracking-widest text-fg-muted!" >商品分類</p>
+                  <p className="text-xs mt-0.5 text-fg-muted!" >{categories.length} 個分類</p>
                 </div>
-                <MiniBtn tone="primary" onClick={() => setCatModal({ initial: null })}>新增活動</MiniBtn>
+                <MiniBtn tone="primary" onClick={() => setCatModal({ initial: null })}>新增商品分類</MiniBtn>
               </div>
               <div className="flex-1 overflow-y-auto p-2 space-y-1">
                 <ShopAdminSortableList
@@ -467,8 +467,8 @@ export default function ShopAdminPage() {
                     </div>
                   )}
                 />
-                {catalogLoading && <p role="status" className="p-4 text-sm">正在載入活動…</p>}
-                {!catalogLoading && !catalogError && categories.length === 0 && <p className="p-4 text-sm text-fg-secondary!" >尚未建立活動。按「新增活動」開始，例如「校慶商品」。</p>}
+                {catalogLoading && <p role="status" className="p-4 text-sm">正在載入商品分類…</p>}
+                {!catalogLoading && !catalogError && categories.length === 0 && <p className="p-4 text-sm text-fg-secondary!" >尚未建立商品分類。按「新增商品分類」開始，例如「校慶商品」。</p>}
               </div>
             </aside>
 
@@ -478,13 +478,13 @@ export default function ShopAdminPage() {
                   <div className="min-w-0">
                     <p className="text-xs font-semibold uppercase tracking-widest text-fg-muted!" >系列與商品</p>
                     <p className="text-sm font-medium truncate mt-0.5 text-fg-primary!" >
-                      {cat ? cat.name : "請先選擇活動"}
+                      {cat ? cat.name : "請先選擇商品分類"}
                     </p>
                   </div>
                   {cat && (
                     <div className="flex flex-wrap justify-end gap-1.5">
                       <button type="button" className="btn btn-ghost min-h-11 px-3 text-xs lg:hidden"
-                        onClick={() => setMobileDetailOpen(true)}>活動設定</button>
+                        onClick={() => setMobileDetailOpen(true)}>分類設定</button>
                       <MiniBtn tone="primary" onClick={() => setProductModal({ initial: null, seriesId: null })}>新增商品</MiniBtn>
                       <MiniBtn tone="primary" onClick={() => setSeriesModal({ initial: null })}>新增系列</MiniBtn>
                     </div>
@@ -493,7 +493,7 @@ export default function ShopAdminPage() {
               </div>
               <div className="flex-1 overflow-y-auto">
                 {!cat ? (
-                  <p className="p-6 text-sm text-center text-fg-muted!" >尚未選擇活動</p>
+                  <p className="p-6 text-sm text-center text-fg-muted!" >尚未選擇商品分類</p>
                 ) : (
                   <div className="divide-y border-border!" >
                     <div className="p-3">
@@ -571,7 +571,7 @@ export default function ShopAdminPage() {
       {tab === "stats" && (
         <details className="border-t pt-4 border-border!" >
           <summary className="min-h-11 cursor-pointer text-sm text-fg-secondary!" >訂單資料維護</summary>
-          <p className="mb-3 text-sm text-fg-secondary!" >清除會永久刪除所有活動的訂單，包含已收款資料，且無法復原。</p>
+          <p className="mb-3 text-sm text-fg-secondary!" >清除會永久刪除所有商品分類的訂單，包含已收款資料，且無法復原。</p>
           <button type="button" onClick={() => setClearOrdersOpen(true)} className="btn btn-ghost min-h-11 text-danger!" >
             <Trash2 size={15} /> 清除所有商品訂購資料
           </button>
@@ -587,7 +587,7 @@ export default function ShopAdminPage() {
               >
               <AlertTriangle size={18} className="mt-0.5 shrink-0 text-danger!"  />
               <div className="space-y-2 text-sm text-fg-secondary!" >
-                <p>這會永久刪除所有使用者、所有活動與所有狀態的商品訂單，包含已收款的訂單。</p>
+                <p>這會永久刪除所有使用者、所有商品分類與所有狀態的商品訂單，包含已收款的訂單。</p>
                 <p>系統會同步清除訂單明細、商品應收款與尚未寄出的確認通知，並回補訂單占用的庫存及優惠使用次數。</p>
                 <p>商品目錄、購物車和稽核紀錄會保留。此動作無法復原。</p>
               </div>
@@ -607,7 +607,7 @@ export default function ShopAdminPage() {
       {mobileDetailOpen && cat && (
         <div className="lg:hidden">
           <Modal
-            title={product ? "商品詳情" : series ? "系列詳情" : "活動詳情"}
+            title={product ? "商品詳情" : series ? "系列詳情" : "商品分類詳情"}
             onClose={() => setMobileDetailOpen(false)}
             size="2xl"
           >

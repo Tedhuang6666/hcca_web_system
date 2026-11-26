@@ -1,4 +1,4 @@
-"""同一學生同一活動持續使用一張登記單的回歸。"""
+"""同一學生依商品分類持續使用登記單的回歸。"""
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ import pytest
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncConnection, async_sessionmaker
 
-from api.models.activity import Activity, ActivityStatus
 from api.models.receivable import Receivable
 from api.models.shop import (
     Order,
@@ -36,13 +35,7 @@ from api.services import shop as shop_svc
 async def registration_setup(db_session, make_user):
     buyer = await make_user(student_id="310001")
     actor = await make_user()
-    activity = Activity(name="校慶", status=ActivityStatus.ACTIVE)
-    db_session.add(activity)
-    await db_session.flush()
-    categories = [
-        ProductCategory(name=name, activity_id=activity.id, created_by=actor.id)
-        for name in ("服飾", "紀念品")
-    ]
+    categories = [ProductCategory(name=name, created_by=actor.id) for name in ("服飾", "紀念品")]
     db_session.add_all(categories)
     await db_session.flush()
     products = [
@@ -58,7 +51,7 @@ async def registration_setup(db_session, make_user):
     ]
     db_session.add_all(products)
     await db_session.flush()
-    return buyer, actor, activity, products
+    return buyer, actor, products
 
 
 async def _append(session, buyer, product, quantity=1, *, actor=None):
@@ -79,7 +72,7 @@ async def _append(session, buyer, product, quantity=1, *, actor=None):
 async def test_new_automatic_promotion_reprices_existing_orders_and_receivables(
     db_session, registration_setup, make_user
 ):
-    buyer, actor, activity, products = registration_setup
+    buyer, actor, products = registration_setup
     order = await _append(db_session, buyer, products[0], 2)
     other = await make_user(student_id="310002")
     other_order = await _append(db_session, other, products[0], 2)
@@ -89,7 +82,7 @@ async def test_new_automatic_promotion_reprices_existing_orders_and_receivables(
         db_session,
         data=ShopPromotionCreate(
             name="追加帳號優惠",
-            activity_id=activity.id,
+            target_category_ids=[products[0].category_id],
             target_identifiers=[buyer.student_id],
             target_product_ids=[products[0].id],
             min_quantity=2,
@@ -126,7 +119,7 @@ async def test_new_automatic_promotion_reprices_existing_orders_and_receivables(
 async def test_new_automatic_promotion_preserves_collected_and_historical_orders(
     db_session, registration_setup, lock
 ):
-    buyer, actor, activity, products = registration_setup
+    buyer, actor, products = registration_setup
     order = await _append(db_session, buyer, products[0], 2)
     if lock in {"cancelled", "refunded"}:
         order.status = OrderStatus(lock)
@@ -138,7 +131,7 @@ async def test_new_automatic_promotion_preserves_collected_and_historical_orders
         db_session,
         data=ShopPromotionCreate(
             name="追加優惠",
-            activity_id=activity.id,
+            target_category_ids=[products[0].category_id],
             discount_type="fixed",
             discount_value=30,
         ),
@@ -154,13 +147,13 @@ async def test_new_automatic_promotion_preserves_collected_and_historical_orders
 async def test_automatic_promotion_preserves_applied_coupon_and_usage_limit(
     db_session, registration_setup, make_user
 ):
-    buyer, actor, activity, products = registration_setup
+    buyer, actor, products = registration_setup
     coupon = await shop_svc.create_promotion(
         db_session,
         data=ShopPromotionCreate(
             name="優惠碼",
             code="KEEP30",
-            activity_id=activity.id,
+            target_category_ids=[products[0].category_id],
             discount_type="fixed",
             discount_value=30,
         ),
@@ -168,7 +161,7 @@ async def test_automatic_promotion_preserves_applied_coupon_and_usage_limit(
     )
     order = await _append(db_session, buyer, products[0], 2)
     await shop_svc.apply_registration_promotion(
-        db_session, buyer, code=coupon.code, activity_id=activity.id
+        db_session, buyer, code=coupon.code, category_id=products[0].category_id
     )
     # PostgreSQL 的 now() 在同一 transaction 固定，明確建立先登記者的順序。
     order.created_at -= timedelta(minutes=1)
@@ -181,7 +174,7 @@ async def test_automatic_promotion_preserves_applied_coupon_and_usage_limit(
         db_session,
         data=ShopPromotionCreate(
             name="限一單追加優惠",
-            activity_id=activity.id,
+            target_category_ids=[products[0].category_id],
             discount_type="fixed",
             discount_value=20,
             max_uses=1,
@@ -204,7 +197,7 @@ async def test_automatic_promotion_preserves_applied_coupon_and_usage_limit(
 async def test_limited_promotion_releases_ineligible_usage_before_retargeting(
     db_session, registration_setup, make_user
 ):
-    buyer, actor, activity, products = registration_setup
+    buyer, actor, products = registration_setup
     earlier = await _append(db_session, buyer, products[0])
     earlier.created_at -= timedelta(minutes=1)
     other = await make_user(student_id="310002")
@@ -213,7 +206,7 @@ async def test_limited_promotion_releases_ineligible_usage_before_retargeting(
         db_session,
         data=ShopPromotionCreate(
             name="限一單帳號優惠",
-            activity_id=activity.id,
+            target_category_ids=[products[0].category_id],
             target_identifiers=[other.student_id],
             discount_type="fixed",
             discount_value=20,
@@ -229,15 +222,12 @@ async def test_limited_promotion_releases_ineligible_usage_before_retargeting(
     assert (earlier.total_price, later.total_price, promotion.used_count) == (80, 100, 1)
 
 
-async def test_promotion_activity_change_reprices_both_scopes_and_deactivation_removes_discount(
+async def test_promotion_category_change_reprices_both_scopes_and_deactivation_removes_discount(
     db_session, registration_setup
 ):
-    buyer, actor, activity, products = registration_setup
+    buyer, actor, products = registration_setup
     original = await _append(db_session, buyer, products[0])
-    other_activity = Activity(name="畢業季", status=ActivityStatus.ACTIVE)
-    db_session.add(other_activity)
-    await db_session.flush()
-    category = ProductCategory(name="畢業商品", activity_id=other_activity.id, created_by=actor.id)
+    category = ProductCategory(name="畢業商品", created_by=actor.id)
     db_session.add(category)
     await db_session.flush()
     product = Product(
@@ -255,7 +245,7 @@ async def test_promotion_activity_change_reprices_both_scopes_and_deactivation_r
         db_session,
         data=ShopPromotionCreate(
             name="活動優惠",
-            activity_id=activity.id,
+            target_category_ids=[products[0].category_id],
             discount_type="fixed",
             discount_value=20,
         ),
@@ -263,7 +253,7 @@ async def test_promotion_activity_change_reprices_both_scopes_and_deactivation_r
     )
     assert (original.total_price, other.total_price) == (80, 100)
     await shop_svc.update_promotion(
-        db_session, promotion, data=ShopPromotionUpdate(activity_id=other_activity.id)
+        db_session, promotion, data=ShopPromotionUpdate(target_category_ids=[category.id])
     )
     assert (original.total_price, other.total_price, promotion.used_count) == (100, 80, 1)
     await shop_svc.update_promotion(
@@ -272,34 +262,29 @@ async def test_promotion_activity_change_reprices_both_scopes_and_deactivation_r
     assert (original.total_price, other.total_price, promotion.used_count) == (100, 100, 0)
 
 
-async def test_repeated_assistance_accumulates_same_activity_and_receivable(
+async def test_repeated_assistance_accumulates_within_same_category_and_receivable(
     db_session, registration_setup, make_user
 ):
-    buyer, actor, activity, products = registration_setup
+    buyer, actor, products = registration_setup
     first = await _append(db_session, buyer, products[0], 2, actor=actor)
     second = await _append(db_session, buyer, products[1], 1, actor=actor)
     third = await _append(db_session, buyer, products[0], 3, actor=actor)
-    assert first.id == second.id == third.id
-    assert {item.product_id: item.quantity for item in third.items} == {
-        products[0].id: 5,
-        products[1].id: 1,
-    }
-    assert third.total_price == 600
+    assert first.id == third.id and second.id != first.id
+    assert {item.product_id: item.quantity for item in third.items} == {products[0].id: 5}
+    assert second.items[0].product_id == products[1].id and second.items[0].quantity == 1
+    assert third.total_price == 500 and second.total_price == 100
     assert [product.stock_quantity for product in products] == [15, 19]
-    assert await db_session.scalar(select(func.count()).select_from(Order)) == 1
+    assert await db_session.scalar(select(func.count()).select_from(Order)) == 2
     receivables = (await db_session.scalars(select(Receivable))).all()
-    assert len(receivables) == 1
-    assert receivables[0].source_id == first.id
-    assert receivables[0].amount == 600
+    assert len(receivables) == 2
+    assert {row.source_id for row in receivables} == {first.id, second.id}
+    assert sum(row.amount for row in receivables) == 600
 
     other = await make_user(student_id="310002")
     other_order = await _append(db_session, other, products[0])
     assert other_order.id != first.id
 
-    other_activity = Activity(name="畢業季", status=ActivityStatus.ACTIVE)
-    db_session.add(other_activity)
-    await db_session.flush()
-    category = ProductCategory(name="畢業商品", activity_id=other_activity.id, created_by=actor.id)
+    category = ProductCategory(name="畢業商品", created_by=actor.id)
     db_session.add(category)
     await db_session.flush()
     product = Product(
@@ -314,13 +299,13 @@ async def test_repeated_assistance_accumulates_same_activity_and_receivable(
     await db_session.flush()
     separate = await _append(db_session, buyer, product)
     assert separate.id != first.id
-    assert separate.activity_id != activity.id
+    assert separate.category_id == category.id
 
 
 async def test_student_family_and_class_assistance_share_totals_and_keep_sources(
     db_session, registration_setup
 ):
-    buyer, actor, _, products = registration_setup
+    buyer, actor, products = registration_setup
     product = products[0]
     first = await shop_svc.set_current_registration_product(
         db_session,
@@ -331,7 +316,6 @@ async def test_student_family_and_class_assistance_share_totals_and_keep_sources
     link = ShopDelegationLink(
         user_id=buyer.id,
         category_id=product.category_id,
-        activity_id=first.activity_id,
         name="家人",
         token_hash=uuid.uuid4().hex * 2,
     )
@@ -355,12 +339,11 @@ async def test_student_family_and_class_assistance_share_totals_and_keep_sources
 
 
 @pytest.mark.parametrize("restart_with_assistance", [False, True])
-async def test_clearing_and_registering_again_reuses_same_order(
+async def test_clearing_and_registering_in_another_category_creates_a_separate_order(
     db_session, registration_setup, restart_with_assistance
 ):
-    buyer, actor, _, products = registration_setup
+    buyer, actor, products = registration_setup
     original = await _append(db_session, buyer, products[0], 2, actor=actor)
-    original_id, serial = original.id, original.serial_number
     await shop_svc.set_current_registration_product(
         db_session, buyer, products[0].id, data=CurrentRegistrationUpdate(variants=[])
     )
@@ -374,22 +357,22 @@ async def test_clearing_and_registering_again_reuses_same_order(
             products[1].id,
             data=CurrentRegistrationUpdate(variants=[RegistrationVariantCreate(quantity=3)]),
         )
-    assert resumed.id == original_id
-    assert resumed.serial_number == serial
+    assert resumed.id != original.id
+    assert resumed.serial_number != original.serial_number
     assert [(item.product_id, item.quantity) for item in resumed.items] == [(products[1].id, 3)]
     assert products[1].stock_quantity == 17
-    assert await db_session.scalar(select(func.count()).select_from(Order)) == 1
-    assert await db_session.scalar(select(func.count()).select_from(Receivable)) == 1
+    assert await db_session.scalar(select(func.count()).select_from(Order)) == 2
+    assert await db_session.scalar(select(func.count()).select_from(Receivable)) == 2
 
 
 async def test_explicit_cancellation_then_registering_again_does_not_restore_cancelled_items(
     db_session, registration_setup
 ):
-    buyer, actor, _, products = registration_setup
+    buyer, actor, products = registration_setup
     original = await _append(db_session, buyer, products[0], 2, actor=actor)
     await shop_svc.cancel_order(db_session, original, requested_by=buyer.id)
     resumed = await _append(db_session, buyer, products[1], 1, actor=actor)
-    assert resumed.id == original.id
+    assert resumed.id != original.id
     assert [(item.product_id, item.quantity) for item in resumed.items] == [(products[1].id, 1)]
     assert [product.stock_quantity for product in products] == [20, 19]
     assert resumed.total_price == 100
@@ -398,13 +381,15 @@ async def test_explicit_cancellation_then_registering_again_does_not_restore_can
 async def test_replace_keeps_order_and_coupon_usage_without_allocating_temporary_order(
     db_session, registration_setup, monkeypatch
 ):
-    buyer, actor, activity, products = registration_setup
+    buyer, actor, products = registration_setup
+    products[1].category_id = products[0].category_id
+    await db_session.flush()
     promotion = await shop_svc.create_promotion(
         db_session,
         data=ShopPromotionCreate(
             name="校慶折扣",
             code="ONEFORM",
-            activity_id=activity.id,
+            target_category_ids=[products[0].category_id],
             discount_type="fixed",
             discount_value=30,
             max_uses=1,
@@ -413,7 +398,7 @@ async def test_replace_keeps_order_and_coupon_usage_without_allocating_temporary
     )
     order = await _append(db_session, buyer, products[0], 2, actor=actor)
     await shop_svc.apply_registration_promotion(
-        db_session, buyer, code=promotion.code, activity_id=activity.id
+        db_session, buyer, code=promotion.code, category_id=products[0].category_id
     )
 
     async def forbid_new_serial(session):
@@ -439,7 +424,9 @@ async def test_replace_keeps_order_and_coupon_usage_without_allocating_temporary
 async def test_assistance_cannot_create_another_order_to_bypass_collection_lock(
     db_session, registration_setup, flag
 ):
-    buyer, actor, _, products = registration_setup
+    buyer, actor, products = registration_setup
+    products[1].category_id = products[0].category_id
+    await db_session.flush()
     order = await _append(db_session, buyer, products[0], actor=actor)
     setattr(order, flag, True)
     await db_session.flush()
@@ -459,10 +446,7 @@ async def test_concurrent_assistance_and_student_registration_share_one_order(db
         buyer = User(email=f"{uuid.uuid4()}@hchs.hc.edu.tw", display_name="並發測試")
         session.add(buyer)
         await session.flush()
-        activity = Activity(name="並發活動", status=ActivityStatus.ACTIVE)
-        session.add(activity)
-        await session.flush()
-        category = ProductCategory(name="活動商品", activity_id=activity.id, created_by=buyer.id)
+        category = ProductCategory(name="並發商品", created_by=buyer.id)
         session.add(category)
         await session.flush()
         products = [
@@ -478,7 +462,7 @@ async def test_concurrent_assistance_and_student_registration_share_one_order(db
         ]
         session.add_all(products)
         await session.commit()
-        buyer_id, activity_id, category_id = buyer.id, activity.id, category.id
+        buyer_id, category_id = buyer.id, category.id
         product_ids = [product.id for product in products]
     try:
 
@@ -518,6 +502,5 @@ async def test_concurrent_assistance_and_student_registration_share_one_order(db
             await session.execute(delete(Order).where(Order.user_id == buyer_id))
             await session.execute(delete(Product).where(Product.id.in_(product_ids)))
             await session.execute(delete(ProductCategory).where(ProductCategory.id == category_id))
-            await session.execute(delete(Activity).where(Activity.id == activity_id))
             await session.execute(delete(User).where(User.id == buyer_id))
             await session.commit()

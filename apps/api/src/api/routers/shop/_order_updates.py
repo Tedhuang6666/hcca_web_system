@@ -9,7 +9,6 @@ from sqlalchemy.orm.exc import StaleDataError
 
 from api.core.permission_codes import PermissionCode
 from api.dependencies.permissions import require_any
-from api.routers._common import or_404
 from api.routers.shop._common import (
     _ADMIN_VIEW_CODES,
     _PAYMENT_WRITE_CODES,
@@ -33,7 +32,6 @@ from api.schemas.shop_recalculate import (
     OrderRecalculateOut,
     OrderRecalculateRequest,
 )
-from api.services import activity as activity_svc
 from api.services import audit as audit_svc
 from api.services import school_class as class_svc
 from api.services import shop as shop_svc
@@ -57,7 +55,7 @@ async def recalculate_order_promotions(
     orders = [await shop_svc.get_order(session, order_id) for order_id in payload.order_ids]
     for order in orders:
         if order is not None:
-            await _require_shop_manager(session, current_user, shop_svc._order_activity_id(order))
+            await _require_shop_manager(session, current_user)
     results = await recalculate_orders(session, payload.order_ids)
     for row in results:
         if row.status != "updated":
@@ -91,16 +89,8 @@ async def get_order(order_id: uuid.UUID, session: DbDep, current_user: CurrentUs
         codes = await get_user_permission_codes(session, current_user.id)
         cadre_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
         is_cadre = order.class_id is not None and order.class_id in cadre_ids
-        is_activity_manager = await activity_svc.can_manage_activity_resource(
-            session, current_user, shop_svc._order_activity_id(order)
-        )
         is_bound_delegate = await delegation_svc.can_view_order(session, current_user, order)
-        if (
-            not (_ADMIN_VIEW_CODES & set(codes))
-            and not is_cadre
-            and not is_activity_manager
-            and not is_bound_delegate
-        ):
+        if not (_ADMIN_VIEW_CODES & set(codes)) and not is_cadre and not is_bound_delegate:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此訂單")
     return shop_svc.serialize_order(order)
 
@@ -242,14 +232,14 @@ async def update_class_collection(
 async def download_class_receipt(
     class_id: uuid.UUID,
     session: DbDep,
-    activity_id: uuid.UUID | None = Query(None, description="活動；未提供時僅匯出一般商品"),
+    category_id: uuid.UUID | None = Query(None, description="商品分類"),
 ) -> Response:
     school_class = await lookups_svc.get_school_class(session, class_id)
     if school_class is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此班級")
     try:
         pdf = await shop_svc.export_class_receipt_pdf(
-            session, school_class, activity_id=activity_id
+            session, school_class, category_id=category_id
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -286,16 +276,12 @@ async def update_class_payment(
 ) -> ClassPaymentOut:
     if await lookups_svc.get_school_class(session, class_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此班級")
-    if payload.activity_id is not None:
-        or_404(await activity_svc.get_activity(session, payload.activity_id), "找不到此活動")
     try:
         orders = await shop_svc.set_class_paid(
             session,
             class_id,
             is_paid=payload.is_paid,
             actor_id=current_user.id,
-            activity_id=payload.activity_id,
-            category_id=payload.category_id,
             received_amount=payload.received_amount,
             expected_unpaid_amount=payload.expected_unpaid_amount,
         )
@@ -312,17 +298,13 @@ async def update_class_payment(
             "is_paid": payload.is_paid,
             "received_amount": payload.received_amount,
             "order_count": len(orders),
-            "activity_id": str(payload.activity_id) if payload.activity_id else None,
-            "category_id": str(payload.category_id) if payload.category_id else None,
         },
-        summary=f"班聯會{'登記' if payload.is_paid else '撤銷'}班級收款（單一活動）",
+        summary=f"班聯會{'登記' if payload.is_paid else '撤銷'}班級收款",
     )
     for order in orders:
         await queue_order_updated(session, order)
     return ClassPaymentOut(
         class_id=class_id,
-        activity_id=payload.activity_id,
-        category_id=payload.category_id,
         updated_orders=len(orders),
         is_paid=all(order.is_paid for order in orders) if orders else payload.is_paid,
     )
@@ -340,10 +322,7 @@ async def update_order_payment(
     order = await _get_order_or_404(order_id, session, current_user)
     if not current_user.is_superuser:
         codes = await get_user_permission_codes(session, current_user.id)
-        is_activity_manager = await activity_svc.can_manage_activity_resource(
-            session, current_user, shop_svc._order_activity_id(order)
-        )
-        if not (_PAYMENT_WRITE_CODES & set(codes)) and not is_activity_manager:
+        if not (_PAYMENT_WRITE_CODES & set(codes)):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="僅班聯會管理員可標示正式繳費"
             )

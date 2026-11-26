@@ -7,7 +7,6 @@ from io import BytesIO
 import pytest
 from openpyxl import load_workbook
 
-from api.models.activity import Activity, ActivityConvener
 from api.models.shop import (
     Order,
     OrderItem,
@@ -26,12 +25,7 @@ from api.services.shop._profit import profit_analysis
 
 @pytest.fixture
 async def option_cost_data(db_session, admin_user, authed_client_factory):
-    activity = Activity(name="成本測試活動")
-    db_session.add(activity)
-    await db_session.flush()
-    category = ProductCategory(
-        name="選項成本主題", activity_id=activity.id, created_by=admin_user.id
-    )
+    category = ProductCategory(name="選項成本主題", created_by=admin_user.id)
     db_session.add(category)
     await db_session.flush()
     size = ProductVariantOption(value="XL", price_delta=20)
@@ -70,7 +64,6 @@ async def option_cost_data(db_session, admin_user, authed_client_factory):
         row = Order(
             serial_number=f"OPTION-{uuid.uuid4().hex[:12]}",
             user_id=admin_user.id,
-            activity_id=activity.id,
             status=status,
             test_product_id=product.id if test else None,
             created_at=datetime(2026, 11, 10, tzinfo=UTC),
@@ -99,7 +92,6 @@ async def option_cost_data(db_session, admin_user, authed_client_factory):
     await order(9, [snapshot(size)], test=True)
     return (
         authed_client_factory(admin_user),
-        activity,
         category,
         product,
         size,
@@ -110,7 +102,7 @@ async def option_cost_data(db_session, admin_user, authed_client_factory):
 
 
 async def test_option_costs_save_and_recalculate_whole_purchase(option_cost_data, db_session):
-    admin, _, category, product, size, print_option, unused, _ = option_cost_data
+    admin, category, product, size, print_option, unused, _ = option_cost_data
     before = await profit_analysis(db_session, category)
     assert before.summary.total_cost is before.summary.profit_amount is None
     assert before.summary.missing_cost_product_count == 1
@@ -158,7 +150,7 @@ async def test_option_costs_save_and_recalculate_whole_purchase(option_cost_data
 
 @pytest.mark.parametrize("value", [0, None])
 async def test_zero_and_unknown_option_cost_differ(option_cost_data, db_session, value):
-    admin, _, category, product, size, print_option, _, _ = option_cost_data
+    admin, category, product, size, print_option, _, _ = option_cost_data
     result = await admin.put(
         f"/shop/products/{product.id}/procurement",
         json={
@@ -174,7 +166,7 @@ async def test_zero_and_unknown_option_cost_differ(option_cost_data, db_session,
 
 @pytest.mark.parametrize("value", [-1, 1.5, True, "10", 2147483648])
 async def test_invalid_option_cost_rejected(option_cost_data, value):
-    admin, _, _, product, size, _, _, _ = option_cost_data
+    admin, _, product, size, _, _, _ = option_cost_data
     response = await admin.put(
         f"/shop/products/{product.id}/procurement",
         json={"unit_cost": 40, "option_costs": {f"id:{size.id}": value}},
@@ -182,32 +174,20 @@ async def test_invalid_option_cost_rejected(option_cost_data, value):
     assert response.status_code == 422, response.text
 
 
-async def test_option_cost_permissions_and_activity_scope(
-    option_cost_data, db_session, client, make_user, authed_client_factory
+async def test_option_cost_permissions_require_shop_management(
+    option_cost_data, client, make_user, authed_client_factory
 ):
-    _, activity, category, product, size, _, _, _ = option_cost_data
+    admin, _, product, size, _, _, _ = option_cost_data
     path = f"/shop/products/{product.id}/procurement"
     payload = {"unit_cost": 40, "option_costs": {f"id:{size.id}": 4}}
     assert (await client.put(path, json=payload)).status_code == 401
     outsider = authed_client_factory(await make_user())
     assert (await outsider.put(path, json=payload)).status_code == 403
-    convener = await make_user()
-    db_session.add(
-        ActivityConvener(activity_id=activity.id, user_id=convener.id, start_date=date(2026, 1, 1))
-    )
-    await db_session.flush()
-    scoped = authed_client_factory(convener)
-    assert (await scoped.put(path, json=payload)).status_code == 200
-    other_activity = Activity(name="其他活動")
-    db_session.add(other_activity)
-    await db_session.flush()
-    category.activity_id = other_activity.id
-    await db_session.flush()
-    assert (await scoped.put(path, json=payload)).status_code == 403
+    assert (await admin.put(path, json=payload)).status_code == 200
 
 
 async def test_deleted_renamed_and_legacy_options_keep_costs(option_cost_data, db_session):
-    admin, _, category, product, size, print_option, _, order = option_cost_data
+    admin, category, product, size, print_option, _, order = option_cost_data
     size_id = size.id
     product.procurement_option_costs = {f"id:{size.id}": 4, f"id:{print_option.id}": 6}
     size.value = "加大"
@@ -237,10 +217,8 @@ async def test_deleted_renamed_and_legacy_options_keep_costs(option_cost_data, d
 
 
 async def test_sales_dimensions_and_excel_include_option_costs(option_cost_data, db_session):
-    _, activity, _, product, size, print_option, _, _ = option_cost_data
-    filters = dict(
-        date_from=date(2026, 11, 10), date_to=date(2026, 11, 10), activity_id=activity.id
-    )
+    _, _, product, size, print_option, _, _ = option_cost_data
+    filters = dict(date_from=date(2026, 11, 10), date_to=date(2026, 11, 10))
     before = await sales_analytics(db_session, **filters)
     assert before.current.metrics.total_cost is before.current.metrics.profit_amount is None
     assert before.current.metrics.missing_cost_item_count == 5

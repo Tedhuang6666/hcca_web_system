@@ -21,15 +21,12 @@ async def preview_registration_promotion(
     *,
     user_id: UUID,
     code: str | None,
-    activity_id: UUID | None = None,
     category_id: UUID | None = None,
 ) -> RegistrationPromotionPreview:
     order = await _orders.get_current_registration(
         session,
         user_id,
-        activity_id=activity_id,
         category_id=category_id,
-        match_activity=True,
         editable_only=True,
     )
     subtotal = order.subtotal_price if order else 0
@@ -40,7 +37,6 @@ async def preview_registration_promotion(
         code=code,
         product_subtotals=_orders._promotion_product_subtotals(order.items) if order else {},
         product_quantities=_orders._promotion_product_quantities(order.items) if order else {},
-        activity_id=activity_id,
         current_promotion_id=order.promotion_id if order else None,
         current_promotion_ids={row.promotion_id for row in order.applied_promotions}
         if order

@@ -48,7 +48,6 @@ ENTITY_LABEL: dict[str, str] = {
     "document": "公文",
     "announcement": "公告",
     "survey": "問卷",
-    "activity": "活動",
     "regulation": "法規",
     "petition": "陳情",
     "judicial_petition": "評議",
@@ -81,8 +80,6 @@ TRIGGER_TYPES: dict[str, str] = {
     "manual": "手動",
     "petition.created": "陳情建立",
     "announcement.published": "公告發布",
-    "activity.created": "活動建立",
-    "activity.completed": "活動結束",
     "matter.status_changed": "事情狀態變更",
     **governance_events.trigger_labels(),
 }

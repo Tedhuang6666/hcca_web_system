@@ -5,41 +5,41 @@ import type { ShopDelegationOut } from "@/lib/types";
 
 const api = vi.hoisted(() => ({ listDelegationLinks: vi.fn(), createDelegationLink: vi.fn(), renameDelegationLink: vi.fn(), revokeDelegationLink: vi.fn(), renewDelegationLink: vi.fn() }));
 vi.mock("@/lib/api", () => ({ shopApi: api, apiErrorMessage: (error: Error) => error.message }));
-const link: ShopDelegationOut = { id: "link", category_id: "goods", activity_id: "festival", name: "給媽媽代訂", created_at: "2026-10-10T00:00:00Z", revoked_at: null, bound_user_name: "媽媽", bound_user_email: "parent@synthetic.test" };
+const link: ShopDelegationOut = { id: "link", category_id: "goods", name: "給媽媽代訂", created_at: "2026-10-10T00:00:00Z", revoked_at: null, bound_user_name: "媽媽", bound_user_email: "parent@synthetic.test" };
 beforeEach(() => vi.resetAllMocks());
 
 describe("學生代訂連結管理", () => {
   it("exposes the scoped entry without opening a disclosure and focuses the create form", async () => {
     api.listDelegationLinks.mockResolvedValue([]);
-    render(<DelegationLinks categoryId="goods" activityId="festival" scopeName="校慶" />);
+    render(<DelegationLinks categoryId="goods" scopeName="紀念品" />);
     const create = screen.getByRole("button", { name: "建立家長代訂連結" });
     expect(create).toBeVisible();
     expect(create).toHaveAttribute("aria-expanded", "false");
-    expect(screen.getByText("本次授權：校慶")).toBeVisible();
+    expect(screen.getByText("本次授權：紀念品")).toBeVisible();
     expect(screen.queryByRole("textbox", { name: "邀請誰來代訂" })).not.toBeInTheDocument();
     fireEvent.click(create);
     expect(screen.getByRole("textbox", { name: "邀請誰來代訂" })).toHaveFocus();
     fireEvent.click(screen.getByText("完整操作介紹與權限說明"));
     expect(screen.getByText(/撤銷授權後，已登記品項仍保留/)).toBeVisible();
-    await screen.findByText("這個活動尚未建立代訂連結。");
+    await screen.findByText("這個商品分類尚未建立代訂連結。");
   });
 
-  it("distinguishes pending loading from an activity without links", async () => {
+  it("distinguishes pending loading from a category without links", async () => {
     let finish!: (links: ShopDelegationOut[]) => void;
     api.listDelegationLinks.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
-    render(<DelegationLinks categoryId="goods" activityId={null} scopeName="校慶商品" />);
+    render(<DelegationLinks categoryId="goods" scopeName="校慶商品" />);
     expect(screen.getByRole("status")).toHaveTextContent("載入代訂連結中");
-    expect(screen.queryByText("這個活動尚未建立代訂連結。")).not.toBeInTheDocument();
+    expect(screen.queryByText("這個商品分類尚未建立代訂連結。")).not.toBeInTheDocument();
     finish([]);
-    await screen.findByText("這個活動尚未建立代訂連結。");
+    await screen.findByText("這個商品分類尚未建立代訂連結。");
   });
 
   it("creates a named link and presents the fragment URL for sharing", async () => {
     api.listDelegationLinks.mockResolvedValue([]);
     api.createDelegationLink.mockResolvedValue({ ...link, token: "synthetic-test-token", authorization_code: "0123456", authorization_code_expires_at: null });
-    render(<DelegationLinks categoryId="goods" activityId="festival" scopeName="校慶" />);
+    render(<DelegationLinks categoryId="goods" scopeName="校慶商品" />);
     fireEvent.click(screen.getByRole("button", { name: "建立家長代訂連結" }));
-    await screen.findByText("這個活動尚未建立代訂連結。");
+    await screen.findByText("這個商品分類尚未建立代訂連結。");
     fireEvent.change(screen.getByRole("textbox", { name: "邀請誰來代訂" }), { target: { value: "給媽媽代訂" } });
     fireEvent.click(screen.getByRole("button", { name: "建立代訂驗證碼" }));
     await waitFor(() => expect(api.createDelegationLink).toHaveBeenCalledWith({ name: "給媽媽代訂", category_id: "goods" }));
@@ -56,7 +56,7 @@ describe("學生代訂連結管理", () => {
     api.listDelegationLinks.mockResolvedValue([link]);
     api.renameDelegationLink.mockResolvedValue({ ...link, name: "給家人代訂" });
     api.revokeDelegationLink.mockResolvedValue(undefined);
-    render(<DelegationLinks categoryId="goods" activityId="festival" scopeName="校慶" />);
+    render(<DelegationLinks categoryId="goods" scopeName="校慶商品" />);
     fireEvent.click(screen.getByRole("button", { name: "建立家長代訂連結" }));
     fireEvent.click(await screen.findByText("管理本次授權的連結（1）"));
     expect(screen.getByText("已綁定 媽媽（parent@synthetic.test）")).toBeVisible();
@@ -71,7 +71,7 @@ describe("學生代訂連結管理", () => {
 
   it("shows a retry action for failed loading", async () => {
     api.listDelegationLinks.mockRejectedValue(new Error("讀取失敗"));
-    render(<DelegationLinks categoryId="goods" activityId={null} scopeName="校慶商品" />);
+    render(<DelegationLinks categoryId="goods" scopeName="校慶商品" />);
     fireEvent.click(screen.getByRole("button", { name: "建立家長代訂連結" }));
     expect(await screen.findByRole("status")).toHaveTextContent("讀取失敗");
     expect(screen.getByRole("button", { name: "重新載入連結" })).toBeVisible();
@@ -81,9 +81,9 @@ describe("學生代訂連結管理", () => {
     api.listDelegationLinks.mockResolvedValueOnce([]).mockResolvedValue([link]);
     api.createDelegationLink.mockResolvedValue({ ...link, token: "synthetic-test-token" });
     api.renameDelegationLink.mockResolvedValue({ ...link, name: "給家人代訂" });
-    render(<DelegationLinks categoryId="goods" activityId="festival" scopeName="校慶" />);
+    render(<DelegationLinks categoryId="goods" scopeName="校慶商品" />);
     fireEvent.click(screen.getByRole("button", { name: "建立家長代訂連結" }));
-    await screen.findByText("這個活動尚未建立代訂連結。");
+    await screen.findByText("這個商品分類尚未建立代訂連結。");
     fireEvent.change(screen.getByRole("textbox", { name: "邀請誰來代訂" }), { target: { value: "給媽媽代訂" } });
     fireEvent.click(screen.getByRole("button", { name: "建立代訂驗證碼" }));
     await screen.findByRole("textbox", { name: "分享連結（請在離開頁面前保存）" });
@@ -96,14 +96,14 @@ describe("學生代訂連結管理", () => {
     expect(screen.getByRole("textbox", { name: "分享連結（請在離開頁面前保存）" })).toHaveValue(`${window.location.origin}/shop#delegate=synthetic-test-token`);
   });
 
-  it("allows revoking old activity links so they do not trap the active link limit", async () => {
-    const oldLink = { ...link, id: "old-link", activity_id: "old-festival", name: "上一場活動" };
+  it("allows revoking links for another category", async () => {
+    const oldLink = { ...link, id: "old-link", category_id: "old-goods", name: "舊分類連結" };
     api.listDelegationLinks.mockResolvedValue([oldLink]);
     api.revokeDelegationLink.mockResolvedValue(undefined);
-    render(<DelegationLinks categoryId="goods" activityId="festival" scopeName="校慶" />);
+    render(<DelegationLinks categoryId="goods" scopeName="校慶商品" />);
     fireEvent.click(screen.getByRole("button", { name: "建立家長代訂連結" }));
-    fireEvent.click(await screen.findByText("其他活動的連結（1）"));
-    expect(screen.getByRole("textbox", { name: "修改上一場活動的名稱" })).toBeVisible();
+    fireEvent.click(await screen.findByText("其他商品分類的連結（1）"));
+    expect(screen.getByRole("textbox", { name: "修改舊分類連結的名稱" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "撤銷" }));
     await waitFor(() => expect(api.revokeDelegationLink).toHaveBeenCalledWith("old-link"));
   });

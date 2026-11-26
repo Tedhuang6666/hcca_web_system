@@ -23,7 +23,7 @@ router = APIRouter()
 @router.get(
     "/registrations",
     response_model=list[OrderOut],
-    summary="取得各活動目前商品登記",
+    summary="取得各分類目前商品登記",
 )
 async def list_current_registrations(session: DbDep, current_user: CurrentUser) -> list[OrderOut]:
     orders = await shop_svc.get_current_registrations(
@@ -56,7 +56,6 @@ async def preview_current_registration_promotion(
         session,
         user_id=current_user.id,
         code=payload.code,
-        activity_id=payload.activity_id,
         category_id=payload.category_id,
     )
     if result.promotion is not None:
@@ -79,7 +78,6 @@ async def apply_current_registration_promotion(
             session,
             current_user,
             code=payload.code,
-            activity_id=payload.activity_id,
             category_id=payload.category_id,
         )
     except ValueError as e:

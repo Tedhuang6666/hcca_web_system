@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.core.config import settings
-from api.models.activity import Activity, ActivityStatus
 from api.models.school_class import SchoolClass
 from api.models.shop import (
     Order,
@@ -119,7 +118,6 @@ async def _apply_order_promotion(
         code=code,
         product_subtotals=product_subtotals,
         product_quantities=product_quantities,
-        activity_id=_order_activity_id(order),
         current_promotion_ids=current_ids,
     )
     await _sync_order_promotions(session, order, result.allocations)
@@ -168,17 +166,14 @@ def _product_category_filter(category_id: uuid.UUID):
     )
 
 
-def _product_order_scope(product: Product) -> tuple[uuid.UUID | None, uuid.UUID | None]:
+def _product_order_scope(product: Product) -> uuid.UUID | None:
     category = product.category
     if category is None and product.series is not None:
         category = product.series.category
-    activity_id = category.activity_id if category is not None else None
-    return activity_id, category.id if category is not None and activity_id is None else None
+    return category.id if category is not None else None
 
 
 def _order_category(order: Order) -> ProductCategory | None:
-    if _order_activity_id(order) is not None:
-        return None
     category = order.__dict__.get("category")
     if category is not None:
         return category
@@ -192,11 +187,11 @@ def _order_category(order: Order) -> ProductCategory | None:
     return next(iter(categories.values())) if len(categories) == 1 else None
 
 
-def _product_activity_id(product: Product) -> uuid.UUID | None:
+def _product_category_id(product: Product) -> uuid.UUID | None:
     category = product.category
     if category is None and product.series is not None:
         category = product.series.category
-    return category.activity_id if category is not None else None
+    return category.id if category is not None else None
 
 
 async def _purchased_quantity(
@@ -252,46 +247,15 @@ async def _assert_purchase_limit(
         )
 
 
-async def _assert_activity_order_unlocked(
-    session: AsyncSession, activity_id: uuid.UUID | None
-) -> Activity | None:
-    if not activity_id:
-        return None
-    # 與手動結單互斥；結單完成後的登記不可讀到 identity map 中的舊狀態。
-    activity = await session.scalar(
-        select(Activity)
-        .where(Activity.id == activity_id)
-        .with_for_update(read=True)
-        .execution_options(populate_existing=True)
-    )
-    if activity is not None and activity.order_closed_at is not None:
-        raise ValueError("活動已結單，訂購已鎖定；既有訂單仍可收款")
-    return activity
-
-
-async def _assert_activity_open(session: AsyncSession, product: Product) -> None:
-    activity = await _assert_activity_order_unlocked(session, _product_activity_id(product))
-    if activity is not None and activity.order_closes_at is not None:
-        deadline = activity.order_closes_at
-        if deadline.tzinfo is None:
-            deadline = deadline.replace(tzinfo=UTC)
-        if datetime.now(UTC) >= deadline:
-            raise ValueError("已到班聯統一截止時間，商品已截止登記")
-    if activity is not None and activity.status in (
-        ActivityStatus.ENDED,
-        ActivityStatus.ARCHIVED,
-    ):
-        raise ValueError(f"商品「{product.name}」所屬活動已結束，停止販售")
-
-
-def _order_activity_id(order: Order) -> uuid.UUID | None:
-    if order.activity_id is not None:
-        return order.activity_id
-    activity_ids: set[uuid.UUID | None] = set()
-    for item in getattr(order, "items", []) or []:
-        product = getattr(item, "product", None)
-        activity_ids.add(_product_activity_id(product) if product is not None else None)
-    return next(iter(activity_ids)) if len(activity_ids) == 1 else None
+def _order_category_id(order: Order) -> uuid.UUID | None:
+    if order.category_id is not None:
+        return order.category_id
+    category_ids = {
+        _product_category_id(item.product)
+        for item in (getattr(order, "items", []) or [])
+        if item.product is not None
+    }
+    return next(iter(category_ids)) if len(category_ids) == 1 else None
 
 
 async def _assert_buyer_eligible(session: AsyncSession, user: User) -> None:
@@ -329,11 +293,8 @@ async def _assert_product_registration_open(
     allow_class_deadline: bool = False,
 ) -> None:
     if allow_testing and product.status == ProductStatus.TESTING:
-        await _assert_activity_order_unlocked(session, _product_activity_id(product))
         return
-    await _assert_activity_open(session, product)
-    activity_id, category_scope = _product_order_scope(product)
-    await _assert_class_order_unlocked(session, class_id, activity_id, category_scope)
+    await _assert_class_order_unlocked(session, class_id)
     if product.status != ProductStatus.ACTIVE and not (
         allow_sold_out and product.status == ProductStatus.SOLD_OUT
     ):
@@ -365,7 +326,6 @@ async def _assert_product_registration_open(
 def _order_detail_query() -> Select[tuple[Order]]:
     """單筆與批次訂單共用預載入關聯，避免列表逐筆呼叫 get_order。"""
     return select(Order).options(
-        selectinload(Order.activity),
         selectinload(Order.category),
         selectinload(Order.items).selectinload(OrderItem.product).selectinload(Product.category),
         selectinload(Order.items)
@@ -387,7 +347,6 @@ async def list_orders(
     session: AsyncSession,
     *,
     user_id: uuid.UUID | None = None,
-    activity_id: uuid.UUID | None = None,
     class_ids: list[uuid.UUID] | None = None,
     grade: int | None = None,
     assistance_scope: str | None = None,
@@ -413,7 +372,6 @@ async def list_orders(
     q = (
         select(Order)
         .options(
-            selectinload(Order.activity),
             selectinload(Order.category),
             selectinload(Order.school_class),
             selectinload(Order.user),
@@ -432,12 +390,8 @@ async def list_orders(
         q = q.where(Order.user_id == user_id)
     if not include_testing:
         q = q.where(Order.test_product_id.is_(None))
-    if activity_id:
-        q = q.where(Order.activity_id == activity_id)
-    if general_only:
-        q = q.where(Order.activity_id.is_(None))
-        if category_id is None:
-            q = q.where(Order.category_id.is_(None))
+    if general_only and category_id is None:
+        q = q.where(Order.category_id.is_(None))
     if class_ids is not None:
         q = q.where(Order.class_id.in_(class_ids))
     if grade is not None:
@@ -485,8 +439,6 @@ async def _lock_class_orders(session: AsyncSession, class_id: uuid.UUID | None) 
 async def _assert_class_order_unlocked(
     session: AsyncSession,
     class_id: uuid.UUID | None,
-    activity_id: uuid.UUID | None,
-    category_id: uuid.UUID | None = None,
 ) -> None:
     if class_id is None:
         return
@@ -494,7 +446,7 @@ async def _assert_class_order_unlocked(
     await session.execute(
         select(SchoolClass.id).where(SchoolClass.id == class_id).with_for_update(read=True)
     )
-    payment = await class_payment_for_scope(session, class_id, activity_id, category_id)
+    payment = await class_payment_for_scope(session, class_id)
     if payment is not None:
         raise ValueError("班聯已確認本班收款，商品登記已鎖定")
 
@@ -510,7 +462,7 @@ _MOVED_SYMBOLS = {
     "serialize_cart": "_cart",
     "update_cart_item": "_cart",
     "_create_order_from_items": "_order_writes",
-    "_group_cart_items_by_activity": "_order_writes",
+    "_group_cart_items_by_category": "_order_writes",
     "_order_items_to_cart_items": "_order_writes",
     "cancel_order": "_order_writes",
     "checkout": "_order_writes",

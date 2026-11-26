@@ -48,7 +48,6 @@ async def download_class_order_confirmations(
         pdf = await shop_svc.export_class_order_confirmations_pdf(
             session,
             payload.class_ids,
-            activity_id=payload.activity_id,
             category_id=payload.category_id,
         )
     except ValueError as exc:
@@ -94,7 +93,6 @@ async def download_class_receipts(
         pdf = await shop_svc.export_class_receipts_pdf(
             session,
             school_classes,
-            activity_id=payload.activity_id,
             category_id=payload.category_id,
             unpaid_only=payload.unpaid_only and school_classes is None,
         )
@@ -134,7 +132,7 @@ async def download_changed_order_receipts(
 ) -> Response:
     try:
         pdf = await shop_svc.export_changed_order_receipts_pdf(
-            session, activity_id=payload.activity_id, category_id=payload.category_id
+            session, category_id=payload.category_id
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
