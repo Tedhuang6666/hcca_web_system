@@ -101,7 +101,7 @@ def test_report_title_uses_only_topic_and_report_name() -> None:
     pdf = render_order_report_pdf("council", [], "聖誕傳情")
     text = "\n".join(page.extract_text() or "" for page in PdfReader(BytesIO(pdf)).pages)
 
-    assert "（聖誕傳情） 班聯商品尺寸總表" in text
+    assert "聖誕傳情班聯商品尺寸總表" in text
     assert "報表範圍" not in text
     assert "全部收款狀態" not in text
 
