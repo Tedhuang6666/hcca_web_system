@@ -44,7 +44,11 @@ def _detail(options: list[tuple[str, str, str, str]]) -> str:
 
 
 def build_sales_table(
-    orders: list[Order], *, product_id: UUID | None = None, category_id: UUID | None = None
+    orders: list[Order],
+    *,
+    product_id: UUID | None = None,
+    category_id: UUID | None = None,
+    product_positions: dict[UUID, int] | None = None,
 ) -> list[SalesTableRow]:
     rows: dict[tuple, SalesTableRow] = {}
     products: dict[UUID, Product] = {}
@@ -100,7 +104,14 @@ def build_sales_table(
             )
     return sorted(
         rows.values(),
-        key=lambda row: (row.product_name, str(row.product_id), row.unit_price, row.detail),
+        key=lambda row: (
+            product_positions.get(row.product_id, len(product_positions))
+            if product_positions is not None
+            else row.product_name,
+            str(row.product_id),
+            row.unit_price,
+            row.detail,
+        ),
     )
 
 

@@ -35,6 +35,7 @@ from api.schemas.shop import (
 )
 from api.services import receivable as receivable_svc
 from api.services import school_class as class_svc
+from api.services.shop._ordering import category_catalog_positions, product_catalog_positions
 from api.services.shop._orders import _product_category_filter, list_orders
 
 
@@ -209,6 +210,7 @@ async def class_order_summary(
         )
     paid_orders = [order for order in active_orders if order.is_class_collected]
     unpaid_orders = [order for order in active_orders if not order.is_class_collected]
+    product_positions = await product_catalog_positions(session, list(product_totals))
     return ShopClassSummaryOut(
         class_count=len(set(class_ids)),
         order_count=len(active_orders),
@@ -222,7 +224,8 @@ async def class_order_summary(
             1 for order in active_orders if order.assistance_scope == "class_assisted"
         ),
         product_rows=sorted(
-            product_totals.values(), key=lambda row: (-row.quantity, row.product_name)
+            product_totals.values(),
+            key=lambda row: product_positions.get(row.product_id, len(product_positions)),
         ),
     )
 
@@ -468,6 +471,9 @@ async def class_payment_report(session: AsyncSession) -> list[ClassPaymentReport
             counted_orders.setdefault(key, set()).add(order.id)
             row.order_count = len(counted_orders[key])
             row.confirmed_at = max(row.confirmed_at, paid_at)
+    category_positions = await category_catalog_positions(
+        session, [row.category_id for row in groups.values() if row.category_id is not None]
+    )
     # 保留年級、班級排序；同班的補收款接在班級收款之後。
     return sorted(
         groups.values(),
@@ -475,6 +481,7 @@ async def class_payment_report(session: AsyncSession) -> list[ClassPaymentReport
             class_positions[row.class_id],
             row.collection_type,
             -row.confirmed_at.timestamp(),
+            category_positions.get(row.category_id, len(category_positions)),
             str(row.category_id),
         ),
     )
@@ -602,4 +609,14 @@ async def order_quantities(
             if order.is_paid:
                 tally[key]["qty_paid"] += item.quantity
 
-    return [OrderQuantityRow(**v) for v in sorted(tally.values(), key=lambda x: x["product_name"])]
+    product_positions = await product_catalog_positions(
+        session, {row["product_id"] for row in tally.values()}
+    )
+    ordered_rows = sorted(
+        tally.values(),
+        key=lambda row: (
+            product_positions.get(row["product_id"], len(product_positions)),
+            row["variant_key"],
+        ),
+    )
+    return [OrderQuantityRow(**row) for row in ordered_rows]

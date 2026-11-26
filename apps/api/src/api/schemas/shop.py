@@ -96,7 +96,11 @@ class ProductCategoryCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200, description="主題名稱，如「商品」")
     description: str | None = None
     image_url: str | None = None
-    sort_order: int = 0
+    sort_order: int | None = None
+
+
+class ProductCategoryReorder(BaseModel):
+    category_ids: list[uuid.UUID] = Field(min_length=1, max_length=1000)
 
 
 class ProductCategoryUpdate(BaseModel):
@@ -128,7 +132,12 @@ class ProductSeriesCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200, description="系列名稱，如「衣服系列」")
     description: str | None = None
     image_url: str | None = None
-    sort_order: int = 0
+    sort_order: int | None = None
+
+
+class ProductSeriesReorder(BaseModel):
+    category_id: uuid.UUID
+    series_ids: list[uuid.UUID] = Field(min_length=1, max_length=1000)
 
 
 class ProductSeriesUpdate(BaseModel):
@@ -257,8 +266,8 @@ class ProductPurchaseGroupOptionOut(BaseModel):
 
 
 class ProductCreate(BaseModel):
-    category_id: uuid.UUID | None = Field(None, description="所屬主題 ID；單一商品可不選系列")
-    series_id: uuid.UUID | None = Field(None, description="所屬系列 ID；可留空直接放在主題下")
+    category_id: uuid.UUID | None = Field(None, description="所屬主題 ID")
+    series_id: uuid.UUID | None = None
     name: str = Field(..., min_length=1, max_length=200, description="商品名稱")
     description: str | None = None
     image_url: str | None = None
@@ -361,6 +370,12 @@ class ProductUpdate(BaseModel):
         return value
 
 
+class ProductReorder(BaseModel):
+    parent_type: Literal["category", "series"]
+    parent_id: uuid.UUID
+    product_ids: list[uuid.UUID] = Field(min_length=1, max_length=5000)
+
+
 class ProductCostOut(BaseModel):
     unit_cost: int | None
 
@@ -384,6 +399,7 @@ class ProductOut(BaseModel):
     version: int
     category_id: uuid.UUID | None = None
     series_id: uuid.UUID | None
+    sort_order: int
     created_by: uuid.UUID
     sale_start: datetime | None
     sale_end: datetime | None

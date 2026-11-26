@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.spreadsheet import safe_mapping
 from api.models.shop import Order, OrderItem, Product, ProductCategory, ProductSeries
 from api.models.user import User
+from api.services.shop._ordering import product_catalog_ordering
 
 
 async def _fetch_order_report_rows(
@@ -34,7 +35,7 @@ async def _fetch_order_report_rows(
         .outerjoin(User, Order.user_id == User.id)
         .join(Product, OrderItem.product_id == Product.id)
         .where(Order.test_product_id.is_(None))
-        .order_by(Order.created_at.desc())
+        .order_by(Order.created_at.desc(), *product_catalog_ordering())
     )
     if activity_id:
         q = q.where(

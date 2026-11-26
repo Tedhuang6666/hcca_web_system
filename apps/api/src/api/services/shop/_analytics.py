@@ -27,6 +27,28 @@ from api.schemas.shop_analytics import (
 from api.services.school_class import class_display_label
 from api.services.shop._analytics_insights import build_sales_insights
 from api.services.shop._costs import item_cost as order_item_cost
+from api.services.shop._ordering import product_catalog_positions
+
+
+def _apply_product_catalog_order(period: ShopSalesPeriod, positions: dict[uuid.UUID, int]) -> None:
+    fallback = len(positions)
+    period.products.sort(key=lambda row: (positions.get(uuid.UUID(row.key), fallback), row.label))
+    for rows in (period.variants, period.variant_options):
+        rows.sort(
+            key=lambda row: (
+                positions.get(row.product_id, fallback),
+                -row.item_count,
+                row.label,
+            )
+        )
+    for rows in (period.grade_products, period.class_products):
+        rows.sort(
+            key=lambda row: (
+                positions.get(row.product_id, fallback),
+                row.dimension_label,
+                row.label,
+            )
+        )
 
 
 def _allocate_amounts(order: Order) -> dict[uuid.UUID, int]:
@@ -89,6 +111,10 @@ async def sales_analytics(
         )
         periods.append(_summarize(orders, period_start, period_end, product_id, category_id))
     previous = periods[1] if compare else None
+    product_ids = {uuid.UUID(row.key) for period in periods for row in period.products}
+    product_positions = await product_catalog_positions(session, product_ids)
+    for period in periods:
+        _apply_product_catalog_order(period, product_positions)
     return ShopSalesAnalyticsOut(
         generated_at=datetime.now(UTC),
         current=periods[0],

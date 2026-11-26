@@ -26,7 +26,6 @@ export function EntityModal({
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [imageUrl, setImageUrl] = useState<string | null>(initial?.image_url ?? null);
-  const [sortOrder, setSortOrder] = useState(String(initial?.sort_order ?? 0));
   const [isActive, setIsActive] = useState(initial?.is_active ?? true);
   const [busy, setBusy] = useState(false);
 
@@ -45,10 +44,7 @@ export function EntityModal({
         <Field label="圖片">
           <ImageField value={imageUrl} onChange={setImageUrl} />
         </Field>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="顯示順序（數字小的在前）">
-            <input value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="input min-h-11 w-full min-w-0" inputMode="numeric" />
-          </Field>
+        <div className="grid grid-cols-1 gap-3">
           <label className="flex min-h-11 items-center gap-2 text-xs text-fg-secondary!">
             <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
             顯示在商品目錄
@@ -65,7 +61,6 @@ export function EntityModal({
                   name: name.trim(),
                   description: description.trim() || null,
                   image_url: imageUrl,
-                  sort_order: Number(sortOrder) || 0,
                   is_active: isActive,
                 };
                 if (kind === "category") {

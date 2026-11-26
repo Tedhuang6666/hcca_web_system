@@ -240,6 +240,7 @@ class Product(Base, TimestampMixin):
         ForeignKey("product_categories.id", ondelete="RESTRICT"),
         nullable=True,
     )
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     series_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("product_series.id", ondelete="RESTRICT"),

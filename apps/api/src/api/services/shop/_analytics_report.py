@@ -29,12 +29,14 @@ from api.schemas.shop_analytics import (
 )
 from api.services.official_print import _font_faces, render_print_pdf
 from api.services.shop._analytics import (
+    _apply_product_catalog_order,
     _summarize,
     load_sales_orders,
     sales_analytics,
     sales_date_range,
 )
 from api.services.shop._analytics_insights import build_sales_insights
+from api.services.shop._ordering import product_catalog_positions
 from api.services.shop._sales_table import (
     TABLE_NOTE,
     SalesTableRow,
@@ -106,13 +108,21 @@ async def create_sales_report(
             include_variants=True,
         )
         current = _summarize(orders, start, end, request.product_id, request.category_id)
+        product_ids = {
+            item.product_id for order in orders for item in order.items if item.product is not None
+        }
+        product_positions = await product_catalog_positions(session, product_ids)
+        _apply_product_catalog_order(current, product_positions)
         data = ShopSalesAnalyticsOut(
             generated_at=datetime.now(UTC),
             current=current,
             insights=build_sales_insights(current, None),
         )
         rows = build_sales_table(
-            orders, product_id=request.product_id, category_id=request.category_id
+            orders,
+            product_id=request.product_id,
+            category_id=request.category_id,
+            product_positions=product_positions,
         )
     else:
         data = await sales_analytics(

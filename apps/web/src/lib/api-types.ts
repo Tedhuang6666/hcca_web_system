@@ -9776,6 +9776,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop/categories/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 調整主題順序 */
+        patch: operations["reorder_categories_shop_categories_order_patch"];
+        trace?: never;
+    };
     "/shop/categories/{category_id}": {
         parameters: {
             query?: never;
@@ -10655,6 +10672,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop/products/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 調整商品順序 */
+        patch: operations["reorder_products_shop_products_order_patch"];
+        trace?: never;
+    };
     "/shop/products/{product_id}": {
         parameters: {
             query?: never;
@@ -11032,6 +11066,23 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/shop/series/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 調整系列順序 */
+        patch: operations["reorder_series_shop_series_order_patch"];
         trace?: never;
     };
     "/shop/series/{series_id}": {
@@ -25330,11 +25381,8 @@ export interface components {
              * @description 主題名稱，如「商品」
              */
             name: string;
-            /**
-             * Sort Order
-             * @default 0
-             */
-            sort_order: number;
+            /** Sort Order */
+            sort_order?: number | null;
         };
         /** ProductCategoryOut */
         ProductCategoryOut: {
@@ -25371,6 +25419,11 @@ export interface components {
              */
             updated_at: string;
         };
+        /** ProductCategoryReorder */
+        ProductCategoryReorder: {
+            /** Category Ids */
+            category_ids: string[];
+        };
         /** ProductCategoryUpdate */
         ProductCategoryUpdate: {
             /** Activity Id */
@@ -25395,7 +25448,7 @@ export interface components {
         ProductCreate: {
             /**
              * Category Id
-             * @description 所屬主題 ID；單一商品可不選系列
+             * @description 所屬主題 ID
              */
             category_id?: string | null;
             /** Description */
@@ -25440,10 +25493,7 @@ export interface components {
              * @description 開售時間
              */
             sale_start?: string | null;
-            /**
-             * Series Id
-             * @description 所屬系列 ID；可留空直接放在主題下
-             */
+            /** Series Id */
             series_id?: string | null;
             /**
              * Stock Quantity
@@ -25558,6 +25608,8 @@ export interface components {
             /** Series Id */
             series_id: string | null;
             size_chart?: components["schemas"]["ProductSizeChart"] | null;
+            /** Sort Order */
+            sort_order: number;
             status: components["schemas"]["ProductStatus"];
             /** Stock Quantity */
             stock_quantity: number;
@@ -25676,6 +25728,21 @@ export interface components {
             /** Required Permissions */
             required_permissions?: string[];
         };
+        /** ProductReorder */
+        ProductReorder: {
+            /**
+             * Parent Id
+             * Format: uuid
+             */
+            parent_id: string;
+            /**
+             * Parent Type
+             * @enum {string}
+             */
+            parent_type: "category" | "series";
+            /** Product Ids */
+            product_ids: string[];
+        };
         /** ProductSeriesCreate */
         ProductSeriesCreate: {
             /**
@@ -25693,11 +25760,8 @@ export interface components {
              * @description 系列名稱，如「衣服系列」
              */
             name: string;
-            /**
-             * Sort Order
-             * @default 0
-             */
-            sort_order: number;
+            /** Sort Order */
+            sort_order?: number | null;
         };
         /** ProductSeriesOut */
         ProductSeriesOut: {
@@ -25731,6 +25795,16 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** ProductSeriesReorder */
+        ProductSeriesReorder: {
+            /**
+             * Category Id
+             * Format: uuid
+             */
+            category_id: string;
+            /** Series Ids */
+            series_ids: string[];
         };
         /** ProductSeriesUpdate */
         ProductSeriesUpdate: {
@@ -54231,6 +54305,39 @@ export interface operations {
             };
         };
     };
+    reorder_categories_shop_categories_order_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductCategoryReorder"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductCategoryOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     delete_category_shop_categories__category_id__delete: {
         parameters: {
             query?: never;
@@ -56240,6 +56347,39 @@ export interface operations {
             };
         };
     };
+    reorder_products_shop_products_order_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductReorder"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_product_shop_products__product_id__get: {
         parameters: {
             query?: {
@@ -57078,6 +57218,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProductSeriesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reorder_series_shop_series_order_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductSeriesReorder"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductSeriesOut"][];
                 };
             };
             /** @description Validation Error */

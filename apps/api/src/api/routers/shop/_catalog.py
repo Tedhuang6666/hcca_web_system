@@ -27,9 +27,11 @@ from api.schemas.shop import (
     ImageUploadOut,
     ProductCategoryCreate,
     ProductCategoryOut,
+    ProductCategoryReorder,
     ProductCategoryUpdate,
     ProductSeriesCreate,
     ProductSeriesOut,
+    ProductSeriesReorder,
     ProductSeriesUpdate,
     ShopActivityDeadlineUpdate,
     ShopActivityOrderClosureUpdate,
@@ -155,6 +157,19 @@ async def create_category(
     return await shop_svc.create_category(session, data=payload, created_by=current_user.id)
 
 
+@router.patch("/categories/order", response_model=list[ProductCategoryOut], summary="調整主題順序")
+async def reorder_categories(
+    payload: ProductCategoryReorder, session: DbDep, current_user: CurrentUser
+) -> list[ProductCategory]:
+    categories = await shop_svc.list_categories(session)
+    for category in categories:
+        await _require_shop_manager(session, current_user, category.activity_id)
+    try:
+        return await shop_svc.reorder_categories(session, payload)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+
+
 @router.patch("/categories/{category_id}", response_model=ProductCategoryOut, summary="更新主題")
 async def update_category(
     category_id: uuid.UUID,
@@ -212,6 +227,18 @@ async def create_series(
         return await shop_svc.create_series(session, data=payload)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+
+
+@router.patch("/series/order", response_model=list[ProductSeriesOut], summary="調整系列順序")
+async def reorder_series(
+    payload: ProductSeriesReorder, session: DbDep, current_user: CurrentUser
+) -> list[ProductSeries]:
+    category = await _get_category_or_404(payload.category_id, session)
+    await _require_shop_manager(session, current_user, category.activity_id)
+    try:
+        return await shop_svc.reorder_series(session, payload)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
 
 
 @router.patch("/series/{series_id}", response_model=ProductSeriesOut, summary="更新系列")

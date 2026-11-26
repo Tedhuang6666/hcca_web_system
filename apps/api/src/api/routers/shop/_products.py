@@ -23,6 +23,7 @@ from api.routers.shop._common import (
 from api.schemas.shop import (
     ProductCreate,
     ProductOut,
+    ProductReorder,
     ProductUpdate,
     ProductVariantGroupCreate,
     ProductVariantGroupOut,
@@ -76,6 +77,26 @@ async def create_product(
         summary=f"建立商品「{product.name}」",
     )
     return product
+
+
+@router.patch("/products/order", response_model=list[ProductOut], summary="調整商品順序")
+async def reorder_products(
+    payload: ProductReorder, session: DbDep, current_user: CurrentUser
+) -> list[Product]:
+    if payload.parent_type == "category":
+        category = await _get_category_or_404(payload.parent_id, session)
+    else:
+        series = await _get_series_or_404(payload.parent_id, session)
+        category = await _get_category_or_404(series.category_id, session)
+    await _require_shop_manager(session, current_user, category.activity_id)
+    try:
+        return await shop_svc.reorder_products(
+            session,
+            payload,
+            include_testing=await can_test_products(session, current_user),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
 
 
 @router.patch("/products/{product_id}", response_model=ProductOut, summary="更新商品")

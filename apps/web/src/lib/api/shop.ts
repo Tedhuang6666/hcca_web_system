@@ -300,6 +300,8 @@ export const shopApi = {
     post<ProductCategoryOut>("/shop/categories", body),
   updateCategory: (id: string, body: Record<string, unknown>) =>
     patch<ProductCategoryOut>(`/shop/categories/${id}`, body),
+  reorderCategories: (category_ids: string[]) =>
+    patch<ProductCategoryOut[]>("/shop/categories/order", { category_ids }),
   deleteCategory: (id: string) => del<void>(`/shop/categories/${id}`),
   listSeries: (params?: Record<string, string>) => {
     const qs = params ? "?" + new URLSearchParams(params).toString() : "";
@@ -309,12 +311,19 @@ export const shopApi = {
     post<ProductSeriesOut>("/shop/series", body),
   updateSeries: (id: string, body: Record<string, unknown>) =>
     patch<ProductSeriesOut>(`/shop/series/${id}`, body),
+  reorderSeries: (category_id: string, series_ids: string[]) =>
+    patch<ProductSeriesOut[]>("/shop/series/order", { category_id, series_ids }),
   deleteSeries: (id: string) => del<void>(`/shop/series/${id}`),
 
   // 商品管理
   createProduct: (body: Record<string, unknown>) => post<ProductOut>("/shop/products", body),
   updateProduct: (id: string, body: Record<string, unknown>) =>
     patch<ProductOut>(`/shop/products/${id}`, body),
+  reorderProducts: (body: {
+    parent_type: "category" | "series";
+    parent_id: string;
+    product_ids: string[];
+  }) => patch<ProductOut[]>("/shop/products/order", body),
   activateProduct: (id: string) => post<ProductOut>(`/shop/products/${id}/activate`, {}),
   testProduct: (id: string) => post<ProductOut>(`/shop/products/${id}/test`, {}),
   deactivateProduct: (id: string) => post<ProductOut>(`/shop/products/${id}/deactivate`, {}),

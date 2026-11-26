@@ -974,6 +974,26 @@ async def test_create_category_with_permission_returns_201(
     assert resp.json()["name"] == "測試主題"
 
 
+async def test_reorder_categories_requires_manager_and_saves_order(
+    db_session, member_user, authed_client_factory
+) -> None:
+    categories = [
+        await _make_category(db_session, member_user, name="主題一"),
+        await _make_category(db_session, member_user, name="主題二"),
+    ]
+    ac = authed_client_factory(member_user)
+    payload = {"category_ids": [str(category.id) for category in reversed(categories)]}
+
+    assert (await ac.patch("/shop/categories/order", json=payload)).status_code == 403
+
+    await _grant_permission(db_session, member_user, "shop:manage")
+    response = await ac.patch("/shop/categories/order", json=payload)
+
+    assert response.status_code == 200, response.text
+    assert [row["id"] for row in response.json()] == payload["category_ids"]
+    assert [row["sort_order"] for row in response.json()] == [0, 1]
+
+
 async def test_update_category_unknown_id_returns_404(
     db_session, member_user, authed_client_factory
 ) -> None:
@@ -1047,6 +1067,34 @@ async def test_create_series_unknown_category_returns_404(
     ac = authed_client_factory(member_user)
     resp = await ac.post("/shop/series", json={"category_id": str(uuid.uuid4()), "name": "系列"})
     assert resp.status_code == 404
+
+
+async def test_reorder_series_requires_manager_and_saves_order(
+    db_session, member_user, authed_client_factory
+) -> None:
+    category = await _make_category(db_session, member_user)
+    series = [
+        await shop_svc.create_series(
+            db_session, data=ProductSeriesCreate(category_id=category.id, name="系列一")
+        ),
+        await shop_svc.create_series(
+            db_session, data=ProductSeriesCreate(category_id=category.id, name="系列二")
+        ),
+    ]
+    ac = authed_client_factory(member_user)
+    payload = {
+        "category_id": str(category.id),
+        "series_ids": [str(item.id) for item in reversed(series)],
+    }
+
+    assert (await ac.patch("/shop/series/order", json=payload)).status_code == 403
+
+    await _grant_permission(db_session, member_user, "shop:manage")
+    response = await ac.patch("/shop/series/order", json=payload)
+
+    assert response.status_code == 200, response.text
+    assert [row["id"] for row in response.json()] == payload["series_ids"]
+    assert [row["sort_order"] for row in response.json()] == [0, 1]
 
 
 async def test_update_series_unknown_id_returns_404(
@@ -1137,6 +1185,62 @@ async def test_create_product_without_permission_returns_403(
         json={"series_id": str(series.id), "name": "商品", "price": 10},
     )
     assert resp.status_code == 403
+
+
+async def test_reorder_products_requires_manager_and_saves_direct_and_series_order(
+    db_session, member_user, authed_client_factory
+) -> None:
+    category = await _make_category(db_session, member_user)
+    series = await shop_svc.create_series(
+        db_session, data=ProductSeriesCreate(category_id=category.id, name="系列")
+    )
+    direct_products = [
+        await shop_svc.create_product(
+            db_session,
+            data=ProductCreate(category_id=category.id, name="直商品一", price=10),
+            created_by=member_user.id,
+        ),
+        await shop_svc.create_product(
+            db_session,
+            data=ProductCreate(category_id=category.id, name="直商品二", price=10),
+            created_by=member_user.id,
+        ),
+    ]
+    series_products = [
+        await shop_svc.create_product(
+            db_session,
+            data=ProductCreate(series_id=series.id, name="系列商品一", price=10),
+            created_by=member_user.id,
+        ),
+        await shop_svc.create_product(
+            db_session,
+            data=ProductCreate(series_id=series.id, name="系列商品二", price=10),
+            created_by=member_user.id,
+        ),
+    ]
+    ac = authed_client_factory(member_user)
+    direct_payload = {
+        "parent_type": "category",
+        "parent_id": str(category.id),
+        "product_ids": [str(item.id) for item in reversed(direct_products)],
+    }
+    assert (await ac.patch("/shop/products/order", json=direct_payload)).status_code == 403
+
+    await _grant_permission(db_session, member_user, "shop:manage")
+    direct_response = await ac.patch("/shop/products/order", json=direct_payload)
+    series_payload = {
+        "parent_type": "series",
+        "parent_id": str(series.id),
+        "product_ids": [str(item.id) for item in reversed(series_products)],
+    }
+    series_response = await ac.patch("/shop/products/order", json=series_payload)
+
+    assert direct_response.status_code == 200, direct_response.text
+    assert [row["id"] for row in direct_response.json()] == direct_payload["product_ids"]
+    assert [row["sort_order"] for row in direct_response.json()] == [0, 1]
+    assert series_response.status_code == 200, series_response.text
+    assert [row["id"] for row in series_response.json()] == series_payload["product_ids"]
+    assert [row["sort_order"] for row in series_response.json()] == [0, 1]
 
 
 async def test_product_lifecycle_activate_and_deactivate(

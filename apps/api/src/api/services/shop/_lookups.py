@@ -9,6 +9,7 @@ from api.models.school_class import SchoolClass
 from api.models.shop import Product
 from api.models.user import User
 from api.schemas.shop import ProductPurchaseGroupOptionOut, ProductPurchaseRules
+from api.services.shop._ordering import product_catalog_ordering
 
 
 async def get_buyer(session: AsyncSession, user_id: uuid.UUID) -> User | None:
@@ -49,6 +50,6 @@ async def purchase_group_options(
     products = await session.execute(
         select(Product.id, Product.name)
         .where(Product.category_id == category_id)
-        .order_by(Product.name, Product.id)
+        .order_by(*product_catalog_ordering())
     )
     return [ProductPurchaseGroupOptionOut(id=row.id, name=row.name) for row in products]

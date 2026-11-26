@@ -25,6 +25,7 @@ from api.schemas.shop_profit import (
 )
 from api.services.shop._analytics import _allocate_amounts
 from api.services.shop._costs import option_cost_key, option_unit_cost, selected_cost_options
+from api.services.shop._ordering import product_catalog_ordering
 
 PLAN_FIELDS = {
     "minimum_order_quantity": "procurement_minimum",
@@ -153,7 +154,7 @@ async def profit_analysis(session: AsyncSession, category: ProductCategory) -> S
                 ),
                 Product.status != ProductStatus.TESTING,
             )
-            .order_by(Product.created_at, Product.id)
+            .order_by(*product_catalog_ordering())
         )
     )
     ids = {product.id for product in products}

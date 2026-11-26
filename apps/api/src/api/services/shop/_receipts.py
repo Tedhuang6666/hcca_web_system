@@ -51,12 +51,33 @@ class _ReceiptProduct:
     variants: dict[tuple[tuple[str, str], ...], int] = field(default_factory=dict)
 
 
+def _catalog_product_sort_key(product: Product) -> tuple:
+    category = product.category or (product.series.category if product.series else None)
+    series = product.series
+    return (
+        category.sort_order if category else 0,
+        category.created_at.isoformat() if category else "",
+        str(category.id) if category else "",
+        0 if series is None else 1,
+        series.sort_order if series else 0,
+        series.created_at.isoformat() if series else "",
+        str(series.id) if series else "",
+        product.sort_order,
+        product.created_at.isoformat(),
+        str(product.id),
+    )
+
+
 def _receipt_products(orders: list[Order] | list[_ReceiptOrder]) -> list[_ReceiptProduct]:
     """同商品合併規格，數量與金額均來自成交快照。"""
     products: dict[uuid.UUID, _ReceiptProduct] = {}
+    product_sort_keys: dict[uuid.UUID, tuple] = {}
     for order in orders:
         for item in order.items:
+            if item.product is None:
+                continue
             product = products.setdefault(item.product_id, _ReceiptProduct(item.product.name))
+            product_sort_keys[item.product_id] = _catalog_product_sort_key(item.product)
             options = tuple(
                 sorted(
                     (str(option.get("group_name", "")), str(option.get("value", "")))
@@ -67,7 +88,10 @@ def _receipt_products(orders: list[Order] | list[_ReceiptOrder]) -> list[_Receip
             product.amount += item.unit_price * item.quantity
             product.prices.add(item.unit_price)
             product.variants[options] = product.variants.get(options, 0) + item.quantity
-    return list(products.values())
+    return [
+        products[product_id]
+        for product_id in sorted(products, key=lambda product_id: product_sort_keys[product_id])
+    ]
 
 
 def _receipt_variant_summary(product: _ReceiptProduct) -> str:
@@ -110,6 +134,7 @@ def _receipt_orders_by_topic(
     orders: list[Order], fallback_label: str
 ) -> dict[uuid.UUID | None, tuple[str, list[_ReceiptOrder]]]:
     topics: dict[uuid.UUID | None, tuple[str, list[_ReceiptOrder]]] = {}
+    topic_sort_keys: dict[uuid.UUID, tuple] = {}
     for order in orders:
         items_by_topic: dict[uuid.UUID | None, tuple[str, list[OrderItem]]] = {}
         for item in order.items:
@@ -118,6 +143,12 @@ def _receipt_orders_by_topic(
             category = category or order.category
             topic_id = category.id if category else None
             label = category.name if category else fallback_label
+            if category is not None:
+                topic_sort_keys[topic_id] = (
+                    category.sort_order,
+                    category.created_at.isoformat(),
+                    str(category.id),
+                )
             items_by_topic.setdefault(topic_id, (label, []))[1].append(item)
         if not items_by_topic:
             category = order.category
@@ -155,7 +186,12 @@ def _receipt_orders_by_topic(
             allocated_received = (
                 received * target_total // order.total_price if order.total_price else 0
             )
-    return topics
+    return dict(
+        sorted(
+            topics.items(),
+            key=lambda item: topic_sort_keys.get(item[0], (2_147_483_647, "", "")),
+        )
+    )
 
 
 async def _render_topic_receipts_pdf(

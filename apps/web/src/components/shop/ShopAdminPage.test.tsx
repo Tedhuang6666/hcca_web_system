@@ -90,7 +90,7 @@ describe("商品管理與統計", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "名稱" }), { target: { value: "校慶" } });
     fireEvent.click(screen.getByRole("button", { name: "儲存" }));
     await waitFor(() => expect(api.createCategory).toHaveBeenCalledWith({
-      name: "校慶", description: null, image_url: null, sort_order: 0, is_active: true,
+      name: "校慶", description: null, image_url: null, is_active: true,
     }));
   });
 
@@ -106,7 +106,7 @@ describe("商品管理與統計", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "名稱" }), { target: { value: "校慶預購" } });
     fireEvent.click(screen.getByRole("button", { name: "儲存" }));
     await waitFor(() => expect(api.updateCategory).toHaveBeenCalledWith("shirts", {
-      name: "校慶預購", description: null, image_url: null, sort_order: 0, is_active: true,
+      name: "校慶預購", description: null, image_url: null, is_active: true,
     }));
     expect(api.updateCategory.mock.lastCall?.[1]).not.toHaveProperty("activity_id");
   });
@@ -116,7 +116,7 @@ describe("商品管理與統計", () => {
     api.createProduct.mockRejectedValueOnce(new Error("offline"));
     render(<ShopAdminPage />);
     fireEvent.click(await screen.findByRole("button", { name: /校慶商品/ }));
-    fireEvent.click(screen.getAllByRole("button", { name: "新增單一商品" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "新增商品" })[0]);
     fireEvent.change(screen.getByRole("textbox", { name: "商品名稱" }), { target: { value: "紀念衫" } });
     fireEvent.change(screen.getByRole("spinbutton", { name: "售價（新台幣元）" }), { target: { value: "300" } });
     const original = screen.getByRole("spinbutton", { name: "原價（新台幣元，選填）" });
@@ -268,7 +268,7 @@ describe("商品管理與統計", () => {
     api.createProduct.mockRejectedValueOnce(new Error("offline"));
     render(<ShopAdminPage />);
     fireEvent.click(await screen.findByRole("button", { name: /校慶商品/ }));
-    fireEvent.click(screen.getAllByRole("button", { name: "新增單一商品" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "新增商品" })[0]);
     fireEvent.change(screen.getByRole("textbox", { name: "商品名稱" }), { target: { value: "紀念袋" } });
     const price = screen.getByRole("spinbutton", { name: "售價（新台幣元）" });
     fireEvent.change(price, { target: { value: "-1" } });

@@ -35,6 +35,7 @@ from api.schemas.shop import (
 )
 from api.services._base import apply_updates
 from api.services.shop._bundle_pricing import bundle_pricing_results
+from api.services.shop._ordering import product_catalog_ordering
 from api.services.shop._promotion_topics import (
     product_topic_ids,
     topic_discount_amount,
@@ -312,7 +313,7 @@ async def _target_products(session: AsyncSession, product_ids: list[uuid.UUID]) 
                     selectinload(Product.series).selectinload(ProductSeries.category),
                 )
                 .where(Product.id.in_(unique_ids))
-                .order_by(Product.name)
+                .order_by(*product_catalog_ordering())
             )
         )
         .scalars()

@@ -19,6 +19,7 @@ from api.models.shop import (
 )
 from api.schemas.shop import OrderPurchaseDetailRow
 from api.services import school_class as class_svc
+from api.services.shop._ordering import product_catalog_positions
 
 
 @dataclass
@@ -575,6 +576,9 @@ async def purchase_details_report(
             row["quantity"] += item.quantity
             row["order_ids"].add(order.id)
 
+    product_positions = await product_catalog_positions(
+        session, {row["product_id"] for row in grouped.values()}
+    )
     ordered_rows = sorted(
         grouped.values(),
         key=lambda row: (
@@ -582,7 +586,7 @@ async def purchase_details_report(
             row["class_code"],
             row["class_label"],
             row["buyer_label"],
-            row["product_name"],
+            product_positions.get(row["product_id"], len(product_positions)),
             row["variant_key"],
         ),
     )

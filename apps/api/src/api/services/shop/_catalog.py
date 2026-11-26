@@ -6,7 +6,7 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import or_, select, text
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
@@ -32,9 +32,12 @@ from api.schemas.shop import (
     CatalogProductOut,
     CatalogSeriesOut,
     ProductCategoryCreate,
+    ProductCategoryReorder,
     ProductCategoryUpdate,
     ProductCreate,
+    ProductReorder,
     ProductSeriesCreate,
+    ProductSeriesReorder,
     ProductSeriesUpdate,
     ProductUpdate,
     ProductVariantGroupCreate,
@@ -43,10 +46,17 @@ from api.schemas.shop import (
     ProductVariantOptionUpdate,
 )
 from api.services._base import apply_updates
+from api.services.shop._ordering import product_catalog_ordering
 from api.services.shop._purchase_rules import purchase_restrictions
 from api.services.shop._visibility import has_purchase_qualifications, public_product_condition
 
 logger = logging.getLogger(__name__)
+
+
+def _next_sort_order(last_order: int | None) -> int:
+    if last_order is not None and last_order >= 2_147_483_647:
+        raise ValueError("顯示順序已達上限，請先重新排序再新增。")
+    return (last_order if last_order is not None else -1) + 1
 
 
 def _catalog_image_url(product: Product) -> str | None:
@@ -89,7 +99,7 @@ async def list_categories(
         q = q.where(ProductCategory.activity_id == activity_id)
     if not include_inactive:
         q = q.where(ProductCategory.is_active.is_(True))
-    q = q.order_by(ProductCategory.sort_order, ProductCategory.created_at)
+    q = q.order_by(ProductCategory.sort_order, ProductCategory.created_at, ProductCategory.id)
     result = await session.execute(q)
     return list(result.scalars().all())
 
@@ -97,17 +107,41 @@ async def list_categories(
 async def create_category(
     session: AsyncSession, *, data: ProductCategoryCreate, created_by: uuid.UUID
 ) -> ProductCategory:
+    sort_order = data.sort_order
+    if sort_order is None:
+        last_order = await session.scalar(select(func.max(ProductCategory.sort_order)))
+        sort_order = _next_sort_order(last_order)
     category = ProductCategory(
         activity_id=data.activity_id,
         name=data.name,
         description=data.description,
         image_url=data.image_url,
-        sort_order=data.sort_order,
+        sort_order=sort_order,
         created_by=created_by,
     )
     session.add(category)
     await session.flush()
     return category
+
+
+async def reorder_categories(
+    session: AsyncSession, data: ProductCategoryReorder
+) -> list[ProductCategory]:
+    if len(data.category_ids) != len(set(data.category_ids)):
+        raise ValueError("主題清單有重複項目，請重新載入後再排序。")
+    categories = list(
+        await session.scalars(
+            select(ProductCategory).order_by(ProductCategory.id).with_for_update()
+        )
+    )
+    by_id = {category.id: category for category in categories}
+    if set(data.category_ids) != set(by_id):
+        raise ValueError("主題清單已變動，請重新載入後再排序。")
+    ordered = [by_id[category_id] for category_id in data.category_ids]
+    for index, category in enumerate(ordered):
+        category.sort_order = index
+    await session.flush()
+    return ordered
 
 
 async def update_category(
@@ -152,7 +186,7 @@ async def list_series(
         q = q.where(ProductSeries.category_id == category_id)
     if not include_inactive:
         q = q.where(ProductSeries.is_active.is_(True))
-    q = q.order_by(ProductSeries.sort_order, ProductSeries.created_at)
+    q = q.order_by(ProductSeries.sort_order, ProductSeries.created_at, ProductSeries.id)
     result = await session.execute(q)
     return list(result.scalars().all())
 
@@ -161,16 +195,45 @@ async def create_series(session: AsyncSession, *, data: ProductSeriesCreate) -> 
     category = await get_category(session, data.category_id)
     if category is None:
         raise ValueError("找不到所屬活動")
+    sort_order = data.sort_order
+    if sort_order is None:
+        last_order = await session.scalar(
+            select(func.max(ProductSeries.sort_order)).where(
+                ProductSeries.category_id == category.id
+            )
+        )
+        sort_order = _next_sort_order(last_order)
     series = ProductSeries(
         category_id=data.category_id,
         name=data.name,
         description=data.description,
         image_url=data.image_url,
-        sort_order=data.sort_order,
+        sort_order=sort_order,
     )
     session.add(series)
     await session.flush()
     return series
+
+
+async def reorder_series(session: AsyncSession, data: ProductSeriesReorder) -> list[ProductSeries]:
+    if len(data.series_ids) != len(set(data.series_ids)):
+        raise ValueError("系列清單有重複項目，請重新載入後再排序。")
+    series = list(
+        await session.scalars(
+            select(ProductSeries)
+            .where(ProductSeries.category_id == data.category_id)
+            .order_by(ProductSeries.id)
+            .with_for_update()
+        )
+    )
+    by_id = {item.id: item for item in series}
+    if set(data.series_ids) != set(by_id):
+        raise ValueError("系列清單已變動，請重新載入後再排序。")
+    ordered = [by_id[series_id] for series_id in data.series_ids]
+    for index, item in enumerate(ordered):
+        item.sort_order = index
+    await session.flush()
+    return ordered
 
 
 async def update_series(
@@ -236,6 +299,7 @@ async def list_products(
             Product.version,
             Product.category_id,
             Product.series_id,
+            Product.sort_order,
             Product.created_by,
             Product.sale_start,
             Product.sale_end,
@@ -268,7 +332,7 @@ async def list_products(
         q = q.where(Product.status != ProductStatus.TESTING)
     if public_only:
         q = q.where(public_product_condition())
-    q = q.order_by(Product.created_at.desc()).limit(limit).offset(offset)
+    q = q.order_by(*product_catalog_ordering()).limit(limit).offset(offset)
     result = await session.execute(q)
     return list(result.scalars().unique().all())
 
@@ -287,6 +351,11 @@ async def create_product(
         raise ValueError("找不到所屬活動")
     if series and series.category_id != category.id:
         raise ValueError("所選系列不屬於此活動")
+    if series is None:
+        sibling_filter = (Product.category_id == category.id) & Product.series_id.is_(None)
+    else:
+        sibling_filter = Product.series_id == series.id
+    last_order = await session.scalar(select(func.max(Product.sort_order)).where(sibling_filter))
 
     product = Product(
         name=data.name,
@@ -301,6 +370,7 @@ async def create_product(
         purchase_rules=data.purchase_rules.model_dump(exclude={"exclusive_product_ids"}),
         category_id=category.id,
         series_id=series.id if series else None,
+        sort_order=_next_sort_order(last_order),
         created_by=created_by,
         sale_start=data.sale_start,
         sale_end=data.sale_end,
@@ -345,6 +415,47 @@ async def create_product(
     return await get_product(session, product.id)  # type: ignore[return-value]
 
 
+async def reorder_products(
+    session: AsyncSession, data: ProductReorder, *, include_testing: bool = True
+) -> list[Product]:
+    if len(data.product_ids) != len(set(data.product_ids)):
+        raise ValueError("商品清單有重複項目，請重新載入後再排序。")
+    query = select(Product)
+    if data.parent_type == "category":
+        query = query.where(
+            Product.category_id == data.parent_id,
+            Product.series_id.is_(None),
+        )
+    else:
+        query = query.where(Product.series_id == data.parent_id)
+    products = list(
+        await session.scalars(
+            query.order_by(Product.sort_order, Product.created_at, Product.id).with_for_update()
+        )
+    )
+    visible_products = [
+        product
+        for product in products
+        if include_testing or product.status != ProductStatus.TESTING
+    ]
+    by_id = {product.id: product for product in visible_products}
+    if set(data.product_ids) != set(by_id):
+        raise ValueError("商品清單已變動，請重新載入後再排序。")
+    ordered = [by_id[product_id] for product_id in data.product_ids]
+    if include_testing:
+        ordered_all = ordered
+    else:
+        ordered_visible = iter(ordered)
+        ordered_all = [
+            next(ordered_visible) if product.status != ProductStatus.TESTING else product
+            for product in products
+        ]
+    for index, product in enumerate(ordered_all):
+        product.sort_order = index
+    await session.flush()
+    return ordered
+
+
 async def update_product(
     session: AsyncSession, product: Product, *, data: ProductUpdate
 ) -> Product:
@@ -378,6 +489,7 @@ async def update_product(
             else {}
         )
     if "series_id" in payload or "category_id" in payload:
+        previous_parent = (product.category_id, product.series_id)
         target_series_id = payload.get("series_id", product.series_id)
         target_series = await get_series(session, target_series_id) if target_series_id else None
         if target_series_id and target_series is None:
@@ -393,6 +505,18 @@ async def update_product(
         if target_series and target_series.category_id != target_category.id:
             raise ValueError("所選系列不屬於此活動")
         payload["category_id"] = target_category.id
+        target_parent = (target_category.id, target_series.id if target_series else None)
+        if target_parent != previous_parent:
+            if target_series is None:
+                sibling_filter = (
+                    Product.category_id == target_category.id
+                ) & Product.series_id.is_(None)
+            else:
+                sibling_filter = Product.series_id == target_series.id
+            last_order = await session.scalar(
+                select(func.max(Product.sort_order)).where(sibling_filter)
+            )
+            payload["sort_order"] = _next_sort_order(last_order)
     media_data = payload.pop("media", None)
     for field, value in payload.items():
         setattr(product, field, value)
@@ -588,7 +712,7 @@ async def build_catalog_tree(
             selectinload(ProductCategory.products).selectinload(Product.media),
         )
         .where(ProductCategory.is_active.is_(True))
-        .order_by(ProductCategory.sort_order, ProductCategory.created_at)
+        .order_by(ProductCategory.sort_order, ProductCategory.created_at, ProductCategory.id)
     )
     if activity_id:
         q = q.where(ProductCategory.activity_id == activity_id)
@@ -671,13 +795,16 @@ async def build_catalog_tree(
                 has_variants=len(product.variant_groups) > 0,
                 has_option_surcharge=product.id in products_with_option_surcharge,
             )
-            for product in sorted(category.products, key=lambda item: item.created_at)
+            for product in sorted(
+                category.products,
+                key=lambda item: (item.sort_order, item.created_at, item.id),
+            )
             if product.series_id is None
             and product.status in visible
             and (buyer is not None or not has_purchase_qualifications(product))
         ]
         series_out: list[CatalogSeriesOut] = []
-        for series in sorted(category.series, key=lambda s: (s.sort_order, s.created_at)):
+        for series in sorted(category.series, key=lambda s: (s.sort_order, s.created_at, s.id)):
             if not series.is_active:
                 continue
             products = [
@@ -701,7 +828,7 @@ async def build_catalog_tree(
                     has_variants=len(p.variant_groups) > 0,
                     has_option_surcharge=p.id in products_with_option_surcharge,
                 )
-                for p in sorted(series.products, key=lambda x: x.created_at)
+                for p in sorted(series.products, key=lambda x: (x.sort_order, x.created_at, x.id))
                 if p.status in visible and (buyer is not None or not has_purchase_qualifications(p))
             ]
             series_out.append(

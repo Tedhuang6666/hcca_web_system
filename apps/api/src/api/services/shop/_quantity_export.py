@@ -24,6 +24,7 @@ from api.models.shop import (
 )
 from api.services.shop._costs import option_unit_cost, selected_cost_options
 from api.services.shop._order_queries import load_quantity_orders
+from api.services.shop._ordering import product_catalog_ordering
 from api.services.shop._orders import _product_category_filter
 
 MAX_VARIANT_COMBINATIONS = 500
@@ -248,5 +249,5 @@ async def export_quantity_excel(
                 Product.series.has(ProductSeries.category.has(activity_id=activity_id)),
             )
         )
-    products = list((await session.scalars(query.order_by(Product.name, Product.id))).unique())
+    products = list((await session.scalars(query.order_by(*product_catalog_ordering()))).unique())
     return await asyncio.to_thread(render_quantity_excel, products, orders)

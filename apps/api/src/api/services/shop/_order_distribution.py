@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.schemas.shop import OrderDistributionRow
 from api.services import school_class as class_svc
 from api.services.shop._order_queries import load_quantity_orders
+from api.services.shop._ordering import product_catalog_positions
 
 
 async def order_distribution(
@@ -71,12 +72,15 @@ async def order_distribution(
                 }
             tally[key]["qty_total"] += item.quantity
 
+    product_positions = await product_catalog_positions(
+        session, {row["product_id"] for row in tally.values()}
+    )
     rows = sorted(
         tally.values(),
         key=lambda row: (
             row["grade"] if row["grade"] is not None else 99,
             row["class_code"],
-            row["product_name"],
+            product_positions.get(row["product_id"], len(product_positions)),
             row["variant_key"],
         ),
     )

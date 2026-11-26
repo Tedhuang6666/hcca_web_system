@@ -21,6 +21,7 @@ import { confirmAction } from "@/components/ui/ConfirmDialog";
 import { Thumb } from "@/components/shop/admin/ShopAdminMediaFields";
 import { EntityModal, NewSeriesModal, ProductFormModal } from "@/components/shop/admin/ShopAdminProductModals";
 import { VariantManager } from "@/components/shop/admin/ShopAdminVariantManager";
+import ShopAdminSortableList from "@/components/shop/admin/ShopAdminSortableList";
 
 
 
@@ -52,6 +53,15 @@ const STATUS_LABEL: Record<string, string> = {
   draft: "草稿", testing: "測試中", active: "上架中", sold_out: "售罄", cancelled: "已下架",
 };
 
+async function listAllProducts(params: Record<string, string>): Promise<ProductOut[]> {
+  const rows: ProductOut[] = [];
+  for (let offset = 0; ; offset += 100) {
+    const page = await shopApi.listProducts({ ...params, limit: "100", offset: String(offset) });
+    rows.push(...page);
+    if (page.length < 100) return rows;
+  }
+}
+
 export default function ShopAdminPage() {
   const { can } = usePermissions();
   const searchParams = useSearchParams();
@@ -61,6 +71,7 @@ export default function ShopAdminPage() {
   const [clearingOrders, setClearingOrders] = useState(false);
   const [statsRefreshKey, setStatsRefreshKey] = useState(0);
   const [productStatusBusy, setProductStatusBusy] = useState(false);
+  const [orderSaving, setOrderSaving] = useState(false);
   const [productActionError, setProductActionError] = useState("");
   const allowed = can("shop:manage");
 
@@ -128,15 +139,15 @@ export default function ShopAdminPage() {
     });
   }, []);
   const loadProducts = useCallback((sid: string) => {
-    shopApi.listProducts({ series_id: sid }).then(setProducts).catch((error) => {
+    listAllProducts({ series_id: sid }).then(setProducts).catch((error) => {
       setProducts([]);
       toast.error(apiErrorMessage(error, "載入商品清單失敗"));
     });
   }, []);
   const loadDirectProducts = useCallback((categoryId: string) => {
-    shopApi.listProducts({ category_id: categoryId }).then(setDirectProducts).catch((error) => {
+    listAllProducts({ category_id: categoryId }).then(setDirectProducts).catch((error) => {
       setDirectProducts([]);
-      toast.error(apiErrorMessage(error, "載入單一商品失敗"));
+      toast.error(apiErrorMessage(error, "載入商品清單失敗"));
     });
   }, []);
   const loadAllProducts = useCallback(() => {
@@ -148,6 +159,62 @@ export default function ShopAdminPage() {
       toast.error(apiErrorMessage(error, "載入商品詳情失敗"));
     });
   }, []);
+
+  const saveCategoryOrder = async (ordered: ProductCategoryOut[]) => {
+    const previous = categories;
+    setCategories(ordered);
+    setOrderSaving(true);
+    try {
+      await shopApi.reorderCategories(ordered.map((category) => category.id));
+      toast.success("主題順序已儲存");
+    } catch (error) {
+      setCategories(previous);
+      toast.error(apiErrorMessage(error, "無法儲存主題順序，已還原畫面。"));
+    } finally {
+      setOrderSaving(false);
+    }
+  };
+
+  const saveSeriesOrder = async (ordered: ProductSeriesOut[]) => {
+    if (!cat) return;
+    const previous = seriesList;
+    setSeriesList(ordered);
+    setOrderSaving(true);
+    try {
+      await shopApi.reorderSeries(cat.id, ordered.map((item) => item.id));
+      toast.success("系列順序已儲存");
+    } catch (error) {
+      setSeriesList(previous);
+      toast.error(apiErrorMessage(error, "無法儲存系列順序，已還原畫面。"));
+    } finally {
+      setOrderSaving(false);
+    }
+  };
+
+  const saveProductOrder = async (
+    parentType: "category" | "series",
+    parentId: string,
+    ordered: ProductOut[],
+  ) => {
+    const previous = parentType === "category" ? directProducts : products;
+    if (parentType === "category") setDirectProducts(ordered);
+    else setProducts(ordered);
+    setOrderSaving(true);
+    try {
+      await shopApi.reorderProducts({
+        parent_type: parentType,
+        parent_id: parentId,
+        product_ids: ordered.map((item) => item.id),
+      });
+      toast.success("商品順序已儲存");
+    } catch (error) {
+      if (parentType === "category") setDirectProducts(previous);
+      else setProducts(previous);
+      toast.error(apiErrorMessage(error, "無法儲存商品順序，已還原畫面。"));
+    } finally {
+      setOrderSaving(false);
+    }
+  };
 
   useEffect(() => {
     if (!allowed) return;
@@ -352,7 +419,7 @@ export default function ShopAdminPage() {
       </div>
       <div className="flex flex-wrap gap-2">
         <MiniBtn tone="primary" onClick={() => setCatModal({ initial: cat })}>編輯活動</MiniBtn>
-        <MiniBtn tone="primary" onClick={() => setProductModal({ initial: null, seriesId: null })}>新增單一商品</MiniBtn>
+        <MiniBtn tone="primary" onClick={() => setProductModal({ initial: null, seriesId: null })}>新增商品</MiniBtn>
       </div>
     </div>
   ) : (
@@ -422,24 +489,31 @@ export default function ShopAdminPage() {
                 <MiniBtn tone="primary" onClick={() => setCatModal({ initial: null })}>新增活動</MiniBtn>
               </div>
               <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                {categories.map((c) => (
-                  <div key={c.id} className="flex items-center gap-1">
-                    <button type="button" onClick={() => selectCategory(c)}
-                      className="min-h-11 flex-1 min-w-0 flex items-center gap-2 p-2 rounded-lg text-left"
-                      style={cat?.id === c.id
-                        ? { background: "var(--primary-dim)", color: "var(--primary-text)" }
-                        : { color: "var(--text-secondary)", opacity: c.is_active ? 1 : 0.6 }}>
-                      <Thumb url={c.image_url} size={34} />
-                      <span className="flex-1 min-w-0">
-                        <span className="block text-sm font-medium truncate">{c.name}</span>
-                        <span className="block text-xs truncate text-fg-muted!" >
-                          {c.description || "無描述"}
+                <ShopAdminSortableList
+                  items={categories}
+                  label="商品主題"
+                  disabled={catalogLoading || Boolean(catalogError) || orderSaving}
+                  onReorder={saveCategoryOrder}
+                  renderItem={(c, handle) => (
+                    <div className="flex items-center gap-1">
+                      {handle}
+                      <button type="button" onClick={() => selectCategory(c)} disabled={orderSaving}
+                        className="min-h-11 flex-1 min-w-0 flex items-center gap-2 p-2 rounded-lg text-left"
+                        style={cat?.id === c.id
+                          ? { background: "var(--primary-dim)", color: "var(--primary-text)" }
+                          : { color: "var(--text-secondary)", opacity: c.is_active ? 1 : 0.6 }}>
+                        <Thumb url={c.image_url} size={34} />
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-sm font-medium truncate">{c.name}</span>
+                          <span className="block text-xs truncate text-fg-muted!" >
+                            {c.description || "無描述"}
+                          </span>
                         </span>
-                      </span>
-                    </button>
-                    <MiniBtn tone="danger" onClick={() => void delCategory(c)}>刪除</MiniBtn>
-                  </div>
-                ))}
+                      </button>
+                      <MiniBtn tone="danger" onClick={() => void delCategory(c)}>刪除</MiniBtn>
+                    </div>
+                  )}
+                />
                 {catalogLoading && <p role="status" className="p-4 text-sm">正在載入活動…</p>}
                 {!catalogLoading && !catalogError && categories.length === 0 && <p className="p-4 text-sm text-fg-secondary!" >尚未建立活動。按「新增活動」開始，例如「校慶商品」。</p>}
               </div>
@@ -458,7 +532,7 @@ export default function ShopAdminPage() {
                     <div className="flex flex-wrap justify-end gap-1.5">
                       <button type="button" className="btn btn-ghost min-h-11 px-3 text-xs lg:hidden"
                         onClick={() => setMobileDetailOpen(true)}>活動設定</button>
-                      <MiniBtn tone="primary" onClick={() => setProductModal({ initial: null, seriesId: null })}>新增單一商品</MiniBtn>
+                      <MiniBtn tone="primary" onClick={() => setProductModal({ initial: null, seriesId: null })}>新增商品</MiniBtn>
                       <MiniBtn tone="primary" onClick={() => setSeriesModal({ initial: null })}>新增系列</MiniBtn>
                     </div>
                   )}
@@ -469,41 +543,61 @@ export default function ShopAdminPage() {
                   <p className="p-6 text-sm text-center text-fg-muted!" >尚未選擇活動</p>
                 ) : (
                   <div className="divide-y border-border!" >
-                    <section className="space-y-2 p-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <div>
-                          <p className="text-sm font-semibold text-fg-primary!" >單一商品</p>
-                          <p className="text-xs text-fg-muted!" >直接放在「{cat.name}」下，不需要建立系列</p>
-                        </div>
-                      </div>
-                      {directProducts.map(productRow)}
-                      {directProducts.length === 0 && (
-                        <p className="py-2 text-xs text-fg-muted!" >目前沒有單一商品</p>
-                      )}
-                    </section>
-                    {seriesList.map((s) => (
-                      <div key={s.id}>
-                        <div className="flex items-center gap-3 px-4 py-3" style={{ background: series?.id === s.id ? "var(--bg-elevated)" : undefined }}>
-                          <button type="button" onClick={() => selectSeries(s)} className="flex-1 min-h-11 min-w-0 text-left">
-                            <p className="text-sm font-semibold truncate" style={{ color: series?.id === s.id ? "var(--primary-text)" : "var(--text-primary)" }}>{s.name}</p>
-                            <p className="text-xs truncate text-fg-muted!" >{s.description || "無描述"}</p>
-                          </button>
-                          <button type="button" className="btn btn-ghost min-h-11 px-3 text-xs lg:hidden"
-                            onClick={() => { selectSeries(s); setMobileDetailOpen(true); }}>管理</button>
-                          <MiniBtn onClick={() => setSeriesModal({ initial: s })}>編輯</MiniBtn>
-                          <MiniBtn tone="danger" onClick={() => void delSeries(s)}>刪除</MiniBtn>
-                        </div>
-                        {series?.id === s.id && (
-                          <div className="px-3 pb-3 space-y-2">
-                            <div className="flex justify-end">
-                              <MiniBtn tone="primary" onClick={() => setProductModal({ initial: null, seriesId: s.id })}>新增商品</MiniBtn>
-                            </div>
-                            {products.map(productRow)}
-                            {products.length === 0 && <p className="py-4 text-xs text-center text-fg-muted!" >此系列尚無商品</p>}
+                    <div className="p-3">
+                      <ShopAdminSortableList
+                        items={directProducts}
+                        label="商品品項"
+                        disabled={catalogLoading || Boolean(catalogError) || orderSaving}
+                        onReorder={(ordered) => saveProductOrder("category", cat.id, ordered)}
+                        renderItem={(item, handle) => (
+                          <div className="flex items-start gap-2">
+                            {handle}
+                            <div className="min-w-0 flex-1">{productRow(item)}</div>
                           </div>
                         )}
-                      </div>
-                    ))}
+                      />
+                    </div>
+                    <ShopAdminSortableList
+                      items={seriesList}
+                      label="商品系列"
+                      disabled={catalogLoading || Boolean(catalogError) || orderSaving}
+                      onReorder={saveSeriesOrder}
+                      renderItem={(s, handle) => (
+                        <div className="border-b border-border!">
+                          <div className="flex items-center gap-3 px-4 py-3" style={{ background: series?.id === s.id ? "var(--bg-elevated)" : undefined }}>
+                            {handle}
+                            <button type="button" onClick={() => selectSeries(s)} disabled={orderSaving} className="flex-1 min-h-11 min-w-0 text-left">
+                              <p className="text-sm font-semibold truncate" style={{ color: series?.id === s.id ? "var(--primary-text)" : "var(--text-primary)" }}>{s.name}</p>
+                              <p className="text-xs truncate text-fg-muted!" >{s.description || "無描述"}</p>
+                            </button>
+                            <button type="button" className="btn btn-ghost min-h-11 px-3 text-xs lg:hidden" disabled={orderSaving}
+                              onClick={() => { selectSeries(s); setMobileDetailOpen(true); }}>管理</button>
+                            <MiniBtn onClick={() => setSeriesModal({ initial: s })}>編輯</MiniBtn>
+                            <MiniBtn tone="danger" onClick={() => void delSeries(s)}>刪除</MiniBtn>
+                          </div>
+                          {series?.id === s.id && (
+                            <div className="px-3 pb-3 space-y-2">
+                              <div className="flex justify-end">
+                                <MiniBtn tone="primary" onClick={() => setProductModal({ initial: null, seriesId: s.id })}>新增商品</MiniBtn>
+                              </div>
+                              <ShopAdminSortableList
+                                items={products}
+                                label="商品品項"
+                                disabled={catalogLoading || Boolean(catalogError) || orderSaving}
+                                onReorder={(ordered) => saveProductOrder("series", s.id, ordered)}
+                                renderItem={(item, productHandle) => (
+                                  <div className="flex items-start gap-2">
+                                    {productHandle}
+                                    <div className="min-w-0 flex-1">{productRow(item)}</div>
+                                  </div>
+                                )}
+                              />
+                              {products.length === 0 && <p className="py-4 text-xs text-center text-fg-muted!" >此系列尚無商品</p>}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    />
                     {seriesList.length === 0 && (
                       <p className="p-6 text-sm text-center text-fg-muted!" >
                         尚無系列
@@ -600,11 +694,11 @@ export default function ShopAdminPage() {
             if (savedProduct.series_id) {
               setProducts((current) => current.some((item) => item.id === savedProduct.id)
                 ? current.map((item) => item.id === savedProduct.id ? savedProduct : item)
-                : [savedProduct, ...current]);
+                : [...current, savedProduct]);
             } else {
               setDirectProducts((current) => current.some((item) => item.id === savedProduct.id)
                 ? current.map((item) => item.id === savedProduct.id ? savedProduct : item)
-                : [savedProduct, ...current]);
+                : [...current, savedProduct]);
             }
             setAllProducts((current) => current.some((item) => item.id === savedProduct.id)
               ? current.map((item) => item.id === savedProduct.id ? savedProduct : item)
