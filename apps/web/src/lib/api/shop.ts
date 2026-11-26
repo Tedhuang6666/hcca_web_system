@@ -374,6 +374,22 @@ export const shopApi = {
     if (!response.ok) throw new ApiError(response.status, await errorMessageFromResponse(response));
     return response;
   },
+  downloadPrintReportPdf: async (
+    reportType: "classes" | "people" | "class-sheet" | "council",
+    filters?: OrderQuantityFilters & { user_id?: string },
+    scope = "全部主題",
+  ) => {
+    const query = new URLSearchParams({ report_type: reportType, scope });
+    Object.entries(filters ?? {}).forEach(([key, value]) => {
+      if (value) query.set(key, value);
+    });
+    const response = await authFetch(
+      `${BASE}/shop/orders/print-report.pdf?${query.toString()}`,
+      { credentials: "include" },
+    );
+    if (!response.ok) throw new ApiError(response.status, await errorMessageFromResponse(response));
+    return response;
+  },
 
   // 圖片上傳
   uploadImage: async (file: File, onProgress?: (progress: number) => void): Promise<{ url: string }> => {

@@ -1315,6 +1315,22 @@ async def test_shop_activity_options_only_include_accessible_active_activities(
     }
 
 
+async def test_superuser_can_include_archived_shop_activities(
+    db_session, member_user, authed_client_factory
+) -> None:
+    archived = Activity(name="已封存主題", status=ActivityStatus.ARCHIVED)
+    db_session.add(archived)
+    member_user.is_superuser = True
+    await db_session.flush()
+
+    response = await authed_client_factory(member_user).get(
+        "/shop/activities?include_inactive=true"
+    )
+
+    assert response.status_code == 200
+    assert [row["id"] for row in response.json()] == [str(archived.id)]
+
+
 async def test_category_activity_update_checks_both_activity_scopes(
     db_session, member_user, authed_client_factory
 ) -> None:
@@ -4360,6 +4376,26 @@ async def test_order_summary_with_permission_groups_by_class(
     resp = await ac.get("/shop/orders/summary", params={"group_by": "class"})
     assert resp.status_code == 200
     assert resp.json()["total_amount"] == 300
+
+
+@pytest.mark.parametrize("report_type", ["classes", "people", "class-sheet", "council"])
+async def test_shop_print_report_pdf_requires_permission_and_renders_pdf(
+    client, db_session, member_user, authed_client_factory, report_type
+) -> None:
+    path = "/shop/orders/print-report.pdf"
+    params = {"report_type": report_type}
+    assert (await client.get(path, params=params)).status_code == 401
+
+    member = authed_client_factory(member_user)
+    assert (await member.get(path, params=params)).status_code == 403
+
+    await _grant_permission(db_session, member_user, "shop:view_all")
+    response = await member.get(path, params=params)
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.content.startswith(b"%PDF-")
+    assert "attachment; filename*=UTF-8''" in response.headers["content-disposition"]
 
 
 async def test_order_purchase_details_requires_permission_and_groups_items(

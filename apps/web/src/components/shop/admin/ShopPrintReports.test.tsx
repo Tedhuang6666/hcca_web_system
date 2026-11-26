@@ -9,6 +9,7 @@ const api = vi.hoisted(() => ({
   orderSummary: vi.fn(),
   purchaseDetails: vi.fn(),
   orderQuantities: vi.fn(),
+  downloadPrintReportPdf: vi.fn(),
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -16,6 +17,7 @@ vi.mock("@/lib/api", () => ({
     orderSummary: api.orderSummary,
     purchaseDetails: api.purchaseDetails,
     orderQuantities: api.orderQuantities,
+    downloadPrintReportPdf: api.downloadPrintReportPdf,
   },
   apiErrorMessage: (_error: unknown, fallback: string) => fallback,
 }));
@@ -65,6 +67,9 @@ describe("ShopPrintReports", () => {
     api.orderSummary.mockResolvedValue(summary);
     api.purchaseDetails.mockResolvedValue(details);
     api.orderQuantities.mockResolvedValue(quantities);
+    api.downloadPrintReportPdf.mockResolvedValue({
+      blob: vi.fn().mockResolvedValue(new Blob(["%PDF"], { type: "application/pdf" })),
+    });
   });
 
   it("provides printable class, person, and council quantity reports", async () => {
@@ -92,9 +97,25 @@ describe("ShopPrintReports", () => {
     expect(screen.getByText("未繳件數")).toBeVisible();
     expect(api.orderQuantities).toHaveBeenCalledWith(filters);
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "列印報表" })).toBeEnabled());
-    fireEvent.click(screen.getByRole("button", { name: "列印報表" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "列印" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "列印" }));
     expect(print).toHaveBeenCalledOnce();
+  });
+
+  it("downloads the selected report as a PDF", async () => {
+    const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:report");
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+    const filters = { category_id: "theme-1" };
+    render(<ShopPrintReports filters={filters} scope="校慶商品" />);
+
+    await screen.findByRole("heading", { name: "各班總數統計" });
+    fireEvent.click(screen.getByRole("button", { name: "下載 PDF" }));
+
+    await waitFor(() => {
+      expect(api.downloadPrintReportPdf).toHaveBeenCalledWith("classes", filters, "校慶商品");
+      expect(createObjectURL).toHaveBeenCalledOnce();
+      expect(click).toHaveBeenCalledOnce();
+    });
   });
 
   it("shows a recoverable load error", async () => {

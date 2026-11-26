@@ -77,7 +77,9 @@ async def list_shop_activities(
     session: DbDep, current_user: CurrentUser, include_inactive: bool = Query(False)
 ) -> list[ActivityOut]:
     permission_codes = await get_user_permission_codes(session, current_user.id)
-    can_view_all = any(str(code) in permission_codes for code in _ADMIN_VIEW_CODES)
+    can_view_all = current_user.is_superuser or any(
+        str(code) in permission_codes for code in _ADMIN_VIEW_CODES
+    )
     if include_inactive and not can_view_all:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="沒有權限檢視封存活動")
     if can_view_all:

@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
+from typing import Literal
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
+from starlette.concurrency import run_in_threadpool
 
 from api.core.clock import local_today
 from api.core.permission_codes import PermissionCode
@@ -25,6 +27,7 @@ from api.schemas.shop_analytics import ShopSalesAnalyticsOut, ShopSalesReportCre
 from api.services import shop as shop_svc
 from api.services.shop._analytics import sales_analytics
 from api.services.shop._analytics_report import create_sales_report
+from api.services.shop._print_reports import REPORT_LABELS, render_order_report_pdf
 from api.services.shop._purchase_report import purchase_details_report
 from api.services.shop._quantity_export import export_quantity_excel
 
@@ -94,6 +97,85 @@ async def sales_analysis_report(
         media_type=media_type,
         headers={
             "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename, safe='')}",
+            "Cache-Control": "private, no-store",
+        },
+    )
+
+
+@router.get(
+    "/orders/print-report.pdf",
+    response_class=Response,
+    summary="下載商品訂購報表 PDF",
+    dependencies=[Depends(require_any(*_ADMIN_VIEW_CODES))],
+    responses={200: {"content": {"application/pdf": {}}}},
+)
+async def download_order_report_pdf(
+    session: DbDep,
+    _: CurrentUser,
+    report_type: Literal["classes", "people", "class-sheet", "council"] = Query(...),
+    scope: str = Query("全部主題", max_length=300),
+    activity_id: uuid.UUID | None = Query(None),
+    category_id: uuid.UUID | None = Query(None),
+    product_id: uuid.UUID | None = Query(None),
+    grade: int | None = Query(None, ge=0),
+    class_id: uuid.UUID | None = Query(None),
+    user_id: uuid.UUID | None = Query(None),
+    status_filter: OrderStatus | None = Query(None, alias="status"),
+    is_paid: bool | None = Query(None),
+    date_from: datetime | None = Query(None),
+    date_to: datetime | None = Query(None),
+) -> Response:
+    if report_type == "classes":
+        report_data = await shop_svc.order_summary(
+            session,
+            group_by="class",
+            activity_id=activity_id,
+            product_id=product_id,
+            category_id=category_id,
+            grade=grade,
+            class_id=class_id,
+            user_id=user_id,
+            status=status_filter,
+            is_paid=is_paid,
+            date_from=date_from,
+            date_to=date_to,
+        )
+    elif report_type in {"people", "class-sheet"}:
+        report_data = await purchase_details_report(
+            session,
+            activity_id=activity_id,
+            category_id=category_id,
+            product_id=product_id,
+            grade=grade,
+            class_id=class_id,
+            user_id=user_id,
+            status=status_filter,
+            is_paid=is_paid,
+            date_from=date_from,
+            date_to=date_to,
+        )
+    else:
+        report_data = await shop_svc.order_quantities(
+            session,
+            activity_id=activity_id,
+            grade=grade,
+            class_id=class_id,
+            category_id=category_id,
+            product_id=product_id,
+            user_id=user_id,
+            is_paid=is_paid,
+            status=status_filter,
+            date_from=date_from,
+            date_to=date_to,
+        )
+
+    content = await run_in_threadpool(render_order_report_pdf, report_type, report_data, scope)
+    filename = quote(f"{REPORT_LABELS[report_type]}_{local_today()}.pdf", safe="")
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{filename}",
             "Cache-Control": "private, no-store",
         },
     )

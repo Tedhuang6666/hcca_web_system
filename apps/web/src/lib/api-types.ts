@@ -10330,6 +10330,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop/orders/print-report.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 下載商品訂購報表 PDF */
+        get: operations["download_order_report_pdf_shop_orders_print_report_pdf_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shop/orders/purchase-details": {
         parameters: {
             query?: never;
@@ -55490,6 +55507,48 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrderDistributionRow"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_order_report_pdf_shop_orders_print_report_pdf_get: {
+        parameters: {
+            query: {
+                report_type: "classes" | "people" | "class-sheet" | "council";
+                scope?: string;
+                activity_id?: string | null;
+                category_id?: string | null;
+                product_id?: string | null;
+                grade?: number | null;
+                class_id?: string | null;
+                user_id?: string | null;
+                status?: components["schemas"]["OrderStatus"] | null;
+                is_paid?: boolean | null;
+                date_from?: string | null;
+                date_to?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": unknown;
                 };
             };
             /** @description Validation Error */

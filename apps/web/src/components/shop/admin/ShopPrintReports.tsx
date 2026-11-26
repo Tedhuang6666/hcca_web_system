@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Printer } from "lucide-react";
+import { Download, Printer } from "lucide-react";
 
 import { apiErrorMessage, shopApi } from "@/lib/api";
 import type {
@@ -232,7 +232,27 @@ export default function ShopPrintReports({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [retryKey, setRetryKey] = useState(0);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [downloadError, setDownloadError] = useState("");
   const reportLabel = REPORTS.find((report) => report.id === reportType)?.label ?? REPORTS[0].label;
+
+  const downloadPdf = async () => {
+    setDownloadingPdf(true);
+    setDownloadError("");
+    try {
+      const response = await shopApi.downloadPrintReportPdf(reportType, filters, scope);
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${reportLabel}.pdf`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (cause) {
+      setDownloadError(apiErrorMessage(cause, "PDF 下載失敗"));
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -292,11 +312,11 @@ export default function ShopPrintReports({
           <button
             type="button"
             className="btn btn-primary min-h-11 w-full sm:w-auto"
-            disabled={loading || Boolean(error) || !reportData}
-            onClick={() => window.print()}
+            disabled={loading || Boolean(error) || !reportData || downloadingPdf}
+            onClick={() => void downloadPdf()}
           >
-            <Printer size={16} aria-hidden="true" />
-            列印報表
+            <Download size={16} aria-hidden="true" />
+            {downloadingPdf ? "正在產生 PDF…" : "下載 PDF"}
           </button>
           {reportData?.type === "class-sheet" && reportData.result.length > 0 && (
             <button type="button" className="btn btn-ghost min-h-11 w-full sm:w-auto" onClick={() => {
@@ -309,8 +329,18 @@ export default function ShopPrintReports({
               window.setTimeout(() => URL.revokeObjectURL(url), 1000);
             }}>下載 Word</button>
           )}
+          <button
+            type="button"
+            className="btn btn-ghost min-h-11 w-full sm:w-auto"
+            disabled={loading || Boolean(error) || !reportData || downloadingPdf}
+            onClick={() => window.print()}
+          >
+            <Printer size={16} aria-hidden="true" />
+            列印
+          </button>
         </div>
         <p className="text-sm text-fg-secondary!">報表範圍：{scope}</p>
+        {downloadError && <p role="alert" className="text-sm text-danger!">{downloadError}</p>}
       </div>
 
       {loading && <p role="status" className="py-4 text-center text-sm text-fg-muted!">載入報表中…</p>}

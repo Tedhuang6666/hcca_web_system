@@ -11,7 +11,6 @@ import type {
   ProductSeriesOut,
   ProductOut,
   OrderSummaryOut,
-  ActivityOut,
 } from "@/lib/types";
 
 
@@ -35,8 +34,6 @@ export default function StatsView() {
   const [categories, setCategories] = useState<ProductCategoryOut[]>([]);
   const [series, setSeries] = useState<ProductSeriesOut[]>([]);
   const [categoryId, setCategoryId] = useState("");
-  const [activities, setActivities] = useState<ActivityOut[]>([]);
-  const [activityId, setActivityId] = useState("");
   const [retryKey, setRetryKey] = useState(0);
   const [optionsError, setOptionsError] = useState(false);
 
@@ -49,14 +46,12 @@ export default function StatsView() {
       shopApi.orderSummary({ group_by: "user" }),
       shopApi.listCategories(),
       shopApi.listSeries(),
-      shopApi.listActivities(true),
-    ]).then(([loadedProducts, loadedClasses, userSummary, loadedCategories, loadedSeries, loadedActivities]) => {
+    ]).then(([loadedProducts, loadedClasses, userSummary, loadedCategories, loadedSeries]) => {
       if (cancelled) return;
       setProducts(loadedProducts);
       setClasses(loadedClasses);
       setCategories(loadedCategories);
       setSeries(loadedSeries);
-      setActivities(loadedActivities);
       setUserOptions(
         userSummary?.rows
           .filter((row) => row.key !== "none")
@@ -72,7 +67,6 @@ export default function StatsView() {
     setError(null);
     shopApi.orderSummary({
       group_by: groupBy,
-      activity_id: activityId,
       category_id: categoryId,
       product_id: productId,
       grade,
@@ -91,7 +85,7 @@ export default function StatsView() {
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [activityId, categoryId, classId, dateFrom, dateTo, grade, groupBy, paid, productId, statusFilter, userId, retryKey]);
+  }, [categoryId, classId, dateFrom, dateTo, grade, groupBy, paid, productId, statusFilter, userId, retryKey]);
 
   const groupOptions = [
     ["class", "依班級"],
@@ -105,7 +99,6 @@ export default function StatsView() {
     (!grade || String(schoolClass.grade) === grade)
   );
   const resetFilters = () => {
-    setActivityId("");
     setCategoryId("");
     setProductId("");
     setGrade("");
@@ -117,11 +110,10 @@ export default function StatsView() {
     setDateTo("");
   };
   const hasAdvancedFilters = Boolean(
-    activityId || categoryId || productId || grade || classId || userId || paid || statusFilter || dateFrom || dateTo
+    categoryId || productId || grade || classId || userId || paid || statusFilter || dateFrom || dateTo
   );
   const scopeLabels = [
-    activities.find((activity) => activity.id === activityId)?.name || "全部活動",
-    categories.find((category) => category.id === categoryId)?.name,
+    categories.find((category) => category.id === categoryId)?.name || "全部主題",
     products.find((product) => product.id === productId)?.name,
     grade && `${grade} 年級`,
     classes.find((schoolClass) => schoolClass.id === classId)?.label,
@@ -131,7 +123,6 @@ export default function StatsView() {
     (dateFrom || dateTo) && `${dateFrom || "不限起日"} 至 ${dateTo || "不限迄日"}`,
   ].filter(Boolean);
   const printFilters = useMemo<ShopPurchaseReportFilters>(() => ({
-    activity_id: activityId || undefined,
     category_id: categoryId || undefined,
     product_id: productId || undefined,
     grade: grade || undefined,
@@ -141,16 +132,16 @@ export default function StatsView() {
     is_paid: paid || undefined,
     date_from: dateFrom ? new Date(`${dateFrom}T00:00:00+08:00`).toISOString() : undefined,
     date_to: dateTo ? new Date(`${dateTo}T23:59:59+08:00`).toISOString() : undefined,
-  }), [activityId, categoryId, classId, dateFrom, dateTo, grade, paid, productId, statusFilter, userId]);
+  }), [categoryId, classId, dateFrom, dateTo, grade, paid, productId, statusFilter, userId]);
 
   return (
     <div className="space-y-4">
       <div className="card p-4 space-y-4">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="活動">
-            <select className="input min-h-11 w-full min-w-0" value={activityId} onChange={(event) => { setActivityId(event.target.value); setCategoryId(""); setProductId(""); }}>
-              <option value="">全部活動</option>
-              {activities.map((activity) => <option key={activity.id} value={activity.id}>{activity.name}</option>)}
+          <Field label="商品主題">
+            <select className="input min-h-11 w-full min-w-0" value={categoryId} onChange={(event) => { setCategoryId(event.target.value); setProductId(""); }}>
+              <option value="">全部主題</option>
+              {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
             </select>
           </Field>
           <Field label="統計方式">
@@ -176,19 +167,12 @@ export default function StatsView() {
         </div>}
         {advancedOpen && (
           <div id="shop-stats-filters" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <Field label="商品主題">
-              <select value={categoryId} onChange={(event) => { setCategoryId(event.target.value); setProductId(""); }} className="input min-h-11 w-full min-w-0">
-                <option value="">全部主題</option>
-                {categories.filter((category) => !activityId || category.activity_id === activityId).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-              </select>
-            </Field>
             <Field label="商品">
               <select value={productId} onChange={(e) => setProductId(e.target.value)} className="input min-h-11 w-full min-w-0">
                 <option value="">全部商品</option>
                 {products.filter((product) => {
                   const productCategoryId = product.category_id ?? series.find((item) => item.id === product.series_id)?.category_id;
-                  return (!categoryId || productCategoryId === categoryId)
-                    && (!activityId || categories.some((category) => category.id === productCategoryId && category.activity_id === activityId));
+                  return !categoryId || productCategoryId === categoryId;
                 }).map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
               </select>
             </Field>
@@ -281,7 +265,7 @@ export default function StatsView() {
           <div className="grid gap-3 sm:hidden">
             {data.rows.length === 0 ? (
               <div className="card p-6 text-center text-sm text-fg-muted!">
-                <p>目前範圍沒有訂單；可清除篩選或改選其他活動。</p>
+                <p>目前範圍沒有訂單；可清除篩選或改選其他商品主題。</p>
                 {hasAdvancedFilters && <button type="button" className="btn btn-ghost mt-3 min-h-11" onClick={resetFilters}>查看全部統計</button>}
               </div>
             ) : data.rows.map((r) => (
@@ -322,7 +306,7 @@ export default function StatsView() {
               <tbody>
                 {data.rows.length === 0 ? (
                   <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-fg-muted!">
-                    <p>目前範圍沒有訂單；可清除篩選或改選其他活動。</p>
+                    <p>目前範圍沒有訂單；可清除篩選或改選其他商品主題。</p>
                     {hasAdvancedFilters && <button type="button" className="btn btn-ghost mt-3 min-h-11" onClick={resetFilters}>查看全部統計</button>}
                   </td></tr>
                 ) : (
