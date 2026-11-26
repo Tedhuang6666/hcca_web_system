@@ -270,6 +270,8 @@ def _email_idempotency_key(
         default=str,
     )
     fingerprint = hashlib.sha256(request.encode()).hexdigest()
+    # Internal Resend idempotency key passed to the email queue, never an HTTP response.
+    # nosemgrep: python.flask.security.audit.directly-returned-format-string.directly-returned-format-string
     return f"outbox/{event_id}/{fingerprint}"
 
 
