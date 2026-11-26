@@ -236,7 +236,7 @@ class MigrationBaselineTests(unittest.TestCase):
             downgrade_config.set_main_option("script_location", str(API_ROOT / "alembic"))
             with engines[0].connect() as connection:
                 revision_before = connection.scalar(text("SELECT version_num FROM alembic_version"))
-            with self.assertRaisesRegex(RuntimeError, "升級前備份"):
+            with self.assertRaisesRegex(RuntimeError, "pre-migration backup"):
                 with engines[0].connect() as connection:
                     downgrade_config.attributes["connection"] = connection
                     command.downgrade(downgrade_config, "20261117020000")

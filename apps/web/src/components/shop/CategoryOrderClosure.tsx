@@ -64,24 +64,22 @@ export default function CategoryOrderClosure({ categories, disabled = false, onS
 
   return (
     <section aria-labelledby="category-order-closure-title" className="card min-w-0 p-4">
-      <h2 id="category-order-closure-title" className="flex items-center gap-2 text-base font-semibold"
-        style={{ color: "var(--text-primary)" }}>
+      <h2 id="category-order-closure-title" className="flex items-center gap-2 text-base font-semibold text-(color:--text-primary)">
         <Lock size={18} aria-hidden="true" /> 班聯結單與公開入口
       </h2>
-      {loadError && <div role="alert" className="mt-2 text-sm" style={{ color: "var(--danger)" }}>
+      {loadError && <div role="alert" className="mt-2 text-sm text-(color:--danger)">
         <p>{loadError}</p>
         <button type="button" className="btn btn-ghost min-h-11" onClick={() => setAttempt((value) => value + 1)}>重新載入鎖單狀態</button>
       </div>}
-      <ul className="mt-3 divide-y" style={{ borderColor: "var(--border)" }}>
+      <ul className="mt-3 divide-y divide-(--border)">
         {categories.map((category) => {
           const status = statuses[category.id];
           const closed = Boolean(status?.is_closed);
           return (
-            <li key={category.id} className="flex min-w-0 flex-wrap items-center justify-between gap-3 py-3"
-              style={{ borderColor: "var(--border)" }}>
+            <li key={category.id} className="flex min-w-0 flex-wrap items-center justify-between gap-3 py-3">
               <div className="min-w-0 flex-1">
-                <h3 className="break-words text-sm font-medium" style={{ color: "var(--text-primary)" }}>{category.name}</h3>
-                <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
+                <h3 className="break-words text-sm font-medium text-(color:--text-primary)">{category.name}</h3>
+                <p className="mt-1 text-sm text-(color:--text-secondary)">
                   {loading ? "載入狀態中…" : loadError || !status
                     ? "狀態待確認"
                     : closed
@@ -100,8 +98,8 @@ export default function CategoryOrderClosure({ categories, disabled = false, onS
           );
         })}
       </ul>
-      {message && <p role="status" className="mt-2 text-sm" style={{ color: "var(--text-secondary)" }}>{message}</p>}
-      {error && <p role="alert" className="mt-2 text-sm" style={{ color: "var(--danger)" }}>{error}</p>}
+      {message && <p role="status" className="mt-2 text-sm text-(color:--text-secondary)">{message}</p>}
+      {error && <p role="alert" className="mt-2 text-sm text-(color:--danger)">{error}</p>}
     </section>
   );
 }
