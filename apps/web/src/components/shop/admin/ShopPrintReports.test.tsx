@@ -72,25 +72,23 @@ describe("ShopPrintReports", () => {
     });
   });
 
-  it("shows selectable reports with PDF as the only export action", async () => {
+  it("shows only the remaining reports with PDF as the only export action", async () => {
     const filters = { category_id: "shirts", is_paid: "false" };
-    render(<ShopPrintReports filters={filters} scope="商品活動 · 班聯未確認" />);
+    render(<ShopPrintReports filters={filters} scope="商品活動 · 班聯未確認" titleScope="商品分類" />);
 
-    expect(await screen.findByRole("heading", { name: "各班總數統計" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "班級訂購明細" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "列印" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "下載 Word" })).not.toBeInTheDocument();
-    expect(api.orderSummary).toHaveBeenCalledWith({ group_by: "class", ...filters });
 
     const reportType = screen.getByRole("combobox", { name: "報表類型" });
-    fireEvent.change(reportType, { target: { value: "people" } });
-    expect(await screen.findByRole("heading", { name: "各班個人購買明細" })).toBeVisible();
-    expect(await screen.findByText("林同學")).toBeVisible();
+    expect(Array.from(reportType.querySelectorAll("option"), (option) => option.textContent)).toEqual([
+      "班級訂購明細",
+      "各班總數明細",
+      "班聯商品尺寸總表",
+    ]);
     expect(api.purchaseDetails).toHaveBeenCalledWith(filters);
-
-    fireEvent.change(reportType, { target: { value: "class-sheet" } });
-    expect(await screen.findByRole("heading", { name: /商品活動.*高一一班/ })).toBeVisible();
+    expect(await screen.findByText("林同學")).toBeVisible();
     expect(screen.getByText("班服帽踢（尺寸：M） × 2")).toBeVisible();
-    expect(screen.queryByRole("button", { name: "下載 Word" })).not.toBeInTheDocument();
 
     fireEvent.change(reportType, { target: { value: "council" } });
     expect(await screen.findByRole("heading", { name: "班聯商品尺寸總表" })).toBeVisible();
@@ -103,9 +101,9 @@ describe("ShopPrintReports", () => {
   it("downloads class totals as PDF and no other format", async () => {
     const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:report");
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
-    render(<ShopPrintReports filters={{ category_id: "theme-1" }} scope="校慶商品" />);
+    render(<ShopPrintReports filters={{ category_id: "theme-1" }} scope="校慶商品" titleScope="校慶商品" />);
 
-    await screen.findByRole("heading", { name: "各班總數統計" });
+    await screen.findByRole("heading", { name: "班級訂購明細" });
     fireEvent.change(screen.getByRole("combobox", { name: "報表類型" }), {
       target: { value: "class-totals" },
     });
@@ -130,24 +128,24 @@ describe("ShopPrintReports", () => {
     const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:report");
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
     const filters = { category_id: "theme-1" };
-    render(<ShopPrintReports filters={filters} scope="校慶商品" />);
+    render(<ShopPrintReports filters={filters} scope="校慶商品 · 班聯未確認" titleScope="校慶商品" />);
 
-    await screen.findByRole("heading", { name: "各班總數統計" });
+    await screen.findByRole("heading", { name: "班級訂購明細" });
     fireEvent.click(screen.getByRole("button", { name: "下載 PDF" }));
 
     await waitFor(() => {
-      expect(api.downloadPrintReportPdf).toHaveBeenCalledWith("classes", filters, "校慶商品");
+      expect(api.downloadPrintReportPdf).toHaveBeenCalledWith("class-sheet", filters, "校慶商品");
       expect(createObjectURL).toHaveBeenCalledOnce();
       expect(click).toHaveBeenCalledOnce();
     });
   });
 
   it("shows a recoverable load error", async () => {
-    api.orderSummary.mockRejectedValueOnce(new Error("offline"));
-    render(<ShopPrintReports filters={{}} scope="全部活動" />);
+    api.purchaseDetails.mockRejectedValueOnce(new Error("offline"));
+    render(<ShopPrintReports filters={{}} scope="全部活動" titleScope="全部主題" />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("報表載入失敗");
     fireEvent.click(screen.getByRole("button", { name: "重新載入報表" }));
-    expect(await screen.findByRole("heading", { name: "各班總數統計" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "班級訂購明細" })).toBeVisible();
   });
 });

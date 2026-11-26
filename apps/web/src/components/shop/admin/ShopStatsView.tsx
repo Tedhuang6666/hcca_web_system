@@ -230,6 +230,7 @@ export default function StatsView() {
       <ShopPrintReports
         filters={printFilters}
         scope={scopeLabels.join(" · ")}
+        titleScope={categories.find((category) => category.id === categoryId)?.name || "全部主題"}
         refreshKey={retryKey}
         shareClassSummary={groupBy === "class"}
         classSummary={groupBy === "class" ? data : undefined}

@@ -5,7 +5,12 @@ from __future__ import annotations
 import html
 import uuid
 from collections import defaultdict
+from datetime import datetime
+from io import BytesIO
 from typing import Literal, cast
+from zoneinfo import ZoneInfo
+
+from pypdf import PdfReader, PdfWriter
 
 from api.schemas.shop import OrderPurchaseDetailRow, OrderQuantityRow, OrderSummaryOut
 from api.services.official_print import _font_faces, render_print_pdf
@@ -143,8 +148,9 @@ def _class_sheet(pages: list[ClassSheetPage], scope: str) -> str:
         ]
         sections.append(
             "<section class='class-sheet'>"
-            f"<h1>{_escape(scope)} 班級訂購明細</h1>"
-            f"<p class='class-info'><span class='class-code'>{_escape(page.class_code)}</span>"
+            f"<h1>（{_escape(scope)}） 班級訂購明細</h1>"
+            f"<p class='class-info'><span class='class-code'>"
+            f"{_escape(page.class_code or page.class_label)}</span>"
             f"{_escape(_class_heading(page))}</p>"
             + _table(["座號", "姓名", "訂購數量"], table_rows, class_name="buyer-table")
             + "</section>"
@@ -201,7 +207,7 @@ def _class_totals(pages: list[ClassTotalsPage], scope: str) -> str:
                 row_class = "product-last" if index == len(product_lines) - 1 else "variant-row"
                 rows.append(f"<tr class='{row_class}'>{''.join(cells)}</tr>")
 
-        title = f"{_class_heading(page)}{scope}班級明細"
+        title = f"{_class_heading(page)} （{scope}）班級明細"
         sections.append(
             "<section class='class-total-sheet'>"
             f"<h1>{_escape(title)}</h1>"
@@ -252,8 +258,33 @@ def _council_quantities(rows: list[OrderQuantityRow]) -> str:
     )
 
 
+def _merge_pdf_documents(documents: list[bytes]) -> bytes:
+    writer = PdfWriter()
+    for document in documents:
+        writer.append(PdfReader(BytesIO(document)), import_outline=False)
+    output = BytesIO()
+    writer.write(output)
+    return output.getvalue()
+
+
 def render_order_report_pdf(report_type: ReportType, data: ReportData, scope: str) -> bytes:
-    """Render the selected shop report with the reference table borders and pagination."""
+    """Render a shop report with the reference table borders and print markers."""
+    printed_at = datetime.now(ZoneInfo("Asia/Taipei")).strftime("%Y/%m/%d %H:%M")
+    if report_type == "class-sheet" and isinstance(data, list) and len(data) > 1:
+        class_documents = [
+            _render_single_order_report_pdf(report_type, [page], scope, printed_at)
+            for page in cast(list[ClassSheetPage], data)
+        ]
+        return _merge_pdf_documents(class_documents)
+    return _render_single_order_report_pdf(report_type, data, scope, printed_at)
+
+
+def _render_single_order_report_pdf(
+    report_type: ReportType,
+    data: ReportData,
+    scope: str,
+    printed_at: str,
+) -> bytes:
     if report_type == "classes" and isinstance(data, OrderSummaryOut):
         content = _class_summary(data)
     elif report_type == "people" and isinstance(data, list):
@@ -270,16 +301,18 @@ def render_order_report_pdf(report_type: ReportType, data: ReportData, scope: st
     portrait = report_type in {"class-sheet", "class-totals"}
     orientation = "portrait" if portrait else "landscape"
     label = REPORT_LABELS[report_type]
-    footer = (
-        ""
-        if report_type == "class-totals"
-        else f"""@bottom-center {{
-    content: '{label} · 第 ' counter(page) ' / ' counter(pages) ' 頁';
+    footer = f"""@bottom-center {{
+    content: '{label} · 第 ' counter(page) ' / ' counter(pages) ' 頁 · 列印時間：{printed_at}';
     font-family: OfficialKai, '標楷體', 'DFKai-SB', serif;
     font-size: 8pt;
     color: #666;
   }}"""
-    )
+    timestamp_footer = f"""@bottom-center {{
+    content: '列印時間：{printed_at}';
+    font-family: OfficialKai, '標楷體', 'DFKai-SB', serif;
+    font-size: 8pt;
+    color: #666;
+  }}"""
     css = f"""@page {{
   size: A4 {orientation};
   margin: 14mm 12mm 17mm;
@@ -289,13 +322,13 @@ def render_order_report_pdf(report_type: ReportType, data: ReportData, scope: st
   size: A4 portrait;
   margin: 13mm 12mm 17mm;
   @bottom-center {{
-    content: '班級訂購明細 · ' string(class-code) ' 第 ' counter(page) ' / ' counter(pages) ' 頁';
+    content: string(class-code) ' 第 ' counter(page) ' / ' counter(pages) ' 頁 · 列印時間：{printed_at}';
     font-family: OfficialKai, '標楷體', 'DFKai-SB', serif;
     font-size: 8pt;
     color: #666;
   }}
 }}
-@page classTotals {{ size: A4 portrait; margin: 25mm 12mm 17mm; @bottom-center {{ content: none; }} }}
+@page classTotals {{ size: A4 portrait; margin: 25mm 12mm 17mm; {timestamp_footer} }}
 * {{ box-sizing: border-box; }}
 body {{ font-family: OfficialKai, '標楷體', 'DFKai-SB', serif; color: #000; font-size: 10pt; line-height: 1.4; }}
 h1 {{ margin: 0 0 6mm; font-family: OfficialKai, '標楷體', 'DFKai-SB', serif; font-size: 18pt; font-weight: 400; text-align: center; }}
@@ -343,7 +376,7 @@ tfoot th {{ border-top: 1.1pt solid #000; font-weight: 700; }}
 """
     header = ""
     if report_type not in {"class-sheet", "class-totals"}:
-        header = f"<h1>{_escape(label)}</h1><p class='scope'>報表範圍：{_escape(scope)}</p>"
+        header = f"<h1>（{_escape(scope)}） {label}</h1>"
     markup = (
         "<!doctype html><html lang='zh-TW'><head><meta charset='utf-8'>"
         f"<style>{_font_faces()}{css}</style></head><body>"

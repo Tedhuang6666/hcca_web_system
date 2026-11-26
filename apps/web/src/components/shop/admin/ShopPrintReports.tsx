@@ -36,8 +36,6 @@ type ReportData =
   | { type: "council"; result: OrderQuantityRow[] };
 
 const REPORTS: { id: ReportType; label: string }[] = [
-  { id: "classes", label: "各班總數統計" },
-  { id: "people", label: "各班個人購買明細" },
   { id: "class-sheet", label: "班級訂購明細" },
   { id: "class-totals", label: "各班總數明細" },
   { id: "council", label: "班聯商品尺寸總表" },
@@ -218,6 +216,7 @@ function ReportTable({ data, scope }: { data: ReportData; scope: string }) {
 export default function ShopPrintReports({
   filters,
   scope,
+  titleScope,
   refreshKey = 0,
   shareClassSummary = false,
   classSummary,
@@ -225,12 +224,13 @@ export default function ShopPrintReports({
 }: {
   filters: ShopPurchaseReportFilters;
   scope: string;
+  titleScope: string;
   refreshKey?: number;
   shareClassSummary?: boolean;
   classSummary?: OrderSummaryOut | null;
   classSummaryLoading?: boolean;
 }) {
-  const [reportType, setReportType] = useState<ReportType>("classes");
+  const [reportType, setReportType] = useState<ReportType>("class-sheet");
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -243,7 +243,7 @@ export default function ShopPrintReports({
     setDownloadingPdf(true);
     setDownloadError("");
     try {
-      const response = await shopApi.downloadPrintReportPdf(reportType, filters, scope);
+      const response = await shopApi.downloadPrintReportPdf(reportType, filters, titleScope);
       const url = URL.createObjectURL(await response.blob());
       const link = document.createElement("a");
       link.href = url;
