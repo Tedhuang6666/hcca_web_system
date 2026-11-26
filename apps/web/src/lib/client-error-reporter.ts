@@ -449,6 +449,30 @@ function resourceEvidence(url: string | null): ClientErrorDiagnostics {
   }
 }
 
+function missingLinkEvidence(target: Element): string {
+  if (!(target instanceof HTMLLinkElement)) return "";
+  const rel = ["stylesheet", "preload", "modulepreload", "icon", "manifest", "preconnect", "prefetch"]
+    .find(value => target.relList.contains(value)) ?? "other";
+  const as = ["image", "style", "script", "font", "fetch"].includes(target.as)
+    ? target.as : "other";
+  return ` [link rel=${rel} as=${as} href=${target.hasAttribute("href") ? "present" : "missing"}]`;
+}
+
+function nextImageSourceHint(url: string | null): string {
+  if (!url) return "";
+  try {
+    const optimized = new URL(url, window.location.href);
+    if (optimized.pathname !== "/_next/image/v2") return "";
+    const source = optimized.searchParams.get("url");
+    if (!source) return "";
+    const parsedSource = new URL(source, window.location.href);
+    if (!["http:", "https:"].includes(parsedSource.protocol)) return "";
+    return ` [source=${parsedSource.origin}${parsedSource.pathname.slice(0, MAX_PATH_LENGTH)}]`;
+  } catch {
+    return "";
+  }
+}
+
 /** 安裝 window error / unhandledrejection 入口，涵蓋未經 React boundary 的錯誤。 */
 export function installGlobalClientErrorReporter(): () => void {
   if (typeof window === "undefined") return () => undefined;
@@ -527,14 +551,21 @@ export function installGlobalClientErrorReporter(): () => void {
     }
     const safeResource = normalizedTransientResourceUrl(failedResource);
     const resourceOrigin = safeHttpOrigin(failedResource);
+    const missingResourceEvidence = resource && !failedResource ? missingLinkEvidence(target) : "";
+    const sourceHint = resource ? nextImageSourceHint(failedResource) : "";
     const input: ClientErrorInput = {
       ...details,
       pathname: window.location.pathname,
       message: resource
-        ? `${details.message || "資源載入失敗"}${failedResource ? ` [${safeResource}]` : ""}`
+        ? `${details.message || "資源載入失敗"}${failedResource ? ` [${safeResource}]` : missingResourceEvidence}${sourceHint}`
         : details.message,
       scope: resource ? `resource:${target.tagName.toLowerCase()}` : "window.error",
-      ...(resource ? { dedupeKey: `resource:${normalizedTransientResourceUrl(failedResource)}` } : {}),
+      ...(resource
+        ? {
+            dedupeKey: `resource:${normalizedTransientResourceUrl(failedResource)}`
+              + `${missingResourceEvidence}${sourceHint}`,
+          }
+        : {}),
       ...(resource
         ? {
             diagnostics: {
@@ -604,6 +635,9 @@ export function installGlobalClientErrorReporter(): () => void {
         ...(event.disposition === "enforce" ? { csp_disposition: "enforce" as const } : {}),
         csp_blocked_source: source,
         ...(sourceOrigin ? { csp_source_origin: sourceOrigin } : {}),
+        ...(event.sourceFile
+          ? { error_source: event.sourceFile.split(/[?#]/, 1)[0].slice(0, MAX_PATH_LENGTH) }
+          : {}),
         ...(event.lineNumber > 0 ? { csp_line_number: event.lineNumber } : {}),
         ...(event.columnNumber > 0 ? { csp_column_number: event.columnNumber } : {}),
       },

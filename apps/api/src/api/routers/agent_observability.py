@@ -189,7 +189,7 @@ async def authenticated_session(session: DbDep) -> dict[str, Any]:
     if user.is_superuser:
         # 靜態 header token 一旦外洩，不能換到可略過所有權限檢查的 session。
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail="效能監測帳號不可為超級管理員",
         )
     permissions = await get_user_permission_codes(session, user.id, on_date=local_today())
@@ -200,7 +200,7 @@ async def authenticated_session(session: DbDep) -> dict[str, Any]:
         for code in permissions
     ):
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail="效能監測帳號不可持有管理權限",
         )
     # 建立正式 UserSession，讓登出、撤銷全部工作階段與管理員撤銷都能讓此 token 失效；

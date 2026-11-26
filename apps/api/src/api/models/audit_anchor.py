@@ -50,8 +50,8 @@ class AuditLogAnchor(Base, TimestampMixin):
     )
     """該日最後一筆 AuditLog。若該日無紀錄則 NULL。"""
 
-    head_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    """該日最後一筆的 self_hash（SHA-256 hex）；無紀錄日為前一日 head。"""
+    head_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    """該日最後一筆的 self_hash；保留版本化演算法與 key id。"""
 
     log_count: Mapped[int] = mapped_column(nullable=False, default=0)
     """該日紀錄數量。完整性檢查時用作配對。"""

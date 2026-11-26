@@ -135,6 +135,46 @@ describe("client error reporter", () => {
     }
   });
 
+  it("identifies failed links that have no href", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const uninstall = installGlobalClientErrorReporter();
+    const link = document.createElement("link");
+    link.rel = "preload";
+    link.as = "image";
+    document.head.append(link);
+    try {
+      link.dispatchEvent(new Event("error"));
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+      const payload = JSON.parse(String(fetchMock.mock.calls[0][1].body));
+      expect(payload.scope).toBe("resource:link");
+      expect(payload.message).toContain("[link rel=preload as=image href=missing]");
+    } finally {
+      uninstall(); link.remove();
+    }
+  });
+
+  it("records the source path for failed optimized images without URL queries", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const uninstall = installGlobalClientErrorReporter();
+    const img = document.createElement("img");
+    img.src = "/_next/image/v2?url=%2Fapi%2Fsite%2Fpublic%2Fimages%2Fpublic-site%2Fdd1ebb73.webp&width=640&quality=75";
+    document.body.append(img);
+    try {
+      img.dispatchEvent(new Event("error"));
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+      const payload = JSON.parse(String(fetchMock.mock.calls[0][1].body));
+      expect(payload.message).toContain(
+        `[source=${window.location.origin}/api/site/public/images/public-site/dd1ebb73.webp]`,
+      );
+      expect(payload.message).not.toContain("width=640");
+      expect(payload.message).not.toContain("quality=75");
+    } finally {
+      uninstall(); img.remove();
+    }
+  });
+
   it("marks missing resource timing explicitly without inventing an HTTP status", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
     vi.stubGlobal("fetch", fetchMock);
@@ -296,7 +336,7 @@ describe("client error reporter", () => {
         effectiveDirective: { value: "connect-src" },
         blockedURI: { value: `https://hcca.tw/surveys?_rsc=${token}` },
         disposition: { value: "enforce" },
-        sourceFile: { value: "https://hcca.tw/_next/static/chunks/app.js" },
+        sourceFile: { value: "https://hcca.tw/_next/static/chunks/app.js?token=private" },
         lineNumber: { value: 12 },
         columnNumber: { value: 7 },
       });
@@ -324,6 +364,7 @@ describe("client error reporter", () => {
         csp_disposition: "enforce",
         csp_blocked_source: "https://hcca.tw",
         csp_source_origin: "https://hcca.tw",
+        error_source: "https://hcca.tw/_next/static/chunks/app.js",
         csp_line_number: 12,
         csp_column_number: 7,
       },

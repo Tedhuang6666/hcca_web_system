@@ -372,7 +372,7 @@ async def test_authenticated_performance_session_refuses_superuser(
         headers={"X-Performance-Monitor-Token": "test-performance-token"},
     )
 
-    assert response.status_code == 503
+    assert response.status_code == 403
 
 
 @pytest.mark.parametrize("code", ["admin:all", "admin:users", "document:admin", "shop:manage"])
@@ -402,7 +402,7 @@ async def test_authenticated_performance_session_refuses_management_permissions(
         "/internal/observability/auth-session",
         headers={"X-Performance-Monitor-Token": "test-performance-token"},
     )
-    assert response.status_code == 503
+    assert response.status_code == 403
 
 
 async def test_authenticated_performance_token_is_revocable(

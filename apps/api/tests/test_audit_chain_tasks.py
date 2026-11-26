@@ -24,6 +24,13 @@ def _make_anchor() -> AuditLogAnchor:
     )
 
 
+def test_anchor_hash_column_fits_versioned_audit_hash() -> None:
+    versioned_hash = f"hmac-sha256:v1:{'k' * 16}:{'a' * 64}"
+
+    assert len(versioned_hash) > 64
+    assert AuditLogAnchor.__table__.c.head_hash.type.length >= len(versioned_hash)
+
+
 def test_upload_anchor_is_skipped_without_a_bucket(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "BACKUP_S3_BUCKET", "  ")
 
