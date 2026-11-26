@@ -822,6 +822,10 @@ nav[aria-label="底部主選單"] .bottom-tab-bar__badge {
   gap: 1rem;
 }
 
+.dashboard-main-column > * {
+  min-width: 0;
+}
+
 .dashboard-focus-grid {
   align-items: start;
 }
