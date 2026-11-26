@@ -28,7 +28,11 @@ from api.services import shop as shop_svc
 from api.services.shop._analytics import sales_analytics
 from api.services.shop._analytics_report import create_sales_report
 from api.services.shop._print_reports import REPORT_LABELS, render_order_report_pdf
-from api.services.shop._purchase_report import purchase_details_report
+from api.services.shop._purchase_report import (
+    class_sheet_report,
+    class_totals_report,
+    purchase_details_report,
+)
 from api.services.shop._quantity_export import export_quantity_excel
 
 router = APIRouter()
@@ -112,7 +116,9 @@ async def sales_analysis_report(
 async def download_order_report_pdf(
     session: DbDep,
     _: CurrentUser,
-    report_type: Literal["classes", "people", "class-sheet", "council"] = Query(...),
+    report_type: Literal["classes", "people", "class-sheet", "class-totals", "council"] = Query(
+        ...
+    ),
     scope: str = Query("全部主題", max_length=300),
     activity_id: uuid.UUID | None = Query(None),
     category_id: uuid.UUID | None = Query(None),
@@ -140,8 +146,36 @@ async def download_order_report_pdf(
             date_from=date_from,
             date_to=date_to,
         )
-    elif report_type in {"people", "class-sheet"}:
+    elif report_type == "people":
         report_data = await purchase_details_report(
+            session,
+            activity_id=activity_id,
+            category_id=category_id,
+            product_id=product_id,
+            grade=grade,
+            class_id=class_id,
+            user_id=user_id,
+            status=status_filter,
+            is_paid=is_paid,
+            date_from=date_from,
+            date_to=date_to,
+        )
+    elif report_type == "class-sheet":
+        report_data = await class_sheet_report(
+            session,
+            activity_id=activity_id,
+            category_id=category_id,
+            product_id=product_id,
+            grade=grade,
+            class_id=class_id,
+            user_id=user_id,
+            status=status_filter,
+            is_paid=is_paid,
+            date_from=date_from,
+            date_to=date_to,
+        )
+    elif report_type == "class-totals":
+        report_data = await class_totals_report(
             session,
             activity_id=activity_id,
             category_id=category_id,

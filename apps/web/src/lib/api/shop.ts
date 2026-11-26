@@ -375,7 +375,7 @@ export const shopApi = {
     return response;
   },
   downloadPrintReportPdf: async (
-    reportType: "classes" | "people" | "class-sheet" | "council",
+    reportType: "classes" | "people" | "class-sheet" | "class-totals" | "council",
     filters?: OrderQuantityFilters & { user_id?: string },
     scope = "全部主題",
   ) => {

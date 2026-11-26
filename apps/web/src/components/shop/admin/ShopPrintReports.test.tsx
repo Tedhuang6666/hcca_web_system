@@ -72,12 +72,13 @@ describe("ShopPrintReports", () => {
     });
   });
 
-  it("provides printable class, person, and council quantity reports", async () => {
-    const print = vi.spyOn(window, "print").mockImplementation(() => undefined);
+  it("shows selectable reports with PDF as the only export action", async () => {
     const filters = { category_id: "shirts", is_paid: "false" };
     render(<ShopPrintReports filters={filters} scope="商品活動 · 班聯未確認" />);
 
     expect(await screen.findByRole("heading", { name: "各班總數統計" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "列印" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "下載 Word" })).not.toBeInTheDocument();
     expect(api.orderSummary).toHaveBeenCalledWith({ group_by: "class", ...filters });
 
     const reportType = screen.getByRole("combobox", { name: "報表類型" });
@@ -89,7 +90,7 @@ describe("ShopPrintReports", () => {
     fireEvent.change(reportType, { target: { value: "class-sheet" } });
     expect(await screen.findByRole("heading", { name: /商品活動.*高一一班/ })).toBeVisible();
     expect(screen.getByText("班服帽踢（尺寸：M） × 2")).toBeVisible();
-    expect(screen.getByRole("button", { name: "下載 Word" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "下載 Word" })).not.toBeInTheDocument();
 
     fireEvent.change(reportType, { target: { value: "council" } });
     expect(await screen.findByRole("heading", { name: "班聯商品尺寸總表" })).toBeVisible();
@@ -97,9 +98,32 @@ describe("ShopPrintReports", () => {
     expect(screen.getByText("未繳件數")).toBeVisible();
     expect(api.orderQuantities).toHaveBeenCalledWith(filters);
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "列印" })).toBeEnabled());
-    fireEvent.click(screen.getByRole("button", { name: "列印" }));
-    expect(print).toHaveBeenCalledOnce();
+  });
+
+  it("downloads class totals as PDF and no other format", async () => {
+    const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:report");
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+    render(<ShopPrintReports filters={{ category_id: "theme-1" }} scope="校慶商品" />);
+
+    await screen.findByRole("heading", { name: "各班總數統計" });
+    fireEvent.change(screen.getByRole("combobox", { name: "報表類型" }), {
+      target: { value: "class-totals" },
+    });
+    const download = await screen.findByRole("button", { name: "下載 PDF" });
+    expect(download).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "列印" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "下載 Word" })).not.toBeInTheDocument();
+
+    fireEvent.click(download);
+    await waitFor(() => {
+      expect(api.downloadPrintReportPdf).toHaveBeenCalledWith(
+        "class-totals",
+        { category_id: "theme-1" },
+        "校慶商品",
+      );
+      expect(createObjectURL).toHaveBeenCalledOnce();
+      expect(click).toHaveBeenCalledOnce();
+    });
   });
 
   it("downloads the selected report as a PDF", async () => {

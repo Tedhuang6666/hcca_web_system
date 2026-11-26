@@ -4378,7 +4378,9 @@ async def test_order_summary_with_permission_groups_by_class(
     assert resp.json()["total_amount"] == 300
 
 
-@pytest.mark.parametrize("report_type", ["classes", "people", "class-sheet", "council"])
+@pytest.mark.parametrize(
+    "report_type", ["classes", "people", "class-sheet", "class-totals", "council"]
+)
 async def test_shop_print_report_pdf_requires_permission_and_renders_pdf(
     client, db_session, member_user, authed_client_factory, report_type
 ) -> None:
@@ -4396,6 +4398,92 @@ async def test_shop_print_report_pdf_requires_permission_and_renders_pdf(
     assert response.headers["content-type"] == "application/pdf"
     assert response.content.startswith(b"%PDF-")
     assert "attachment; filename*=UTF-8''" in response.headers["content-disposition"]
+
+
+async def test_class_reports_aggregate_orders_in_catalog_and_option_order(
+    db_session, member_user, authed_client_factory
+) -> None:
+    from api.services.shop._purchase_report import class_sheet_report, class_totals_report
+
+    await _grant_permission(db_session, member_user, "shop:view_all")
+    school_class = await _make_class(db_session)
+    buyer = await _bare_user(db_session, student_id="11501")
+    product = await _make_active_product(db_session, member_user, price=750)
+    group = await shop_svc.add_variant_group(
+        db_session,
+        product,
+        data=ProductVariantGroupCreate(
+            name="尺寸",
+            options=[
+                ProductVariantOptionCreate(value="M", sort_order=0),
+                ProductVariantOptionCreate(value="XL", sort_order=1),
+                ProductVariantOptionCreate(value="2XL", sort_order=2),
+            ],
+        ),
+    )
+    db_session.add(
+        ClassRosterEntry(
+            class_id=school_class.id,
+            seat_number=2,
+            student_id=buyer.student_id,
+            user_id=buyer.id,
+        )
+    )
+    orders = [
+        await _seed_order(db_session, buyer, class_id=school_class.id),
+        await _seed_order(db_session, buyer, class_id=school_class.id),
+    ]
+    for order, selections in zip(
+        orders,
+        [
+            [("M", 2), ("XL", 5)],
+            [("M", 2), ("2XL", 2)],
+        ],
+        strict=True,
+    ):
+        for value, quantity in selections:
+            option = next(candidate for candidate in group.options if candidate.value == value)
+            db_session.add(
+                OrderItem(
+                    order_id=order.id,
+                    product_id=product.id,
+                    quantity=quantity,
+                    unit_price=750,
+                    selected_options=[
+                        {
+                            "group_id": str(group.id),
+                            "group_name": group.name,
+                            "option_id": str(option.id),
+                            "value": option.value,
+                        }
+                    ],
+                )
+            )
+    await db_session.flush()
+
+    filters = {"class_id": school_class.id}
+    sheet = await class_sheet_report(db_session, **filters)
+    totals = await class_totals_report(db_session, **filters)
+    assert len(sheet) == len(totals) == 1
+    assert sheet[0].buyers[0].seat == 2
+    expected_items = [
+        "商品（尺寸：M） × 4",
+        "商品（尺寸：XL） × 5",
+        "商品（尺寸：2XL） × 2",
+    ]
+    assert sheet[0].buyers[0].items == expected_items
+    assert [(line.option_label, line.quantity, line.subtotal) for line in totals[0].lines] == [
+        ("M", 4, 3000),
+        ("XL", 5, 3750),
+        ("2XL", 2, 1500),
+    ]
+
+    response = await authed_client_factory(member_user).get(
+        "/shop/orders/print-report.pdf",
+        params={"report_type": "class-totals", "class_id": str(school_class.id)},
+    )
+    assert response.status_code == 200
+    assert response.content.startswith(b"%PDF-")
 
 
 async def test_order_purchase_details_requires_permission_and_groups_items(

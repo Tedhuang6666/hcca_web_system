@@ -3,35 +3,30 @@
 from __future__ import annotations
 
 import html
+import uuid
 from collections import defaultdict
-from dataclasses import dataclass, field
 from typing import Literal, cast
 
 from api.schemas.shop import OrderPurchaseDetailRow, OrderQuantityRow, OrderSummaryOut
 from api.services.official_print import _font_faces, render_print_pdf
+from api.services.shop._purchase_report import ClassSheetPage, ClassTotalLine, ClassTotalsPage
 
-ReportType = Literal["classes", "people", "class-sheet", "council"]
-ReportData = OrderSummaryOut | list[OrderPurchaseDetailRow] | list[OrderQuantityRow]
+ReportType = Literal["classes", "people", "class-sheet", "class-totals", "council"]
+ReportData = (
+    OrderSummaryOut
+    | list[OrderPurchaseDetailRow]
+    | list[OrderQuantityRow]
+    | list[ClassSheetPage]
+    | list[ClassTotalsPage]
+)
 
 REPORT_LABELS: dict[ReportType, str] = {
     "classes": "各班總數統計",
     "people": "各班個人購買明細",
     "class-sheet": "班級訂購明細",
+    "class-totals": "各班總數明細",
     "council": "班聯商品尺寸總表",
 }
-
-
-@dataclass
-class _Buyer:
-    name: str
-    seat: int | None
-    items: list[str] = field(default_factory=list)
-
-
-@dataclass
-class _ClassGroup:
-    label: str
-    buyers: dict[str, _Buyer] = field(default_factory=dict)
 
 
 def _escape(value: object) -> str:
@@ -99,6 +94,7 @@ def _class_summary(data: OrderSummaryOut) -> str:
         ["班級", "訂單數", "商品件數", "訂購金額", "已確認收款", "待收金額"],
         rows,
         footer=footer,
+        class_name="report-table",
     )
 
 
@@ -120,44 +116,100 @@ def _people_details(rows: list[OrderPurchaseDetailRow]) -> str:
         ["班級", "座號", "訂購人", "商品", "尺寸／規格", "數量", "訂單筆數"],
         table_rows,
         footer=[["商品件數合計", "", "", "", "", _number(total), ""]],
+        class_name="report-table",
     )
 
 
-def _class_sheet(rows: list[OrderPurchaseDetailRow]) -> str:
-    classes: dict[str, _ClassGroup] = {}
-    for index, row in enumerate(rows):
-        class_key = str(row.class_id) if row.class_id is not None else "unassigned"
-        group = classes.setdefault(class_key, _ClassGroup(label=row.class_label))
-        buyer_key = str(row.user_id) if row.user_id is not None else f"external-{index}"
-        buyer = group.buyers.setdefault(
-            buyer_key, _Buyer(name=row.buyer_label, seat=row.seat_number)
-        )
-        variant = "" if row.variant_key == "—" else f"（{row.variant_key}）"
-        buyer.items.append(f"{row.product_name}{variant} × {_number(row.quantity)}")
+def _class_heading(page: ClassSheetPage | ClassTotalsPage) -> str:
+    label = page.class_label.strip()
+    academic_year = f"{page.academic_year} 學年度 " if page.academic_year is not None else ""
+    if page.grade is not None and page.class_code.isdigit():
+        prefix = str(page.grade)
+        if page.class_code.startswith(prefix) and len(page.class_code) > len(prefix):
+            class_number = int(page.class_code[len(prefix) :])
+            if class_number:
+                return f"{academic_year}{page.grade} 年 {class_number} 班"
+    if academic_year and label.startswith(academic_year.strip()):
+        return label
+    return f"{academic_year}{label}"
 
+
+def _class_sheet(pages: list[ClassSheetPage], scope: str) -> str:
     sections: list[str] = []
-    for class_group in classes.values():
-        ordered_buyers = sorted(
-            class_group.buyers.values(),
-            key=lambda buyer: (
-                buyer.seat is None,
-                buyer.seat if buyer.seat is not None else 0,
-                buyer.name,
-            ),
-        )
+    for page in pages:
         table_rows = [
-            [
-                buyer.seat if buyer.seat is not None else "",
-                buyer.name,
-                "；".join(buyer.items),
-            ]
-            for buyer in ordered_buyers
+            [buyer.seat if buyer.seat is not None else "", buyer.name, "；".join(buyer.items)]
+            for buyer in page.buyers
         ]
         sections.append(
-            "<section class='class-sheet'><h2>"
-            f"{_escape(class_group.label)} 數量明細</h2>"
+            "<section class='class-sheet'>"
+            f"<h1>{_escape(scope)} 班級訂購明細</h1>"
+            f"<p class='class-info'><span class='class-code'>{_escape(page.class_code)}</span>"
+            f"{_escape(_class_heading(page))}</p>"
             + _table(["座號", "姓名", "訂購數量"], table_rows, class_name="buyer-table")
             + "</section>"
+        )
+    return "".join(sections) if sections else "<p>目前沒有符合篩選的訂購明細。</p>"
+
+
+def _class_totals(pages: list[ClassTotalsPage], scope: str) -> str:
+    sections: list[str] = []
+    for page in pages:
+        products: dict[uuid.UUID, list[ClassTotalLine]] = {}
+        for line in page.lines:
+            products.setdefault(line.product_id, []).append(line)
+
+        rows: list[str] = []
+        for product_lines in products.values():
+            product_total = sum(line.subtotal for line in product_lines)
+            price_runs: dict[int, tuple[int, int]] = {}
+            start = 0
+            while start < len(product_lines):
+                end = start + 1
+                while (
+                    end < len(product_lines)
+                    and product_lines[end].unit_price == product_lines[start].unit_price
+                ):
+                    end += 1
+                price_runs[start] = (end - start, product_lines[start].unit_price)
+                start = end
+
+            for index, line in enumerate(product_lines):
+                cells = []
+                if index == 0:
+                    if not line.option_label and len(product_lines) == 1:
+                        cells.append(
+                            f"<td class='product-cell' colspan='2'>"
+                            f"{_escape(line.product_name)}</td>"
+                        )
+                    else:
+                        cells.append(
+                            f"<td class='product-cell' rowspan='{len(product_lines)}'>"
+                            f"{_escape(line.product_name)}</td>"
+                        )
+                if line.option_label or len(product_lines) > 1:
+                    cells.append(f"<td class='option-cell'>{_escape(line.option_label)}</td>")
+                if index in price_runs:
+                    rowspan, price = price_runs[index]
+                    cells.append(f"<td class='price-cell' rowspan='{rowspan}'>{price}</td>")
+                cells.append(f"<td class='quantity-cell'>{line.quantity}</td>")
+                if index == 0:
+                    cells.append(
+                        f"<td class='subtotal-cell' rowspan='{len(product_lines)}'>"
+                        f"{product_total}</td>"
+                    )
+                row_class = "product-last" if index == len(product_lines) - 1 else "variant-row"
+                rows.append(f"<tr class='{row_class}'>{''.join(cells)}</tr>")
+
+        title = f"{_class_heading(page)}{scope}班級明細"
+        sections.append(
+            "<section class='class-total-sheet'>"
+            f"<h1>{_escape(title)}</h1>"
+            "<table class='class-total-table'><colgroup>"
+            "<col><col><col><col><col></colgroup><thead><tr>"
+            "<th scope='col'>品項</th><th scope='col'>選項</th><th scope='col'>單價</th>"
+            "<th scope='col'>數量</th><th scope='col'>小計</th>"
+            f"</tr></thead><tbody>{''.join(rows)}</tbody></table></section>"
         )
     return "".join(sections) if sections else "<p>目前沒有符合篩選的訂購明細。</p>"
 
@@ -196,49 +248,105 @@ def _council_quantities(rows: list[OrderQuantityRow]) -> str:
         ["商品", "尺寸／規格", "總數", "已繳件數", "未繳件數"],
         body_rows,
         footer=[["全部商品合計", "", _number(total), _number(paid), _number(total - paid)]],
+        class_name="report-table",
     )
 
 
 def render_order_report_pdf(report_type: ReportType, data: ReportData, scope: str) -> bytes:
-    """Render the selected shop report with repeating table heads and page numbers."""
+    """Render the selected shop report with the reference table borders and pagination."""
     if report_type == "classes" and isinstance(data, OrderSummaryOut):
         content = _class_summary(data)
     elif report_type == "people" and isinstance(data, list):
         content = _people_details(cast(list[OrderPurchaseDetailRow], data))
     elif report_type == "class-sheet" and isinstance(data, list):
-        content = _class_sheet(cast(list[OrderPurchaseDetailRow], data))
+        content = _class_sheet(cast(list[ClassSheetPage], data), scope)
+    elif report_type == "class-totals" and isinstance(data, list):
+        content = _class_totals(cast(list[ClassTotalsPage], data), scope)
     elif report_type == "council" and isinstance(data, list):
         content = _council_quantities(cast(list[OrderQuantityRow], data))
     else:
         raise ValueError("報表類型與資料不相符")
 
-    orientation = "portrait" if report_type == "class-sheet" else "landscape"
+    portrait = report_type in {"class-sheet", "class-totals"}
+    orientation = "portrait" if portrait else "landscape"
     label = REPORT_LABELS[report_type]
+    footer = (
+        ""
+        if report_type == "class-totals"
+        else f"""@bottom-center {{
+    content: '{label} · 第 ' counter(page) ' / ' counter(pages) ' 頁';
+    font-family: OfficialKai, '標楷體', 'DFKai-SB', serif;
+    font-size: 8pt;
+    color: #666;
+  }}"""
+    )
     css = f"""@page {{
   size: A4 {orientation};
   margin: 14mm 12mm 17mm;
-  @bottom-center {{ content: '{label} · 第 ' counter(page) ' / ' counter(pages) ' 頁'; font-size: 8pt; color: #666; }}
+  {footer}
 }}
+@page classSheet {{
+  size: A4 portrait;
+  margin: 13mm 12mm 17mm;
+  @bottom-center {{
+    content: '班級訂購明細 · ' string(class-code) ' 第 ' counter(page) ' / ' counter(pages) ' 頁';
+    font-family: OfficialKai, '標楷體', 'DFKai-SB', serif;
+    font-size: 8pt;
+    color: #666;
+  }}
+}}
+@page classTotals {{ size: A4 portrait; margin: 25mm 12mm 17mm; @bottom-center {{ content: none; }} }}
 * {{ box-sizing: border-box; }}
-body {{ font-family: 'Noto Sans CJK TC', OfficialKai, sans-serif; color: #171717; font-size: 9pt; line-height: 1.45; }}
-h1 {{ margin: 0 0 3mm; font-size: 18pt; }}
-.scope {{ margin: 0 0 7mm; color: #444; }}
-h2 {{ margin: 0 0 3mm; font-size: 12pt; break-after: avoid; }}
-.class-sheet + .class-sheet {{ break-before: page; }}
-table {{ width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 8.5pt; }}
+body {{ font-family: OfficialKai, '標楷體', 'DFKai-SB', serif; color: #000; font-size: 10pt; line-height: 1.4; }}
+h1 {{ margin: 0 0 6mm; font-family: OfficialKai, '標楷體', 'DFKai-SB', serif; font-size: 18pt; font-weight: 400; text-align: center; }}
+.scope {{ margin: 0 0 7mm; color: #000; }}
+.class-info {{ margin: 0 0 2mm; font-size: 12pt; }}
+.class-sheet h1 {{ margin-bottom: 4.5mm; }}
+.class-sheet .class-info {{ margin-bottom: 1mm; }}
+.class-total-sheet h1 {{ margin-bottom: 5mm; }}
+.class-code {{ position: absolute; left: -10000px; string-set: class-code content(); }}
+.class-sheet {{ page: classSheet; }}
+.class-total-sheet {{ page: classTotals; }}
+.class-sheet h1, .class-total-sheet h1 {{ font-weight: 700; }}
+.class-sheet + .class-sheet, .class-total-sheet + .class-total-sheet {{ break-before: page; }}
+table {{ width: 100%; border: 1.5pt solid #000; border-collapse: collapse; table-layout: fixed; font-size: 9pt; }}
 thead {{ display: table-header-group; }}
 tfoot {{ display: table-footer-group; }}
 tr {{ break-inside: avoid; }}
-th, td {{ border: 0.5pt solid #777; padding: 4pt 5pt; text-align: left; vertical-align: top; overflow-wrap: anywhere; }}
-thead th, tfoot th {{ background: #f2efe7; font-weight: 700; }}
-.buyer-table th:first-child, .buyer-table td:first-child {{ width: 12%; text-align: center; }}
+th, td {{ border: 0.5pt solid #000; padding: 3.5pt 5pt; text-align: center; vertical-align: middle; overflow-wrap: anywhere; }}
+thead th {{ border-bottom: 1.4pt solid #000; font-weight: 700; }}
+tfoot th {{ border-top: 1.1pt solid #000; font-weight: 700; }}
+.report-table {{ font-size: 9pt; }}
+.buyer-table {{ border-width: 1.6pt; font-size: 10pt; }}
+.buyer-table th, .buyer-table td {{ padding: 3.2pt 5pt; }}
+.buyer-table tr:first-child > * {{ border-top-width: 1.6pt; }}
+.buyer-table tr:last-child > * {{ border-bottom-width: 1.6pt; }}
+.buyer-table tr > *:first-child {{ border-left-width: 1.6pt; }}
+.buyer-table tr > *:last-child {{ border-right-width: 1.6pt; }}
+.buyer-table th:first-child, .buyer-table td:first-child {{ width: 12%; border-right: 0.7pt dotted #000; }}
 .buyer-table th:nth-child(2), .buyer-table td:nth-child(2) {{ width: 22%; }}
 .buyer-table th:nth-child(3), .buyer-table td:nth-child(3) {{ width: 66%; }}
+.class-total-table {{ width: 80%; margin: 0 auto; border-width: 1.6pt; font-size: 10pt; line-height: 1.26; }}
+.class-total-table col {{ width: 20%; }}
+.class-total-table th, .class-total-table td {{ padding: 2.5pt 4pt; }}
+.class-total-table th {{ font-weight: 400; }}
+.class-total-table thead th {{ font-weight: 700; }}
+.class-total-table thead th {{ border-top-width: 1.6pt; border-bottom-width: 1.2pt; }}
+.class-total-table thead th:first-child {{ border-left-width: 1.6pt; }}
+.class-total-table thead th:last-child {{ border-right-width: 1.6pt; }}
+.class-total-table tbody .product-cell {{ border-left-width: 1.6pt; }}
+.class-total-table tbody .subtotal-cell {{ border-right-width: 1.6pt; }}
+.class-total-table tbody tr:first-child > * {{ border-top-width: 1.6pt; }}
+.class-total-table tbody tr:last-child > * {{ border-bottom-width: 1.6pt; }}
+.class-total-table .variant-row .option-cell, .class-total-table .variant-row .quantity-cell {{ border-bottom-width: 0.7pt; border-bottom-style: dotted; }}
+.class-total-table .product-last > td {{ border-bottom-width: 1pt; border-bottom-style: solid; }}
 """
+    header = ""
+    if report_type not in {"class-sheet", "class-totals"}:
+        header = f"<h1>{_escape(label)}</h1><p class='scope'>報表範圍：{_escape(scope)}</p>"
     markup = (
         "<!doctype html><html lang='zh-TW'><head><meta charset='utf-8'>"
         f"<style>{_font_faces()}{css}</style></head><body>"
-        f"<h1>{_escape(label)}</h1><p class='scope'>報表範圍：{_escape(scope)}</p>"
-        f"{content}</body></html>"
+        f"{header}{content}</body></html>"
     )
     return render_print_pdf(markup)

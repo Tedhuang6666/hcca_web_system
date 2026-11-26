@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Download, Printer } from "lucide-react";
+import { Download } from "lucide-react";
 
 import { apiErrorMessage, shopApi } from "@/lib/api";
 import type {
@@ -11,7 +11,7 @@ import type {
 } from "@/lib/types";
 
 import styles from "./ShopPrintDocument.module.css";
-import { classOrderPages, createClassOrderDocument } from "./class-order-document";
+import { classOrderPages } from "./class-order-document";
 
 export type ShopPurchaseReportFilters = {
   activity_id?: string;
@@ -26,18 +26,20 @@ export type ShopPurchaseReportFilters = {
   date_to?: string;
 };
 
-type ReportType = "classes" | "people" | "council" | "class-sheet";
+type ReportType = "classes" | "people" | "council" | "class-sheet" | "class-totals";
 
 type ReportData =
   | { type: "classes"; result: OrderSummaryOut }
   | { type: "people"; result: OrderPurchaseDetailRow[] }
   | { type: "class-sheet"; result: OrderPurchaseDetailRow[] }
+  | { type: "class-totals" }
   | { type: "council"; result: OrderQuantityRow[] };
 
 const REPORTS: { id: ReportType; label: string }[] = [
   { id: "classes", label: "各班總數統計" },
   { id: "people", label: "各班個人購買明細" },
   { id: "class-sheet", label: "班級訂購明細" },
+  { id: "class-totals", label: "各班總數明細" },
   { id: "council", label: "班聯商品尺寸總表" },
 ];
 
@@ -45,6 +47,7 @@ const number = (value: number) => value.toLocaleString("zh-TW");
 const money = (value: number) => `NT$${number(value)}`;
 
 function ReportTable({ data, scope }: { data: ReportData; scope: string }) {
+  if (data.type === "class-totals") return null;
   if (data.type === "class-sheet") {
     const pages = classOrderPages(data.result);
     if (!pages.length) return <p className={styles.empty}>目前沒有符合篩選的訂購明細。</p>;
@@ -279,6 +282,9 @@ export default function ShopPrintReports({
         .then((result) => { if (active) setReportData({ type: "classes", result }); })
         .catch(fail)
         .finally(finish);
+    } else if (reportType === "class-totals") {
+      setReportData({ type: "class-totals" });
+      finish();
     } else if (reportType === "people" || reportType === "class-sheet") {
       void shopApi.purchaseDetails(filters)
         .then((result) => { if (active) setReportData({ type: reportType, result }); })
@@ -295,7 +301,7 @@ export default function ShopPrintReports({
   }, [classSummary, classSummaryLoading, filters, reportType, refreshKey, retryKey, shareClassSummary]);
 
   return (
-    <section aria-label="商品統計列印" className="space-y-3">
+    <section aria-label="商品統計報表" className="space-y-3">
       <div className={`card space-y-3 p-4 ${styles.screenOnly}`}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <label className="block min-w-0 flex-1 text-sm font-medium text-fg-primary!" htmlFor="shop-print-report-type">
@@ -318,26 +324,6 @@ export default function ShopPrintReports({
             <Download size={16} aria-hidden="true" />
             {downloadingPdf ? "正在產生 PDF…" : "下載 PDF"}
           </button>
-          {reportData?.type === "class-sheet" && reportData.result.length > 0 && (
-            <button type="button" className="btn btn-ghost min-h-11 w-full sm:w-auto" onClick={() => {
-              const bytes = createClassOrderDocument(classOrderPages(reportData.result), scope);
-              const url = URL.createObjectURL(new Blob([new Uint8Array(bytes).buffer], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }));
-              const link = document.createElement("a");
-              link.href = url;
-              link.download = "班級訂購明細.docx";
-              link.click();
-              window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-            }}>下載 Word</button>
-          )}
-          <button
-            type="button"
-            className="btn btn-ghost min-h-11 w-full sm:w-auto"
-            disabled={loading || Boolean(error) || !reportData || downloadingPdf}
-            onClick={() => window.print()}
-          >
-            <Printer size={16} aria-hidden="true" />
-            列印
-          </button>
         </div>
         <p className="text-sm text-fg-secondary!">報表範圍：{scope}</p>
         {downloadError && <p role="alert" className="text-sm text-danger!">{downloadError}</p>}
@@ -352,8 +338,8 @@ export default function ShopPrintReports({
           </button>
         </div>
       )}
-      {!loading && reportData && (
-        <section className={`${styles.printRoot} ${reportData.type === "class-sheet" ? styles.classSheets : ""}`} aria-label={reportLabel}>
+      {!loading && reportData && reportData.type !== "class-totals" && (
+        <section className={styles.printRoot} aria-label={reportLabel}>
           <header className={styles.header}>
             <h2>{reportLabel}</h2>
             <p>報表範圍：{scope}</p>
