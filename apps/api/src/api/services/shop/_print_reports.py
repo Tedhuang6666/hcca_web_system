@@ -376,7 +376,7 @@ tfoot th {{ border-top: 1.1pt solid #000; font-weight: 700; }}
 """
     header = ""
     if report_type not in {"class-sheet", "class-totals"}:
-        header = f"<h1>（{_escape(scope)}） {label}</h1>"
+        header = f"<h1>{_escape(scope)}{label}</h1>"
     markup = (
         "<!doctype html><html lang='zh-TW'><head><meta charset='utf-8'>"
         f"<style>{_font_faces()}{css}</style></head><body>"
