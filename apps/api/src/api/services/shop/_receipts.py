@@ -63,7 +63,7 @@ def _catalog_product_sort_key(product: Product) -> tuple:
         series.created_at.isoformat() if series else "",
         str(series.id) if series else "",
         product.sort_order,
-        product.created_at.isoformat(),
+        product.created_at.isoformat() if product.created_at else "",
         str(product.id),
     )
 

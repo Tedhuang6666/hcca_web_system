@@ -55630,7 +55630,7 @@ export interface operations {
     download_order_report_pdf_shop_orders_print_report_pdf_get: {
         parameters: {
             query: {
-                report_type: "classes" | "people" | "class-sheet" | "council";
+                report_type: "classes" | "people" | "class-sheet" | "class-totals" | "council";
                 scope?: string;
                 activity_id?: string | null;
                 category_id?: string | null;

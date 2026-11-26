@@ -28,6 +28,7 @@ def product_catalog_ordering():
     series_category_id = (
         select(ProductSeries.category_id)
         .where(ProductSeries.id == Product.series_id)
+        .correlate(Product)
         .scalar_subquery()
     )
     category_id = func.coalesce(Product.category_id, series_category_id)

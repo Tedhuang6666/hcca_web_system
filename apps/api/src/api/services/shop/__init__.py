@@ -37,9 +37,6 @@ from api.services.shop._catalog import (
     list_categories,
     list_products,
     list_series,
-    reorder_categories,
-    reorder_products,
-    reorder_series,
     update_category,
     update_product,
     update_series,
@@ -47,6 +44,7 @@ from api.services.shop._catalog import (
     update_variant_option,
 )
 from api.services.shop._catalog_links import filter_catalog_to_direct_product
+from api.services.shop._catalog_order import reorder_categories, reorder_products, reorder_series
 from api.services.shop._class_close_status import (
     _serialize_close,
     get_close_status,

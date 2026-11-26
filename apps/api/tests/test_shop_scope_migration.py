@@ -50,7 +50,7 @@ async def db_session():
                     config.set_main_option("script_location", str(api_root / "alembic"))
                     config.attributes["connection"] = sync_connection
                     config.attributes["bootstrap_baseline"] = True
-                    command.upgrade(config, "20261117020000")
+                    command.upgrade(config, "20261126010000")
                     quote = sync_connection.dialect.identifier_preparer.quote
                     tables = inspect(sync_connection).get_table_names()
                     names = ", ".join(
