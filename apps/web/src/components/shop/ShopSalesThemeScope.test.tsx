@@ -6,7 +6,7 @@ const api = vi.hoisted(() => ({
   catalog: vi.fn(), recipientOptions: vi.fn(),
   orderSummary: vi.fn(), getCloseStatus: vi.fn(), classPaymentReport: vi.fn(),
 }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), useSearchParams: () => new URLSearchParams() }));
 vi.mock("@/hooks/usePermissions", () => ({
   usePermissions: () => ({ isAdmin: false, permissions: new Set(["shop:view_all"]) }),
 }));

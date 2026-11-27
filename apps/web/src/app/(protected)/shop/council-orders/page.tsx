@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import ShopWorkflowNav, { shopWorkflowSteps } from "@/components/shop/ShopWorkflowNav";
 import ProductQuantitySummary from "@/components/shop/ProductQuantitySummary";
 import ShopDistributionView from "@/components/shop/ShopDistributionView";
 import ShopSalesAnalytics from "@/components/shop/ShopSalesAnalytics";
@@ -86,21 +87,10 @@ export default function CouncilOrdersPage() {
     || permissions.has("shop:view_all")
     || permissions.has("finance:view");
   const canViewAdvancedStats = hasAdminPermission || permissions.has("shop:manage");
-  const [selectedTab, setTab] = useState<Tab>("summary");
-  const tabs = ([
-    { key: "summary", label: "班級繳款", visible: true },
-    { key: "assisted", label: "幫同學代訂", visible: canConfirmClassPayment },
-    { key: "supplements", label: "追加補收款", visible: canConfirmClassPayment },
-    { key: "daily", label: "每日收款", visible: canViewClassPaymentReport },
-    { key: "receipts", label: "收款單據", visible: canConfirmClassPayment },
-    { key: "quantities", label: "商品總量", visible: true },
-    { key: "distribution", label: "分貨統計", visible: true },
-    { key: "orders", label: "查找訂單", visible: true },
-    { key: "analytics", label: "銷售分析", visible: true },
-    { key: "profit", label: "盈利與備貨", visible: canViewAdvancedStats },
-    { key: "closure", label: "結單設定", visible: canConfirmClassPayment },
-  ] satisfies { key: Tab; label: string; visible: boolean }[]).filter((item) => item.visible);
-  const tab = tabs.find((item) => item.key === selectedTab)?.key ?? "summary";
+  const workflowAccess = { manage: canViewAdvancedStats, confirm: canConfirmClassPayment, report: canViewClassPaymentReport };
+  const requestedTab = useSearchParams().get("tab");
+  const [selectedTab, setTab] = useState<Tab>(() => (requestedTab as Tab | null) ?? "summary");
+  const tab = (shopWorkflowSteps("council", workflowAccess).find((item) => item.key === selectedTab)?.key ?? "summary") as Tab;
   const hasOrderFilters = ["summary", "receipts", "quantities", "orders", "analytics"].includes(tab);
   const showsSummary = tab === "summary" || tab === "receipts";
   const [assistedBusy, setAssistedBusy] = useState(false);
@@ -676,7 +666,6 @@ export default function CouncilOrdersPage() {
           </h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {canViewAdvancedStats && <Link href="/shop/admin?view=stats" className="btn btn-ghost min-h-11">進階訂購統計</Link>}
           <button type="button" onClick={() => {
             if (showsSummary) void loadSummary({ refreshCloseStatus: true });
             else if (tab === "daily") void loadClassPayments();
@@ -692,15 +681,11 @@ export default function CouncilOrdersPage() {
         </div>
       </header>
 
-      <nav className="shop-task-switch shop-council-tasks" aria-label="班聯統籌工作">
-        {tabs.map(({ key, label }) => (
-          <button key={key} id={`council-task-${key}`} type="button" disabled={mutationBusy}
-            aria-pressed={tab === key} aria-controls="council-work-panel" onClick={() => {
-              if (key === "receipts") setGroupBy("class");
-              setTab(key);
-            }}>{label}</button>
-        ))}
-      </nav>
+      <ShopWorkflowNav page="council" current={tab} access={workflowAccess} disabled={mutationBusy}
+        onSelect={(key) => {
+          if (key === "receipts") setGroupBy("class");
+          setTab(key as Tab);
+        }} />
 
       <div id="council-work-panel" role="group" aria-labelledby={`council-task-${tab}`} className="min-w-0 space-y-5">
       {canConfirmClassPayment && <div hidden={tab !== "closure"}>

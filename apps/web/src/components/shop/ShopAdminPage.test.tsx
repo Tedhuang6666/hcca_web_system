@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ShopAdminPage from "@/app/(protected)/shop/admin/page";
 
@@ -132,10 +132,10 @@ describe("商品管理與統計", () => {
     fireEvent.click(screen.getByRole("button", { name: "儲存草稿" }));
     await waitFor(() => expect(api.createProduct).toHaveBeenLastCalledWith(expect.objectContaining({ original_price: null })));
   });
-  it("以直接入口取代商品頁的商品分類期限區塊", async () => {
+  it("以流程導覽直接開啟結單設定分頁", async () => {
     render(<ShopAdminPage />);
     await screen.findByText(/尚未建立商品分類/);
-    expect(screen.getByRole("link", { name: "商品分類結單" })).toHaveAttribute("href", "/shop/council-orders#category-order-closure-title");
+    expect(screen.getByRole("link", { name: "結單設定" })).toHaveAttribute("href", "/shop/council-orders?tab=closure");
     expect(screen.queryByText("商品分類結單與期限")).not.toBeInTheDocument();
     expect(screen.queryByText(/目前沒有可設定的商品分類/)).not.toBeInTheDocument();
   });
@@ -176,13 +176,15 @@ describe("商品管理與統計", () => {
     navigation.search = "view=stats";
     const page = render(<ShopAdminPage />);
     expect(screen.getByRole("heading", { name: "訂購統計", level: 1 })).toBeVisible();
-    expect(screen.getByRole("link", { name: "返回商品設定" })).toHaveAttribute("href", "/shop/admin");
-    expect(screen.getByRole("link", { name: "返回班聯工作" })).toHaveAttribute("href", "/shop/council-orders");
+    const workflow = screen.getByRole("navigation", { name: "商品作業流程" });
+    expect(within(workflow).getByRole("link", { name: "商品設定" })).toHaveAttribute("href", "/shop/admin");
+    expect(within(workflow).getByRole("link", { name: "班級繳款" })).toHaveAttribute("href", "/shop/council-orders?tab=summary");
+    expect(within(workflow).getByRole("link", { name: "進階訂購統計" })).toHaveAttribute("aria-current", "page");
     await screen.findAllByText("初始班級");
     navigation.search = "";
     page.rerender(<ShopAdminPage />);
     expect(screen.getByRole("heading", { name: "商品設定", level: 1 })).toBeVisible();
-    expect(screen.getByRole("link", { name: "設定優惠" })).toHaveAttribute("href", "/shop/admin?view=promotions");
+    expect(screen.getByRole("link", { name: "優惠設定" })).toHaveAttribute("href", "/shop/admin?view=promotions");
     expect(screen.queryByRole("link", { name: "訂購統計" })).not.toBeInTheDocument();
   });
 

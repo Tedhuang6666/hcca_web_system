@@ -15,7 +15,7 @@ const api = vi.hoisted(() => ({
 const access = vi.hoisted(() => ({ isAdmin: true, permissions: new Set<string>() }));
 const notifications = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 const navigation = vi.hoisted(() => ({ push: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
+vi.mock("next/navigation", () => ({ useRouter: () => navigation, useSearchParams: () => new URLSearchParams() }));
 vi.mock("@/lib/api", () => ({ shopApi: api, classApi: api, emailApi: api, apiErrorMessage: (_: unknown, fallback: string) => fallback }));
 vi.mock("@/hooks/usePermissions", () => ({ usePermissions: () => access }));
 vi.mock("sonner", () => ({ toast: notifications }));
@@ -133,12 +133,12 @@ it("班級部分收款後立即更新補收款區，補齊後重新載入班級�
   fireEvent.change(screen.getByRole("spinbutton", { name: "本次實收金額（元）" }), { target: { value: "2000" } });
   fireEvent.click(screen.getByRole("button", { name: "確認收到款項" }));
   await screen.findByText(/剩餘 NT\$1,000 已列入補收款區/);
-  await screen.findByRole("navigation", { name: "班聯統籌工作" });
+  await screen.findByRole("navigation", { name: "商品作業流程" });
   switchTask("追加補收款");
   const balances = await screen.findByRole("list", { name: "整班尾款" });
   fireEvent.click(within(balances).getByRole("button", { name: "收齊尾款 NT$1,000" }));
   await screen.findByText("已收齊該班的整班尾款。");
-  await screen.findByRole("navigation", { name: "班聯統籌工作" });
+  await screen.findByRole("navigation", { name: "商品作業流程" });
   switchTask("班級繳款");
   expect(await within(screen.getByRole("region", { name: "登記班級收款" })).findByText("已收齊")).toBeVisible();
 });
@@ -190,13 +190,13 @@ it("上方篩選會縮小班級收款名單，金額仍依全班訂單核對", a
 });
 
 function switchTask(name: string) {
-  fireEvent.click(within(screen.getByRole("navigation", { name: "班聯統籌工作" }))
+  fireEvent.click(within(screen.getByRole("navigation", { name: "商品作業流程" }))
     .getByRole("button", { name }));
 }
 
 it("依工作切換內容，切回代訂保留未送出的資料", async () => {
   await openPage();
-  expect(screen.getByRole("navigation", { name: "班聯統籌工作" })).toHaveTextContent("追加補收款");
+  expect(screen.getByRole("navigation", { name: "商品作業流程" })).toHaveTextContent("追加補收款");
   expect(screen.getByRole("region", { name: "登記班級收款" })).toBeVisible();
   expect(screen.queryByRole("region", { name: "每日收款" })).not.toBeInTheDocument();
   expect(screen.queryByRole("combobox", { name: "代訂班級" })).not.toBeInTheDocument();
@@ -210,7 +210,7 @@ it("依工作切換內容，切回代訂保留未送出的資料", async () => {
   expect(await screen.findByRole("heading", { name: "追加訂單補收款" })).toBeVisible();
   switchTask("幫同學代訂");
   expect(screen.getByRole("textbox", { name: "代訂備註（選填）" })).toHaveValue("下課再確認尺寸");
-  expect(within(screen.getByRole("navigation", { name: "班聯統籌工作" }))
+  expect(within(screen.getByRole("navigation", { name: "商品作業流程" }))
     .getByRole("button", { name: "幫同學代訂" })).toHaveAttribute("aria-pressed", "true");
 });
 
@@ -381,7 +381,7 @@ describe("全校收款與訂單", () => {
     const closure = await screen.findByRole("region", { name: "班聯結單與公開入口" });
     expect(closure).toBeVisible();
     expect(closure.closest("details")).toBeNull();
-    expect(closure.compareDocumentPosition(screen.getByRole("navigation", { name: "班聯統籌工作" })) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    expect(closure.compareDocumentPosition(screen.getByRole("navigation", { name: "商品作業流程" })) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     const lock = within(closure).getByRole("button", { name: "結單並隱藏入口衣服" });
     await waitFor(() => expect(lock).toBeEnabled());
     api.closeCategory.mockImplementationOnce(async () => {

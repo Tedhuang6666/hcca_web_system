@@ -4,6 +4,7 @@ import ShopSheetImportPanel from "@/components/shop/ShopSheetImportPanel";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import ShopWorkflowNav from "@/components/shop/ShopWorkflowNav";
 import { AlertTriangle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { shopApi, apiErrorMessage } from "@/lib/api";
@@ -399,18 +400,13 @@ export default function ShopAdminPage() {
           <h1 className="text-xl font-semibold text-fg-primary!" >{tab === "stats" ? "訂購統計" : tab === "promotions" ? "優惠設定" : tab === "offices" ? "教師處室設定" : tab === "imports" ? "組織預購同步" : tab === "note-groups" ? "購買名單備註分組" : "商品設定"}</h1>
         </div>
         <div className="flex flex-wrap gap-2">
-          {tab !== "catalog" && <Link href="/shop/admin" className="btn btn-secondary min-h-11">返回商品設定</Link>}
           {tab === "catalog" && <button type="button" className="btn btn-primary min-h-11" disabled={catalogLoading || !!catalogError || categories.length === 0}
             onClick={() => setProductModal({ initial: null, seriesId: null })}>新增商品</button>}
-          {tab === "catalog" && <Link href="/shop/admin?view=promotions" className="btn btn-secondary min-h-11">設定優惠</Link>}
-          {tab === "catalog" && <Link href="/shop/admin?view=note-groups" className="btn btn-secondary min-h-11">依備註查看購買名單</Link>}
-          {tab === "catalog" && <Link href="/shop/admin?view=offices" className="btn btn-secondary min-h-11">教師處室設定</Link>}
-          {tab === "catalog" && <Link href="/shop/admin?view=imports" className="btn btn-secondary min-h-11">組織預購同步</Link>}
-          {tab === "catalog" && <Link href="/shop/council-orders#category-order-closure-title" className="btn btn-secondary min-h-11">商品分類結單</Link>}
           {tab === "catalog" && <Link href="/shop" className="btn btn-ghost min-h-11">查看商品頁</Link>}
-          {tab === "stats" && <Link href="/shop/council-orders" className="btn btn-ghost min-h-11">返回班聯工作</Link>}
         </div>
       </div>
+
+      <ShopWorkflowNav page="admin" current={tab} access={{ manage: true, confirm: true, report: true }} />
 
       {tab === "stats" ? (
         <StatsView key={statsRefreshKey} />
