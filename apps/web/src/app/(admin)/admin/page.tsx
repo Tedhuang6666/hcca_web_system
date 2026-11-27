@@ -2,21 +2,15 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  Activity,
-  AlertTriangle,
-  BookUser,
-  ClipboardList,
-  Puzzle,
-  Settings,
-  SlidersHorizontal,
-  Users,
-  type LucideIcon,
-} from "lucide-react";
+import { AlertTriangle, BookUser, ChevronRight, Puzzle, Users } from "lucide-react";
 import { adminApi, auditLogsApi, systemApi, type ModuleStatus } from "@/lib/api";
 import { usePermissions } from "@/hooks/usePermissions";
 import type { AuditLogOut } from "@/lib/types";
 import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
+import { ADMIN_CATALOG, isNavItemVisible } from "@/lib/navigation";
+import { NAV_ID_TO_MODULE } from "@/lib/modules";
+import { useModuleStatus } from "@/contexts/ModuleStatusContext";
+import NavIcon from "@/components/layout/NavIcon";
 
 /* ── 小元件 ──────────────────────────────────────────────────────────────── */
 
@@ -85,31 +79,25 @@ function entityLabel(type: string) {
   return ENTITY_LABELS[type] ?? type;
 }
 
-/* ── 快速操作定義 ─────────────────────────────────────────────────────────── */
-
-type QuickAction = {
-  href: string;
-  icon: LucideIcon;
-  label: string;
-  requiredPermission?: string;
-  requiredPermissions?: string[];
-};
-
-const QUICK_ACTIONS: QuickAction[] = [
-  { href: "/admin/people",       icon: Users,      label: "人員與組織" },
-  { href: "/admin/settings",     icon: Settings,   label: "系統設定" },
-  { href: "/admin/system",       icon: Activity,   label: "系統營運", requiredPermission: "admin:all" },
-  { href: "/admin/navigation-profiles", icon: SlidersHorizontal, label: "視角管理", requiredPermission: "admin:all" },
-  { href: "/audit-logs",         icon: ClipboardList, label: "稽核日誌" },
-];
-
 /* ── 主頁面 ──────────────────────────────────────────────────────────────── */
 
 const ADMIN_CACHE_KEY = "admin/dashboard";
 
 export default function AdminDashboardPage() {
-  const { isAdmin, can } = usePermissions();
+  const { isAdmin, can, permissions, isReady } = usePermissions();
+  const { isModuleClosed } = useModuleStatus();
   const canAccessAdmin = isAdmin || can("admin:users");
+  const hasPrefix = (prefix: string) =>
+    isAdmin || permissions.has("admin:all") || [...permissions].some((code) => code.startsWith(prefix));
+  const visibility = {
+    can,
+    hasPrefix,
+    isAdmin,
+    isModuleClosed: (item: { id: string }) => isModuleClosed(NAV_ID_TO_MODULE[item.id] ?? null),
+  };
+  const toolSections = ADMIN_CATALOG
+    .map((section) => ({ ...section, items: section.items.filter((item) => isNavItemVisible(item, visibility)) }))
+    .filter((section) => section.items.length > 0);
 
   const [userCount, setUserCount] = useState<number | null>(() => cacheGet<number>(ADMIN_CACHE_KEY + "/userCount") ?? null);
   const [downModules, setDownModules] = useState<number | null>(() => cacheGet<number>(ADMIN_CACHE_KEY + "/downModules") ?? null);
@@ -148,10 +136,12 @@ export default function AdminDashboardPage() {
     });
   }, [canAccessAdmin, can]);
 
-  if (!canAccessAdmin) {
+  if (!isReady) return null;
+
+  if (toolSections.length === 0) {
     return (
       <div className="p-6 text-center" style={{ color: "var(--text-muted)" }}>
-        您沒有存取管理後台的權限。
+        目前沒有可使用的管理工具。
       </div>
     );
   }
@@ -188,11 +178,10 @@ export default function AdminDashboardPage() {
 
       {/* 標題 */}
       <h1 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
-        系統總覽
+        管理中心
       </h1>
 
-      {/* 快速統計 */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+      {canAccessAdmin && <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <StatCard
           href="/admin/people"
           icon={<Users size={13} />}
@@ -212,38 +201,33 @@ export default function AdminDashboardPage() {
           label="組織職位"
           value={loading ? null : positionCount}
         />
-      </div>
+      </div>}
 
-      {/* 快速操作 */}
-      <div>
-        <h2 className="text-sm font-semibold mb-3" style={{ color: "var(--text-secondary)" }}>
-          快速操作
-        </h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-          {QUICK_ACTIONS.filter((action) => {
-            if (isAdmin) return true;
-            if (action.requiredPermission) return can(action.requiredPermission);
-            if (action.requiredPermissions) return action.requiredPermissions.some(can);
-            return true;
-          }).map((action) => {
-            const Icon = action.icon;
-            return (
-              <Link
-                key={action.href}
-                href={action.href}
-                className="flex min-h-11 items-center gap-2.5 rounded-md px-3.5 text-sm font-semibold transition-colors hover:bg-[var(--bg-hover)]"
-                style={{ border: "1px solid var(--border)", color: "var(--text-primary)", textDecoration: "none" }}
-              >
-                <Icon size={16} aria-hidden style={{ color: "var(--text-muted)" }} />
-                {action.label}
-              </Link>
-            );
-          })}
-        </div>
-      </div>
+      {toolSections.map((section) => (
+        <section key={section.id} aria-labelledby={`${section.id}-heading`}>
+          <h2 id={`${section.id}-heading`} className="mb-2 text-sm font-semibold" style={{ color: "var(--text-secondary)" }}>
+            {section.heading}
+          </h2>
+          <ul className="grid gap-x-6 sm:grid-cols-2 lg:grid-cols-3">
+            {section.items.map((item) => (
+              <li key={item.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                <Link
+                  href={item.href}
+                  className="flex min-h-12 items-center gap-3 rounded-md px-2 text-sm font-medium transition-colors hover:bg-[var(--bg-hover)]"
+                  style={{ color: "var(--text-primary)", textDecoration: "none" }}
+                >
+                  <span aria-hidden style={{ color: "var(--text-muted)" }}><NavIcon iconKey={item.iconKey} size={16} /></span>
+                  <span className="min-w-0 flex-1">{item.label}</span>
+                  <ChevronRight size={15} aria-hidden style={{ color: "var(--text-disabled)" }} />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
 
       {/* 最近稽核紀錄 */}
-      {recentLogs.length > 0 && (
+      {canAccessAdmin && recentLogs.length > 0 && (
         <Panel>
           <div
             className="flex items-center justify-between px-4 py-3"

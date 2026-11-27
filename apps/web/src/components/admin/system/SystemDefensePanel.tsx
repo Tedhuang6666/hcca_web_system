@@ -408,8 +408,8 @@ export default function SystemDefensePanel() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href="/admin/people?section=defense" className="btn btn-secondary">
-            使用者與功能處置
+          <Link href="/admin/system?tab=blocking" className="btn btn-secondary">
+            封鎖與規則
           </Link>
           <button type="button" onClick={refresh} className="btn btn-ghost">
             <RefreshCcw size={16} aria-hidden />

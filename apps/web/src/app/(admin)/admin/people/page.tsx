@@ -70,13 +70,9 @@ const CLASS_ROLE_OPTIONS = [
   { key: "vice_leader", label: "副班長" },
 ];
 
-type PeopleManagementSection = "people" | "defense" | "organization" | "classes";
+type PeopleManagementSection = "people" | "organization" | "classes";
 const PEOPLE_PAGE_SIZE = 200;
 
-const UserAndFeatureActionsPanel = dynamic(
-  () => import("@/components/admin/UserAndFeatureActionsPanel"),
-  { loading: () => <WorkspaceLoading /> },
-);
 const OrganizationPermissionPanel = dynamic(
   () => import("../permissions/page"),
   { loading: () => <WorkspaceLoading /> },
@@ -172,7 +168,6 @@ export default function PeopleAdminPage() {
   const canManagePeople = isAdmin || can("admin:all") || can("admin:users") || can("class:manage") || can("org:manage_members");
   const canOpen: Record<PeopleManagementSection, boolean> = {
     people: canManagePeople,
-    defense: isAdmin,
     organization: isAdmin || can("admin:all") || can("admin:users") || can("org:manage_members"),
     classes: isAdmin || can("admin:all") || can("class:manage"),
   };
@@ -191,10 +186,9 @@ export default function PeopleAdminPage() {
   return (
     <div className="flex min-h-0 min-w-0 flex-col xl:h-full">
       <AdminWorkbenchTabs />
-      <div className="xl:min-h-0 xl:flex-1 xl:overflow-auto" aria-label="人員與使用者防護工作區">
+      <div className="xl:min-h-0 xl:flex-1 xl:overflow-auto" aria-label="人員與組織工作區">
         <PeopleManagementEmbedProvider>
           {section === "people" && <PersonDirectoryPanel />}
-          {section === "defense" && <UserAndFeatureActionsPanel />}
           {section === "organization" && <OrganizationPermissionPanel />}
           {section === "classes" && <ClassManagementPanel />}
         </PeopleManagementEmbedProvider>

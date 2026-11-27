@@ -10,8 +10,6 @@ import {
   Plus,
   RefreshCcw,
   Save,
-  ShieldCheck,
-  UserX,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -22,7 +20,6 @@ import {
   systemApi,
   type DefenseRule,
   type DefenseRuleType,
-  type SystemFeatureFlag,
 } from "@/lib/api";
 import { blockUserAccount, previewUserBlock, type UserBlockPreview } from "@/lib/user-block-api";
 
@@ -81,11 +78,10 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-export default function UserAndFeatureActionsPanel() {
+export default function UserBlockingPanel() {
   const { isAdmin } = usePermissions();
   const confirm = useConfirm();
   const [rules, setRules] = useState<DefenseRule[]>([]);
-  const [flags, setFlags] = useState<SystemFeatureFlag[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
@@ -108,23 +104,16 @@ export default function UserAndFeatureActionsPanel() {
   const [blockUserEmails, setBlockUserEmails] = useState(true);
   const [blockUserIps, setBlockUserIps] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [revokeUserId, setRevokeUserId] = useState("");
 
   const refresh = useCallback(async () => {
     if (!isAdmin) return;
     setLoading(true);
-    const [rulesResult, flagsResult] = await Promise.allSettled([
-      systemApi.listDefenseRules({ limit: 200 }),
-      systemApi.listFeatureFlags(),
-    ]);
-
-    const failures: unknown[] = [];
-    if (rulesResult.status === "fulfilled") setRules(rulesResult.value);
-    else failures.push(rulesResult.reason);
-    if (flagsResult.status === "fulfilled") setFlags(flagsResult.value);
-    else failures.push(flagsResult.reason);
-
-    setLoadError(failures.length ? apiErrorMessage(failures[0], "部分防護設定無法載入") : null);
+    try {
+      setRules(await systemApi.listDefenseRules({ limit: 200 }));
+      setLoadError(null);
+    } catch (error) {
+      setLoadError(apiErrorMessage(error, "防禦規則無法載入"));
+    }
     setLoading(false);
   }, [isAdmin]);
 
@@ -252,52 +241,16 @@ export default function UserAndFeatureActionsPanel() {
     }
   };
 
-  const revokeUser = async () => {
-    if (!revokeUserId.trim()) return;
-    if (!(await confirm({
-      title: "強制登出使用者？",
-      description: `使用者 ${revokeUserId} 的所有工作階段會立即撤銷。`,
-      confirmLabel: "強制登出",
-      danger: true,
-    }))) return;
-    setWorking(true);
-    try {
-      const result = await systemApi.revokeUserTokens(revokeUserId.trim());
-      toast.success(`已撤銷 ${result.revoked_count} 個 token`);
-      setRevokeUserId("");
-    } catch (error) {
-      toast.error(apiErrorMessage(error, "撤銷失敗"));
-    } finally {
-      setWorking(false);
-    }
-  };
-
-  const toggleFlag = async (flag: SystemFeatureFlag) => {
-    setWorking(true);
-    try {
-      await systemApi.setFeatureFlag(flag.key, !flag.enabled);
-      toast.success(`${flag.description}：${!flag.enabled ? "已啟用" : "已停用"}`);
-      await refresh();
-    } catch (error) {
-      toast.error(apiErrorMessage(error, "切換失敗"));
-    } finally {
-      setWorking(false);
-    }
-  };
-
   if (!isAdmin) {
     return (
       <section className="p-6 text-sm text-danger!" role="alert">
-        需要超級管理員權限才能管理使用者封鎖與全站功能旗標。
+        需要超級管理員權限才能管理使用者封鎖與防禦規則。
       </section>
     );
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
-      <header className="border-b! border-b-border! pb-4">
-        <h1 className="text-2xl font-semibold text-fg-primary!">使用者與功能處置</h1>
-      </header>
+    <div className="space-y-6">
 
       {loadError && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border! border-danger-border! p-3 text-sm text-danger!" role="alert">
@@ -311,9 +264,8 @@ export default function UserAndFeatureActionsPanel() {
       <section className="space-y-4" aria-labelledby="user-actions-title">
         <div>
           <h2 id="user-actions-title" className="text-lg font-semibold text-fg-primary!">使用者處置</h2>
-          <p className="mt-1 text-sm text-fg-muted!">可先預覽目標帳號，再執行封鎖或撤銷所有登入工作階段。</p>
         </div>
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 lg:max-w-2xl">
           <section className="space-y-3 rounded-md border! border-border! p-4">
             <h3 className="flex items-center gap-2 text-sm font-semibold text-fg-primary!">
               <Ban size={16} aria-hidden /> 封鎖使用者
@@ -361,42 +313,6 @@ export default function UserAndFeatureActionsPanel() {
             </button>
           </section>
 
-          <section className="space-y-3 rounded-md border! border-border! p-4">
-            <h3 className="flex items-center gap-2 text-sm font-semibold text-fg-primary!">
-              <UserX size={16} aria-hidden /> 強制登出
-            </h3>
-            <p className="text-xs text-fg-muted!">撤銷指定使用者的所有登入工作階段，使用者需重新登入。</p>
-            <Field label="使用者 UUID">
-              <input value={revokeUserId} onChange={(event) => setRevokeUserId(event.target.value)} className="input w-full font-mono" />
-            </Field>
-            <button type="button" onClick={() => void revokeUser()} disabled={working || !revokeUserId.trim()} className="btn btn-danger">
-              <UserX size={15} aria-hidden /> 撤銷所有登入
-            </button>
-          </section>
-        </div>
-      </section>
-
-      <section className="space-y-4" aria-labelledby="feature-flags-title">
-        <div>
-          <h2 id="feature-flags-title" className="text-lg font-semibold text-fg-primary!">功能旗標</h2>
-          <p className="mt-1 text-sm text-fg-muted!">調整全站功能的啟用狀態。</p>
-        </div>
-        <div className="divide-y rounded-md border! border-border!">
-          {flags.length === 0 ? (
-            <p className="p-4 text-sm text-fg-muted!" role={loading ? "status" : undefined}>
-              {loading ? "載入功能旗標…" : "目前沒有功能旗標。"}
-            </p>
-          ) : flags.map((flag) => (
-            <div key={flag.key} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-fg-primary!">{flag.description}</p>
-                <p className="break-all font-mono text-xs text-fg-muted!">{flag.key}</p>
-              </div>
-              <button type="button" onClick={() => void toggleFlag(flag)} disabled={working} aria-pressed={flag.enabled} className={`btn ${flag.enabled ? "btn-secondary" : "btn-ghost"}`}>
-                <ShieldCheck size={15} aria-hidden /> {flag.enabled ? "停用" : "啟用"}
-              </button>
-            </div>
-          ))}
         </div>
       </section>
 

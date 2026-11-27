@@ -1,10 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   CheckCircle,
-  FileText,
-  Inbox,
   Lock,
   Plus,
   RefreshCcw,
@@ -20,8 +18,7 @@ import {
   type PolicyDocumentListItem,
   type PolicyDocumentOut,
   type PolicyKind,
-  type PrivacyRequestOut,
-  type PrivacyRequestStatus, apiErrorMessage } from "@/lib/api";
+  apiErrorMessage } from "@/lib/api";
 
 const KIND_LABEL: Record<PolicyKind, string> = {
   privacy: "隱私權政策",
@@ -31,35 +28,10 @@ const KIND_LABEL: Record<PolicyKind, string> = {
   security: "資安政策",
 };
 
-const STATUS_LABEL: Record<PrivacyRequestStatus, string> = {
-  submitted: "已收件",
-  in_review: "處理中",
-  completed: "已完成",
-  rejected: "已拒絕",
-  cancelled: "已取消",
-};
-
-const STATUS_COLOR: Record<PrivacyRequestStatus, string> = {
-  submitted: "var(--warning)",
-  in_review: "var(--primary)",
-  completed: "var(--success)",
-  rejected: "var(--danger)",
-  cancelled: "var(--text-muted)",
-};
-
-type Tab = "documents" | "privacy_requests";
-
 export default function PoliciesPage() {
-  const { can, canAny } = usePermissions();
-  const canManagePolicies = can("policy:admin");
-  const canManagePrivacyRequests = can("system:privacy");
-  const [tab, setTab] = useState<Tab>("documents");
+  const { can } = usePermissions();
 
-  useEffect(() => {
-    if (!canManagePolicies && canManagePrivacyRequests) setTab("privacy_requests");
-  }, [canManagePolicies, canManagePrivacyRequests]);
-
-  if (!canAny("policy:admin", "system:privacy")) {
+  if (!can("policy:admin")) {
     return (
       <div className="mx-auto max-w-3xl p-6">
         <section
@@ -67,7 +39,7 @@ export default function PoliciesPage() {
           style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}>
           <Lock className="mx-auto mb-3 text-[var(--danger)]" size={32} aria-hidden />
           <h1 className="text-xl font-semibold text-[var(--text-primary)]">
-            需要政策或個資管理權限
+            需要政策管理權限
           </h1>
         </section>
       </div>
@@ -77,51 +49,10 @@ export default function PoliciesPage() {
   return (
     <div className="mx-auto max-w-6xl p-4 md:p-6">
       <header className="mb-4">
-        <h1 className="text-2xl font-bold text-[var(--text-primary)]">政策與個資請求</h1>
+        <h1 className="text-2xl font-bold text-[var(--text-primary)]">政策版本</h1>
       </header>
-
-      <nav className="mb-4 flex gap-1 border-b border-[var(--border)]">
-        {canManagePolicies && (
-          <TabButton active={tab === "documents"} onClick={() => setTab("documents")}>
-            <FileText size={14} aria-hidden /> 政策版本
-          </TabButton>
-        )}
-        {canManagePrivacyRequests && (
-          <TabButton
-            active={tab === "privacy_requests"}
-            onClick={() => setTab("privacy_requests")}>
-            <Inbox size={14} aria-hidden /> 個資權利請求
-          </TabButton>
-        )}
-      </nav>
-
-      {tab === "documents" && canManagePolicies ? <DocumentsTab /> : <PrivacyRequestsTab />}
+      <DocumentsTab />
     </div>
-  );
-}
-
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex items-center gap-1 px-3 py-2 text-sm transition ${
-        active ? "border-b-2" : "opacity-60 hover:opacity-100"
-      }`}
-      style={{
-        color: active ? "var(--primary-text)" : "var(--text-secondary)",
-        borderBottomColor: active ? "var(--primary)" : "transparent",
-      }}>
-      {children}
-    </button>
   );
 }
 
@@ -511,185 +442,5 @@ function CreateModal({
         建立後為草稿；啟用時自動停用同類別舊版本。
       </p>
     </Modal>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────
-// 個資權利請求 Tab
-// ─────────────────────────────────────────────────────────────────
-
-function PrivacyRequestsTab() {
-  const [rows, setRows] = useState<PrivacyRequestOut[]>([]);
-  const [active, setActive] = useState<PrivacyRequestOut | null>(null);
-  const [respMsg, setRespMsg] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  const load = useCallback(async () => {
-    try {
-      const items = await policiesApi.listPrivacyRequests();
-      setRows(items);
-    } catch (e) {
-      toast.error(apiErrorMessage(e, "讀取失敗"));
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  const counts = useMemo(() => {
-    const m: Record<string, number> = {};
-    for (const r of rows) m[r.status] = (m[r.status] ?? 0) + 1;
-    return m;
-  }, [rows]);
-
-  const updateStatus = async (newStatus: PrivacyRequestStatus) => {
-    if (!active) return;
-    setBusy(true);
-    try {
-      await policiesApi.updatePrivacyRequest(active.id, {
-        status: newStatus,
-        response_message: respMsg.trim() || null,
-      });
-      toast.success(`已更新狀態為 ${STATUS_LABEL[newStatus]}`);
-      setRespMsg("");
-      setActive(null);
-      await load();
-    } catch (e) {
-      toast.error(apiErrorMessage(e, "更新失敗"));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div>
-      <div className="mb-3 flex flex-wrap gap-2 text-xs">
-        {Object.entries(STATUS_LABEL).map(([k, l]) => (
-          <span
-            key={k}
-            className="rounded border px-2 py-0.5"
-            style={{
-              borderColor: "var(--border)",
-              color: STATUS_COLOR[k as PrivacyRequestStatus],
-            }}>
-            {l}：{counts[k] ?? 0}
-          </span>
-        ))}
-        <button type="button" className="btn-sm btn-ghost ml-auto" onClick={load}>
-          <RefreshCcw size={12} aria-hidden />
-          重新整理
-        </button>
-      </div>
-
-      <section
-        className="overflow-hidden rounded-lg border bg-[var(--bg-surface)]"
-        style={{ borderColor: "var(--border)" }}>
-        {rows.length === 0 ? (
-          <p className="p-6 text-center text-sm text-[var(--text-muted)]">無請求。</p>
-        ) : (
-          <div
-            className="max-w-full overflow-x-auto overscroll-x-contain"
-            role="region"
-            aria-label="個資權利請求清單，可左右捲動查看欄位"
-            tabIndex={0}>
-            <table className="w-full min-w-[48rem] text-xs">
-              <thead className="text-[var(--text-secondary)]">
-                <tr className="border-b border-[var(--border)] bg-[var(--bg-base)]">
-                  <th className="px-3 py-2 text-left">收件時間</th>
-                  <th className="px-3 py-2 text-left">類型</th>
-                  <th className="px-3 py-2 text-left">主旨</th>
-                  <th className="px-3 py-2 text-left">狀態</th>
-                  <th className="px-3 py-2 text-right">操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id} className="border-b border-[var(--border)]">
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      {new Date(r.created_at).toLocaleString()}
-                    </td>
-                    <td className="px-3 py-2 font-mono text-xs">{r.request_type}</td>
-                    <td className="px-3 py-2">{r.subject}</td>
-                    <td
-                      className="px-3 py-2"
-                      style={{ color: STATUS_COLOR[r.status] }}>
-                      {STATUS_LABEL[r.status]}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActive(r);
-                          setRespMsg(r.response_message ?? "");
-                        }}
-                        className="btn-sm btn-ghost">
-                        處理
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      {active && (
-        <Modal title={active.subject} onClose={() => setActive(null)} size="2xl" mobileFullscreen={false}>
-          <p className="mb-2 text-xs text-[var(--text-muted)]">
-            {STATUS_LABEL[active.status]} · {active.request_type} ·{" "}
-            {new Date(active.created_at).toLocaleString()}
-          </p>
-          <div className="mb-3 rounded bg-[var(--bg-base)] p-2 text-xs whitespace-pre-wrap">
-            {active.description}
-          </div>
-          {active.response_message && (
-            <div className="mb-3 text-xs">
-              <div className="text-[var(--text-secondary)]">前次回覆：</div>
-              <div className="rounded bg-[var(--bg-base)] p-2 whitespace-pre-wrap">
-                {active.response_message}
-              </div>
-            </div>
-          )}
-          <label className="text-xs">
-            <span className="text-[var(--text-secondary)]">回覆訊息（會寄給當事人）</span>
-            <textarea
-              data-autofocus=""
-              rows={4}
-              value={respMsg}
-              onChange={(e) => setRespMsg(e.target.value)}
-              className="input mt-1"
-            />
-          </label>
-          <div className="mt-3 flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
-            <button type="button" className="btn btn-ghost w-full sm:w-auto" onClick={() => setActive(null)}>
-              取消
-            </button>
-            <button
-              type="button"
-              className="btn btn-ghost w-full sm:w-auto"
-              disabled={busy}
-              onClick={() => updateStatus("in_review")}>
-              標為處理中
-            </button>
-            <button
-              type="button"
-              className="btn btn-primary w-full sm:w-auto"
-              disabled={busy}
-              onClick={() => updateStatus("completed")}>
-              標為完成
-            </button>
-            <button
-              type="button"
-              className="btn btn-danger w-full sm:w-auto"
-              disabled={busy}
-              onClick={() => updateStatus("rejected")}>
-              拒絕
-            </button>
-          </div>
-        </Modal>
-      )}
-    </div>
   );
 }

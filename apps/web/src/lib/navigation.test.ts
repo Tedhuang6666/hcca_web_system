@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import type { NavigationProfileOut } from "./types";
 import {
+  ADMIN_CATALOG,
   NAV_DEF,
   NAV_DEF_LOGGED_OUT,
   NAV_DEF_STUDENT,
   NAV_ITEMS,
-  NAVIGATION_PROFILES,
   filterSidebarNavEntries,
   isSection,
   isNavItemVisible,
@@ -16,58 +16,62 @@ import {
 } from "./navigation";
 
 describe("navigation visibility", () => {
-  it("links management tools directly instead of routing through hub pages", () => {
-    const sections = NAV_DEF.filter(isSection);
-    const managementSection = sections.find((section) => section.id === "manage");
+  it("collects every management tool behind a single admin center entry", () => {
     const allIds = navItemsFromEntries(NAV_DEF).map((item) => item.id);
+    const catalogIds = navItemsFromEntries(ADMIN_CATALOG).map((item) => item.id);
 
-    expect(allIds).not.toContain("operations");
-    expect(allIds).not.toContain("moduleBackoffice");
+    expect(NAV_DEF.filter(isSection).find((section) => section.id === "admin")?.items.map((item) => item.id))
+      .toEqual(["adminDashboard"]);
+    expect(allIds.filter((id) => catalogIds.includes(id))).toEqual([]);
     expect(NAV_ITEMS.some((item) => item.href === "/finance/receivables")).toBe(false);
-    expect(managementSection?.items.map((item) => item.id)).toEqual(expect.arrayContaining([
-      "publications",
-      "email",
-      "finance",
-      "petitionsManage",
-      "peopleAdmin",
-    ]));
-    for (const id of [
-      "classOrders",
-      "councilOrders",
-      "shopAdmin",
-      "raffleAdmin",
-      "documentTemplates",
-      "policies",
-      "privacyAdmin",
+    expect(NAV_ITEMS.some((item) => item.href === "/backoffice" || item.href === "/operations")).toBe(false);
+    for (const href of [
+      "/admin/feature-flags",
+      "/admin/api-keys",
+      "/admin/webhooks",
+      "/admin/trash",
+      "/admin/reports",
+      "/admin/term-rollover",
+      "/admin/data-lifecycle",
+      "/admin/policies",
+      "/admin/privacy",
+      "/admin/raffle",
+      "/admin/navigation-profiles",
+      "/admin/gallery",
     ]) {
-      expect(allIds).not.toContain(id);
+      expect(navItemsFromEntries(ADMIN_CATALOG).some((item) => item.href === href)).toBe(true);
     }
   });
 
-  it("filters removed entries from legacy sidebar profiles", () => {
-    const hiddenIds = new Set([
-      "classOrders",
-      "councilOrders",
-      "shopAdmin",
-      "raffleAdmin",
-      "documentTemplates",
-      "policies",
-      "privacyAdmin",
-    ]);
+  it("collapses management items from legacy sidebar profiles into the admin entry", () => {
     const entries = filterSidebarNavEntries([
       {
         id: "legacy-management",
         heading: "管理工作",
-        items: NAV_ITEMS.filter((item) => hiddenIds.has(item.id)),
-      },
-      {
-        id: "other-management",
-        heading: "其他管理",
-        items: NAV_ITEMS.filter((item) => item.id === "finance"),
+        items: NAV_ITEMS.filter((item) => ["shopAdmin", "policies", "finance", "dashboard"].includes(item.id)),
       },
     ]);
 
-    expect(navItemsFromEntries(entries).map((item) => item.id)).toEqual(["finance"]);
+    expect(navItemsFromEntries(entries).map((item) => item.id)).toEqual(["dashboard", "adminDashboard"]);
+    expect(filterSidebarNavEntries(NAV_DEF)).toEqual(NAV_DEF);
+  });
+
+  it("shows the admin center only to people holding at least one management tool", () => {
+    const adminItem = NAV_ITEMS.find((item) => item.id === "adminDashboard")!;
+    const visibilityFor = (codes: string[]) => ({
+      can: (code: string) => codes.includes(code),
+      hasPrefix: (prefix: string) => codes.some((code) => code.startsWith(prefix)),
+      isAdmin: false,
+    });
+
+    expect(isNavItemVisible(adminItem, visibilityFor([]))).toBe(false);
+    expect(isNavItemVisible(adminItem, visibilityFor(["survey:create"]))).toBe(false);
+    expect(isNavItemVisible(adminItem, visibilityFor(["merchandise_submission:review"]))).toBe(true);
+    expect(isNavItemVisible(adminItem, { can: () => true, hasPrefix: () => true, isAdmin: true })).toBe(true);
+    expect(isNavItemVisible(adminItem, {
+      ...visibilityFor(["election:manage"]),
+      isModuleClosed: (item) => item.id === "electionsAdmin",
+    })).toBe(false);
   });
 
   it("keeps private services out of the logged-out fallback", () => {
@@ -130,8 +134,7 @@ describe("navigation visibility", () => {
   });
 
   it("shows each management tool only to people holding its permission", () => {
-    const defaultIds = navItemsFromEntries(NAVIGATION_PROFILES.default.desktopSections)
-      .map((item) => item.id);
+    const defaultIds = navItemsFromEntries(ADMIN_CATALOG).map((item) => item.id);
     const adminItem = NAV_ITEMS.find((item) => item.id === "merchandiseSubmissionsAdmin");
     const financeItem = NAV_ITEMS.find((item) => item.id === "finance");
     const systemOperationsItem = NAV_ITEMS.find((item) => item.id === "systemOperations");
@@ -160,8 +163,7 @@ describe("navigation visibility", () => {
   });
 
   it("groups system operations behind one workspace entry", () => {
-    const defaultIds = navItemsFromEntries(NAVIGATION_PROFILES.default.desktopSections)
-      .map((item) => item.id);
+    const defaultIds = navItemsFromEntries(ADMIN_CATALOG).map((item) => item.id);
 
     expect(defaultIds).toContain("systemOperations");
     expect(defaultIds).not.toContain("systemDefense");

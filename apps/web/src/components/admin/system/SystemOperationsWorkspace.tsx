@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   Activity,
+  Ban,
   BarChart3,
   Boxes,
   Database,
@@ -18,6 +19,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 
 export type SystemOperationsTabId =
   | "defense"
+  | "blocking"
   | "diagnostics"
   | "observability"
   | "modules"
@@ -37,6 +39,13 @@ const TABS: SystemOperationsTab[] = [
     label: "系統防護",
     description: "維護模式、全域限流與緊急封鎖",
     icon: ShieldCheck,
+    adminOnly: true,
+  },
+  {
+    id: "blocking",
+    label: "封鎖與規則",
+    description: "封鎖使用者與長期防禦規則",
+    icon: Ban,
     adminOnly: true,
   },
   {
@@ -81,6 +90,9 @@ function WorkspaceLoading() {
 const SystemDefensePanel = dynamic(() => import("./SystemDefensePanel"), {
   loading: WorkspaceLoading,
 });
+const UserBlockingPanel = dynamic(() => import("./UserBlockingPanel"), {
+  loading: WorkspaceLoading,
+});
 const SystemDiagnosticsPanel = dynamic(() => import("./SystemDiagnosticsPanel"), {
   loading: WorkspaceLoading,
 });
@@ -96,6 +108,7 @@ const PerformanceManagementPanel = dynamic(() => import("./PerformanceManagement
 
 const PANELS: Record<SystemOperationsTabId, ComponentType> = {
   defense: SystemDefensePanel,
+  blocking: UserBlockingPanel,
   diagnostics: SystemDiagnosticsPanel,
   observability: SystemObservabilityPanel,
   modules: ModuleMaintenancePanel,

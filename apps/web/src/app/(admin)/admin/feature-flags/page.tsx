@@ -8,14 +8,17 @@ import {
   Lock,
   Plus,
   RefreshCcw,
-  Save } from "lucide-react";
+  Save,
+  ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import {
   featureFlagsApi,
-  type FeatureFlagOut, apiErrorMessage } from "@/lib/api";
+  systemApi,
+  type FeatureFlagOut,
+  type SystemFeatureFlag, apiErrorMessage } from "@/lib/api";
 
 const SYSTEM_EMAIL_FLAG_KEYS = ["email_scheduled_dispatch"];
 
@@ -80,7 +83,7 @@ export default function FeatureFlagsPage() {
     <div className="mx-auto max-w-6xl p-4 md:p-6">
       <header className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)]">Feature Flags</h1>
+          <h1 className="text-2xl font-bold text-[var(--text-primary)]">功能開關</h1>
         </div>
         <button type="button" className="btn btn-ghost" onClick={load}>
           <RefreshCcw size={16} aria-hidden />
@@ -88,10 +91,13 @@ export default function FeatureFlagsPage() {
         </button>
       </header>
 
+      <EmergencySwitches />
+
+      <h2 className="mb-2 text-lg font-semibold text-[var(--text-primary)]">灰度發布</h2>
       <section
         className="mb-4 rounded-lg border bg-[var(--bg-surface)] p-4"
         style={{ borderColor: "var(--border)" }}>
-        <h2 className="mb-2 text-sm font-semibold text-[var(--text-primary)]">新增 Flag</h2>
+        <h3 className="mb-2 text-sm font-semibold text-[var(--text-primary)]">新增 Flag</h3>
         <div className="flex flex-wrap gap-2">
           <input
             type="text"
@@ -126,6 +132,64 @@ export default function FeatureFlagsPage() {
         )}
       </section>
     </div>
+  );
+}
+
+/** 全站緊急開關（系統內建 key），與下方可分群發布的自訂 flag 分開儲存。 */
+function EmergencySwitches() {
+  const [flags, setFlags] = useState<SystemFeatureFlag[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [working, setWorking] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      setFlags(await systemApi.listFeatureFlags());
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "緊急開關無法載入"));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const toggle = async (flag: SystemFeatureFlag) => {
+    setWorking(true);
+    try {
+      await systemApi.setFeatureFlag(flag.key, !flag.enabled);
+      toast.success(`${flag.description}：${!flag.enabled ? "已啟用" : "已停用"}`);
+      await load();
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "切換失敗"));
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  return (
+    <section className="mb-6" aria-labelledby="emergency-switches-title">
+      <h2 id="emergency-switches-title" className="mb-2 text-lg font-semibold text-[var(--text-primary)]">緊急開關</h2>
+      <div className="divide-y rounded-lg border" style={{ borderColor: "var(--border)" }}>
+        {flags.length === 0 ? (
+          <p className="p-4 text-sm text-[var(--text-muted)]" role={loading ? "status" : undefined}>
+            {loading ? "載入中…" : "目前沒有緊急開關。"}
+          </p>
+        ) : flags.map((flag) => (
+          <div key={flag.key} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-[var(--text-primary)]">{flag.description}</p>
+              <p className="break-all font-mono text-xs text-[var(--text-muted)]">{flag.key}</p>
+            </div>
+            <button type="button" onClick={() => void toggle(flag)} disabled={working} aria-pressed={flag.enabled}
+              className={`btn ${flag.enabled ? "btn-secondary" : "btn-ghost"}`}>
+              <ShieldCheck size={15} aria-hidden /> {flag.enabled ? "停用" : "啟用"}
+            </button>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 

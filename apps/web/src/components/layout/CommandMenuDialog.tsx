@@ -9,6 +9,7 @@ import Modal from "@/components/ui/Modal";
 import type { SearchResultOut } from "@/lib/types";
 import {
   filterNavItems,
+  isNavItemVisible,
   NAV_ITEMS,
 } from "@/lib/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -71,37 +72,13 @@ export default function CommandMenuDialog({ query, setQuery, onClose }: {
 
   const allNavActions = useMemo(() => {
     // 這是「所有服務」入口：不能只跟隨目前角色視角，否則被精簡的功能會無法抵達。
-    const hasOperationsAccess = (
-      isAdmin
-      || permissions.has("admin:all")
-      || hasPrefix("announcement:")
-      || hasPrefix("email:")
-      || hasPrefix("site:")
-      || hasPrefix("analytics:")
-      || hasPrefix("finance:")
-    );
-    const hasBackofficeAccess = (
-      isAdmin
-      || permissions.has("admin:all")
-      || hasPrefix("class:")
-      || hasPrefix("document:")
-      || hasPrefix("serial:")
-      || hasPrefix("exam:")
-      || hasPrefix("shop:")
-      || hasPrefix("merchandise_submission:")
-      || hasPrefix("partner_map:")
-      || hasPrefix("election:")
-      || hasPrefix("petition:")
-      || hasPrefix("org:")
-    );
     const items = filterNavItems(NAV_ITEMS, can, hasPrefix)
       .filter((item) => item.id !== "tasks" || hasPrefix("document:") || hasPrefix("regulation:"))
-      .filter((item) => item.id !== "operations" || hasOperationsAccess)
-      .filter((item) => item.id !== "moduleBackoffice" || hasBackofficeAccess)
+      .filter((item) => item.id !== "adminDashboard" || isNavItemVisible(item, { can, hasPrefix, isAdmin }))
       .filter((item) => !isModuleClosed(NAV_ID_TO_MODULE[item.id] ?? null));
 
     return items;
-  }, [can, hasPrefix, isAdmin, isModuleClosed, permissions]);
+  }, [can, hasPrefix, isAdmin, isModuleClosed]);
 
   const actionGroups = useMemo(() => {
     const groupedIds = new Set<string>(ACTION_GROUPS.flatMap((group) => group.ids));

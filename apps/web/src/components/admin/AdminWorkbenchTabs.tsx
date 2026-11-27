@@ -6,7 +6,6 @@ import { usePermissions } from "@/hooks/usePermissions";
 
 const TABS = [
   { section: "people", label: "人員與身分", description: "人員主檔、身分與歸屬" },
-  { section: "defense", label: "使用者與功能處置", description: "封鎖、登入工作階段、功能旗標與長期防禦規則" },
   { section: "organization", label: "組織、職位與權限", description: "組織架構、任期與授權" },
   { section: "classes", label: "班級與名冊", description: "班級、座號與班級幹部" },
 ] as const;
@@ -18,7 +17,6 @@ export default function AdminWorkbenchTabs() {
   const canManagePeople = isAdmin || can("admin:all") || can("admin:users") || can("class:manage") || can("org:manage_members");
   const visibleTabs = TABS.filter(({ section }) => {
     if (section === "people") return canManagePeople;
-    if (section === "defense") return isAdmin;
     if (section === "organization") return isAdmin || can("admin:all") || can("admin:users") || can("org:manage_members");
     return isAdmin || can("admin:all") || can("class:manage");
   });

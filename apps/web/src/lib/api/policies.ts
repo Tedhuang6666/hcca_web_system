@@ -2,7 +2,6 @@ import type {
   PendingConsentItem, PolicyConsentOut,
 } from "../types";
 import { get, post, patch } from "./core";
-import type { PrivacyRequestStatus, PrivacyRequestOut } from "./core";
 
 // ── 政策（隱私 / ToS / Cookie / 無障礙）───────────────────────────────
 export type PolicyKind =
@@ -69,15 +68,6 @@ export const policiesApi = {
     patch<PolicyDocumentOut>(`/policies/${encodeURIComponent(id)}`, body),
   activate: (id: string) =>
     post<PolicyDocumentOut>(`/policies/${encodeURIComponent(id)}/activate`, {}),
-  listPrivacyRequests: () => get<PrivacyRequestOut[]>("/policies/privacy-requests"),
-  updatePrivacyRequest: (
-    id: string,
-    body: { status: PrivacyRequestStatus; response_message?: string | null },
-  ) =>
-    patch<PrivacyRequestOut>(
-      `/policies/privacy-requests/${encodeURIComponent(id)}`,
-      body,
-    ),
   pendingConsents: () => get<PendingConsentItem[]>("/policies/me/pending"),
   consent: (policy_document_id: string) =>
     post<PolicyConsentOut>("/policies/me/consents", { policy_document_id }),

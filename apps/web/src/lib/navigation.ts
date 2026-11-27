@@ -98,12 +98,6 @@ export const NAV_ITEMS: NavItem[] = [
     perm: "announcement:create",
   },
   {
-    id: "operations",
-    href: "/operations",
-    iconKey: "analytics",
-    label: "營運中心",
-  },
-  {
     id: "qrCode",
     href: "/qr-code",
     iconKey: "link",
@@ -113,11 +107,28 @@ export const NAV_ITEMS: NavItem[] = [
   {
     id: "adminDashboard",
     href: "/admin",
-    iconKey: "dashboard",
-    label: "系統總覽",
-    perms: ["admin:users", "admin:all"],
+    iconKey: "settings",
+    label: "管理中心",
     end: true,
   },
+  {
+    id: "orgAdmin",
+    href: "/admin/people?section=organization",
+    iconKey: "org",
+    label: "組織、職位與權限",
+    perms: ["admin:users", "admin:all", "org:manage_members"],
+  },
+  { id: "classAdmin", href: "/admin/people?section=classes", iconKey: "classes", label: "班級與名冊", perm: "class:manage" },
+  { id: "termRollover", href: "/admin/term-rollover", iconKey: "people", label: "換屆交接", perm: "admin:all" },
+  { id: "navigationProfiles", href: "/admin/navigation-profiles", iconKey: "settings", label: "視角管理", perm: "admin:all" },
+  { id: "galleryAdmin", href: "/admin/gallery", iconKey: "info", label: "活動影像", perm: "site:manage" },
+  { id: "reports", href: "/admin/reports", iconKey: "analytics", label: "常用報表", perm: "admin:all" },
+  { id: "dataLifecycle", href: "/admin/data-lifecycle", iconKey: "policy", label: "資料保存與清理", perm: "admin:all" },
+  { id: "trash", href: "/admin/trash", iconKey: "audit", label: "誤刪救援", perm: "admin:all" },
+  { id: "systemBlocking", href: "/admin/system?tab=blocking", iconKey: "systemDefense", label: "封鎖與防禦規則", perm: "admin:all" },
+  { id: "featureFlags", href: "/admin/feature-flags", iconKey: "modules", label: "功能開關", perm: "admin:all" },
+  { id: "apiKeys", href: "/admin/api-keys", iconKey: "link", label: "API 金鑰", perm: "admin:all" },
+  { id: "webhooks", href: "/admin/webhooks", iconKey: "link", label: "Webhooks", perm: "admin:all" },
   {
     id: "peopleAdmin",
     href: "/admin/people",
@@ -166,12 +177,6 @@ export const NAV_ITEMS: NavItem[] = [
     iconKey: "info",
     label: "公開網站設定",
     perm: "site:manage",
-  },
-  {
-    id: "moduleBackoffice",
-    href: "/backoffice",
-    iconKey: "modules",
-    label: "模組後台",
   },
   { id: "audit", href: "/audit-logs", iconKey: "audit", label: "稽核日誌", perm: "audit:view_org" },
   {
@@ -292,17 +297,70 @@ const PRIVATE_PUBLIC_NAV_ITEM_IDS = new Set([
   "publicRecommendedVendors",
 ]);
 
-const SIDEBAR_HIDDEN_NAV_ITEM_IDS = new Set([
-  "classOrders",
-  "councilOrders",
-  "shopAdmin",
-  "raffleAdmin",
-  "documentTemplates",
-  "policies",
-  "privacyAdmin",
-]);
 
-/** 管理工具直接列出、依權限過濾，不再先進入營運中心或模組後台再找一次。 */
+/** 所有管理工具集中在管理中心，依任務分組、依權限過濾；側欄只留一個入口。 */
+export const ADMIN_CATALOG: NavSection[] = [
+  {
+    id: "admin-people",
+    heading: "人員與權限",
+    items: byIds(["peopleAdmin", "orgAdmin", "classAdmin", "termRollover", "navigationProfiles", "audit"]),
+  },
+  {
+    id: "admin-publishing",
+    heading: "發布與內容",
+    items: byIds([
+      "publications",
+      "email",
+      "publicSiteAdmin",
+      "galleryAdmin",
+      "documentTemplates",
+      "serialTemplates",
+      "discordAdmin",
+    ]),
+  },
+  {
+    id: "admin-governance",
+    heading: "治理事務",
+    items: byIds(["petitionsManage", "electionsAdmin", "examPaperAdmin"]),
+  },
+  {
+    id: "admin-commerce",
+    heading: "商品、財務與合作",
+    items: byIds([
+      "shopAdmin",
+      "councilOrders",
+      "classOrders",
+      "finance",
+      "merchandiseSubmissionsAdmin",
+      "partnerMapAdmin",
+      "recommendedVendorsAdmin",
+      "qrCode",
+      "raffleAdmin",
+    ]),
+  },
+  {
+    id: "admin-data",
+    heading: "資料與隱私",
+    items: byIds(["privacyAdmin", "policies", "reports", "dataLifecycle", "trash"]),
+  },
+  {
+    id: "admin-system",
+    heading: "系統",
+    items: byIds([
+      "systemOperations",
+      "systemBlocking",
+      "systemSettings",
+      "featureFlags",
+      "apiKeys",
+      "webhooks",
+    ]),
+  },
+];
+
+const ADMIN_CATALOG_IDS = new Set(navItemsFromEntries(ADMIN_CATALOG).map((item) => item.id));
+
+const ADMIN_NAV_SECTION: NavSection = { id: "admin", heading: "管理", items: byIds(["adminDashboard"]) };
+
 export const NAV_DEF: NavEntry[] = [
   {
     id: "work",
@@ -328,37 +386,7 @@ export const NAV_DEF: NavEntry[] = [
     collapsible: true,
     items: byIds(["shop", "surveys", "partnerMap", "credential", "merchandiseSubmissions", "recommendedVendors", "examPapers"]),
   },
-  {
-    id: "manage",
-    heading: "管理工作",
-    collapsible: true,
-    items: byIds([
-      "publications",
-      "email",
-      "finance",
-      "petitionsManage",
-      "merchandiseSubmissionsAdmin",
-      "partnerMapAdmin",
-      "recommendedVendorsAdmin",
-      "electionsAdmin",
-      "examPaperAdmin",
-      "serialTemplates",
-      "qrCode",
-      "publicSiteAdmin",
-      "peopleAdmin",
-    ]),
-  },
-  {
-    id: "system",
-    heading: "系統",
-    collapsible: true,
-    items: byIds([
-      "adminDashboard",
-      "systemOperations",
-      "systemSettings",
-      "audit",
-    ]),
-  },
+  ADMIN_NAV_SECTION,
 ];
 
 export const NAV_DEF_LOGGED_OUT: NavEntry[] = [
@@ -501,17 +529,20 @@ export function navItemsFromEntries(entries: NavEntry[]): NavItem[] {
   });
 }
 
+/** 側欄把管理工具收進單一「管理中心」入口，包含後台或舊版視角設定裡列出的管理項目。 */
 export function filterSidebarNavEntries(entries: NavEntry[]): NavEntry[] {
   const visibleEntries: NavEntry[] = [];
+  let hasAdminEntry = false;
+  let collapsedAdminTool = false;
   for (const entry of entries) {
-    if (!isSection(entry)) {
-      if (!SIDEBAR_HIDDEN_NAV_ITEM_IDS.has(entry.id)) visibleEntries.push(entry);
-      continue;
-    }
-
-    const items = entry.items.filter((item) => !SIDEBAR_HIDDEN_NAV_ITEM_IDS.has(item.id));
-    if (items.length > 0) visibleEntries.push({ ...entry, items });
+    const items = isSection(entry) ? entry.items : [entry];
+    if (items.some((item) => item.id === "adminDashboard")) hasAdminEntry = true;
+    const kept = items.filter((item) => !ADMIN_CATALOG_IDS.has(item.id));
+    if (kept.length < items.length) collapsedAdminTool = true;
+    if (kept.length === 0) continue;
+    visibleEntries.push(isSection(entry) ? { ...entry, items: kept } : entry);
   }
+  if (collapsedAdminTool && !hasAdminEntry) visibleEntries.push(ADMIN_NAV_SECTION);
   return visibleEntries;
 }
 
@@ -521,32 +552,8 @@ export function isNavItemVisible(item: NavItem, options: NavVisibilityOptions): 
   if (item.id === "tasks" && !options.hasPrefix("document:") && !options.hasPrefix("regulation:")) {
     return false;
   }
-  if (item.id === "moduleBackoffice") {
-    return (
-      options.isAdmin
-      || options.hasPrefix("class:")
-      || options.hasPrefix("document:")
-      || options.hasPrefix("serial:")
-      || options.hasPrefix("exam:")
-      || options.hasPrefix("shop:")
-      || options.hasPrefix("merchandise_submission:")
-      || options.hasPrefix("partner_map:")
-      || options.hasPrefix("recommended_vendor:")
-      || options.hasPrefix("election:")
-      || options.hasPrefix("petition:")
-      || options.hasPrefix("org:")
-    );
-  }
-  if (item.id === "operations") {
-    return (
-      options.isAdmin
-      || options.hasPrefix("announcement:")
-      || options.hasPrefix("email:")
-      || options.hasPrefix("activity:")
-      || options.hasPrefix("site:")
-      || options.hasPrefix("finance:")
-      || options.hasPrefix("merchandise_submission:")
-    );
+  if (item.id === "adminDashboard") {
+    return ADMIN_CATALOG.some((section) => section.items.some((tool) => isNavItemVisible(tool, options)));
   }
   return filterNavItems([item], options.can, options.hasPrefix).length > 0;
 }
