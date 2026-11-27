@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import io
 import struct
+import tracemalloc
 import zlib
 
+import pytest
 from PIL import Image
 
-from api.services.merchandise_submission_ai import analyze_image_ai_evidence
+from api.services.merchandise_submission_ai import _png_text_chunks, analyze_image_ai_evidence
 
 
 def _png_text_image(text: str) -> bytes:
@@ -61,6 +63,28 @@ def _png_pixel_image(size: tuple[int, int] = (96, 96)) -> bytes:
     output = io.BytesIO()
     image.save(output, format="PNG")
     return output.getvalue()
+
+
+@pytest.mark.parametrize("chunk_type", [b"zTXt", b"iTXt"])
+def test_compressed_png_metadata_has_bounded_memory(chunk_type: bytes) -> None:
+    compressed = zlib.compress(b"A" * 8_000_000)
+    prefix = b"prompt\x00\x00" if chunk_type == b"zTXt" else b"prompt\x00\x01\x00\x00\x00"
+    content = (
+        bytes.fromhex("89504e470d0a1a0a")
+        + _png_chunk(chunk_type, prefix + compressed)
+        + _png_chunk(b"IEND", b"")
+    )
+
+    tracemalloc.start()
+    try:
+        rows = _png_text_chunks(content)
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+
+    assert len(rows) == 1
+    assert len(rows[0][1]) <= 4200
+    assert peak < 2_000_000
 
 
 def test_png_prompt_metadata_is_reported_as_ai_evidence() -> None:

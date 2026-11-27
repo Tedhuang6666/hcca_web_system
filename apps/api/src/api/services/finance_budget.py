@@ -7,6 +7,7 @@ import re
 import uuid
 from datetime import UTC, date, datetime
 from decimal import ROUND_HALF_UP, Decimal
+from itertools import islice
 
 from fastapi import HTTPException
 from sqlalchemy import delete, func, select
@@ -94,10 +95,23 @@ def _parse_budget_workbook(
     file_bytes: bytes, *, full_snapshot: bool = True
 ) -> tuple[list[dict], list[dict], list[str]]:
     from io import BytesIO
+    from zipfile import BadZipFile, ZipFile
 
     from defusedxml import ElementTree
     from defusedxml.common import DefusedXmlException
     from openpyxl import load_workbook
+
+    try:
+        with ZipFile(BytesIO(file_bytes)) as archive:
+            entries = archive.infolist()
+            if (
+                len(entries) > 500
+                or any(entry.file_size > 10_000_000 for entry in entries)
+                or sum(entry.file_size for entry in entries) > 20_000_000
+            ):
+                raise ValueError("預算檔解壓後過大")
+    except BadZipFile as exc:
+        raise ValueError("無法讀取 xlsx 預算檔，請確認檔案未損壞") from exc
 
     try:
         workbook = load_workbook(BytesIO(file_bytes), data_only=True, read_only=True)
@@ -110,7 +124,16 @@ def _parse_budget_workbook(
         sheet = next(
             (workbook[name] for name in sheet_names if name in workbook.sheetnames), workbook.active
         )
-        rows = list(sheet.iter_rows(values_only=False))
+        if (sheet.max_row or 0) > 5000 or (sheet.max_column or 0) > 50:
+            raise ValueError("預算檔列數或欄數過多")
+        rows = list(
+            islice(
+                sheet.iter_rows(max_col=min(sheet.max_column or 50, 50), values_only=False),
+                5001,
+            )
+        )
+        if len(rows) > 5000:
+            raise ValueError("預算檔列數或欄數過多")
     finally:
         workbook.close()
 

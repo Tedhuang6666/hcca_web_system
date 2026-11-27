@@ -201,20 +201,27 @@ def _png_chunks(content: bytes) -> list[tuple[str, int, int, bytes]]:
 
 def _png_text_chunks(content: bytes) -> list[tuple[str, str]]:
     result: list[tuple[str, str]] = []
+    text_chunks = 0
     for chunk_type, _, _, data in _png_chunks(content):
+        if chunk_type in {"tEXt", "zTXt", "iTXt"}:
+            text_chunks += 1
+            if text_chunks > 128:
+                break
         if chunk_type == "tEXt":
             key, separator, value = data.partition(b"\x00")
             if separator:
-                result.append(("PNG tEXt chunk", _decode_metadata(key + b": " + value)))
+                result.append(
+                    ("PNG tEXt chunk", _decode_metadata(key[:256] + b": " + value[:4096]))
+                )
         elif chunk_type == "zTXt":
             key, separator, compressed = data.partition(b"\x00")
             if separator and compressed[:1] == b"\x00":
                 try:
-                    value = zlib.decompress(compressed[1:])
+                    value = zlib.decompressobj().decompress(compressed[1:], 4096)
                 except zlib.error:
                     value = b""
                 if value:
-                    result.append(("PNG zTXt chunk", _decode_metadata(key + b": " + value)))
+                    result.append(("PNG zTXt chunk", _decode_metadata(key[:256] + b": " + value)))
         elif chunk_type == "iTXt":
             parts = data.split(b"\x00", 5)
             if len(parts) == 6:
@@ -222,11 +229,13 @@ def _png_text_chunks(content: bytes) -> list[tuple[str, str]]:
                 del language, translated
                 if compressed == b"\x01" and compression_method == b"\x00":
                     try:
-                        value = zlib.decompress(value)
+                        value = zlib.decompressobj().decompress(value, 4096)
                     except zlib.error:
                         value = b""
                 if value:
-                    result.append(("PNG iTXt chunk", _decode_metadata(keyword + b": " + value)))
+                    result.append(
+                        ("PNG iTXt chunk", _decode_metadata(keyword[:256] + b": " + value[:4096]))
+                    )
         elif chunk_type == "caBX":
             fragments = _printable_fragments(data)
             result.append(

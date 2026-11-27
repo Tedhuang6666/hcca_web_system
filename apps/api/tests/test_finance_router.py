@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from io import BytesIO
+from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
 from openpyxl import Workbook, load_workbook
@@ -57,6 +58,35 @@ def test_budget_import_prefers_total_sheet_and_keeps_new_income_marker() -> None
     expenses, incomes, _ = _parse_budget_workbook(_colored_budget_workbook(), full_snapshot=False)
     assert expenses == []
     assert [row["name"] for row in incomes] == ["報名費"]
+
+
+def test_budget_import_rejects_oversized_xlsx_part_before_parsing() -> None:
+    output = BytesIO()
+    with (
+        ZipFile(BytesIO(_colored_budget_workbook())) as source,
+        ZipFile(output, "w", compression=ZIP_DEFLATED) as destination,
+    ):
+        for item in source.infolist():
+            data = (
+                b"A" * 10_000_001
+                if item.filename == "xl/theme/theme1.xml"
+                else source.read(item.filename)
+            )
+            destination.writestr(item.filename, data)
+
+    with pytest.raises(ValueError, match="解壓後過大"):
+        _parse_budget_workbook(output.getvalue())
+
+
+def test_budget_import_rejects_excessive_sheet_rows() -> None:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet["A5001"] = "尾列"
+    output = BytesIO()
+    workbook.save(output)
+
+    with pytest.raises(ValueError, match="列數或欄數過多"):
+        _parse_budget_workbook(output.getvalue())
 
 
 async def _grant(db_session, user, code: str) -> Org:
