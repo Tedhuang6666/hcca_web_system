@@ -18,6 +18,13 @@ from api.models.user import User
 ANONYMIZED_EMAIL_SUFFIX = "@deleted.local"
 
 
+def is_privileged_email(email: str) -> bool:
+    privileged = {
+        address.strip().lower() for address in [*settings.OWNER_EMAILS, *settings.SUPERUSER_EMAILS]
+    }
+    return email.strip().lower() in privileged
+
+
 def is_owner(user: User) -> bool:
     owners = {email.strip().lower() for email in settings.OWNER_EMAILS}
     return user.email.strip().lower() in owners

@@ -269,6 +269,18 @@ async def set_primary_email(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="請先完成此 Email 的驗證與連結"
         )
     if normalized != current_user.email:
+        proven_identity = await db.scalar(
+            select(UserIdentity.id).where(
+                UserIdentity.user_id == current_user.id,
+                UserIdentity.email == normalized,
+                UserIdentity.provider.in_(("google", "verified_email")),
+            )
+        )
+        if proven_identity is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="請先驗證此 Email 的持有權，再設為主要信箱",
+            )
         previous_email = current_user.email
         current_user.email = normalized
         await audit_svc.record(

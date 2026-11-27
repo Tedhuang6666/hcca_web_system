@@ -55,6 +55,7 @@ from api.services import passkey as passkey_svc
 from api.services import person as person_svc
 from api.services import school_class as class_svc
 from api.services import user_session as user_session_svc
+from api.services.account_protection import is_privileged_email
 from api.services.discord_bot import (
     get_user_by_discord_id,
 )
@@ -243,6 +244,16 @@ async def _upsert_google_user(
     identity_by_email = await db.scalar(
         select(UserIdentity).where(UserIdentity.email == email).order_by(UserIdentity.linked_at)
     )
+    if (
+        is_privileged_email(email)
+        and identity_by_email is not None
+        and identity_by_email.provider == "email"
+        and identity_by_sub is None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="特權信箱的既有連結尚未驗證，請聯絡管理員處理",
+        )
     linked_user_id = identity_by_sub.user_id if identity_by_sub else None
     if linked_user_id is None and identity_by_email:
         linked_user_id = identity_by_email.user_id

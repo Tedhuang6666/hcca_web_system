@@ -105,7 +105,7 @@ async def request_verification(db: AsyncSession, user: User, email: str) -> None
             UserIdentity.user_id == user.id,
         )
     )
-    if existing_identity:
+    if existing_identity and existing_identity.provider != "email":
         raise UserRegistrationError(409, "此 Email 已連結到您的帳號")
 
     allowed = await redis_client.set(
@@ -175,7 +175,9 @@ async def verify_and_link(
     )
     source = await _ensure_self_mergeable(external_accounts)
     if source is None:
-        await link_user_emails(db, user=user, emails=[normalized_email], actor=user)
+        await link_user_emails(
+            db, user=user, emails=[normalized_email], actor=user, verified_by_user=True
+        )
     else:
         try:
             await merge_user_accounts(
@@ -192,5 +194,15 @@ async def verify_and_link(
                     payload={"conflicts": exc.payload["conflicts"]},
                 ) from exc
             raise
+    asserted_identity = await db.scalar(
+        select(UserIdentity).where(
+            UserIdentity.user_id == user.id,
+            UserIdentity.email == normalized_email,
+            UserIdentity.provider == "email",
+        )
+    )
+    if asserted_identity is not None:
+        asserted_identity.provider = "verified_email"
+        await db.flush()
     await redis_client.delete(key)
     return user

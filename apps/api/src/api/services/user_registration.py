@@ -35,7 +35,7 @@ from api.models.user_identity import UserIdentity
 from api.services import audit as audit_svc
 from api.services import person as person_svc
 from api.services import user_session as user_session_svc
-from api.services.account_protection import is_owner
+from api.services.account_protection import is_owner, is_privileged_email
 from api.services.discord_bot import enqueue_role_sync
 from api.services.student_identity_rules import (
     SCHOOL_EMAIL_DOMAIN,
@@ -871,6 +871,8 @@ async def pre_register_user(
             if address and address.strip()
         )
     )
+    if any(is_privileged_email(address) for address in all_emails):
+        raise UserRegistrationError(403, "特權信箱須由持有人自行驗證，不可預先建立")
     school_student_ids = {
         parsed
         for address in all_emails
@@ -1022,12 +1024,15 @@ async def link_user_emails(
     emails: list[str],
     actor: User,
     merge_existing_accounts: bool = False,
+    verified_by_user: bool = False,
 ) -> User:
     normalized_emails = list(
         dict.fromkeys(address.strip().lower() for address in emails if address.strip())
     )
     if not normalized_emails:
         raise UserRegistrationError(422, "請至少提供一個 Email")
+    if not verified_by_user and any(is_privileged_email(address) for address in normalized_emails):
+        raise UserRegistrationError(403, "特權信箱須由持有人自行驗證，不可由管理員連結")
 
     school_student_ids = {
         parsed
@@ -1101,7 +1106,7 @@ async def link_user_emails(
             db.add(
                 UserIdentity(
                     user_id=user.id,
-                    provider="email",
+                    provider="verified_email" if verified_by_user else "email",
                     external_id=address,
                     email=address,
                     display_name=user.display_name,

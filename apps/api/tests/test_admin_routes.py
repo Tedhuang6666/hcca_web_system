@@ -6,11 +6,13 @@ from datetime import UTC, date, datetime, timedelta
 from unittest.mock import AsyncMock
 
 import pytest
+from fastapi import HTTPException
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.clock import local_today
+from api.core.config import settings
 from api.dependencies.auth import get_current_active_user
 from api.main import app
 from api.models.council_proposal import CouncilProposal
@@ -427,6 +429,46 @@ async def test_non_superuser_admin_cannot_change_superuser_login_state(
 
 
 @pytest.mark.asyncio
+async def test_admin_cannot_assert_or_preregister_privileged_email(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, operator, _, position, _ = await _seed_admin_data(db_session)
+    db_session.add(Permission(position_id=position.id, code="admin:all"))
+    await db_session.flush()
+    monkeypatch.setattr(settings, "OWNER_EMAILS", ["owner-unclaimed@example.test"])
+    monkeypatch.setattr(settings, "SUPERUSER_EMAILS", ["super-unclaimed@example.test"])
+    _override_user(operator)
+
+    linked = await client.post(
+        f"/admin/users/{operator.id}/emails",
+        json={"emails": ["owner-unclaimed@example.test"]},
+    )
+    assert linked.status_code == 403, linked.text
+    assert (
+        await db_session.scalar(
+            select(UserIdentity).where(UserIdentity.email == "owner-unclaimed@example.test")
+        )
+        is None
+    )
+
+    preregistered = await client.post(
+        "/admin/users/pre-register",
+        json={
+            "email": "super-unclaimed@example.test",
+            "linked_emails": [operator.email],
+            "display_name": "偽造帳號",
+        },
+    )
+    assert preregistered.status_code == 403, preregistered.text
+    assert (
+        await db_session.scalar(select(User).where(User.email == "super-unclaimed@example.test"))
+        is None
+    )
+
+
+@pytest.mark.asyncio
 async def test_owner_cannot_be_merged_away(
     client: AsyncClient,
     db_session: AsyncSession,
@@ -660,6 +702,45 @@ async def test_google_login_with_linked_email_uses_existing_user(
     )
     assert identity is not None
     assert identity.user_id == user.id
+
+
+@pytest.mark.asyncio
+async def test_google_login_rejects_legacy_unverified_owner_link(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = User(
+        email="ordinary@school.edu",
+        display_name="未驗證別名",
+        is_active=True,
+        is_verified=True,
+    )
+    db_session.add(user)
+    await db_session.flush()
+    db_session.add(
+        UserIdentity(
+            user_id=user.id,
+            provider="email",
+            external_id="owner@example.test",
+            email="owner@example.test",
+            linked_at=datetime.now(UTC),
+        )
+    )
+    await db_session.flush()
+    monkeypatch.setattr(settings, "OWNER_EMAILS", ["owner@example.test"])
+
+    with pytest.raises(HTTPException) as exc_info:
+        await auth_router._upsert_google_user(
+            db_session,
+            google_sub="real-owner-google-sub",
+            email="owner@example.test",
+            display_name="真正持有人",
+            avatar_url=None,
+            client_ip="127.0.0.1",
+            user_agent="pytest",
+        )
+    assert exc_info.value.status_code == 409
+    assert user.is_superuser is False
 
 
 @pytest.mark.asyncio

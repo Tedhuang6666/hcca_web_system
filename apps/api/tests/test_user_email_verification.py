@@ -9,6 +9,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.config import settings
 from api.dependencies.auth import get_current_active_user
 from api.main import app
 from api.models.discord_account import DiscordAccountLink
@@ -113,6 +114,71 @@ async def test_user_verifies_email_before_it_is_linked(
     )
     assert identity is not None
     assert identity.user_id == user.id
+    assert identity.provider == "verified_email"
+
+    primary_response = await client.post(
+        "/users/me/emails/primary", json={"email": "private@gmail.com"}
+    )
+    assert primary_response.status_code == 200, primary_response.text
+    assert primary_response.json()["primary_email"] == "private@gmail.com"
+
+
+@pytest.mark.asyncio
+async def test_admin_asserted_email_requires_otp_before_primary_switch(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = User(
+        email="original@hchs.hc.edu.tw",
+        display_name="待驗證信箱",
+        is_active=True,
+        is_verified=True,
+    )
+    db_session.add(user)
+    await db_session.flush()
+    db_session.add(
+        UserIdentity(
+            user_id=user.id,
+            provider="email",
+            external_id="owner@example.test",
+            email="owner@example.test",
+            linked_at=datetime.now(UTC),
+        )
+    )
+    await db_session.flush()
+    monkeypatch.setattr(settings, "OWNER_EMAILS", ["owner@example.test"])
+    _override_user(user)
+
+    denied = await client.post("/users/me/emails/primary", json={"email": "owner@example.test"})
+    assert denied.status_code == 403
+    assert user.email == "original@hchs.hc.edu.tw"
+
+    fake_redis = FakeRedis()
+    monkeypatch.setattr(verification_svc, "redis_client", fake_redis)
+    monkeypatch.setattr(verification_svc.secrets, "randbelow", lambda _limit: 123456)
+    monkeypatch.setattr(
+        verification_svc,
+        "send_branded_email",
+        lambda *_args, **_kwargs: ["task-id"],
+    )
+    requested = await client.post(
+        "/users/me/emails/verification", json={"email": "owner@example.test"}
+    )
+    assert requested.status_code == 202, requested.text
+    verified = await client.post(
+        "/users/me/emails/verify",
+        json={"email": "owner@example.test", "code": "123456"},
+    )
+    assert verified.status_code == 200, verified.text
+    identity = await db_session.scalar(
+        select(UserIdentity).where(UserIdentity.email == "owner@example.test")
+    )
+    assert identity is not None
+    assert identity.provider == "verified_email"
+    promoted = await client.post("/users/me/emails/primary", json={"email": "owner@example.test"})
+    assert promoted.status_code == 200, promoted.text
+    assert promoted.json()["primary_email"] == "owner@example.test"
 
 
 @pytest.mark.asyncio
