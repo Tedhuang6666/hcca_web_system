@@ -122,6 +122,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "termRollover", href: "/admin/term-rollover", iconKey: "people", label: "換屆交接", perm: "admin:all" },
   { id: "navigationProfiles", href: "/admin/navigation-profiles", iconKey: "settings", label: "視角管理", perm: "admin:all" },
   { id: "galleryAdmin", href: "/admin/gallery", iconKey: "info", label: "活動影像", perm: "site:manage" },
+  { id: "performanceAnalytics", href: "/analytics", iconKey: "analytics", label: "績效統計", perm: "analytics:view" },
   { id: "reports", href: "/admin/reports", iconKey: "analytics", label: "常用報表", perm: "admin:all" },
   { id: "dataLifecycle", href: "/admin/data-lifecycle", iconKey: "policy", label: "資料保存與清理", perm: "admin:all" },
   { id: "trash", href: "/admin/trash", iconKey: "audit", label: "誤刪救援", perm: "admin:all" },
@@ -141,7 +142,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/admin/system",
     iconKey: "systemOperations",
     label: "系統營運",
-    perms: ["admin:all", "analytics:view"],
+    perm: "admin:all",
   },
   {
     id: "systemSettings",
@@ -340,8 +341,8 @@ export const ADMIN_CATALOG: NavSection[] = [
   },
   {
     id: "admin-data",
-    heading: "資料與隱私",
-    items: byIds(["privacyAdmin", "policies", "reports", "dataLifecycle", "trash"]),
+    heading: "統計、資料與隱私",
+    items: byIds(["performanceAnalytics", "reports", "privacyAdmin", "policies", "dataLifecycle", "trash"]),
   },
   {
     id: "admin-system",

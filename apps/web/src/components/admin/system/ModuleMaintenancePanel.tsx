@@ -8,6 +8,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useWS } from "@/hooks/useWS";
 import { systemApi, type ModuleStatus, apiErrorMessage } from "@/lib/api";
+import { DeadLetterPanel, RecoveryToolsPanel } from "./SystemDefensePanel";
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -211,7 +212,7 @@ export default function ModuleMaintenancePanel() {
             <Boxes size={20} aria-hidden />
           </span>
           <div>
-            <h2 className="text-xl font-semibold text-[var(--text-primary)]">模組維護</h2>
+            <h2 className="text-xl font-semibold text-[var(--text-primary)]">維護與復原</h2>
             <p className="text-sm text-[var(--text-muted)]">
               管理各功能模組的上線狀態與健康監控
             </p>
@@ -392,6 +393,11 @@ export default function ModuleMaintenancePanel() {
           </div>
         </>
       )}
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(20rem,0.8fr)_minmax(0,1.2fr)]">
+        <RecoveryToolsPanel onChanged={() => void load()} />
+        <DeadLetterPanel />
+      </div>
     </div>
   );
 }

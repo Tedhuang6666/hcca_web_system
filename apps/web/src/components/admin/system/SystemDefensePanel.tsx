@@ -7,7 +7,6 @@ import Link from "next/link";
 import {
   AlertTriangle,
   Ban,
-  Boxes,
   Database,
   Eraser,
   Gauge,
@@ -408,9 +407,6 @@ export default function SystemDefensePanel() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href="/admin/system?tab=blocking" className="btn btn-secondary">
-            封鎖與規則
-          </Link>
           <button type="button" onClick={refresh} className="btn btn-ghost">
             <RefreshCcw size={16} aria-hidden />
             重新整理
@@ -715,34 +711,9 @@ export default function SystemDefensePanel() {
         </Panel>
       </section>
 
-      <section className="mt-4">
-        <ModulesLinkCard />
-      </section>
-
-      <section className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(20rem,0.8fr)_minmax(0,1.2fr)]">
-        <RecoveryToolsPanel onChanged={refresh} />
-        <div className="xl:col-span-2">
-          <DeadLetterPanel />
-        </div>
-      </section>
     </div>
   );
 }
-
-function ModulesLinkCard() {
-  return (
-    <Panel title="模組維護" icon={<Boxes size={18} aria-hidden />}>
-      <Link
-        href="/admin/system?tab=modules"
-        className="btn btn-secondary inline-flex items-center gap-2 text-sm"
-      >
-        <Boxes size={15} aria-hidden />
-        前往模組維護頁面
-      </Link>
-    </Panel>
-  );
-}
-
 
 function DeadLetterRow({ item }: { item: DeadLetterItem }) {
   const when = item.timestamp ? new Date(item.timestamp).toLocaleString() : "—";
@@ -780,7 +751,7 @@ function DeadLetterRow({ item }: { item: DeadLetterItem }) {
   );
 }
 
-function DeadLetterPanel() {
+export function DeadLetterPanel() {
   const confirm = useConfirm();
   const [items, setItems] = useState<DeadLetterItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -898,7 +869,7 @@ function Action({
   );
 }
 
-function RecoveryToolsPanel({ onChanged }: { onChanged: () => void }) {
+export function RecoveryToolsPanel({ onChanged }: { onChanged: () => void }) {
   const confirm = useConfirm();
   const [busy, setBusy] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<string | null>(null);

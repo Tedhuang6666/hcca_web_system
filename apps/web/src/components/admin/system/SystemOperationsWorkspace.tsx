@@ -7,7 +7,6 @@ import { useSearchParams } from "next/navigation";
 import {
   Activity,
   Ban,
-  BarChart3,
   Boxes,
   Database,
   LockKeyhole,
@@ -22,15 +21,13 @@ export type SystemOperationsTabId =
   | "blocking"
   | "diagnostics"
   | "observability"
-  | "modules"
-  | "performance";
+  | "modules";
 
 type SystemOperationsTab = {
   id: SystemOperationsTabId;
   label: string;
   description: string;
   icon: LucideIcon;
-  adminOnly?: boolean;
 };
 
 const TABS: SystemOperationsTab[] = [
@@ -39,41 +36,30 @@ const TABS: SystemOperationsTab[] = [
     label: "系統防護",
     description: "維護模式、全域限流與緊急封鎖",
     icon: ShieldCheck,
-    adminOnly: true,
   },
   {
     id: "blocking",
     label: "封鎖與規則",
     description: "封鎖使用者與長期防禦規則",
     icon: Ban,
-    adminOnly: true,
   },
   {
     id: "diagnostics",
     label: "系統診斷",
     description: "服務健康與版本狀態",
     icon: Database,
-    adminOnly: true,
   },
   {
     id: "observability",
     label: "效能觀測",
     description: "錯誤、使用者體驗與慢查詢",
     icon: Activity,
-    adminOnly: true,
   },
   {
     id: "modules",
-    label: "模組維護",
-    description: "模組可用性與恢復操作",
+    label: "維護與復原",
+    description: "模組狀態、快取、服務重啟與失敗任務",
     icon: Boxes,
-    adminOnly: true,
-  },
-  {
-    id: "performance",
-    label: "績效管理",
-    description: "治理成效、公文效率與參與度",
-    icon: BarChart3,
   },
 ];
 
@@ -102,9 +88,6 @@ const SystemObservabilityPanel = dynamic(() => import("./SystemObservabilityPane
 const ModuleMaintenancePanel = dynamic(() => import("./ModuleMaintenancePanel"), {
   loading: WorkspaceLoading,
 });
-const PerformanceManagementPanel = dynamic(() => import("./PerformanceManagementPanel"), {
-  loading: WorkspaceLoading,
-});
 
 const PANELS: Record<SystemOperationsTabId, ComponentType> = {
   defense: SystemDefensePanel,
@@ -112,7 +95,6 @@ const PANELS: Record<SystemOperationsTabId, ComponentType> = {
   diagnostics: SystemDiagnosticsPanel,
   observability: SystemObservabilityPanel,
   modules: ModuleMaintenancePanel,
-  performance: PerformanceManagementPanel,
 };
 
 function parseTab(value: string | null): SystemOperationsTabId | null {
@@ -125,14 +107,12 @@ export default function SystemOperationsWorkspace({
   defaultTab?: SystemOperationsTabId;
 }) {
   const searchParams = useSearchParams();
-  const { can, isAdmin, isReady } = usePermissions();
-  const visibleTabs = TABS.filter((tab) => !tab.adminOnly || isAdmin)
-    .filter((tab) => tab.adminOnly || can("analytics:view"));
+  const { isAdmin, isReady } = usePermissions();
+  const visibleTabs = isAdmin ? TABS : [];
   const requestedTab = parseTab(searchParams.get("tab")) ?? defaultTab;
   const activeTab = visibleTabs.some((tab) => tab.id === requestedTab)
     ? requestedTab
     : visibleTabs[0]?.id;
-  const isPerformanceOnly = !isAdmin;
 
   if (!isReady) {
     return (
@@ -162,7 +142,7 @@ export default function SystemOperationsWorkspace({
     <div className="mx-auto max-w-7xl p-4 md:p-6">
       <header className="border-b pb-4" style={{ borderColor: "var(--border)" }}>
         <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
-          {isPerformanceOnly ? "績效管理" : "系統營運中心"}
+          系統營運中心
         </h1>
         <nav className="mt-4 flex gap-1 overflow-x-auto" aria-label="系統營運分頁">
           {visibleTabs.map((tab) => {

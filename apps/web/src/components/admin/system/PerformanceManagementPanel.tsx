@@ -162,10 +162,7 @@ export default function PerformanceManagementPanel() {
     <div className="space-y-5">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-xl font-semibold">績效統計儀表板</h2>
-          <p className="mt-1 text-sm text-fg-muted!">
-            公開文章閱讀、公文效率與參與度概覽
-          </p>
+          <h1 className="text-2xl font-semibold">績效統計</h1>
         </div>
         <button className="btn btn-secondary" onClick={load} disabled={loading}>
           {loading ? "載入中" : "重新整理"}

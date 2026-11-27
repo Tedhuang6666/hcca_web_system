@@ -150,7 +150,11 @@ describe("navigation visibility", () => {
     expect(defaultIds).not.toContain("analytics");
     expect(isNavItemVisible(adminItem!, visibility)).toBe(true);
     expect(isNavItemVisible(financeItem!, visibility)).toBe(false);
-    expect(systemOperationsItem?.perms).toContain("analytics:view");
+    expect(systemOperationsItem?.perm).toBe("admin:all");
+    expect(NAV_ITEMS.find((item) => item.id === "performanceAnalytics")).toMatchObject({
+      href: "/analytics",
+      perm: "analytics:view",
+    });
     expect(adminItem?.perms).toEqual(expect.arrayContaining([
       "merchandise_submission:view",
       "merchandise_submission:manage",
