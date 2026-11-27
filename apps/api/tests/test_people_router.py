@@ -7,6 +7,7 @@ from collections.abc import Callable
 from datetime import date, timedelta
 
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.clock import local_today
@@ -20,7 +21,7 @@ from api.models.person import (
     PersonAffiliationStatus,
     PersonStatus,
 )
-from api.models.school_class import ClassRosterEntry, SchoolClass
+from api.models.school_class import ClassRoleBinding, ClassRosterEntry, SchoolClass
 from api.models.user import User
 from api.services import person as person_svc
 
@@ -77,6 +78,167 @@ async def _add_org_affiliation(
     db_session.add(affiliation)
     await db_session.flush()
     return affiliation
+
+
+async def test_people_affiliation_rejects_grant_above_actor_permission(
+    authed_client_factory: Callable[[User], AsyncClient],
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    manager, org = await _make_people_manager(db_session, PermissionCode.ADMIN_USERS)
+    person = await _make_person(db_session, user_id=manager.id)
+    privileged = Position(org_id=org.id, name="系統管理職位")
+    delegated = Position(org_id=org.id, name="使用者管理職位")
+    db_session.add_all([privileged, delegated])
+    await db_session.flush()
+    db_session.add_all(
+        [
+            Permission(position_id=privileged.id, code=PermissionCode.ADMIN_ALL.value),
+            Permission(position_id=delegated.id, code=PermissionCode.ADMIN_USERS.value),
+        ]
+    )
+    await db_session.flush()
+
+    payload = {
+        "person_id": str(person.id),
+        "kind": "org_position",
+        "org_id": str(org.id),
+        "position_id": str(privileged.id),
+    }
+    assert (await client.post("/people/affiliations", json=payload)).status_code == 401
+    manager_client = authed_client_factory(manager)
+    denied = await manager_client.post("/people/affiliations", json=payload)
+    assert denied.status_code == 403, denied.text
+    assert (
+        await db_session.scalar(
+            select(UserPosition).where(
+                UserPosition.user_id == manager.id,
+                UserPosition.position_id == privileged.id,
+            )
+        )
+        is None
+    )
+
+    inherited_org = Org(
+        name=f"繼承權限組織-{uuid.uuid4().hex[:6]}",
+        default_permission_codes=[PermissionCode.ADMIN_ALL.value],
+    )
+    db_session.add(inherited_org)
+    await db_session.flush()
+    inherited_position = Position(org_id=inherited_org.id, name="繼承管理權職位")
+    db_session.add(inherited_position)
+    await db_session.flush()
+    inherited_denied = await manager_client.post(
+        "/people/affiliations",
+        json={
+            "person_id": str(person.id),
+            "kind": "org_position",
+            "position_id": str(inherited_position.id),
+        },
+    )
+    assert inherited_denied.status_code == 403, inherited_denied.text
+
+    payload["position_id"] = str(delegated.id)
+    allowed = await manager_client.post("/people/affiliations", json=payload)
+    assert allowed.status_code == 201, allowed.text
+
+
+async def test_org_member_and_class_managers_cannot_grant_privileged_position(
+    authed_client_factory: Callable[[User], AsyncClient],
+    db_session: AsyncSession,
+) -> None:
+    member_manager, org = await _make_people_manager(db_session, PermissionCode.ORG_MANAGE_MEMBERS)
+    member_person = await _make_person(db_session, user_id=member_manager.id)
+    await _add_org_affiliation(db_session, member_person, org)
+    privileged = Position(org_id=org.id, name="高權限職位")
+    db_session.add(privileged)
+    await db_session.flush()
+    db_session.add(Permission(position_id=privileged.id, code=PermissionCode.ADMIN_ALL.value))
+    school_class = SchoolClass(
+        academic_year=115,
+        class_code="108",
+        created_by=member_manager.id,
+        org_id=org.id,
+    )
+    db_session.add(school_class)
+    await db_session.flush()
+    db_session.add(
+        ClassRoleBinding(class_id=school_class.id, role_key="leader", position_id=privileged.id)
+    )
+    await db_session.flush()
+
+    member_client = authed_client_factory(member_manager)
+    org_response = await member_client.post(
+        "/people/affiliations",
+        json={
+            "person_id": str(member_person.id),
+            "kind": "org_position",
+            "org_id": str(org.id),
+            "position_id": str(privileged.id),
+        },
+    )
+    assert org_response.status_code == 403, org_response.text
+
+    class_manager, _ = await _make_people_manager(db_session, PermissionCode.CLASS_MANAGE)
+    class_manager_position = await db_session.scalar(
+        select(Position)
+        .join(UserPosition, UserPosition.position_id == Position.id)
+        .where(UserPosition.user_id == class_manager.id)
+    )
+    assert class_manager_position is not None
+    class_manager_position.org_id = org.id
+    class_person = await _make_person(db_session, user_id=class_manager.id)
+    db_session.add(
+        PersonAffiliation(
+            person_id=class_person.id,
+            kind=PersonAffiliationKind.CLASS_MEMBER,
+            class_id=school_class.id,
+            org_id=org.id,
+            start_date=local_today(),
+            status=PersonAffiliationStatus.ACTIVE,
+            source=PersonAffiliationSource.MANUAL,
+        )
+    )
+    await db_session.flush()
+    class_client = authed_client_factory(class_manager)
+    class_response = await class_client.post(
+        "/people/affiliations",
+        json={
+            "person_id": str(class_person.id),
+            "kind": "class_role",
+            "class_id": str(school_class.id),
+            "role_key": "leader",
+        },
+    )
+    assert class_response.status_code == 403, class_response.text
+
+
+async def test_admin_all_can_grant_privileged_position_through_affiliation(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    db_session: AsyncSession,
+) -> None:
+    person = await _make_person(db_session, user_id=admin_user.id)
+    org = Org(name=f"高權限組織-{uuid.uuid4().hex[:6]}")
+    db_session.add(org)
+    await db_session.flush()
+    privileged = Position(org_id=org.id, name="高權限職位")
+    db_session.add(privileged)
+    await db_session.flush()
+    db_session.add(Permission(position_id=privileged.id, code=PermissionCode.ADMIN_ALL.value))
+    await db_session.flush()
+
+    response = await authed_client_factory(admin_user).post(
+        "/people/affiliations",
+        json={
+            "person_id": str(person.id),
+            "kind": "org_position",
+            "org_id": str(org.id),
+            "position_id": str(privileged.id),
+        },
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["synced_user_position_id"] is not None
 
 
 async def test_org_member_manager_only_sees_people_in_managed_org(

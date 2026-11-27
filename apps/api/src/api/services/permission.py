@@ -63,6 +63,19 @@ async def _get_org_default_permission_codes_by_org(
     return codes_by_org
 
 
+async def get_position_granted_permission_codes(
+    db: AsyncSession, position: Position
+) -> frozenset[str]:
+    """取得指派職位會帶入的直接權限與組織祖先預設權限。"""
+    direct_codes = set(
+        (
+            await db.scalars(select(Permission.code).where(Permission.position_id == position.id))
+        ).all()
+    )
+    default_codes = await _get_org_default_permission_codes_by_org(db, {position.org_id})
+    return frozenset(direct_codes | default_codes.get(position.org_id, set()))
+
+
 async def get_user_permission_codes(
     db: AsyncSession,
     user_id: uuid.UUID,
