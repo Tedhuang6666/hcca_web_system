@@ -6,15 +6,12 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.permissions import require_any, require_permission
-from api.models.org import Org, Position
-from api.models.person import Person, PersonAffiliation, PersonAffiliationKind, PersonStatus
-from api.models.school_class import ClassRoleBinding, SchoolClass
+from api.models.person import Person, PersonAffiliation, PersonStatus
 from api.models.user import User
 from api.routers._common import or_404
 from api.schemas.person import (
@@ -35,7 +32,6 @@ from api.schemas.person import (
 from api.services import audit as audit_svc
 from api.services import person as person_svc
 from api.services import person_access as person_access_svc
-from api.services.permission import get_position_granted_permission_codes, get_user_permission_codes
 from api.services.person_access import PeopleAccessScope
 
 router = APIRouter(prefix="/people", tags=["人員與身分"])
@@ -82,52 +78,6 @@ async def _require_new_affiliation_scope(
 ) -> None:
     if not await person_access_svc.new_affiliation_has_access_scope(db, payload, scope):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到目標身分範圍")
-
-
-async def _require_affiliation_grant_authority(
-    db: AsyncSession, payload: PersonAffiliationCreate, actor: User
-) -> None:
-    position_id = payload.position_id
-    if payload.kind == PersonAffiliationKind.CLASS_ROLE:
-        binding_id = (
-            await db.scalar(
-                select(ClassRoleBinding.position_id).where(
-                    ClassRoleBinding.class_id == payload.class_id,
-                    ClassRoleBinding.role_key == payload.role_key,
-                )
-            )
-            if payload.role_key
-            else None
-        )
-        if position_id is not None and (binding_id is None or binding_id != position_id):
-            raise HTTPException(status_code=422, detail="班級職位須符合既有角色綁定")
-        position_id = position_id or binding_id
-    elif position_id is not None and payload.kind != PersonAffiliationKind.ORG_POSITION:
-        raise HTTPException(status_code=422, detail="此身分類型不可指派職位")
-
-    if position_id is None:
-        return
-    position = await db.get(Position, position_id)
-    if position is None:
-        raise HTTPException(status_code=422, detail="找不到職位")
-    org = await db.get(Org, position.org_id)
-    if org is None or not org.is_active:
-        raise HTTPException(status_code=409, detail="職位所屬組織已停用")
-    if payload.org_id is not None and payload.org_id != position.org_id:
-        raise HTTPException(status_code=422, detail="職位與身分所屬組織不一致")
-    if payload.kind == PersonAffiliationKind.CLASS_ROLE:
-        school_class = await db.get(SchoolClass, payload.class_id)
-        if school_class is None or school_class.org_id != position.org_id:
-            raise HTTPException(status_code=422, detail="班級職位與班級所屬組織不一致")
-
-    if actor.is_superuser:
-        return
-    actor_codes = await get_user_permission_codes(db, actor.id)
-    if PermissionCode.ADMIN_ALL in actor_codes:
-        return
-    granted_codes = await get_position_granted_permission_codes(db, position)
-    if PermissionCode.ADMIN_ALL in granted_codes or not granted_codes.issubset(actor_codes):
-        raise HTTPException(status_code=403, detail="不可指派超出自身權限的職位")
 
 
 async def _require_roster_import_scope(
@@ -354,7 +304,10 @@ async def create_affiliation(
     scope = await _get_people_access_scope(db, actor)
     await _require_person_scope(db, payload.person_id, scope)
     await _require_new_affiliation_scope(db, payload, scope)
-    await _require_affiliation_grant_authority(db, payload, actor)
+    grant_error = await person_access_svc.affiliation_grant_error(db, payload, actor)
+    if grant_error is not None:
+        code, detail = grant_error
+        raise HTTPException(status_code=code, detail=detail)
     try:
         affiliation = await person_svc.create_affiliation(db, data=payload)
     except ValueError as exc:

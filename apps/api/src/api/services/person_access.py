@@ -4,17 +4,27 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from http import HTTPStatus
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.permission_codes import PermissionCode
-from api.models.org import Position
-from api.models.person import Person, PersonAffiliation, PersonAffiliationStatus
-from api.models.school_class import SchoolClass
+from api.models.org import Org, Position
+from api.models.person import (
+    Person,
+    PersonAffiliation,
+    PersonAffiliationKind,
+    PersonAffiliationStatus,
+)
+from api.models.school_class import ClassRoleBinding, SchoolClass
 from api.models.user import User
 from api.schemas.person import PersonAffiliationCreate, PersonRosterImport
-from api.services.permission import get_user_org_ids_with_permission, get_user_permission_codes
+from api.services.permission import (
+    get_position_granted_permission_codes,
+    get_user_org_ids_with_permission,
+    get_user_permission_codes,
+)
 
 
 @dataclass(frozen=True)
@@ -36,6 +46,54 @@ class PeopleAccessScope:
         return frozenset(
             self.org_ids | {org_id for org_id in self.class_org_by_id.values() if org_id}
         )
+
+
+async def affiliation_grant_error(
+    db: AsyncSession, payload: PersonAffiliationCreate, actor: User
+) -> tuple[HTTPStatus, str] | None:
+    """Validate that a user may grant the position requested by an affiliation."""
+    position_id = payload.position_id
+    if payload.kind == PersonAffiliationKind.CLASS_ROLE:
+        binding_id = (
+            await db.scalar(
+                select(ClassRoleBinding.position_id).where(
+                    ClassRoleBinding.class_id == payload.class_id,
+                    ClassRoleBinding.role_key == payload.role_key,
+                )
+            )
+            if payload.role_key
+            else None
+        )
+        if position_id is not None and (binding_id is None or binding_id != position_id):
+            return HTTPStatus.UNPROCESSABLE_ENTITY, "班級職位須符合既有角色綁定"
+        position_id = position_id or binding_id
+    elif position_id is not None and payload.kind != PersonAffiliationKind.ORG_POSITION:
+        return HTTPStatus.UNPROCESSABLE_ENTITY, "此身分類型不可指派職位"
+
+    if position_id is None:
+        return None
+    position = await db.get(Position, position_id)
+    if position is None:
+        return HTTPStatus.UNPROCESSABLE_ENTITY, "找不到職位"
+    org = await db.get(Org, position.org_id)
+    if org is None or not org.is_active:
+        return HTTPStatus.CONFLICT, "職位所屬組織已停用"
+    if payload.org_id is not None and payload.org_id != position.org_id:
+        return HTTPStatus.UNPROCESSABLE_ENTITY, "職位與身分所屬組織不一致"
+    if payload.kind == PersonAffiliationKind.CLASS_ROLE:
+        school_class = await db.get(SchoolClass, payload.class_id)
+        if school_class is None or school_class.org_id != position.org_id:
+            return HTTPStatus.UNPROCESSABLE_ENTITY, "班級職位與班級所屬組織不一致"
+
+    if actor.is_superuser:
+        return None
+    actor_codes = await get_user_permission_codes(db, actor.id)
+    if PermissionCode.ADMIN_ALL in actor_codes:
+        return None
+    granted_codes = await get_position_granted_permission_codes(db, position)
+    if PermissionCode.ADMIN_ALL in granted_codes or not granted_codes.issubset(actor_codes):
+        return HTTPStatus.FORBIDDEN, "不可指派超出自身權限的職位"
+    return None
 
 
 async def get_people_access_scope(db: AsyncSession, actor: User) -> PeopleAccessScope:

@@ -53,6 +53,18 @@ async def list_user_emails(db: AsyncSession, user: User) -> list[str]:
     return sorted({user.email, *(email for email in identity_emails if email)})
 
 
+async def has_verified_email_identity(db: AsyncSession, *, user_id: uuid.UUID, email: str) -> bool:
+    return (
+        await db.scalar(
+            select(UserIdentity.id).where(
+                UserIdentity.user_id == user_id,
+                UserIdentity.email == email,
+                UserIdentity.provider.in_(("google", "verified_email")),
+            )
+        )
+    ) is not None
+
+
 async def _find_external_accounts(
     db: AsyncSession,
     *,

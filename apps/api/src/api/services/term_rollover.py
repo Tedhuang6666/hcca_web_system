@@ -20,10 +20,12 @@ from typing import Any
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.permission_codes import PermissionCode
 from api.models.audit_log import AuditLog
 from api.models.org import Position, UserPosition
 from api.models.user import User
 from api.services.notification import notify_users
+from api.services.permission import get_position_granted_permission_codes, get_user_permission_codes
 
 # ── Schemas ────────────────────────────────────────────────────────────────
 
@@ -77,6 +79,31 @@ class ExecuteResult:
     started_at: datetime
     finished_at: datetime
     affected_user_ids: set[uuid.UUID]
+
+
+async def can_execute_rollover(
+    session: AsyncSession,
+    user: User,
+    *,
+    terminate_active_before: bool,
+    position_ids: set[uuid.UUID],
+) -> bool:
+    """Check privileged rollover constraints for non-global administrators."""
+    if user.is_superuser:
+        return True
+    actor_codes = await get_user_permission_codes(session, user.id)
+    if PermissionCode.ADMIN_ALL in actor_codes:
+        return True
+    if terminate_active_before:
+        return False
+    for position_id in position_ids:
+        position = await session.get(Position, position_id)
+        if position is None:
+            continue
+        granted_codes = await get_position_granted_permission_codes(session, position)
+        if PermissionCode.ADMIN_ALL in granted_codes or not granted_codes.issubset(actor_codes):
+            return False
+    return True
 
 
 # ── 內部 helpers ────────────────────────────────────────────────────────────
