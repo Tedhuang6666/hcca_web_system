@@ -803,6 +803,25 @@ async def test_confidential_petition_access_is_scoped_by_role(
     assert admin_cases[0]["title"] == "此案件已被設為密件"
     site_owner_cases = (await authed_client_factory(site_owner).get("/petitions/manage")).json()
     assert site_owner_cases[0]["title"] == "教室冷氣故障"
+    viewer_client = authed_client_factory(viewer)
+    matching_title = await viewer_client.get("/petitions/manage", params={"keyword": "冷氣"})
+    unrelated_title = await viewer_client.get("/petitions/manage", params={"keyword": "不存在"})
+    assert matching_title.status_code == unrelated_title.status_code == 200
+    assert matching_title.json() == unrelated_title.json() == []
+    assert (await viewer_client.get("/petitions/manage", params={"keyword": "%"})).json() == []
+    number_lookup = await viewer_client.get(
+        "/petitions/manage", params={"keyword": case_obj.case_number}
+    )
+    assert number_lookup.status_code == 200
+    assert number_lookup.json()[0]["title"] == "此案件已被設為密件"
+    assignee_title_search = await authed_client_factory(handler).get(
+        "/petitions/manage", params={"keyword": "冷氣"}
+    )
+    assert [item["id"] for item in assignee_title_search.json()] == [str(case_obj.id)]
+    site_owner_title_search = await authed_client_factory(site_owner).get(
+        "/petitions/manage", params={"keyword": "冷氣"}
+    )
+    assert [item["id"] for item in site_owner_title_search.json()] == [str(case_obj.id)]
     cross_org_cases = (
         await authed_client_factory(cross_org_viewer).get("/petitions/manage")
     ).json()

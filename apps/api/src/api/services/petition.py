@@ -7,7 +7,7 @@ import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import case, extract, func, select
+from sqlalchemy import and_, case, extract, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
@@ -15,6 +15,7 @@ from api.core.clock import local_today, roc_year
 from api.core.config import settings
 from api.core.database import advisory_xact_lock
 from api.core.permission_codes import PermissionCode
+from api.core.search import LIKE_ESCAPE, like_contains
 from api.models.org import Org, Position, UserPosition
 from api.models.petition import (
     PetitionAttachment,
@@ -515,6 +516,7 @@ async def list_cases(
     status: PetitionStatus | None = None,
     keyword: str | None = None,
     include_confidential: bool = False,
+    viewer: User | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> list[PetitionCase]:
@@ -557,9 +559,20 @@ async def list_cases(
     if status:
         stmt = stmt.where(PetitionCase.status == status)
     if keyword:
-        pattern = f"%{keyword.strip()}%"
+        pattern = like_contains(keyword.strip())
+        title_match = PetitionCase.title.ilike(pattern, escape=LIKE_ESCAPE)
+        if include_confidential and submitter_id is None and not (viewer and is_site_owner(viewer)):
+            visible_titles = [PetitionCase.is_confidential.is_(False)]
+            if viewer is not None:
+                visible_titles.extend(
+                    [
+                        PetitionCase.submitter_id == viewer.id,
+                        PetitionCase.assigned_to_id == viewer.id,
+                    ]
+                )
+            title_match = and_(title_match, or_(*visible_titles))
         stmt = stmt.where(
-            PetitionCase.title.ilike(pattern) | PetitionCase.case_number.ilike(pattern)
+            or_(title_match, PetitionCase.case_number.ilike(pattern, escape=LIKE_ESCAPE))
         )
     if submitter_id is None and not include_confidential:
         stmt = stmt.where(PetitionCase.is_confidential.is_(False))

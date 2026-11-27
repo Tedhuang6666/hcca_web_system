@@ -1032,6 +1032,7 @@ async def list_manage_cases(
         org_ids=org_ids,
         assigned_to_id=user.id if assigned_to_me else None,
         include_confidential=True,
+        viewer=user,
         status=status_filter,
         keyword=keyword,
         limit=limit,
