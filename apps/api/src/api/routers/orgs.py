@@ -192,6 +192,13 @@ async def create_org(data: OrgCreate, db: DbDep, current_user: CurrentUser) -> o
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"存在未知權限碼：{', '.join(invalid_codes)}",
         )
+    if data.default_permission_codes and not current_user.is_superuser:
+        caller_codes = await get_user_permission_codes(db, current_user.id)
+        if PermissionCode.ADMIN_ALL not in caller_codes:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="變更組織預設權限需要 admin:all",
+            )
     org = await org_svc.create_org(db, data)
     await audit_svc.record(
         db,
@@ -234,6 +241,16 @@ async def update_org(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"存在未知權限碼：{', '.join(invalid_codes)}",
             )
+        if (
+            set(data.default_permission_codes) != set(org.default_permission_codes or [])
+            and not current_user.is_superuser
+        ):
+            caller_codes = await get_user_permission_codes(db, current_user.id)
+            if PermissionCode.ADMIN_ALL not in caller_codes:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="變更組織預設權限需要 admin:all",
+                )
     before = {
         "name": org.name,
         "description": org.description,

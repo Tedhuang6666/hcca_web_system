@@ -7,6 +7,8 @@ import datetime as dt
 import re
 from collections.abc import Sequence
 from io import BytesIO
+from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 from api.core.clock import TAIPEI
 from api.models.petition import PetitionCase
@@ -60,8 +62,36 @@ _CN_DIGITS = "零一二三四五六七八九"
 def render_print_pdf(html_content: str) -> bytes:
     """Render official print HTML to PDF bytes."""
     from weasyprint import HTML
+    from weasyprint.urls import URLFetcher
 
-    return HTML(string=html_content, base_url="/").write_pdf()
+    font_names = (
+        _BUNDLED_KAI_FONT,
+        _FALLBACK_KAI_FONT,
+        _BUNDLED_LISHU_FONT,
+        _BUNDLED_TITLE_FONT,
+        _BUNDLED_XINGSHU_FONT,
+    )
+    allowed_fonts = {
+        path.resolve()
+        for name in font_names
+        for path in _bundled_font_candidates(name)
+        if path.is_file()
+    }
+
+    class OfficialPrintURLFetcher(URLFetcher):
+        def fetch(self, url: str, headers=None):
+            parsed = urlsplit(url)
+            if parsed.scheme == "data":
+                return super().fetch(url, headers)
+            if parsed.scheme == "file" and not parsed.netloc:
+                path = Path(unquote(parsed.path)).resolve()
+                if path in allowed_fonts:
+                    return super().fetch(url, headers)
+            raise ValueError("不允許載入外部列印資源")
+
+    return HTML(
+        string=html_content, base_url="/", url_fetcher=OfficialPrintURLFetcher()
+    ).write_pdf()
 
 
 def _br(value: str | None) -> str:

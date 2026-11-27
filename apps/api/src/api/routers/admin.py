@@ -45,6 +45,7 @@ from api.services import person as person_svc
 from api.services import user_position as tenure_svc
 from api.services import user_registration as user_registration_svc
 from api.services import user_session as user_session_svc
+from api.services.account_protection import is_owner, protected_target
 from api.services.discord_bot import enqueue_role_sync
 from api.services.notification_pref import (
     DIGEST_FREQUENCIES,
@@ -686,9 +687,9 @@ async def clear_user_mfa(
     admin_user: AdminUser,
 ) -> UserDetail:
     """管理員清除使用者的 TOTP 設定，讓使用者可重新註冊。"""
-    user = await db.get(User, user_id)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="使用者不存在")
+    user = await protected_target(
+        db, requester=admin_user, target_id=user_id, action_label="清除 2FA"
+    )
 
     before = {
         "mfa_enabled": user.mfa_enabled,
@@ -723,9 +724,9 @@ async def link_user_emails(
     db: DbDep,
     admin_user: AdminUser,
 ) -> UserDetail:
-    user = await db.get(User, user_id)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="使用者不存在")
+    user = await protected_target(
+        db, requester=admin_user, target_id=user_id, action_label="連結 Email"
+    )
     try:
         await user_registration_svc.link_user_emails(
             db,
@@ -757,6 +758,7 @@ def _merge_source_ids(body: MergeUserAccountsRequest) -> list[uuid.UUID]:
 async def _load_merge_users(
     db: AsyncSession,
     *,
+    requester: User,
     target_user_id: uuid.UUID,
     source_user_ids: list[uuid.UUID],
 ) -> tuple[User, list[User]]:
@@ -775,9 +777,9 @@ async def _load_merge_users(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="不可合併主要帳戶本身",
         )
-    target_user = await db.get(User, target_user_id)
-    if target_user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到主要帳戶")
+    target_user = await protected_target(
+        db, requester=requester, target_id=target_user_id, action_label="合併"
+    )
     result = await db.execute(select(User).where(User.id.in_(source_user_ids)))
     source_users = list(result.scalars().all())
     if len(source_users) != len(source_user_ids):
@@ -786,6 +788,13 @@ async def _load_merge_users(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="已停用的帳戶不可再次合併",
+        )
+    if any(is_owner(source) for source in source_users):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Owner 帳號不可合併")
+    if not requester.is_superuser and any(source.is_superuser for source in source_users):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="僅超級管理員可合併超級管理員帳號",
         )
     return target_user, source_users
 
@@ -799,11 +808,12 @@ async def preview_user_account_merge(
     user_id: uuid.UUID,
     body: MergeUserAccountsRequest,
     db: DbDep,
-    _: AdminUser,
+    admin_user: AdminUser,
 ) -> MergePreview:
     source_user_ids = _merge_source_ids(body)
     target_user, source_users = await _load_merge_users(
         db,
+        requester=admin_user,
         target_user_id=user_id,
         source_user_ids=source_user_ids,
     )
@@ -832,6 +842,7 @@ async def merge_user_accounts(
     source_user_ids = _merge_source_ids(body)
     target_user, source_users = await _load_merge_users(
         db,
+        requester=admin_user,
         target_user_id=user_id,
         source_user_ids=source_user_ids,
     )
@@ -1014,9 +1025,9 @@ async def revoke_user_sessions(
     db: DbDep,
     admin_user: AdminUser,
 ) -> dict[str, int | str]:
-    user = await db.get(User, user_id)
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="使用者不存在")
+    user = await protected_target(
+        db, requester=admin_user, target_id=user_id, action_label="撤銷工作階段"
+    )
     legacy_revoked_count = await revoke_user(str(user.id))
     revoked_count = legacy_revoked_count + await user_session_svc.revoke_all(
         db, user.id, reason="admin_revoke_all"

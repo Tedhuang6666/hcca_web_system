@@ -121,6 +121,15 @@ def test_render_print_pdf_embeds_bundled_body_and_signature_fonts() -> None:
     assert any("OfficialXingshu" in font_name for font_name in base_fonts)
 
 
+def test_render_print_pdf_does_not_attach_arbitrary_local_file(tmp_path: Path) -> None:
+    canary = tmp_path / "private.txt"
+    canary.write_text("private-canary", encoding="utf-8")
+
+    pdf = render_print_pdf(f'<a rel="attachment" href="{canary.as_uri()}">附件</a>')
+
+    assert PdfReader(BytesIO(pdf)).attachments == {}
+
+
 def test_render_petition_print_html_uses_intake_detail_layout() -> None:
     case_obj = SimpleNamespace(
         case_number="1150018",
@@ -750,6 +759,16 @@ async def test_announcement_omits_recipient_fields_without_changing_letters(
         for text in ("測試受文單位", "測試正本單位", "測試副本單位", "（未填）"):
             assert text not in rendered
             assert text not in pdf_text
+    else:
+        unsafe_name = '<a rel="attachment" href="file:///private.txt">測試</a>'
+        addressed = await render_document_print_html(
+            _OrgSession(org), doc, addressed_recipient_name=unsafe_name
+        )
+        assert unsafe_name not in addressed
+        assert (
+            "&lt;a rel=&quot;attachment&quot; href=&quot;file:///private.txt&quot;&gt;"
+            "測試&lt;/a&gt;"
+        ) in addressed
 
 
 @pytest.mark.parametrize(

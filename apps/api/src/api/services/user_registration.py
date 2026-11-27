@@ -35,6 +35,7 @@ from api.models.user_identity import UserIdentity
 from api.services import audit as audit_svc
 from api.services import person as person_svc
 from api.services import user_session as user_session_svc
+from api.services.account_protection import is_owner
 from api.services.discord_bot import enqueue_role_sync
 from api.services.student_identity_rules import (
     SCHOOL_EMAIL_DOMAIN,
@@ -1065,6 +1066,10 @@ async def link_user_emails(
             other_user = await db.get(User, other_user_id)
             if other_user is None:
                 continue
+            if is_owner(other_user):
+                raise UserRegistrationError(409, "Owner 帳號不可合併")
+            if other_user.is_superuser and not actor.is_superuser:
+                raise UserRegistrationError(403, "僅超級管理員可合併超級管理員帳號")
             if (
                 candidate_student_id
                 and other_user.student_id

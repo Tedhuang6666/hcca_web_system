@@ -285,7 +285,9 @@ async def test_create_org_succeeds(client: AsyncClient, db_session: AsyncSession
 async def test_org_default_permissions_can_be_saved_and_updated(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    user = await _seed_user_with_codes(db_session, "org-default-perms@school.edu", ["org:manage"])
+    user = await _seed_user_with_codes(
+        db_session, "org-default-perms@school.edu", ["org:manage", "admin:all"]
+    )
     _override_user(user)
 
     created = await client.post(
@@ -306,6 +308,30 @@ async def test_org_default_permissions_can_be_saved_and_updated(
         "site:manage",
         "announcement:create",
     }
+
+
+@pytest.mark.asyncio
+async def test_org_manager_cannot_grant_default_admin_permission(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    org = Org(name="權限測試組織")
+    db_session.add(org)
+    await db_session.flush()
+    manager = await _seed_user_with_codes(
+        db_session, "org-default-manager@school.edu", ["org:manage"], org=org
+    )
+    _override_user(manager)
+
+    created = await client.post(
+        "/orgs", json={"name": "不應建立的組織", "default_permission_codes": ["admin:all"]}
+    )
+    updated = await client.patch(
+        f"/orgs/{org.id}", json={"default_permission_codes": ["admin:all"]}
+    )
+
+    assert created.status_code == 403
+    assert updated.status_code == 403
+    assert org.default_permission_codes in (None, [])
 
 
 @pytest.mark.asyncio
@@ -343,7 +369,7 @@ async def test_org_inheritance_changes_invalidate_descendant_members(
     from api.routers import orgs as org_routes
 
     manager = await _seed_user_with_codes(
-        db_session, "org-inheritance-manager@school.edu", ["org:manage"]
+        db_session, "org-inheritance-manager@school.edu", ["org:manage", "admin:all"]
     )
     parent = Org(name="學生會")
     new_parent = Org(name="校務會議")

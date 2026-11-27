@@ -392,6 +392,64 @@ async def test_member_cannot_clear_user_mfa(
 
 
 @pytest.mark.asyncio
+async def test_non_superuser_admin_cannot_change_superuser_login_state(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    superuser, operator, _, position, _ = await _seed_admin_data(db_session)
+    db_session.add(Permission(position_id=position.id, code="admin:all"))
+    await db_session.flush()
+    _override_user(operator)
+
+    responses = [
+        await client.delete(f"/admin/users/{superuser.id}/mfa"),
+        await client.post(
+            f"/admin/users/{superuser.id}/emails",
+            json={"emails": ["operator-alias@example.test"]},
+        ),
+        await client.post(f"/admin/users/{superuser.id}/sessions/revoke"),
+        await client.post(
+            f"/admin/users/{superuser.id}/merge/preview",
+            json={"source_user_ids": [str(operator.id)]},
+        ),
+        await client.post(
+            f"/admin/users/{superuser.id}/merge",
+            json={"source_user_ids": [str(operator.id)]},
+        ),
+        await client.post(
+            f"/admin/users/{operator.id}/emails",
+            json={"emails": [superuser.email]},
+        ),
+    ]
+
+    assert [response.status_code for response in responses] == [403] * len(responses)
+    assert all("僅超級管理員" in response.json()["detail"] for response in responses)
+
+
+@pytest.mark.asyncio
+async def test_owner_cannot_be_merged_away(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from api.core.config import settings
+
+    owner, target, _, _, _ = await _seed_admin_data(db_session)
+    monkeypatch.setattr(settings, "OWNER_EMAILS", [owner.email])
+    _override_user(owner)
+
+    for suffix in ("merge/preview", "merge"):
+        response = await client.post(
+            f"/admin/users/{target.id}/{suffix}",
+            json={"source_user_ids": [str(owner.id)]},
+        )
+        assert response.status_code == 409
+
+    await db_session.refresh(owner)
+    assert owner.is_active is True
+
+
+@pytest.mark.asyncio
 async def test_admin_can_update_user_settings(
     client: AsyncClient,
     db_session: AsyncSession,
