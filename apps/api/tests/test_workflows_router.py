@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -71,6 +72,41 @@ async def test_list_instances_filters_by_workflow_type(
     ids = {row["id"] for row in response.json()}
     assert str(petition.id) in ids
     assert str(council.id) not in ids
+
+
+@pytest.mark.parametrize(
+    ("code", "allowed_type", "blocked_type"),
+    [
+        ("council_proposal:manage", "council_proposal", "judicial_petition"),
+        ("judicial_petition:manage", "judicial_petition", "council_proposal"),
+    ],
+)
+async def test_workflow_reads_require_matching_source_permission(
+    authed_client_factory: Callable[[User], AsyncClient],
+    member_user: User,
+    db_session: AsyncSession,
+    code: str,
+    allowed_type: str,
+    blocked_type: str,
+) -> None:
+    await _grant(db_session, member_user, code)
+    allowed = await _make_instance(db_session, workflow_type=allowed_type, source_type=allowed_type)
+    blocked = await _make_instance(db_session, workflow_type=blocked_type, source_type=blocked_type)
+    ac = authed_client_factory(member_user)
+
+    listing = await ac.get("/workflows/instances")
+    blocked_filter = await ac.get("/workflows/instances", params={"workflow_type": blocked_type})
+    blocked_detail = await ac.get(f"/workflows/instances/{blocked.id}")
+    blocked_timeline = await ac.get(f"/workflows/instances/{blocked.id}/timeline")
+    allowed_detail = await ac.get(f"/workflows/instances/{allowed.id}")
+
+    assert listing.status_code == 200
+    assert {row["id"] for row in listing.json()} == {str(allowed.id)}
+    assert blocked_filter.status_code == 200
+    assert blocked_filter.json() == []
+    assert blocked_detail.status_code == 403
+    assert blocked_timeline.status_code == 403
+    assert allowed_detail.status_code == 200
 
 
 async def test_get_instance_404_when_missing(

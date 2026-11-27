@@ -70,15 +70,25 @@ async def _require_source_manager(db: AsyncSession, user: User, instance: Workfl
 )
 async def list_workflow_instances(
     db: DbDep,
-    _: CurrentUser,
+    user: CurrentUser,
     workflow_type: str | None = Query(None),
     status_filter: str | None = Query(None, alias="status"),
     limit: int = Query(80, ge=1, le=300),
     offset: int = Query(0, ge=0),
 ) -> list[WorkflowInstance]:
+    source_types = None
+    if not user.is_superuser:
+        codes = await get_user_permission_codes(db, user.id)
+        if PermissionCode.ADMIN_ALL not in codes:
+            source_types = frozenset(
+                source_type
+                for source_type, required in _SOURCE_MANAGE_PERMISSION.items()
+                if required in codes
+            )
     return await workflow_svc.list_instances(
         db,
         workflow_type=workflow_type,
+        source_types=source_types,
         status=status_filter,
         limit=limit,
         offset=offset,
@@ -92,9 +102,11 @@ async def list_workflow_instances(
     dependencies=[WorkflowManagerDep],
 )
 async def get_workflow_instance(
-    instance_id: uuid.UUID, db: DbDep, _: CurrentUser
+    instance_id: uuid.UUID, db: DbDep, user: CurrentUser
 ) -> WorkflowInstance:
-    return await _instance_or_404(db, instance_id)
+    instance = await _instance_or_404(db, instance_id)
+    await _require_source_manager(db, user, instance)
+    return instance
 
 
 @router.post(
@@ -144,8 +156,9 @@ async def transition_workflow_instance(
     summary="取得工作流時間軸",
     dependencies=[WorkflowManagerDep],
 )
-async def get_workflow_timeline(instance_id: uuid.UUID, db: DbDep, _: CurrentUser) -> dict:
+async def get_workflow_timeline(instance_id: uuid.UUID, db: DbDep, user: CurrentUser) -> dict:
     instance = await _instance_or_404(db, instance_id)
+    await _require_source_manager(db, user, instance)
     events, links = await workflow_svc.timeline(db, instance)
     return {"instance": instance, "events": events, "links": links}
 

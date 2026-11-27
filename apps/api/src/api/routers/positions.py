@@ -26,11 +26,26 @@ from api.services import org as org_svc
 from api.services import person as person_svc
 from api.services import user_session as user_session_svc
 from api.services.discord_bot import enqueue_role_sync
+from api.services.permission import get_user_permission_codes, get_user_permission_codes_for_org
 
 router = APIRouter(tags=["職位與權限"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
+
+
+async def _require_position_manager(db: AsyncSession, user: User, org_id: uuid.UUID) -> None:
+    if user.is_superuser:
+        return
+    codes = await get_user_permission_codes(db, user.id)
+    if PermissionCode.ADMIN_ALL in codes:
+        return
+    org_codes = await get_user_permission_codes_for_org(db, user.id, org_id)
+    if PermissionCode.ORG_MANAGE_POSITIONS not in org_codes:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="需要此組織的 org:manage_positions 權限",
+        )
 
 
 # ── Position (nested under /orgs) ─────────────────────────────────────────────
@@ -69,6 +84,7 @@ async def create_position(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="組織節點不存在")
     if not org.is_active:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="組織已停用，無法建立職位")
+    await _require_position_manager(db, current_user, org_id)
     position = await org_svc.create_position(db, org_id, data)
     await audit_svc.record(
         db,
@@ -112,6 +128,7 @@ async def update_position(
     position = await org_svc.get_position(db, position_id)
     if not position:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="職位不存在")
+    await _require_position_manager(db, current_user, position.org_id)
     before = {
         "name": position.name,
         "description": position.description,
@@ -153,6 +170,7 @@ async def delete_position(position_id: uuid.UUID, db: DbDep, current_user: Curre
     position = await org_svc.get_position(db, position_id)
     if not position:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="職位不存在")
+    await _require_position_manager(db, current_user, position.org_id)
     holder_ids = set(
         (
             await db.execute(

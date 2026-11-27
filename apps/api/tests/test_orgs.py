@@ -335,6 +335,53 @@ async def test_org_manager_cannot_grant_default_admin_permission(
 
 
 @pytest.mark.asyncio
+async def test_position_manager_is_limited_to_own_org(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    own_org = Org(name="可管理職位組織")
+    other_org = Org(name="不可管理職位組織")
+    db_session.add_all([own_org, other_org])
+    await db_session.flush()
+    manager = await _seed_user_with_codes(
+        db_session, "position-manager@school.edu", ["org:manage_positions"], org=own_org
+    )
+    other_position = Position(org_id=other_org.id, name="他組織職位")
+    db_session.add(other_position)
+    await db_session.flush()
+    _override_user(manager)
+
+    own_create = await client.post(f"/orgs/{own_org.id}/positions", json={"name": "本組織職位"})
+    other_create = await client.post(f"/orgs/{other_org.id}/positions", json={"name": "越權職位"})
+    other_update = await client.patch(f"/positions/{other_position.id}", json={"name": "越權改名"})
+    other_delete = await client.delete(f"/positions/{other_position.id}")
+
+    assert own_create.status_code == 201, own_create.text
+    assert [response.status_code for response in (other_create, other_update, other_delete)] == [
+        403,
+        403,
+        403,
+    ]
+    assert other_position.name == "他組織職位"
+    own_update = await client.patch(
+        f"/positions/{own_create.json()['id']}", json={"name": "更新後職位"}
+    )
+    assert own_update.status_code == 200, own_update.text
+
+
+@pytest.mark.asyncio
+async def test_position_create_requires_login(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    org = Org(name="登入測試組織")
+    db_session.add(org)
+    await db_session.flush()
+
+    response = await client.post(f"/orgs/{org.id}/positions", json={"name": "不得建立"})
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
 async def test_update_org_missing_returns_404(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:

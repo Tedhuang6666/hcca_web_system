@@ -92,6 +92,7 @@ async def list_instances(
     db: AsyncSession,
     *,
     workflow_type: str | None = None,
+    source_types: frozenset[str] | None = None,
     status: str | None = None,
     limit: int = 80,
     offset: int = 0,
@@ -106,6 +107,8 @@ async def list_instances(
     )
     if workflow_type:
         stmt = stmt.where(WorkflowInstance.workflow_type == workflow_type)
+    if source_types is not None:
+        stmt = stmt.where(WorkflowInstance.source_type.in_(source_types))
     if status:
         stmt = stmt.where(WorkflowInstance.status == status)
     return list((await db.execute(stmt)).scalars().all())
