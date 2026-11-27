@@ -294,6 +294,24 @@ export default function PublicSiteAdminPage() {
   const [specialAgreement, setSpecialAgreement] = useState<PublicSpecialAgreementContent>(DEFAULT_SPECIAL_AGREEMENT_CONTENT);
   const [themeJson, setThemeJson] = useState("{}");
   const [blocksJson, setBlocksJson] = useState("{}");
+  // 進階樣式直接編輯整份 JSON；記下最後同步的內容，其他分頁存檔前可判斷是否有未儲存的 JSON 修改。
+  const [syncedJson, setSyncedJson] = useState({ theme: "{}", blocks: "{}" });
+  const themeJsonDirty = themeJson !== syncedJson.theme;
+  const blocksJsonDirty = blocksJson !== syncedJson.blocks;
+  const syncThemeJson = useCallback((value: unknown) => {
+    const text = JSON.stringify(value ?? {}, null, 2);
+    setThemeJson(text);
+    setSyncedJson((current) => ({ ...current, theme: text }));
+  }, []);
+  const syncBlocksJson = useCallback((value: unknown) => {
+    const text = JSON.stringify(value ?? {}, null, 2);
+    setBlocksJson(text);
+    setSyncedJson((current) => ({ ...current, blocks: text }));
+  }, []);
+  const blockedByUnsavedJson = (dirty: boolean) => {
+    if (dirty) toast.error("「進階樣式」有未儲存的 JSON 修改，請先儲存或還原後再儲存此區。");
+    return dirty;
+  };
   const [rosterText, setRosterText] = useState("");
   const [rosterTabs, setRosterTabs] = useState<OfficerRosterTab[]>([]);
   const [rosterMemberLabelOverrides, setRosterMemberLabelOverrides] = useState<Record<string, string>>({});
@@ -370,8 +388,8 @@ export default function PublicSiteAdminPage() {
       setLinks(nextLinks);
       setCandidates(nextCandidates);
       setProfiles(nextProfiles);
-      setThemeJson(JSON.stringify(nextSettings.theme_config ?? {}, null, 2));
-      setBlocksJson(JSON.stringify(nextSettings.homepage_blocks ?? {}, null, 2));
+      syncThemeJson(nextSettings.theme_config);
+      syncBlocksJson(nextSettings.homepage_blocks);
       setSpecialAgreement(readSpecialAgreementContent(nextSettings.homepage_blocks?.special_agreement));
       const nextRosterTabs = parseStoredOfficerRosterTabs(nextSettings.theme_config);
       setRosterTabs(nextRosterTabs);
@@ -395,7 +413,7 @@ export default function PublicSiteAdminPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [syncBlocksJson, syncThemeJson]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -480,6 +498,7 @@ export default function PublicSiteAdminPage() {
   };
 
   const saveOfficerRoster = async () => {
+    if (blockedByUnsavedJson(themeJsonDirty)) return;
     const invalidLines = rosterLines.filter((line) => line.error);
     if (invalidLines.length > 0) {
       toast.error(`第 ${invalidLines.map((line) => line.lineNumber).join("、")} 行格式有誤`);
@@ -497,7 +516,7 @@ export default function PublicSiteAdminPage() {
       const nextTheme = { ...(settings.theme_config ?? {}), officer_rosters: nextTabs };
       const next = await saveSettingsFields({ theme_config: nextTheme });
       setRosterTabs(nextTabs);
-      setThemeJson(JSON.stringify(next.theme_config ?? {}, null, 2));
+      syncThemeJson(next.theme_config);
       toast.success(`已儲存 ${rosterSummary.memberCount} 位幹部、${roster.length} 個職位`);
     } catch (error) {
       displayError(error, "儲存幹部名單失敗");
@@ -525,8 +544,6 @@ export default function PublicSiteAdminPage() {
         cta_href: settings.cta_href,
         public_database_label: settings.public_database_label,
         public_database_description: settings.public_database_description,
-        seo_title: settings.seo_title,
-        seo_description: settings.seo_description,
       });
       toast.success("公開網站設定已儲存");
     } catch (error) {
@@ -558,9 +575,11 @@ export default function PublicSiteAdminPage() {
         theme_config: parseJsonObject(themeJson, "主題設定"),
         homepage_blocks: parseJsonObject(blocksJson, "首頁區塊"),
         custom_css: settings.custom_css,
+        seo_title: settings.seo_title,
+        seo_description: settings.seo_description,
       });
-      setThemeJson(JSON.stringify(next.theme_config ?? {}, null, 2));
-      setBlocksJson(JSON.stringify(next.homepage_blocks ?? {}, null, 2));
+      syncThemeJson(next.theme_config);
+      syncBlocksJson(next.homepage_blocks);
       toast.success("進階設定已儲存");
     } catch (error) {
       displayError(error, error instanceof Error ? error.message : "儲存進階設定失敗");
@@ -593,6 +612,7 @@ export default function PublicSiteAdminPage() {
   const resetNav = () => setNavItems(resolvePublicNav(null));
 
   const saveNav = async () => {
+    if (blockedByUnsavedJson(themeJsonDirty)) return;
     try {
       const sorted = [...navItems].sort((a, b) => a.order - b.order);
       const items: Record<string, PublicNavOverride> = {};
@@ -607,7 +627,7 @@ export default function PublicSiteAdminPage() {
       const nextTheme = { ...(settings.theme_config ?? {}), nav: { items } };
       const next = await saveSettingsFields({ theme_config: nextTheme });
       setNavItems(resolvePublicNav(next.theme_config));
-      setThemeJson(JSON.stringify(next.theme_config ?? {}, null, 2));
+      syncThemeJson(next.theme_config);
       toast.success("導覽列設定已儲存");
     } catch (error) {
       displayError(error, "儲存導覽列失敗");
@@ -896,6 +916,7 @@ export default function PublicSiteAdminPage() {
   };
 
   const saveSpecialAgreement = async () => {
+    if (blockedByUnsavedJson(blocksJsonDirty)) return;
     const invalidStep = specialAgreement.process.find(
       (step) => !step.title.trim() || !step.description.trim(),
     );
@@ -916,7 +937,7 @@ export default function PublicSiteAdminPage() {
       };
       const next = await saveSettingsFields({ homepage_blocks: homepageBlocks });
       setSpecialAgreement(readSpecialAgreementContent(next.homepage_blocks?.special_agreement));
-      setBlocksJson(JSON.stringify(next.homepage_blocks ?? {}, null, 2));
+      syncBlocksJson(next.homepage_blocks);
       toast.success("特約資訊已儲存");
     } catch (error) {
       displayError(error, "儲存特約資訊失敗");
@@ -1798,7 +1819,14 @@ export default function PublicSiteAdminPage() {
               <Field label="SEO Title"><TextInput value={settings.seo_title ?? ""} onChange={(e) => setSettings({ ...settings, seo_title: e.target.value })} /></Field>
               <Field label="SEO Description"><TextInput value={settings.seo_description ?? ""} onChange={(e) => setSettings({ ...settings, seo_description: e.target.value })} /></Field>
             </div>
-            <button type="button" onClick={saveAdvanced} className="btn btn-primary"><Save size={16} aria-hidden /> 儲存進階設定</button>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={saveAdvanced} className="btn btn-primary"><Save size={16} aria-hidden /> 儲存進階設定</button>
+              {(themeJsonDirty || blocksJsonDirty) && (
+                <button type="button" className="btn btn-ghost" onClick={() => { setThemeJson(syncedJson.theme); setBlocksJson(syncedJson.blocks); }}>
+                  還原 JSON
+                </button>
+              )}
+            </div>
           </div>
         </section>
       )}
