@@ -8,9 +8,11 @@ import {
   Activity,
   Ban,
   Boxes,
+  Bug,
   Database,
   LockKeyhole,
   ShieldCheck,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 
@@ -21,6 +23,8 @@ export type SystemOperationsTabId =
   | "blocking"
   | "diagnostics"
   | "observability"
+  | "errors"
+  | "real-users"
   | "modules";
 
 type SystemOperationsTab = {
@@ -51,9 +55,21 @@ const TABS: SystemOperationsTab[] = [
   },
   {
     id: "observability",
-    label: "效能觀測",
-    description: "錯誤、使用者體驗與慢查詢",
+    label: "頁面效能",
+    description: "各頁 Lighthouse／PSI 分數與部署版本",
     icon: Activity,
+  },
+  {
+    id: "errors",
+    label: "錯誤與慢查詢",
+    description: "事故、例外與慢交易",
+    icon: Bug,
+  },
+  {
+    id: "real-users",
+    label: "真實使用者",
+    description: "使用者實際體驗與路由效能",
+    icon: Users,
   },
   {
     id: "modules",
@@ -94,6 +110,8 @@ const PANELS: Record<SystemOperationsTabId, ComponentType> = {
   blocking: UserBlockingPanel,
   diagnostics: SystemDiagnosticsPanel,
   observability: SystemObservabilityPanel,
+  errors: () => <SystemObservabilityPanel view="errors" />,
+  "real-users": () => <SystemObservabilityPanel view="real-users" />,
   modules: ModuleMaintenancePanel,
 };
 

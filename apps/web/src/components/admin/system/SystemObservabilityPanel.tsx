@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Gauge, LoaderCircle, RefreshCw } from "lucide-react";
+import { ChevronLeft, Gauge, LoaderCircle, RefreshCw } from "lucide-react";
 import AnimatedDownloadButton from "@/components/ui/AnimatedDownloadButton";
 import SystemRecentErrorsPanel from "@/components/admin/system/SystemRecentErrorsPanel";
 import { authFetch, post, request } from "@/lib/api/core";
@@ -80,15 +80,8 @@ type PerformanceData = { url: string; psi: PageScore[]; crux: { collection_perio
 type Release = { release: string; commit_sha: string; environment: string; deployed_at: string };
 type CollectionResult = { queued?: boolean; task_id?: string; message?: string; created?: number; failed?: number; urls?: number; strategies?: number; skipped?: string };
 type CollectionNotice = { tone: "success" | "warning" | "error"; message: string };
-type Tab = "overview" | "errors" | "real-users" | "performance" | "releases";
-
-const tabs: { id: Tab; label: string }[] = [
-  { id: "overview", label: "總覽" },
-  { id: "errors", label: "錯誤與慢查詢" },
-  { id: "real-users", label: "真實使用者" },
-  { id: "performance", label: "頁面效能" },
-  { id: "releases", label: "部署版本" },
-];
+export type ObservabilityView = "overview" | "errors" | "real-users";
+type Tab = ObservabilityView | "performance";
 
 function formatNumber(value: number | null | undefined, suffix = "") {
   if (value == null || Number.isNaN(value)) return "—";
@@ -150,8 +143,7 @@ function normalizeOverview(value: Overview | null | undefined): Overview {
   };
 }
 
-function normalizeTabData(tab: Tab, value: ErrorsData | RealUsersData | PerformanceData | Release[]) {
-  if (tab === "releases") return asArray<Release>(value);
+function normalizeTabData(tab: Tab, value: ErrorsData | RealUsersData | PerformanceData) {
   if (tab === "errors") {
     const raw = (value ?? {}) as Partial<ErrorsData>;
     return {
@@ -208,30 +200,36 @@ function Score({ value }: { value: number | null | undefined }) {
   return <strong style={{ color: scoreColor(value) }}>{value == null ? "—" : Math.round(value)}</strong>;
 }
 
-export default function SystemObservabilityPanel() {
-  const [tab, setTab] = useState<Tab>("overview");
+/** 系統營運中心的「頁面效能／錯誤與慢查詢／真實使用者」分頁共用此面板；單頁效能詳情由頁面清單進入。 */
+export default function SystemObservabilityPanel({ view = "overview" }: { view?: ObservabilityView }) {
+  const [tab, setTab] = useState<Tab>(view);
+  const [releases, setReleases] = useState<Release[]>([]);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [overviewError, setOverviewError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(view === "overview");
   const [refreshing, setRefreshing] = useState(false);
   const [collecting, setCollecting] = useState(false);
   const [collectionNotice, setCollectionNotice] = useState<CollectionNotice | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedUrl, setSelectedUrl] = useState<string | null>(null);
-  const [tabData, setTabData] = useState<ErrorsData | RealUsersData | PerformanceData | Release[] | null>(null);
+  const [tabData, setTabData] = useState<ErrorsData | RealUsersData | PerformanceData | null>(null);
   const [tabLoading, setTabLoading] = useState(false);
   const [tabError, setTabError] = useState<string | null>(null);
   const [rumWindowHours, setRumWindowHours] = useState(24);
 
   useEffect(() => {
+    if (view !== "overview") return;
     let active = true;
     setLoading(true);
+    request<Release[]>("/admin/system/observability/releases")
+      .then((value) => { if (active) setReleases(asArray<Release>(value)); })
+      .catch(() => { if (active) setReleases([]); });
     request<Overview>("/admin/system/observability/overview")
       .then((value) => { if (active) { setOverview(normalizeOverview(value)); setOverviewError(null); } })
       .catch((error: Error) => { if (active) setOverviewError(error.message || "無法讀取觀測資料"); })
       .finally(() => { if (active) { setLoading(false); setRefreshing(false); } });
     return () => { active = false; };
-  }, [refreshKey]);
+  }, [refreshKey, view]);
 
   useEffect(() => {
     if (tab === "overview") return;
@@ -244,13 +242,11 @@ export default function SystemObservabilityPanel() {
       ? "/admin/system/observability/errors"
       : tab === "real-users"
         ? `/admin/system/observability/real-users?window_hours=${rumWindowHours}`
-        : tab === "performance"
-          ? `/admin/system/observability/performance${encodedUrl}`
-          : "/admin/system/observability/releases";
-    request<ErrorsData | RealUsersData | PerformanceData | Release[]>(endpoint)
+        : `/admin/system/observability/performance${encodedUrl}`;
+    request<ErrorsData | RealUsersData | PerformanceData>(endpoint)
       .then((value) => active && setTabData(normalizeTabData(tab, value)))
       .catch((error: Error) => active && setTabError(error.message || "無法讀取資料"))
-      .finally(() => active && setTabLoading(false));
+      .finally(() => { if (active) { setTabLoading(false); setRefreshing(false); } });
     return () => { active = false; };
   }, [tab, selectedUrl, refreshKey, rumWindowHours]);
 
@@ -286,26 +282,23 @@ export default function SystemObservabilityPanel() {
 
   return <div className="space-y-6">
     <header className="flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-end sm:justify-between border-border!">
-      <div><h2 className="text-2xl font-semibold sm:text-3xl">系統可觀測性</h2></div>
+      <div>{tab === "performance" && <button type="button" className="inline-flex min-h-11 items-center gap-1 text-sm font-medium text-accent-text!" onClick={() => setTab("overview")}><ChevronLeft size={16} aria-hidden="true" />返回頁面清單</button>}</div>
       <div className="flex flex-col items-stretch gap-2 sm:items-end">
         <div className="flex flex-wrap gap-2">
           <button type="button" className="inline-flex min-h-11 items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors hover:bg-[var(--bg-hover)] disabled:cursor-wait disabled:opacity-60 border-border-strong! text-fg-primary!"  onClick={() => { setRefreshing(true); setRefreshKey((value) => value + 1); }} disabled={loading || refreshing}><RefreshCw size={16} aria-hidden="true" className={refreshing ? "animate-spin" : undefined} />{loading || refreshing ? "讀取中…" : "重新整理"}</button>
-          <button type="button" className="inline-flex min-h-11 items-center gap-2 rounded-md px-3 text-sm font-semibold transition-opacity hover:opacity-85 disabled:cursor-wait disabled:opacity-60 bg-accent! text-accent-text!"  onClick={collectPsi} disabled={collecting} aria-busy={collecting}>{collecting ? <LoaderCircle size={16} aria-hidden="true" className="animate-spin" /> : <Gauge size={16} aria-hidden="true" />}{collecting ? "PSI 採集中…" : "立即採集 PSI"}</button>
+          {view === "overview" && <button type="button" className="inline-flex min-h-11 items-center gap-2 rounded-md px-3 text-sm font-semibold transition-opacity hover:opacity-85 disabled:cursor-wait disabled:opacity-60 bg-accent! text-accent-text!"  onClick={collectPsi} disabled={collecting} aria-busy={collecting}>{collecting ? <LoaderCircle size={16} aria-hidden="true" className="animate-spin" /> : <Gauge size={16} aria-hidden="true" />}{collecting ? "PSI 採集中…" : "立即採集 PSI"}</button>}
         </div>
         {collectionNotice && <p role="status" className="text-right text-xs" style={{ color: collectionNotice.tone === "success" ? "var(--success)" : collectionNotice.tone === "warning" ? "var(--warning)" : "var(--error)" }}>{collectionNotice.message}</p>}
       </div>
     </header>
-    <nav className="flex gap-1 overflow-x-auto border-b border-border!"  aria-label="觀測分頁">
-      {tabs.map((item) => <button key={item.id} type="button" onClick={() => { setTabData(null); setTabError(null); setTab(item.id); }} aria-current={tab === item.id ? "page" : undefined} className="min-h-11 shrink-0 border-b-2 px-3 text-sm font-medium transition-colors" style={{ borderColor: tab === item.id ? "var(--primary)" : "transparent", color: tab === item.id ? "var(--text-primary)" : "var(--text-muted)" }}>{item.label}</button>)}
-    </nav>
     {overviewError && <InlineError message={overviewError} />}
-    {tab === "overview" && <OverviewPanel data={overview} loading={loading} onInspect={(url) => { setSelectedUrl(url); setTab("performance"); }} />}
+    {tab === "overview" && <OverviewPanel data={overview} loading={loading} onInspect={(url) => { setTabData(null); setTabError(null); setSelectedUrl(url); setTab("performance"); }} />}
+    {tab === "overview" && !loading && <ReleasesPanel data={releases} />}
     {tab !== "overview" && tabLoading && <LoadingState />}
     {tab !== "overview" && tabError && <InlineError message={tabError} />}
-    {tab === "errors" && tabData && !Array.isArray(tabData) && <ErrorsPanel data={tabData as ErrorsData} />}
-    {tab === "real-users" && tabData && !Array.isArray(tabData) && <RealUsersPanel data={tabData as RealUsersData} windowHours={rumWindowHours} onWindowHoursChange={setRumWindowHours} />}
-    {tab === "performance" && tabData && !Array.isArray(tabData) && <PerformancePanel data={tabData as PerformanceData} page={selectedPage} />}
-    {tab === "releases" && Array.isArray(tabData) && <ReleasesPanel data={tabData} />}
+    {tab === "errors" && tabData && <ErrorsPanel data={tabData as ErrorsData} />}
+    {tab === "real-users" && tabData && <RealUsersPanel data={tabData as RealUsersData} windowHours={rumWindowHours} onWindowHoursChange={setRumWindowHours} />}
+    {tab === "performance" && tabData && <PerformancePanel data={tabData as PerformanceData} page={selectedPage} />}
   </div>;
 }
 
@@ -320,7 +313,6 @@ function OverviewPanel({ data, loading, onInspect }: { data: Overview | null; lo
       <SummaryMetric label="最近 mobile 平均" value={formatNumber(data.synthetic.mobile_performance)} detail={`LCP ${formatNumber(data.synthetic.mobile_lcp_ms, " ms")}`} tone={scoreColor(data.synthetic.mobile_performance)} />
       <SummaryMetric label="登入後達標" value={data.authenticated_coverage.passing} detail={`已測 ${data.authenticated_coverage.monitored}／失敗 ${data.authenticated_coverage.errors}／待測 ${data.authenticated_coverage.pending}`} tone={data.authenticated_coverage.errors || data.authenticated_coverage.needs_attention ? "var(--warning)" : "var(--success)"} />
     </section>
-    <section><div className="mb-3 flex items-end justify-between gap-3"><div><h2 className="text-base font-semibold">服務狀態</h2><p className="mt-1 text-sm text-fg-muted!">這些狀態來自本次 API 請求的即時探測。</p></div><span className="text-xs text-fg-muted!">版本 {data.latest_release.commit_sha?.slice(0, 8) ?? "—"}</span></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{data.system_health.map((item) => <div key={item.name} className="rounded-md border p-4 border-border!"><div className="flex items-center gap-2 text-sm"><span aria-hidden="true" style={{ color: item.healthy ? "var(--success)" : "var(--error)" }}>●</span>{item.name}</div><strong className="mt-2 block">{item.healthy ? "正常" : "異常"}</strong></div>)}</div></section>
     <PageTable pages={data.pages} threshold={data.coverage.threshold} onInspect={onInspect} />
   </div>;
 }

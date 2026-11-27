@@ -811,8 +811,8 @@ export function DeadLetterPanel() {
       <p className="mb-3 text-xs text-[var(--text-muted)]">
         背景排程／worker 任務失敗時寫入 Redis；這裡只顯示 Celery 失敗，不包含 API 5xx。
         其他錯誤與慢查詢請前往{" "}
-        <Link href="/admin/system?tab=observability" className="font-medium text-[var(--primary-text)] underline underline-offset-2">
-          系統可觀測性
+        <Link href="/admin/system?tab=errors" className="font-medium text-[var(--primary-text)] underline underline-offset-2">
+          錯誤與慢查詢
         </Link>
         。
       </p>
