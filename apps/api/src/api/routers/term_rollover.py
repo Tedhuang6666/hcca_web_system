@@ -17,9 +17,11 @@ from api.core.cache import cache_invalidate_user_permissions
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.permissions import require_permission
+from api.models.org import Position
 from api.models.user import User
 from api.services import audit as audit_svc
 from api.services import term_rollover as svc
+from api.services.permission import get_position_granted_permission_codes, get_user_permission_codes
 
 router = APIRouter(prefix="/admin/term-rollover", tags=["管理員 / 換屆精靈"])
 
@@ -103,6 +105,27 @@ def _to_assignments(items: list[NewAssignmentIn]) -> list[svc.NewAssignment]:
     ]
 
 
+async def _require_full_rollover_authority(db: AsyncSession, user: User) -> bool:
+    if user.is_superuser:
+        return True
+    return PermissionCode.ADMIN_ALL in await get_user_permission_codes(db, user.id)
+
+
+async def _require_safe_rollover_execution(db: AsyncSession, user: User, body: ExecuteBody) -> None:
+    if await _require_full_rollover_authority(db, user):
+        return
+    if body.terminate_active_before:
+        raise HTTPException(status_code=403, detail="批次結束任期需要 admin:all 權限")
+    actor_codes = await get_user_permission_codes(db, user.id)
+    for position_id in {item.position_id for item in body.new_assignments}:
+        position = await db.get(Position, position_id)
+        if position is None:
+            continue
+        granted_codes = await get_position_granted_permission_codes(db, position)
+        if PermissionCode.ADMIN_ALL in granted_codes or not granted_codes.issubset(actor_codes):
+            raise HTTPException(status_code=403, detail="不可指派超出自身權限的職位")
+
+
 # ── 端點 ───────────────────────────────────────────────────────────────
 
 
@@ -130,6 +153,7 @@ async def execute_rollover(body: ExecuteBody, db: DbDep, user: RolloverUser) -> 
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="confirm_phrase 必須為「換屆」字串",
         )
+    await _require_safe_rollover_execution(db, user, body)
     try:
         result, snapshot = await svc.execute(
             db,
@@ -181,6 +205,8 @@ async def rollback_rollover(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="confirm_phrase 必須為「復原」字串",
         )
+    if not await _require_full_rollover_authority(db, user):
+        raise HTTPException(status_code=403, detail="復原換屆需要 admin:all 權限")
     try:
         result: dict[str, Any] = await svc.rollback(db, batch_id=batch_id)
     except ValueError as exc:

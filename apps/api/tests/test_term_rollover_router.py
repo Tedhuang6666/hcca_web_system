@@ -7,7 +7,9 @@ from datetime import date
 
 from sqlalchemy import select
 
-from api.models.org import Org, Position, UserPosition
+from api.core.clock import local_today
+from api.core.permission_codes import PermissionCode
+from api.models.org import Org, Permission, Position, UserPosition
 from api.models.user import User
 
 
@@ -36,6 +38,97 @@ async def test_dry_run_by_member_returns_403(member_user, authed_client_factory)
         json={"new_term_start": "2026-08-01", "new_assignments": []},
     )
     assert resp.status_code == 403
+
+
+async def test_delegated_rollover_cannot_grant_admin_or_end_all_tenures(
+    authed_client_factory, db_session
+) -> None:
+    actor = User(
+        email=f"rollover-{uuid.uuid4().hex[:6]}@school.edu",
+        display_name="交接承辦人",
+        is_active=True,
+        is_verified=True,
+    )
+    org = Org(name=f"交接授權組織-{uuid.uuid4().hex[:6]}")
+    inherited_org = Org(
+        name=f"繼承特權組織-{uuid.uuid4().hex[:6]}",
+        default_permission_codes=[PermissionCode.ADMIN_ALL.value],
+    )
+    db_session.add_all([actor, org, inherited_org])
+    await db_session.flush()
+    delegated = Position(org_id=org.id, name="交接承辦職位")
+    privileged = Position(org_id=org.id, name="全域管理職位")
+    inherited = Position(org_id=inherited_org.id, name="繼承管理職位")
+    db_session.add_all([delegated, privileged, inherited])
+    await db_session.flush()
+    db_session.add_all(
+        [
+            Permission(position_id=delegated.id, code=PermissionCode.SYSTEM_TERM_ROLLOVER.value),
+            Permission(position_id=privileged.id, code=PermissionCode.ADMIN_ALL.value),
+            UserPosition(user_id=actor.id, position_id=delegated.id, start_date=local_today()),
+        ]
+    )
+    await db_session.flush()
+    ac = authed_client_factory(actor)
+
+    for position in (privileged, inherited):
+        denied = await ac.post(
+            "/admin/term-rollover/execute",
+            json={
+                "new_term_start": "2027-08-01",
+                "new_assignments": [
+                    {
+                        "user_id": str(actor.id),
+                        "position_id": str(position.id),
+                        "start_date": "2027-08-01",
+                    }
+                ],
+                "terminate_active_before": False,
+                "confirm_phrase": "換屆",
+            },
+        )
+        assert denied.status_code == 403, denied.text
+    assert (
+        await db_session.scalar(
+            select(UserPosition).where(
+                UserPosition.user_id == actor.id, UserPosition.position_id == privileged.id
+            )
+        )
+        is None
+    )
+
+    bulk_denied = await ac.post(
+        "/admin/term-rollover/execute",
+        json={
+            "new_term_start": "2027-08-01",
+            "new_assignments": [],
+            "terminate_active_before": True,
+            "confirm_phrase": "換屆",
+        },
+    )
+    assert bulk_denied.status_code == 403
+    rollback_denied = await ac.post(
+        "/admin/term-rollover/rollback/unknown", json={"confirm_phrase": "復原"}
+    )
+    assert rollback_denied.status_code == 403
+
+    allowed = await ac.post(
+        "/admin/term-rollover/execute",
+        json={
+            "new_term_start": "2027-08-01",
+            "new_assignments": [
+                {
+                    "user_id": str(actor.id),
+                    "position_id": str(delegated.id),
+                    "start_date": "2027-08-01",
+                }
+            ],
+            "terminate_active_before": False,
+            "confirm_phrase": "換屆",
+        },
+    )
+    assert allowed.status_code == 200, allowed.text
+    assert allowed.json()["created_count"] == 1
 
 
 async def test_dry_run_lists_active_positions_as_terminations(
