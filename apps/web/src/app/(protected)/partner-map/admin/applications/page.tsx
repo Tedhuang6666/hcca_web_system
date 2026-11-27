@@ -78,6 +78,7 @@ export default function PartnerApplicationsAdminPage() {
   const [statusFilter, setStatusFilter] = useState<PartnerBusinessApplicationStatus | "">("");
   const [reviewDrafts, setReviewDrafts] = useState<Record<string, { status: PartnerBusinessApplicationStatus; note: string }>>({});
   const [loading, setLoading] = useState(true);
+  const [canReview, setCanReview] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
   const [savingReviewId, setSavingReviewId] = useState<string | null>(null);
 
@@ -97,26 +98,35 @@ export default function PartnerApplicationsAdminPage() {
   }, []);
 
   useEffect(() => {
-    Promise.all([partnerApplicationApi.adminSettings(), partnerApplicationApi.adminList("")])
-      .then(([nextSettings, nextApplications]) => {
-        setSettings(nextSettings);
-        setFields(toDraft(nextSettings.fields));
-        setApplications(nextApplications);
-        setReviewDrafts(
-          Object.fromEntries(nextApplications.map((application) => [application.id, {
-            status: application.status,
-            note: application.review_note ?? "",
-          }])),
-        );
+    // 表單設定與審核權限不同（公開網站管理者只能改表單），分開載入避免一邊失敗整頁空白。
+    Promise.allSettled([partnerApplicationApi.adminSettings(), partnerApplicationApi.adminList("")])
+      .then(([settingsResult, listResult]) => {
+        if (settingsResult.status === "fulfilled") {
+          setSettings(settingsResult.value);
+          setFields(toDraft(settingsResult.value.fields));
+        }
+        if (listResult.status === "fulfilled") {
+          setApplications(listResult.value);
+          setReviewDrafts(
+            Object.fromEntries(listResult.value.map((application) => [application.id, {
+              status: application.status,
+              note: application.review_note ?? "",
+            }])),
+          );
+        } else {
+          setCanReview(false);
+        }
+        if (settingsResult.status === "rejected" && listResult.status === "rejected") {
+          toast.error(apiErrorMessage(settingsResult.reason, "載入特約商家申請管理失敗"));
+        }
       })
-      .catch((error) => toast.error(apiErrorMessage(error, "載入特約商家申請管理失敗")))
       .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
-    if (loading) return;
+    if (loading || !canReview) return;
     loadApplications(statusFilter).catch((error) => toast.error(apiErrorMessage(error, "載入申請列表失敗")));
-  }, [loadApplications, loading, statusFilter]);
+  }, [canReview, loadApplications, loading, statusFilter]);
 
   const saveSettings = async () => {
     if (!settings) return;
@@ -224,7 +234,7 @@ export default function PartnerApplicationsAdminPage() {
         </section>
       ) : null}
 
-      <section className="card p-4 sm:p-5">
+      {canReview && <section className="card p-4 sm:p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div><h2 className="text-base font-semibold text-fg-primary!">申請審核</h2><p className="mt-1 text-sm text-fg-muted!">審核狀態與備註會保留在申請紀錄中。</p></div>
           <label className="space-y-1 text-xs text-fg-secondary!"><span>篩選狀態</span><select className="input w-full sm:w-auto sm:min-w-40" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as PartnerBusinessApplicationStatus | "")}><option value="">全部申請</option>{Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
@@ -248,7 +258,7 @@ export default function PartnerApplicationsAdminPage() {
             );
           })}
         </div>
-      </section>
+      </section>}
 
       <p className="text-xs leading-5 text-fg-muted!">Discord 通知請設定「特約商家申請送出」事件。</p>
     </div>

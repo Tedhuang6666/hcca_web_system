@@ -1,10 +1,12 @@
 "use client";
 
+import { useRouter, useSearchParams } from "next/navigation";
 import { Field, Select, TextArea, TextInput } from "@/components/site/PublicSiteAdminFields";
 import OfficerAdminTab, { type OfficerProfileDraft } from "@/components/site/OfficerAdminTab";
 import PublicSiteWorkspaceHeader from "@/components/site/PublicSiteWorkspaceHeader";
 
 import Image from "next/image";
+import Link from "next/link";
 import {
   DndContext,
   KeyboardSensor,
@@ -20,6 +22,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import {
+  ArrowRight,
   ArrowDown,
   ArrowUp,
   ArrowUpRight,
@@ -45,7 +48,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { ApiError, partnerApplicationApi, siteApi } from "@/lib/api";
+import { ApiError, siteApi } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
 import MarkdownBlock from "@/components/site/MarkdownBlock";
 import ArticleMarkdownEditor from "@/components/site/ArticleMarkdownEditor";
@@ -57,7 +60,7 @@ import DraftStatus from "@/components/ui/DraftStatus";
 import TabBar from "@/components/ui/TabBar";
 import Toggle from "@/components/ui/Toggle";
 import { clearStoredDraft, useDraftAutosave } from "@/hooks/useDraftAutosave";
-import { getSystemInfoMarkdown } from "@/lib/systemInfoMarkdown";
+import { mergeSavedSettings, normalizeSettingsForEditor } from "@/lib/public-site-settings";
 import {
   PUBLIC_NAV_GROUP_META,
   PUBLIC_NAV_GROUP_ORDER,
@@ -72,13 +75,11 @@ import type {
   PublicLinkOut,
   PublicOfficerCandidateOut,
   PublicOfficerProfileOut,
-  PartnerApplicationFieldConfig,
-  PartnerApplicationFieldType,
-  PartnerApplicationSettingsOut,
   PublicSpecialAgreementContent,
   PublicSpecialAgreementFile,
   PublicSitePageOut,
   PublicSiteSettingsOut,
+  PublicSiteSettingsUpdate,
 } from "@/lib/types";
 import {
   DEFAULT_SPECIAL_AGREEMENT_CONTENT,
@@ -168,49 +169,8 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "advanced", label: "進階樣式", icon: <Eye size={16} aria-hidden /> },
 ];
 
-const APPLICATION_FIELD_TYPE_LABELS: Record<PartnerApplicationFieldType, string> = {
-  text: "單行文字",
-  textarea: "多行文字",
-  email: "Email",
-  tel: "電話",
-  url: "網址",
-  select: "下拉選單",
-};
-
-const EMPTY_APPLICATION_FIELD: PartnerApplicationFieldConfig = {
-  key: "new_field",
-  label: "新欄位",
-  field_type: "text",
-  required: false,
-  placeholder: null,
-  help_text: null,
-  options: [],
-  sort_order: 100,
-  is_active: true,
-};
-
 function displayError(error: unknown, fallback: string) {
   toast.error(error instanceof ApiError ? error.message : fallback);
-}
-
-function normalizeSettingsForEditor(settings: PublicSiteSettingsOut): PublicSiteSettingsOut {
-  return { ...settings, system_info_md: getSystemInfoMarkdown(settings) };
-}
-
-function applicationFieldsForEditor(
-  fields: PartnerApplicationSettingsOut["fields"],
-): PartnerApplicationFieldConfig[] {
-  return fields.map((field) => ({
-    key: field.key,
-    label: field.label,
-    field_type: field.field_type,
-    required: field.required,
-    placeholder: field.placeholder,
-    help_text: field.help_text,
-    options: field.options,
-    sort_order: field.sort_order,
-    is_active: field.is_active,
-  }));
 }
 
 function MarkdownEditor({
@@ -319,7 +279,10 @@ export default function PublicSiteAdminPage() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
   const [savingLinkTree, setSavingLinkTree] = useState(false);
-  const [tab, setTab] = useState<Tab>("homepage");
+  const router = useRouter();
+  const requestedTab = useSearchParams().get("tab");
+  const tab: Tab = tabs.find((item) => item.id === requestedTab)?.id ?? "homepage";
+  const setTab = (next: Tab) => router.replace(`/admin/public-site?tab=${next}`, { scroll: false });
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState<PublicSiteSettingsOut>(emptySettings);
   const [pages, setPages] = useState<PublicSitePageOut[]>([]);
@@ -329,9 +292,6 @@ export default function PublicSiteAdminPage() {
   const [candidates, setCandidates] = useState<PublicOfficerCandidateOut[]>([]);
   const [profiles, setProfiles] = useState<PublicOfficerProfileOut[]>([]);
   const [specialAgreement, setSpecialAgreement] = useState<PublicSpecialAgreementContent>(DEFAULT_SPECIAL_AGREEMENT_CONTENT);
-  const [applicationSettings, setApplicationSettings] = useState<PartnerApplicationSettingsOut | null>(null);
-  const [applicationFields, setApplicationFields] = useState<PartnerApplicationFieldConfig[]>([]);
-  const [savingApplicationSettings, setSavingApplicationSettings] = useState(false);
   const [themeJson, setThemeJson] = useState("{}");
   const [blocksJson, setBlocksJson] = useState("{}");
   const [rosterText, setRosterText] = useState("");
@@ -396,7 +356,6 @@ export default function PublicSiteAdminPage() {
         nextLinks,
         nextCandidates,
         nextProfiles,
-        nextApplicationSettings,
       ] = await Promise.all([
         siteApi.adminSettings(),
         siteApi.adminPages(),
@@ -404,7 +363,6 @@ export default function PublicSiteAdminPage() {
         siteApi.adminLinks(),
         siteApi.officerCandidates(true),
         siteApi.officerProfiles(),
-        partnerApplicationApi.adminSettings(),
       ]);
       setSettings(normalizeSettingsForEditor(nextSettings));
       setPages(nextPages);
@@ -415,8 +373,6 @@ export default function PublicSiteAdminPage() {
       setThemeJson(JSON.stringify(nextSettings.theme_config ?? {}, null, 2));
       setBlocksJson(JSON.stringify(nextSettings.homepage_blocks ?? {}, null, 2));
       setSpecialAgreement(readSpecialAgreementContent(nextSettings.homepage_blocks?.special_agreement));
-      setApplicationSettings(nextApplicationSettings);
-      setApplicationFields(applicationFieldsForEditor(nextApplicationSettings.fields));
       const nextRosterTabs = parseStoredOfficerRosterTabs(nextSettings.theme_config);
       setRosterTabs(nextRosterTabs);
       const nextMemberLabelOverrides: Record<string, string> = {};
@@ -517,6 +473,12 @@ export default function PublicSiteAdminPage() {
     setRosterText(serializeOfficerRoster(nextTab.entries));
   };
 
+  const saveSettingsFields = async (body: PublicSiteSettingsUpdate) => {
+    const next = await siteApi.updateSettings(body);
+    setSettings((current) => mergeSavedSettings(current, next, Object.keys(body)));
+    return next;
+  };
+
   const saveOfficerRoster = async () => {
     const invalidLines = rosterLines.filter((line) => line.error);
     if (invalidLines.length > 0) {
@@ -533,9 +495,8 @@ export default function PublicSiteAdminPage() {
       const roster = currentRosterEntries();
       const nextTabs = rosterTabs.map((tab) => tab.id === activeRosterTabId ? { ...tab, entries: roster } : tab);
       const nextTheme = { ...(settings.theme_config ?? {}), officer_rosters: nextTabs };
-      const next = await siteApi.updateSettings({ theme_config: nextTheme });
+      const next = await saveSettingsFields({ theme_config: nextTheme });
       setRosterTabs(nextTabs);
-      setSettings(normalizeSettingsForEditor(next));
       setThemeJson(JSON.stringify(next.theme_config ?? {}, null, 2));
       toast.success(`已儲存 ${rosterSummary.memberCount} 位幹部、${roster.length} 個職位`);
     } catch (error) {
@@ -547,7 +508,7 @@ export default function PublicSiteAdminPage() {
 
   const saveSettings = async () => {
     try {
-      const next = await siteApi.updateSettings({
+      await saveSettingsFields({
         site_title: settings.site_title,
         site_description: settings.site_description,
         site_logo_url: settings.site_logo_url,
@@ -567,7 +528,6 @@ export default function PublicSiteAdminPage() {
         seo_title: settings.seo_title,
         seo_description: settings.seo_description,
       });
-      setSettings(normalizeSettingsForEditor(next));
       toast.success("公開網站設定已儲存");
     } catch (error) {
       displayError(error, "儲存設定失敗");
@@ -576,8 +536,7 @@ export default function PublicSiteAdminPage() {
 
   const saveSystemInfo = async () => {
     try {
-      const next = await siteApi.updateSettings({ system_info_md: settings.system_info_md });
-      setSettings(normalizeSettingsForEditor(next));
+      await saveSettingsFields({ system_info_md: settings.system_info_md });
       toast.success("系統資訊已儲存");
     } catch (error) {
       displayError(error, "儲存系統資訊失敗");
@@ -586,8 +545,7 @@ export default function PublicSiteAdminPage() {
 
   const saveContact = async () => {
     try {
-      const next = await siteApi.updateSettings({ contact_md: settings.contact_md });
-      setSettings(normalizeSettingsForEditor(next));
+      await saveSettingsFields({ contact_md: settings.contact_md });
       toast.success("聯絡方式已儲存");
     } catch (error) {
       displayError(error, "儲存聯絡方式失敗");
@@ -596,12 +554,11 @@ export default function PublicSiteAdminPage() {
 
   const saveAdvanced = async () => {
     try {
-      const next = await siteApi.updateSettings({
+      const next = await saveSettingsFields({
         theme_config: parseJsonObject(themeJson, "主題設定"),
         homepage_blocks: parseJsonObject(blocksJson, "首頁區塊"),
         custom_css: settings.custom_css,
       });
-      setSettings(normalizeSettingsForEditor(next));
       setThemeJson(JSON.stringify(next.theme_config ?? {}, null, 2));
       setBlocksJson(JSON.stringify(next.homepage_blocks ?? {}, null, 2));
       toast.success("進階設定已儲存");
@@ -648,8 +605,7 @@ export default function PublicSiteAdminPage() {
         items[item.key] = override;
       });
       const nextTheme = { ...(settings.theme_config ?? {}), nav: { items } };
-      const next = await siteApi.updateSettings({ theme_config: nextTheme });
-      setSettings(normalizeSettingsForEditor(next));
+      const next = await saveSettingsFields({ theme_config: nextTheme });
       setNavItems(resolvePublicNav(next.theme_config));
       setThemeJson(JSON.stringify(next.theme_config ?? {}, null, 2));
       toast.success("導覽列設定已儲存");
@@ -939,33 +895,6 @@ export default function PublicSiteAdminPage() {
     }));
   };
 
-  const saveApplicationSettings = async () => {
-    if (!applicationSettings) return;
-    setSavingApplicationSettings(true);
-    try {
-      const next = await partnerApplicationApi.updateSettings({
-        is_open: applicationSettings.is_open,
-        title: applicationSettings.title,
-        intro: applicationSettings.intro,
-        privacy_notice: applicationSettings.privacy_notice,
-        fields: applicationFields,
-      });
-      setApplicationSettings(next);
-      setApplicationFields(applicationFieldsForEditor(next.fields));
-      toast.success("申請表單設定已儲存");
-    } catch (error) {
-      displayError(error, "儲存申請表單設定失敗");
-    } finally {
-      setSavingApplicationSettings(false);
-    }
-  };
-
-  const updateApplicationField = (index: number, patch: Partial<PartnerApplicationFieldConfig>) => {
-    setApplicationFields((current) => current.map((field, fieldIndex) => (
-      fieldIndex === index ? { ...field, ...patch } : field
-    )));
-  };
-
   const saveSpecialAgreement = async () => {
     const invalidStep = specialAgreement.process.find(
       (step) => !step.title.trim() || !step.description.trim(),
@@ -985,8 +914,7 @@ export default function PublicSiteAdminPage() {
         ...(settings.homepage_blocks ?? {}),
         special_agreement: specialAgreement,
       };
-      const next = await siteApi.updateSettings({ homepage_blocks: homepageBlocks });
-      setSettings(normalizeSettingsForEditor(next));
+      const next = await saveSettingsFields({ homepage_blocks: homepageBlocks });
       setSpecialAgreement(readSpecialAgreementContent(next.homepage_blocks?.special_agreement));
       setBlocksJson(JSON.stringify(next.homepage_blocks ?? {}, null, 2));
       toast.success("特約資訊已儲存");
@@ -1380,87 +1308,12 @@ export default function PublicSiteAdminPage() {
             </aside>
           </div>
 
-          {applicationSettings && (
-            <div className="card space-y-5 p-5">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <h2 className="font-semibold">公開申請表單</h2>
-                </div>
-                <label className="flex min-h-11 items-center gap-2 text-sm text-[var(--text-secondary)]">
-                  <input
-                    type="checkbox"
-                    checked={applicationSettings.is_open}
-                    onChange={(event) => setApplicationSettings((current) => current ? { ...current, is_open: event.target.checked } : current)}
-                  />
-                  開放合作申請
-                </label>
-              </div>
-              <div className="grid gap-4">
-                <Field label="表單標題">
-                  <TextInput value={applicationSettings.title} onChange={(event) => setApplicationSettings((current) => current ? { ...current, title: event.target.value } : current)} />
-                </Field>
-                <Field label="開頭說明">
-                  <TextArea rows={4} value={applicationSettings.intro} onChange={(event) => setApplicationSettings((current) => current ? { ...current, intro: event.target.value } : current)} />
-                </Field>
-                <Field label="個資／聯絡說明（選填）">
-                  <TextArea rows={3} value={applicationSettings.privacy_notice ?? ""} onChange={(event) => setApplicationSettings((current) => current ? { ...current, privacy_notice: event.target.value || null } : current)} placeholder="例如：資料僅用於特約合作聯繫與審核。" />
-                </Field>
-              </div>
-
-              <div className="flex flex-col gap-3 border-t border-[var(--border)] pt-4 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold">申請輸入欄位</h3>
-                  <p className="mt-1 text-xs text-[var(--text-muted)]">欄位代碼只接受小寫英數與底線；既有欄位可停用以保留歷史申請資料。</p>
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-secondary shrink-0"
-                  onClick={() => setApplicationFields((current) => [...current, { ...EMPTY_APPLICATION_FIELD, key: `field_${current.length + 1}`, sort_order: (current.length + 1) * 10 }])}
-                >
-                  <Plus size={15} aria-hidden /> 新增欄位
-                </button>
-              </div>
-              <div className="space-y-3">
-                {applicationFields.map((field, index) => (
-                  <div key={`${field.key}-${index}`} className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4" style={{ opacity: field.is_active ? 1 : 0.6 }}>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-[var(--text-muted)]">欄位 {index + 1}</span>
-                      <label className="ml-auto flex items-center gap-2 text-xs text-[var(--text-secondary)]">
-                        <input type="checkbox" checked={field.is_active} onChange={(event) => updateApplicationField(index, { is_active: event.target.checked })} /> 啟用
-                      </label>
-                    </div>
-                    <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_100px]">
-                      <Field label="欄位名稱"><TextInput value={field.label} onChange={(event) => updateApplicationField(index, { label: event.target.value })} /></Field>
-                      <Field label="欄位代碼"><TextInput className="font-mono" value={field.key} onChange={(event) => updateApplicationField(index, { key: event.target.value })} /></Field>
-                      <Field label="型別">
-                        <Select value={field.field_type} onChange={(event) => updateApplicationField(index, { field_type: event.target.value as PartnerApplicationFieldType })}>
-                          {Object.entries(APPLICATION_FIELD_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                        </Select>
-                      </Field>
-                      <Field label="排序"><TextInput type="number" min={0} value={field.sort_order} onChange={(event) => updateApplicationField(index, { sort_order: Number(event.target.value) })} /></Field>
-                    </div>
-                    <div className="mt-3 grid gap-3 md:grid-cols-2">
-                      <Field label="輸入框提示"><TextInput value={field.placeholder ?? ""} onChange={(event) => updateApplicationField(index, { placeholder: event.target.value || null })} placeholder="選填" /></Field>
-                      <Field label="填寫說明"><TextInput value={field.help_text ?? ""} onChange={(event) => updateApplicationField(index, { help_text: event.target.value || null })} placeholder="選填" /></Field>
-                    </div>
-                    {field.field_type === "select" && (
-                      <Field label="下拉選項（用逗號分隔）">
-                        <TextInput className="mt-3" value={field.options?.join(", ") ?? ""} onChange={(event) => updateApplicationField(index, { options: event.target.value.split(",").map((option) => option.trim()).filter(Boolean) })} />
-                      </Field>
-                    )}
-                    <label className="mt-3 inline-flex min-h-11 items-center gap-2 text-xs text-[var(--text-secondary)]">
-                      <input type="checkbox" checked={field.required} onChange={(event) => updateApplicationField(index, { required: event.target.checked })} /> 必填欄位
-                    </label>
-                  </div>
-                ))}
-              </div>
-              <div className="flex justify-end border-t border-[var(--border)] pt-4">
-                <button type="button" className="btn btn-primary" disabled={savingApplicationSettings} onClick={() => void saveApplicationSettings()}>
-                  <Save size={16} aria-hidden /> {savingApplicationSettings ? "儲存中…" : "儲存申請表單"}
-                </button>
-              </div>
-            </div>
-          )}
+          <div className="card flex flex-wrap items-center justify-between gap-3 p-5">
+            <h2 className="font-semibold">公開申請表單</h2>
+            <Link href="/partner-map/admin/applications" className="btn btn-secondary min-h-11">
+              表單設定與審核 <ArrowRight size={15} aria-hidden />
+            </Link>
+          </div>
 
           <div className="card space-y-4 p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
