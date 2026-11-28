@@ -360,7 +360,21 @@ export const ADMIN_CATALOG: NavSection[] = [
 
 const ADMIN_CATALOG_IDS = new Set(navItemsFromEntries(ADMIN_CATALOG).map((item) => item.id));
 
-const ADMIN_NAV_SECTION: NavSection = { id: "admin", heading: "管理", items: byIds(["adminDashboard"]) };
+/** 常用管理工具直接放在側欄；其餘仍從管理中心進入。 */
+const SIDEBAR_ADMIN_SHORTCUT_IDS = [
+  "peopleAdmin",
+  "email",
+  "publicSiteAdmin",
+  "petitionsManage",
+  "qrCode",
+  "systemOperations",
+];
+
+const ADMIN_NAV_SECTION: NavSection = {
+  id: "admin",
+  heading: "管理",
+  items: byIds(["adminDashboard", ...SIDEBAR_ADMIN_SHORTCUT_IDS]),
+};
 
 export const NAV_DEF: NavEntry[] = [
   {
@@ -530,20 +544,22 @@ export function navItemsFromEntries(entries: NavEntry[]): NavItem[] {
   });
 }
 
-/** 側欄把管理工具收進單一「管理中心」入口，包含後台或舊版視角設定裡列出的管理項目。 */
+/** 側欄把管理工具收進「管理」區（管理中心＋常用工具），包含後台或舊版視角設定裡列出的管理項目。 */
 export function filterSidebarNavEntries(entries: NavEntry[]): NavEntry[] {
   const visibleEntries: NavEntry[] = [];
-  let hasAdminEntry = false;
+  let placedAdminSection = false;
   let collapsedAdminTool = false;
   for (const entry of entries) {
     const items = isSection(entry) ? entry.items : [entry];
-    if (items.some((item) => item.id === "adminDashboard")) hasAdminEntry = true;
-    const kept = items.filter((item) => !ADMIN_CATALOG_IDS.has(item.id));
+    const kept = items.filter((item) => item.id !== "adminDashboard" && !ADMIN_CATALOG_IDS.has(item.id));
     if (kept.length < items.length) collapsedAdminTool = true;
-    if (kept.length === 0) continue;
-    visibleEntries.push(isSection(entry) ? { ...entry, items: kept } : entry);
+    if (kept.length > 0) visibleEntries.push(isSection(entry) ? { ...entry, items: kept } : entry);
+    if (!placedAdminSection && items.some((item) => item.id === "adminDashboard")) {
+      visibleEntries.push(ADMIN_NAV_SECTION);
+      placedAdminSection = true;
+    }
   }
-  if (collapsedAdminTool && !hasAdminEntry) visibleEntries.push(ADMIN_NAV_SECTION);
+  if (collapsedAdminTool && !placedAdminSection) visibleEntries.push(ADMIN_NAV_SECTION);
   return visibleEntries;
 }
 

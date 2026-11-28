@@ -20,9 +20,10 @@ describe("navigation visibility", () => {
     const allIds = navItemsFromEntries(NAV_DEF).map((item) => item.id);
     const catalogIds = navItemsFromEntries(ADMIN_CATALOG).map((item) => item.id);
 
+    const shortcutIds = ["peopleAdmin", "email", "publicSiteAdmin", "petitionsManage", "qrCode", "systemOperations"];
     expect(NAV_DEF.filter(isSection).find((section) => section.id === "admin")?.items.map((item) => item.id))
-      .toEqual(["adminDashboard"]);
-    expect(allIds.filter((id) => catalogIds.includes(id))).toEqual([]);
+      .toEqual(["adminDashboard", ...shortcutIds]);
+    expect(allIds.filter((id) => catalogIds.includes(id))).toEqual(shortcutIds);
     expect(NAV_ITEMS.some((item) => item.href === "/finance/receivables")).toBe(false);
     expect(NAV_ITEMS.some((item) => item.href === "/backoffice" || item.href === "/operations")).toBe(false);
     for (const href of [
@@ -52,8 +53,24 @@ describe("navigation visibility", () => {
       },
     ]);
 
-    expect(navItemsFromEntries(entries).map((item) => item.id)).toEqual(["dashboard", "adminDashboard"]);
+    expect(navItemsFromEntries(entries).map((item) => item.id)).toEqual([
+      "dashboard",
+      "adminDashboard",
+      "peopleAdmin",
+      "email",
+      "publicSiteAdmin",
+      "petitionsManage",
+      "qrCode",
+      "systemOperations",
+    ]);
     expect(filterSidebarNavEntries(NAV_DEF)).toEqual(NAV_DEF);
+    // 後台視角只列管理中心時，常用工具一樣出現在側欄，且不重複
+    const apiEntries = filterSidebarNavEntries([
+      { id: "main", heading: "主要", items: NAV_ITEMS.filter((item) => ["dashboard", "adminDashboard", "email"].includes(item.id)) },
+    ]);
+    const apiIds = navItemsFromEntries(apiEntries).map((item) => item.id);
+    expect(apiIds.filter((id) => id === "email")).toHaveLength(1);
+    expect(apiIds).toContain("systemOperations");
   });
 
   it("shows the admin center only to people holding at least one management tool", () => {
