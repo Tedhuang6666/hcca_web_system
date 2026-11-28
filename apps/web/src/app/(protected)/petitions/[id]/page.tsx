@@ -12,6 +12,7 @@ import PetitionContentEditor from "@/components/petitions/PetitionContentEditor"
 import PetitionAttachmentList from "@/components/petitions/PetitionAttachmentList";
 import AnimatedFileUpload from "@/components/ui/AnimatedFileUpload";
 import { PetitionConfidentialBlocked } from "@/components/petitions/PetitionConfidentialBlocked";
+import { uploadStagedAttachments, type UploadedStagedAttachment } from "@/components/petitions/petitionStagedAttachments";
 
 function fmt(iso: string | null) {
   if (!iso) return "未設定";
@@ -22,7 +23,10 @@ export default function PetitionDetailPage() {
   const params = useParams<{ id: string }>();
   const [item, setItem] = useState<PetitionCaseOut | null>(null);
   const [supplement, setSupplement] = useState("");
-  const [file, setFile] = useState<File | null>(null);
+  const [supplementFiles, setSupplementFiles] = useState<File[]>([]);
+  const [uploadedSupplementFiles, setUploadedSupplementFiles] = useState<UploadedStagedAttachment[]>([]);
+  const [submittingSupplement, setSubmittingSupplement] = useState(false);
+  const [supplementUploadKey, setSupplementUploadKey] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -39,19 +43,30 @@ export default function PetitionDetailPage() {
   useEffect(() => { load(); }, [load]);
 
   const submitSupplement = async () => {
-    if (!item) return;
+    if (!item || submittingSupplement || !supplement.trim()) return;
+    setSubmittingSupplement(true);
     try {
+      await uploadStagedAttachments(
+        item.id,
+        supplementFiles,
+        uploadedSupplementFiles,
+        (caseId, file) => petitionsApi.uploadAttachment(caseId, file),
+        setUploadedSupplementFiles,
+      );
       const updated = await petitionsApi.supplement(item.id, {
-        content: supplement,
+        content: supplement.trim(),
       });
-      if (file) await petitionsApi.uploadAttachment(item.id, file);
       setItem(updated);
       setSupplement("");
-      setFile(null);
+      setSupplementFiles([]);
+      setUploadedSupplementFiles([]);
+      setSupplementUploadKey((key) => key + 1);
       toast.success("補件已送出");
       load();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "補件失敗");
+    } finally {
+      setSubmittingSupplement(false);
     }
   };
 
@@ -140,13 +155,22 @@ export default function PetitionDetailPage() {
               {item.supplement_request && <p className="break-words text-sm text-danger!">{item.supplement_request}</p>}
               <textarea className="input w-full min-h-28" value={supplement} onChange={(e) => setSupplement(e.target.value)} placeholder="請補充承辦機關要求的資料" />
               <AnimatedFileUpload
+                key={supplementUploadKey}
                 accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
-                label="拖曳補件附件到這裡"
-                hint="檔案會和補充內容一起送出"
-                onFiles={(files) => setFile(files[0] ?? null)}
-                onRemove={() => setFile(null)}
+                multiple
+                maxFiles={10}
+                disabled={submittingSupplement}
+                label="加入補件附件"
+                hint="最多 10 個，會和補充內容一起送出"
+                onFiles={(files) => setSupplementFiles((current) => [...current, ...files].slice(0, 10))}
+                onRemove={(removed) => {
+                  setSupplementFiles((current) => current.filter((file) => file !== removed));
+                  setUploadedSupplementFiles((current) => current.filter((item) => item.file !== removed));
+                }}
               />
-              <button className="btn btn-primary min-h-11 w-full" disabled={!supplement.trim()} onClick={submitSupplement}>送出補件</button>
+              <button className="btn btn-primary min-h-11 w-full" disabled={!supplement.trim() || submittingSupplement} onClick={submitSupplement}>
+                {submittingSupplement ? "送出中…" : "送出補件"}
+              </button>
             </section>
           )}
         </aside>

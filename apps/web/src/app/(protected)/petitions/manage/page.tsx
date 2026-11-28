@@ -17,6 +17,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { PetitionPublicDiff } from "@/components/petitions/PetitionPublicConsent";
 import { PetitionConfidentialBlocked } from "@/components/petitions/PetitionConfidentialBlocked";
 import { PetitionConfidentialReasonEditor } from "@/components/petitions/PetitionConfidentialReasonEditor";
+import { uploadStagedAttachments } from "@/components/petitions/petitionStagedAttachments";
 
 type ActionKey = "assign" | "handle" | "transfer" | "reject_close" | "public" | "attachments";
 
@@ -50,7 +51,7 @@ const PET_ORGS_KEY = "petitions/manage/orgs";
 const ACTION_CONFIRM: Record<string, { title: string; description: string; confirmLabel: string; danger?: boolean }> = {
   reject: { title: "駁回／不受理此案件？", description: "駁回原因會通知陳情人。", confirmLabel: "駁回", danger: true },
   close: { title: "結案？", description: "陳情人會收到結案通知。", confirmLabel: "結案" },
-  reply: { title: "送出正式回覆並完成？", description: "回覆會通知陳情人，案件標示為完成。", confirmLabel: "送出回覆" },
+  reply: { title: "送出回覆並結案？", description: "回覆會通知陳情人，案件將標示為已結案。", confirmLabel: "送出回覆並結案" },
   transfer: { title: "轉派至其他機關？", description: "案件會移交給選定的機關。", confirmLabel: "確認轉派" },
 };
 
@@ -89,8 +90,10 @@ export default function PetitionManagePage() {
   const [intakeBusy, setIntakeBusy] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [fileUploadKey, setFileUploadKey] = useState(0);
+  const [replyUploadKey, setReplyUploadKey] = useState(0);
   const [attachmentVisibility, setAttachmentVisibility] = useState<"public" | "internal">("internal");
-  const [pendingReplyAttachmentId, setPendingReplyAttachmentId] = useState<string | null>(null);
+  const [replyFiles, setReplyFiles] = useState<File[]>([]);
+  const [uploadedReplyFiles, setUploadedReplyFiles] = useState<{ file: File; id: string }[]>([]);
   const [busy, setBusy] = useState(false);
   const [confirmingConfidential, setConfirmingConfidential] = useState(false);
   const [confidentialReason, setConfidentialReason] = useState("");
@@ -144,8 +147,10 @@ export default function PetitionManagePage() {
     setInternalNote("");
     setTargetOrg("");
     setFile(null);
+    setReplyFiles([]);
+    setUploadedReplyFiles([]);
+    setReplyUploadKey((key) => key + 1);
     setFileUploadKey((key) => key + 1);
-    setPendingReplyAttachmentId(null);
     setEditingEventId(null);
     setEditingEventTitle("");
     setEditingEventContent("");
@@ -350,12 +355,6 @@ export default function PetitionManagePage() {
     try {
       let updated: PetitionCaseOut;
       let replyAttachmentIds: string[] = [];
-      let stagedReplyAttachmentId = pendingReplyAttachmentId;
-      if (file && activeAction === "handle" && !stagedReplyAttachmentId) {
-        const uploaded = await petitionsApi.uploadAttachment(selected.id, file, { visibility: "internal" });
-        stagedReplyAttachmentId = uploaded.id;
-        setPendingReplyAttachmentId(stagedReplyAttachmentId);
-      }
       if (action === "assign") {
         updated = await petitionsApi.assign(selected.id, {
           assigned_to_id: assignee,
@@ -374,10 +373,13 @@ export default function PetitionManagePage() {
           internal_note: internalNote || null,
         });
       } else if (action === "reply") {
-        if (file) {
-          if (!stagedReplyAttachmentId) throw new Error("附件尚未完成上傳，請重試");
-          replyAttachmentIds = [stagedReplyAttachmentId];
-        }
+        replyAttachmentIds = await uploadStagedAttachments(
+          selected.id,
+          replyFiles,
+          uploadedReplyFiles,
+          (caseId, replyFile) => petitionsApi.uploadAttachment(caseId, replyFile, { visibility: "internal" }),
+          setUploadedReplyFiles,
+        );
         updated = await petitionsApi.reply(selected.id, {
           public_content: publicText,
           internal_note: internalNote || null,
@@ -753,23 +755,24 @@ export default function PetitionManagePage() {
                 )}
               </div>
 
-              <div className="flex flex-wrap gap-2" role="tablist" aria-label="案件處理動作">
+              <div className="flex flex-wrap gap-2" role="group" aria-label="案件處理動作">
                 {[
-                  ["assign", "分派承辦"],
-                  ["handle", "處理/回覆"],
-                  ["transfer", "跨機關轉派"],
-                  ["reject_close", "駁回/結案"],
-                  ...(selected.status === "closed" ? [["public", "公開陳情"]] : []),
-                  ["attachments", "附件/備註"],
+                  ["assign", "分派案件"],
+                  ["handle", "回覆或要求補件"],
+                  ["transfer", "轉派機關"],
+                  ["reject_close", "駁回或結案"],
+                  ...(selected.status === "closed" ? [["public", "公開案件"]] : []),
+                  ["attachments", "其他附件與備註"],
                 ].map(([key, label]) => (
                   <button
                     key={key}
                     type="button"
                     className={activeAction === key ? "btn btn-primary" : "btn btn-ghost"}
+                    aria-pressed={activeAction === key}
+                    disabled={busy}
                     onClick={() => {
                       setActiveAction(key as ActionKey);
                       setFile(null);
-                      setPendingReplyAttachmentId(null);
                       setFileUploadKey((value) => value + 1);
                     }}>
                     {label}
@@ -798,41 +801,41 @@ export default function PetitionManagePage() {
                 </div>
               )}
 
-              {activeAction === "handle" && (
-                <div className="rounded-lg p-4 space-y-3 border! border-border!" >
+              <div className={`rounded-lg p-4 space-y-3 border! border-border! ${activeAction === "handle" ? "" : "hidden"}`}>
                   <div>
-                    <h3 className="font-medium">處理、要求補件或正式回覆</h3>
-                    <p className="text-sm mt-1 text-fg-muted!" >公開內容會顯示給陳情人；內部備註只給幹部看。</p>
+                    <h3 className="font-medium">回覆陳情人</h3>
+                    <p className="text-sm mt-1 text-fg-muted!" >公開內容會顯示給陳情人；內部備註只供承辦人查看。</p>
                   </div>
                   <label className="block space-y-1.5">
-                    <span className="text-sm font-medium">公開說明、補件原因或正式回覆</span>
-                    <textarea className="input w-full min-h-32" value={publicText} onChange={(e) => setPublicText(e.target.value)} placeholder="輸入會提供給陳情人的內容" />
+                    <span className="text-sm font-medium">回覆內容</span>
+                    <textarea className="input w-full min-h-32" value={publicText} onChange={(e) => setPublicText(e.target.value)} placeholder="輸入會提供給陳情人的內容" maxLength={10000} />
                   </label>
                   <label className="block space-y-1.5">
                     <span className="text-sm font-medium">內部備註（選填）</span>
                     <textarea className="input w-full min-h-20" value={internalNote} onChange={(e) => setInternalNote(e.target.value)} placeholder="僅供承辦人與幹部查看" />
                   </label>
                   <AnimatedFileUpload
-                    key={fileUploadKey}
+                    key={replyUploadKey}
                     accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
-                    label="拖曳回覆附件到這裡"
-                    hint="正式回覆會把附件公開給陳情人，並一併附在回覆通知郵件"
+                    multiple
+                    maxFiles={10}
+                    disabled={busy}
+                    label="加入回覆附件"
+                    hint="最多 10 個，合計 20 MB；送出正式回覆時一併提供給陳情人"
                     onFiles={(files) => {
-                      setFile(files[0] ?? null);
-                      setPendingReplyAttachmentId(null);
+                      setReplyFiles((current) => [...current, ...files].slice(0, 10));
                     }}
-                    onRemove={() => {
-                      setFile(null);
-                      setPendingReplyAttachmentId(null);
+                    onRemove={(removed) => {
+                      setReplyFiles((current) => current.filter((item) => item !== removed));
+                      setUploadedReplyFiles((current) => current.filter((item) => item.file !== removed));
                     }}
                   />
                   <div className="flex flex-wrap gap-2">
-                    <button className="btn btn-ghost" disabled={busy} onClick={() => run("progress")}>標記處理中</button>
-                    <button className="btn btn-ghost" disabled={!publicText.trim() || busy} onClick={() => run("needs_info")}>退回補件</button>
-                    <button className="btn btn-primary" disabled={!publicText.trim() || busy} onClick={() => run("reply")}>正式回覆並完成</button>
+                    <button className="btn btn-ghost" disabled={busy || replyFiles.length > 0} onClick={() => run("progress")}>標記處理中</button>
+                    <button className="btn btn-ghost" disabled={!publicText.trim() || busy || replyFiles.length > 0} onClick={() => run("needs_info")}>要求補件</button>
+                    <button className="btn btn-primary" disabled={!publicText.trim() || busy} onClick={() => run("reply")}>送出回覆並結案</button>
                   </div>
-                </div>
-              )}
+              </div>
 
               {activeAction === "transfer" && (
                 <div className="rounded-lg p-4 space-y-3 border! border-border!" >
