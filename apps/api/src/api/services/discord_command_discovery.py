@@ -5,15 +5,16 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only
 
 from api.models.announcement import Announcement
-from api.models.document import Document
 from api.models.regulation import Regulation, RegulationArticle
 from api.models.survey import Survey, SurveyStatus
 from api.models.user import User
+from api.services import announcement as announcement_service
+from api.services import document as document_service
 from api.services.discord_bot import (
     plain_frontend_url,
 )
@@ -34,9 +35,13 @@ async def handle(
     arguments: dict[str, Any],
 ) -> dict[str, Any] | None:
     if operation == "browse_announcements":
+        scope = await announcement_service.get_viewer_scope(db, user)
         statement = (
             select(Announcement)
-            .where(Announcement.is_published.is_(True))
+            .where(
+                Announcement.is_published.is_(True),
+                announcement_service._audience_clause(scope),
+            )
             .order_by(Announcement.published_at.desc().nullslast())
             .limit(10)
         )
@@ -118,12 +123,14 @@ async def handle(
         needle = f"%{query}%"
         items: list[dict[str, Any]] = []
         if scope in {"all", "announcement"}:
+            viewer_scope = await announcement_service.get_viewer_scope(db, user)
             rows = (
                 await db.execute(
                     select(Announcement)
                     .where(
                         Announcement.title.ilike(needle),
                         Announcement.is_published.is_(True),
+                        announcement_service._audience_clause(viewer_scope),
                     )
                     .order_by(Announcement.published_at.desc().nullslast())
                     .limit(5)
@@ -138,21 +145,19 @@ async def handle(
                     }
                 )
         if scope in {"all", "document"}:
-            rows = (
-                await db.execute(
-                    select(Document)
-                    .where(
-                        or_(
-                            Document.title.ilike(needle),
-                            Document.subject.ilike(needle),
-                            Document.serial_number.ilike(needle),
-                        )
-                    )
-                    .order_by(Document.updated_at.desc())
-                    .limit(5)
-                )
-            ).scalars()
-            for row in rows:
+            can_view_all = user.is_superuser or bool(
+                {"admin:all", "document:view_all", "document:admin"} & codes
+            )
+            docs = await document_service.list_documents(
+                db,
+                keyword=query,
+                limit=5,
+                viewer_id=None if can_view_all else user.id,
+            )
+            visible_items = await document_service.build_document_list_items(
+                db, docs, viewer_id=user.id, reveal_sensitive=can_view_all
+            )
+            for row in visible_items:
                 items.append(
                     {
                         "type": "document",
