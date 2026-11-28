@@ -354,6 +354,60 @@ async def test_recipient_list_requires_bulk_permission_at_send(
 
 
 @pytest.mark.asyncio
+async def test_recipient_list_requires_current_owner_and_active_status(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sender = await _seed_user(db_session, "list-authorized@school.edu", ["email:send_bulk"])
+    other = await _seed_user(db_session, "list-other@school.edu", [])
+    _override_user(sender)
+    foreign = EmailRecipientList(owner_id=other.id, name="別人的私人名單")
+    own = EmailRecipientList(owner_id=sender.id, name="自己的名單")
+    db_session.add_all([foreign, own])
+    await db_session.flush()
+    db_session.add_all(
+        [
+            EmailRecipientListMember(list_id=foreign.id, email="foreign@example.org"),
+            EmailRecipientListMember(list_id=own.id, email="own@example.org"),
+        ]
+    )
+    await db_session.flush()
+    queued: list[str] = []
+    monkeypatch.setattr(
+        "api.routers.email.enqueue_rendered",
+        lambda destinations, *args, **kwargs: queued.extend(destinations) or ["task-id"],
+    )
+
+    foreign_draft = await client.post(
+        "/email/messages",
+        json={"subject": "私人名單", "action": "draft", "recipient_list_id": str(foreign.id)},
+    )
+    assert foreign_draft.status_code == 404
+
+    own_draft = await client.post(
+        "/email/messages",
+        json={"subject": "有效名單", "action": "draft", "recipient_list_id": str(own.id)},
+    )
+    assert own_draft.status_code == 201
+    message_id = own_draft.json()["id"]
+    foreign_update = await client.patch(
+        f"/email/messages/{message_id}", json={"recipient_list_id": str(foreign.id)}
+    )
+    assert foreign_update.status_code == 404
+
+    own.is_active = False
+    await db_session.flush()
+    revoked_send = await client.post(f"/email/messages/{message_id}/send")
+    assert revoked_send.status_code == 404
+    assert queued == []
+
+    own.is_active = True
+    await db_session.flush()
+    allowed_send = await client.post(f"/email/messages/{message_id}/send")
+    assert allowed_send.status_code == 200
+    assert queued == ["own@example.org"]
+
+
+@pytest.mark.asyncio
 async def test_send_commits_recipient_before_enqueue(
     client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:

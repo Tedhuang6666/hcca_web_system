@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 
 import pandas as pd
 from fastapi import HTTPException, status
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -154,7 +154,10 @@ async def list_recipient_lists(
             EmailRecipientList.is_active.is_(True),
             or_(
                 EmailRecipientList.owner_id == user_id,
-                EmailRecipientList.org_id.in_(org_ids) if org_ids else False,
+                and_(
+                    EmailRecipientList.visibility == EmailResourceVisibility.ORG,
+                    EmailRecipientList.org_id.in_(org_ids) if org_ids else False,
+                ),
             ),
         )
         .order_by(EmailRecipientList.updated_at.desc())

@@ -38,6 +38,7 @@ from api.schemas.email_platform import EmailConditionalRule
 from api.services import audit as audit_svc
 from api.services.email_dispatch import (
     _merged_custom_variables,
+    load_sendable_recipient_list,
     require_bulk_permission,
     reserve_sample_quota,
 )
@@ -936,6 +937,8 @@ async def test_send_sample(
 )
 async def create_message(body: EmailMessageCreate, db: DbDep, user: EmailUser) -> EmailMessageOut:
     await _ensure_can_send(db, user, body.recipients)
+    if body.recipient_list_id is not None:
+        await load_sendable_recipient_list(db, user, body.recipient_list_id)
     if body.idempotency_key:
         existing = await db.scalar(
             select(EmailMessage).where(EmailMessage.idempotency_key == body.idempotency_key)
@@ -997,6 +1000,8 @@ async def update_message(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="只有草稿或預約中的郵件可以編輯"
         )
+    if body.recipient_list_id is not None:
+        await load_sendable_recipient_list(db, user, body.recipient_list_id)
     if body.subject is not None:
         msg.subject = body.subject
     if body.body is not None:

@@ -18,10 +18,13 @@ from api.models.email_message import (
     EmailAttachment,
     EmailCampaignRecipient,
     EmailMessage,
+    EmailRecipientList,
     EmailRecipientListMember,
+    EmailResourceVisibility,
     EmailSuppression,
     EmailTemplate,
 )
+from api.models.org import Org
 from api.models.user import User
 from api.services import email_platform as platform_svc
 
@@ -445,6 +448,34 @@ async def test_list_recipient_lists_returns_created_list(
 
     assert resp.status_code == 200
     assert [row["name"] for row in resp.json()] == ["名單A"]
+
+
+@pytest.mark.asyncio
+async def test_list_recipient_lists_hides_private_lists_from_org_members(
+    db_session: AsyncSession,
+) -> None:
+    owner = await _superuser(db_session)
+    viewer = await _superuser(db_session)
+    org = Org(name="郵件名單機關")
+    db_session.add(org)
+    await db_session.flush()
+    private = EmailRecipientList(
+        owner_id=owner.id,
+        org_id=org.id,
+        visibility=EmailResourceVisibility.PRIVATE,
+        name="私人名單",
+    )
+    shared = EmailRecipientList(
+        owner_id=owner.id,
+        org_id=org.id,
+        visibility=EmailResourceVisibility.ORG,
+        name="共享名單",
+    )
+    db_session.add_all([private, shared])
+    await db_session.flush()
+
+    rows = await platform_svc.list_recipient_lists(db_session, viewer.id, {org.id})
+    assert [row.name for row in rows] == ["共享名單"]
 
 
 @pytest.mark.asyncio

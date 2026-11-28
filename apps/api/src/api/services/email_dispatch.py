@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import delete, func, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.clock import local_today
@@ -31,13 +31,15 @@ from api.models.email_message import (
     EmailAttachmentMode,
     EmailCampaignRecipient,
     EmailMessage,
+    EmailRecipientList,
     EmailRecipientListMember,
     EmailRecipientStatus,
+    EmailResourceVisibility,
     EmailStatus,
     EmailSuppression,
 )
 from api.models.user import User
-from api.services.permission import get_user_permission_codes
+from api.services.permission import get_user_org_ids, get_user_permission_codes
 from api.services.recipient import resolve_recipients, spec_to_resolve_kwargs
 from api.services.storage import get_storage
 
@@ -82,10 +84,39 @@ def _make_personalization_context(row: PersonalizedRecipient) -> dict:
     )
 
 
+async def load_sendable_recipient_list(
+    db: AsyncSession, user: User, list_id: uuid.UUID
+) -> EmailRecipientList:
+    """只允許使用自己的有效名單，或目前所屬機關的共享名單。"""
+    stmt = select(EmailRecipientList).where(
+        EmailRecipientList.id == list_id,
+        EmailRecipientList.is_active.is_(True),
+    )
+    if not user.is_superuser:
+        org_ids = await get_user_org_ids(db, user.id)
+        stmt = stmt.where(
+            or_(
+                EmailRecipientList.owner_id == user.id,
+                and_(
+                    EmailRecipientList.visibility == EmailResourceVisibility.ORG,
+                    EmailRecipientList.org_id.in_(org_ids) if org_ids else False,
+                ),
+            )
+        )
+    row = await db.scalar(stmt)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="收件名單不存在")
+    return row
+
+
 async def resolve_personalized_recipients(
     db: AsyncSession,
     msg: EmailMessage,
+    sender: User,
 ) -> list[PersonalizedRecipient]:
+    recipient_list_id = (msg.recipient_spec or {}).get("recipient_list_id")
+    if recipient_list_id:
+        await load_sendable_recipient_list(db, sender, uuid.UUID(str(recipient_list_id)))
     users, emails = await resolve_recipients(db, **spec_to_resolve_kwargs(msg.recipient_spec or {}))
     definitions = list(msg.variable_definitions or [])
     try:
@@ -96,7 +127,6 @@ async def resolve_personalized_recipients(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     defaults = {str(key): str(value) for key, value in (msg.default_variables or {}).items()}
     inputs = list(msg.recipient_variables or [])
-    recipient_list_id = (msg.recipient_spec or {}).get("recipient_list_id")
     if recipient_list_id:
         list_rows = (
             (
@@ -293,7 +323,7 @@ async def send_now(
     enqueue: Callable[..., list[str]] | None = None,
 ) -> None:
     """解析收件人、落庫後逐封排入寄送佇列，並更新 msg 狀態。"""
-    rows = await resolve_personalized_recipients(db, msg)
+    rows = await resolve_personalized_recipients(db, msg, user)
     if not rows:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="解析後無有效收件人"
