@@ -242,11 +242,6 @@ export default function SerialTemplatesPage() {
                   maxLength={10}
                   className="w-full bg-transparent text-sm px-3 py-2 rounded-lg outline-none border! border-border!"
                   style={{ opacity: canManageOrg ? 1 : 0.6, cursor: canManageOrg ? "text" : "not-allowed" }} />
-                <p className="text-xs mt-1 text-fg-muted!" >
-                  {canManageOrg
-                    ? "只設定這一層，系統會自動接上上層前綴"
-                    : "本層前綴由組織管理員設定，系統會自動接上上層前綴"}
-                </p>
               </div>
             )}
 
@@ -261,11 +256,6 @@ export default function SerialTemplatesPage() {
                   />
                   <span className="text-sm">沿用上級組織前綴</span>
                 </label>
-                <p className="text-xs mt-1 ml-6 text-fg-muted!" >
-                  {form.inherit_parent_prefix
-                    ? "字號會依組織階層串接上級前綴"
-                    : "僅使用本組織前綴，適用於不隸屬上級的單位"}
-                </p>
               </div>
             )}
 
@@ -317,9 +307,6 @@ export default function SerialTemplatesPage() {
                 />
                 <span className="text-sm">
                   設為一般公文預設模板
-                  <span className="block text-xs mt-1 text-fg-muted!" >
-                    同組織起草公文時，會優先自動帶入這個模板
-                  </span>
                 </span>
               </label>
               <label className="flex items-start gap-2 cursor-pointer">
@@ -331,9 +318,6 @@ export default function SerialTemplatesPage() {
                 />
                 <span className="text-sm">
                   設為主席公布預設模板
-                  <span className="block text-xs mt-1 text-fg-muted!" >
-                    主席公布法規時，系統會優先使用這個模板
-                  </span>
                 </span>
               </label>
             </div>

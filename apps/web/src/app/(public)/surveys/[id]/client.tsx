@@ -323,7 +323,7 @@ function RankingInput({
   return (
     <div className="space-y-3">
       <p className="text-xs text-fg-muted!">
-        請從下方點選並拖拉排序（最少 {minN} 項{maxN !== minN ? `、最多 ${maxN} 項` : ""}）
+        最少 {minN} 項{maxN !== minN ? `、最多 ${maxN} 項` : ""}
         — 目前已選 <strong className="text-accent-text!">{selected.length}</strong> 項
       </p>
 
@@ -348,7 +348,7 @@ function RankingInput({
       {unselected.length > 0 && (
         <div className="space-y-1.5">
           <p className="text-xs text-fg-muted!">
-            {selected.length === 0 ? "選項" : "其他選項（點擊加入排序）"}
+            {selected.length === 0 ? "選項" : "其他選項"}
           </p>
           {unselected.map(opt => (
             <button

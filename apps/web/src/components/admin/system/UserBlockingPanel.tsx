@@ -322,7 +322,6 @@ export default function UserBlockingPanel() {
             <h2 id="defense-rules-title" className="flex items-center gap-2 text-lg font-semibold text-fg-primary!">
               <LockKeyhole size={18} aria-hidden /> 長期防禦規則
             </h2>
-            <p className="mt-1 text-sm text-fg-muted!">規則儲存後持續生效，可修改目標、原因、到期與限流參數。</p>
           </div>
           <button type="button" onClick={() => void refresh()} disabled={loading} className="btn btn-ghost">
             <RefreshCcw size={15} aria-hidden /> 重新整理

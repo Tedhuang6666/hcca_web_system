@@ -64,9 +64,6 @@ export default function OfficerAdminTab({
                     批次輸入
                   </span>
                 </div>
-                <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--text-muted)]">
-                  每行一個職位，姓名以空白、頓號或逗號分隔；名單直接公開。
-                </p>
               </div>
               <ClipboardPaste size={20} className="text-[var(--primary-text)]" aria-hidden />
             </div>

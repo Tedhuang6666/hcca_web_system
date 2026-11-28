@@ -500,7 +500,7 @@ function AccountDetail({
           </Section>
 
           {!embedded && (
-          <Section title="班級與座號" description="查看目前及歷史名冊資料，並在此快速新增班級或調整座號。">
+          <Section title="班級與座號">
             {user.class_roster.length === 0 ? (
               <p className="text-sm text-fg-muted!">尚無班級座號名冊資料。</p>
             ) : (
@@ -603,7 +603,7 @@ function AccountDetail({
           </Section>
           )}
 
-          <Section title="登入身分與帳號連結" description="所有已連結的 Email 都可以登入同一個主要帳戶；連結前請確認信箱確實屬於此人。">
+          <Section title="登入身分與帳號連結">
             <div className="space-y-2">
               {user.linked_emails.map((email, index) => <div key={email} className="flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm bg-elevated! text-fg-secondary!"><Mail size={15}   className="text-fg-muted!"/><span className="min-w-0 flex-1 break-all">{email}</span>{index === 0 && <StatusBadge label="主要" tone="success" />}</div>)}
             </div>
@@ -613,7 +613,7 @@ function AccountDetail({
             </div>
           </Section>
 
-          <Section title="通知偏好" description="調整通知管道後，按上方「儲存設定」套用。">
+          <Section title="通知偏好">
             <div className={`${styles.twoColumns} mb-4`}>
               <label className="text-xs text-fg-muted!">Email 摘要頻率<SelectInput className="mt-1" value={digest} onChange={(event) => setDigest(event.target.value as typeof digest)}><option value="off">關閉摘要</option><option value="daily">每日摘要</option><option value="weekly">每週摘要</option></SelectInput></label>
               <div className="text-xs text-fg-muted!">已靜音模組<div className="mt-1 flex min-h-11 flex-wrap items-center gap-1.5 rounded-lg px-3 border! border-border!">{Object.entries(MODULE_LABELS).map(([key, label]) => <button type="button" key={key} onClick={() => setMutedModules((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key])} aria-pressed={mutedModules.includes(key)} aria-label={`${label}通知靜音`} className="min-h-11 rounded-lg px-2 py-1 text-xs" style={{ background: mutedModules.includes(key) ? "var(--warning-dim)" : "var(--bg-elevated)", color: mutedModules.includes(key) ? "var(--warning)" : "var(--text-muted)" }}>{label}</button>)}</div></div>

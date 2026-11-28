@@ -439,7 +439,6 @@ function OrgWorkbenchSidebar({
     <div className="h-full flex flex-col">
       <div className="px-4 py-3 flex-shrink-0 border-b! border-b-border!">
         <p className="text-xs font-semibold uppercase tracking-widest text-fg-muted!">組織與職位</p>
-        <p className="text-xs mt-1 text-fg-muted!">停用組織保留歷史資料，但不會進入新建與指派流程。</p>
       </div>
       <nav className="flex-1 overflow-y-auto p-2 space-y-0.5">
         {childrenOf(null).map((org) => renderOrg(org))}

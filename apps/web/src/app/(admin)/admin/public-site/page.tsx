@@ -1248,19 +1248,6 @@ export default function PublicSiteAdminPage() {
 
       {tab === "contact" && (
         <section key="contact" className="tab-panel-transition space-y-4">
-          <div className="card overflow-hidden border-[var(--primary)]/20 bg-[var(--primary-dim)] p-5">
-            <div className="flex items-start gap-3">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--bg-surface)] text-[var(--primary-text)]">
-                <Mail size={19} aria-hidden />
-              </span>
-              <div>
-                <h2 className="font-semibold text-[var(--text-primary)]">聯絡我們</h2>
-                <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--text-secondary)]">
-                  同步顯示於聯絡、關於班聯會與幹部名單頁。
-                </p>
-              </div>
-            </div>
-          </div>
           <div className="card space-y-4 p-5">
             <Field label="聯絡方式 Markdown" hint="可使用 Markdown 建立信箱、社群、表單連結與分段說明。">
               <MarkdownEditor rows={22} value={settings.contact_md ?? ""} onChange={(value) => setSettings({ ...settings, contact_md: value })} />
@@ -1433,9 +1420,6 @@ export default function PublicSiteAdminPage() {
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="font-semibold">公開站導覽列</h2>
-                <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--text-muted)]">
-                  「主要入口」直接顯示在頁首，「公開資料」與「關於」各收成一個下拉選單。
-                </p>
               </div>
               <div className="flex shrink-0 gap-2">
                 <button type="button" onClick={resetNav} className="btn btn-secondary">

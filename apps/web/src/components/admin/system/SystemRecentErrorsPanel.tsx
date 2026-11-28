@@ -140,9 +140,6 @@ export default function SystemRecentErrorsPanel({
         <summary className="flex min-h-14 cursor-pointer flex-wrap items-center justify-between gap-2 px-4 py-3">
           <span>
             <span className="block text-sm font-semibold" style={{ color: "var(--text-primary)" }}>即時錯誤緩衝</span>
-            <span className="mt-0.5 block text-xs" style={{ color: "var(--text-muted)" }}>
-              最近 {items.length} 筆；服務重新啟動後會清空
-            </span>
           </span>
           <span className="text-xs" style={{ color: "var(--text-secondary)" }}>展開查詢與清理</span>
         </summary>

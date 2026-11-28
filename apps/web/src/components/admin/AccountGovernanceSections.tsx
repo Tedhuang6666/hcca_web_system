@@ -166,10 +166,7 @@ export function AccountLifecycleSection({
   }
 
   return (
-    <Section
-      title="帳號停權與學籍"
-      description="凍結、校友歸檔或解凍此帳號。操作會結束有效任期並保留稽核紀錄；解凍不會重建已結束的任期。"
-    >
+    <Section title="帳號停權與學籍">
       <label className="block text-xs text-[var(--text-muted)]">
         原因（會寫入 audit log）
         <input

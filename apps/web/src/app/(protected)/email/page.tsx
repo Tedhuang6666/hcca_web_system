@@ -1394,32 +1394,27 @@ function ComposeInner() {
                 placeholder="顯示於信件內容最上方的大標題"
               />
             </div>
-            <div className="space-y-2 rounded-lg border p-3 border-border!">
-              <p className="text-xs text-fg-muted!">
-                先點選主旨或主標題中的插入位置，再點選欄位。
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {SYSTEM_VARIABLES.map((variable) => (
-                  <button
-                    key={variable.token}
-                    type="button"
-                    className="rounded-full px-2.5 py-1 text-xs bg-accent-soft! text-accent-text! border! border-border!"
-                    onClick={() => insertVariable(variable.token)}
-                  >
-                    + {variable.label}
-                  </button>
-                ))}
-                {definedVariables.map((variable) => (
-                  <button
-                    key={variable.key}
-                    type="button"
-                    className="rounded-full px-2.5 py-1 text-xs bg-elevated! text-fg-secondary! border! border-border!"
-                    onClick={() => insertVariable(`{{ ${variable.key} }}`)}
-                  >
-                    + {variable.label || variable.key}
-                  </button>
-                ))}
-              </div>
+            <div className="flex flex-wrap gap-1.5">
+              {SYSTEM_VARIABLES.map((variable) => (
+                <button
+                  key={variable.token}
+                  type="button"
+                  className="rounded-full px-2.5 py-1 text-xs bg-accent-soft! text-accent-text! border! border-border!"
+                  onClick={() => insertVariable(variable.token)}
+                >
+                  + {variable.label}
+                </button>
+              ))}
+              {definedVariables.map((variable) => (
+                <button
+                  key={variable.key}
+                  type="button"
+                  className="rounded-full px-2.5 py-1 text-xs bg-elevated! text-fg-secondary! border! border-border!"
+                  onClick={() => insertVariable(`{{ ${variable.key} }}`)}
+                >
+                  + {variable.label || variable.key}
+                </button>
+              ))}
             </div>
             <div className="space-y-2">
               <label className="mb-1 block text-xs font-medium text-fg-muted!">
@@ -1731,34 +1726,28 @@ function ComposeInner() {
               onUpdateRecipientVariable={updateRecipientVar}
               onRemoveRecipientRow={removeRecipientRow}
             />
-            <div className="space-y-3 rounded-lg border p-3 border-border!">
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <h3 className="text-xs font-semibold">條件式佔位符</h3>
-                  <p className="mt-1 text-xs text-fg-muted!">
-                    依收件資料自動填入欄位；後面的規則優先。
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  disabled={definedVariables.length === 0}
-                  onClick={addConditionalRule}
-                >
-                  + 新增條件
-                </button>
-              </div>
-              {definedVariables.length === 0 && (
-                <p className="text-xs text-fg-muted!">
-                  請先新增至少兩個自訂欄位，例如「第一志願」和「面試時間」。
-                </p>
-              )}
-              {conditionalRules.length === 0 && definedVariables.length > 0 && (
-                <p className="text-xs text-fg-muted!">
-                  尚未設定條件
-                </p>
-              )}
-              {conditionalRules.map((rule, index) => {
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <h3 className="text-xs font-semibold">條件式佔位符</h3>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                disabled={definedVariables.length === 0}
+                onClick={addConditionalRule}
+              >
+                + 新增條件
+              </button>
+            </div>
+            {definedVariables.length === 0 && (
+              <p className="text-xs text-fg-muted!">
+                請先新增至少兩個自訂欄位，例如「第一志願」和「面試時間」。
+              </p>
+            )}
+            {conditionalRules.length === 0 && definedVariables.length > 0 && (
+              <p className="text-xs text-fg-muted!">
+                尚未設定條件
+              </p>
+            )}
+            {conditionalRules.map((rule, index) => {
                 const operator = CONDITIONAL_OPERATOR_OPTIONS.find(
                   (option) => option.value === rule.operator,
                 );
@@ -1848,8 +1837,7 @@ function ComposeInner() {
                     </div>
                   </div>
                 );
-              })}
-            </div>
+            })}
           </section>
 
           <section className={`card space-y-3 p-4 ${currentStep === 3 ? "" : "hidden"}`}>

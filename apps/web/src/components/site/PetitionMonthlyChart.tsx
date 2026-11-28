@@ -17,7 +17,6 @@ export default function PetitionMonthlyChart({
   const chart: ArticleChartSpec = {
     type: "pie",
     title: "陳情案件類型分布",
-    description: "依案件受理日計算本月收件類型。",
     unit: "案",
     data: stats.by_type.map((item) => ({ label: item.type_name, value: item.count })),
   };
@@ -28,9 +27,6 @@ export default function PetitionMonthlyChart({
         <h3 id={headingId} className="m-0 text-lg font-semibold">
           {stats.month} 陳情統計
         </h3>
-        <span className="text-xs" style={{ color: "var(--public-muted, var(--text-muted))" }}>
-          受理數按受理日；結案數與平均時間按結案日
-        </span>
       </header>
 
       <dl className="grid gap-3 border-y py-4 sm:grid-cols-3" style={{ borderColor: "var(--public-border, var(--border))" }}>

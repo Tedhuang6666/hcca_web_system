@@ -488,9 +488,6 @@ export function ItemEditor({
         style={{ borderColor: "var(--border)" }}
       >
         <h3 className="font-semibold">投稿通知</h3>
-        <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-          品項送出時通知指定負責人；未指定收件人時會依系統權限自動尋找負責人。
-        </p>
         <div className="mt-3 space-y-3">
           <label className="flex min-h-10 items-center gap-2 text-sm">
             <input

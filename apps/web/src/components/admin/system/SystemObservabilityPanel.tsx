@@ -351,28 +351,19 @@ function incidentTone(status: IncidentStatus) {
 function ErrorsPanel({ data }: { data: ErrorsData }) {
   const incidents = data.incidents ?? [];
   const repeatedActiveIssues = data.repeated_active_issues ?? data.regressions ?? 0;
-  const autoResolveDetail = data.auto_resolve_after_hours
-    ? `連續 ${data.auto_resolve_after_hours} 小時未再發生會自動結案`
-    : "自動結案目前已停用";
 
   return <div className="space-y-6">
     <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      <SummaryMetric label="進行中議題" value={data.new_issues} detail={autoResolveDetail} tone={data.new_issues ? "var(--error)" : "var(--success)"} />
-      <SummaryMetric label="再次發生" value={repeatedActiveIssues} detail="仍在處理且累計出現超過 1 次的議題" tone={repeatedActiveIssues ? "var(--warning)" : "var(--success)"} />
-      <SummaryMetric label="Sentry" value={data.sentry?.configured ? "已連線" : "未設定"} detail={data.sentry?.error ?? "錯誤資料仍會寫入本機事故庫"} />
-      <SummaryMetric label="慢查詢來源" value="即時" detail={data.slow_query_source ?? "query audit"} />
+      <SummaryMetric label="進行中議題" value={data.new_issues} tone={data.new_issues ? "var(--error)" : "var(--success)"} />
+      <SummaryMetric label="再次發生" value={repeatedActiveIssues} tone={repeatedActiveIssues ? "var(--warning)" : "var(--success)"} />
+      <SummaryMetric label="Sentry" value={data.sentry?.configured ? "已連線" : "未設定"} detail={data.sentry?.error ?? undefined} />
+      <SummaryMetric label="慢查詢來源" value="即時" />
     </section>
 
     <section className="space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-base font-semibold">可追蹤事故</h2>
-          <p className="mt-1 max-w-3xl text-sm text-fg-muted!">
-            每筆會保留出現次數、版本、追蹤 ID 與事件歷程；已解除且持續未再發生的議題會自動結案。
-          </p>
-          <p className="mt-1 text-xs text-fg-muted!">
-            上方統計涵蓋全部紀錄；下方依最近更新排序，最多顯示 200 筆。
-          </p>
         </div>
         <AnimatedDownloadButton
           className="min-h-11 rounded-md border px-3 text-sm font-semibold hover:bg-[var(--bg-hover)] border-border-strong! text-fg-primary!"
@@ -445,15 +436,15 @@ function RealUsersPanel({ data, windowHours, onWindowHoursChange }: { data: Real
         </p>
       </section>
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <SummaryMetric label="DAU" value={data.dau == null ? "—" : data.dau} detail="需 PostHog 查詢權限" />
-        <SummaryMetric label="Sessions" value={data.sessions == null ? "—" : data.sessions} detail="需 PostHog 查詢權限" />
-        <SummaryMetric label="Pageviews" value={data.pageviews == null ? "—" : data.pageviews} detail={`第一方 RUM，近 ${data.window_hours ?? windowHours} 小時`} />
-        <SummaryMetric label="RUM 狀態" value={data.data_available ? "運作中" : "待連線"} detail={data.source} />
+        <SummaryMetric label="DAU" value={data.dau == null ? "—" : data.dau} />
+        <SummaryMetric label="Sessions" value={data.sessions == null ? "—" : data.sessions} />
+        <SummaryMetric label="Pageviews" value={data.pageviews == null ? "—" : data.pageviews} />
+        <SummaryMetric label="RUM 狀態" value={data.data_available ? "運作中" : "待連線"} />
       </section>
       <section className="space-y-3">
         <div>
           <h2 className="text-base font-semibold">所有已造訪路由</h2>
-          <p className="mt-1 text-sm text-fg-muted!">公開、登入與未來新增頁面會在首次造訪後自動出現；不收集訪客身份。</p>
+          <p className="mt-1 text-sm text-fg-muted!">不收集訪客身份。</p>
         </div>
         {routes.length === 0 ? <EmptyState title="尚無第一方 RUM 樣本" /> : (
           <div className="overflow-x-auto rounded-md border border-border!">
@@ -505,8 +496,8 @@ function ReleasesPanel({ data }: { data: Release[] }) {
   return <section className="space-y-3"><div><h2 className="text-base font-semibold">部署版本</h2><p className="mt-1 text-sm text-fg-muted!">每次採集會關聯部署 commit，方便定位分數回退。</p></div>{data.length === 0 ? <EmptyState title="尚無部署紀錄" detail="完成一次部署或建立 release 後會顯示於此。" /> : <div className="overflow-x-auto rounded-md border border-border!"><table className="w-full min-w-[640px] text-left text-sm"><thead><tr className="border-b border-border!"><th className="px-4 py-3">版本</th><th className="px-4 py-3">環境</th><th className="px-4 py-3">部署時間</th></tr></thead><tbody>{data.map((item) => <tr key={`${item.release}-${item.deployed_at}`} className="border-b last:border-0 border-border!"><td className="px-4 py-3"><div className="font-medium">{item.release}</div><div className="mt-1 font-mono text-xs text-fg-muted!">{item.commit_sha}</div></td><td className="px-4 py-3">{item.environment}</td><td className="px-4 py-3 text-fg-secondary!">{formatDate(item.deployed_at)}</td></tr>)}</tbody></table></div>}</section>;
 }
 
-function SummaryMetric({ label, value, detail, tone }: { label: string; value: string | number; detail: string; tone?: string }) {
-  return <div className="rounded-md border p-4 border-border!"><div className="text-xs text-fg-muted!">{label}</div><div className="mt-2 text-2xl font-semibold" style={{ color: tone ?? "var(--text-primary)" }}>{value}</div><div className="mt-1 text-xs text-fg-muted!">{detail}</div></div>;
+function SummaryMetric({ label, value, detail, tone }: { label: string; value: string | number; detail?: string; tone?: string }) {
+  return <div className="rounded-md border p-4 border-border!"><div className="text-xs text-fg-muted!">{label}</div><div className="mt-2 text-2xl font-semibold" style={{ color: tone ?? "var(--text-primary)" }}>{value}</div>{detail && <div className="mt-1 text-xs text-fg-muted!">{detail}</div>}</div>;
 }
 
 function Metric({ label, value }: { label: string; value: string }) {

@@ -188,9 +188,6 @@ export default function PerformanceDashboard() {
             <span className="h-2 w-2 rounded-full bg-[var(--success)]" aria-hidden="true" />
             <h2 id="performance-dashboard-heading" className="text-sm font-semibold">即時元件效能</h2>
           </div>
-          <p className="mt-1 text-xs text-[var(--text-muted)]">
-            只在目前瀏覽器工作階段更新；每 30 秒批次送往 client metrics。
-          </p>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:flex">
           <button

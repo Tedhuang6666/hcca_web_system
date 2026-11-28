@@ -49,9 +49,6 @@ export function EmailRecipientDataTable({
                   <span className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>
                     收件人資料表
                   </span>
-                  <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                    直接編輯表頭與資料。每個表頭都會自動成為同名佔位符。
-                  </p>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   <button

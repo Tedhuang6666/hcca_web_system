@@ -517,9 +517,6 @@ export default function SystemDefensePanel() {
           <div className="mt-5 border-t border-[var(--border)] pt-4">
             <div className="mb-2">
               <p className="text-sm font-medium text-[var(--text-primary)]">負載防護模式</p>
-              <p className="mt-1 text-xs text-[var(--text-muted)]">
-                控制高負載時的一般流量策略，不影響管理員緊急通道。
-              </p>
             </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {(["auto", "off", "on", "bypass"] as LoadShedMode[]).map((mode) => (

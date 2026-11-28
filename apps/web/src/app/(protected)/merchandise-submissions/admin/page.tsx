@@ -234,9 +234,6 @@ export default function MerchandiseSubmissionsAdminPage() {
         >
           <div>
             <h2 className="font-semibold">全站投稿與公告設定</h2>
-            <p className="mt-1 text-sm text-[var(--text-muted)]">
-              設定時間後會在開始時間自動開放；品項可再個別覆寫。
-            </p>
           </div>
           <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <label className="flex min-h-11 items-center gap-2 text-sm font-medium">
@@ -360,9 +357,6 @@ export default function MerchandiseSubmissionsAdminPage() {
                 className="input min-h-40 w-full py-2"
                 placeholder="例如：請說明設計理念、用色元素、尺寸限制與交稿注意事項。支援 Markdown。"
               />
-              <span className="mt-1 block text-xs text-[var(--text-muted)]">
-                儲存後會顯示在所有投稿品項上方。
-              </span>
             </label>
             <div className="rounded-lg border border-[var(--border)] p-4 sm:col-span-2 xl:col-span-3">
               <h3 className="font-semibold">投稿通知</h3>
