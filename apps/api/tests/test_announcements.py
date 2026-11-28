@@ -341,6 +341,30 @@ async def test_create_announcement_succeeds(client: AsyncClient, db_session: Asy
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "urgent_fields",
+    [
+        {"is_urgent": True},
+        {"show_on_every_visit": True},
+        {"urgent_until": "2030-01-01T00:00:00+00:00"},
+    ],
+)
+async def test_create_announcement_requires_urgent_permission_for_urgent_fields(
+    client: AsyncClient, db_session: AsyncSession, urgent_fields: dict
+) -> None:
+    user = await _seed_user_with_codes(
+        db_session, "ann-create-urgent-denied@school.edu", ["announcement:create"]
+    )
+    _override_user(user)
+
+    resp = await client.post(
+        "/announcements", json={"title": "無權重要公告", "content": {}, **urgent_fields}
+    )
+
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_create_announcement_with_action_link_returns_normalized_link(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
@@ -411,6 +435,61 @@ async def test_update_announcement_succeeds(client: AsyncClient, db_session: Asy
 
     assert resp.status_code == 200
     assert resp.json()["title"] == "更新標題"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "urgent_fields",
+    [
+        {"is_urgent": True},
+        {"show_on_every_visit": True},
+        {"urgent_until": "2030-01-01T00:00:00+00:00"},
+    ],
+)
+async def test_update_announcement_requires_urgent_permission_for_changed_urgent_fields(
+    client: AsyncClient, db_session: AsyncSession, urgent_fields: dict
+) -> None:
+    author = await _seed_user_with_codes(db_session, "ann-urgent-author@school.edu", [])
+    editor = await _seed_user_with_codes(
+        db_session, "ann-urgent-editor@school.edu", ["announcement:edit"]
+    )
+    ann = Announcement(title="普通公告", content={}, author_id=author.id, audience_type="all")
+    db_session.add(ann)
+    await db_session.flush()
+    _override_user(editor)
+
+    denied = await client.patch(f"/announcements/{ann.id}", json=urgent_fields)
+    allowed = await client.patch(f"/announcements/{ann.id}", json={"title": "更新內容"})
+
+    assert denied.status_code == 403
+    assert allowed.status_code == 200
+    assert allowed.json()["title"] == "更新內容"
+    assert allowed.json()["is_urgent"] is False
+
+
+@pytest.mark.asyncio
+async def test_update_announcement_allows_resending_unchanged_urgent_fields(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    author = await _seed_user_with_codes(db_session, "ann-unchanged-author@school.edu", [])
+    editor = await _seed_user_with_codes(
+        db_session, "ann-unchanged-editor@school.edu", ["announcement:edit"]
+    )
+    ann = Announcement(
+        title="原標題", content={}, author_id=author.id, audience_type="all", is_urgent=True
+    )
+    db_session.add(ann)
+    await db_session.flush()
+    _override_user(editor)
+
+    resp = await client.patch(
+        f"/announcements/{ann.id}",
+        json={"title": "新標題", "is_urgent": True, "show_on_every_visit": False},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["title"] == "新標題"
+    assert resp.json()["is_urgent"] is True
 
 
 @pytest.mark.asyncio

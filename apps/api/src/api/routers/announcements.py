@@ -263,6 +263,8 @@ async def create_announcement(
     user: CurrentUser,
 ) -> AnnouncementOut:
     await _require_announcement_action(db, user, PermissionCode.ANNOUNCEMENT_CREATE)
+    if body.is_urgent or body.show_on_every_visit or body.urgent_until is not None:
+        await _require_announcement_action(db, user, PermissionCode.ANNOUNCEMENT_SET_URGENT)
     try:
         ann = await ann_svc.create(db, user, body)
     except ValueError as e:
@@ -300,6 +302,12 @@ async def update_announcement(
 ) -> AnnouncementOut:
     before = await ann_svc.get(db, ann_id)
     await _require_announcement_action(db, user, PermissionCode.ANNOUNCEMENT_EDIT)
+    if any(
+        field in body.model_fields_set and getattr(body, field) != getattr(before, field)
+        for field in ("is_urgent", "urgent_until", "show_on_every_visit")
+        if getattr(body, field) is not None or field == "urgent_until"
+    ):
+        await _require_announcement_action(db, user, PermissionCode.ANNOUNCEMENT_SET_URGENT)
     before_meta = {
         "title": before.title,
         "is_published": before.is_published,

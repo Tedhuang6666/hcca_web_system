@@ -694,7 +694,7 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "group": "公告系統",
         "code": PermissionCode.ANNOUNCEMENT_EDIT,
         "label": "編輯公告",
-        "desc": "修改公告內容、發布狀態、緊急標籤",
+        "desc": "修改公告內容與對象",
     },
     {
         "group": "公告系統",
