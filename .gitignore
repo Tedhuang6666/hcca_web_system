@@ -173,3 +173,4 @@ docs/*
 !.claude/skills/
 .claude/skills/*
 !.claude/skills/prod-host-operations
+.kilo/
