@@ -135,10 +135,10 @@ async def test_legacy_unsafe_endpoint_is_deactivated_before_network_send(db_sess
 
 async def test_push_transport_disables_redirect_following(db_session, monkeypatch):
     subscriptions = await _subscriptions(db_session, 1)
-    seen: list[bool] = []
+    seen: list[int] = []
 
-    def post(_session, _url, **kwargs):
-        seen.append(kwargs["allow_redirects"])
+    def post(session, _url, **kwargs):
+        seen.append(session.max_redirects)
         return SimpleNamespace(status_code=307)
 
     def deliver(**kwargs):
@@ -147,4 +147,4 @@ async def test_push_transport_disables_redirect_following(db_session, monkeypatc
     monkeypatch.setattr("requests.Session.post", post)
     monkeypatch.setattr("pywebpush.webpush", deliver)
     assert await web_push.send_to_user(db_session, subscriptions[0].user_id, {}) == 1
-    assert seen == [False]
+    assert seen == [0]

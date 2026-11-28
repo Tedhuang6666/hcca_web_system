@@ -38,6 +38,8 @@ from api.schemas.email_platform import EmailConditionalRule
 from api.services import audit as audit_svc
 from api.services.email_dispatch import (
     _merged_custom_variables,
+    _try_enqueue,
+    commit_email_dispatch_transaction,
     load_sendable_recipient_list,
     require_bulk_permission,
     reserve_sample_quota,
@@ -572,26 +574,27 @@ async def _requeue_unsent(db: AsyncSession, msg: EmailMessage) -> int:
         recipient.next_retry_at = None
     msg.status = EmailStatus.QUEUED
     msg.error_detail = None
-    await db.commit()
+    await commit_email_dispatch_transaction(db)
 
     requeued = 0
     enqueue_errors = 0
     for recipient, subject, html in dispatches:
-        try:
-            task_ids = enqueue_rendered(
-                [recipient.email],
-                subject,
-                html,
-                str(msg.id),
-                str(recipient.id),
-                resend_attachments or None,
-            )
-            recipient.celery_task_id = task_ids[0] if task_ids else None
-            requeued += len(task_ids)
-        except Exception as exc:  # noqa: BLE001
+        task_ids, enqueue_error = _try_enqueue(
+            enqueue_rendered,
+            [recipient.email],
+            subject,
+            html,
+            str(msg.id),
+            str(recipient.id),
+            resend_attachments or None,
+        )
+        if enqueue_error is not None:
             enqueue_errors += 1
             recipient.status = EmailRecipientStatus.FAILED
-            recipient.error_detail = f"無法排入寄送佇列：{str(exc)[:450]}"
+            recipient.error_detail = f"無法排入寄送佇列：{str(enqueue_error)[:450]}"
+        else:
+            recipient.celery_task_id = task_ids[0] if task_ids else None
+            requeued += len(task_ids)
     if requeued == 0:
         msg.status = EmailStatus.FAILED
         msg.error_detail = f"全部收件人無法排入寄送佇列（{enqueue_errors} 人）"
@@ -913,19 +916,22 @@ async def test_send_sample(
         else None
     )
     queued = 0
-    try:
-        for subject, html in dispatches:
-            for destination in destinations:
-                enqueue_rendered(
-                    [destination], subject, html, attachments=resend_attachments or None
-                )
-                queued += 1
-    except Exception as exc:
-        if record is not None:
-            record.status = EmailStatus.QUEUED if queued else EmailStatus.FAILED
-            record.error_detail = str(exc)[:500]
-            await db.commit()
-        raise
+    for subject, html in dispatches:
+        for destination in destinations:
+            _, enqueue_error = _try_enqueue(
+                enqueue_rendered,
+                [destination],
+                subject,
+                html,
+                attachments=resend_attachments or None,
+            )
+            if enqueue_error is not None:
+                if record is not None:
+                    record.status = EmailStatus.QUEUED if queued else EmailStatus.FAILED
+                    record.error_detail = str(enqueue_error)[:500]
+                    await commit_email_dispatch_transaction(db)
+                raise enqueue_error
+            queued += 1
     return SampleTestSendOut(status="queued", queued=queued, sent_to=destinations)
 
 

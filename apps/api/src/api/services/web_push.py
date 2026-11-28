@@ -5,10 +5,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import uuid
 from typing import Any
 from urllib.parse import urlsplit
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.config import settings
@@ -49,6 +50,16 @@ def web_push_enabled() -> bool:
     return bool(settings.VAPID_PUBLIC_KEY and settings.VAPID_PRIVATE_KEY)
 
 
+async def count_active_subscriptions(db: AsyncSession, user_id: uuid.UUID) -> int:
+    count = await db.scalar(
+        select(func.count(WebPushSubscription.id)).where(
+            WebPushSubscription.user_id == user_id,
+            WebPushSubscription.is_active.is_(True),
+        )
+    )
+    return int(count or 0)
+
+
 async def send_to_user(db: AsyncSession, user_id: object, payload: dict[str, Any]) -> int:
     """推送至所有有效訂閱；暫時失敗交由外層 outbox 重試。
 
@@ -65,11 +76,6 @@ async def send_to_user(db: AsyncSession, user_id: object, payload: dict[str, Any
         logger.warning("pywebpush is not installed; skipping web push")
         return 0
 
-    class NoRedirectSession(Session):
-        def post(self, url: str, **kwargs: Any) -> Any:
-            kwargs["allow_redirects"] = False
-            return super().post(url, **kwargs)
-
     subscriptions = (
         await db.execute(
             select(WebPushSubscription)
@@ -82,7 +88,8 @@ async def send_to_user(db: AsyncSession, user_id: object, payload: dict[str, Any
 
     sent = 0
     first_error: Exception | None = None
-    with NoRedirectSession() as push_session:
+    with Session() as push_session:
+        push_session.max_redirects = 0
         for sub in subscriptions:
             try:
                 validate_push_endpoint(sub.endpoint)

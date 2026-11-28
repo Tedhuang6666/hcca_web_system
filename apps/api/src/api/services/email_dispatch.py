@@ -44,6 +44,17 @@ from api.services.recipient import resolve_recipients, spec_to_resolve_kwargs
 from api.services.storage import get_storage
 
 
+def _try_enqueue(
+    enqueue: Callable[..., list[str]],
+    *args: object,
+    **kwargs: object,
+) -> tuple[list[str], Exception | None]:
+    try:
+        return enqueue(*args, **kwargs), None
+    except Exception as exc:  # noqa: BLE001
+        return [], exc
+
+
 @dataclass
 class PersonalizedRecipient:
     user_id: uuid.UUID | None
@@ -253,6 +264,10 @@ async def _check_quota(db: AsyncSession, user: User, count: int) -> None:
         )
 
 
+async def commit_email_dispatch_transaction(db: AsyncSession) -> None:
+    await db.commit()
+
+
 async def require_bulk_permission(db: AsyncSession, user: User) -> None:
     """寄送當下重新確認批次權限，涵蓋草稿與排程。"""
     if user.is_superuser:
@@ -281,7 +296,7 @@ async def reserve_sample_quota(
         status=EmailStatus.QUEUED,
     )
     db.add(record)
-    await db.commit()
+    await commit_email_dispatch_transaction(db)
     return record
 
 
@@ -382,27 +397,27 @@ async def send_now(
         html = render_generic_message(msg.subject, msg.body, render_context, personal)
         dispatches.append((row, recipient, subject, html))
 
-    await db.commit()
+    await commit_email_dispatch_transaction(db)
     task_ids: list[str] = []
     enqueue_errors = 0
     enqueue_fn = enqueue or enqueue_rendered
     for row, recipient, subject, html in dispatches:
-        try:
-            task_ids.extend(
-                enqueue_fn(
-                    [row.email],
-                    subject,
-                    html,
-                    str(msg.id),
-                    str(recipient.id),
-                    resend_attachments or None,
-                )
-            )
-            recipient.celery_task_id = task_ids[-1] if task_ids else None
-        except Exception as exc:  # noqa: BLE001
+        queued_task_ids, enqueue_error = _try_enqueue(
+            enqueue_fn,
+            [row.email],
+            subject,
+            html,
+            str(msg.id),
+            str(recipient.id),
+            resend_attachments or None,
+        )
+        if enqueue_error is not None:
             enqueue_errors += 1
             recipient.status = EmailRecipientStatus.FAILED
-            recipient.error_detail = f"無法排入寄送佇列：{str(exc)[:450]}"
+            recipient.error_detail = f"無法排入寄送佇列：{str(enqueue_error)[:450]}"
+        else:
+            task_ids.extend(queued_task_ids)
+            recipient.celery_task_id = task_ids[-1] if task_ids else None
     msg.celery_task_id = task_ids[0] if task_ids else None
     if not task_ids:
         msg.status = EmailStatus.FAILED

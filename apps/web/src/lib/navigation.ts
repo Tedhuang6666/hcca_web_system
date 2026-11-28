@@ -362,12 +362,8 @@ const ADMIN_CATALOG_IDS = new Set(navItemsFromEntries(ADMIN_CATALOG).map((item) 
 
 /** 常用管理工具直接放在側欄；其餘仍從管理中心進入。 */
 const SIDEBAR_ADMIN_SHORTCUT_IDS = [
-  "peopleAdmin",
-  "email",
-  "publicSiteAdmin",
-  "petitionsManage",
-  "qrCode",
-  "systemOperations",
+  "peopleAdmin", "email", "publicSiteAdmin",
+  "petitionsManage", "qrCode", "systemOperations",
 ];
 
 const ADMIN_NAV_SECTION: NavSection = {

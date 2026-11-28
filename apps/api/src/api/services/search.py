@@ -145,7 +145,7 @@ async def _visible_document_hit(
     viewer_id: uuid.UUID | None,
     is_superuser: bool,
     result_id: str,
-) -> dict[str, Any] | None:
+) -> dict[str, str] | None:
     if not is_superuser:
         if viewer_id is not None:
             await db.refresh(doc, attribute_names=["approvals"])
@@ -208,7 +208,7 @@ async def search(
                 f"/indexes/{_index_name()}/search",
                 body,
             )
-            results: list[dict[str, Any]] = []
+            results: list[dict[str, str]] = []
             for hit in payload.get("hits", []):
                 if hit.get("kind") != "document":
                     results.append(
