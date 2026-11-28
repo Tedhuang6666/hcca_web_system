@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.clock import local_today
 from api.core.config import settings
+from api.core.permission_codes import PermissionCode
 from api.email.renderer import (
     apply_conditional_rules,
     build_personalization_context,
@@ -36,6 +37,7 @@ from api.models.email_message import (
     EmailSuppression,
 )
 from api.models.user import User
+from api.services.permission import get_user_permission_codes
 from api.services.recipient import resolve_recipients, spec_to_resolve_kwargs
 from api.services.storage import get_storage
 
@@ -221,6 +223,38 @@ async def _check_quota(db: AsyncSession, user: User, count: int) -> None:
         )
 
 
+async def require_bulk_permission(db: AsyncSession, user: User) -> None:
+    """寄送當下重新確認批次權限，涵蓋草稿與排程。"""
+    if user.is_superuser:
+        return
+    codes = await get_user_permission_codes(db, user.id)
+    if PermissionCode.EMAIL_SEND_BULK not in codes and PermissionCode.ADMIN_ALL not in codes:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="寄送多位收件人需要「批次寄送 Email」權限（email:send_bulk）",
+        )
+
+
+async def reserve_sample_quota(
+    db: AsyncSession, user: User, *, count: int, destinations: list[str], subject: str
+) -> EmailMessage:
+    """把抽樣寄送計入既有每日配額與寄信紀錄。"""
+    await _check_quota(db, user, count)
+    record = EmailMessage(
+        sender_id=user.id,
+        subject=f"[抽樣測試] {subject}"[:255],
+        body="",
+        context={"sample_test": True},
+        recipient_spec={"test_emails": destinations},
+        resolved_emails=destinations * (count // len(destinations)),
+        recipient_count=count,
+        status=EmailStatus.QUEUED,
+    )
+    db.add(record)
+    await db.commit()
+    return record
+
+
 async def render_attachments(
     attachments: list[EmailAttachment],
 ) -> tuple[list[dict[str, str]], list[dict]]:
@@ -264,6 +298,22 @@ async def send_now(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="解析後無有效收件人"
         )
+    spec = msg.recipient_spec or {}
+    if (
+        len(rows) > 1
+        or len(spec.get("user_ids") or []) + len(spec.get("external_emails") or []) > 1
+        or any(
+            spec.get(key)
+            for key in (
+                "position_ids",
+                "org_ids",
+                "include_all",
+                "include_school",
+                "recipient_list_id",
+            )
+        )
+    ):
+        await require_bulk_permission(db, user)
     await _check_quota(db, user, len(rows))
     await db.execute(
         delete(EmailCampaignRecipient).where(EmailCampaignRecipient.message_id == msg.id)

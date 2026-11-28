@@ -38,6 +38,8 @@ from api.schemas.email_platform import EmailConditionalRule
 from api.services import audit as audit_svc
 from api.services.email_dispatch import (
     _merged_custom_variables,
+    require_bulk_permission,
+    reserve_sample_quota,
 )
 from api.services.email_dispatch import (
     normalize_external_emails as _normalize_external_emails,
@@ -864,12 +866,17 @@ async def test_send_sample(
                 variables=body.preview_variables,
             )
         ]
+    bulk_sample = len(destinations) * len(selected) > 1 or any(
+        destination.strip().lower() != user.email.strip().lower() for destination in destinations
+    )
+    if bulk_sample:
+        await require_bulk_permission(db, user)
     resend_attachments, link_blocks = await _render_requested_attachments(
         db, user, body.attachment_ids
     )
     render_context = _build_context(body, conditional_rules)
     render_context["blocks"] = [*list(render_context.get("blocks", [])), *link_blocks]
-    queued = 0
+    dispatches: list[tuple[str, str]] = []
     for index, row in enumerate(selected):
         custom = apply_conditional_rules(
             _merged_custom_variables(definitions, body.default_variables, row.variables),
@@ -892,14 +899,32 @@ async def test_send_sample(
         )
         subject = render_generic_subject(body.subject, personal)
         html = render_generic_message(body.subject, body.body, render_context, personal)
-        for destination in destinations:
-            enqueue_rendered(
-                [destination],
-                f"[抽樣 {index + 1}] {subject}",
-                html,
-                attachments=resend_attachments or None,
-            )
-            queued += 1
+        dispatches.append((f"[抽樣 {index + 1}] {subject}", html))
+    record = (
+        await reserve_sample_quota(
+            db,
+            user,
+            count=len(destinations) * len(dispatches),
+            destinations=destinations,
+            subject=body.subject,
+        )
+        if bulk_sample
+        else None
+    )
+    queued = 0
+    try:
+        for subject, html in dispatches:
+            for destination in destinations:
+                enqueue_rendered(
+                    [destination], subject, html, attachments=resend_attachments or None
+                )
+                queued += 1
+    except Exception as exc:
+        if record is not None:
+            record.status = EmailStatus.QUEUED if queued else EmailStatus.FAILED
+            record.error_detail = str(exc)[:500]
+            await db.commit()
+        raise
     return SampleTestSendOut(status="queued", queued=queued, sent_to=destinations)
 
 

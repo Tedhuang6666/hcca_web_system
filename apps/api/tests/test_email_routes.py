@@ -12,7 +12,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies.auth import get_current_active_user
 from api.main import app
-from api.models.email_message import EmailCampaignRecipient, EmailMessage
+from api.models.email_message import (
+    EmailCampaignRecipient,
+    EmailMessage,
+    EmailRecipientList,
+    EmailRecipientListMember,
+)
 from api.models.org import Org, Permission, Position, UserPosition
 from api.models.user import User
 
@@ -288,6 +293,62 @@ async def test_multiple_external_emails_require_bulk_permission(
         },
     )
 
+    assert response.status_code == 403
+    assert "email:send_bulk" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_recipient_variables_cannot_bypass_bulk_permission(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = await _seed_user(db_session, "table-bulk-sender@school.edu", ["email:send"])
+    _override_user(user)
+    queued: list[str] = []
+    monkeypatch.setattr(
+        "api.routers.email.enqueue_rendered",
+        lambda destinations, *args, **kwargs: queued.extend(destinations) or ["task-id"],
+    )
+    payload = {
+        "subject": "收件表通知",
+        "recipients": {},
+        "recipient_variables": [
+            {"email": "first@example.org"},
+            {"email": "second@example.org"},
+        ],
+    }
+
+    immediate = await client.post("/email/messages", json={**payload, "action": "send"})
+    assert immediate.status_code == 403
+    assert "email:send_bulk" in immediate.json()["detail"]
+    assert queued == []
+
+    draft = await client.post("/email/messages", json={**payload, "action": "draft"})
+    assert draft.status_code == 201
+    send = await client.post(f"/email/messages/{draft.json()['id']}/send")
+    assert send.status_code == 403
+    assert queued == []
+
+
+@pytest.mark.asyncio
+async def test_recipient_list_requires_bulk_permission_at_send(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await _seed_user(db_session, "list-single-sender@school.edu", ["email:send"])
+    _override_user(user)
+    recipient_list = EmailRecipientList(owner_id=user.id, name="單人名單")
+    db_session.add(recipient_list)
+    await db_session.flush()
+    db_session.add(EmailRecipientListMember(list_id=recipient_list.id, email="member@example.org"))
+    await db_session.flush()
+
+    response = await client.post(
+        "/email/messages",
+        json={
+            "subject": "名單通知",
+            "action": "send",
+            "recipient_list_id": str(recipient_list.id),
+        },
+    )
     assert response.status_code == 403
     assert "email:send_bulk" in response.json()["detail"]
 
@@ -977,7 +1038,7 @@ async def test_test_send_without_email_returns_422(
 async def test_test_send_sample_queues_for_selected_rows(
     client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    user = await _seed_user(db_session, "sample-tester@school.edu", ["email:send"])
+    user = await _seed_user(db_session, "sample-tester@school.edu", ["email:send_bulk"])
     _override_user(user)
     queued: list[str] = []
     monkeypatch.setattr(
@@ -1000,6 +1061,52 @@ async def test_test_send_sample_queues_for_selected_rows(
     body = resp.json()
     assert body["queued"] == 1
     assert body["sent_to"] == ["qa@example.org"]
+    assert queued == ["qa@example.org"]
+
+
+@pytest.mark.asyncio
+async def test_sample_send_requires_bulk_for_other_destination(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = await _seed_user(db_session, "sample-single@school.edu", ["email:send"])
+    _override_user(user)
+    queued: list[str] = []
+    monkeypatch.setattr(
+        "api.routers.email.enqueue_rendered",
+        lambda destinations, *args, **kwargs: queued.extend(destinations) or ["task-id"],
+    )
+    payload = {"subject": "抽樣測試", "recipient_variables": [{"email": "row@example.org"}]}
+
+    denied = await client.post(
+        "/email/test-sample", json={**payload, "test_emails": ["qa@example.org"]}
+    )
+    assert denied.status_code == 403
+    assert queued == []
+
+    own = await client.post("/email/test-sample", json=payload)
+    assert own.status_code == 200
+    assert own.json()["sent_to"] == [user.email]
+    assert queued == [user.email]
+
+
+@pytest.mark.asyncio
+async def test_sample_send_counts_toward_daily_quota(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = await _seed_user(db_session, "sample-quota@school.edu", ["email:send_bulk"])
+    _override_user(user)
+    monkeypatch.setattr("api.services.email_dispatch.settings.EMAIL_DAILY_QUOTA_PER_USER", 1)
+    queued: list[str] = []
+    monkeypatch.setattr(
+        "api.routers.email.enqueue_rendered",
+        lambda destinations, *args, **kwargs: queued.extend(destinations) or ["task-id"],
+    )
+    payload = {"subject": "抽樣配額", "test_emails": ["qa@example.org"]}
+
+    first = await client.post("/email/test-sample", json=payload)
+    assert first.status_code == 200
+    second = await client.post("/email/test-sample", json=payload)
+    assert second.status_code == 429
     assert queued == ["qa@example.org"]
 
 
