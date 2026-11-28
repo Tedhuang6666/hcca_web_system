@@ -119,6 +119,33 @@ async def can_view_case(session: AsyncSession, case_obj: PetitionCase, user: Use
     return case_obj.current_org_id in org_ids
 
 
+async def can_staff_act_on_case(
+    session: AsyncSession, case_obj: PetitionCase, user: User, permission: PermissionCode
+) -> bool:
+    """承辦動作須同時符合職務權限、案件機關及密件規則。"""
+    if case_obj.submitter_id == user.id and not user.is_superuser:
+        return False
+    if case_obj.is_confidential and not (is_site_owner(user) or case_obj.assigned_to_id == user.id):
+        return False
+
+    codes = await get_user_permission_codes(session, user.id)
+    global_staff = user.is_superuser or bool(
+        {
+            str(PermissionCode.ADMIN_ALL),
+            str(PermissionCode.PETITION_ADMIN),
+        }
+        & set(codes)
+    )
+    if global_staff:
+        return True
+    if str(permission) not in codes:
+        return False
+    if permission == PermissionCode.PETITION_HANDLE and case_obj.assigned_to_id == user.id:
+        return True
+    org_ids = await get_user_case_org_ids_with_permission(session, user.id, str(permission))
+    return case_obj.current_org_id in org_ids
+
+
 async def get_user_case_org_ids_with_permission(
     session: AsyncSession, user_id: uuid.UUID, permission_code: str
 ) -> list[uuid.UUID]:

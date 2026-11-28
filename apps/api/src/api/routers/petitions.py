@@ -130,14 +130,8 @@ async def _case_detail_response(
             can_view_submitter=False,
             confidential_blocked=True,
         )
-    permission_codes = await get_user_permission_codes(session, user.id)
-    can_edit_events = user.is_superuser or bool(
-        permission_codes
-        & {
-            str(PermissionCode.ADMIN_ALL),
-            str(PermissionCode.PETITION_ADMIN),
-            str(PermissionCode.PETITION_HANDLE),
-        }
+    can_edit_events = await petition_svc.can_staff_act_on_case(
+        session, case_obj, user, PermissionCode.PETITION_HANDLE
     )
     return await _decorate_case(
         case_obj,
@@ -218,6 +212,16 @@ async def _assert_case_access(
     if case_obj.current_org_id in org_ids:
         return True, True
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權查看此陳情案件")
+
+
+async def _assert_staff_action(
+    session: AsyncSession,
+    case_obj: PetitionCase,
+    user: User,
+    permission: PermissionCode,
+) -> None:
+    if not await petition_svc.can_staff_act_on_case(session, case_obj, user, permission):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權處理此陳情案件")
 
 
 def _can_view_confidential_case(case_obj: PetitionCase, user: User) -> bool:
@@ -1338,9 +1342,7 @@ async def edit_event(
     user: CurrentUser,
 ) -> PetitionCaseOut:
     case_obj = await _case_or_404(session, case_id)
-    include_internal, can_view_submitter = await _assert_case_access(session, case_obj, user)
-    if not include_internal:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權編輯陳情訊息")
+    await _assert_staff_action(session, case_obj, user, PermissionCode.PETITION_HANDLE)
     try:
         await petition_svc.edit_public_event(
             session,
@@ -1360,7 +1362,7 @@ async def edit_event(
     return await _decorate_case(
         case_obj,
         include_internal=True,
-        can_view_submitter=can_view_submitter,
+        can_view_submitter=True,
         editor_user_id=user.id,
     )
 
@@ -1404,11 +1406,7 @@ async def create_petition_discord_channel(
     case_id: uuid.UUID, session: DbDep, current_user: CurrentUser
 ) -> PetitionCaseOut:
     case_obj = await _case_or_404(session, case_id)
-    include_internal, can_view_submitter = await _assert_case_access(
-        session, case_obj, current_user
-    )
-    if not include_internal:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權建立陳情私密頻道")
+    await _assert_staff_action(session, case_obj, current_user, PermissionCode.PETITION_HANDLE)
     queued = await enqueue_petition_private_channel(session, case_obj, force=True)
     if not queued:
         raise HTTPException(
@@ -1424,9 +1422,7 @@ async def create_petition_discord_channel(
         meta={"case_number": case_obj.case_number},
         summary=f"建立陳情 Discord 私密頻道 {case_obj.case_number}",
     )
-    return await _decorate_case(
-        case_obj, include_internal=include_internal, can_view_submitter=can_view_submitter
-    )
+    return await _decorate_case(case_obj, include_internal=True, can_view_submitter=True)
 
 
 @router.post("/{case_id}/supplement", response_model=PetitionCaseOut, summary="補充資料")
@@ -1493,7 +1489,7 @@ async def assign_case(
     user: CurrentUser,
 ) -> PetitionCaseOut:
     case_obj = await _case_or_404(session, case_id)
-    await _assert_case_access(session, case_obj, user)
+    await _assert_staff_action(session, case_obj, user, PermissionCode.PETITION_ASSIGN)
     try:
         case_obj = await petition_svc.assign_case(session, case_obj, data=payload, actor_id=user.id)
     except ValueError as e:
@@ -1526,7 +1522,7 @@ async def transfer_case(
     user: CurrentUser,
 ) -> PetitionCaseOut:
     case_obj = await _case_or_404(session, case_id)
-    await _assert_case_access(session, case_obj, user)
+    await _assert_staff_action(session, case_obj, user, PermissionCode.PETITION_TRANSFER)
     try:
         case_obj = await petition_svc.transfer_case(
             session, case_obj, data=payload, actor_id=user.id
@@ -1573,7 +1569,7 @@ async def reply_case(
     user: CurrentUser,
 ) -> PetitionCaseOut:
     case_obj = await _case_or_404(session, case_id)
-    await _assert_case_access(session, case_obj, user)
+    await _assert_staff_action(session, case_obj, user, PermissionCode.PETITION_HANDLE)
     reply_attachments: list[PetitionAttachment] = []
     if payload.attachment_ids:
         attachment_ids = list(dict.fromkeys(payload.attachment_ids))
@@ -1668,7 +1664,7 @@ async def request_public(
     user: CurrentUser,
 ) -> PetitionCaseOut:
     case_obj = await _case_or_404(session, case_id)
-    await _assert_case_access(session, case_obj, user)
+    await _assert_staff_action(session, case_obj, user, PermissionCode.PETITION_HANDLE)
     try:
         case_obj = await petition_svc.request_public(
             session, case_obj, data=payload, actor_id=user.id
@@ -1737,7 +1733,7 @@ async def confirm_public(
     user: CurrentUser,
 ) -> PetitionCaseOut:
     case_obj = await _case_or_404(session, case_id)
-    await _assert_case_access(session, case_obj, user)
+    await _assert_staff_action(session, case_obj, user, PermissionCode.PETITION_HANDLE)
     try:
         case_obj = await petition_svc.confirm_public(session, case_obj, actor_id=user.id)
     except ValueError as e:
@@ -1769,7 +1765,7 @@ async def update_status(
     user: CurrentUser,
 ) -> PetitionCaseOut:
     case_obj = await _case_or_404(session, case_id)
-    await _assert_case_access(session, case_obj, user)
+    await _assert_staff_action(session, case_obj, user, PermissionCode.PETITION_HANDLE)
     try:
         case_obj = await petition_svc.update_status(
             session, case_obj, data=payload, actor_id=user.id
@@ -1829,7 +1825,7 @@ async def add_note(
     user: CurrentUser,
 ) -> PetitionCaseOut:
     case_obj = await _case_or_404(session, case_id)
-    await _assert_case_access(session, case_obj, user)
+    await _assert_staff_action(session, case_obj, user, PermissionCode.PETITION_HANDLE)
     case_obj = await petition_svc.add_internal_note(
         session, case_obj, data=payload, actor_id=user.id
     )

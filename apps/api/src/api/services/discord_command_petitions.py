@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.permission_codes import PermissionCode
 from api.models.petition import PetitionStatus
 from api.models.user import User
 from api.schemas.petition import PetitionCreate, PetitionInternalNoteCreate, PetitionStatusUpdate
@@ -18,7 +19,6 @@ from api.services.discord_bot import (
 from api.services.discord_command_common import (
     DiscordCommandError,
     _audit,
-    _has_permission,
 )
 
 
@@ -74,13 +74,13 @@ async def handle(
             ]
         }
     if operation in {"petition_note", "petition_channel", "petition_in_progress"}:
-        if not _has_permission(user, codes, "petition:handle"):
-            raise DiscordCommandError("你沒有處理陳情權限。")
         case_obj = await petition_svc.get_case(db, uuid.UUID(str(arguments["case_id"])))
         if case_obj is None:
             raise DiscordCommandError("找不到此陳情案件。")
-        if not await petition_svc.can_view_case(db, case_obj, user):
-            raise DiscordCommandError("無權查看此陳情案件。")
+        if not await petition_svc.can_staff_act_on_case(
+            db, case_obj, user, PermissionCode.PETITION_HANDLE
+        ):
+            raise DiscordCommandError("無權處理此陳情案件。")
         if operation == "petition_note":
             await petition_svc.add_internal_note(
                 db,

@@ -20,8 +20,10 @@ from api.models.petition import (
     PetitionType,
 )
 from api.models.user import User
-from api.schemas.petition import PetitionCreate, PetitionStatusUpdate
+from api.schemas.petition import PetitionCreate, PetitionInternalNoteCreate, PetitionStatusUpdate
 from api.services import petition as petition_svc
+from api.services.discord_command_common import DiscordCommandError
+from api.services.discord_command_petitions import handle as handle_discord_petition
 from api.services.outbox import _dispatch
 
 # ── 測試輔助 ──────────────────────────────────────────────────────────────────
@@ -1015,6 +1017,88 @@ async def test_list_assignable_users_includes_parent_members_only_for_parent_ass
 
 
 # ── 分案 / 轉派 / 回覆 / 狀態 / 備註 ───────────────────────────────────────────
+
+
+async def test_submitter_with_staff_code_elsewhere_cannot_act_or_read_internal_notes(
+    db_session, authed_client_factory
+) -> None:
+    case_org, petition_type = await _make_org_and_type(db_session)
+    other_org = Org(name="無關承辦機關")
+    db_session.add(other_org)
+    await db_session.flush()
+    submitter = await _bare_user(db_session)
+    for code in ("petition:handle", "petition:assign", "petition:transfer"):
+        await _grant_org_permission(db_session, submitter, other_org, code)
+    case_obj, _share_token = await _create_case(db_session, petition_type, submitter=submitter)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, case_org, "petition:handle")
+    await petition_svc.add_internal_note(
+        db_session,
+        case_obj,
+        data=PetitionInternalNoteCreate(content="僅承辦可見的內部備註"),
+        actor_id=handler.id,
+    )
+
+    ac = authed_client_factory(submitter)
+    actions = [
+        ("patch", "assign", {"assigned_to_id": str(submitter.id)}),
+        ("patch", "transfer", {"to_org_id": str(other_org.id), "reason": "測試"}),
+        ("post", "reply", {"public_content": "自行結案", "close": True}),
+        ("post", "public-request", {}),
+        ("post", "public-confirm", {}),
+        ("patch", "status", {"status": "rejected"}),
+        ("post", "notes", {"content": "自行加入內部備註"}),
+        ("patch", f"events/{uuid.uuid4()}", {"content": "自行編輯"}),
+        ("post", "discord-channel", {}),
+    ]
+    for method, path, payload in actions:
+        response = await getattr(ac, method)(f"/petitions/{case_obj.id}/{path}", json=payload)
+        assert response.status_code == 403, path
+
+    detail = await ac.get(f"/petitions/{case_obj.id}")
+    assert detail.status_code == 200
+    assert detail.json()["latest_internal_note"] is None
+    assert all(event["visibility"] != "internal" for event in detail.json()["events"])
+    assert all(event["can_edit"] is False for event in detail.json()["events"])
+
+    with pytest.raises(DiscordCommandError):
+        await handle_discord_petition(
+            db_session,
+            submitter,
+            frozenset({"petition:handle"}),
+            operation="petition_note",
+            discord_user_id="123",
+            interaction_id="456",
+            guild_id="789",
+            arguments={"case_id": str(case_obj.id), "content": "Discord 自行加入備註"},
+        )
+
+    viewer = await _bare_user(db_session)
+    await _grant_org_permission(db_session, viewer, case_org, "petition:view_org")
+    await _grant_org_permission(db_session, viewer, other_org, "petition:handle")
+    viewer_response = await authed_client_factory(viewer).post(
+        f"/petitions/{case_obj.id}/notes", json={"content": "跨機關註記"}
+    )
+    assert viewer_response.status_code == 403
+
+    authorized = await authed_client_factory(handler).post(
+        f"/petitions/{case_obj.id}/notes", json={"content": "承辦合法註記"}
+    )
+    assert authorized.status_code == 200
+    assert authorized.json()["latest_internal_note"] == "承辦合法註記"
+
+    confidential, _share_token = await _create_case(db_session, petition_type, submitter=submitter)
+    confidential.is_confidential = True
+    confidential.assigned_to_id = handler.id
+    await db_session.flush()
+    blocked_confidential = await authed_client_factory(submitter).post(
+        f"/petitions/{confidential.id}/notes", json={"content": "密件自行註記"}
+    )
+    assert blocked_confidential.status_code == 403
+    allowed_confidential = await authed_client_factory(handler).post(
+        f"/petitions/{confidential.id}/notes", json={"content": "密件承辦註記"}
+    )
+    assert allowed_confidential.status_code == 200
 
 
 async def test_assign_case_requires_permission(
