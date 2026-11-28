@@ -5,14 +5,20 @@
 
 from __future__ import annotations
 
+import json
+import uuid
 import zipfile
 from collections.abc import Callable
+from datetime import UTC, datetime
 from io import BytesIO
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.config import settings
+from api.models.org import Org
+from api.models.petition import PetitionCase, PetitionType
 from api.models.user import User
 
 
@@ -52,6 +58,51 @@ async def test_self_download_export_returns_valid_zip(
     assert download_resp.headers["content-type"] == "application/zip"
     with zipfile.ZipFile(BytesIO(download_resp.content)) as zf:
         assert "manifest.json" in zf.namelist()
+
+
+async def test_self_export_omits_staff_only_petition_fields(
+    authed_client_factory: Callable[[User], AsyncClient],
+    member_user: User,
+    db_session: AsyncSession,
+) -> None:
+    org = Org(name=f"privacy-petition-org-{uuid.uuid4().hex[:8]}")
+    db_session.add(org)
+    await db_session.flush()
+    petition_type = PetitionType(
+        name=f"privacy-petition-type-{uuid.uuid4().hex[:8]}", responsible_org_id=org.id
+    )
+    db_session.add(petition_type)
+    await db_session.flush()
+    db_session.add(
+        PetitionCase(
+            case_number="PRV1234",
+            share_token_hash="a" * 64,
+            type_id=petition_type.id,
+            submitter_id=member_user.id,
+            current_org_id=org.id,
+            title="我的陳情",
+            content="陳情內容",
+            latest_internal_note="僅供承辦人閱讀",
+            discord_channel_id="123456789",
+            submitted_at=datetime.now(UTC),
+        )
+    )
+    await db_session.flush()
+
+    ac = authed_client_factory(member_user)
+    export = await ac.post("/users/me/privacy/export")
+    assert export.status_code == 202
+    downloaded = await ac.get(export.json()["download_url"])
+    assert downloaded.status_code == 200
+    with zipfile.ZipFile(BytesIO(downloaded.content)) as zf:
+        petitions = json.loads(zf.read("petitions.json"))
+        manifest = json.loads(zf.read("manifest.json"))
+    assert len(petitions) == 1
+    assert petitions[0]["title"] == "我的陳情"
+    assert "latest_internal_note" not in petitions[0]
+    assert "discord_channel_id" not in petitions[0]
+    assert "share_token_hash" not in petitions[0]
+    assert "latest_internal_note" not in manifest["files"]["petitions.json"]["fields"]
 
 
 async def test_self_download_export_rejects_other_users_file(

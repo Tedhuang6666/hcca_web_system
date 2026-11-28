@@ -500,6 +500,7 @@ async def self_export_data(db: DbDep, current_user: CurrentUser) -> SelfExportRe
         db,
         user_id=current_user.id,
         requested_by_email=current_user.email,
+        include_staff_only=False,
     )
     await db.commit()
     return SelfExportRequestOut(

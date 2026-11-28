@@ -158,6 +158,42 @@ _EXPORT_EXCLUDED_COLUMNS = frozenset(
     }
 )
 
+# 自助匯出只包含陳情人可取得的案件欄位；新欄位預設不進入匯出。
+_PETITION_SUBJECT_EXPORT_COLUMNS = frozenset(
+    {
+        "id",
+        "case_number",
+        "type_id",
+        "status",
+        "is_named",
+        "is_confidential",
+        "confidential_reason",
+        "submitter_id",
+        "contact_name",
+        "contact_email",
+        "title",
+        "content",
+        "public_reply",
+        "supplement_request",
+        "rejection_reason",
+        "public_status",
+        "public_title",
+        "public_content",
+        "public_requested_at",
+        "public_user_responded_at",
+        "public_published_at",
+        "current_org_id",
+        "assigned_to_id",
+        "submitted_at",
+        "assigned_at",
+        "first_response_at",
+        "resolved_at",
+        "closed_at",
+        "created_at",
+        "updated_at",
+    }
+)
+
 
 def _serialize(obj: Any) -> dict[str, Any]:
     out: dict[str, Any] = {}
@@ -180,7 +216,7 @@ def _serialize(obj: Any) -> dict[str, Any]:
 
 
 async def _collect_user_related_tables(
-    session: AsyncSession, user: User
+    session: AsyncSession, user: User, *, include_staff_only: bool
 ) -> dict[str, list[dict[str, Any]]]:
     """從各表蒐集與該 user 相關的資料；新增表時補一條 select 即可。"""
     bundle: dict[str, list[dict[str, Any]]] = {"users.json": [_serialize(user)]}
@@ -231,7 +267,19 @@ async def _collect_user_related_tables(
             .scalars()
             .all()
         )
-        bundle["petitions.json"] = [_serialize(c) for c in cases]
+        petition_rows = [_serialize(c) for c in cases]
+        bundle["petitions.json"] = (
+            petition_rows
+            if include_staff_only
+            else [
+                {
+                    key: value
+                    for key, value in row.items()
+                    if key in _PETITION_SUBJECT_EXPORT_COLUMNS
+                }
+                for row in petition_rows
+            ]
+        )
     except Exception:
         logger.debug("export petitions skipped", exc_info=True)
 
@@ -262,12 +310,18 @@ async def _collect_user_related_tables(
 
 
 async def export_user_data(
-    session: AsyncSession, *, user_id: uuid.UUID, requested_by_email: str | None
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    requested_by_email: str | None,
+    include_staff_only: bool = True,
 ) -> ExportResult:
     user = await session.scalar(select(User).where(User.id == user_id))
     if user is None:
         raise ValueError("找不到該使用者")
-    bundle = await _collect_user_related_tables(session, user)
+    bundle = await _collect_user_related_tables(
+        session, user, include_staff_only=include_staff_only
+    )
     now = datetime.now(UTC)
     manifest = {
         "subject_user_id": str(user.id),
