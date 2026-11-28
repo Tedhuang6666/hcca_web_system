@@ -17,8 +17,10 @@ from api.models.document import (
     Document,
     DocumentApproval,
     DocumentApprovalDelegation,
+    DocumentClassification,
     DocumentRecipient,
     DocumentStatus,
+    DocumentVisibility,
 )
 from api.models.org import Org, Permission, Position, UserPosition
 from api.models.outbox import OutboxEvent
@@ -891,6 +893,44 @@ async def test_archive_document_by_non_creator_returns_403(
     resp = await ac.post(f"/documents/{doc.id}/archive")
 
     assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_batch_archive_hides_confidential_document_from_unrelated_org(
+    db_session: AsyncSession, authed_client_factory
+) -> None:
+    owner_org = Org(name=f"密件機關-{uuid.uuid4().hex[:6]}")
+    outsider_org = Org(name=f"外部機關-{uuid.uuid4().hex[:6]}")
+    creator = User(email="batch-confidential-creator@example.com", display_name="Creator")
+    outsider = User(email="batch-confidential-outsider@example.com", display_name="Outsider")
+    db_session.add_all([owner_org, outsider_org, creator, outsider])
+    await db_session.flush()
+    await _grant_permission(db_session, outsider, outsider_org, "document:archive")
+    doc = _make_draft(
+        owner_org,
+        creator,
+        status=DocumentStatus.APPROVED,
+        classification=DocumentClassification.CONFIDENTIAL,
+        visibility_level=DocumentVisibility.PUBLIC,
+    )
+    db_session.add(doc)
+    await db_session.flush()
+
+    response = await _authed(authed_client_factory, outsider).post(
+        "/documents/batch/archive", json={"document_ids": [str(doc.id)]}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["results"] == [
+        {
+            "document_id": str(doc.id),
+            "serial_number": None,
+            "title": None,
+            "ok": False,
+            "status": None,
+            "detail": "找不到此公文",
+        }
+    ]
 
 
 @pytest.mark.asyncio

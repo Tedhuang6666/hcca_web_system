@@ -8,15 +8,28 @@ import pytest
 from fastapi import BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.models.document import ApprovalStepStatus, Document, DocumentApproval, DocumentStatus
+from api.models.document import (
+    ApprovalStepStatus,
+    Document,
+    DocumentApproval,
+    DocumentClassification,
+    DocumentStatus,
+    DocumentVisibility,
+)
 from api.models.org import Org
 from api.models.user import User
 from api.routers.documents import (
     batch_approve_documents,
     batch_archive_documents,
+    batch_delegate_documents,
     batch_reject_documents,
 )
-from api.schemas.document import BatchApproveRequest, BatchArchiveRequest, BatchRejectRequest
+from api.schemas.document import (
+    BatchApproveRequest,
+    BatchArchiveRequest,
+    BatchDelegateRequest,
+    BatchRejectRequest,
+)
 
 
 @pytest.mark.asyncio
@@ -40,7 +53,7 @@ async def test_batch_approve_returns_per_document_results(db_session: AsyncSessi
         serial_number="DOC-2026-100002",
         title="不可核准草稿",
         org_id=org.id,
-        created_by=creator.id,
+        created_by=approver.id,
         status=DocumentStatus.DRAFT,
         subject="為測試批量核准失敗，請 鑒核。",
     )
@@ -74,16 +87,15 @@ async def test_batch_approve_returns_per_document_results(db_session: AsyncSessi
 @pytest.mark.asyncio
 async def test_batch_reject_skips_already_approved_document(db_session: AsyncSession) -> None:
     org = Org(name="退件組", prefix="退")
-    creator = User(email="batch-reject-creator@example.com", display_name="Creator")
     approver = User(email="batch-reject-approver@example.com", display_name="Approver")
-    db_session.add_all([org, creator, approver])
+    db_session.add_all([org, approver])
     await db_session.flush()
 
     approved_doc = Document(
         serial_number="DOC-2026-100003",
         title="已核准不可退件",
         org_id=org.id,
-        created_by=creator.id,
+        created_by=approver.id,
         status=DocumentStatus.APPROVED,
         current_step=1,
         subject="已經核准並發出，不可再批量退件。",
@@ -134,3 +146,53 @@ async def test_batch_archive_deduplicates_document_ids(db_session: AsyncSession)
     assert result.failed == 1
     assert result.results[0].status == DocumentStatus.ARCHIVED
     assert result.results[1].detail == "找不到此公文"
+
+
+@pytest.mark.asyncio
+async def test_batch_routes_hide_metadata_for_inaccessible_confidential_document(
+    db_session: AsyncSession,
+) -> None:
+    org = Org(name="密件批次測試組", prefix="密")
+    creator = User(email="batch-secret-creator@example.com", display_name="Creator")
+    outsider = User(email="batch-secret-outsider@example.com", display_name="Outsider")
+    db_session.add_all([org, creator, outsider])
+    await db_session.flush()
+    doc = Document(
+        serial_number="DOC-2026-SECRET-1",
+        title="不得外洩的標題",
+        org_id=org.id,
+        created_by=creator.id,
+        status=DocumentStatus.PENDING,
+        current_step=1,
+        subject="密件測試",
+        classification=DocumentClassification.CONFIDENTIAL,
+        visibility_level=DocumentVisibility.PUBLIC,
+    )
+    db_session.add(doc)
+    await db_session.flush()
+
+    operations = [
+        await batch_approve_documents(
+            BatchApproveRequest(document_ids=[doc.id]), db_session, outsider, BackgroundTasks()
+        ),
+        await batch_reject_documents(
+            BatchRejectRequest(document_ids=[doc.id], comment="退件"),
+            db_session,
+            outsider,
+            BackgroundTasks(),
+        ),
+        await batch_archive_documents(
+            BatchArchiveRequest(document_ids=[doc.id]), db_session, outsider, BackgroundTasks()
+        ),
+        await batch_delegate_documents(
+            BatchDelegateRequest(document_ids=[doc.id]), db_session, outsider
+        ),
+    ]
+
+    for result in operations:
+        assert result.succeeded == 0
+        item = result.results[0]
+        assert item.detail == "找不到此公文"
+        assert item.serial_number is None
+        assert item.title is None
+        assert item.status is None

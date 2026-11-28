@@ -31,6 +31,7 @@ from api.dependencies.permissions import require_any, require_permission
 from api.models.document import Document, DocumentStatus
 from api.models.user import User
 from api.routers.documents_helpers import (
+    assert_access,
     batch_out,
     batch_result,
     can_manage_delegation_for_org,
@@ -184,6 +185,21 @@ async def dispatch_document(
 # ── 批量操作端點 ──────────────────────────────────────────────────────────────
 
 
+async def _get_visible_batch_document(
+    session: AsyncSession, doc_id: uuid.UUID, user: User
+) -> Document | None:
+    doc = await doc_svc.get_document(session, doc_id)
+    if doc is None:
+        return None
+    try:
+        await assert_access(session, doc, user)
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_403_FORBIDDEN:
+            return None
+        raise
+    return doc
+
+
 @router.post(
     "/batch/approve",
     response_model=BatchDocumentOperationOut,
@@ -197,7 +213,7 @@ async def batch_approve_documents(
 ) -> BatchDocumentOperationOut:
     results: list[BatchDocumentResult] = []
     for doc_id in unique_doc_ids(payload.document_ids):
-        doc = await doc_svc.get_document(session, doc_id)
+        doc = await _get_visible_batch_document(session, doc_id, current_user)
         if doc is None:
             results.append(batch_result(doc_id, ok=False, detail="找不到此公文"))
             continue
@@ -246,7 +262,7 @@ async def batch_reject_documents(
 ) -> BatchDocumentOperationOut:
     results: list[BatchDocumentResult] = []
     for doc_id in unique_doc_ids(payload.document_ids):
-        doc = await doc_svc.get_document(session, doc_id)
+        doc = await _get_visible_batch_document(session, doc_id, current_user)
         if doc is None:
             results.append(batch_result(doc_id, ok=False, detail="找不到此公文"))
             continue
@@ -293,7 +309,7 @@ async def batch_archive_documents(
 ) -> BatchDocumentOperationOut:
     results: list[BatchDocumentResult] = []
     for doc_id in unique_doc_ids(payload.document_ids):
-        doc = await doc_svc.get_document(session, doc_id)
+        doc = await _get_visible_batch_document(session, doc_id, current_user)
         if doc is None:
             results.append(batch_result(doc_id, ok=False, detail="找不到此公文"))
             continue
@@ -330,7 +346,7 @@ async def batch_delegate_documents(
 ) -> BatchDocumentOperationOut:
     results: list[BatchDocumentResult] = []
     for doc_id in unique_doc_ids(payload.document_ids):
-        doc = await doc_svc.get_document(session, doc_id)
+        doc = await _get_visible_batch_document(session, doc_id, current_user)
         if doc is None:
             results.append(batch_result(doc_id, ok=False, detail="找不到此公文"))
             continue
