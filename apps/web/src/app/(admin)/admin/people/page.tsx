@@ -26,10 +26,11 @@ import {
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
-import { ApiError, classApi, peopleApi } from "@/lib/api";
+import { adminApi, ApiError, classApi, peopleApi } from "@/lib/api";
 import { getPeopleDirectoryStats } from "@/lib/api/people";
 import { today } from "@/lib/dateUtils";
 import { loadPeopleDirectoryReferenceData } from "@/lib/people-directory-reference";
+import { AccountDetailPanel } from "@/components/admin/AccountDetailPanel";
 import { AccountDirectoryPanel } from "@/components/admin/AccountDirectoryPanel";
 import MobileBackToList from "@/components/ui/MobileBackToList";
 import styles from "@/components/admin/PeopleManagement.module.css";
@@ -205,7 +206,6 @@ function PersonDirectoryPanel() {
   const canManageOrgAffiliations = canManageMasterData || can("org:manage_members");
   const canManageAccounts = isAdmin || can("admin:all");
   const [directoryView, setDirectoryView] = useState<"people" | "accounts">("people");
-  const [accountId, setAccountId] = useState<string | null>(null);
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const detailRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -369,7 +369,7 @@ function PersonDirectoryPanel() {
               key={view}
               type="button"
               aria-pressed={directoryView === view}
-              onClick={() => { setAccountId(null); setMobileDetailOpen(false); setDirectoryView(view); }}
+              onClick={() => { setMobileDetailOpen(false); setDirectoryView(view); }}
               className="min-h-11 shrink-0 rounded-lg px-4 text-sm font-medium border! border-border!"
               style={{ color: directoryView === view ? "var(--primary-text)" : "var(--text-muted)", background: directoryView === view ? "var(--primary-dim)" : "var(--bg-surface)" }}
             >
@@ -524,7 +524,7 @@ function PersonDirectoryPanel() {
                 window.requestAnimationFrame(() => searchRef.current?.focus());
               }} />
             </div>
-          {detailLoading ? (
+          {detailLoading && detail?.id !== selectedId ? (
             <div className="p-8 text-sm text-fg-muted!">載入人員詳情...</div>
           ) : detail ? (
             <PersonDetailPanel
@@ -537,7 +537,6 @@ function PersonDirectoryPanel() {
               canManageAccounts={canManageAccounts}
               onChanged={refreshAll}
               onAssign={() => setShowAffiliation(true)}
-              onOpenAccount={(id) => { setAccountId(id); setDirectoryView("accounts"); }}
             />
           ) : (
             <div className="p-10 text-center text-sm text-fg-muted!">
@@ -588,7 +587,6 @@ function PersonDirectoryPanel() {
         </>
       ) : (
         <AccountDirectoryPanel
-          initialSelectedId={accountId}
           users={users}
           loading={usersLoading}
           classes={classes}
@@ -631,7 +629,6 @@ function PersonDetailPanel({
   canManageAccounts,
   onChanged,
   onAssign,
-  onOpenAccount,
 }: {
   person: PersonDetailOut;
   classes: SchoolClassListItem[];
@@ -641,7 +638,6 @@ function PersonDetailPanel({
   canManageAccounts: boolean;
   onChanged: () => Promise<void>;
   onAssign: () => void;
-  onOpenAccount: (id: string) => void;
 }) {
   const [quickClassId, setQuickClassId] = useState("");
   const [classSaving, setClassSaving] = useState(false);
@@ -853,17 +849,81 @@ function PersonDetailPanel({
           />}
         </Panel>
         {person.user_id && canManageAccounts && (
-          <button type="button" onClick={() => { if (person.user_id) onOpenAccount(person.user_id); }}
-            className="flex min-h-14 w-full min-w-0 items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left border-border! text-accent-text!"
-            >
-            <span className="min-w-0"><span className="block text-sm font-medium">管理連結帳號</span>
-              <span className="mt-1 block break-all text-xs text-fg-muted!">學籍、幹部任期、登入與安全設定</span>
-            </span>
-            <ChevronRight size={18} className="shrink-0" />
-          </button>
+          <LinkedAccountSection
+            key={person.user_id}
+            userId={person.user_id}
+            users={users}
+            classes={classes}
+            canManageClasses={canAssignClass}
+            onChanged={onChanged}
+          />
         )}
       </div>
     </div>
+  );
+}
+
+/** 連結帳號的登入、任期與安全設定直接在人員詳情裡處理，不另開帳號面板。 */
+function LinkedAccountSection({
+  userId,
+  users,
+  classes,
+  canManageClasses,
+  onChanged,
+}: {
+  userId: string;
+  users: AdminUserDetail[];
+  classes: SchoolClassListItem[];
+  canManageClasses: boolean;
+  onChanged: () => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [user, setUser] = useState<AdminUserDetail | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  const load = useCallback(async () => {
+    setFailed(false);
+    try {
+      setUser(await adminApi.getUser(userId));
+    } catch (error) {
+      setFailed(true);
+      toast.error(errorMessage(error, "載入連結帳號失敗"));
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    if (open) void load();
+  }, [open, load]);
+
+  return (
+    <details
+      className="min-w-0 rounded-md border border-border!"
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
+      <summary className="min-h-11 cursor-pointer px-4 py-3 text-sm font-medium text-fg-secondary!">
+        登入帳號、任期與安全
+      </summary>
+      {!open ? null : failed ? (
+        <div className="flex items-center gap-3 px-4 pb-4 text-sm text-fg-muted!">
+          載入失敗
+          <IconButton onClick={() => void load()}><RefreshCcw size={14} /> 重試</IconButton>
+        </div>
+      ) : !user ? (
+        <p className="px-4 pb-4 text-sm text-fg-muted!">載入帳號資料...</p>
+      ) : (
+        <AccountDetailPanel
+          embedded
+          user={user}
+          users={users}
+          classes={classes}
+          canManageClasses={canManageClasses}
+          onChanged={async () => {
+            await load();
+            await onChanged();
+          }}
+        />
+      )}
+    </details>
   );
 }
 

@@ -218,12 +218,15 @@ export function AccountDetailPanel({
   classes,
   canManageClasses,
   onChanged,
+  embedded = false,
 }: {
   user: AdminUserDetail;
   users: AdminUserDetail[];
   classes: SchoolClassListItem[];
   canManageClasses: boolean;
   onChanged: () => Promise<void>;
+  /** 嵌在人員詳情裡時，班級與座號由人員面板負責，不重複顯示。 */
+  embedded?: boolean;
 }) {
   const [confirm, setConfirm] = useState<ConfirmState>(null);
 
@@ -248,6 +251,7 @@ export function AccountDetailPanel({
         canManageClasses={canManageClasses}
         onChanged={onChanged}
         onConfirm={setConfirm}
+        embedded={embedded}
       />
       {confirm && (
         <Modal title={confirm.title} onClose={() => setConfirm(null)}>
@@ -274,6 +278,7 @@ function AccountDetail({
   canManageClasses,
   onChanged,
   onConfirm,
+  embedded,
 }: {
   user: AdminUserDetail;
   users: AdminUserDetail[];
@@ -281,6 +286,7 @@ function AccountDetail({
   canManageClasses: boolean;
   onChanged: () => Promise<void>;
   onConfirm: (state: ConfirmState) => void;
+  embedded: boolean;
 }) {
   const [displayName, setDisplayName] = useState(user.display_name);
   const [studentId, setStudentId] = useState(user.student_id ?? "");
@@ -493,6 +499,7 @@ function AccountDetail({
             </div>
           </Section>
 
+          {!embedded && (
           <Section title="班級與座號" description="查看目前及歷史名冊資料，並在此快速新增班級或調整座號。">
             {user.class_roster.length === 0 ? (
               <p className="text-sm text-fg-muted!">尚無班級座號名冊資料。</p>
@@ -594,6 +601,7 @@ function AccountDetail({
               管理班級名冊與座號<ChevronRight size={14} />
             </Link>
           </Section>
+          )}
 
           <Section title="登入身分與帳號連結" description="所有已連結的 Email 都可以登入同一個主要帳戶；連結前請確認信箱確實屬於此人。">
             <div className="space-y-2">
