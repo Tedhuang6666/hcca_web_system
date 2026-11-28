@@ -55,6 +55,12 @@ const nextConfig: NextConfig = {
         permanent: false,
       },
       {
+        // 幹部名單併入各機關專頁
+        source: "/officers",
+        destination: "/agencies",
+        permanent: true,
+      },
+      {
         source: "/finance/receivables",
         destination: "/finance",
         permanent: true,

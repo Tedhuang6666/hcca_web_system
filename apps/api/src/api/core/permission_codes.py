@@ -140,6 +140,7 @@ class PermissionCode(StrEnum):
     RECOMMENDED_VENDOR_MANAGE = "recommended_vendor:manage"
 
     SITE_MANAGE = "site:manage"
+    AGENCY_MANAGE = "agency:manage"
 
     QR_CODE_MANAGE = "qr_code:manage"
 
@@ -845,6 +846,12 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "code": PermissionCode.SITE_MANAGE,
         "label": "管理公開網站",
         "desc": "管理官網首頁、公開頁面、平台連結與公開幹部顯示設定",
+    },
+    {
+        "group": "公開網站",
+        "code": PermissionCode.AGENCY_MANAGE,
+        "label": "維護機關專頁",
+        "desc": "維護所屬組織綁定的機關專頁內容與公開項目（僅限該組織範圍）",
     },
     {
         "group": "企業級治理",

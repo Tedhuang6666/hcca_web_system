@@ -1629,6 +1629,129 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/agencies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 公開機關清單 */
+        get: operations["list_public_agencies_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agencies/manage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 可維護的機關 */
+        get: operations["list_manageable_agencies_manage_get"];
+        put?: never;
+        /** 建立機關專頁（網站管理員） */
+        post: operations["create_agency_agencies_manage_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agencies/manage/{agency_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 刪除機關（網站管理員） */
+        delete: operations["delete_agency_agencies_manage__agency_id__delete"];
+        options?: never;
+        head?: never;
+        /** 更新機關介紹 */
+        patch: operations["update_agency_agencies_manage__agency_id__patch"];
+        trace?: never;
+    };
+    "/agencies/manage/{agency_id}/admin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 更新機關結構設定（網站管理員） */
+        patch: operations["admin_update_agency_agencies_manage__agency_id__admin_patch"];
+        trace?: never;
+    };
+    "/agencies/manage/{agency_id}/entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 機關公開項目 */
+        get: operations["list_entries_agencies_manage__agency_id__entries_get"];
+        put?: never;
+        /** 新增機關公開項目 */
+        post: operations["create_entry_agencies_manage__agency_id__entries_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agencies/manage/{agency_id}/entries/{entry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 刪除機關公開項目 */
+        delete: operations["delete_entry_agencies_manage__agency_id__entries__entry_id__delete"];
+        options?: never;
+        head?: never;
+        /** 更新機關公開項目 */
+        patch: operations["update_entry_agencies_manage__agency_id__entries__entry_id__patch"];
+        trace?: never;
+    };
+    "/agencies/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 公開機關專頁 */
+        get: operations["get_public_agencies__slug__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/analytics/announcements/participation": {
         parameters: {
             query?: never;
@@ -12686,6 +12809,315 @@ export interface components {
             active_user_count: number;
             /** Position Count */
             position_count: number;
+        };
+        /**
+         * AgencyBranch
+         * @description 機關性質；決定公開頁版型與可用的公開項目類型。
+         * @enum {string}
+         */
+        AgencyBranch: "executive" | "legislative" | "judicial" | "delegation";
+        /** AgencyEntryCreate */
+        AgencyEntryCreate: {
+            /** Body Md */
+            body_md?: string | null;
+            /**
+             * Is Published
+             * @default false
+             */
+            is_published: boolean;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "document" | "policy" | "achievement" | "session" | "bill" | "committee" | "finance" | "procedure" | "decision" | "meeting" | "proposal" | "rights" | "event" | "template";
+            /** Link Url */
+            link_url?: string | null;
+            /** Occurred On */
+            occurred_on?: string | null;
+            /** Outcome Md */
+            outcome_md?: string | null;
+            /** Reference No */
+            reference_no?: string | null;
+            /**
+             * Show On Calendar
+             * @default false
+             */
+            show_on_calendar: boolean;
+            /**
+             * Sort Order
+             * @default 0
+             */
+            sort_order: number;
+            /** Status */
+            status?: ("planned" | "in_progress" | "completed" | "under_review" | "passed" | "rejected" | "withdrawn" | "decided" | "dismissed" | "adopted" | "tracking") | null;
+            /** Summary */
+            summary?: string | null;
+            /** Title */
+            title: string;
+        };
+        /** AgencyEntryOut */
+        AgencyEntryOut: {
+            /**
+             * Agency Id
+             * Format: uuid
+             */
+            agency_id: string;
+            /** Body Md */
+            body_md?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Published
+             * @default false
+             */
+            is_published: boolean;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "document" | "policy" | "achievement" | "session" | "bill" | "committee" | "finance" | "procedure" | "decision" | "meeting" | "proposal" | "rights" | "event" | "template";
+            /** Link Url */
+            link_url?: string | null;
+            /** Occurred On */
+            occurred_on?: string | null;
+            /** Outcome Md */
+            outcome_md?: string | null;
+            /** Reference No */
+            reference_no?: string | null;
+            /**
+             * Show On Calendar
+             * @default false
+             */
+            show_on_calendar: boolean;
+            /**
+             * Sort Order
+             * @default 0
+             */
+            sort_order: number;
+            /** Status */
+            status?: ("planned" | "in_progress" | "completed" | "under_review" | "passed" | "rejected" | "withdrawn" | "decided" | "dismissed" | "adopted" | "tracking") | null;
+            /** Summary */
+            summary?: string | null;
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** AgencyEntryUpdate */
+        AgencyEntryUpdate: {
+            /** Body Md */
+            body_md?: string | null;
+            /** Is Published */
+            is_published?: boolean | null;
+            /** Link Url */
+            link_url?: string | null;
+            /** Occurred On */
+            occurred_on?: string | null;
+            /** Outcome Md */
+            outcome_md?: string | null;
+            /** Reference No */
+            reference_no?: string | null;
+            /** Show On Calendar */
+            show_on_calendar?: boolean | null;
+            /** Sort Order */
+            sort_order?: number | null;
+            /** Status */
+            status?: ("planned" | "in_progress" | "completed" | "under_review" | "passed" | "rejected" | "withdrawn" | "decided" | "dismissed" | "adopted" | "tracking") | null;
+            /** Summary */
+            summary?: string | null;
+            /** Title */
+            title?: string | null;
+        };
+        /**
+         * AgencyLinkedRecord
+         * @description 既有流程的公開案件：受理後的議案（含提案人）、已公布的評議結果（不含聲請人）。
+         */
+        AgencyLinkedRecord: {
+            /** Category */
+            category: string;
+            /** Decided At */
+            decided_at: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Proposer Name */
+            proposer_name?: string | null;
+            /** Reference No */
+            reference_no: string;
+            /** Status */
+            status: string;
+            /**
+             * Submitted At
+             * Format: date-time
+             */
+            submitted_at: string;
+            /** Summary */
+            summary: string | null;
+            /** Title */
+            title: string;
+        };
+        /** AgencyListItem */
+        AgencyListItem: {
+            branch: components["schemas"]["AgencyBranch"];
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+            /** Tagline */
+            tagline: string | null;
+        };
+        /** AgencyManageOut */
+        AgencyManageOut: {
+            branch: components["schemas"]["AgencyBranch"];
+            /**
+             * Can Admin
+             * @default false
+             */
+            can_admin: boolean;
+            /** Contact Md */
+            contact_md: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Intro Md */
+            intro_md: string;
+            /** Is Published */
+            is_published: boolean;
+            /** Mandate Md */
+            mandate_md: string | null;
+            /** Name */
+            name: string;
+            /** Org Id */
+            org_id: string | null;
+            /** Org Name */
+            org_name?: string | null;
+            /** Slug */
+            slug: string;
+            /** Sort Order */
+            sort_order: number;
+            /** Tagline */
+            tagline: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * AgencyProfileAdminUpdate
+         * @description 只有網站管理員可改的結構欄位。
+         */
+        AgencyProfileAdminUpdate: {
+            /** Contact Md */
+            contact_md?: string | null;
+            /** Intro Md */
+            intro_md?: string | null;
+            /** Is Published */
+            is_published?: boolean | null;
+            /** Mandate Md */
+            mandate_md?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Org Id */
+            org_id?: string | null;
+            /** Slug */
+            slug?: string | null;
+            /** Sort Order */
+            sort_order?: number | null;
+            /** Tagline */
+            tagline?: string | null;
+        };
+        /** AgencyProfileCreate */
+        AgencyProfileCreate: {
+            branch: components["schemas"]["AgencyBranch"];
+            /**
+             * Intro Md
+             * @default
+             */
+            intro_md: string;
+            /** Name */
+            name: string;
+            /** Org Id */
+            org_id?: string | null;
+            /** Slug */
+            slug: string;
+            /**
+             * Sort Order
+             * @default 0
+             */
+            sort_order: number;
+            /** Tagline */
+            tagline?: string | null;
+        };
+        /** AgencyProfileOut */
+        AgencyProfileOut: {
+            branch: components["schemas"]["AgencyBranch"];
+            /** Contact Md */
+            contact_md: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Intro Md */
+            intro_md: string;
+            /** Is Published */
+            is_published: boolean;
+            /** Mandate Md */
+            mandate_md: string | null;
+            /** Name */
+            name: string;
+            /** Org Id */
+            org_id: string | null;
+            /** Slug */
+            slug: string;
+            /** Sort Order */
+            sort_order: number;
+            /** Tagline */
+            tagline: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * AgencyProfileUpdate
+         * @description 機關維護者可改的內容欄位。
+         */
+        AgencyProfileUpdate: {
+            /** Contact Md */
+            contact_md?: string | null;
+            /** Intro Md */
+            intro_md?: string | null;
+            /** Is Published */
+            is_published?: boolean | null;
+            /** Mandate Md */
+            mandate_md?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Tagline */
+            tagline?: string | null;
+        };
+        /** AgencyPublicOut */
+        AgencyPublicOut: {
+            agency: components["schemas"]["AgencyProfileOut"];
+            /** Entries */
+            entries: components["schemas"]["AgencyEntryOut"][];
+            /** Linked Records */
+            linked_records: components["schemas"]["AgencyLinkedRecord"][];
+            /** Members */
+            members: components["schemas"]["PublicOfficerOut"][];
         };
         /** AnalyticsInsightsOut */
         AnalyticsInsightsOut: {
@@ -35878,6 +36310,341 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ZombieCredentialEntry"][];
+                };
+            };
+        };
+    };
+    list_public_agencies_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgencyListItem"][];
+                };
+            };
+        };
+    };
+    list_manageable_agencies_manage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgencyManageOut"][];
+                };
+            };
+        };
+    };
+    create_agency_agencies_manage_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgencyProfileCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgencyProfileOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_agency_agencies_manage__agency_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agency_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_agency_agencies_manage__agency_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agency_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgencyProfileUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgencyProfileOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_update_agency_agencies_manage__agency_id__admin_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agency_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgencyProfileAdminUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgencyProfileOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_entries_agencies_manage__agency_id__entries_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agency_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgencyEntryOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_entry_agencies_manage__agency_id__entries_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agency_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgencyEntryCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgencyEntryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_entry_agencies_manage__agency_id__entries__entry_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agency_id: string;
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_entry_agencies_manage__agency_id__entries__entry_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agency_id: string;
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgencyEntryUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgencyEntryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_public_agencies__slug__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgencyPublicOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

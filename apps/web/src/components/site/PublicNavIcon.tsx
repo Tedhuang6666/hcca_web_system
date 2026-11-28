@@ -1,4 +1,5 @@
 import {
+  Building2,
   BookOpenText,
   FileSearch,
   Info,
@@ -22,6 +23,7 @@ const ICONS: Record<string, LucideIcon> = {
   shop: ShoppingBag,
   articles: BookOpenText,
   about: Landmark,
+  agencies: Building2,
   "system-info": Info,
   officers: UsersRound,
   activities: Images,

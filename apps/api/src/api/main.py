@@ -55,6 +55,7 @@ from api.routers import (
     admin,
     admin_observability,
     admin_system,
+    agencies,
     agent_observability,
     analytics,
     announcements,
@@ -456,6 +457,7 @@ def create_app() -> FastAPI:
     app.include_router(saved_filters.router)
     app.include_router(search.router)
     app.include_router(site.router)
+    app.include_router(agencies.router)
     app.include_router(short_links.router)
     app.include_router(shop.router)
     app.include_router(shop_teacher.router)

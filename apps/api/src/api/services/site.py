@@ -251,7 +251,10 @@ def _active_term_filter(stmt: Select[Any], on_date: date) -> Select[Any]:
 
 
 async def list_officers(
-    db: AsyncSession, active_only: bool = True, featured_only: bool = False
+    db: AsyncSession,
+    active_only: bool = True,
+    featured_only: bool = False,
+    org_ids: list[uuid.UUID] | None = None,
 ) -> list[PublicOfficerOut]:
     """公開幹部名單（混合模式）。
 
@@ -273,6 +276,8 @@ async def list_officers(
     )
     if active_only:
         stmt = _active_term_filter(stmt, today)
+    if org_ids is not None:
+        stmt = stmt.where(Position.org_id.in_(org_ids))
     tenures = (await db.execute(stmt)).scalars().all()
 
     profiles_by_position = {

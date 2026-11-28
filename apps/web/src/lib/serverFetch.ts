@@ -4,7 +4,6 @@ import type {
   AnnouncementListItem,
   AnnouncementOut,
   DocumentListItem,
-  PublicOfficerOut,
   PublicSiteBundleOut,
   PublicSitePageOut,
   PartnerTagOut,
@@ -187,8 +186,12 @@ export async function fetchPublicModuleStatuses(): Promise<ModuleStatusPublic[]>
   return (await getCachedPublicJson<ModuleStatusPublic[]>("/system/module-status", true)) ?? [];
 }
 
-export async function fetchPublicOfficers(): Promise<PublicOfficerOut[]> {
-  return (await getCachedPublicJson<PublicOfficerOut[]>("/site/officers?active_only=true")) ?? [];
+export async function fetchPublicAgencies(): Promise<import("./types").AgencyListItem[]> {
+  return (await fetchPublicJson<import("./types").AgencyListItem[]>("/agencies", { revalidate: 30 })) ?? [];
+}
+
+export async function fetchPublicAgency(slug: string): Promise<import("./types").AgencyPublicOut | null> {
+  return fetchPublicJson<import("./types").AgencyPublicOut>(`/agencies/${encodeURIComponent(slug)}`, { revalidate: 30 });
 }
 
 export async function fetchPublicPage(slug: string): Promise<PublicSitePageOut | null> {

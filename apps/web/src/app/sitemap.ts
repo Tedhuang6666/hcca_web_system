@@ -6,7 +6,7 @@ import { readActivityAlbums } from "@/lib/public-activity-albums";
 import { serverApiUrl } from "@/lib/config";
 import { publicPageHref, resolvePublicNav } from "@/lib/publicNav";
 import { isSitemapRoute } from "@/lib/route-access";
-import type { PublicSiteBundleOut } from "@/lib/types";
+import type { AgencyListItem, PublicSiteBundleOut } from "@/lib/types";
 
 // Sitemap 必須在請求時讀取資料庫；若只在 build time 產生，API 尚未啟動時
 // 會把暫時的空集合快取成只有固定入口的 sitemap。
@@ -162,7 +162,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const visibleNavKeys = new Set(visibleNavItems.map((item) => item.key));
   const hasNavItem = (key: string) => visibleNavKeys.has(key);
 
-  const [regs, docs, announcements, elections, petitions] = await Promise.all([
+  const [regs, docs, announcements, elections, petitions, agencies] = await Promise.all([
     hasNavItem("regulations")
       ? (() => {
           const url = new URL(serverApiUrl("/regulations"));
@@ -190,6 +190,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     hasNavItem("petitions")
       ? pagedFetch<PublicPetitionListItem>(new URL(serverApiUrl("/petitions/public")))
       : Promise.resolve([] as PublicPetitionListItem[]),
+    hasNavItem("agencies")
+      ? fetchJson<AgencyListItem[]>(new URL(serverApiUrl("/agencies"))).then((items) => items ?? [])
+      : Promise.resolve([] as AgencyListItem[]),
   ]);
   if (!regs || !docs || !announcements || !elections || !petitions) {
     return lastKnownGoodSitemap ?? minimalFallback;
@@ -250,7 +253,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     news: announcementLastModified,
     about: settingsLastModified,
     "system-info": settingsLastModified,
-    officers: settingsLastModified,
+    agencies: settingsLastModified,
     links: linkLastModified,
     "public-db": publicDatabaseLastModified,
     regulations: regulationLastModified,
@@ -268,7 +271,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     .map((item) => ({
       url: `${site}${item.href}`,
       lastModified: lastModifiedByNavKey[item.key] ?? settingsLastModified,
-      changeFrequency: ["about", "system-info", "officers", "links"].includes(item.key)
+      changeFrequency: ["about", "system-info", "agencies", "links"].includes(item.key)
         ? ("monthly" as const)
         : ("daily" as const),
       priority: item.key === "public-db" ? 0.6 : item.group === "primary" ? 0.8 : 0.7,
@@ -314,6 +317,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: new Date(petition.published_at),
       changeFrequency: "weekly" as const,
       priority: 0.6,
+    })),
+    ...agencies.map((agency) => ({
+      url: `${site}/agencies/${encodeURIComponent(agency.slug)}`,
+      lastModified: settingsLastModified,
+      changeFrequency: "weekly" as const,
+      priority: 0.7,
     })),
     ...(publicPages ?? [])
       .filter((page) => page.is_published && page.slug)

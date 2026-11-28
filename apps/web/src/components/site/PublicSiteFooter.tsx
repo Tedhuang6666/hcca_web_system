@@ -22,7 +22,7 @@ export default function PublicSiteFooter({
         </Link>
         <nav className="public-footer-links" aria-label="頁尾導覽">
           <Link href="/about">關於班聯會</Link>
-          <Link href="/officers">幹部名單</Link>
+          <Link href="/agencies">自治機關</Link>
           <Link href="/public">公開資料</Link>
           <Link href="/contact">聯絡我們</Link>
         </nav>

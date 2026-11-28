@@ -1,6 +1,5 @@
 import Image from "next/image";
-import Link from "next/link";
-import { ArrowUpRight, Crown, Mail, UserRound, UsersRound } from "lucide-react";
+import { Crown, Mail, UserRound, UsersRound } from "lucide-react";
 
 import OfficerRosterTabs, {
   type OfficerRosterTab,
@@ -167,42 +166,30 @@ export default function PublicOfficerDirectory({
   officers,
   themeConfig,
   showHeading = true,
-  showFullPageLink = true,
 }: {
   officers: PublicOfficerOut[];
   themeConfig?: Record<string, unknown>;
   showHeading?: boolean;
-  showFullPageLink?: boolean;
 }) {
   const directRosters = parseDirectOfficerRosters(themeConfig);
   const grouped = groupOfficersByOrganization(officers);
 
   return (
     <div className="space-y-10">
-      {showHeading && (
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          {showFullPageLink && (
-            <Link href="/officers" className="public-text-link inline-flex items-center gap-1.5">
-              開啟完整幹部頁面
-              <ArrowUpRight size={15} aria-hidden />
-            </Link>
-          )}
-        </div>
-      )}
       {directRosters.length > 0 && (
         <OfficerRosterTabs tabs={directRosters} showHeading={showHeading} />
       )}
       {directRosters.length === 0 && grouped.map(({ orgName, roles }) => (
-        <section key={orgName} aria-labelledby={`org-${orgName}`}>
-          <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="text-xs font-bold tracking-[0.12em] text-[var(--primary-text)]">自治組織</p>
-              <h2 id={`org-${orgName}`} className="mt-2 text-2xl font-bold">{orgName}</h2>
+        <section key={orgName} aria-labelledby={grouped.length > 1 ? `org-${orgName}` : undefined}>
+          {/* 機關頁只有單一組織時，標題已由機關頁提供 */}
+          {grouped.length > 1 && (
+            <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+              <h3 id={`org-${orgName}`} className="text-xl font-bold">{orgName}</h3>
+              <span className="text-sm font-medium text-[var(--text-muted)]">
+                {new Set(roles.flatMap((role) => role.officers.map((officer) => officer.display_name))).size} 位幹部
+              </span>
             </div>
-            <span className="text-sm font-medium text-[var(--text-muted)]">
-              {new Set(roles.flatMap((role) => role.officers.map((officer) => officer.display_name))).size} 位幹部
-            </span>
-          </div>
+          )}
           <div
             className="overflow-hidden rounded-2xl border"
             style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}

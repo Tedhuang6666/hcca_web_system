@@ -1,0 +1,86 @@
+/* 自治機關專頁：沿用首頁的編輯式語彙（實線開章、細線條列、灰色日期），
+   各機關以版面結構區分，不另設配色。 */
+.agency, .agency-hub {
+  --agency-hairline: 1px solid var(--public-border);
+  width: min(100%, 72rem);
+  margin-inline: auto;
+  padding: 2.5rem var(--public-gutter, 1rem) 4rem;
+  color: var(--public-text);
+}
+.agency { display: grid; gap: clamp(3rem, 5vw, 4rem); }
+/* grid 子項預設 min-width:auto，會被議案表格撐寬 */
+.agency > * { min-width: 0; }
+.agency :is(a, button):focus-visible, .agency-hub a:focus-visible { outline: 2px solid var(--public-focus); outline-offset: 4px; }
+.agency-meta { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; margin: 0; color: var(--public-muted); font-size: 0.8125rem; font-variant-numeric: tabular-nums; }
+.agency-empty { margin: 0; padding-block: 1.5rem; color: var(--public-muted); }
+.agency-status { color: var(--public-accent-text); font-weight: 700; }
+.agency-status.is-muted { color: var(--public-secondary); }
+.agency-nowrap { white-space: nowrap; }
+
+.agency-head h1 { margin: 0.25rem 0 0; }
+.agency-tagline { max-width: 40rem; margin: 0.75rem 0 0; color: var(--public-secondary); line-height: 1.8; }
+
+.agency-intro { display: grid; gap: 1.5rem; line-height: 1.9; }
+@media (min-width: 900px) { .agency-intro:has(.agency-mandate) { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; } }
+.agency-mandate { padding: 1.25rem; }
+.agency-mandate h2 { margin: 0 0 0.5rem; font-size: 1rem; font-weight: 700; }
+
+/* 與首頁 .campus-section-heading 相同的開章方式 */
+.agency-section-title { margin: 0 0 1rem; padding-top: 0.75rem; border-top: 2px solid var(--public-text); font-size: clamp(1.375rem, 2.2vw, 1.75rem); font-weight: 700; line-height: 1.3; letter-spacing: -0.02em; }
+.agency-section h3 { margin: 0; font-size: 1.0625rem; font-weight: 600; line-height: 1.6; }
+.agency-summary { margin: 0.35rem 0 0; color: var(--public-secondary); line-height: 1.75; }
+.agency-block { margin-top: 0.75rem; }
+.agency-block h4 { margin: 0 0 0.25rem; color: var(--public-secondary); font-size: 0.8125rem; font-weight: 700; }
+
+.agency-list { margin: 0; padding: 0; border-top: var(--agency-hairline); list-style: none; }
+.agency-list > li { padding-block: 1rem; border-bottom: var(--agency-hairline); }
+.agency-list.is-dated > li { display: grid; gap: 0.25rem 1.5rem; }
+@media (min-width: 640px) { .agency-list.is-dated > li { grid-template-columns: 7rem minmax(0, 1fr); align-items: baseline; } }
+.agency-item { min-width: 0; }
+.agency-item > .agency-meta { margin-top: 0.25rem; }
+
+.agency-link { margin-top: 0.75rem; }
+.agency-link-actions { display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; }
+.agency-link-open, .agency-link-toggle {
+  display: inline-flex; align-items: center; gap: 0.35rem; min-height: 44px; padding: 0;
+  border: 0; background: none; color: var(--public-secondary); font: inherit; font-size: 0.875rem;
+  text-decoration: underline; text-underline-offset: 0.25em; cursor: pointer;
+}
+.agency-link-open:hover, .agency-link-toggle:hover { color: var(--public-accent-text); }
+.agency-link-frame { margin-top: 0.5rem; border: var(--agency-hairline); background: #fff; }
+.agency-link-frame iframe { display: block; width: 100%; height: min(70vh, 640px); border: 0; }
+
+/* 議會：議案追蹤表 */
+.agency-table-wrap { overflow-x: auto; }
+.agency-table { width: 100%; min-width: 36rem; border-collapse: collapse; font-size: 0.9375rem; }
+.agency-table th { padding: 0.5rem 0.75rem 0.5rem 0; border-bottom: var(--agency-hairline); color: var(--public-muted); font-size: 0.8125rem; font-weight: 600; text-align: left; }
+.agency-table td { padding: 0.875rem 0.75rem 0.875rem 0; border-bottom: var(--agency-hairline); vertical-align: top; }
+.agency-table td strong { display: block; font-weight: 600; line-height: 1.6; }
+
+/* 評議委員會：文書排版 */
+.agency[data-branch="judicial"] .agency-decision :is(h3, .agency-block) { font-family: "Noto Serif TC", "Source Han Serif TC", "Songti TC", "PMingLiU", serif; }
+.agency-steps { margin: 0 0 1.5rem; padding: 0; border-top: var(--agency-hairline); list-style: none; counter-reset: step; }
+.agency-steps > li { display: grid; grid-template-columns: 2.5rem minmax(0, 1fr); padding-block: 1rem; border-bottom: var(--agency-hairline); counter-increment: step; }
+.agency-steps > li::before { content: counter(step, cjk-ideographic) "、"; color: var(--public-secondary); font-weight: 600; }
+.agency-steps > li > * { grid-column: 2; }
+.agency-decisions { display: grid; gap: 1rem; }
+.agency-decision { padding: 1.5rem clamp(1.25rem, 3vw, 2rem); }
+.agency-decision h3 { margin-top: 0.5rem; font-size: 1.1875rem; }
+.agency-decision .agency-block { line-height: 2; }
+
+/* 代表團：各階段案件數 */
+.agency-stages { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 1rem; margin: 0 0 1.5rem; padding: 0; list-style: none; }
+@media (min-width: 720px) { .agency-stages { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.agency-stages li { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; padding-block: 0.75rem; border-top: var(--agency-hairline); }
+.agency-stages span { color: var(--public-secondary); font-size: 0.875rem; }
+.agency-stages strong { font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+
+/* 總覽：同首頁「常用服務」的大字入口 */
+.agency-hub-list { margin: 0; padding: 0; border-top: var(--agency-hairline); list-style: none; }
+.agency-hub-list a { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 5rem; padding-block: 1rem; border-bottom: var(--agency-hairline); color: var(--public-text); text-decoration: none; }
+.agency-hub-list strong { display: block; font-size: clamp(1.25rem, 2.2vw, 1.75rem); font-weight: 700; line-height: 1.25; letter-spacing: -0.015em; }
+.agency-hub-list p { margin: 0.35rem 0 0; color: var(--public-secondary); font-size: 0.9375rem; }
+.agency-hub-list svg { flex: 0 0 auto; color: var(--public-secondary); transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1); }
+.agency-hub-list a:hover strong, .agency-hub-list a:hover svg { color: var(--public-accent-text); }
+.agency-hub-list a:hover svg { transform: translateX(4px); }
+@media (prefers-reduced-motion: reduce) { .agency-hub-list svg { transition: none; } }

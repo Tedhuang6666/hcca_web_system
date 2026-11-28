@@ -40,6 +40,7 @@ export * from "./api/judicial-petitions";
 export * from "./api/documents-recipients";
 export * from "./api/announcements";
 export * from "./api/site";
+export * from "./api/agencies";
 export * from "./api/analytics";
 export * from "./api/email";
 export * from "./api/dashboard";

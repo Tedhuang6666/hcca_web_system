@@ -185,6 +185,9 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("/notifications/unsubscribe", "POST"),
     ("/notifications/web-push/config", "GET"),
     # 公開網站資訊
+    # 自治機關專頁：只回傳已發布機關與項目
+    ("/agencies", "GET"),
+    ("/agencies/{slug}", "GET"),
     ("/site/link-categories", "GET"),
     ("/site/links", "GET"),
     ("/site/officers", "GET"),

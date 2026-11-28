@@ -14,6 +14,18 @@ export type RegulationOut = Omit<ApiRegulationOut, "article_count"> & { article_
 export type CloseStatusItem = Omit<ApiCloseStatusItem, "is_global"> & { is_global?: boolean };
 
 export type {
+  AgencyBranch,
+  AgencyEntryCreate,
+  AgencyEntryOut,
+  AgencyEntryUpdate,
+  AgencyLinkedRecord,
+  AgencyListItem,
+  AgencyManageOut,
+  AgencyProfileAdminUpdate,
+  AgencyProfileCreate,
+  AgencyProfileOut,
+  AgencyProfileUpdate,
+  AgencyPublicOut,
   RegulationSyncSourceUpdate,
   GalleryDriveConfig,
   GalleryDriveStatusOut,

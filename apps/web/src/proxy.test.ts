@@ -91,7 +91,7 @@ describe("proxy search metadata routes", () => {
     expect(csp).toContain("https://hcca.tw https://www.hcca.tw");
     expect(csp).toContain("wss://hcca.tw wss://www.hcca.tw");
     expect(csp.match(/wss:\/\/hcca\.tw/g)).toHaveLength(1);
-    expect(csp).toContain("frame-src 'self' https://accounts.google.com https://hcca.buckets.hct.works blob:");
+    expect(csp).toContain("frame-src 'self' https://accounts.google.com https://hcca.buckets.hct.works https://docs.google.com https://drive.google.com blob:");
     expect(csp).toContain("worker-src 'self' blob: https://hcca.tw https://www.hcca.tw");
   });
 

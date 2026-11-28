@@ -32,7 +32,7 @@ export const SHOP_PRODUCT_ROUTE_PATTERNS = [
 ] as const;
 
 export const PUBLIC_ROUTE_MANIFEST = {
-  prefixes: ["/about", "/articles", "/auth", "/gallery", "/legal", "/links", "/live", "/login", "/maintenance", "/module-status", "/news", "/officers", "/pages", "/public", "/shop/cart", "/unsubscribe"],
+  prefixes: ["/about", "/agencies", "/articles", "/auth", "/gallery", "/legal", "/links", "/live", "/login", "/maintenance", "/module-status", "/news", "/pages", "/public", "/shop/cart", "/unsubscribe"],
   exact: ["/", "/activities", "/announcements", "/documents", "/partner-map", "/petitions/public", "/profile/complete", "/regulations", "/surveys", "/raffle", "/blocked", "/contact", "/shop", "/system-info"],
   patterns: [
     ...SHOP_PRODUCT_ROUTE_PATTERNS,

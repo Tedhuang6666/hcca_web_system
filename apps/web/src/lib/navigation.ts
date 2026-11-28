@@ -173,6 +173,13 @@ export const NAV_ITEMS: NavItem[] = [
     perm: "admin:all",
   },
   {
+    id: "agencyAdmin",
+    href: "/admin/agencies",
+    iconKey: "info",
+    label: "機關專頁",
+    perms: ["agency:manage", "site:manage"],
+  },
+  {
     id: "publicSiteAdmin",
     href: "/admin/public-site",
     iconKey: "info",
