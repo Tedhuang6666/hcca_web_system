@@ -188,6 +188,7 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
     # 自治機關專頁：只回傳已發布機關與項目
     ("/agencies", "GET"),
     ("/agencies/{slug}", "GET"),
+    ("/agencies/council-proposals/{proposal_id}", "GET"),
     ("/site/link-categories", "GET"),
     ("/site/links", "GET"),
     ("/site/officers", "GET"),

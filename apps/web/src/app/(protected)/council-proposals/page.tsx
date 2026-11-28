@@ -317,7 +317,8 @@ export default function CouncilProposalsPage() {
           <textarea className="input min-h-44 w-full" value={form.proposal_text} onChange={(e) => setForm({ ...form, proposal_text: e.target.value })} placeholder="提案本文 / 條文 / 決議文字" required />
           <textarea className="input min-h-36 w-full" value={form.rationale} onChange={(e) => setForm({ ...form, rationale: e.target.value })} placeholder="提案理由" required />
           <textarea className="input min-h-24 w-full" value={form.expected_effect} onChange={(e) => setForm({ ...form, expected_effect: e.target.value })} placeholder="預期效益或影響（選填）" />
-          <div className="flex justify-end">
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <p className="text-sm text-[var(--text-secondary)]">受理後，提案內容與提案人、連署人姓名會公開於議會專頁。</p>
             <button className="btn btn-primary" disabled={submitting}>{submitting ? "送出中..." : "送出議會提案"}</button>
           </div>
         </form>

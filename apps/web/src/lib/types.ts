@@ -26,6 +26,7 @@ export type {
   AgencyProfileOut,
   AgencyProfileUpdate,
   AgencyPublicOut,
+  CouncilProposalPublicOut,
   RegulationSyncSourceUpdate,
   GalleryDriveConfig,
   GalleryDriveStatusOut,

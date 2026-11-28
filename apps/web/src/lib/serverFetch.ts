@@ -194,6 +194,10 @@ export async function fetchPublicAgency(slug: string): Promise<import("./types")
   return fetchPublicJson<import("./types").AgencyPublicOut>(`/agencies/${encodeURIComponent(slug)}`, { revalidate: 30 });
 }
 
+export async function fetchPublicProposal(id: string): Promise<import("./types").CouncilProposalPublicOut | null> {
+  return fetchPublicJson<import("./types").CouncilProposalPublicOut>(`/agencies/council-proposals/${encodeURIComponent(id)}`, { revalidate: 30 });
+}
+
 export async function fetchPublicPage(slug: string): Promise<PublicSitePageOut | null> {
   return fetchPublicJson<PublicSitePageOut>(`/site/pages/${encodeURIComponent(slug)}`, { revalidate: 15 });
 }

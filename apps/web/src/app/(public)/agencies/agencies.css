@@ -55,7 +55,8 @@
 .agency-table { width: 100%; min-width: 36rem; border-collapse: collapse; font-size: 0.9375rem; }
 .agency-table th { padding: 0.5rem 0.75rem 0.5rem 0; border-bottom: var(--agency-hairline); color: var(--public-muted); font-size: 0.8125rem; font-weight: 600; text-align: left; }
 .agency-table td { padding: 0.875rem 0.75rem 0.875rem 0; border-bottom: var(--agency-hairline); vertical-align: top; }
-.agency-table td strong { display: block; font-weight: 600; line-height: 1.6; }
+.agency-table-link { display: block; color: var(--public-text); font-weight: 600; line-height: 1.6; text-decoration: none; }
+.agency-table-link:hover { color: var(--public-accent-text); text-decoration: underline; text-underline-offset: 0.25em; }
 
 /* 評議委員會：文書排版 */
 .agency[data-branch="judicial"] .agency-decision :is(h3, .agency-block) { font-family: "Noto Serif TC", "Source Han Serif TC", "Songti TC", "PMingLiU", serif; }
@@ -84,3 +85,17 @@
 .agency-hub-list a:hover strong, .agency-hub-list a:hover svg { color: var(--public-accent-text); }
 .agency-hub-list a:hover svg { transform: translateX(4px); }
 @media (prefers-reduced-motion: reduce) { .agency-hub-list svg { transition: none; } }
+
+/* 議案詳情 */
+.agency-back { display: inline-flex; align-items: center; gap: 0.35rem; min-height: 44px; margin-bottom: 0.5rem; color: var(--public-secondary); font-size: 0.875rem; text-decoration: none; }
+.agency-back:hover { color: var(--public-accent-text); }
+.agency-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 0 1.5rem; margin: 0; border-top: 2px solid var(--public-text); }
+.agency-facts > div { padding-block: 0.875rem; border-bottom: var(--agency-hairline); }
+.agency-facts dt { color: var(--public-muted); font-size: 0.8125rem; }
+.agency-facts dd { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; margin: 0.25rem 0 0; font-weight: 600; }
+.agency-proposal-steps { display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; margin: 0; padding: 0; list-style: none; counter-reset: step; }
+.agency-proposal-steps li { color: var(--public-muted); font-size: 0.875rem; counter-increment: step; }
+.agency-proposal-steps li::before { content: counter(step) ". "; font-variant-numeric: tabular-nums; }
+.agency-proposal-steps li[data-state="done"] { color: var(--public-secondary); }
+.agency-proposal-steps li[data-state="current"] { color: var(--public-accent-text); font-weight: 700; }
+.agency-proposal-text { margin: 0; line-height: 1.9; white-space: pre-wrap; overflow-wrap: anywhere; }

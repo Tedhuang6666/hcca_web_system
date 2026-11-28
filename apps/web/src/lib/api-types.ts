@@ -1646,6 +1646,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/agencies/council-proposals/{proposal_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 公開議案內容 */
+        get: operations["get_public_proposal_agencies_council_proposals__proposal_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/agencies/manage": {
         parameters: {
             query?: never;
@@ -16085,6 +16102,48 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /**
+         * CouncilProposalPublicOut
+         * @description 議案公開內容；不含聯絡人與 email。
+         */
+        CouncilProposalPublicOut: {
+            /** Case Type */
+            case_type: string;
+            /** Co Sponsors */
+            co_sponsors: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Decided At */
+            decided_at: string | null;
+            /** Expected Effect */
+            expected_effect: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Kind */
+            kind: string | null;
+            /** Legal Basis */
+            legal_basis: string | null;
+            /** Proposal Text */
+            proposal_text: string;
+            /** Proposer Name */
+            proposer_name: string;
+            /** Rationale */
+            rationale: string;
+            /** Serial Number */
+            serial_number: string;
+            /** Status */
+            status: string;
+            /** Summary */
+            summary: string;
+            /** Title */
+            title: string;
         };
         /**
          * CouncilProposalStatus
@@ -36330,6 +36389,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgencyListItem"][];
+                };
+            };
+        };
+    };
+    get_public_proposal_agencies_council_proposals__proposal_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CouncilProposalPublicOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

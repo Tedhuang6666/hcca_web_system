@@ -175,6 +175,7 @@ export type CouncilProposalCreate = components['schemas']['CouncilProposalCreate
 export type CouncilProposalKind = components['schemas']['CouncilProposalKind']
 export type CouncilProposalListItem = components['schemas']['CouncilProposalListItem']
 export type CouncilProposalOut = components['schemas']['CouncilProposalOut']
+export type CouncilProposalPublicOut = components['schemas']['CouncilProposalPublicOut']
 export type CouncilProposalStatus = components['schemas']['CouncilProposalStatus']
 export type CouncilProposalStatusUpdate = components['schemas']['CouncilProposalStatusUpdate']
 export type CurrentRegistrationUpdate = components['schemas']['CurrentRegistrationUpdate']

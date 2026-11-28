@@ -259,3 +259,38 @@ async def test_site_admin_creates_and_rebinds_agency(
     assert listed[0]["org_name"] == "學生代表團" and listed[0]["can_admin"] is True
     # 409 會 rollback 共用的測試 session，放最後
     assert (await ac.post("/agencies/manage", json=payload)).status_code == 409
+
+
+async def test_public_proposal_detail_hides_contact_and_unaccepted(client, db_session) -> None:
+    proposals = {}
+    for status in ("council_review", "submitted", "withdrawn"):
+        proposal = CouncilProposal(
+            serial_number=f"D-{status}",
+            submitter_id=None,
+            contact_name="聯絡人",
+            contact_email="private@example.test",
+            proposer_name="吳承恩",
+            co_sponsors="黃郁庭、李宜蓁",
+            title="〈社團經費補助辦法〉修正案",
+            summary="提高補助上限",
+            proposal_text="第三條修正為……",
+            rationale="物價上漲",
+            status=status,
+        )
+        db_session.add(proposal)
+        proposals[status] = proposal
+    await db_session.flush()
+
+    resp = await client.get(f"/agencies/council-proposals/{proposals['council_review'].id}")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["proposer_name"] == "吳承恩"
+    assert body["co_sponsors"] == "黃郁庭、李宜蓁"
+    assert body["proposal_text"] == "第三條修正為……"
+    assert "contact_email" not in body and "contact_name" not in body
+    assert "private@example.test" not in resp.text
+
+    for status in ("submitted", "withdrawn"):
+        hidden = await client.get(f"/agencies/council-proposals/{proposals[status].id}")
+        assert hidden.status_code == 404
+    assert (await client.get(f"/agencies/council-proposals/{uuid.uuid4()}")).status_code == 404

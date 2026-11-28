@@ -99,7 +99,7 @@ function EntryList({ entries, kind }: { entries: AgencyEntryOut[]; kind: AgencyE
   );
 }
 
-function BillTracker({ records }: { records: AgencyLinkedRecord[] }) {
+function BillTracker({ records, slug }: { records: AgencyLinkedRecord[]; slug: string }) {
   if (records.length === 0) return <p className="agency-empty">目前沒有受理中的議案</p>;
   return (
     <div className="agency-table-wrap">
@@ -113,7 +113,9 @@ function BillTracker({ records }: { records: AgencyLinkedRecord[] }) {
               <td className="agency-nowrap">{record.reference_no}</td>
               <td>
                 <span className="agency-meta">{CASE_TYPE_LABEL[record.category] ?? record.category}</span>
-                <strong>{record.title}</strong>
+                <Link href={`/agencies/${encodeURIComponent(slug)}/proposals/${record.id}`} className="agency-table-link">
+                  {record.title}
+                </Link>
               </td>
               <td className="agency-nowrap">{record.proposer_name}</td>
               <td className="agency-nowrap">
@@ -210,7 +212,7 @@ export default function AgencyPage({ data }: { data: AgencyPublicOut }) {
       {branch === "executive" && membersSection}
 
       {branch === "legislative" && (
-        <Section id="tracking" title="議案追蹤"><BillTracker records={records} /></Section>
+        <Section id="tracking" title="議案追蹤"><BillTracker records={records} slug={agency.slug} /></Section>
       )}
 
       {branch === "judicial" && (

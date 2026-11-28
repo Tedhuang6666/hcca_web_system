@@ -25,6 +25,7 @@ from api.schemas.agency import (
     AgencyProfileOut,
     AgencyProfileUpdate,
     AgencyPublicOut,
+    CouncilProposalPublicOut,
 )
 from api.services import agency as agency_svc
 from api.services import audit as audit_svc
@@ -220,6 +221,18 @@ async def delete_entry(
 @router.get("", response_model=list[AgencyListItem], summary="公開機關清單")
 async def list_public(db: DbDep) -> list[AgencyProfile]:
     return await agency_svc.list_published(db)
+
+
+@router.get(
+    "/council-proposals/{proposal_id}",
+    response_model=CouncilProposalPublicOut,
+    summary="公開議案內容",
+)
+async def get_public_proposal(proposal_id: uuid.UUID, db: DbDep) -> object:
+    proposal = await agency_svc.get_public_proposal(db, proposal_id)
+    if proposal is None:
+        raise HTTPException(status_code=404, detail="議案不存在或尚未受理")
+    return proposal
 
 
 @router.get("/{slug}", response_model=AgencyPublicOut, summary="公開機關專頁")
