@@ -31,10 +31,10 @@ from api.models.document import (
 from api.models.petition import PetitionCase, PetitionStatus
 from api.models.regulation import Regulation, RegulationWorkflowStatus
 from api.models.shop import Product, ProductStatus
-from api.models.survey import Survey, SurveyResponse, SurveyStatus
 from api.models.user import User
 from api.models.work_item import WorkItem, WorkItemStatus
 from api.schemas.task import TaskCountResponse, TaskInboxResponse, TaskItem
+from api.services import survey as survey_service
 from api.services.permission import get_user_permission_codes
 from api.services.task_priority import prioritize_tasks
 
@@ -267,33 +267,7 @@ async def _petitions_assigned(
 
 
 async def _surveys_to_fill(db: AsyncSession, user: User) -> list[TaskItem]:
-    completed_response = (
-        select(SurveyResponse.id)
-        .where(
-            SurveyResponse.survey_id == Survey.id,
-            SurveyResponse.respondent_id == user.id,
-        )
-        .exists()
-    )
-    rows = (
-        (
-            await db.execute(
-                select(Survey)
-                .where(Survey.status == SurveyStatus.OPEN)
-                .where(
-                    or_(
-                        Survey.is_anonymous.is_(True),
-                        Survey.allow_multiple.is_(True),
-                        ~completed_response,
-                    )
-                )
-                .order_by(desc(Survey.updated_at))
-                .limit(20)
-            )
-        )
-        .scalars()
-        .all()
-    )
+    rows = await survey_service.list_pending_surveys(db, user, limit=20)
     return [
         TaskItem(
             id=f"survey:{s.id}:fill",
@@ -527,14 +501,6 @@ async def build_task_count_cached(db: AsyncSession, user: User) -> TaskCountResp
     now = datetime.now(UTC)
     cutoff_48h = now + timedelta(hours=48)
     count_queries: list[tuple[str, object]] = []
-    completed_response = (
-        select(SurveyResponse.id)
-        .where(
-            SurveyResponse.survey_id == Survey.id,
-            SurveyResponse.respondent_id == user.id,
-        )
-        .exists()
-    )
 
     if _has(perms, is_admin, "document:approve"):
         active_assignment = select(DocumentApprovalDelegation.id).where(
@@ -573,19 +539,6 @@ async def build_task_count_cached(db: AsyncSession, user: User) -> TaskCountResp
 
     count_queries.extend(
         [
-            (
-                "survey",
-                select(func.count(Survey.id), literal(0))
-                .select_from(Survey)
-                .where(Survey.status == SurveyStatus.OPEN)
-                .where(
-                    or_(
-                        Survey.is_anonymous.is_(True),
-                        Survey.allow_multiple.is_(True),
-                        ~completed_response,
-                    )
-                ),
-            ),
             (
                 "work_item",
                 select(
@@ -686,6 +639,9 @@ async def build_task_count_cached(db: AsyncSession, user: User) -> TaskCountResp
         if total:
             by_module[module] = by_module.get(module, 0) + total
         urgent_count += urgent
+    survey_count = len(await survey_service.list_pending_surveys(db, user, limit=None))
+    if survey_count:
+        by_module["survey"] = survey_count
     response = TaskCountResponse(
         total=sum(by_module.values()),
         by_module=by_module,

@@ -177,6 +177,8 @@ async def list_public_surveys(
 async def get_survey(survey_id: str, session: DbDep, user: CurrentUser) -> Survey:
     survey = await _survey_or_404(survey_id, session)
     if not await _can_manage_survey(session, user):
+        if survey.status not in (SurveyStatus.OPEN, SurveyStatus.CLOSED):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此問卷")
         try:
             await survey_svc.check_survey_access(session, survey, user)
         except PermissionError as e:

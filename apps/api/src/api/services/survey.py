@@ -11,7 +11,7 @@ import uuid
 from datetime import UTC, datetime
 from urllib.parse import quote
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
@@ -455,6 +455,68 @@ async def list_respondable_surveys(
                 break
 
     return page
+
+
+async def list_pending_surveys(
+    session: AsyncSession, user: User, *, limit: int | None = 20
+) -> list[Survey]:
+    """列出目前使用者可填且尚未完成的問卷，供待辦與儀表板共用。"""
+    if limit is not None and limit <= 0:
+        return []
+    completed_response = (
+        select(SurveyResponse.id)
+        .where(SurveyResponse.survey_id == Survey.id, SurveyResponse.respondent_id == user.id)
+        .exists()
+    )
+    candidates_query = (
+        select(Survey)
+        .options(
+            load_only(
+                Survey.id,
+                Survey.title,
+                Survey.created_at,
+                Survey.updated_at,
+                Survey.is_public,
+                Survey.allowed_org_ids_json,
+                Survey.allowed_user_ids_json,
+                Survey.allowed_domains_json,
+                Survey.allowed_grades_json,
+            )
+        )
+        .where(Survey.status == SurveyStatus.OPEN)
+        .where(
+            or_(Survey.is_anonymous.is_(True), Survey.allow_multiple.is_(True), ~completed_response)
+        )
+        .order_by(Survey.updated_at.desc(), Survey.id.desc())
+    )
+    active_org_ids = {str(org_id) for org_id in await get_user_org_ids(session, user.id)}
+    linked_emails = await _linked_emails(session, user)
+    active_grades: set[int] | None = None
+    visible: list[Survey] = []
+    offset = 0
+    while limit is None or len(visible) < limit:
+        candidates = list((await session.scalars(candidates_query.offset(offset).limit(100))).all())
+        if not candidates:
+            break
+        offset += len(candidates)
+        for survey in candidates:
+            if _load_grade_list(survey.allowed_grades_json) and active_grades is None:
+                active_grades = await _get_user_active_grades(session, user.id)
+            try:
+                await check_survey_access(
+                    session,
+                    survey,
+                    user,
+                    active_org_ids=active_org_ids,
+                    linked_emails=linked_emails,
+                    active_grades=active_grades,
+                )
+            except PermissionError:
+                continue
+            visible.append(survey)
+            if limit is not None and len(visible) >= limit:
+                break
+    return visible
 
 
 async def open_survey(session: AsyncSession, survey: Survey) -> Survey:

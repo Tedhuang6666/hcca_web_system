@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import uuid
 from datetime import UTC, datetime
 
 from httpx import AsyncClient
@@ -93,3 +95,42 @@ async def test_dashboard_excludes_completed_non_repeatable_survey(
         widget for widget in response.json()["widgets"] if widget["key"] == "open_surveys"
     )
     assert [item["title"] for item in survey_widget["items"]] == ["儀表板未填問卷"]
+
+
+async def test_dashboard_hides_surveys_outside_user_audience(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = User(
+        email="dashboard-audience-user@school.edu",
+        display_name="儀表板受眾測試",
+        is_active=True,
+        is_verified=True,
+    )
+    org = Org(name="儀表板受眾問卷組織")
+    db_session.add_all([user, org])
+    await db_session.flush()
+    db_session.add_all(
+        [
+            Survey(
+                title="儀表板不可見問卷",
+                org_id=org.id,
+                created_by=user.id,
+                status=SurveyStatus.OPEN,
+                allowed_org_ids_json=json.dumps([str(uuid.uuid4())]),
+            ),
+            Survey(
+                title="儀表板可見問卷",
+                org_id=org.id,
+                created_by=user.id,
+                status=SurveyStatus.OPEN,
+            ),
+        ]
+    )
+    await db_session.flush()
+    _override_user(user)
+
+    response = await client.get("/dashboard")
+
+    assert response.status_code == 200
+    widget = next(item for item in response.json()["widgets"] if item["key"] == "open_surveys")
+    assert [item["title"] for item in widget["items"]] == ["儀表板可見問卷"]

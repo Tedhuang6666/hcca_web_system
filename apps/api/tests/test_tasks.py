@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import uuid
 from datetime import UTC, datetime
 
 from httpx import AsyncClient
@@ -158,3 +160,39 @@ async def test_tasks_exclude_completed_non_repeatable_survey(
     assert [item["title"] for item in inbox_response.json()["items"]] == ["填答：未填問卷"]
     assert count_response.status_code == 200
     assert count_response.json()["by_module"] == {"survey": 1}
+
+
+async def test_tasks_and_count_hide_surveys_outside_user_audience(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await _seed_user(db_session)
+    org = Org(name="待辦受眾測試組織")
+    db_session.add(org)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            Survey(
+                title="不可見問卷",
+                org_id=org.id,
+                created_by=user.id,
+                status=SurveyStatus.OPEN,
+                allowed_org_ids_json=json.dumps([str(uuid.uuid4())]),
+            ),
+            Survey(
+                title="可見問卷",
+                org_id=org.id,
+                created_by=user.id,
+                status=SurveyStatus.OPEN,
+            ),
+        ]
+    )
+    await db_session.flush()
+    _override_user(user)
+
+    inbox = await client.get("/tasks")
+    count = await client.get("/tasks/count")
+
+    assert inbox.status_code == 200
+    assert [item["title"] for item in inbox.json()["items"]] == ["填答：可見問卷"]
+    assert count.status_code == 200
+    assert count.json()["by_module"] == {"survey": 1}

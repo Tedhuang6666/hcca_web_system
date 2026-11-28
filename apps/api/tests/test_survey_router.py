@@ -79,6 +79,27 @@ async def test_create_survey_and_get_detail(
     assert detail.json()["status"] == "draft"
 
 
+async def test_draft_survey_detail_is_hidden_from_non_manager(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    member_user: User,
+    db_session: AsyncSession,
+) -> None:
+    org = await _make_org(db_session)
+    created = await authed_client_factory(admin_user).post(
+        "/surveys", json={"title": "尚未發布的問卷", "org_id": str(org.id)}
+    )
+    assert created.status_code == 201
+    survey_id = created.json()["id"]
+
+    member_client = authed_client_factory(member_user)
+    assert (await member_client.get(f"/surveys/{survey_id}")).status_code == 404
+    assert (
+        await member_client.get(f"/surveys/{quote('尚未發布的問卷', safe='')}")
+    ).status_code == 404
+    assert (await authed_client_factory(admin_user).get(f"/surveys/{survey_id}")).status_code == 200
+
+
 async def test_grade_limited_survey_checks_school_account_and_current_grade(
     authed_client_factory: Callable[[User], AsyncClient],
     make_user: Callable[..., User],
