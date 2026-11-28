@@ -435,7 +435,7 @@ async def test_save_and_list_web_push_subscription(
     created = await client.post(
         "/notifications/web-push/subscriptions",
         json={
-            "endpoint": "https://push.example.org/abc",
+            "endpoint": "https://fcm.googleapis.com/fcm/send/abc",
             "keys": {"p256dh": "pkey", "auth": "akey"},
             "device_label": "我的手機",
         },
@@ -446,6 +446,60 @@ async def test_save_and_list_web_push_subscription(
     listed = await client.get("/notifications/web-push/subscriptions")
     assert listed.status_code == 200
     assert len(listed.json()) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "http://127.0.0.1/internal",
+        "https://127.0.0.1/internal",
+        "https://fcm.googleapis.com.evil.example/send",
+        "https://user@fcm.googleapis.com/fcm/send/abc",
+        "https://fcm.googleapis.com:8443/fcm/send/abc",
+    ],
+)
+async def test_save_web_push_subscription_rejects_unsafe_endpoint(
+    client: AsyncClient, db_session: AsyncSession, endpoint: str
+) -> None:
+    user = await _seed_user(db_session, "webpush-invalid@school.edu")
+    _override_user(user)
+
+    response = await client.post(
+        "/notifications/web-push/subscriptions",
+        json={"endpoint": endpoint, "keys": {"p256dh": "pkey", "auth": "akey"}},
+    )
+    assert response.status_code == 422
+    rows = await db_session.scalars(
+        select(WebPushSubscription).where(WebPushSubscription.user_id == user.id)
+    )
+    assert rows.all() == []
+
+
+@pytest.mark.asyncio
+async def test_web_push_subscription_limit_is_per_user(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await _seed_user(db_session, "webpush-limit@school.edu")
+    _override_user(user)
+
+    for index in range(5):
+        response = await client.post(
+            "/notifications/web-push/subscriptions",
+            json={
+                "endpoint": f"https://fcm.googleapis.com/fcm/send/{index}",
+                "keys": {"p256dh": "pkey", "auth": "akey"},
+            },
+        )
+        assert response.status_code == 200
+    denied = await client.post(
+        "/notifications/web-push/subscriptions",
+        json={
+            "endpoint": "https://fcm.googleapis.com/fcm/send/extra",
+            "keys": {"p256dh": "pkey", "auth": "akey"},
+        },
+    )
+    assert denied.status_code == 429
 
 
 @pytest.mark.asyncio

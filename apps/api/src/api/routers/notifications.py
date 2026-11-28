@@ -8,7 +8,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from itsdangerous import BadData
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.config import settings
@@ -33,7 +33,12 @@ from api.services.notification_pref import (
     set_digest_frequency,
     set_muted_modules,
 )
-from api.services.web_push import send_to_user, web_push_enabled
+from api.services.web_push import (
+    MAX_PUSH_SUBSCRIPTIONS,
+    send_to_user,
+    validate_push_endpoint,
+    web_push_enabled,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -407,6 +412,12 @@ async def save_web_push_subscription(
     db: DbDep,
     current_user: CurrentUser,
 ) -> WebPushSubscriptionOut:
+    try:
+        validate_push_endpoint(body.endpoint)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
     existing = (
         await db.execute(
             select(WebPushSubscription)
@@ -415,6 +426,17 @@ async def save_web_push_subscription(
         )
     ).scalar_one_or_none()
     if existing is None:
+        active_count = await db.scalar(
+            select(func.count(WebPushSubscription.id)).where(
+                WebPushSubscription.user_id == current_user.id,
+                WebPushSubscription.is_active.is_(True),
+            )
+        )
+        if int(active_count or 0) >= MAX_PUSH_SUBSCRIPTIONS:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Web Push 訂閱數量已達上限",
+            )
         existing = WebPushSubscription(user_id=current_user.id, endpoint=body.endpoint)
         db.add(existing)
     existing.p256dh = body.push_keys.p256dh

@@ -15,6 +15,20 @@ from api.models.web_push import WebPushSubscription
 from api.services import web_push
 
 
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "https://fcm.googleapis.com/fcm/send/abc",
+        "https://android.googleapis.com/gcm/send/abc",
+        "https://updates.push.services.mozilla.com/wpush/v2/abc",
+        "https://web.push.apple.com/abc",
+        "https://dm3p.notify.windows.com/?token=abc",
+    ],
+)
+def test_supported_browser_push_endpoints_are_accepted(endpoint: str) -> None:
+    assert web_push.validate_push_endpoint(endpoint) == endpoint
+
+
 async def _subscriptions(db: AsyncSession, count: int) -> list[WebPushSubscription]:
     user = User(email=f"push-{uuid.uuid4().hex}@school.edu", display_name="推播測試")
     db.add(user)
@@ -22,7 +36,7 @@ async def _subscriptions(db: AsyncSession, count: int) -> list[WebPushSubscripti
     subscriptions = [
         WebPushSubscription(
             user_id=user.id,
-            endpoint=f"https://push.example.test/{index}",
+            endpoint=f"https://fcm.googleapis.com/fcm/send/{index}",
             p256dh="test-public-key",
             auth="test-auth",
         )
@@ -49,6 +63,8 @@ async def test_push_transport_runs_outside_event_loop(db_session, monkeypatch):
         delivery_threads.append(threading.get_ident())
         assert kwargs["subscription_info"]["endpoint"] == subscriptions[0].endpoint
         assert '"title": "測試"' in kwargs["data"]
+        assert kwargs["timeout"] == web_push.PUSH_TIMEOUT_SECONDS
+        assert kwargs["requests_session"] is not None
 
     monkeypatch.setattr("pywebpush.webpush", deliver)
     assert await web_push.send_to_user(db_session, subscriptions[0].user_id, {"title": "測試"}) == 1
@@ -99,3 +115,36 @@ async def test_temporary_push_failure_reaches_retry_after_trying_other_devices(
         assert subscription.is_active is True
     assert subscriptions[0].last_used_at is None
     assert subscriptions[1].last_used_at is not None
+
+
+async def test_legacy_unsafe_endpoint_is_deactivated_before_network_send(db_session, monkeypatch):
+    subscriptions = await _subscriptions(db_session, 2)
+    subscriptions[0].endpoint = "http://127.0.0.1/internal"
+    await db_session.flush()
+    attempted: list[str] = []
+
+    def deliver(**kwargs):
+        attempted.append(kwargs["subscription_info"]["endpoint"])
+
+    monkeypatch.setattr("pywebpush.webpush", deliver)
+    assert await web_push.send_to_user(db_session, subscriptions[0].user_id, {}) == 1
+    await db_session.refresh(subscriptions[0])
+    assert subscriptions[0].is_active is False
+    assert attempted == [subscriptions[1].endpoint]
+
+
+async def test_push_transport_disables_redirect_following(db_session, monkeypatch):
+    subscriptions = await _subscriptions(db_session, 1)
+    seen: list[bool] = []
+
+    def post(_session, _url, **kwargs):
+        seen.append(kwargs["allow_redirects"])
+        return SimpleNamespace(status_code=307)
+
+    def deliver(**kwargs):
+        kwargs["requests_session"].post(subscriptions[0].endpoint, timeout=5)
+
+    monkeypatch.setattr("requests.Session.post", post)
+    monkeypatch.setattr("pywebpush.webpush", deliver)
+    assert await web_push.send_to_user(db_session, subscriptions[0].user_id, {}) == 1
+    assert seen == [False]
