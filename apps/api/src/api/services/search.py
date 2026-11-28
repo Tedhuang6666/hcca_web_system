@@ -19,7 +19,12 @@ from api.models.document import Document
 from api.models.org import Position, UserPosition
 from api.models.regulation import Regulation
 from api.models.user import User
-from api.services.document._access import _build_visibility_filter, _get_active_descendant_org_ids
+from api.services.document._access import (
+    _build_visibility_filter,
+    _get_active_descendant_org_ids,
+    can_anonymous_access_document,
+    check_document_access,
+)
 from api.services.permission import active_tenure_filter
 from api.services.school_class import get_user_active_class_ids
 
@@ -133,6 +138,33 @@ def _escape_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
+async def _visible_document_hit(
+    db: AsyncSession,
+    doc: Document,
+    *,
+    viewer_id: uuid.UUID | None,
+    is_superuser: bool,
+    result_id: str,
+) -> dict[str, Any] | None:
+    if not is_superuser:
+        if viewer_id is not None:
+            await db.refresh(doc, attribute_names=["approvals"])
+        allowed = (
+            await check_document_access(db, doc, viewer_id)
+            if viewer_id is not None
+            else can_anonymous_access_document(doc)
+        )
+        if not allowed:
+            return None
+    return {
+        "id": result_id,
+        "kind": "document",
+        "title": doc.title,
+        "summary": doc.content[:160],
+        "href": f"/documents/{doc.id}",
+    }
+
+
 async def search(
     db: AsyncSession,
     query: str,
@@ -176,7 +208,35 @@ async def search(
                 f"/indexes/{_index_name()}/search",
                 body,
             )
-            return list(payload.get("hits", []))
+            results: list[dict[str, Any]] = []
+            for hit in payload.get("hits", []):
+                if hit.get("kind") != "document":
+                    results.append(
+                        {
+                            key: hit[key]
+                            for key in ("id", "kind", "title", "summary", "href")
+                            if key in hit
+                        }
+                    )
+                    continue
+                result_id = str(hit.get("id", ""))
+                try:
+                    document_id = uuid.UUID(result_id.removeprefix("document-"))
+                except ValueError:
+                    continue
+                doc = await db.get(Document, document_id)
+                if doc is None:
+                    continue
+                visible = await _visible_document_hit(
+                    db,
+                    doc,
+                    viewer_id=viewer_id,
+                    is_superuser=is_superuser,
+                    result_id=result_id,
+                )
+                if visible is not None:
+                    results.append(visible)
+            return results
         except Exception:
             logger.warning("Meilisearch query failed; falling back to SQL", exc_info=True)
 
@@ -218,16 +278,12 @@ async def _sql_fallback(
             else:
                 doc_q = doc_q.where(False)
     docs = (await db.execute(doc_q.limit(limit))).scalars()
-    results.extend(
-        {
-            "id": str(doc.id),
-            "kind": "document",
-            "title": doc.title,
-            "summary": doc.content[:160],
-            "href": f"/documents/{doc.id}",
-        }
-        for doc in docs
-    )
+    for doc in docs:
+        visible = await _visible_document_hit(
+            db, doc, viewer_id=viewer_id, is_superuser=is_superuser, result_id=str(doc.id)
+        )
+        if visible is not None:
+            results.append(visible)
 
     reg_q = (
         select(Regulation)

@@ -6,6 +6,7 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.config import settings
 from api.models.document import (
     Document,
     DocumentClassification,
@@ -14,6 +15,7 @@ from api.models.document import (
 )
 from api.models.org import Org
 from api.models.user import User
+from api.services import search as search_svc
 from api.services.document._access import list_documents
 
 
@@ -65,6 +67,74 @@ async def test_keyword_search_does_not_match_others_confidential_documents(
     assert own_secret.id in found_ids
     assert secret.id not in found_ids
     assert secret.id in {doc.id for doc in listed}
+
+
+async def test_global_search_rechecks_public_flagged_confidential_documents(
+    db_session: AsyncSession,
+    make_user,
+    authed_client_factory,
+    monkeypatch,
+) -> None:
+    org = Org(name=f"全站搜尋組織-{uuid.uuid4().hex[:6]}")
+    db_session.add(org)
+    await db_session.flush()
+    author = await make_user(email=f"search-author-{uuid.uuid4().hex[:6]}@example.test")
+    viewer = await make_user(email=f"search-viewer-{uuid.uuid4().hex[:6]}@example.test")
+    secret = _doc(
+        org,
+        author,
+        title="機密校務關鍵公文",
+        content="機密校務關鍵內容",
+        is_public=True,
+        classification=DocumentClassification.SECRET,
+    )
+    ordinary = _doc(org, author, title="公開校務關鍵公文", is_public=True)
+    own_secret = _doc(
+        org,
+        viewer,
+        title="本人校務關鍵密件",
+        is_public=True,
+        classification=DocumentClassification.SECRET,
+    )
+    db_session.add_all([secret, ordinary, own_secret])
+    await db_session.flush()
+    monkeypatch.setattr(settings, "MEILISEARCH_URL", "")
+
+    sql_response = await authed_client_factory(viewer).get(
+        "/search", params={"q": "校務關鍵", "limit": 10}
+    )
+    assert sql_response.status_code == 200, sql_response.text
+    sql_ids = {row["id"] for row in sql_response.json() if row["kind"] == "document"}
+    assert str(secret.id) not in sql_ids
+    assert {str(ordinary.id), str(own_secret.id)} <= sql_ids
+
+    async def stale_meili_hits(*_args, **_kwargs):
+        return {
+            "hits": [
+                {
+                    "id": f"document-{doc.id}",
+                    "kind": "document",
+                    "title": "過期索引標題",
+                    "summary": "過期索引內容",
+                    "content": "不應回傳的索引全文",
+                    "href": f"/documents/{doc.id}",
+                }
+                for doc in (secret, ordinary, own_secret)
+            ]
+        }
+
+    monkeypatch.setattr(settings, "MEILISEARCH_URL", "http://unused.test")
+    monkeypatch.setattr(search_svc, "_meili_request", stale_meili_hits)
+    meili_response = await authed_client_factory(viewer).get(
+        "/search", params={"q": "校務關鍵", "limit": 10}
+    )
+    assert meili_response.status_code == 200, meili_response.text
+    meili_rows = meili_response.json()
+    assert {row["id"] for row in meili_rows} == {
+        f"document-{ordinary.id}",
+        f"document-{own_secret.id}",
+    }
+    assert all("content" not in row and row["title"] != "過期索引標題" for row in meili_rows)
 
 
 async def test_autosave_on_issued_document_still_records_revision(
