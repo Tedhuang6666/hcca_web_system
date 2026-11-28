@@ -21,7 +21,6 @@ from sqlalchemy.orm import load_only
 
 from api.core.cache import cache_get, cache_invalidate_dashboard, cache_set
 from api.core.database import AsyncSessionLocal
-from api.models.announcement import Announcement
 from api.models.document import (
     ApprovalStepStatus,
     DelegateSource,
@@ -482,15 +481,16 @@ async def _w_open_surveys(db: AsyncSession, user: User) -> DashboardWidget | Non
 async def _w_announcements_recent(db: AsyncSession, user: User) -> DashboardWidget | None:
     now = datetime.now(UTC)
     week_ago = now - timedelta(days=7)
-    stmt = (
-        select(Announcement)
-        .options(load_only(Announcement.id, Announcement.title, Announcement.created_at))
-        .where(Announcement.created_at >= week_ago)
-        .order_by(desc(Announcement.created_at))
-        .limit(5)
-    )
     try:
-        rows = (await db.execute(stmt)).scalars().all()
+        scope = await announcement_service.get_viewer_scope(db, user)
+        rows = await announcement_service.list_announcements(
+            db,
+            published_only=True,
+            scope=scope,
+            created_after=week_ago,
+            order_by_created=True,
+            limit=5,
+        )
     except Exception:
         logger.warning("dashboard: announcement query failed", exc_info=True)
         return None

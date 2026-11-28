@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies.auth import get_current_active_user
 from api.main import app
+from api.models.announcement import Announcement
 from api.models.org import Org
 from api.models.survey import Survey, SurveyResponse, SurveyStatus
 from api.models.user import User
@@ -134,3 +135,52 @@ async def test_dashboard_hides_surveys_outside_user_audience(
     assert response.status_code == 200
     widget = next(item for item in response.json()["widgets"] if item["key"] == "open_surveys")
     assert [item["title"] for item in widget["items"]] == ["儀表板可見問卷"]
+
+
+async def test_dashboard_recent_announcements_hide_drafts_and_other_audiences(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    viewer = User(
+        email="dashboard-ann-viewer@school.edu",
+        display_name="公告檢視者",
+        is_active=True,
+        is_verified=True,
+    )
+    author = User(email="dashboard-ann-author@school.edu", display_name="公告作者")
+    db_session.add_all([viewer, author])
+    await db_session.flush()
+    db_session.add_all(
+        [
+            Announcement(
+                title="未發布公告",
+                content={},
+                author_id=author.id,
+                audience_type="all",
+                is_published=False,
+            ),
+            Announcement(
+                title="其他成員公告",
+                content={},
+                author_id=author.id,
+                audience_type="members",
+                is_published=True,
+            ),
+            Announcement(
+                title="可見公告",
+                content={},
+                author_id=author.id,
+                audience_type="all",
+                is_published=True,
+            ),
+        ]
+    )
+    await db_session.flush()
+    _override_user(viewer)
+
+    response = await client.get("/dashboard")
+
+    assert response.status_code == 200
+    widget = next(
+        item for item in response.json()["widgets"] if item["key"] == "announcements_recent"
+    )
+    assert [item["title"] for item in widget["items"]] == ["可見公告"]

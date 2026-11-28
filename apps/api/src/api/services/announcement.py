@@ -195,6 +195,8 @@ async def list_announcements(
     skip: int = 0,
     limit: int = 20,
     scope: ViewerScope | None = None,
+    created_after: datetime | None = None,
+    order_by_created: bool = False,
 ) -> list[Announcement]:
     """列出公告；傳入 scope 時依公告對象過濾可見範圍（None = 不過濾，管理端用）。"""
     # 列表只需要摘要欄位；content 是可能很大的 Tiptap JSON，audience/media
@@ -231,7 +233,12 @@ async def list_announcements(
         q = q.where(_audience_clause(scope))
     if org_id is not None:
         q = q.where(Announcement.org_id == org_id)
-    q = q.order_by(Announcement.published_at.desc().nullslast(), Announcement.created_at.desc())
+    if created_after is not None:
+        q = q.where(Announcement.created_at >= created_after)
+    if order_by_created:
+        q = q.order_by(Announcement.created_at.desc())
+    else:
+        q = q.order_by(Announcement.published_at.desc().nullslast(), Announcement.created_at.desc())
     q = q.offset(skip).limit(limit)
     result = await db.execute(q)
     return list(result.scalars().all())
