@@ -1221,7 +1221,7 @@ async def petition_resolution_context(
 ) -> PetitionResolutionContextOut:
     case_obj = await _case_or_404(session, case_id)
     await _assert_case_access(session, case_obj, user)
-    return await context_svc.petition_resolution_context(session, case_obj.id)
+    return await context_svc.petition_resolution_context(session, case_obj.id, viewer=user)
 
 
 @router.get(

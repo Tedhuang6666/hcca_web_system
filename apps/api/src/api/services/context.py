@@ -4,14 +4,22 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only
 
-from api.models.announcement import Announcement
-from api.models.document import Document, DocumentApproval
-from api.models.petition import PetitionCase
+from api.core.search import LIKE_ESCAPE, like_contains
+from api.models.announcement import Announcement, AnnouncementAudience
+from api.models.document import (
+    Document,
+    DocumentApproval,
+    DocumentClassification,
+    DocumentStatus,
+    DocumentVisibility,
+)
+from api.models.petition import PetitionCase, PetitionPublicStatus, PetitionStatus
 from api.models.regulation import Regulation
+from api.models.user import User
 from api.schemas.context import (
     ContextLink,
     DocumentApprovalContextOut,
@@ -46,34 +54,69 @@ async def document_approval_context(
 
 
 async def petition_resolution_context(
-    db: AsyncSession, petition_id: uuid.UUID
+    db: AsyncSession, petition_id: uuid.UUID, *, viewer: User | None = None
 ) -> PetitionResolutionContextOut:
     petition = await db.get(PetitionCase, petition_id)
     if petition is None:
         raise ValueError("陳情不存在")
-    keyword = f"%{petition.title[:12]}%" if petition.title else "%"
+    keyword = like_contains(petition.title[:12]) if petition.title else None
     regs = (
-        await db.execute(
-            select(Regulation)
-            .options(load_only(Regulation.id, Regulation.title))
-            .where(Regulation.title.ilike(keyword))
-            .limit(5)
+        (
+            await db.execute(
+                select(Regulation)
+                .options(load_only(Regulation.id, Regulation.title))
+                .where(Regulation.title.ilike(keyword, escape=LIKE_ESCAPE))
+                .limit(5)
+            )
+        ).scalars()
+        if keyword
+        else []
+    )
+    public_case = and_(
+        PetitionCase.status == PetitionStatus.CLOSED,
+        PetitionCase.public_status == PetitionPublicStatus.PUBLISHED,
+        PetitionCase.is_confidential.is_(False),
+    )
+    public_title_match = and_(
+        public_case,
+        func.coalesce(PetitionCase.public_title, PetitionCase.title).ilike(
+            keyword, escape=LIKE_ESCAPE
         )
-    ).scalars()
-    similar = (
-        await db.execute(
-            select(PetitionCase)
-            .where(PetitionCase.id != petition.id, PetitionCase.title.ilike(keyword))
-            .limit(5)
-        )
-    ).scalars()
+        if keyword
+        else False,
+    )
+    visible_matches = [public_title_match]
+    if viewer is not None and keyword:
+        from api.services.petition import is_site_owner
+
+        if is_site_owner(viewer):
+            visible_matches = [PetitionCase.title.ilike(keyword, escape=LIKE_ESCAPE)]
+        else:
+            visible_matches.append(
+                and_(
+                    or_(
+                        PetitionCase.submitter_id == viewer.id,
+                        PetitionCase.assigned_to_id == viewer.id,
+                    ),
+                    PetitionCase.title.ilike(keyword, escape=LIKE_ESCAPE),
+                )
+            )
+    similar_query = select(PetitionCase).where(
+        PetitionCase.id != petition.id,
+        or_(*visible_matches),
+    )
+    similar = (await db.execute(similar_query.limit(5))).scalars()
     return PetitionResolutionContextOut(
         petition_id=petition.id,
         related_regulations=[
             ContextLink(title=r.title, href=f"/regulations/{r.id}", kind="regulation") for r in regs
         ],
         similar_petitions=[
-            ContextLink(title=p.title, href=f"/petitions/{p.case_number}", kind="petition")
+            ContextLink(
+                title=p.public_title or p.title,
+                href=f"/petitions/{p.case_number}",
+                kind="petition",
+            )
             for p in similar
         ],
         recommended_actions=[
@@ -90,15 +133,46 @@ async def regulation_usage_context(
     regulation = await db.get(Regulation, regulation_id)
     if regulation is None:
         raise ValueError("法規不存在")
-    keyword = f"%{regulation.title[:12]}%"
+    keyword = like_contains(regulation.title[:12])
     docs = (
-        await db.execute(select(Document).where(Document.title.ilike(keyword)).limit(8))
+        await db.execute(
+            select(Document)
+            .where(
+                Document.title.ilike(keyword, escape=LIKE_ESCAPE),
+                Document.status == DocumentStatus.APPROVED,
+                Document.classification == DocumentClassification.NORMAL,
+                or_(
+                    Document.visibility_level == DocumentVisibility.PUBLICLY_OPEN,
+                    Document.is_public.is_(True),
+                ),
+            )
+            .limit(8)
+        )
     ).scalars()
     petitions = (
-        await db.execute(select(PetitionCase).where(PetitionCase.title.ilike(keyword)).limit(8))
+        await db.execute(
+            select(PetitionCase)
+            .where(
+                func.coalesce(PetitionCase.public_title, PetitionCase.title).ilike(
+                    keyword, escape=LIKE_ESCAPE
+                ),
+                PetitionCase.status == PetitionStatus.CLOSED,
+                PetitionCase.public_status == PetitionPublicStatus.PUBLISHED,
+                PetitionCase.is_confidential.is_(False),
+            )
+            .limit(8)
+        )
     ).scalars()
     anns = (
-        await db.execute(select(Announcement).where(Announcement.title.ilike(keyword)).limit(8))
+        await db.execute(
+            select(Announcement)
+            .where(
+                Announcement.title.ilike(keyword, escape=LIKE_ESCAPE),
+                Announcement.is_published.is_(True),
+                Announcement.audience_type == AnnouncementAudience.ALL.value,
+            )
+            .limit(8)
+        )
     ).scalars()
     return RegulationUsageContextOut(
         regulation_id=regulation.id,
@@ -111,7 +185,9 @@ async def regulation_usage_context(
             for d in docs
         ],
         related_petitions=[
-            ContextLink(title=p.title, href=f"/petitions/{p.case_number}", kind="petition")
+            ContextLink(
+                title=p.public_title or p.title, href=f"/petitions/{p.case_number}", kind="petition"
+            )
             for p in petitions
         ],
         related_announcements=[
