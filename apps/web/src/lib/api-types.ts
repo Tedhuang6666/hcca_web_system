@@ -1176,23 +1176,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/system/revoke-user-tokens": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Force Logout User */
-        post: operations["force_logout_user_admin_system_revoke_user_tokens_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/admin/system/settings": {
         parameters: {
             query?: never;
@@ -28701,14 +28684,6 @@ export interface components {
             /** Title */
             title: string;
         };
-        /** RevokeUserBody */
-        RevokeUserBody: {
-            /**
-             * User Id
-             * Format: uuid
-             */
-            user_id: string;
-        };
         /** RollbackBody */
         RollbackBody: {
             /** Confirm Phrase */
@@ -34994,41 +34969,6 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
-                };
-            };
-        };
-    };
-    force_logout_user_admin_system_revoke_user_tokens_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RevokeUserBody"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -709,7 +709,6 @@ export type {
   RevealBody,
   RevealResponse,
   RevisionOut,
-  RevokeUserBody,
   RollbackBody,
   RollbackOut,
   RuleSummary,

@@ -38,6 +38,13 @@ async def test_retired_receipt_has_no_http_handler(client):
     assert response.status_code == 404
 
 
+def test_unprotected_force_logout_route_is_retired():
+    # 強制登出只走 /admin/users/{user_id}/sessions/revoke（含受保護帳號檢查）
+    paths = app.openapi()["paths"]
+    assert "/admin/system/revoke-user-tokens" not in paths
+    assert "post" in paths["/admin/users/{user_id}/sessions/revoke"]
+
+
 async def test_context_omits_retired_matter_destinations(db_session, member_user):
     org = Org(name="脈絡回歸組織")
     db_session.add(org)

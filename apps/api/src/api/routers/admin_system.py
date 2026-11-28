@@ -357,10 +357,6 @@ class IpBlockedItem(BaseModel):
     expires_at: float | None = None
 
 
-class RevokeUserBody(BaseModel):
-    user_id: uuid.UUID
-
-
 DefenseRuleTypeLiteral = Literal[
     "ip_block",
     "cidr_block",
@@ -1380,33 +1376,6 @@ async def remove_ip_block(ip: str, session: DbDep, _admin: AdminUser) -> dict:
         body=f"ip={ip}\nactor={_admin.email}",
     )
     return {"ip": ip, "removed": True}
-
-
-# ── 強制登出 ────────────────────────────────────────────────────────────────
-
-
-@router.post("/revoke-user-tokens", response_model=dict)
-async def force_logout_user(body: RevokeUserBody, session: DbDep, _admin: AdminUser) -> dict:
-    legacy_count = await revoke_user(str(body.user_id))
-    count = legacy_count + await user_session_svc.revoke_all(
-        session, body.user_id, reason="admin_revoke_all"
-    )
-    await audit_svc.record(
-        session,
-        entity_type="defense_rule",
-        entity_id=str(body.user_id),
-        action="revoke_user_tokens",
-        actor_id=str(_admin.id),
-        actor_email=_admin.email,
-        meta={"user_id": str(body.user_id), "revoked_count": count},
-        summary=f"強制登出使用者 {body.user_id}",
-    )
-    await emit_security_alert(
-        session,
-        title="強制登出使用者",
-        body=f"user_id={body.user_id}\nrevoked_count={count}\nactor={_admin.email}",
-    )
-    return {"user_id": str(body.user_id), "revoked_count": count}
 
 
 # ── WebSocket 統計（admin 視角） ─────────────────────────────────────────────

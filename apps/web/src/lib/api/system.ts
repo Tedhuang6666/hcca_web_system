@@ -370,8 +370,6 @@ export const systemApi = {
     post<IpBlockedItem>("/admin/system/ip-blocklist", body),
   removeIpBlock: (ip: string) =>
     del<{ ip: string; removed: boolean }>(`/admin/system/ip-blocklist/${encodeURIComponent(ip)}`),
-  revokeUserTokens: (user_id: string) =>
-    post<{ user_id: string; revoked_count: number }>("/admin/system/revoke-user-tokens", { user_id }),
   wsRooms: () =>
     get<{
       stats: { total: number; rooms: number; unique_ips: number; limits: WsLimits };
