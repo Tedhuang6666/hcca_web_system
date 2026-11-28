@@ -65,9 +65,9 @@ class SystemCog(commands.Cog):
         data = await _command(interaction, "user_lookup", {"discord_user_id": str(target.id)})
         if data is None:
             return
-        platform = (
-            f"平台：{data['display_name']} / {data['email']}" if data["linked"] else "平台：未綁定"
-        )
+        platform = f"平台：{data['display_name']}" if data["linked"] else "平台：未綁定"
+        if data.get("email"):
+            platform += f" / {data['email']}"
         roles = ", ".join(role.name for role in target.roles[-5:] if role.name != "@everyone")
         await interaction.response.send_message(
             f"{target} ({target.id})\n{platform}\n"

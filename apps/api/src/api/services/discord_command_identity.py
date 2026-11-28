@@ -26,11 +26,13 @@ async def handle_identity(
             "is_superuser": user.is_superuser,
         }
     if operation == "user_lookup":
+        actor, codes = await _actor(db, discord_user_id)
         target = await get_user_by_discord_id(db, str(arguments["discord_user_id"]))
+        can_view_email = actor.is_superuser or "admin:all" in codes
         return {
             "linked": target is not None,
             "display_name": target.display_name if target else None,
-            "email": target.email if target else None,
+            "email": target.email if target and can_view_email else None,
         }
     if operation == "regulation_citations":
         results = []

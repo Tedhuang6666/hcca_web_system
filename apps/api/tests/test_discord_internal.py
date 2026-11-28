@@ -180,6 +180,46 @@ async def _linked_user(db_session, *, email: str, discord_user_id: str, **fields
     return user
 
 
+async def test_user_lookup_requires_link_and_hides_other_members_email(client, db_session):
+    raw_key = await _bot_key(db_session)
+    await _linked_user(
+        db_session, email="private-target@example.com", discord_user_id="902", show_email=False
+    )
+    await _linked_user(db_session, email="ordinary-viewer@example.com", discord_user_id="901")
+    await _linked_user(
+        db_session,
+        email="admin-viewer@example.com",
+        discord_user_id="903",
+        is_superuser=True,
+    )
+
+    async def lookup(discord_user_id: str):
+        return await client.post(
+            "/internal/discord/commands/user_lookup",
+            headers={"X-API-Key": raw_key},
+            json={
+                "discord_user_id": discord_user_id,
+                "interaction_id": "1",
+                "guild_id": "111",
+                "arguments": {"discord_user_id": "902"},
+            },
+        )
+
+    unlinked = await lookup("999")
+    ordinary = await lookup("901")
+    admin = await lookup("903")
+
+    assert unlinked.status_code == 409
+    assert ordinary.status_code == 200
+    assert ordinary.json()["data"] == {
+        "linked": True,
+        "display_name": "綁定成員",
+        "email": None,
+    }
+    assert admin.status_code == 200
+    assert admin.json()["data"]["email"] == "private-target@example.com"
+
+
 async def _shortlink(client, raw_key: str, discord_user_id: str) -> str:
     response = await client.post(
         "/internal/discord/commands/shortlink",
